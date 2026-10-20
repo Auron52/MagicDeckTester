@@ -46555,7 +46555,11 @@ static bool CreatureAuraHostInert(const CardDefinition* d)
         && !p.aura_is_bestow_face && p.aura_power_bonus == 0 && p.aura_tough_bonus == 0
         && !p.aura_grants_lifelink && p.aura_scale_kind.empty() && p.aura_scale_power == 0
         && p.aura_scale_tough == 0 && p.aura_set_base_power < 0 && p.aura_set_base_toughness < 0
-        && p.aura_color_bonuses.empty() && !RemovalSearchesForController(*d);
+        && p.aura_color_bonuses.empty() && !RemovalSearchesForController(*d)
+        // Curiosity (NivMizzetCombo, upstream 2026-10-17): its draw rides the HOST's damage, so WHICH
+        // creature carries it decides whether the Niv loop runs -- host-dependent, never inert
+        // (scenario niv_curiosity_host_search_then_cantrip).
+        && !p.aura_damage_trigger_draw;
 }
 static int CollapseGreedyCreatureAuraHosts(const GameState& state, const std::vector<Action>& cands,
                                            std::vector<std::vector<int>>& groups)
