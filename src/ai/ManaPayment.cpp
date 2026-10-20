@@ -5532,6 +5532,26 @@ static std::uint64_t PayloadReserveMask(const GameState& state)
     if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
     const int active = state.active_player_index;
 
+    // No anchor candidate -> 0, decided BEFORE the pricing pass (P4, 2026-10-20). The pass below
+    // returns 0 whenever it finds no anchor, and an anchor is exactly an own untapped DOMAIN dork that
+    // can tap now with its graveyard fuel live -- the same four tests, read here in the same order, so
+    // this answers that question without the DomainColors walk and the PermanentManaYield of every
+    // source (pure reads, nothing else is touched). That was ~1.5% of an AccomplishedAlchemist game,
+    // whose plan payments all reach this mask and whose board never holds a domain dork.
+    {
+        bool any_anchor = false;
+        for (int i = 0; i < n && !any_anchor; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !d->params.domain_mana) { continue; }
+            any_anchor = d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)
+                      && GraveyardFuelLive(state, active, *d);
+        }
+        if (!any_anchor) { return 0; }
+    }
+
     // Post-cast domain: today's colours plus the plan's permanent casts'.
     int domain_mask = 0;
     for (Color c : DomainColors(state, active)) { domain_mask |= (1 << static_cast<int>(c)); }
