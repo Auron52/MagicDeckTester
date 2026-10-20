@@ -1,6 +1,6 @@
 # Accomplished Alchemist untap loop — design (AccomplishedAlchemist deck)
 
-Status: IMPLEMENTATION IN PROGRESS (2026-10-19) -- chunks A, B, C1, C2a, C2b, P, E1 landed; Stage 5 verification run (E1 = its engine fixes). Per-deck ledger: `analysis-AccomplishedAlchemist.md`.
+Status: IMPLEMENTATION IN PROGRESS (2026-10-19) -- chunks A, B, C1, C2a, C2b, P, E1 landed; Stage 5 verification run (E1 = its engine fixes). 2026-10-20: COMBO OFF (rule table + the mechanical untap-loop route + the search query) -- see the ledger. Per-deck ledger: `analysis-AccomplishedAlchemist.md`.
 Card drafts (research fan-out, gitignored): `logs/aa_drafts/*.md|json` in the worktree.
 
 ## What the engine could not do (verified 2026-10-18, file:line at fork 2176032d)

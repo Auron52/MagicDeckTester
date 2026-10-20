@@ -28,7 +28,9 @@ bucket rule landed DEFAULT ON (held-out -0.015 d3 / -0.022 d5); see "USER discar
 cell -- see "USER Elvish Harbinger rule (2026-10-20)".
 2026-10-20 (branch `aa-perf`, off `aa-land` @ 88126463, NOT pushed): Chunk P4 landed eight byte-identical per-node
 cuts -- d5 b20 0.931x instructions / ~0.94x core time, the costliest game 0.885x; see "Chunk P4 (2026-10-20)".
-Open USER items are
+2026-10-20: COMBO OFF for this deck (branch `aa-combooff`) -- the rule table, the mechanical untap-loop route
+and the search's query, all DEFAULT ON as the USER asked; -0.40..-0.48 turns and 0.81-0.87x ms on every cell; see
+"Combo Off for AccomplishedAlchemist (2026-10-20)". Open USER items are
 listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -225,6 +227,190 @@ cells), `g23*/` (the one moved game) and `an.py`.
   1. The `MTG_BOTTOM_PREF_ORDER` trial-order dependence above (s70001 d5 gi23).
   2. The deck is now within noise of the 3x line. Whether to attempt the suite entry (rows + a quiet-box
      `--measure-all`) is the USER's call.
+
+## Combo Off for AccomplishedAlchemist (2026-10-20)
+
+Branch `aa-combooff` (worktree `.claude/worktrees/aa-combooff`, forked from `accomplished-alchemist` @ 8ab567c4 +
+the 0d16858b test fix). Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-co/` (`fx/` fixture drafts,
+`sweep*/` the sweeps, `ab/` the pooled A/B + `an.py`).
+
+**The USER's instruction** (2026-10-20): *"We should use the combo off logic for this deck. It is very much the type
+of deck that needs it."* And the shape: *"it is another combo that can have many steps just like EDF. After
+playing the lifegain you untap and tap Alchemist a whole lot to generate mana, then either cast a finishing spell
+like Stroke of Genius targeting the opponent or wish for the win-con there."* Everything below is written in those
+three stages -- LIFE, LOOP, FINISH -- and under the EDF doctrine: display AGGRESSIVE (the rule table), execution
+EXACT (the route).
+
+### The rule table (`AccomplishedAlchemistProvider::ComboOffPossible`) -- for the USER to argue with
+
+A rule is the conjunction `LIFE + LOOP + FINISH`; the name is the three parts, e.g. `LIFE-HAND+LOOP-UMBRA+FIN-STROKE`.
+Inventory only (battlefield, hand, the sideboard a Living Wish reaches); no search; no floating pool.
+
+* **ALCHEMIST** (every row): an Accomplished Alchemist we control that can tap this turn (not summoning-sick;
+  tapped is fine -- the loop's first untap re-enables it).
+* **LIFE-GAINED** -- life already gained this turn reaches the untapper's threshold with no further cast.
+* **LIFE-HAND** -- plus a subset of the hand's lifegain spells (Nourish 6, Feed the Clan 5 / 10 ferocious, Weather
+  the Storm 3 x storm count -- the deploy's casts count only when the deploy is paid FIRST), paid exactly
+  (`ManaPool::CanPay`) from the board's other untapped mana + the turn's land drop, cast before the Alchemist taps.
+* **LIFE-STAFF** -- no lifegain spell: a Staff of Domination's {2},{T}: gain 1 life bootstraps X.
+* **LOOP-UMBRA / -UMBRA-HAND** -- Crab Umbra on the Alchemist / in hand ({U}); {2}{U} per untap (X >= 4).
+* **LOOP-GALVANIC / -GALVANIC-HAND / -GALVANIC-WISH** -- the Alchemist soulbonded to a Galvanic Alchemist / one in
+  hand ({2}{U}) / Living Wish -> one from the sideboard ({1}{G} + {2}{U}); {2}{U} per untap.
+* **LOOP-STAFF / -STAFF-HAND** -- Staff of Domination in play / in hand ({3}); {3},{T} + {1} per untap (X >= 5).
+* **LOOP-WITCH / -WITCH-HAND** -- Seedcradle Witch in play / in hand ({G/W}); {2}{G}{W} per untap (X >= 5), and a
+  non-Alchemist {G}-or-{W} unit left for the first untap's second colour.
+* LOOP exactness: after the LIFE casts and the deploy, the loop's own bootstrap search `UntapLoopBootOp` (the
+  function the resolver re-runs before every op) must reach "Alchemist untapped, X > per-iteration cost" from
+  (other mana, X, Staff tapped, Alchemist tapped). Two deploy orders: from the other mana (before the gain), or
+  out of the Alchemist's first tap (after the gain; one colour per tap, so a deploy whose pips are one colour).
+* **FIN-STROKE** -- Stroke of Genius in hand at the opponent: {X}{2}{U}, X = the lethal X.
+* **FIN-SCHOLAR / -SCHOLAR-HAND** -- Scholar of Athreos in play / in hand (+{2}{W}): {2}{B} per opponent life.
+* **FIN-WISH-SCHOLAR** -- a Living Wish in hand (not the one LOOP-GALVANIC-WISH spends) + Scholar in the sideboard.
+* **FIN-STAFF-DIG** -- a Staff (in play or the loop's own) + a Stroke in the library above the last card:
+  {5}+{1} per draw to it, then the Stroke (the loop's draw-to-find; the search is clairvoyant about order).
+* BANK: (kUntapLoopCeiling / 2 - 16) x the net per iteration + the other mana must cover the finisher; with a Staff
+  able to GAIN the bank does not bind (each gain raises X for every later iteration).
+* MAIN-PHASE KILLS ONLY: Ezuri's pump and the Witch's +3/+3 win in combat, which the route's verdict
+  (OpponentHasLost after its last link) cannot prove before combat. They stay the search's (sweep class c').
+
+### The route (execution EXACT) -- `AlchemistComboRouteOffer` / `AlchemistComboRouteApply`
+
+* ONE `ComboRoute` action ("Combo Off", the EDF / KittyEquipment kind -- every existing reader of a verified
+  go-off works unchanged; `ComboRouteApplyFor` is now the one dispatch of the kind). Emitted from `CollectActions`
+  when the provider's `UntapLoopRouteEnabled()` (`MTG_AA_COMBO_ROUTE`, heurarm `AA_COMBO_ROUTE`, DEFAULT ON) and
+  the RULE fires (the microsecond pre-filter) and -- in autonomous play -- a walk on a copy WINS this turn. In human
+  play a rule-only fire is still emitted (display aggressive): the menu labels it "not yet proven", and a click
+  that does not win rolls back and emits `combo_off_failed` (the existing AIEngine branch).
+* THE WALK: a bounded DFS (6 links, 24 applies) over the engine's OWN plans under `ExecutorMenuScope`, in the
+  USER's stage order: FINISH when the float already pays the cheapest main-phase kill (the kill-fold list, now
+  `TurnSolver::UntapLoopKillPlans`, shared with `BpDeriveContinuationList`); else LOOP plans (the closed-form
+  `ActivateUntap kUntapLoopToNeed`) ranked no-finisher-first / most lifegain / fewest actions; then SETUP plans
+  (lifegain, untapper, Living Wish casts, the Staff's gain), two orders interleaved (untapper-first for Weather's
+  storm, life-first for a {U} untapper paid off the Alchemist), each optionally after tapping the Alchemist for
+  the untapper's colour (the payer otherwise taps it white). Children fold on a relabelling-invariant board key.
+  Inside the walk the loop funds main-phase kills only (`g_untap_loop_no_pump`). It ORDERS the engine's plans and
+  tries them until one proves a kill; it never invents an action, and nothing is removed from the menu.
+* EXACT: the path is recorded as the PLANS (not indices -- the enumerator's breadth reads its context), memoised
+  per game on the full mid-turn state + the whole library order; the apply replays it on a COPY in its own
+  context first and re-walks there if it does not kill, so nothing half-plays. `MTG_AA_ROUTE_TRACE`,
+  `MTG_AA_ROUTE_STATS`, `MTG_AA_CO_WHY` (rule refusals).
+* Engine fixes the sweep forced (both worlds): `MTG_UNTAP_LOOP_SURPLUS_GENERIC` (heurarm, default ON) -- inside the
+  closed-form loop the untap's generic eats the colour most in surplus over what the loop owes, and a tap whose
+  owed pips are covered floats the payer's first generic colour; `UntapLoopFloatPays` prices the payoff outside
+  that scope (the real payer). Before it, a Staff loop funding Scholar ran to the 256-step ceiling with the kill
+  unfunded (0 of 33 offers). The enumeration memo stands down inside the walk.
+
+### The search's query (`edfco`)
+
+`MTG_EDF_CO_ROOT` / `MTG_EDF_CO_LOOK` now default to the provider's `ComboOffSearchDefault()` when unset (EDF
+false -> byte-identical; AA true) and the shortcut's gate accepts a provider with a route
+(`UntapLoopRouteEnabled`). The precondition the rule's comment demands is met by construction: the AA route
+action exists autonomously only after its own walk killed. Both arms still verify (root always; lookahead by
+`MTG_EDF_CO_LOOK_TRIAL`, default ON), and the trial replays the proven plans.
+
+### Viewer
+
+Nothing deck-specific: the plan JSON's `combo_off` / `combo_off_verified` / `combo_off_rule` drive the existing
+⚡ Combo Off button; the history lists each link's summary and every untap / drain event, never a macro.
+DECISIONS.md row added (`main_phase` reuse). No AA references exist yet, so no reference replays move.
+
+### Sweep (`bash test/aa_combo_off_sweep.sh`; classes as the EDF catalogue)
+
+1,154 states: a synthetic matrix of 1,008 over the table's ingredients (LIFE none / Nourish / Feed / Weather /
+already-gained x LOOP Umbra / Staff / Witch on board or in hand, Galvanic in hand, none x FINISH Stroke / Living Wish
+/ Scholar in hand / none x 2-6 lands x Island x a sick Alchemist) and 146 MAIN_1 frames of 30 autonomous games
+(seed 91001, d3 b10). Every state asked through `EnumerateMainPlans` under `MTG_HUMAN_PLAY` and the flagged plan
+re-applied as a click; the win oracle is the autonomous engine on the SAME board (`resume_at: main1`, d5 b100,
+then b1000), and its game log says whether the win was a combo (Stroke / drain / the route) or combat.
+
+| population | a offered+wins | b offered, no win (combo exists) | c missed (combo exists) | c' missed (combat only) | d offered, no main-phase win | e |
+|---|---:|---:|---:|---:|---:|---:|
+| synthetic (1,008) | 328 | 0 | 2 | 31 | 26 | 621 |
+| engine (146) | 15 | 1 | 0 | 12 | 1 | 117 |
+
+* `combo_off_verified` is again a perfect oracle: 343 verified, 343 won. Offered 371, won 343 (92.5%).
+* Per stage (offered / wins): LOOP-UMBRA 51/51, -UMBRA-HAND 61/60, -STAFF 53/53, -STAFF-HAND 60/59,
+  -GALVANIC-HAND 48/48, -WITCH 43/35, -WITCH-HAND 55/37; FIN-STROKE 129/124, -WISH-SCHOLAR 120/109,
+  -SCHOLAR-HAND 118/107, -STAFF-DIG 4/3.
+* **d = 27: all 26 synthetic ones are Seedcradle Witch boards**: the closed-form loop with a
+  TWO-colour untap ({2}{G}{W}) off a ONE-colour Alchemist starves -- at X = 5 (Feed the Clan, net 1) the float runs
+  out of {G} with the Alchemist tapped (`S-d625d49799`: W5 B16 G0, loop stopped), and with the Witch cast from hand
+  the payer pays its {G/W} with a Forest before the floating white (`S-4bf6b611b3`), leaving the first untap's {G}
+  unpayable. The autonomous engine wins these only in combat (the Witch's own +3/+3). The arithmetic says the
+  loop exists, so the rule keeps offering it (display aggressive; narrowing is the USER's call); the fix belongs to
+  the loop's colour plan / the payer. The engine d (X-c618e2a6d9) is a Staff dig to a Stroke ~45 cards deep
+  in the sweep's canonical (alphabetical) library -- a fixture-fidelity artifact plus the loop's 256-step ceiling.
+* **b = 1** (X-36693ec269): Weather the Storm + Staff + Crab Umbra in hand; the engine wins by an order the walk's
+  width does not reach (Umbra, Staff gain, then Weather at storm 3). **c = 2** (weather/staff_bf/wish): the engine
+  casts Living Wish FIRST (storm + a fetched gain) -- LIFE through a wish is not a rule ingredient.
+* What the sweep fixed on the way (counts are the first sweep -> the last, binary 119b9342): b 61 -> 1, c 52 -> 2, d 62 -> 27. The
+  causes: the walk's order (standalone loops first; then stage order), the payer tapping the Alchemist white for a
+  {U} untapper (the pre-tap), the loop's generic eating the colour it was banking (MTG_UNTAP_LOOP_SURPLUS_GENERIC),
+  Weather's storm count, the land drop, the Witch's second colour, and an untap-step confound in the oracle.
+* Fixtures: `test/combo_off/aa_co_{1..12}` (7 offered + verified wins incl. the Wish -> Scholar finish, 5 absent),
+  all green with the 34 EDF ones (`bash test/combo_off_check.sh`: 46/46).
+
+### A/B (one pooled batch, 4,800 games, three arms via heurarm; binary 119b9342)
+
+Arms: **base** = route, both queries and `MTG_UNTAP_LOOP_SURPLUS_GENERIC` OFF (the committed tree's play);
+**fix** = only the loop's colour fix ON; **on** = everything ON (the shipped defaults). Win turn with an unwon game
+= 9; cost in ms (the box was shared, so ms is noisy) and in work UNITS (contention-free; note the route's walk is
+NOT metered in units -- its own time is `walk_ms` below and is inside the ms).
+
+| cell | base avg | on avg | delta | faster / slower | fix alone vs base |
+|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.6950 | 5.2550 | **-0.440** | 72 / 1 | +0.000 (1 / 1) |
+| s70001 d5 b20 (200) | 5.6300 | 5.2300 | **-0.400** | 66 / 1 | +0.005 (0 / 1) |
+| s90001 d3 b10 (600 held-out) | 5.6883 | 5.2100 | **-0.478** | 226 / 8 | +0.005 (0 / 3) |
+| s90001 d5 b20 (600 held-out) | 5.6167 | 5.1717 | **-0.445** | 211 / 5 | -0.003 (3 / 3) |
+
+Unwon games: 14 -> 9, 12 -> 7, 41 -> 33, 40 -> 27.
+
+| cost per game | base ms mean / p90 / max | on ms mean / p90 / max | ms ratio | units mean base -> on |
+|---|---|---|---|---|
+| s70001 d3 b10 | 4,339 / 11,117 / 41,712 | 3,738 / 11,801 / 65,456 | 0.86x | 149.7k -> 104.4k (0.70x) |
+| s70001 d5 b20 | 15,153 / 47,760 / 155,380 | 13,207 / 33,201 / 234,167 | 0.87x | 271.7k -> 200.6k (0.74x) |
+| s90001 d3 b10 | 6,201 / 15,271 / 190,670 | 5,042 / 11,899 / 179,131 | 0.81x | 132.8k -> 92.3k (0.69x) |
+| s90001 d5 b20 | 9,812 / 24,950 / 282,614 | 8,449 / 19,623 / 319,397 | 0.86x | 243.5k -> 171.9k (0.71x) |
+
+Route census over the 1,600 on-arm games (`MTG_AA_ROUTE_STATS`): 45.5 M emission-site visits, the rule refused
+44.8 M (98.4%), 442 k memo hits, 648 k walks (307 k won), 20.6 M applies, walk time 2,984 s = **1.9 s per game**
+(inside the ms above), 846 applies re-walked in their own context. Against suite_gate's line (8,907 ms/game, the
+worst searched case's mean) the deck is still over on the shared box (d5 b20 13.2 s at s70001 / 8.4 s held-out),
+but every cell is cheaper ON than OFF -- the go-off ends games sooner and skips the search's chain.
+
+**Before the last two fixes** (binary ee4b5c2f, the first full run): -0.405 / -0.350 / -0.467 / -0.433 with 3 / 3
+/ 9 / 6 slower; the duplicate-child fix (119b9342) took the route no-ops of s70001 gi118 / gi142 and s90001 gi134
+back to the control's turn (gi118 T7 -> T4).
+
+**Every slower game, both arms re-run at 10x budget (d3 b100 / d5 b200):** on vs base 15 slower games -> **8
+recover, 7 persist** (4 distinct games); fix vs base 8 -> 6 recover, 2 persist (1 game).
+* s70001 gi1 (both depths, 6 -> 8): RECOVERS (on T5 at 10x, base T6).
+* s90001 gi293 / gi401 / gi446 / gi584 (d3), gi198 / gi401 (d5): RECOVER.
+* **s90001 gi340** (both depths, T3 -> T4; also the fix arm alone): the control wins T3 with the Witch's pump loop
+  (Feed the Clan, X = 5, net 1 -- the colour-starved shape above); with `MTG_UNTAP_LOOP_SURPLUS_GENERIC` the turn-3
+  search picks a Living Wish line instead. Reconstructed at turn 3 (b100) both settings win T3, so this is the
+  loop-payment change moving a knife-edge allocation on the real board, not a lost line.
+* **s90001 gi521** (both depths, 5 -> 6): a route NO-OP -- the committed turn-5 line casts Living Wish, which at
+  REAL resolution fetched Galvanic Alchemist with the Alchemist already tapped by the line's payments, and the
+  route the search had proven on its own board could not be walked on the executor's (an fd-divergence that
+  surfaces through the route; the line plays on and wins T6).
+* **s90001 gi560** (both depths) and **gi198** (d3), 5 -> 6: play diverges at turn 2-3 (the lookahead now prices the
+  route's future kill turns), and the control's T5 is again a Witch pump loop the on arm's line never sets up.
+  Search re-valuation, not a route failure.
+
+**Validation** (binary 119b9342): mtg-test 1517 / 1517; scenarios 228 / 228; `combo_off_check.sh` 46 / 46 (34 EDF
++ 12 AA). Smoke (not accepted): 124 / 128, exactly the four known moves at their known digests (selesnya d3
+a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11) -- EDF and every other
+deck byte-identical. FD oracle (`MTG_FD_ORACLE=1`, on arm, s70001 d5 b40 x 200): **0 [fd-diverge]**, avg 5.200 (E1's
+committed cell: 5.685). The search's query (`MTG_EDF_CO_STATS=1`, same run): root 3 route candidates, 3 verified;
+lookahead 3,684 asked, 3,684 verified, **0 refuted (false-positive rate 0.00%)**.
+
+**Verdict vs the line.** The USER asked for this ON and it measures far better on every cell (-0.40 to -0.48
+turns, 211-226 faster vs 5-8 slower on the held-out 600s) and CHEAPER on every cell (0.81-0.87x ms, 0.69-0.74x
+units). It does not by itself bring the deck under suite_gate's 8,907 ms/game line on this (shared) box: the
+held-out d5 b20 mean is 8.4 s ON vs 9.8 s OFF, s70001 d5 b20 13.2 s vs 15.2 s -- the line needs a dedicated
+uncontended `suite_gate.py --cost` measurement before any suite-entry claim.
 
 ## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
 
@@ -1441,6 +1627,20 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   (4) a Brindle Boar or any untapper (Witch included) in play fills its bucket; (5) Wishes fill only non-mana
   gaps; (6) lands strictly before dorks / land Auras in the MANA remainder; (7) one LIFEGAIN keep -- the one
   rule-worse label (seed 930213) wanted both Feed and Nourish over a third Forest.
+
+* **Combo Off (2026-10-20) -- what to decide / argue with (defaults taken, all ON as you asked):**
+  (1) the rule table above, row by row -- in particular whether LIFE should also count a Living Wish for a lifegain
+  creature (the sweep's 2 c's) and whether the Witch rows should stay offered at X = 5 (26 of the 27 d's: the
+  loop's two-colour untap starves off a one-colour Alchemist -- arithmetic says the loop exists, our executor does
+  not run it; the fix is the loop's colour plan / the payer's hybrid pip, and narrowing the display is your call);
+  (2) the route is DEFAULT ON (`MTG_AA_COMBO_ROUTE`) and so are the search's two queries for this deck
+  (`ComboOffSearchDefault`), with EDF's defaults unchanged; (3) `MTG_UNTAP_LOOP_SURPLUS_GENERIC` (default ON) is a
+  mana-payment change to the closed-form loop itself, i.e. it moves the search's own loops too -- measured alone it
+  is +0.000 / +0.005 / +0.005 / -0.003 turns (see the table), needed for the Staff -> Scholar finish; (4) pump
+  finishers (Ezuri, the Witch's +3/+3) are not combo-off rows because they win in combat; (5) the persistent
+  slower games (below) include route NO-OPs where the executor's state at the route differs from the one the
+  search proved it on (a Living Wish resolving to a different card / a payment that tapped the Alchemist) -- an
+  fd-divergence surfacing through the route; the line plays on, a turn later.
 
 ## Claude-play sweep
 - commit: `251c426e`

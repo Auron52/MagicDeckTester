@@ -801,3 +801,15 @@ The residue is dominated by `loop-ran-finish-never-fired` (36) and `finish-fired
 of which sit on the `net_c <= 0` axis that §2.2's outlet swap only reaches when a pip-free outlet
 is actually available. On the synthetic matrix it is not (the generator fills libraries with
 Forests); on real boards it now can be, because the draw engine works.
+
+---
+
+## Appendix (2026-10-20): the same sweep for AccomplishedAlchemist
+
+The AccomplishedAlchemist deck has its own rule table (`AccomplishedAlchemistProvider::ComboOffPossible`, the USER's
+three stages LIFE + LOOP + FINISH) and its own mechanical route (`AlchemistComboRouteOffer` / `Apply`, the
+untap-loop go-off). Its sweep is `bash test/aa_combo_off_sweep.sh` (`test/aa_combo_off_sweep.py`: a synthetic
+matrix over that table's ingredients + MAIN_1 frames of autonomous games; the win oracle resumes the SAME board at
+main 1 and reads from its game log whether the win was a combo or combat), its fixtures `test/combo_off/aa_co_*`.
+Results, clusters and the residue are in `docs/design/analysis-AccomplishedAlchemist.md`, "Combo Off for
+AccomplishedAlchemist (2026-10-20)". The headline transfers: `combo_off_verified` is again a perfect oracle.
