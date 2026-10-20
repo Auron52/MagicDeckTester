@@ -30766,9 +30766,12 @@ inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source
         const int si = find_num(source_id, /*own=*/true);
         int ti = find_num(target_id, /*own=*/false);
         if (si < 0 || ti < 0) { break; }
-        // The oracle is the legality test: an ability the oracle no longer lists is gone.
+        // The oracle is the legality test: an ability the oracle no longer lists is gone. The list is a
+        // reused per-thread buffer (P4, 2026-10-20: one heap allocation per ACTIVATION of a loop that
+        // runs dozens of them); it is read to the end before anything below can re-enter here.
         {
-            std::vector<UntapAbilityRef> abil;
+            static thread_local std::vector<UntapAbilityRef> abil;
+            abil.clear();
             CollectCreatureUntapAbilities(state, ctrl, state.battlefield[static_cast<std::size_t>(ti)], abil);
             bool have = false;
             for (const UntapAbilityRef& r : abil) { if (r.shape == shape && r.source_id == source_id) { have = true; } }
@@ -30778,15 +30781,16 @@ inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source
             UntapUnitCost(state, ctrl, shape, state.battlefield[static_cast<std::size_t>(si)],
                           state.battlefield[static_cast<std::size_t>(ti)]);
         if (!unit) { break; }
+        // Is the UNTAPPED target a live mana creature? Asked ONCE (P4, 2026-10-20): the no-op test and the
+        // tap-for-mana below asked the same pure question of the same unchanged board.
+        bool pretap_live = false;
         if (!state.battlefield[static_cast<std::size_t>(ti)].tapped)
         {
             Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
-            const bool live = t.controller_index == ctrl && UntapTargetIsLiveManaCreature(state, t);
-            if (!live && shape != kUntapPumpTarget) { break; }   // a pure untap of it is a no-op
+            pretap_live = t.controller_index == ctrl && UntapTargetIsLiveManaCreature(state, t);
+            if (!pretap_live && shape != kUntapPumpTarget) { break; }   // a pure untap of it is a no-op
         }
-        if (!state.battlefield[static_cast<std::size_t>(ti)].tapped
-            && state.battlefield[static_cast<std::size_t>(ti)].controller_index == ctrl
-            && UntapTargetIsLiveManaCreature(state, state.battlefield[static_cast<std::size_t>(ti)]))
+        if (pretap_live)
         {
             Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
             const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
