@@ -1,8 +1,9 @@
-# Regression ground truth -- commit 8e9cacbb1  date 2026-10-20
+# Regression ground truth -- commit 2f2cd2220  date 2026-10-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
 # accepted-with-regressions (smoke, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
 # accepted-with-regressions (regression, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
+# accepted-with-regressions (overnight, 2026-10-20): fungusv3 overnight rows RE-SIZED to the standard FULL set (d3 4x1000 b20, d5 4x500 b40; USER 2026-10-17 'put everything into the latest version'): a resized row re-defines its key, accepted on its own with no play change (d0 rows unchanged 4/4; smoke+regression byte-identical for every non-EDF key).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -122,6 +123,10 @@ bruna2hg_smoke_d3_s1001=5.4000/2e922bfe7cbeee71
 bruna_smoke_d0_s1001=6.1460/a35da4523e8d5492
 bruna_smoke_d3_s1001=4.8400/0f9a162c0feb8cf3
 bruna_smoke_d5_s1001=4.9200/b46b1507da4cf508
+edf2hg_smoke_d3_s1001=4.6667/28ebd1cc5a327646
+edf_smoke_d0_s1001=5.5310/3ee033ed3b85dffa
+edf_smoke_d3_s1001=4.5600/3e77a8a5669578a6
+edf_smoke_d5_s1001=4.6667/a0db4ed23016e777
 snow_smoke_d0_s1001=6.1710/72d36f9ec29bf8da
 snow_smoke_d3_s1001=5.8400/0250540527c14a97
 snow_smoke_d5_s1001=5.8000/51401cf5b384e6fc
@@ -293,6 +298,11 @@ bruna_regression_d3_s2002=5.1400/16e25d56451fc2cb
 bruna_regression_d3_s3003=5.0400/9af3b004f66b9f11
 bruna_regression_d5_s2002=5.0533/e0d204fa5add4481
 bruna_regression_d5_s3003=5.0933/9e638bd457cd7215
+edf_regression_d0_s2002=5.5370/b25f98bbd03c3fa7
+edf_regression_d3_s2002=4.1000/c210a8d836fa9f8b
+edf_regression_d3_s3003=4.5500/5ad900dce9602b3a
+edf_regression_d5_s2002=4.0800/d7790d1967197e23
+edf_regression_d5_s3003=4.7600/a3bbd1bd90e88faa
 snow_regression_d0_s2002=6.2000/84ab754e3ba4031c
 snow_regression_d3_s2002=5.7000/a366ba71c35f920c
 snow_regression_d3_s3003=5.7000/34f95b27767ff9d4
@@ -321,14 +331,14 @@ fungusv3_overnight_d0_s4004=5.3810/218363fba321b400
 fungusv3_overnight_d0_s6006=5.3520/a726a3f2dabf9a22
 fungusv3_overnight_d0_s8008=5.3510/0496037d673cf4ab
 fungusv3_overnight_d0_s10010=5.3730/1ac676cdc32a2106
-fungusv3_overnight_d3_s4004=4.6250/51adf5f18a37015f
-fungusv3_overnight_d3_s5005=4.5625/4929bda5f6fc1757
-fungusv3_overnight_d3_s6006=4.5575/eee2c4066013cdfc
-fungusv3_overnight_d3_s7007=4.6075/eff9ac0f1e5c8cb6
-fungusv3_overnight_d5_s4004=4.6533/8588a12eda566291
-fungusv3_overnight_d5_s5005=4.5567/eb6f770b1336f1ab
-fungusv3_overnight_d5_s6006=4.5633/19c74a7de40844ea
-fungusv3_overnight_d5_s7007=4.5667/fc9aa31736aacf7b
+fungusv3_overnight_d3_s4004=4.5750/2be1ec8ed9d1bc2f
+fungusv3_overnight_d3_s5005=4.6020/fc318473a8a136fc
+fungusv3_overnight_d3_s6006=4.5600/ba10590474e60154
+fungusv3_overnight_d3_s7007=4.5790/11dd2cee5affc536
+fungusv3_overnight_d5_s4004=4.6080/627c77be1b93d501
+fungusv3_overnight_d5_s5005=4.5700/5557c540f291696d
+fungusv3_overnight_d5_s6006=4.5480/10e59b5baec5103a
+fungusv3_overnight_d5_s7007=4.5840/99ad2d7f35e96a69
 slivers_overnight_d0_s4004=4.6540/9dd76cf4a01e3493
 slivers_overnight_d0_s6006=4.6560/538bfc056828ebfb
 slivers_overnight_d0_s8008=4.6375/781e664a3095276f
@@ -641,6 +651,18 @@ bruna_overnight_d5_s4004=5.0133/745bff343e61a613
 bruna_overnight_d5_s5005=5.0533/0a2fdc588afe1afd
 bruna_overnight_d5_s6006=5.0367/2c13dc24e3e1f5e8
 bruna_overnight_d5_s7007=5.1700/176383cfb164f874
+edf_overnight_d0_s4004=5.5405/81458fa313f23502
+edf_overnight_d0_s6006=5.5155/3e51c6d1448e1de2
+edf_overnight_d0_s8008=5.5680/8e7bbc0fd1e277a1
+edf_overnight_d0_s10010=5.5410/3714c3fdcf48f55e
+edf_overnight_d3_s4004=4.4075/e28126fcf4cb73c0
+edf_overnight_d3_s5005=4.2375/e9380720691b12de
+edf_overnight_d3_s6006=4.2100/e3b8b53fa88aeb37
+edf_overnight_d3_s7007=4.3400/2751860364cbdd97
+edf_overnight_d5_s4004=4.4467/e79c6670b843bbe8
+edf_overnight_d5_s5005=4.2433/90ec876734d59a20
+edf_overnight_d5_s6006=4.1433/51ef8de0466a17ad
+edf_overnight_d5_s7007=4.2867/95d8e2d59a829eb7
 giants_overnight_d0_s4004=6.0760/0d3f2a1adf68723d
 giants_overnight_d0_s6006=6.0780/477bf3a2a272d22b
 giants_overnight_d0_s8008=6.0720/fdb668ec7bdb63ed
@@ -758,24 +780,3 @@ colossus_overnight_d5_s4004=3.3680/77fc1a5aa4f1d166
 colossus_overnight_d5_s5005=3.3720/8815e366486b6eba
 colossus_overnight_d5_s6006=3.3100/204420ad95007c59
 colossus_overnight_d5_s7007=3.3980/b116710a5be09d92
-edf2hg_smoke_d3_s1001=4.6667/28ebd1cc5a327646
-edf_smoke_d0_s1001=5.5310/3ee033ed3b85dffa
-edf_smoke_d3_s1001=4.5600/3e77a8a5669578a6
-edf_smoke_d5_s1001=4.6667/a0db4ed23016e777
-edf_regression_d0_s2002=5.5370/b25f98bbd03c3fa7
-edf_regression_d3_s2002=4.1000/c210a8d836fa9f8b
-edf_regression_d3_s3003=4.5500/5ad900dce9602b3a
-edf_regression_d5_s2002=4.0800/d7790d1967197e23
-edf_regression_d5_s3003=4.7600/a3bbd1bd90e88faa
-edf_overnight_d0_s4004=5.5405/81458fa313f23502
-edf_overnight_d0_s6006=5.5155/3e51c6d1448e1de2
-edf_overnight_d0_s8008=5.5680/8e7bbc0fd1e277a1
-edf_overnight_d0_s10010=5.5410/3714c3fdcf48f55e
-edf_overnight_d3_s4004=4.4075/e28126fcf4cb73c0
-edf_overnight_d3_s5005=4.2375/e9380720691b12de
-edf_overnight_d3_s6006=4.2100/e3b8b53fa88aeb37
-edf_overnight_d3_s7007=4.3400/2751860364cbdd97
-edf_overnight_d5_s4004=4.4467/e79c6670b843bbe8
-edf_overnight_d5_s5005=4.2433/90ec876734d59a20
-edf_overnight_d5_s6006=4.1433/51ef8de0466a17ad
-edf_overnight_d5_s7007=4.2867/95d8e2d59a829eb7
