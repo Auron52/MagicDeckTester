@@ -406,6 +406,26 @@ deck byte-identical. FD oracle (`MTG_FD_ORACLE=1`, on arm, s70001 d5 b40 x 200):
 committed cell: 5.685). The search's query (`MTG_EDF_CO_STATS=1`, same run): root 3 route candidates, 3 verified;
 lookahead 3,684 asked, 3,684 verified, **0 refuted (false-positive rate 0.00%)**.
 
+**Port onto `aa-land` (2026-10-20).** The eight Combo Off commits cherry-picked onto `aa-land` @ ae8cb607 (the
+rebase onto 78 upstream commits + the USER Harbinger and discard rules + Chunk P4); conflicts were unions only
+(HeuristicArm.h: the AA Harbinger / discard slots, then `AA_COMBO_ROUTE`, `UNTAP_LOOP_SURPLUS_GENERIC` -- enum and
+kNames in the same order; this ledger). Validation: mtg-test 1612 / 1612, scenarios 241 / 241, combo-off fixtures
+46 / 46; smoke (MTG_PGO=0, not accepted) = the four known moves at their known digests, EDF byte-identical, plus the
+four NEW alchemist rows of the coordinator's uncommitted suite draft (d0 7.2220/aaf70d40edc6eb07, d3
+5.4333/353a32b5029685e0, d5 5.2667/89402437aa2efb07, 2HG d3 5.5600/dd447dd3be18f545 -- no GT). The effect holds on
+the integrated tree (one pooled batch, 2,000 games, ON vs everything OFF):
+
+| cell | base avg | on avg | delta | faster / slower | units mean base -> on | ms mean base -> on |
+|---|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.7400 | 5.3000 | **-0.440** | 71 / 3 | 140.0k -> 85.3k (0.61x) | 4,143 -> 3,088 |
+| s70001 d5 b20 (200) | 5.6400 | 5.2700 | **-0.370** | 62 / 3 | 234.6k -> 157.4k (0.67x) | 6,276 -> 5,500 |
+| s90001 d5 b20 (600) | 5.6217 | 5.2133 | **-0.408** | 193 / 6 | 223.0k -> 142.8k (0.64x) | 6,739 -> 5,267 |
+
+The 12 slower games at 10x: 5 recover, 7 persist, all in the classes already named above -- s90001 gi340 (the loop's
+colour fix), s70001 gi36 and s90001 gi134 (a route NO-OP on the executor's board), s70001 gi45, s90001 gi337 / gi373
+(the route wins a turn later than the control's line: search re-valuation). Scratch:
+`/workspaces/MagicDeckTester/build/scratch/aa-co/land/`.
+
 **Verdict vs the line.** The USER asked for this ON and it measures far better on every cell (-0.40 to -0.48
 turns, 211-226 faster vs 5-8 slower on the held-out 600s) and CHEAPER on every cell (0.81-0.87x ms, 0.69-0.74x
 units). It does not by itself bring the deck under suite_gate's 8,907 ms/game line on this (shared) box: the
