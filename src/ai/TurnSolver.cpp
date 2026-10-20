@@ -46400,14 +46400,72 @@ static bool GreedyUntapTargetTieOn()
 // Drop, from each group, every ActivateUntap option whose key another option of the SAME group shares with
 // a strictly higher eval -- and, with the target tie on, whose TARGET-BLIND key an EARLIER option of the
 // group shares at an eval at least as high. Returns the number dropped.
+// THE SAME COUNT DOMINANCE FOR A REPEATABLE {T} PERMANENT ABILITY (Staff of Domination's draw and its
+// lifegain, MTG_GREEDY_UNTAP_K_DOM too): every K of one (source, mode) carries ONE activation's bill and
+// eval = K, and with no damage term (direct_damage equal across K -- the drain / ping modes scale it and
+// never match) consider() reads nothing else off the action that K changes. One extra condition: K is
+// mixed into the interchangeable-source tag (ActivationEquivTag), and the source fold's prefix rule reads
+// tags ACROSS sources, so a family is folded only when no OTHER source offers any of its tags (a lone
+// Staff, not two identical ones).
+static std::uint64_t PermKDomKey(const Action& a)
+{
+    Action b = a;
+    b.equiv_tag = 0;
+    std::uint64_t h = UntapKDomKey(b);
+    FoldMix(h, 0x9E44ull + static_cast<std::uint64_t>(a.ability_mode));
+    return h;
+}
 static int DropGreedyDominatedUntapCounts(const std::vector<Action>& cands, std::vector<std::vector<int>>& groups)
 {
     const bool target_tie = GreedyUntapTargetTieOn();
     int dropped = 0;
+    // Interchangeable-source tags offered by MORE THAN ONE source (the source fold is live on those).
+    static thread_local std::vector<std::pair<int, int>> tag_src;   // (tag, source)
+    tag_src.clear();
+    bool any_perm = false;
+    for (const Action& c : cands)
+    {
+        if (c.kind != Action::Kind::ActivatePermAbility) { continue; }
+        any_perm = true;
+        if (c.equiv_tag != 0) { tag_src.emplace_back(c.equiv_tag, c.sac_source_id); }
+    }
+    auto tag_shared = [&](const Action& a) -> bool
+    {
+        if (a.equiv_tag == 0) { return false; }
+        for (const auto& ts : tag_src) { if (ts.first == a.equiv_tag && ts.second != a.sac_source_id) { return true; } }
+        return false;
+    };
     for (std::vector<int>& gp : groups)
     {
-        int n_untap = 0;
-        for (int j : gp) { if (cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateUntap) { ++n_untap; } }
+        int n_untap = 0, n_perm = 0;
+        for (int j : gp)
+        {
+            const Action::Kind k = cands[static_cast<std::size_t>(j)].kind;
+            if (k == Action::Kind::ActivateUntap) { ++n_untap; }
+            else if (k == Action::Kind::ActivatePermAbility) { ++n_perm; }
+        }
+        if (n_perm >= 2 && any_perm)
+        {
+            std::vector<int> kept;
+            kept.reserve(gp.size());
+            for (std::size_t i = 0; i < gp.size(); ++i)
+            {
+                const Action& a = cands[static_cast<std::size_t>(gp[i])];
+                bool dominated = false;
+                if (a.kind == Action::Kind::ActivatePermAbility && !tag_shared(a))
+                {
+                    const std::uint64_t ka = PermKDomKey(a);
+                    for (std::size_t k = 0; k < gp.size() && !dominated; ++k)
+                    {
+                        const Action& b = cands[static_cast<std::size_t>(gp[k])];
+                        if (k == i || b.kind != Action::Kind::ActivatePermAbility || b.eval <= a.eval || tag_shared(b)) { continue; }
+                        if (PermKDomKey(b) == ka) { dominated = true; }
+                    }
+                }
+                if (dominated) { ++dropped; } else { kept.push_back(gp[i]); }
+            }
+            if (kept.size() != gp.size()) { gp.swap(kept); }
+        }
         if (n_untap < 2) { continue; }
         static thread_local std::vector<std::uint64_t> keys, blind;
         keys.assign(gp.size(), 0);
