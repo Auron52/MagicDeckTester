@@ -495,7 +495,10 @@ static_assert(sizeof(Player) == 200,
 // (set by the main-1 plan, read at THIS turn's declare-attackers), FOLDED in Build(), value-gated; and the
 // bools `deck_has_transform` / `deck_has_tap_steal` (beside deck_has_madness, same padding) -- DECK
 // CONSTANTS stamped once in StampDeckTraits that only skip provably-empty scans, nothing to fold.
-static_assert(sizeof(GameState) == 1136,
+// The NivMizzetCombo / banked-hold fields and the Vampires fields above each fit the padding against 1136
+// on parallel branches; together they overflow it by one alignment step: 1152, measured on the rebased
+// tree, 2026-10-20. No new field -- every one is classified above.
+static_assert(sizeof(GameState) == 1152,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

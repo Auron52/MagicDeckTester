@@ -270,6 +270,38 @@ TEST_CASE("Curiosity on a NON-Niv creature: combat damage draws one card per dam
     CHECK(Hand(t) == 1);
 }
 
+TEST_CASE("Curiosity on a first / double striker: one draw per combat-damage STEP it connects in (CR 510.4)")
+{
+    // A first or double striker sends the combat to the two-step resolution; the damage->draw grant
+    // fires per step there, so a double striker draws twice and a first striker once.
+    EnsureCardsLoadedNiv();
+    GameState s = FreshNiv();
+    const int vind = PutNiv(s, "Swiftblade Vindicator", 3);
+    const int cur  = PutNiv(s, "Curiosity", 4);
+    AttachNiv(s, cur, 3);
+    ResolveCombatDamage(s, { vind }, 0, false);
+    CHECK(s.players[1].life == 18);            // 1 in each step
+    CHECK(Hand(s) == 2);                       // two damage events, two draws
+    // With a Niv up (not attacking), each step's draw pings before the next step.
+    GameState t = FreshNiv();
+    PutNiv(t, "Niv-Mizzet, the Firemind", 1);
+    const int v2 = PutNiv(t, "Swiftblade Vindicator", 3);
+    const int c2 = PutNiv(t, "Curiosity", 4);
+    AttachNiv(t, c2, 3);
+    ResolveCombatDamage(t, { v2 }, 0, false);
+    CHECK(t.players[1].life == 16);            // 1 + ping, 1 + ping
+    CHECK(Hand(t) == 2);
+    // A FIRST striker connects in the first step only: one draw, one ping.
+    GameState u = FreshNiv();
+    PutNiv(u, "Niv-Mizzet, the Firemind", 1);
+    const int th = PutNiv(u, "Thalia, Guardian of Thraben", 3);
+    const int c3 = PutNiv(u, "Curiosity", 4);
+    AttachNiv(u, c3, 3);
+    ResolveCombatDamage(u, { th }, 0, false);
+    CHECK(u.players[1].life == 17);            // 2 combat + 1 ping
+    CHECK(Hand(u) == 1);
+}
+
 TEST_CASE("Curiosity on an attacking Niv: the combat-damage draw starts the loop and it kills")
 {
     EnsureCardsLoadedNiv();
