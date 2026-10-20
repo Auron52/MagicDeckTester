@@ -30928,6 +30928,12 @@ inline thread_local InternedName g_untap_loop_kill_card{};   // chained payoffs:
 // in every world that runs it (trial, rollout apply, executor apply), so the worlds stay in lockstep.
 // Zero everywhere else: byte-identical.
 inline thread_local int g_untap_loop_no_pump = 0;
+// THE ROUTE'S MENU (the same COMBO OFF route, 2026-10-20): while non-zero, CollectActions keeps only what the
+// walk can use -- the land drop, lifegain / untapper / Living Wish casts, the closed-form loop
+// (ActivateUntap kUntapLoopToNeed) and the Staff's gain. The walk enumerated the WHOLE menu at every link and
+// kept a dozen plans of it (perf, s70001 gi113: the enumeration was most of a 59 s game's route time). Set
+// ONLY by aaroute::Dfs around its own enumeration; zero everywhere else -- byte-identical.
+inline thread_local int g_untap_loop_route_menu = 0;
 
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies);   // ManaPayment.cpp
 

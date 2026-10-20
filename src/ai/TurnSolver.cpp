@@ -41664,6 +41664,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
         actions.swap(kept);
     }
+    // THE COMBO OFF ROUTE'S MENU (g_untap_loop_route_menu; see SpellEffects.h): only the walk's own pieces.
+    if (g_untap_loop_route_menu != 0)
+    {
+        std::vector<Action> kept;
+        for (Action& a : actions)
+        {
+            bool keep = false;
+            if (a.kind == Action::Kind::PlayLand) { keep = true; }
+            else if (a.kind == Action::Kind::ActivateUntap) { keep = a.chosen_x >= kUntapLoopToNeed; }
+            else if (a.kind == Action::Kind::ActivatePermAbility) { keep = a.ability_mode == Action::AbilityMode::TapLifegain; }
+            else if (a.kind == Action::Kind::CastFromHand)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d != nullptr)
+                {
+                    const CardParams& q = d->params;
+                    keep = q.cast_lifegain > 0 || q.untap_enchanted_cost.has_value() || q.untap_pump_cost.has_value()
+                        || (q.untap_target_creature_cost.has_value() && q.self_untap_cost.has_value())
+                        || (q.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
+                        || (q.tutor_to_hand && q.wish_from_sideboard);
+                }
+            }
+            if (keep) { kept.push_back(std::move(a)); }
+        }
+        actions.swap(kept);
+    }
 
     // Identical creature-Aura HOSTS -> the first k of each class (MTG_AURA_HOST_FOLD; see the function).
     // Dominated haste/shroud equip moves (see DropInertHasteShroudEquips): the search's lever or the
@@ -53728,7 +53754,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...INSIDE THE DFS. The route's greedy CERTIFICATE keeps the canon: it is a one-pass playout
         // whose job is to finish the chain inside one apply, and without the continuation it stopped
         // short of kills it had always found (five depth-0 smoke games, T4 -> T6, 2026-10-04).
-        if (!resolved && !EquipRouteDfsActive()
+        // ...AND INSIDE THE UNTAP-LOOP ROUTE'S WALK (AccomplishedAlchemist COMBO OFF, 2026-10-20), for the same
+        // reason: the walk re-enumerates after every link (loop -> kill-fold finisher -> chained casts), so it
+        // is itself the continuation search, and the canon default cost it a whole continuation derivation per
+        // link -- 54 ms per apply, 135 s of a 150 s game (s70001 gi113, MTG_AA_ROUTE_STATS) -- while playing
+        // casts the walk did not choose. Trial and replay both run inside the walk, so they agree.
+        if (!resolved && !EquipRouteDfsActive() && !AlchemistComboRouteInProgress()
             && TurnSolver::BpUnbranchedCanon(state, is_pre_combat, plan, seen_before, class_on, out))
         { resolved = true; canon_used = true; }
         // The playout fold's premise, checked rather than assumed: the measured base resolved this
@@ -78932,8 +78963,18 @@ static void HybridLearnedStateClear()
 //
 // BYTE-IDENTICAL FOR EVERY OTHER DECK, by two independent gates: `HasExtraLethalModel()` is false
 // for most providers, and `DecisionProvider::ComboOffPossible`'s base implementation returns false
-// unconditionally -- only EldraziFlickerProvider overrides it. The `chosen_x > 3` scan finds
-// nothing for a deck with no blink outlet, so the rule is not even called there.
+// unconditionally -- only EldraziFlickerProvider and (2026-10-20) AccomplishedAlchemistProvider
+// override it. The `chosen_x > 3` scan finds nothing for a deck with no blink outlet / no route, so
+// the rule is not even called there.
+//
+// ACCOMPLISHED ALCHEMIST (2026-10-20; USER: "We should use the combo off logic for this deck"). The
+// deck's go-off is the mechanical untap-loop ROUTE (AlchemistComboRouteOffer, a ComboRoute action), so
+// the precondition (2) is met by construction: in autonomous play that action exists ONLY when its own
+// walk on a copy already killed the opponent, which is a stronger proof than "a multi-activation plan
+// was enumerated" -- the payment machinery ran every link. The trial (3) is still paid at root and, by
+// LookTrialOn's default, in lookahead: it replays the proven plans (AlchemistComboRouteApply), so a
+// verified answer is what the committed line realises. Both queries default ON for this provider
+// (ComboOffSearchDefault), OFF for EDF, and keep their env / heurarm overrides.
 //
 // NOT IN HUMAN PLAY. `EnumerateMainPlans`' own gate owns the button; this must not double-fire
 // inside a viewer frame (it would commit the go-off instead of offering it).

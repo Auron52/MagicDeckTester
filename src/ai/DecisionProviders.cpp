@@ -44376,7 +44376,16 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         }
         return 0;   // the float pays a kill and none of the kill plans lands it: no further link helps
     }
-    std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    std::vector<TurnSolver::Plan> plans;
+    {
+        struct MenuScope
+        {
+            int prev;
+            MenuScope() : prev(g_untap_loop_route_menu) { g_untap_loop_route_menu = 1; }
+            ~MenuScope() { g_untap_loop_route_menu = prev; }
+        } _menu;
+        plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    }
     // THE WALK'S ORDER (an order over the engine's own plans, never a pick: every admitted plan is tried
     // until one proves a kill). Stage order is the USER's: a loop plan that spends a FINISHER before the loop
     // runs (a Stroke cast for the X the plan-start pool affords, a Scholar cast from the plan-start pool) is
