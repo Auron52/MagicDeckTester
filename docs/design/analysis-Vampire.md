@@ -181,8 +181,18 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   and kept as `docs/design/analysis-Vampire.suite-rows.patch` (`git apply` it to re-admit; it applies cleanly
   to `test/regression_cases.sh` as of this landing), with every `vampires*` GT key / `.wins` file and its
   `test/suite_cost.json` entry. The suite cannot see this deck's play again until it is re-admitted.
-- **Other decks:** smoke + regression re-run on the rebased binary against origin's ground truth, verdict per
-  moved row in the landing commit.
+- **Other decks** (smoke + regression on the rebased binary against origin's ground truth, both GT halves
+  restored to origin's first; accepted in 8a83cf620): the moved decks are EXACTLY the predicted set in both
+  tiers -- two-step combat (angels, critter) and the payer levers (auras, creature_giving, minotaur, pirates,
+  selesnya, soldiers, th); every other deck byte-identical. Searched: 0 slower (19 + 47 faster). d0: 3 slower,
+  one class, each restored with both payer levers =0 (soldiers smoke gi49 / gi817, pirates regression gi628:
+  the painless payment keeps a life, then the d0 runner sacrifice-cycles a land and is a land short).
+- **Reference gate:** the known CritterLifegain/claude_s6_gi5 drift only (question 27). Landing it on the
+  shared branch would turn every agent's regression tier red on it, so the shared-branch fast-forward WAITS on
+  question 27; the rebased branch is on origin as `backup/2026-10-20/vampires-land`.
+- **Question 46:** NOT refilled from this run -- it shared the box with another container's job (load ~25 with
+  20 workers; hinata's d5 rows read 3,010 ms/game against 1,468 on 10-19 with byte-identical play). The cache
+  keeps the 10-19 refill minus Vampires. A clean `--measure-all` refill is still owed on a quiet box.
 - **Next (the first goal):** a route under 3x that does not need a keep table (the keep table is gated behind
   suite membership). 68-76% of the units are pre-keep-table bottoming rollouts, so the folds of questions 40-42
   (a few % each) cannot get there alone; the lever that can is the one NivMizzetCombo's question 15 names --
@@ -899,7 +909,8 @@ rules; gi1565's least-flexible pick).
     landed, no generator started; I would recommend (a)]
 46. **The cost cache's Galadriel reference is stale** (2,969 vs ~94 ms/game today), so the 3x gate is mis-calibrated
     for every deck. [default: refill with `suite_gate.py --measure-all --no-run` off the next full regression run
-    and commit `test/suite_cost.json` with this branch]
+    and commit `test/suite_cost.json` with this branch] -- DONE 10-19 (b50e1c69d: Galadriel 2,969 -> 75, reference
+    hinata 1,468). The 10-20 landing run was contended and NOT used; a clean refill on a quiet box is still owed.
 47. **Bucket amendments from the d0 root-cause** (cast-order doc 5.1): (1) Keeper's delayed value x0.75 (Keeper 12 ->
     10.5); (2) duplicate copies priced at cumulative cost. Each changes searched play too, so each needs the same A/B.
     [default: buckets as drafted, OFF; amendments not tried]
