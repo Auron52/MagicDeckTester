@@ -1,6 +1,8 @@
-# Regression ground truth -- commit 93c01329  date 2026-10-20
+# Regression ground truth -- commit 8e9cacbb1  date 2026-10-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
+# accepted-with-regressions (smoke, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
+# accepted-with-regressions (regression, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -123,9 +125,9 @@ bruna_smoke_d5_s1001=4.9200/b46b1507da4cf508
 snow_smoke_d0_s1001=6.1710/72d36f9ec29bf8da
 snow_smoke_d3_s1001=5.8400/0250540527c14a97
 snow_smoke_d5_s1001=5.8000/51401cf5b384e6fc
-landfall_smoke_d0_s1001=7.5910/d4bff365cee69d95
-landfall_smoke_d3_s1001=6.0000/c930836eb68a3888
-landfall_smoke_d5_s1001=5.8667/4531d4162b8fccbd
+landfall_smoke_d0_s1001=7.4410/90c75d3c95a0f662
+landfall_smoke_d3_s1001=6.0000/48047bc2e9848a95
+landfall_smoke_d5_s1001=5.8667/11a73ea414d70d8d
 galadriel_smoke_d0_s1001=6.9400/876fdad1871c1c5a
 galadriel_smoke_d3_s1001=4.9933/e962de98bc12e846
 galadriel_smoke_d5_s1001=4.8933/0bebbdb5d1970e7b
@@ -296,11 +298,11 @@ snow_regression_d3_s2002=5.7000/a366ba71c35f920c
 snow_regression_d3_s3003=5.7000/34f95b27767ff9d4
 snow_regression_d5_s2002=5.6667/672a8d6ba4950919
 snow_regression_d5_s3003=5.7667/6cc882e78899ed4a
-landfall_regression_d0_s2002=7.6220/6aa62603a8dfe3ba
-landfall_regression_d3_s2002=5.8500/8fa5520970a51b3d
-landfall_regression_d3_s3003=5.8500/e2263cccef69817e
-landfall_regression_d5_s2002=5.7500/a853da5da0b9df8a
-landfall_regression_d5_s3003=5.8500/0e4a470dfa01a812
+landfall_regression_d0_s2002=7.5010/07517ac2c0ae2b03
+landfall_regression_d3_s2002=5.9250/35cb8867be2bf87e
+landfall_regression_d3_s3003=5.8000/90cdc236333c1c0e
+landfall_regression_d5_s2002=5.7500/f924adbe2234b2ac
+landfall_regression_d5_s3003=5.6500/5757c46d4c6b5002
 galadriel_regression_d0_s2002=6.9500/02803c76ba13231d
 galadriel_regression_d3_s2002=4.7600/7316ce7a7639b625
 galadriel_regression_d3_s3003=4.9333/4663bc6f2f79cfff
