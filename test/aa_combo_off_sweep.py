@@ -195,13 +195,39 @@ def probe_win(fix, budget_ms=100):
     f["max_turns"] = f["turn"]
     f["depth"] = 5
     f["budget_ms"] = budget_ms
+    fd, logp = tempfile.mkstemp(suffix=".log.json", dir=SCRATCH)
+    os.close(fd)
+    f["log_out"] = logp
     _rc, out = run_scenario(f)
+    # HOW the engine won: a Stroke of Genius at the opponent or a drain activation in the winning turn is a
+    # COMBO kill (what the button is for); anything else is combat.
+    kind = None
+    try:
+        g = json.load(open(logp))
+        kind = "combat"
+        for t in g.get("turns") or []:
+            if t.get("turn") != fix["turn"]:
+                continue
+            for act in t.get("actions") or []:
+                nm = act.get("cardName") or ""
+                if act.get("type") == "CAST_SPELL" and nm == "Stroke of Genius" and any(
+                        (x or {}).get("who") == "opponent" for x in act.get("targets") or []):
+                    kind = "combo"
+                if act.get("type") == "ABILITY" and "Scholar" in nm:
+                    kind = "combo"
+    except Exception:
+        kind = None
+    finally:
+        try:
+            os.unlink(logp)
+        except OSError:
+            pass
     m = WIN_RE.search(out)
     if not m:
         return {"auto_win_turn": None, "error": (out.strip().splitlines() or ["?"])[-1][:200]}
     wt = m.group(1)
     return {"auto_win_turn": (None if wt == "none" else int(wt)), "auto_opp_life": int(m.group(2)),
-            "error": None}
+            "kind": kind, "error": None}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -326,8 +352,11 @@ def classify(rec):
     if o["offered"]:
         if o["apply_win"]:
             return "a_offered_wins"
-        if rec["win"].get("auto_win_turn") is not None or rec["win10"].get("auto_win_turn") is not None:
+        w = rec["win"].get("auto_win_turn") is not None or rec["win10"].get("auto_win_turn") is not None
+        if w and rec["win_kind"] == "combo":
             return "b_offered_no_win"
+        # The autonomous engine wins this turn only in COMBAT (or not at all): the rule promised a main-phase
+        # kill no executor reached -- the rule is too loose for THIS board, whatever combat can do.
         return "d_rule_too_loose"
     w = rec["win"].get("auto_win_turn")
     if w is not None:
@@ -356,9 +385,8 @@ def analyse_one(item):
             power += int(c.get("power") or 0)
         except (TypeError, ValueError):
             pass
-    wl = rec["win"].get("auto_opp_life")
     rec["board_power"] = power
-    rec["win_kind"] = "combo" if (wl is not None and wl > 0) or power == 0 else "combat"
+    rec["win_kind"] = rec["win"].get("kind") or rec["win10"].get("kind") or "combat"
     rec["fixture"] = fix
     rec["class"] = classify(rec)
     return rec
