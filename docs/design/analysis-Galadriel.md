@@ -310,11 +310,74 @@ better in both modes).
 - Rebased onto origin 8b3776df (Colossus): GT conflict taken from origin and galadriel re-accepted on the rebased
   binary -- every galadriel row reproduced its pre-rebase value and digest; every other smoke row byte-identical.
 
+## Scry rule: PROPOSED amendment (2026-10-20; `MTG_GALADRIEL_SCRY_AMEND`, default OFF -- the USER decides)
+Trigger: the 2026-10-19 overnight rebaseline (b7d599a2) took 267 Galadriel games slower, all recovered by
+`MTG_GALADRIEL_SCRY_PRUNE=0`. In 223 the unpruned NON-clairvoyant search misses the old line too (clearly
+clairvoyant). In the other **44** (32 deals) the unpruned honest search wins a turn earlier and the pruned one does not:
+honest losses to the rule. Both honest arms were replayed with traces (all 44 reproduce) and netted by FIRST
+divergence (pruned vs unpruned, `MTG_NC_SEARCH=1`, case settings).
+
+| first divergence (shipped clause) | games / deals | rule / search | mechanism |
+|---|---|---|---|
+| "anything else is thrown": a LAND bottomed, Galadriel in hand, colours "covered", not short | 20 / 15 | BOT / KEEP | 5 = a lone Temple of Mystery read as both G and U (g20, g345); 3 = an untapped 3rd land puts her down a turn early (g996, 2HG g36, g112); the rest a one-card library shift (which card the next draw / the chain meets) |
+| not a scry: the land played | 6 / 4 | -- | g54 x3: the pruned arm's next scry bottoms Mystery's G partner (the same lone-Mystery count); g43 x2: Grotto played T3 to cast her T3; g722: Skerry T1 |
+| short on lands, acceleration only in hand (LAND TIMING blocks the keep) | 4 / 3 | BOT / KEEP | the `MTG_GALADRIEL_ACCEL_HAND` case (seed 1026's shape); g774 is also lone-Mystery |
+| no Galadriel: keep Galadriel (hand empty after a mull to 1) | 3 / 1 | KEEP / BOT | luck: the rule wins this class 0/12 (24k, 800000+) and 0/3 (4k, 940000+) |
+| Crackle kept | 3 / 2 | KEEP / BOT | g187 x2: a SECOND Crackle kept, it displaced the scry land the next chain needed; g621: short on lands, the Crackle displaced her third land |
+| a 2nd Galadriel bottomed | 3 / 2 | BOT / KEEP | luck (2/8 in the 940000+ netting; 5/38 in the 24k one) |
+| short on lands: any land kept | 3 / 2 | KEEP / BOT | g824: Saprazzan Skerry kept while Sol Ring in hand casts her off two lands -- the land after her must scry; g92 x2: luck |
+| colour fixer kept | 2 / 2 | KEEP / BOT | luck (a Skerry / Sol Ring one card deeper) |
+
+Fresh NC netting under the CURRENT rule (pruned vs unpruned, seeds 940000-943000, 4,000 paired games, d5 b20): the
+rule is +0.019 t better (t +5.2; 52 / 112), and EVERY clause class nets for the rule except the sub-cases below. Where a
+lone-Mystery count flips the verdict the search wins 10 / 1 (net -9 turns); an untapped land with two lands in play 2 / 0;
+Sol Ring held 2 / 1; "short-on-lands Crackle" 2 / 2 (dropped); ACCEL_HAND 1 / 2. Compared with the 24k netting
+(pre-LAND-TIMING): the "temples bottomed" class is closer to even now (15 / 19), but without its lone-Mystery part it is
+8 / 19, i.e. the rule's bottoming is right; the old near-even T1 short-on-lands spot is 6 / 11 for the rule since LAND TIMING.
+
+**The amendment, in the USER's terms** (pre-Galadriel, Galadriel in hand; everything else unchanged):
+1. **PAIR** -- "colours covered" means a green source AND a DIFFERENT blue source: Galadriel's {G}{U} is two pips, and
+   Temple of Mystery makes one or the other. Mystery alone leaves a colour missing, so a second G or U land is a fix
+   (kept), and "bad shape for colours" applies (Crackle / acceleration thrown unless they fix).
+2. **CRACKLE HELD** -- a second Crackle is thrown, as it already is once Galadriel is out ("a Crackle we already hold").
+3. **SOL MANA** -- Sol Ring held counts as a land for "short on lands", and a Sol Ring in hand adds its two to next turn's
+   mana: with two lands + Sol Ring she comes down next turn without the land drop, so the land that follows her must be
+   a SCRY land (Saprazzan Skerry starts no chain).
+4. **UNTAPPED** -- with exactly two lands in play that make G and U, and no untapped land in hand, keep an untapped land
+   (Crystal Grotto, Rumble Arena, Zhalfirin Void, The Grey Havens): it is next turn's drop and she comes down with it --
+   the extra attack the seed-5 reference showed. (A first draft also did this at ONE land in play; that branch measured
+   worse -- d0 +0.038 t, searched net +24 turns -- because the land is played at the next drop, ahead of the coloured
+   Temples, instead of being held. Narrowed in 624e8326.)
+Each clause has its own flag (`MTG_GALADRIEL_SCRY_PAIR` / `_CRACKLE_HELD` / `_SOL_MANA` / `_UNTAPPED`) for attribution;
+`MTG_GALADRIEL_SCRY_AMEND=1` turns all four on. Flag off is byte-identical to HEAD (44/44 case digests; smoke 4/4 PASS).
+"Short-on-lands Crackle thrown" was measured too (2 / 2 in the netting, 0 / 2 the wrong way at first) and dropped.
+
+**Held-out A/B** (24 seeds x 1000, 900000+, d5 b20, shipped profile, AMEND vs shipped):
+- NON-clairvoyant (`MTG_NC_SEARCH=1`, the bar): **-0.0062 t (t -7.5; 195 faster / 70 slower)**, no extra cost (core-ms
+  per game 0.89x, wall-based on a contended box). Attributed by first divergence: PAIR ~-106 turns, SOL MANA ~-15,
+  CRACKLE HELD ~-10, UNTAPPED -8 (24 / 14), follow-on non-scry -9 -- every clause nets for the amendment.
+- clairvoyant (shipped search): **-0.0054 t (t -8.5; 170 faster / 46 slower)**, cost 0.997x units. Attributed by first
+  divergence: PAIR ~-67 turns, UNTAPPED -23 (25 / 4), SOL MANA ~-14, CRACKLE HELD ~-10, follow-on non-scry -16.
+- d0 (the rule played greedily, 24k): **-0.0184 t (t -9.9; 685 / 268)**; per clause PAIR -0.0047, UNTAPPED -0.0202
+  (450 / 21), SOL MANA -0.0003, CRACKLE HELD **+0.0065** (t +6.2). The HELD loss is the greedy runner's, not the rule's:
+  the d0 runner fires the first Crackle as soon as it is castable, non-lethally, and then needs the second (900000 g490);
+  under search it nets for HELD.
+- Recovery of the 44 (honest, case settings): **14 / 44** (PAIR 9: g20 x3, g54 x3, g345 x2, g774; UNTAPPED 3: g996,
+  2HG g36 / g112; CRACKLE HELD 2: g187 x2; SOL MANA 1: g824); none of the 44 slower. The other 30 are the luck classes
+  above, the ACCEL_HAND class (4; that flag alone recovers them, still the USER's open question), the search's own land
+  choices (g43, g722) and g621 / g92 / g707.
+- Suite, AMEND on (not accepted): smoke searched 0 slower / 1 faster (d3 4.9933 -> 4.9867; d5 and 2HG equal, 15 games
+  change play), d0 6.940 -> 6.937 (14 / 22); regression searched 0 / 0 (12 play changes at the same turn, d5 s3003
+  byte-identical), d0 6.950 = (16 / 26); 630 references replay clean (0 drift / enum-gap / board-diverged).
+
 ## PARKED (USER 2026-10-18: "once this is done I would like to park this deck")
 Shipped: exhaustive keep table (K=9, R=40); leaf = nlfit (USER); the USER's scry rule as a firm prune; the
 Crackle-pile rule; land timing; every suite row resized; smoke + regression GT accepted (overnight GT is left
 for the periodic overnight run).
 OPEN USER QUESTIONS (none blocks anything):
+- `MTG_GALADRIEL_SCRY_AMEND` (2026-10-20, the four-clause amendment above: G/U pairing, a held Crackle, Sol Ring
+  mana, an untapped third land): better in both modes on 24k held-out games; OFF until the USER approves. Adopt all,
+  some clauses, or none?
 - `MTG_GALADRIEL_ACCEL_HAND` (acceleration held in hand counts as settled; fixes seed 1026): neutral, OFF.
   Turn it on?
 - `MTG_GALADRIEL_SCRY_NONEED` (keep on top when nothing is needed): measured worse than the plain rule in both
