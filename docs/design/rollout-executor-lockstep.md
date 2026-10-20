@@ -716,3 +716,18 @@ inline replay, and a non-committed plan keeps its inline re-solve. gi 486 at d5 
 NivMizzetCombo, Unpredictable Cyclone). No mechanism-level unit test (the executor path needs a
 committed line); `test/scenarios/hinata_remand_cantrip_after_karoo.json` pins it on the gi 486 T5 board (PASS T5 with the flag, no win with `=0`, at d5 b30 and at d8 b0).
 
+
+**#17 + #18 measured (2026-10-20).** Held-out paired A/B, both flags on vs both `=0`, one pooled `--batch` (seeds
+`13000001 + 1000 x block + gi`, `game_index = gi`; ship = the profile's own d5 b30 value_play; d0 cell +50000):
+
+| cell | games | net (loss = 9) | faster / slower | play-changed | units |
+|---|---|---|---|---|---|
+| hinata ship | 4,000 | **-2** | 2 / 0 | 7 | 1.000 |
+| hinata d0 | 4,000 | 0 | 0 / 0 | 0 | 1.000 |
+| hinata2hg ship | 1,500 | 0 | 0 / 0 | 1 | 1.000 |
+
+Per-flag attribution of the 8 changed games (each re-run with one flag alone): #17 owns both faster games (s13002304 gi
+303 and s13004356 gi 355, T7 -> T6); #18 owns the 6 same-turn play changes. No game is slower, so the d8 b0 recovery
+bar is vacuous. Suite: hinata + hinata2hg smoke 4/4 and the whole smoke tier 128/128 byte-identical; hinata + hinata2hg
+regression 5/7 -- `hinata_regression_d3_s3003` and `_d5_s3003` change play in gi 11 only, T6 -> T6 (owner #17); both
+flags `=0` regression 7/7 byte-identical. `[fd-diverge]` (leaf estimates only, none simulated) 4 -> 3 on the ship cell.

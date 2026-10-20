@@ -419,6 +419,42 @@ and record s6006 gi 256 as a known loss of the Gamble-before-Ornithopter slot; i
 Gamble line findable regardless, `MTG_HINATA_GAMBLE_PAST_DORK` is the amendment to take (not either fixed placement),
 and gi 486's T5 divergence should be fixed first.
 
+**2026-10-20 follow-up: gi 486 root-caused -- TWO engine lockstep defects, both fixed (default ON), neither in the
+order.** The amendment's T4 (Ornithopter -> Gamble -> Soulfire) only exposed them; base play never reaches either.
+`docs/design/rollout-executor-lockstep.md` #17 and #18 have the full mechanism.
+* **d8 b0 (#17, `MTG_BP_RESUME_LINE_HOLD`).** The committed line is the T1 search's: its T5 main-2 node child
+  `[Spasm, Spasm, Preordain] -> Ponder -> [Sol Ring, Ornithopter, Irencrag + Remand] -> [Irencrag, Crackle]` was a
+  breakpoint-node RESUME, and a resume re-bound the line's unpaid-cost hold from the whole plan's bill -- Soulfire's
+  already-paid `{R}{R}{R}` -- so the payer paid Ornithopter's `{2}` with Sol Ring and kept the floating `{R}`. The game
+  holds 0 there, pays the `{2}` with the floating `{R}` + wild, and the recast Irencrag is one red short. Remand on
+  Irencrag is rules-correct as modelled (countered before it resolves, its "only one more spell" never applies).
+* **d5 b30 (#18, `MTG_EXEC_CLEAN_BP_DEFERRED`).** T5 main 1 is Soulfire with a Remand rider; the executor's clean-set
+  loop replayed the Remand's continuation `[Reality Spasm]` at the cast, BEFORE the deferred Izzet Boilerworks, so the
+  Spasm untapped the Island the Boilerworks then bounced and the Boilerworks stayed tapped; the search played the Karoo
+  first. Pinned by `test/scenarios/hinata_remand_cantrip_after_karoo.json`.
+
+| gi 486 (seed 12111487) | d8 b0 | d5 b30 (ship) |
+|---|---|---|
+| `_GAMBLE_PAST_DORK=1`, both fixes | **T5** `4ca37c41d44f8224` | **T5** `4def9588ba9db379` |
+| ... `MTG_BP_RESUME_LINE_HOLD` only | T5 | T6 |
+| ... `MTG_EXEC_CLEAN_BP_DEFERRED` only | T6 | T5 |
+| ... both `=0` (HEAD) | T6 `95dd7b4651c62d62` | T6 `4fecb23ba8a43dbf` |
+| amendment OFF, any arm | T5 `e647100296204cdf` | T5 `e647100296204cdf` |
+
+**The amendment re-measured WITH both fixes** (same cells, seeds and arms as the table above; one pooled batch):
+
+| cell | `_GAMBLE_PAST_DORK` vs off | was |
+|---|---|---|
+| hinata ship (12 x 500) | **+2** (2 faster / 4 slower; 46 changed), units 1.003 | +3 (2 / 5) |
+| hinata2hg ship (6 x 250) | **+3** (0 / 3; 14 changed), units 1.002 | +3 (0 / 3) |
+| hinata d0 (12 x 500) | 0 (inert) | 0 |
+
+gi 486 is no longer slower (T5 both arms). **Every one of the 7 slower games now recovers at d8 b0** (the amendment's
+own flags): hinata gi 54 5 -> 6 at ship, d8 b0 5; gi 431 7 -> 8, d8 b0 6; gi 180 5 -> 6, d8 b0 5; gi 207 5 -> 6, d8 b0
+5; 2HG gi 229 5 -> 6, d8 b0 5; gi 207 5 -> 6, d8 b0 5; gi 91 5 -> 6, d8 b0 4. So the amendment now meets the
+recovery half of the bar but not the net half: +2 / +3 on the two shipped cells (not <= 0). The verdict above stands
+on the net (the USER decides); the "gi 486 should be fixed first" condition is met.
+
 ---
 
 # HISTORY -- the August order and its measurements (sections 1-8, kept as written)
