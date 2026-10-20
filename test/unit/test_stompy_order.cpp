@@ -17,7 +17,9 @@
 //   6. the shared comparator's fixed key: by name for this deck, plan order for the others;
 //   7. MTG_STOMPY_NO_TARGET_RANK: Natural Order copies resolve in their targets' slot order;
 //   8. MTG_HOLD_RELEASE_YIELD: the prepay's hold ladder is battlefield-position-free (gi1526, gi287);
-//   9. MTG_SAC_VICTIM_SAME_NAME: a stale Natural Order victim pin moves to another copy of its name (gi160).
+//   9. MTG_SAC_VICTIM_SAME_NAME: a stale Natural Order victim pin moves to another copy of its name (gi160);
+//  10. MTG_HOLD_ATK_FALLBACK: an equal-power runner-up is held when (b)'s pick is a colour the bill needs
+//      (SelesnyaLifegain overnight s7088 gi81 T5).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -519,6 +521,68 @@ TEST_CASE("Payment fix (MTG_HOLD_RELEASE_YIELD): gi287's 6-mana turn holds BOTH 
         CHECK(TappedSo(s, kPriest));
         heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
     }
+}
+
+TEST_CASE("Payment fix (MTG_HOLD_ATK_FALLBACK): when (b)'s pick is a colour the bill needs, an equal-power runner-up is held")
+{
+    // SelesnyaLifegain overnight s7088 gi81 T5: Blossoming Sands, Blighted Steppe, Forest, Wellwisher, Elvish
+    // Archdruid, Priest of Titania, Accomplished Alchemist untapped (4 Elves: Priest and Archdruid tap for 4
+    // each); the line is Nykthos Paragon {4}{W}{W} + Feed the Clan {1}{G} = 8. (b) holds the lowest-yield
+    // power-2 mana attacker, Accomplished Alchemist -- but it is the only {W} besides the Sands, so every
+    // rung failed and the unrestricted solve tapped Archdruid, the attacker the T5 kill needs. Holding
+    // Archdruid pays 8 exactly (lands 3 + Priest 4 + Alchemist {W}).
+    EnsureCardsSo();
+    static const SelesnyaLifegainProvider prov;
+    const char* kAlch = "Accomplished Alchemist";
+    const std::vector<std::vector<std::string>> orders = {
+        { kArch, kPriest, kAlch }, { kAlch, kPriest, kArch }, { kPriest, kAlch, kArch }, { kAlch, kArch, kPriest } };
+    for (const bool fb : { true, false })
+    {
+        heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = 1;
+        heurarm::t_arm[heurarm::HOLD_ATK_FALLBACK]  = fb ? 1 : 0;
+        bool every_order_keeps_arch = true;
+        for (const auto& ord : orders)
+        {
+            CAPTURE(fb); CAPTURE(ord[0]); CAPTURE(ord[1]); CAPTURE(ord[2]);
+            GameState s;
+            s.active_player_index = 0;
+            s.turn_number         = 5;
+            s.players[0].life = s.players[1].life = gamesetup::StartingLife();
+            s.players[0].lands_played_this_turn = 1;
+            s.m_provider = &prov;
+            int num = 300;
+            auto put = [&](const std::string& n)
+            {
+                Permanent p;
+                p.card             = DefSo(n).card;
+                p.card.m_number    = num++;
+                p.controller_index = 0;
+                p.owner_index      = 0;
+                s.battlefield.push_back(p);
+            };
+            put("Blossoming Sands"); put("Blighted Steppe"); put("Wellwisher"); put("Forest");
+            for (const std::string& c : ord) { put(c); }
+            s.players[0].hand.push_back(CardSo("Nykthos Paragon", 10));
+            s.players[0].hand.push_back(CardSo("Feed the Clan", 11));
+            for (int k = 0; k < 20; ++k) { s.players[0].library.push_back(CardSo("Forest", 900 + k)); }
+            std::vector<Action> acts = { CastSo(s, "Nykthos Paragon"), CastSo(s, "Feed the Clan") };
+            const bool paid = TurnSolver::BatchPrepayMainCasts(s, acts);
+            const bool arch_up = paid && !TappedSo(s, kArch);
+            if (fb)
+            {
+                CHECK(paid);
+                CHECK(arch_up);
+                CHECK(TappedSo(s, kPriest));
+                CHECK(TappedSo(s, kAlch));
+            }
+            every_order_keeps_arch = every_order_keeps_arch && arch_up;
+        }
+        // Off: (b)'s single pick (the Alchemist) is the only single-attacker rung, and the turn spends
+        // Archdruid (the defect).
+        if (!fb) { CHECK_FALSE(every_order_keeps_arch); }
+    }
+    heurarm::t_arm[heurarm::HOLD_RELEASE_YIELD] = -1;
+    heurarm::t_arm[heurarm::HOLD_ATK_FALLBACK]  = -1;
 }
 
 TEST_CASE("Sacrifice victim (MTG_SAC_VICTIM_SAME_NAME): a stale pin eats another copy of its name, wherever it sits")

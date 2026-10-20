@@ -43625,6 +43625,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // creature an own-creature pump lands on, so reserving it makes the pump target the one left up).
     // A non-mana beater is never in the tap set, so restrict to mana sources (else the all-or-nothing
     // hold below carries an inert bit). Same leave-out-if-you-can fallback as depletion.
+    // MTG_HOLD_ATK_FALLBACK (EngineFlags.h): the (b) pick's RUNNERS-UP -- the other untapped mana
+    // attackers as strong as it -- each as a single-attacker rung of its own, in (b)'s order, after the
+    // pick's rung. Empty unless that lever and MTG_HOLD_RELEASE_YIELD are both on.
+    std::uint64_t atk_alts[8];
+    int n_atk_alts = 0;
     if (AttackerReserveEnabled() && !m2_release && n <= 64)
     {
         int best = FindBestOwnAttacker(state, active);
@@ -43636,6 +43641,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         {
             const int bpow = state.battlefield[best].EffectivePower();
             const HasteSources hs = GatherHasteSources(state.battlefield, active);
+            const bool atk_fallback = HoldAtkFallbackEnabled();
+            int cands[64];
+            int n_cands = 0;
             int pick = -1;
             for (int i = 0; i < n; ++i)
             {
@@ -43646,11 +43654,34 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
                 if (!(d && ((d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                             || d->params.mana_rock))) { continue; }
+                if (atk_fallback) { cands[n_cands++] = i; }
                 if (pick < 0) { pick = i; continue; }
                 const int yi = hold_yield(i), yp = hold_yield(pick);
                 if (yi < yp || (yi == yp && hold_tie_less(i, pick))) { pick = i; }
             }
             if (pick >= 0) { best = pick; }
+            // MTG_HOLD_ATK_FALLBACK: "worth least as mana" counts AMOUNT, not COLOUR, so the pick can
+            // be the one body the turn cannot pay without. SelesnyaLifegain overnight s7088 gi81 T5:
+            // Nykthos Paragon {4}{W}{W} + Feed the Clan {1}{G} on Blossoming Sands, Blighted Steppe,
+            // Forest, Elvish Archdruid, Priest of Titania (4 Elves -> 4 each) and Accomplished Alchemist
+            // (yield 1, power 2 = Archdruid's): (b) held the Alchemist -- the only {W} besides the
+            // Sands -- every rung failed, and the unrestricted solve tapped Archdruid, a 12/12 attacker
+            // once Paragon's counters land (24 damage -> 12, T5 -> T6 at every depth and budget, since
+            // payment is not a searched axis). Holding Archdruid pays 8 exactly. Each runner-up is one
+            // more rung tried only after the pick's has failed, so a payable pick is unchanged.
+            if (atk_fallback && pick >= 0)
+            {
+                std::sort(cands, cands + n_cands, [&](int a, int b)
+                {
+                    const int ya = hold_yield(a), yb = hold_yield(b);
+                    if (ya != yb) { return ya < yb; }
+                    return hold_tie_less(a, b);
+                });
+                for (int k = 0; k < n_cands && n_atk_alts < 8; ++k)
+                {
+                    if (cands[k] != pick) { atk_alts[n_atk_alts++] = (1ull << cands[k]); }
+                }
+            }
         }
         if (is_victim(best)) { best = -1; }   // MTG_HOLD_PRODUCER_FIRST (f): its body is spent by a cost
         if (best >= 0 && best < 64)
@@ -43847,6 +43878,12 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     if (hold_yield_on && TapAttackerRungEnabled() && reserved_atk && reserved_atk != reserved)
     { push(reserved_atk); }
+    // MTG_HOLD_ATK_FALLBACK: the pick's runners-up, one single-attacker rung each (n_atk_alts is 0 with
+    // the lever off, so the ladder is byte-identical). push() drops one equal to an earlier rung.
+    if (hold_yield_on && TapAttackerRungEnabled() && reserved_atk)
+    {
+        for (int k = 0; k < n_atk_alts; ++k) { if (atk_alts[k] != reserved) { push(atk_alts[k]); } }
+    }
     ManaPool produced;
     bool ok = false;
     // Which hold the accepted solve ran under. The shrink post-pass below must start from it, not

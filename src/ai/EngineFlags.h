@@ -990,6 +990,24 @@ inline bool HoldReleaseYieldEnabled()
     return heurarm::Flag(heurarm::HOLD_RELEASE_YIELD, v);
 }
 
+// MTG_HOLD_ATK_FALLBACK (live only under MTG_HOLD_RELEASE_YIELD; DEFAULT ON, =0 restores the single
+// pick byte-identically) -- (b)'s single-attacker rung holds the strongest mana attacker whose tap is
+// worth least as mana, and nothing else of that power was ever tried: when holding that ONE body makes
+// the turn unpayable (it is a colour the bill needs), the ladder fell to the unrestricted solve, which
+// may tap the very attacker a second equal-power body could have been held as. Under this lever every
+// other untapped mana attacker of the same power gets its own single-attacker rung, in (b)'s order
+// (yield, then name, then number), after the pick's rung -- so a payable pick is unchanged and the
+// fallbacks are tried only after it fails. SelesnyaLifegain overnight s7088 gi81 T5: (b) held the
+// Accomplished Alchemist (the only {W} besides Blossoming Sands, for Nykthos Paragon's {W}{W}); the
+// unrestricted solve then tapped Elvish Archdruid, the 12/12 attacker the T5 kill needed (T6 at every
+// depth and budget -- payment is the permitted greedy area, not a searched axis). Holding Archdruid
+// pays the turn exactly. Payment only, one shared payer -> executor/rollout lockstep.
+inline bool HoldAtkFallbackEnabled()
+{
+    static const bool v = EnvOn("MTG_HOLD_ATK_FALLBACK", true);
+    return heurarm::Flag(heurarm::HOLD_ATK_FALLBACK, v);
+}
+
 // MTG_HOLD_PRODUCER_FIRST=1 (live only under MTG_HOLD_RELEASE_YIELD) -- two more rules for the same hold
 // ladder (TurnSolver::BatchPrepayMainCasts):
 //   (e) when the ladder must release held bodies, the BIGGEST PRODUCER releases first (yield, then power,
