@@ -39482,6 +39482,41 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
     out.bound_credit = out.live ? credit : 0;
 }
 
+static void SimulateCombat(GameState& state);   // defined below
+
+// ---- BOARD-LETHAL CUT VERIFICATION (MTG_LETHAL_CUT_VERIFY, DEFAULT ON; see EngineFlags.h) -------
+// The board-lethal short-circuit (both hosts, below) collapses a frame to its attack-only plan on the
+// strength of PendingAttackDamage >= life. That guard is a PROJECTION, and a cut is a sound identity
+// only when the kill it assumes is real: a frame collapsed onto a false lethal has deleted every
+// line that really wins (and, at a breakpoint, re-indexes the continuation list under the committed
+// line's searched choice). So the cut fires only after the very plan it returns has been APPLIED on a
+// copy and its combat simulated -- the sibling go-off / equip-route cuts' "verified by a real apply"
+// rule. `land_played`: the EnumeratePlans host runs on a board its caller already played the land
+// into (EnumeratePlansWithLand stamps land_decided on what it returns), so the probe plays none --
+// the sv-audit probe's rule; the Solve host's plan is applied exactly as its caller will apply it.
+// MTG_TRACE=lethalcut names every refusal.
+static bool LethalCutKillIsReal(const GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
+                                bool land_played, int pending_atk, const char* site)
+{
+    GameState copy = state;
+    {
+        RevealLogPause quiet;
+        TurnSolver::Plan probe = plan;
+        if (land_played) { probe.land_decided = true; }
+        ApplyPlanDirect(copy, probe, is_pre_combat);
+        if (is_pre_combat && !OpponentHasLost(copy)) { SimulateCombat(copy); }
+    }
+    const bool real = OpponentHasLost(copy);
+    if (!real)
+    {
+        TRACE("lethalcut", "%s T%d REFUSED: projected %d vs life %d, the applied plan + combat leaves %d "
+              "(floating %d, combat-swap pin %d)",
+              site, state.turn_number, pending_atk, state.Opponent().life, copy.Opponent().life,
+              state.floating_mana.Total(), state.scripted_combat_aura_swap);
+    }
+    return real;
+}
+
 TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat,
                                             const GreedyPermit& permit)
 {
@@ -41354,12 +41389,32 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // CanAttackFull && ShouldAttackWith attackers, so vs the passive opponent it is real, cast-independent
     // damage. The guard is a cheap pre-filter; consider() owns the authoritative win projection. Isolation
     // toggle MTG_NO_LETHAL_CUT; also disabled under MTG_UNPRUNED(ComboLine) alongside the sibling cuts.
+    // VERIFIED (MTG_LETHAL_CUT_VERIFY, default ON): pending_atk is a projection, not real damage -- its
+    // combat-swap term can spend main-phase floating mana (LethalCutKillIsReal) -- so the plan is
+    // applied and its combat simulated before the powerset is skipped; a refused trial restores the
+    // frame (the sibling cuts' snapshot) so the walk below is exactly the no-cut walk.
     if (!s_no_lethal_cut && ResolveProvider(state).UseLethalShortCircuit()
         && !DecisionUnpruned(UnprunedGate::ComboLine)
         && pending_atk >= state.Opponent().life)
     {
+        const bool verify = LethalCutVerifyEnabled();
+        const Plan saved_best = best;                 // actions deliberately unmaterialized -> cheap copy
+        const int  saved_mask = best_mask;
+        const std::vector<int> saved_sel = best_sel;
+        const int    saved_fj = best_fill_j;
+        const Action saved_fa = best_fill_action;
         { std::vector<int> empty_sel; consider(empty_sel); }   // the empty (attack-only) subset
-        if (best.wins_this_turn) { return materialize_best(); }   // board already lethal -> skip the powerset
+        if (best.wins_this_turn)
+        {
+            if (!verify || LethalCutKillIsReal(state, materialize_best(), is_pre_combat,
+                                               /*land_played=*/false, pending_atk, "solve"))
+            { return materialize_best(); }            // board REALLY lethal -> skip the powerset
+            best      = saved_best;                   // a false lethal: no cut, nothing pre-seeded
+            best_mask = saved_mask;
+            best_sel  = saved_sel;
+            best_fill_j = saved_fj;
+            best_fill_action = saved_fa;
+        }
         // consider()'s exact projection did not confirm the win (should not happen given the guard) ->
         // fall through; `best` is merely pre-seeded (harmless move-ordering).
     }
@@ -55289,18 +55344,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Board-lethal short-circuit (mirrors Solve's sibling): if the current board's attack-all damage
     // already kills the opponent this turn, emit JUST the do-nothing (attack-only) plan and skip the
     // odometer + Plan-B -- a turn-winning branch dominates, so the search commits it and needs no others.
-    // pending_atk is REAL combat damage (PendingAttackDamage counts only legal CanAttackFull attackers vs
-    // the passive opponent), not an optimistic projection, so no re-simulation is needed (unlike the
-    // go-off cut). GT-fingerprint-invariant: which winning branch is chosen never changes the win TURN.
+    // GT-fingerprint-invariant: which winning branch is chosen never changes the win TURN.
+    // VERIFIED (MTG_LETHAL_CUT_VERIFY, default ON). pending_atk was documented here as "REAL combat damage
+    // ... not an optimistic projection, so no re-simulation is needed" -- it is not: its Arcanum Wings
+    // combat-swap term pays the swap with main-phase FLOATING mana that empties before combat (see
+    // LethalCutKillIsReal / EngineFlags.h), and on that false lethal this cut deleted the executor's
+    // breakpoint continuation list down to attack-only (Bruna overnight s4004 gi334, T8 win -> unwon).
+    // So the attack-only plan is applied and its combat simulated first, exactly as the go-off sibling
+    // above verifies; a refused trial is popped and the frame enumerates as with no cut.
     if (!s_no_lethal_cut && ResolveProvider(state).UseLethalShortCircuit()
         && !DecisionUnpruned(UnprunedGate::ComboLine)
         && pending_atk >= state.Opponent().life)
     {
         const size_t before = plans.size();
         eval_and_push(std::vector<int>{});                  // the empty (attack-only) subset
-        if (plans.size() > before && plans.back().wins_this_turn)
+        if (plans.size() > before && plans.back().wins_this_turn
+            && (!LethalCutVerifyEnabled()
+                || LethalCutKillIsReal(state, plans.back(), is_pre_combat, /*land_played=*/true,
+                                       pending_atk, "enum")))
         {
-            return { std::move(plans.back()) };             // board already lethal -> skip powerset + Plan-B
+            return { std::move(plans.back()) };             // board REALLY lethal -> skip powerset + Plan-B
         }
         if (plans.size() > before) { plans.pop_back(); }    // not a confirmed win -> enumerate normally (no dup)
     }

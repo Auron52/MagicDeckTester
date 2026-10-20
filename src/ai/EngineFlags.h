@@ -47,6 +47,25 @@ inline bool UpkeepRevealTopEnabled()
     return env_on;
 }
 
+// MTG_LETHAL_CUT_VERIFY (DEFAULT ON; =0 -> the unverified cut, byte-identical to before) -- the
+// board-lethal short-circuit (DecisionProvider::UseLethalShortCircuit; Solve + EnumeratePlans) fires
+// only when the attack-only plan REALLY kills: applied on a copy and its combat simulated
+// (SimulateCombat, the executor's lockstep combat). Otherwise the frame is restored and enumerates
+// exactly as with no cut. The cut's guard reads PendingAttackDamage, which is a PROJECTION: its
+// Arcanum Wings combat-swap term (CountAttackGatherPump -> ApplyCombatAuraSwap on a copy of the
+// main-phase board) pays the {2}{U} with mana still FLOATING in main 1, which empties before combat
+// (CR 500.4). Bruna overnight s4004 gi334 (seed 4338) T8: Remote Farm paid Arcanum Wings and floated
+// a {W}; at the executor's breakpoint after the Wings cast the projection read 20 against 20 life (0
+// with the pool drained), the cut collapsed the continuation list to attack-only, the committed
+// line's searched continuation (Avacyn's Pilgrim + Greaves onto it, whose {W} pays the swap) was no
+// longer in the list, and combat found the swap unpaid -- T8 win -> unwon at d3 b10 and d8 b0 alike.
+// Read in TurnSolver only (both cut sites); kept here as the one reader per the flag convention.
+inline bool LethalCutVerifyEnabled()
+{
+    static const bool on = EnvOn("MTG_LETHAL_CUT_VERIFY", true);   // DEFAULT ON; =0 disables
+    return on;
+}
+
 // MTG_FUNGUS_SPORE_POOL (ADOPTED 2026-09-22, DEFAULT ON; =0 reverts, heurarm slot so one pooled
 // batch carries both arms) -- treat every interchangeable spore outlet as ONE POOL, spent
 // oldest-first, so the only enumerated axis is HOW MANY Saprolings to make and never WHICH body pays.

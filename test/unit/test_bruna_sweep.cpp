@@ -1648,3 +1648,48 @@ TEST_CASE("Idle pass: the explicit no-swap pin (0) declines a payable combat swa
     CHECK(CountOnBf(no, "Arcanum Wings") == 1);
     CHECK(no.scripted_combat_aura_swap == -1);        // consumed like any pin
 }
+
+// ---- BOARD-LETHAL CUT VERIFICATION (MTG_LETHAL_CUT_VERIFY, default ON) ----------------------------
+// Bruna overnight s4004 gi334 (seed 4338) T8, the executor's breakpoint right after the Arcanum Wings
+// cast: Remote Farm paid the Wings and floated a {W}, and the board carries the committed line's
+// combat-swap pin. PendingAttackDamage's swap term pays the {2}{U} with that float, so it reads the
+// Wings' Somberwald Sage + Colossification = 20 against 20 life -- but mana empties before combat
+// (CR 500.4), and Birds of Paradise + Skycloud Expanse alone make two. The board-lethal short-circuit
+// collapsed the continuation list to attack-only on that false lethal, so the searched continuation
+// (Avacyn's Pilgrim + Lightning Greaves onto it, whose {W} pays the swap) was gone and the T8 win
+// with it. The cut now fires only on a kill an applied plan + simulated combat confirms.
+TEST_CASE("Board-lethal cut: a lethal projected with main-phase floating mana does not collapse the frame")
+{
+    BoardBs b;
+    b.s.turn_number = 8;
+    b.s.players[0].lands_played_this_turn = 1;
+    b.s.spells_cast_this_turn = 1;
+    b.Put("Botanical Sanctum", /*tapped=*/true);
+    b.Put("Birds of Paradise");
+    b.Put("Skycloud Expanse");
+    const int sage_a = b.Put("Somberwald Sage");
+    const int sage_b = b.Put("Somberwald Sage");
+    Permanent g;
+    g.card = CardBs("Lightning Greaves", 71); g.controller_index = 0; g.owner_index = 0;
+    g.equipped_to = sage_a;
+    b.s.battlefield.push_back(g);
+    Permanent w;
+    w.card = CardBs("Arcanum Wings", 70); w.controller_index = 0; w.owner_index = 0;
+    w.aura_attached_to = sage_b; w.entered_this_turn = true;
+    b.s.battlefield.push_back(w);
+    b.Hand("Colossification");
+    b.Hand("Avacyn's Pilgrim");
+    b.s.floating_mana.white = 1;            // Remote Farm's second {W}
+    b.s.scripted_combat_aura_swap = 70;     // the committed line's combat swap
+
+    // The guard's projection reads lethal (control: this is the board the cut fired on) ...
+    REQUIRE(TurnSolver::ProjectedAttackDamageForTest(b.s) >= b.s.players[1].life);
+    // ... and the attack alone does not kill: the float is gone in combat, the swap goes unpaid.
+    { GameState c = b.s; RolloutSimulateCombat(c); CHECK(c.players[1].life == 20); }
+
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateBreakpointPlans(b.s, /*is_pre_combat=*/true);
+    CHECK_MESSAGE(plans.size() > 1, "the false lethal collapsed the continuation list to attack-only");
+    bool pilgrim = false;
+    for (const TurnSolver::Plan& p : plans) { if (PlanCasts(p, "Avacyn's Pilgrim")) { pilgrim = true; } }
+    CHECK(pilgrim);
+}
