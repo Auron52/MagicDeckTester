@@ -2146,6 +2146,8 @@ TEST_CASE("Late-bound Crab Umbra host (searched walk): the same plan list as wal
         CHECK_MESSAGE(text(on) == text(off), "board ", board);
     }
     CHECK(dropped > 0);
+}
+
 // ---- THE USER'S LIVING WISH BUCKETS (2026-10-20, MTG_AA_WISH_BUCKETS) ------------------------------------------
 // AccomplishedAlchemistProvider::TutorCandidates offers a wish only the sideboard cards of the buckets (Mana,
 // Accomplished Alchemist, Lifegain, Untap, Wincon/Draw) that our hand + battlefield lack, in that order;
