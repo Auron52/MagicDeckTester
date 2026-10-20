@@ -3164,6 +3164,18 @@ public:
     // 9 while the bucket rule is on: a COVERAGE bound, so every name the rule can admit (7 in the
     // widest case) and its empty-set fallback (the 9-name sideboard) is searched. =0 -> the base 6.
     int TutorSearchWidth() const override;
+    // THE USER'S CLEANUP-DISCARD BUCKETS (2026-10-20): "You keep the best of each bucket and lands etc. for the
+    // rest. Living Wish can fill any gaps and Staff can fill both." -- the wish rule's buckets (Alchemist,
+    // Lifegain, Untap, Wincon/Draw), net of board, the best hand card of each owed bucket kept, a Wish per
+    // remaining gap, MANA for the rest; spares shed first. ONE index (MTG_AA_DISCARD_FAN=1, testing only: the
+    // whole order). MTG_AA_BUCKET_DISCARD (heurarm AA_BUCKET_DISCARD), default ON; =0 -> the inherited
+    // SelesnyaLifegain policy. See the .cpp for the within-bucket orders.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // TRUE while the rule is on (no card's verdict reads a card that sheds before it); =0 -> Selesnya's answer.
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval

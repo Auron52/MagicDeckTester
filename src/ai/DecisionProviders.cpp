@@ -43022,6 +43022,16 @@ std::vector<int> AccomplishedAlchemistProvider::EtbChoiceCandidates(const GameSt
 // one-option prune.
 namespace
 {
+// THE BUCKET ROLES, keyed on PARAMS -- shared by the wish rule (below) and the cleanup-discard rule
+// (AccomplishedAlchemistProvider::CleanupDiscardShedOrder), so every USER bucket rule reads one card the same
+// way. Staff of Domination is BOTH an untapper and a wincon/draw card ("it can do the untap and the draw").
+bool AaIsAlchemist(const CardParams& p) { return p.mana_per_life_gained; }
+bool AaIsUntapper(const CardParams& p)          // Crab Umbra, Staff of Domination, Galvanic Alchemist
+{ return p.untap_enchanted_cost || p.untap_target_creature_cost || p.soulbond_grants_untap_self_cost; }
+bool AaIsWitch(const CardParams& p) { return static_cast<bool>(p.untap_pump_cost); }   // Seedcradle Witch
+bool AaIsWinDraw(const CardParams& p)           // Stroke of Genius, Staff of Domination, Scholar of Athreos
+{ return p.draw_target_player || p.tap_draw_cost || p.drain_cost; }
+
 struct AaWishCensus
 {
     bool alchemist = false, untapper = false, witch = false, wincon = false, lifegain = false;
@@ -43039,11 +43049,10 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
     AaWishCensus c;
     auto roles = [&](const CardParams& p)
     {
-        if (p.mana_per_life_gained) { c.alchemist = true; }
-        if (p.untap_enchanted_cost || p.untap_target_creature_cost || p.soulbond_grants_untap_self_cost)
-        { c.untapper = true; }
-        if (p.untap_pump_cost) { c.witch = true; }
-        if (p.draw_target_player || p.tap_draw_cost || p.drain_cost) { c.wincon = true; }
+        if (AaIsAlchemist(p)) { c.alchemist = true; }
+        if (AaIsUntapper(p))  { c.untapper = true; }
+        if (AaIsWitch(p))     { c.witch = true; }
+        if (AaIsWinDraw(p))   { c.wincon = true; }
         if (p.team_pump_cost) { c.ezuri = true; }
     };
     int best_forest_bonus = 0;
@@ -43285,6 +43294,232 @@ std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const Ga
     if (all.size() <= 1 || DecisionUnpruned(UnprunedGate::Tutor) || !AaWishBucketsOn()) { return all; }
     std::vector<std::string> out = AaWishBucketSet(s, controller, all);
     return out.empty() ? all : out;
+}
+
+// ---- AccomplishedAlchemistProvider: THE USER'S CLEANUP-DISCARD BUCKETS (2026-10-20) --------------------------
+// The USER, verbatim: "the discard heuristic for this deck is simple. Buckets are the same as all of my other
+// rules. You keep the best of each bucket and lands etc. for the rest. Living Wish can fill any gaps and Staff can
+// fill both." It supersedes the inherited SelesnyaLifegain buckets (authored for another list: their PAYOFFS
+// bucket is empty here, so they shed Nourish / Feed the Clan as "lifegain with no payoff" -- backwards for a deck
+// whose lifegain IS the Alchemist's fuel).
+//
+// THE READING (every role keyed on PARAMS; the same buckets as the wish rule, AaIs* above):
+//   * Four non-mana buckets, each owed ONE card: ALCHEMIST (Accomplished Alchemist), LIFEGAIN (Nourish, Feed the
+//     Clan, Weather the Storm, Trufflesnout, Brindle Boar), UNTAP (Crab Umbra, Staff of Domination, Galvanic
+//     Alchemist, Seedcradle Witch), WINCON/DRAW (Stroke of Genius, Staff of Domination, Scholar of Athreos, Ezuri).
+//   * NET OF BOARD: a bucket already filled on our battlefield owes nothing -- an Alchemist in play fills
+//     ALCHEMIST, an untapper (Witch included) fills UNTAP, a Staff fills UNTAP and WINCON/DRAW, a Scholar or Ezuri
+//     fills WINCON/DRAW, a Brindle Boar fills LIFEGAIN (its sacrifice is a gain still to come; the wish rule's
+//     reading). Lifegain spells are consumed, so only the Boar fills LIFEGAIN from the board.
+//   * The best HAND card of each owed bucket is kept. Agent default orders (the USER's to correct):
+//       LIFEGAIN  Nourish > Feed the Clan > Weather the Storm (spells by printed gain, 6 > 5 > 3) > Trufflesnout >
+//                 Brindle Boar
+//       UNTAP     Crab Umbra > Staff of Domination > Galvanic Alchemist > Seedcradle Witch
+//       WINCON    Stroke of Genius > Staff of Domination > Scholar of Athreos > Ezuri
+//     Copies of one card tie; the earlier hand index is kept. Staff is a member of BOTH UNTAP and WINCON: kept as
+//     either bucket's best, it fills both ("Staff can fill both"); with a Crab Umbra AND a Stroke in hand it is
+//     the best of neither, so it is a spare.
+//   * GAPS: a bucket with nothing on the board and nothing in hand. Each Living Wish fills ONE gap (hand order);
+//     a Wish beyond the gaps is a spare.
+//   * "lands etc. for the rest": every other kept slot is MANA -- lands first (an Island ahead of the Forests while
+//     no blue source is on our battlefield and a KEPT card needs {U}; otherwise hand order), then Utopia Sprawl >
+//     Arbor Elf > Wild Growth > Elvish Harbinger (Harbinger read as a dork).
+//   * SHED ORDER (most expendable first): unclassified cards (Eternal Witness) -> spare bucket cards, the worst
+//     within-bucket rank first (equal ranks: WINCON, UNTAP, LIFEGAIN, ALCHEMIST spares in that order) -> spare
+//     Wishes -> MANA worst first (Harbinger ... Sprawl, then the lands from the back) -> the kept bucket cards
+//     (gap-filling Wishes, then WINCON, UNTAP, LIFEGAIN, ALCHEMIST).
+//   * Prefix-stable: shedding a spare or a mana card never changes another card's bucket verdict (the {U} test
+//     reads KEPT cards only), so a multi-card cleanup reads its sheds off one consultation.
+// ONE index through CleanupDiscardRankingWithOrder (staged / required-piece protections stay engine-enforced).
+// MTG_AA_BUCKET_DISCARD (heurarm AA_BUCKET_DISCARD), default ON; =0 -> the INHERITED SelesnyaLifegain policy,
+// exactly as before. MTG_AA_DISCARD_FAN=1 (heurarm AA_DISCARD_FAN; TESTING ONLY, the discard-analysis evidence
+// run) returns the whole order so the executor's searched pass trials every card and grades this rule's pick.
+static bool AaBucketDiscardOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_BUCKET_DISCARD", true);   // DEFAULT ON (the USER's rule); =0 = inherited
+    return heurarm::Flag(heurarm::AA_BUCKET_DISCARD, s_env);
+}
+
+std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!AaBucketDiscardOn()) { return SelesnyaLifegainProvider::CleanupDiscardCandidates(s, required_pieces); }
+    std::vector<int> ranked = CleanupDiscardShedOrder(s, required_pieces);
+    static const bool s_fan = EnvOn("MTG_AA_DISCARD_FAN");   // TESTING ONLY: the whole order
+    if (!heurarm::Flag(heurarm::AA_DISCARD_FAN, s_fan) && ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
+bool AccomplishedAlchemistProvider::CleanupDiscardShedStable() const
+{
+    return AaBucketDiscardOn() ? true : SelesnyaLifegainProvider::CleanupDiscardShedStable();
+}
+
+std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!AaBucketDiscardOn()) { return SelesnyaLifegainProvider::CleanupDiscardShedOrder(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return {}; }
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+    enum : int { kAlch = 0, kGain, kUntap, kWin, kBuckets };
+    // Within-bucket rank (lower = better kept), -1 = not a member.
+    auto rank_in = [](const CardDefinition& d, int b) -> int
+    {
+        const CardParams& p = d.params;
+        switch (b)
+        {
+        case kAlch: return AaIsAlchemist(p) ? 0 : -1;
+        case kGain:
+            if (d.card.IsLand()) { return -1; }
+            if (p.cast_lifegain > 0) { return p.cast_lifegain >= 6 ? 0 : p.cast_lifegain >= 5 ? 1 : 2; }   // Nourish, Feed, Weather
+            if (p.etb_modal_lifegain > 0) { return 3; }             // Trufflesnout
+            if (p.sac_outlet_lifegain > 0) { return 4; }            // Brindle Boar
+            return -1;
+        case kUntap:
+            if (p.untap_enchanted_cost) { return 0; }               // Crab Umbra
+            if (p.untap_target_creature_cost) { return 1; }         // Staff of Domination
+            if (p.soulbond_grants_untap_self_cost) { return 2; }    // Galvanic Alchemist
+            if (AaIsWitch(p)) { return 3; }                         // Seedcradle Witch
+            return -1;
+        case kWin:
+            if (p.draw_target_player) { return 0; }                 // Stroke of Genius
+            if (p.tap_draw_cost) { return 1; }                      // Staff of Domination
+            if (p.drain_cost) { return 2; }                         // Scholar of Athreos
+            if (p.team_pump_cost && d.card.IsCreature()) { return 3; }   // Ezuri
+            return -1;
+        default: return -1;
+        }
+    };
+
+    // ---- the board: which buckets are already filled, and is there a blue source ------------------------
+    bool filled[kBuckets] = { false, false, false, false };
+    bool board_blue = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        if (AaIsAlchemist(pp)) { filled[kAlch] = true; }
+        if (AaIsUntapper(pp) || AaIsWitch(pp)) { filled[kUntap] = true; }
+        if (pp.tap_draw_cost || pp.drain_cost || (pp.team_pump_cost && d->card.IsCreature())) { filled[kWin] = true; }
+        if (pp.sac_outlet_lifegain > 0) { filled[kGain] = true; }
+        if (d->card.IsLand() && AaHasColour(pp.produces, Color::Blue)) { board_blue = true; }
+        if (pp.is_land_aura && AaHasColour(LandAuraProducesFor(*d, p), Color::Blue))
+        { board_blue = true; }
+        if (d->card.IsCreature() && !AaIsAlchemist(pp) && AaHasColour(pp.produces, Color::Blue)) { board_blue = true; }
+    }
+
+    // ---- classify the hand -------------------------------------------------------------------------------
+    std::vector<const CardDefinition*> defs(at(n), nullptr);
+    std::vector<int> lands, mana_other, wishes, unclassified, members;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(hc);
+        defs[at(i)] = d;
+        if (CleanupDiscardIsLand(hc)) { lands.push_back(i); continue; }
+        if (d == nullptr) { unclassified.push_back(i); continue; }
+        const CardParams& pp = d->params;
+        bool member = false;
+        for (int b = 0; b < kBuckets; ++b) { if (rank_in(*d, b) >= 0) { member = true; } }
+        if (member) { members.push_back(i); continue; }
+        if (pp.wish_from_sideboard) { wishes.push_back(i); continue; }
+        if (pp.is_land_aura || (d->card.IsCreature() && !pp.produces.empty())) { mana_other.push_back(i); continue; }
+        unclassified.push_back(i);
+    }
+
+    // ---- keep the best of each owed bucket --------------------------------------------------------------
+    int best[kBuckets] = { -1, -1, -1, -1 };
+    for (int b = 0; b < kBuckets; ++b)
+    {
+        if (filled[b]) { continue; }
+        int best_r = 0;
+        for (int i : members)
+        {
+            const int r = rank_in(*defs[at(i)], b);
+            if (r >= 0 && (best[b] < 0 || r < best_r)) { best[b] = i; best_r = r; }
+        }
+    }
+    std::vector<char> kept(at(n), 0);
+    for (int b = 0; b < kBuckets; ++b) { if (best[b] >= 0) { kept[at(best[b])] = 1; } }
+    // "Staff can fill both": a kept card fills every bucket it belongs to.
+    bool covered[kBuckets];
+    for (int b = 0; b < kBuckets; ++b)
+    {
+        covered[b] = filled[b];
+        for (int i : members) { if (kept[at(i)] && rank_in(*defs[at(i)], b) >= 0) { covered[b] = true; } }
+    }
+    int gaps = 0;
+    for (int b = 0; b < kBuckets; ++b) { if (!covered[b]) { ++gaps; } }
+    std::vector<int> wish_kept, wish_spare;
+    for (int i : wishes) { (static_cast<int>(wish_kept.size()) < gaps ? wish_kept : wish_spare).push_back(i); }
+
+    // ---- MANA keep order: lands (an Island first when {U} is needed and missing), then the other sources ----
+    bool need_blue = false;
+    for (int i : members)
+    {
+        if (!kept[at(i)]) { continue; }
+        const CardDefinition& d = *defs[at(i)];
+        if (d.card.m_mana_cost.blue > 0 || (d.params.untap_enchanted_cost && d.params.untap_enchanted_cost->blue > 0)
+            || (d.params.soulbond_grants_untap_self_cost && d.params.soulbond_grants_untap_self_cost->blue > 0))
+        { need_blue = true; }
+    }
+    if (need_blue && !board_blue)
+    {
+        auto blue_land = [&](int i) { return defs[at(i)] != nullptr && AaHasColour(defs[at(i)]->params.produces, Color::Blue); };
+        auto it = std::find_if(lands.begin(), lands.end(), blue_land);
+        if (it != lands.end()) { const int v = *it; lands.erase(it); lands.insert(lands.begin(), v); }
+    }
+    auto mana_rank = [&](int i) -> int
+    {
+        const CardParams& p = defs[at(i)]->params;
+        if (p.is_land_aura && p.etb_choose_color) { return 0; }                    // Utopia Sprawl
+        if (!p.mana_requires_land_subtype.empty()) { return 1; }                  // Arbor Elf
+        if (p.is_land_aura) { return 2; }                                         // Wild Growth
+        return 3;                                                                 // Elvish Harbinger (a dork)
+    };
+    std::stable_sort(mana_other.begin(), mana_other.end(), [&](int a, int b) { return mana_rank(a) < mana_rank(b); });
+
+    // ---- the shed order --------------------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(at(n));
+    shed.insert(shed.end(), unclassified.begin(), unclassified.end());
+    {
+        // Spare bucket cards: the worst within-bucket rank first; equal ranks WINCON, UNTAP, LIFEGAIN, ALCHEMIST.
+        std::vector<std::pair<std::pair<int, int>, int>> spare;   // ((rank, bucket), index)
+        for (int i : members)
+        {
+            if (kept[at(i)]) { continue; }
+            int r = -1, bk = -1;
+            for (int b = 0; b < kBuckets; ++b)
+            {
+                const int rb = rank_in(*defs[at(i)], b);
+                if (rb >= 0 && (r < 0 || rb < r)) { r = rb; bk = b; }
+            }
+            spare.push_back({ { r, bk }, i });
+        }
+        std::stable_sort(spare.begin(), spare.end(), [](const auto& a, const auto& b)
+        {
+            if (a.first.first != b.first.first) { return a.first.first > b.first.first; }
+            return a.first.second > b.first.second;
+        });
+        for (const auto& e : spare) { shed.push_back(e.second); }
+    }
+    shed.insert(shed.end(), wish_spare.begin(), wish_spare.end());
+    shed.insert(shed.end(), mana_other.rbegin(), mana_other.rend());
+    shed.insert(shed.end(), lands.rbegin(), lands.rend());
+    shed.insert(shed.end(), wish_kept.rbegin(), wish_kept.rend());
+    for (int b = kBuckets - 1; b >= 0; --b)
+    {
+        const int i = best[b];
+        if (i >= 0 && std::find(shed.begin(), shed.end(), i) == shed.end()) { shed.push_back(i); }
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 // ---- AccomplishedAlchemistProvider: the closed-form untap loop and its payoffs (chunk C2b) ---------

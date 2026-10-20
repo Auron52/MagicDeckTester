@@ -2564,3 +2564,154 @@ TEST_CASE("Harbinger rule: the searched plans fetch only the rule's pick, and th
     if (DecisionUnpruned(UnprunedGate::Tutor)) { CHECK(tops.count("Ezuri, Renegade Leader") == 1); }
     else { CHECK(tops == std::set<std::string>{ "Accomplished Alchemist", "Forest" }); }
 }
+// ---- THE USER'S CLEANUP-DISCARD BUCKETS (2026-10-20, MTG_AA_BUCKET_DISCARD) ------------------------------------
+// "You keep the best of each bucket and lands etc. for the rest. Living Wish can fill any gaps and Staff can fill
+// both." AccomplishedAlchemistProvider::CleanupDiscardShedOrder: the best hand card of each bucket (Alchemist,
+// Lifegain, Untap, Wincon/Draw) the battlefield has not filled, one Living Wish per remaining gap, mana for the
+// rest; spare bucket cards and spare Wishes shed first, then the lowest mana card.
+namespace
+{
+struct DiscArmAa
+{
+    std::int8_t b, f;
+    DiscArmAa(int on, int fan) : b(heurarm::t_arm[heurarm::AA_BUCKET_DISCARD]), f(heurarm::t_arm[heurarm::AA_DISCARD_FAN])
+    { heurarm::t_arm[heurarm::AA_BUCKET_DISCARD] = static_cast<std::int8_t>(on);
+      heurarm::t_arm[heurarm::AA_DISCARD_FAN] = static_cast<std::int8_t>(fan); }
+    ~DiscArmAa() { heurarm::t_arm[heurarm::AA_BUCKET_DISCARD] = b; heurarm::t_arm[heurarm::AA_DISCARD_FAN] = f; }
+};
+GameState DiscAa(const std::vector<std::string>& hand)
+{
+    GameState s = FreshAa();
+    s.players[0].hand.clear();
+    for (const std::string& n : hand) { HandAa(s, n); }
+    s.m_provider = &AaProv();
+    return s;
+}
+// The rule's shed order as names (most expendable first).
+std::vector<std::string> ShedNamesAa(const GameState& s)
+{
+    DiscArmAa on(1, -1);
+    std::vector<std::string> out;
+    for (int i : AaProv().CleanupDiscardShedOrder(s, nullptr)) { out.push_back(s.players[0].hand[static_cast<std::size_t>(i)].m_name.str()); }
+    return out;
+}
+std::string ShedOneAa(const GameState& s)
+{
+    DiscArmAa on(1, 0);
+    const std::vector<int> c = AaProv().CleanupDiscardCandidates(s, nullptr);
+    REQUIRE(c.size() == 1);
+    return s.players[0].hand[static_cast<std::size_t>(c[0])].m_name.str();
+}
+}   // namespace
+
+TEST_CASE("Discard buckets: the best of each bucket is kept; the spare in a filled bucket sheds first, ONE index")
+{
+    // Untap: Crab Umbra > Staff; Wincon: Stroke > Staff -> the Staff is the best of neither, a spare.
+    const GameState s = DiscAa({ "Accomplished Alchemist", "Nourish", "Staff of Domination", "Crab Umbra",
+                                 "Stroke of Genius", "Forest", "Forest", "Forest" });
+    CHECK(ShedOneAa(s) == "Staff of Domination");
+    // Lifegain: Nourish > Feed the Clan > Weather the Storm; the worst spare first.
+    const GameState g = DiscAa({ "Accomplished Alchemist", "Feed the Clan", "Weather the Storm", "Nourish",
+                                 "Crab Umbra", "Stroke of Genius", "Forest", "Forest" });
+    const std::vector<std::string> o = ShedNamesAa(g);
+    CHECK(o[0] == "Weather the Storm");
+    CHECK(o[1] == "Feed the Clan");
+    CHECK(o[2] == "Forest");                                  // then the lowest mana card
+    CHECK(o.back() == "Accomplished Alchemist");              // the kept bucket cards go last
+    // Untap order: Galvanic > Seedcradle Witch; Wincon: Scholar > Ezuri.
+    const GameState u = DiscAa({ "Seedcradle Witch", "Galvanic Alchemist", "Ezuri, Renegade Leader",
+                                 "Scholar of Athreos", "Forest" });
+    const std::vector<std::string> ou = ShedNamesAa(u);
+    CHECK(ou[0] == "Ezuri, Renegade Leader");                 // rank 3 spares: Wincon before Untap
+    CHECK(ou[1] == "Seedcradle Witch");
+}
+
+TEST_CASE("Discard buckets: Staff of Domination in hand fills BOTH Untap and Wincon/Draw")
+{
+    // No Umbra, no Stroke: the Staff is both buckets' best, so Galvanic and Scholar are spares and no gap
+    // is left for the Wish.
+    const GameState s = DiscAa({ "Accomplished Alchemist", "Nourish", "Staff of Domination", "Galvanic Alchemist",
+                                 "Scholar of Athreos", "Living Wish", "Forest", "Forest", "Forest" });
+    const std::vector<std::string> o = ShedNamesAa(s);
+    CHECK(o[0] == "Scholar of Athreos");                      // rank 2 spare (Wincon) before Galvanic (Untap)
+    CHECK(o[1] == "Galvanic Alchemist");
+    CHECK(o[2] == "Living Wish");                             // no gap -> the Wish is a spare
+    CHECK(o[3] == "Forest");
+}
+
+TEST_CASE("Discard buckets: a Living Wish fills one empty bucket each; Wishes past the gaps are spares")
+{
+    // Untap and Wincon empty -> both Wishes kept; the shed is a land.
+    const GameState two = DiscAa({ "Accomplished Alchemist", "Nourish", "Living Wish", "Living Wish",
+                                   "Forest", "Forest", "Forest", "Forest" });
+    CHECK(ShedOneAa(two) == "Forest");
+    // Only Untap empty -> one Wish kept, the other shed before any land.
+    const GameState one = DiscAa({ "Accomplished Alchemist", "Nourish", "Stroke of Genius", "Living Wish",
+                                   "Living Wish", "Forest", "Forest", "Forest" });
+    const std::vector<std::string> o = ShedNamesAa(one);
+    CHECK(o[0] == "Living Wish");
+    CHECK(o[1] == "Forest");
+    CHECK(std::count(o.end() - 4, o.end(), std::string("Living Wish")) == 1);   // the gap-filler is kept
+}
+
+TEST_CASE("Discard buckets: net of board -- a bucket filled on the battlefield owes no hand card")
+{
+    // An Alchemist in play: the hand's Alchemist is a spare.
+    GameState a = DiscAa({ "Accomplished Alchemist", "Nourish", "Crab Umbra", "Stroke of Genius",
+                           "Forest", "Forest", "Forest", "Forest" });
+    PutAa(a, "Accomplished Alchemist");
+    CHECK(ShedOneAa(a) == "Accomplished Alchemist");
+    // A Staff in play fills Untap AND Wincon: the Umbra and the Stroke are spares.
+    GameState st = DiscAa({ "Accomplished Alchemist", "Nourish", "Crab Umbra", "Stroke of Genius",
+                            "Forest", "Forest", "Forest", "Forest" });
+    PutAa(st, "Staff of Domination");
+    std::vector<std::string> o = ShedNamesAa(st);
+    CHECK(((o[0] == "Crab Umbra" && o[1] == "Stroke of Genius") || (o[0] == "Stroke of Genius" && o[1] == "Crab Umbra")));
+    // A Seedcradle Witch in play fills Untap; a Brindle Boar in play fills Lifegain.
+    GameState w = DiscAa({ "Accomplished Alchemist", "Nourish", "Crab Umbra", "Stroke of Genius", "Forest" });
+    PutAa(w, "Seedcradle Witch"); PutAa(w, "Brindle Boar");
+    o = ShedNamesAa(w);
+    CHECK(o[0] == "Crab Umbra");
+    CHECK(o[1] == "Nourish");
+    // ... and with the Untap bucket filled by the board, a lone Wish has one fewer gap to fill.
+    GameState g = DiscAa({ "Accomplished Alchemist", "Nourish", "Living Wish", "Forest", "Forest" });
+    PutAa(g, "Crab Umbra");
+    CHECK(ShedNamesAa(g).front() == "Forest");                // Wincon is still empty: the Wish fills it
+}
+
+TEST_CASE("Discard buckets: mana keeps lands first, then Sprawl > Arbor Elf > Wild Growth > Harbinger; Island when {U} is owed")
+{
+    const GameState s = DiscAa({ "Elvish Harbinger", "Wild Growth", "Arbor Elf", "Utopia Sprawl", "Forest", "Forest",
+                                 "Eternal Witness" });
+    const std::vector<std::string> o = ShedNamesAa(s);
+    CHECK(o == std::vector<std::string>{ "Eternal Witness", "Elvish Harbinger", "Wild Growth", "Arbor Elf",
+                                         "Utopia Sprawl", "Forest", "Forest" });
+    // A kept Crab Umbra needs {U}, nothing on the battlefield makes it: the Island is the last land shed.
+    GameState b = DiscAa({ "Crab Umbra", "Forest", "Forest", "Island" });
+    PutAa(b, "Forest");
+    std::vector<std::string> ob = ShedNamesAa(b);
+    CHECK(ob[0] == "Forest"); CHECK(ob[1] == "Forest"); CHECK(ob[2] == "Island");
+    // With an Island already in play the hand's lands keep hand order: the Island, last in hand, sheds first.
+    GameState c = DiscAa({ "Crab Umbra", "Forest", "Forest", "Island" });
+    PutAa(c, "Island");
+    CHECK(ShedNamesAa(c)[0] == "Island");
+}
+
+TEST_CASE("Discard buckets: =0 restores the inherited SelesnyaLifegain policy; the fan lever returns the whole order")
+{
+    const GameState s = DiscAa({ "Accomplished Alchemist", "Nourish", "Feed the Clan", "Crab Umbra",
+                                 "Stroke of Genius", "Forest", "Forest", "Forest" });
+    {
+        DiscArmAa off(0, -1);
+        CHECK(AaProv().CleanupDiscardCandidates(s, nullptr)
+              == AaProv().SelesnyaLifegainProvider::CleanupDiscardCandidates(s, nullptr));
+        CHECK(AaProv().CleanupDiscardShedStable() == AaProv().SelesnyaLifegainProvider::CleanupDiscardShedStable());
+    }
+    {
+        DiscArmAa fan(1, 1);
+        const std::vector<int> all = AaProv().CleanupDiscardCandidates(s, nullptr);
+        CHECK(all.size() == s.players[0].hand.size());
+        CHECK(s.players[0].hand[static_cast<std::size_t>(all[0])].m_name.str() == "Feed the Clan");
+        CHECK(AaProv().CleanupDiscardShedStable());
+    }
+}
