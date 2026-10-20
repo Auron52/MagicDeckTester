@@ -131,6 +131,24 @@ int GameEngine::PlayOut(GameState& state, int max_turns)
 int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
 {
     m_ai.SetMaxTurns(max_turns);
+    // MTG_BOTTOM_TRIAL_TRACE: per-turn work units of a bottom trial (diagnostic; reads only).
+    struct TrialTrace
+    {
+        long long id; const GameState& st; int stop; std::vector<long long> u; int res = 0;
+        TrialTrace(long long i, const GameState& s, int sa) : id(i), st(s), stop(sa) {}
+        ~TrialTrace()
+        {
+            if (id == 0) { return; }
+            std::string o = "[btrial] seed=" + std::to_string(st.game_seed) + " id=" + std::to_string(id)
+                          + " stop=" + std::to_string(stop) + " res=" + std::to_string(res)
+                          + " turn=" + std::to_string(st.turn_number) + " u=";
+            for (std::size_t k = 0; k < u.size(); ++k) { o += (k ? "," : "") + std::to_string(u[k]); }
+            std::fprintf(stderr, "%s\n", o.c_str());
+        }
+    } ttrace(t_bottom_trial_trace, state, m_stop_after_turn);
+    t_bottom_trial_trace = 0;
+    auto tnote = [&](int r) { ttrace.res = r; return r; };
+    if (ttrace.id) { ttrace.u.push_back(gamework::t_used); }
     // Finish the turn already in progress before the normal fresh-turn loop takes over.
     if (from != ResumeAt::NewTurn)
     {
@@ -141,21 +159,22 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
     while (state.turn_number < max_turns)
     {
         if (state.player_lost_on_draw) { return -1; }
-        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return -1; }   // SetStopAfterTurn
+        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return tnote(-1); }   // SetStopAfterTurn
         // Stop playing a game that has already been voided. The search bails out of its recursion as
         // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
         // running turns on rolled-back lines -- cheap per turn, yet unbounded in count, and every one
         // of them is work spent on a result that will be discarded.
         if (gamework::Abandoned()) { return GameEngine::kAbandoned; }
         RunTurn(state);
+        if (ttrace.id) { ttrace.u.push_back(gamework::t_used); }
         // Check opponent loss first: if we dealt lethal and also triggered ourselves to
         // death in the same turn, the win still counts.
-        if (CheckWinCondition(state)) { return state.turn_number; }
-        if (state.ActivePlayer().HasLost()) { return -1; }
+        if (CheckWinCondition(state)) { return tnote(state.turn_number); }
+        if (state.ActivePlayer().HasLost()) { return tnote(-1); }
         // The search refuted every line through max_turns (see GameState::proven_no_win).
-        if (state.proven_no_win) { return -1; }
+        if (state.proven_no_win) { return tnote(-1); }
     }
-    return -1;
+    return tnote(-1);
 }
 
 // ============================================================

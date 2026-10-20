@@ -14,7 +14,7 @@ adopted or added. Chunk P2 (lossless per-node cuts, 2026-10-19) made the per-nod
 per unit but the deck is still 1.55x over the line at d5 b20, and its `MTG_ENUM_CHARGE` lever (OFF) measured a
 quality loss. Chunk P3 (2026-10-19) landed three more byte-identical cuts (the gi286 tail game 1.13x, the
 cells ~2%) and found nothing lossless left that reaches the line; it surfaced the continuation-cache
-eviction (g60 -17% with an unbounded cache) as a USER call. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
+eviction (g60 -17% with an unbounded cache) as a USER call. The mulligan-trial optimization (2026-10-20, branch `aa-opt-mull`) landed `MTG_BOTTOM_PREF_ORDER` (trial order + strict stop, byte-identical; d5 b20 units -4.8%, ms -6%) and assessed the winless certificate as inert for budgeted play -- still over the line. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
 `MTG_ALLOW_UNTESTED_DECK=1`), and/or the per-node enumeration cost found in the same attempt; then the suite
 rows, then profile -> mulligan -> value leaf. Viewer flags are the viewer worktree's. Open USER items are
 listed under "Open questions surfaced to USER".
@@ -63,6 +63,68 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
+
+Branch `aa-opt-mull` (from accomplished-alchemist @ 39848afe). Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/mopt/`
+(`mtg.base` = 39848afe, `trace_*` = the per-trial census, `base` / `new1` = the cost cells, `tr.py` the census reader).
+The `bottom_eval_*` fields are untouched (that arm is the USER's call, "Suite entry attempt").
+
+* **Where the bottom-trial units are (new diagnostic `MTG_BOTTOM_TRIAL_TRACE=1`, reads only: one `[btrial]` line per
+  trial with its stop, result and per-turn work units).** Seed 70001, 200 games: 71 games mulligan, 542 trials; trials
+  are **80% of all units** (d5 b20 50.3 M of 62.7 M; d3 b10 27.1 M of 33.4 M). By trial turn (d5): T1 18%, T2 34%,
+  T3 23%, T4 12%, T5 7%, T6+ 5% -- the cost is the EARLY turns every trial must play identically. Bounds computed from
+  the census: perfect turn-synchronous interleaving (every trial stops at the pass minimum G) 48.8 M (-3%); every trial
+  but the chosen one stopped after G - 1 ("ideal strict") 46.4 M (-8%); the last turn of every stopped trial (the
+  most a turn-B winless certificate could remove) 1.5 M (3%). So no exact trial-side change can approach the line;
+  the remaining lever on trial cost is what the trial searches with (bottom_eval, the USER's), not how many turns it plays.
+* **The change -- `MTG_BOTTOM_PREF_ORDER` (default ON; sound dominance, the COLLAPSE rule).** The pick is
+  HeuristicBottomPick over the candidates at the pass minimum G. `AIEngine::BottomPreferenceOrder` peels
+  HeuristicBottomPick into one order and VERIFIES over all 2^h allowed sets (127 calls at seven cards) that it is a
+  priority choice -- the pick is always the allowed set's first card in that order; where that fails (or h > 10) the
+  old order and P3's stop run unchanged. Then (per-candidate loop) the trials run in that order, and (subset table)
+  the masks run in the order of the key the step greedy would give each mask (the preference rank of each step's
+  pick from it, per hand state, memoised) -- the greedy's final set is the key-minimum mask at G. Every trial after a
+  W is less preferred than the holder of W, so it can matter only by winning STRICTLY before W: it stops after turn
+  W - 1 (P3: after W), and a stopped trial reads W + 1. The final allowed set loses only candidates less preferred
+  than an allowed one and keeps the most-preferred one at G, so the bottomed cards are identical. Off with the
+  two-stage refine, an external bottom chooser, the blind bottomer and forced replays (where values are read for
+  more than that). Name-deduped twins now always play the lowest-index copy's trial (as before), even when another
+  copy comes first in preference order. The only cross-trial channel is the shared bottoming TT's history -- the
+  same channel as P3's stop (a key collision across different kept hands), and it did not show.
+* **Tests.** `test/unit/test_bottom_pref_order.cpp`: (1) on 40 real AA opening hands the order verifies and
+  HeuristicBottomPick equals the order's first allowed card on all 127 sets of each; (2) end to end,
+  RolloutKeepWinTurn at 1 and 2 mulligans on 6 hands bottoms the SAME physical cards and returns the same win turn
+  with the lever forced on and off (`AIEngine::TestForceBottomPrefOrder`). mtg-test 1501/1501.
+* **Play identity.** The deck's 200-game cells: d3 b10 `ed03ab6957a09593`, d5 b20 `f4d9cf88b0c3a26c` -- identical to
+  base, avg 5.8150 / 5.7450, 0 faster / 0 slower; the units moved in 61 of the 71 mulligan games (the lever fired)
+  and nowhere else. Scenarios 228/228; smoke 124/128 with exactly the four known moves at their
+  known digests (selesnya d3 a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0
+  0f633c1012b4fb11); nothing else moved. Not accepted.
+* **Cost, seed 70001, 200 games** (base 39848afe and new as two concurrent 12-thread batches; ms per game):
+
+  | cell | base mean / p90 / max | new mean / p90 / max | core-s | units total |
+  |---|---|---|---|---|
+  | d3 b10 | 8,834 / 20,369 / 94,694 | 8,164 / 21,019 / 90,409 | 1,767 -> 1,633 (0.92x) | 33.37 M -> 30.17 M (-9.6%) |
+  | d5 b20 | 10,227 / 28,008 / 120,914 | 9,608 / 25,000 / 116,179 | 2,045 -> 1,922 (0.94x) | 62.71 M -> 59.71 M (-4.8%) |
+
+  Trial units: d5 50.3 M -> 47.3 M (-6%, against the -8% "ideal strict" bound), d3 27.1 M -> 23.9 M (-12%).
+  **Still over the 8,907 ms line at d5 b20 (9,608 here at 24-way contention; P3 measured 12,643 at 30-way).**
+* **The certificate (`ProvenWinlessThisTurn` for AccomplishedAlchemistProvider) -- assessed, NOT built.** By its own
+  contract (DecisionProvider.h, TurnSolver's `WinlessCertificateActive` / `WinlessDevelopActive`) the certificate is
+  consulted only inside `LabelSearchScopeActive()` / `UnbudgetedWorkScopeActive()` -- the offline label ladder and
+  unbounded cells -- because pruning consumes no work units and would change budgeted play. Every game in the suite
+  and both 200-game cells is budgeted, so a certificate here is byte-inert for this deck's cost, play AND bottom trials.
+  The one budget-safe use is a trial stop (a trial proven winless on its stop turn ends at that turn's start): the
+  census caps that at the last turn of the stopped trials, 3% of trial units before this change and less after it
+  (the strict stop already removes most of those turns). Against that, a sound bound for this deck must price
+  unbounded Alchemist loops (four untappers), mid-turn lifegain, Stroke's deck-out and Living Wish's 15-card
+  sideboard -- a large one-sided proof whose failure mode is a silently lost win. Not worth it for the line; it stays
+  NotAssessed. (It would pay on an unbudgeted label run of this deck, if one is ever needed.)
+* **Residual.** At d5 b20 the deck sits ~1.08x over the line on this sample; the trials are 79% of units and their
+  cost is turns 1-3 of each trial at full play settings. What is left on the bottoming side is a USER decision: the
+  `bottom_eval_*` arm (Suite entry attempt) or running the mulligan stage (keep table) under
+  `MTG_ALLOW_UNTESTED_DECK=1`.
 
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 

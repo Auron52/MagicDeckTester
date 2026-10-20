@@ -1189,6 +1189,47 @@ double AIEngine::CardScore(const std::string& name, int copy_index) const
     return std::max(0.0, it->second[idx]);
 }
 
+// Test seam for MTG_BOTTOM_PREF_ORDER (see BottomCards): -1 follow the env, 0 off, 1 on.
+static std::atomic<int> g_bottom_pref_order_force{-1};
+void AIEngine::TestForceBottomPrefOrder(int v) { g_bottom_pref_order_force.store(v); }
+static bool BottomPrefOrderOn()
+{
+    static const bool env = EnvOn("MTG_BOTTOM_PREF_ORDER", true);
+    const int f = g_bottom_pref_order_force.load(std::memory_order_relaxed);
+    return f < 0 ? env : (f != 0);
+}
+
+bool AIEngine::BottomPreferenceOrder(const std::vector<Card>& hand, std::vector<int>& order) const
+{
+    order.clear();
+    const int h = static_cast<int>(hand.size());
+    if (h == 0 || h > kBottomPrefMaxHand) { return false; }
+    std::vector<char> a(static_cast<std::size_t>(h), 1);
+    std::vector<int>  rank(static_cast<std::size_t>(h), -1);
+    for (int k = 0; k < h; ++k)
+    {
+        const int p = HeuristicBottomPick(hand, a);
+        if (p < 0 || p >= h || !a[static_cast<std::size_t>(p)]) { order.clear(); return false; }
+        rank[static_cast<std::size_t>(p)] = k;
+        order.push_back(p);
+        a[static_cast<std::size_t>(p)] = 0;
+    }
+    // The peel alone does not make it a priority choice: verify every allowed set the bottoming
+    // greedy could ever hand it (2^h - 1 of them; 127 at the usual seven cards).
+    for (std::uint32_t set = 1; set < (1u << h); ++set)
+    {
+        int want = -1;
+        for (int j = 0; j < h; ++j)
+        {
+            a[static_cast<std::size_t>(j)] = static_cast<char>((set >> j) & 1u);
+            if (a[static_cast<std::size_t>(j)] && (want < 0 || rank[static_cast<std::size_t>(j)] < rank[static_cast<std::size_t>(want)]))
+            { want = j; }
+        }
+        if (HeuristicBottomPick(hand, a) != want) { order.clear(); return false; }
+    }
+    return true;
+}
+
 int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
                                  const std::vector<char>& allowed) const
 {
@@ -1844,6 +1885,9 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     static const bool s_legal_trials = EnvOn("MTG_BOTTOM_LEGAL", true);
     static const bool s_name_dedupe_env = EnvOn("MTG_BOTTOM_NAME_DEDUPE", true);   // default ON: PD 1,200 games byte-identical, -12..-16% CPU (2026-09-29)
     const bool s_name_dedupe = heurarm::Flag(heurarm::BOTTOM_NAME_DEDUPE, s_name_dedupe_env);
+    // MTG_BOTTOM_PREF_ORDER (below) needs the refine test on its own; the stops ride turn_cut.
+    static const bool s_trial_trace = EnvOn("MTG_BOTTOM_TRIAL_TRACE");   // diagnostic (GameEngine.h)
+    const bool refine_active = eff_beval_topk > 0 && (eff_beval_depth >= 0 || eff_beval_budget >= 0);
     std::vector<int>  subset_win;    // win turn per removal mask over the initial hand (0 = not a legal mask)
     std::vector<int>  nums0;         // initial hand card numbers, in mask-bit order
     std::uint32_t     done_mask = 0; // bottoms committed so far, as initial-hand bits
@@ -1897,25 +1941,99 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                     }
                     return c;
                 };
-                int incumbent = max_turns + 1;   // best win over the masks rolled so far (MTG_BOTTOM_TURN_CUT)
-                for (std::uint32_t m = 0; m < (1u << h0); ++m)
+                const bool sub_stop_ok = turn_cut;   // MTG_BOTTOM_TURN_CUT (refine / external chooser excluded)
+                // Trial ORDER and STRICT STOP (MTG_BOTTOM_PREF_ORDER, default ON; see the block
+                // comment at the per-candidate loop below for the argument). Each legal mask gets the
+                // key the step greedy below would give it if it were the only mask at the pass
+                // minimum: the preference rank of the card each step would pick from it. Under
+                // priority-choice HeuristicBottomPick (verified per hand state by
+                // BottomPreferenceOrder) the greedy's final set is the KEY-MINIMUM mask among those
+                // at the pass minimum G, so a mask run after a better-keyed mask that already reached
+                // W can only matter by winning STRICTLY before W.
+                std::vector<std::uint32_t> masks;
+                for (std::uint32_t m = 0; m < (1u << h0); ++m) { if (popcnt(m) == count) { masks.push_back(m); } }
+                bool sub_strict = sub_stop_ok && BottomPrefOrderOn();
+                if (sub_strict)
                 {
-                    if (popcnt(m) != count) { continue; }
+                    std::map<std::uint32_t, std::vector<int>> pref_memo;   // chosen-set -> rank per hand slot
+                    std::vector<std::pair<std::vector<int>, std::uint32_t>> keyed;
+                    keyed.reserve(masks.size());
+                    for (std::uint32_t m : masks)
+                    {
+                        std::vector<int> key;
+                        std::vector<int> slot(static_cast<std::size_t>(h0));   // hand slot -> initial index
+                        for (int a = 0; a < h0; ++a) { slot[static_cast<std::size_t>(a)] = a; }
+                        std::uint32_t chosen = 0;
+                        for (int step = 0; step < count && sub_strict; ++step)
+                        {
+                            auto it = pref_memo.find(chosen);
+                            if (it == pref_memo.end())
+                            {
+                                std::vector<Card> hk;
+                                for (int a = 0; a < h0; ++a) { if (!((chosen >> a) & 1u)) { hk.push_back(ap.hand[static_cast<std::size_t>(a)]); } }
+                                std::vector<int> ord, rank;
+                                if (BottomPreferenceOrder(hk, ord))
+                                {
+                                    rank.assign(ord.size(), 0);
+                                    for (std::size_t r = 0; r < ord.size(); ++r) { rank[static_cast<std::size_t>(ord[r])] = static_cast<int>(r); }
+                                }
+                                it = pref_memo.emplace(chosen, std::move(rank)).first;
+                            }
+                            const std::vector<int>& rank = it->second;
+                            if (rank.empty()) { sub_strict = false; break; }
+                            int best_r = -1, best_a = -1;
+                            for (std::size_t p = 0; p < slot.size(); ++p)
+                            {
+                                const int a = slot[p];
+                                if (((m >> a) & 1u) && (best_r < 0 || rank[p] < best_r)) { best_r = rank[p]; best_a = static_cast<int>(p); }
+                            }
+                            key.push_back(best_r);
+                            chosen |= 1u << slot[static_cast<std::size_t>(best_a)];
+                            slot.erase(slot.begin() + best_a);
+                        }
+                        keyed.emplace_back(std::move(key), m);
+                    }
+                    if (sub_strict)
+                    {
+                        std::sort(keyed.begin(), keyed.end());
+                        for (std::size_t q = 0; q < keyed.size(); ++q) { masks[q] = keyed[q].second; }
+                    }
+                }
+                int pass_best = std::numeric_limits<int>::max();
+                for (std::uint32_t m : masks)
+                {
+                    std::uint32_t roll = m;   // the mask whose trial is played (its canonical twin, deduped)
                     if (s_name_dedupe)
                     {
                         const std::uint32_t c = canon(m);
-                        if (c != m && subset_win[c] != 0)
+                        if (subset_win[c] != 0)   // c == m: rolled early as a twin's canonical (key order)
                         {
                             subset_win[m] = subset_win[c];
                             if (BottomCostStatsOn()) { g_bottom_dedup.fetch_add(1, std::memory_order_relaxed); }
                             continue;
                         }
+                        roll = c;   // == m in mask order (the canonical is lower, so already scored)
                     }
-                    m_bottom_turn_cap = (turn_cut && incumbent <= max_turns) ? incumbent : 0;
-                    subset_win[m] = roll_mask(m);
-                    m_bottom_turn_cap = 0;
-                    incumbent = std::min(incumbent, subset_win[m]);
-                    if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
+                    int stop = (sub_stop_ok && pass_best <= max_turns) ? pass_best : 0;
+                    int win  = 0;
+                    if (sub_strict && stop > 0)
+                    {
+                        stop = pass_best - 1;            // must win STRICTLY before the best to matter
+                        if (stop < 1) { win = pass_best + 1; }   // nothing wins before turn 1
+                    }
+                    if (win == 0)
+                    {
+                        m_bottom_turn_cap = stop;
+                        if (s_trial_trace) { t_bottom_trial_trace = static_cast<long long>(roll) + 1; }
+                        win = roll_mask(roll);
+                        m_bottom_turn_cap = 0;
+                        // A trial capped at `stop` with no win reads max_turns + 1 (RolloutWinTurnFrom),
+                        // already worse than the best: no stand-in can tie it.
+                        if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    subset_win[roll] = win;
+                    subset_win[m]    = win;
+                    pass_best = std::min(pass_best, win);
                 }
             }
             // TWO-STAGE REFINE (MTG_BOTTOM_EVAL_TOPK=K, default 0 = off). Only meaningful when
@@ -1996,8 +2114,33 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             int best_win = std::numeric_limits<int>::max();
             {
             BottomEvalScope _beval_pc(*this, eff_beval_depth, eff_beval_budget, eff_beval_units);   // covers the per-candidate and blind-K rollouts
-            for (int j = 0; j < hand_size; ++j)
+            // TRIAL ORDER + STRICT STOP (MTG_BOTTOM_PREF_ORDER, default ON, 2026-10-20). The pick is
+            // HeuristicBottomPick over the candidates whose win turn equals the step minimum G. When
+            // that function is a PRIORITY choice on this hand -- it returns the first allowed card of
+            // one fixed order, which BottomPreferenceOrder verifies over all 2^h allowed sets rather
+            // than assumes -- the pick is the most-preferred candidate at G. So run the candidates in
+            // that order: once a candidate has reached W, every later one is LESS preferred and can
+            // change the pick only by winning STRICTLY before W, so its trial stops after turn W - 1
+            // (P3's stop was after W) and a stopped trial reads W + 1, not W. The values feed nothing
+            // but `allowed` (no refine, no external chooser, no blind averaging -- all excluded): the
+            // final allowed set loses only candidates less preferred than an allowed one, and the
+            // most-preferred candidate at G is still in it, so the pick is unchanged. Every turn a
+            // trial does play is played exactly as before (same state, same stop-free turns); the
+            // one cross-trial channel is the shared bottoming TT's history, as for P3's stop.
+            // Where the property fails, or for an oversized hand, the plain order and P3's stop run.
+            std::vector<int> pc_order;
+            const bool pc_strict = !subset_table && !s_blind_bottom && !refine_active
+                                && !m_external_bottom_chooser && BottomPrefOrderOn()
+                                && BottomPreferenceOrder(ap.hand, pc_order);
+            if (!pc_strict)
             {
+                pc_order.resize(static_cast<std::size_t>(hand_size));
+                for (int j = 0; j < hand_size; ++j) { pc_order[static_cast<std::size_t>(j)] = j; }
+            }
+            std::vector<char> pc_rolled(static_cast<std::size_t>(hand_size), 0);
+            for (int jj = 0; jj < hand_size; ++jj)
+            {
+                const int j = pc_order[static_cast<std::size_t>(jj)];
                 if (subset_table)
                 {
                     // Legal-subset score: the best win over legal removal sets that contain the
@@ -2041,27 +2184,46 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 }
                 else
                 {
-                    int twin = -1;   // MTG_BOTTOM_NAME_DEDUPE: an earlier copy of this name was already rolled out
+                    // MTG_BOTTOM_NAME_DEDUPE: the trial is always the LOWEST-indexed copy of this
+                    // name's (in index order it was rolled first; in preference order it may not be).
+                    int twin = j;
                     if (s_name_dedupe)
                     {
                         for (int b = 0; b < j; ++b)
                         { if (ap.hand[b].m_name.str() == ap.hand[j].m_name.str()) { twin = b; break; } }
                     }
-                    if (twin >= 0)
+                    if (pc_rolled[static_cast<std::size_t>(twin)])   // twin == j: rolled early as another copy's twin
                     {
                         win_turn[j] = win_turn[twin];
                         if (BottomCostStatsOn()) { g_bottom_dedup.fetch_add(1, std::memory_order_relaxed); }
                     }
                     else
                     {
-                        GameState trial = state;
-                        Player& trial_ap = trial.ActivePlayer();
-                        trial_ap.library.push_back(trial_ap.hand[j]);
-                        trial_ap.hand.erase(trial_ap.hand.begin() + j);
-                        m_bottom_turn_cap = (turn_cut && best_win <= max_turns) ? best_win : 0;   // MTG_BOTTOM_TURN_CUT
-                        win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
-                        m_bottom_turn_cap = 0;
-                        if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
+                        // Early stop at the best win so far (MTG_BOTTOM_TURN_CUT above), strict under
+                        // the preference order (see pc_strict).
+                        int stop = (turn_cut && best_win <= max_turns) ? best_win : 0;   // MTG_BOTTOM_TURN_CUT
+                        int win  = 0;
+                        if (pc_strict && stop > 0)
+                        {
+                            stop = best_win - 1;
+                            if (stop < 1) { win = best_win + 1; }   // nothing wins before turn 1
+                        }
+                        if (win == 0)
+                        {
+                            GameState trial = state;
+                            Player& trial_ap = trial.ActivePlayer();
+                            trial_ap.library.push_back(trial_ap.hand[twin]);
+                            trial_ap.hand.erase(trial_ap.hand.begin() + twin);
+                            m_bottom_turn_cap = stop;
+                            if (s_trial_trace) { t_bottom_trial_trace = (1LL << 24) | (i << 8) | twin; }
+                            win = RolloutWinTurn(std::move(trial), max_turns);
+                            m_bottom_turn_cap = 0;
+                            // A capped trial reads max_turns + 1 (RolloutWinTurnFrom): worse than the best.
+                            if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
+                        }
+                        win_turn[twin] = win;
+                        win_turn[j]    = win;
+                        pc_rolled[static_cast<std::size_t>(twin)] = 1;
                     }
                 }
                 if (win_turn[j] < best_win) { best_win = win_turn[j]; }

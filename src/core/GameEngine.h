@@ -4,6 +4,11 @@
 
 class AIEngine;
 
+// MTG_BOTTOM_TRIAL_TRACE (diagnostic only, default off => no behaviour): AIEngine::BottomCards sets
+// this to the trial's id right before a bottom trial's playout; PlayOutFrom takes it (resetting it
+// to 0, so a rollout NESTED in the trial is not traced) and prints the trial's per-turn work units.
+inline thread_local long long t_bottom_trial_trace = 0;
+
 class GameEngine
 {
 public:

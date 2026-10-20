@@ -470,10 +470,24 @@ private:
     bool KeepHand(const std::vector<Card>& hand, int mulligan_count, bool on_the_play) const;
     void BottomCards(GameState& state, int count, int max_turns);
 
+public:
     // Picks the index of the card the curve/castability heuristic would bottom,
     // considering only cards whose allowed[i] is non-zero. Returns -1 if none.
+    // (Public for test_bottom_pref_order.cpp; const, reads the hand + profile only.)
     int HeuristicBottomPick(const std::vector<Card>& hand,
                             const std::vector<char>& allowed) const;
+    // BOTTOM PREFERENCE ORDER (MTG_BOTTOM_PREF_ORDER, see BottomCards). Peels HeuristicBottomPick
+    // into a total order -- order[0] = its pick from the whole hand, order[1] = its pick once order[0]
+    // is excluded, ... -- and then VERIFIES, over every non-empty allowed set of the hand, that the
+    // pick IS the first allowed card of that order (i.e. HeuristicBottomPick is a priority choice on
+    // this hand). Returns false -- and BottomCards keeps its plain trial order and stops -- when the
+    // hand is empty or larger than kBottomPrefMaxHand, or when any allowed set breaks the property.
+    // Public for the unit tests (test_bottom_pref_order.cpp); reads nothing but the hand + profile.
+    static constexpr int kBottomPrefMaxHand = 10;
+    bool BottomPreferenceOrder(const std::vector<Card>& hand, std::vector<int>& order) const;
+    // Test seam: -1 = follow MTG_BOTTOM_PREF_ORDER (default ON), 0 = force off, 1 = force on.
+    static void TestForceBottomPrefOrder(int v);
+private:
 
     // Per-card "keep value" derived from the deck analysis (card_scores): the
     // empirical marginal win-turn improvement of the (copy_index+1)-th copy in
