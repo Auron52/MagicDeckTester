@@ -226,3 +226,26 @@ rollouts per cell back to back, so a freezing cell's next 3 rollouts were alread
 
 Monitor: `skip7=` (rollouts not rolled under E3); the end-of-pool usefulness line reports it too; E4
 logs `floor speculation UNLATCHED at cell-side k/N` once.
+
+**Measured on slivers_vial (2026-10-20).** `MTG_KEEP_EXHAUSTIVE`, adaptive bottoming, K=10 (7,758
+size-7 cells), R=10, d1/b3, r_batch 2, seed 4242, `MTG_KEEP_REFS_OFFSET=0`; same binary, flags select
+the arm; harness `logs/bruna_mullgen/slv_ident/run.sh` (gitignored).
+
+| arm | raw / profile / report | size-7 speculation fed | used | rolled and discarded |
+|---|---|---|---|---|
+| old (E1-E4 all `=0`) | baseline | 62,064 | 29,215 (47.1%) | 32,849 |
+| E1-E3 on, `MTG_KEEP_SPEC_UNLATCH=0` | **byte-identical** | 62,064 | 29,215 | 32,785 (E3 skipped 64) |
+| all defaults (E1-E4) | **byte-identical** | 6,965 | 6,965 (100%) | **0** |
+
+All three arms fold the same 159,076 rollouts. The old arm's sub-refine converged at 2,501 s and its
+latched sweep then ran ALONE until refs fixed at 4,465 s, after which 76.7% of the cell-sides froze at
+once -- the Bruna shape in miniature. With E4 the sweep unlatched at cell-side 6,965/15,516 the moment
+the sub-refine converged and refs fixed 8 s later. ~31% fewer size-7 rollouts for the identical table.
+The shared-branch binary (upstream engine) gives the same old == new identity (`slv_shared`).
+
+Resume: a run hard-killed during sub-refine wave 2 and resumed lands on a table whose 9 size-6
+sub-cells carry different COUNTS than the uninterrupted run (values per rollout are pure, so only
+sample sizes differ). This is the scheduling-state gap recorded in `keepgen-resume-exactness.md` --
+the journal persists accumulators, not which wave a sub-cell was in.
+It is pre-existing, not E1-E4: the OLD schedule (all four `=0`), killed in wave 2 and resumed, likewise
+differs from its own uninterrupted run (1 size-6 sub-cell's count; no value differs) -- `slv_oldres`.
