@@ -188,6 +188,30 @@ inline bool FbHoldBankedNextTurnOn()
     return heurarm::Flag(heurarm::FB_HOLD_BANKED_NEXT_TURN, env_on);
 }
 
+// MTG_FB_HOLD_SEARCHED (DEFAULT ON; =0 -> the verdict taken at every node, byte-identical) -- the banked
+// hold is SEARCHED: the verdict of FbHoldBankedThisCombat only ORDERS "hold the bank" vs "spend it", the
+// search branches over both (Plan::fb_hold_choice, fanned in AppendSubdecisionAxes) and the pump honours
+// the pinned side (GameState::scripted_fb_hold). Read by the axis fan-out (TurnSolver.cpp) and the one
+// helper both pump sites call (Combat.cpp), so executor and rollout stay in lockstep.
+inline bool FbHoldSearchedOn()
+{
+    static const bool env_on = EnvOn("MTG_FB_HOLD_SEARCHED", true);
+    return heurarm::Flag(heurarm::FB_HOLD_SEARCHED, env_on);
+}
+
+// MTG_PAYOFF_REDUCER_SINK_NEEDED (DEFAULT ON; =0 -> every reducer subset admitted, byte-identical) -- the
+// Dragonstorm payoff prune's reducer sink (MTG_PAYOFF_PRUNE_REDUCER_SINK) admits a ritual-bearing subset
+// whose only payoff is a spell-cost reducer (Ruby Medallion) ONLY when the subset's non-ritual casts are
+// NOT already payable from the free sources (untapped non-banked lands + the floating pool) -- i.e. when a
+// ritual really funds the reducer. Otherwise every ritual in it is burnt, and the ritual-free sibling
+// subset (the same casts, the rituals still in hand) dominates it. Read by EnumeratePlans' branch-list
+// prune only (TurnSolver.cpp).
+inline bool PayoffReducerSinkNeededOn()
+{
+    static const bool env_on = EnvOn("MTG_PAYOFF_REDUCER_SINK_NEEDED", true);
+    return heurarm::Flag(heurarm::PAYOFF_REDUCER_SINK_NEEDED, env_on);
+}
+
 // MTG_LINE_FLOAT_TAP_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware float rung
 // (TapForCostSharedImpl, ManaPayment.cpp). One payer for executor, rollout and the payability walks.
 inline bool LineFloatTapFirstOn()

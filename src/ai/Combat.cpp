@@ -400,7 +400,7 @@ static bool FbNextTurnLethal(GameState& probe, std::vector<int>& idx, FbPayer pa
     return FbProbeCombat(probe, idx, payer, /*hold=*/false);
 }
 
-bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer)
+bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer, int pin)
 {
     if (payer == nullptr || atk_idx.empty() || !FbHoldBankedOn()) { return false; }
     if (FbBankedSourceMask(state) == 0) { return false; }
@@ -410,15 +410,24 @@ bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_
     GameState spend = state;
     std::vector<int> sidx = atk_idx;
     if (FbProbeCombat(spend, sidx, payer, /*hold=*/false)) { return false; }
-    if (!FbHoldBankedNextTurnOn()) { return true; }
-    // MTG_FB_HOLD_BANKED_NEXT_TURN: the hold costs a turn when spending now makes NEXT turn's attack
-    // lethal and holding does not (the Scourge race: Needle pumped T3 -> kill T4; held -> T5). Only then
-    // is the bank spent; when both worlds kill next turn, or neither does, it is kept for the storm turn.
-    if (!FbNextTurnLethal(spend, sidx, payer)) { return true; }
-    GameState hold = state;
-    std::vector<int> hidx = atk_idx;
-    FbProbeCombat(hold, hidx, payer, /*hold=*/true);
-    return FbNextTurnLethal(hold, hidx, payer);
+    // CONTESTED from here: a banked source is up and the full pump does not end the game, so holding the
+    // bank and spending it are both real lines. The verdict below is the ORDER (the heuristic's side);
+    // MTG_FB_HOLD_SEARCHED lets the searched pin take the other side.
+    const auto verdict = [&]() -> bool
+    {
+        if (!FbHoldBankedNextTurnOn()) { return true; }
+        // MTG_FB_HOLD_BANKED_NEXT_TURN: the hold costs a turn when spending now makes NEXT turn's attack
+        // lethal and holding does not (the Scourge race: Needle pumped T3 -> kill T4; held -> T5). Only
+        // then is the bank spent; when both worlds kill next turn, or neither does, it is kept for the
+        // storm turn.
+        if (!FbNextTurnLethal(spend, sidx, payer)) { return true; }
+        GameState hold = state;
+        std::vector<int> hidx = atk_idx;
+        FbProbeCombat(hold, hidx, payer, /*hold=*/true);
+        return FbNextTurnLethal(hold, hidx, payer);
+    };
+    const bool v = verdict();
+    return (pin == 1 && FbHoldSearchedOn()) ? !v : v;
 }
 
 FbBankedHoldScope::FbBankedHoldScope(bool on) : prev(t_fb_hold_banked) { t_fb_hold_banked = on; }

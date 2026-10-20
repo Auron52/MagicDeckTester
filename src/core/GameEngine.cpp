@@ -277,6 +277,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
+    state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;

@@ -857,6 +857,18 @@ struct GameState
     // Defaults TRUE so an unstamped state keeps the walk (today's behaviour). Lives in the bool
     // padding after the bools above, so sizeof(GameState) does not move.
     bool                     deck_has_discard_land_damage = true;
+    // THE SEARCHED BANKED-HOLD RANK (Plan::fb_hold_choice, MTG_FB_HOLD_SEARCHED, 2026-10-20) -- a per-turn
+    // COMBAT PIN, the scripted_combat_landfall_target class, placed HERE (int8_t, the last byte of this bool
+    // padding). The combat pump's banked hold (MTG_FB_HOLD_BANKED: keep a depletion / storage land out of a
+    // non-lethal Scourge / Lathliss pump) is a real decision -- spend the bank now or keep it for a later
+    // turn -- and the engine's verdict (FbHoldBankedThisCombat, Combat.cpp) used to be taken at EVERY node,
+    // in the search window too. The verdict now only ORDERS the two options: -1 / 0 = the verdict, 1 = the
+    // other side of it. Read only where the hold is CONTESTED (a banked source up, the full pump not lethal),
+    // consumed (reset to -1) by both pump sites whether or not a pump happens (AIEngine::Firebreathe, the
+    // rollout's SimulateCombat), written by the main-1 plan (TurnSolver::WritePostApplyStatePins), cleared
+    // with the combat pins at both turn starts, folded value-gated into the dominance key and the post-apply
+    // dedup key.
+    std::int8_t              scripted_fb_hold = -1;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole

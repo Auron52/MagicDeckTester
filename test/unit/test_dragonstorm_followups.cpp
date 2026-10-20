@@ -501,6 +501,138 @@ TEST_CASE("Combat pump spends the banked mana when only that buys a next-turn ki
     }
 }
 
+TEST_CASE("Searched banked hold: the pin takes the other side of the verdict (MTG_FB_HOLD_SEARCHED)")
+{
+    // dragonstorm overnight d3 s7007 gi466 T5: the verdict held both Needles (a non-lethal pump, no
+    // next-turn kill in the projection), and the T6 kill (Scourge #2's ETB pings) needed them spent.
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::FB_HOLD_SEARCHED, on);
+        {
+            // 20 life, the verdict holds (MTG_FB_HOLD_BANKED's case): the pinned other side spends the
+            // Needle (4 + 2 Mountains + {R}{R}) -- with the lever only. The pin is consumed either way.
+            GameState s = PumpBoardFu("Sandstone Needle", 20);
+            s.scripted_fb_hold = 1;
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == (on ? 12 : 14));
+            CHECK(DepletionFu(PermFu(s, "Sandstone Needle")) == (on ? 1 : 2));
+            CHECK(s.scripted_fb_hold == -1);
+        }
+        {
+            // Rank 0 is the verdict itself.
+            GameState s = PumpBoardFu("Sandstone Needle", 20);
+            s.scripted_fb_hold = 0;
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == 14);
+        }
+        {
+            // 16 life, the verdict SPENDS (only spending kills next turn, MTG_FB_HOLD_BANKED_NEXT_TURN): the
+            // other side holds.
+            GameState s = PumpBoardFu("Sandstone Needle", 16);
+            s.scripted_fb_hold = 1;
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life == (on ? 10 : 8));
+        }
+        {
+            // Uncontested -- lethal with the Needle (8 life): holding is dominated, the pin is ignored.
+            GameState s = PumpBoardFu("Sandstone Needle", 8);
+            s.scripted_fb_hold = 1;
+            RolloutSimulateCombat(s);
+            CHECK(s.players[1].life <= 0);
+        }
+        {
+            // The axis: a pre-combat list on the pump board carries the other-side variant, with the lever only.
+            GameState s = PumpBoardFu("Sandstone Needle", 20);
+            s.players[0].hand.push_back(CardFu("Lotus Bloom", 50));   // a non-empty list: suspend / pass
+            int variants = 0;
+            for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+            { if (p.fb_hold_choice == 1) { ++variants; } }
+            CHECK((variants > 0) == on);
+            // ...and never on a post-combat list (its pin could not be read).
+            int m2 = 0;
+            for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+            { if (p.fb_hold_choice >= 0) { ++m2; } }
+            CHECK(m2 == 0);
+        }
+    }
+}
+
+TEST_CASE("Payoff prune: the reducer sink admits a ritual only when the Medallion needs it (MTG_PAYOFF_REDUCER_SINK_NEEDED)")
+{
+    // dragonstorm overnight d3 s7007 gi466 T2: Territory + Mountain pay Ruby Medallion by themselves, so
+    // {Rite, Medallion, Desperate, Seething} burnt three rituals for nothing and the search tied it with the
+    // Medallion-only line. Two Mountains here; the one-Mountain "Rite -> Medallion" stays (the test above).
+    const GameState s = BoardFu({ "Mountain", "Mountain" },
+                                { "Rite of Flame", "Ruby Medallion", "Desperate Ritual", "Seething Song" }, 2);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::PAYOFF_REDUCER_SINK_NEEDED, on);
+        bool rite_medallion = false, medallion_alone = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        {
+            int casts = 0;
+            for (const Action& x : p.actions) { if (x.kind == Action::Kind::CastFromHand) { ++casts; } }
+            if (CastsBoth(p, "Rite of Flame", "Ruby Medallion")) { rite_medallion = true; }
+            if (casts == 1 && CastsBoth(p, "Ruby Medallion", "Ruby Medallion")) { medallion_alone = true; }
+        }
+        CHECK(rite_medallion == !on);
+        CHECK(medallion_alone);
+    }
+    // The same game's land-less twin: the lone Unclaimed Territory ({C} for a noncreature spell) cannot pay
+    // Rite of Flame's {R}, nor Medallion's {2}, so every Rite + Medallion subset is a PHANTOM the flat sum
+    // admitted (it sorted first among the tied T2 plans and the executor cast nothing).
+    const GameState t = BoardFu({ "Unclaimed Territory" },
+                                { "Rite of Flame", "Ruby Medallion", "Desperate Ritual", "Seething Song" }, 2);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::PAYOFF_REDUCER_SINK_NEEDED, on);
+        bool rite_medallion = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(t, /*is_pre_combat=*/true))
+        { if (CastsBoth(p, "Rite of Flame", "Ruby Medallion")) { rite_medallion = true; } }
+        CHECK(rite_medallion == !on);
+    }
+    // Minimal funding, the same game's T1 on one Mountain: Rite of Flame funds the Medallion and stays;
+    // {Rite, Desperate, Medallion} floats Desperate's {R} for nothing beside it and goes.
+    const GameState u = BoardFu({ "Mountain" },
+                                { "Rite of Flame", "Ruby Medallion", "Desperate Ritual", "Seething Song" }, 1);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::PAYOFF_REDUCER_SINK_NEEDED, on);
+        bool rite_medallion = false, with_desperate = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(u, /*is_pre_combat=*/true))
+        {
+            if (!CastsBoth(p, "Rite of Flame", "Ruby Medallion")) { continue; }
+            int casts = 0;
+            for (const Action& x : p.actions) { if (x.kind == Action::Kind::CastFromHand) { ++casts; } }
+            if (casts == 2) { rite_medallion = true; }
+            if (CastsBoth(p, "Desperate Ritual", "Ruby Medallion")) { with_desperate = true; }
+        }
+        CHECK(rite_medallion);
+        CHECK(with_desperate == !on);
+    }
+    // ...but not beside a BANKED land: dragonstorm smoke d3 s1001 gi67 T3, Mountain + Mercadian Bazaar. Rite
+    // of Flame pays the Medallion off the Mountain so the Bazaar banks a counter for the T5 Dragonstorm;
+    // the ritual-free sibling may tap the Bazaar, so it does not dominate and {Rite, Medallion} stays.
+    GameState v = BoardFu({ "Mountain", "Mercadian Bazaar" },
+                          { "Rite of Flame", "Ruby Medallion", "Desperate Ritual", "Dragonstorm" }, 3);
+    v.battlefield.back().storage_counters = 1;
+    {
+        ArmFu arm(heurarm::PAYOFF_REDUCER_SINK_NEEDED, true);
+        bool rite_medallion = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(v, /*is_pre_combat=*/true))
+        {
+            int casts = 0;
+            for (const Action& x : p.actions) { if (x.kind == Action::Kind::CastFromHand) { ++casts; } }
+            if (casts == 2 && CastsBoth(p, "Rite of Flame", "Ruby Medallion")) { rite_medallion = true; }
+        }
+        CHECK(rite_medallion);
+    }
+}
+
 namespace
 {
 // Bind the applying line's unpaid total for one test payment (the plan-apply paths bind it in play).

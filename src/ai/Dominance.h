@@ -473,6 +473,10 @@ static_assert(sizeof(Player) == 200,
 // provably-empty flush -- nothing to fold. The mark is TRANSIENT: every resolution / apply boundary
 // flushes, after which it equals the active player's cards_drawn_this_turn (folded above), so two
 // states Build() compares can only differ in it if they already differ in that count -- nothing to fold.
+// +0 bytes (2026-10-20, the searched banked hold; the last byte of the bool padding after
+// deck_has_discard_land_damage): `scripted_fb_hold` (int8_t). Classification: FUTURE-DETERMINING, the
+// combat landfall-target rank's class (set by the main-1 plan, read at THIS turn's combat pump), FOLDED
+// in Build(), value-gated.
 static_assert(sizeof(GameState) == 1136,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -823,6 +827,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // future-determining class as the crack mask, value-gated, its own domain tag.
     if (s.scripted_combat_landfall_target >= 0)
     { fold(0x1A60000000ull + static_cast<std::uint64_t>(s.scripted_combat_landfall_target)); }
+    // The searched banked-hold rank (MTG_FB_HOLD_SEARCHED): the same future-determining class (set by
+    // the main-1 plan, read at THIS turn's combat pump), value-gated, its own domain tag.
+    if (s.scripted_fb_hold >= 0)
+    { fold(0xFB40000000ull + static_cast<std::uint64_t>(s.scripted_fb_hold)); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP

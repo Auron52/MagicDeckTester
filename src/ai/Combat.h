@@ -68,7 +68,14 @@ std::uint64_t FbBankedSourceMask(const GameState& state);
 // pump (with `payer`, on a copy) NOT lethal -- and (MTG_FB_HOLD_BANKED_NEXT_TURN) not the one pump that
 // makes NEXT turn's attack lethal where holding does not. False (byte-identical) whenever no banked
 // source is up.
-bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer);
+//
+// MTG_FB_HOLD_SEARCHED: that verdict ORDERS the two sides of a CONTESTED hold (a banked source up, the
+// full pump not lethal) and the search picks one. `pin` is the searched rank the caller CONSUMED from
+// GameState::scripted_fb_hold at this combat (-1 none / 0 the verdict / 1 the other side); 1 on a
+// contested hold returns the opposite of the verdict, anything else returns the verdict. An uncontested
+// combat ignores the pin (a lethal pump spends -- holding it is dominated; no banked source -> no hold).
+bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer,
+                            int pin = -1);
 
 // The hold is published per thread for the duration of one pump (both sites) ...
 struct FbBankedHoldScope

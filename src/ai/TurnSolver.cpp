@@ -878,7 +878,8 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
     return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
         || p.attack_land_search_choice >= 0    // Primeval Titan's attack pick: read in THIS combat only
         || p.combat_crack_choice >= 0          // ...and the in-combat Khalni crack
-        || p.attack_attach_choice >= 0;        // Raubahn's attack attach: read in THIS combat only
+        || p.attack_attach_choice >= 0         // Raubahn's attack attach: read in THIS combat only
+        || p.fb_hold_choice >= 0;              // the searched banked hold: read at THIS combat's pump only
 }
 // Firing counters (printed with the rollout stats): pin variants NOT emitted for a post-combat list,
 // and pinned candidates folded after combat (la_cand loop / FSLineWin).
@@ -1516,6 +1517,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("cswap", first.combat_aura_swap_choice != dup.combat_aura_swap_choice);
     pl("aattach", first.attack_attach_choice != dup.attack_attach_choice);
     pl("clandfall", first.combat_landfall_target_choice != dup.combat_landfall_target_choice);
+    pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
                   || first.upkeep_land_search_choice != dup.upkeep_land_search_choice
@@ -1610,6 +1612,10 @@ inline void PinClass(const GameState& s, const TurnSolver::Plan& plan, bool dup)
         }
         k = std::string("AATTACH k=") + std::to_string(plan.attack_attach_choice)
           + " eqBf=" + std::to_string(eq_bf) + " eqCast=" + std::to_string(eq_cast);
+    }
+    else if (plan.fb_hold_choice >= 0)
+    {
+        k = std::string("FBHOLD k=") + std::to_string(plan.fb_hold_choice);
     }
     else
     {
@@ -11508,27 +11514,134 @@ static bool PayoffPruneReducerSinkOn()
     return heurarm::Flag(heurarm::PAYOFF_PRUNE_REDUCER_SINK, on);
 }
 
+// MTG_PAYOFF_REDUCER_SINK_NEEDED (PayoffReducerSinkNeededOn, EngineFlags.h): the per-enumeration facts the
+// reducer sink's "does a ritual really fund the reducer?" test reads. Built once per EnumeratePlans
+// (BuildReducerSinkCtx).
+//   state       -- the enumeration's board (post land drop); null = the lever is off, admit as before.
+//   surplus_live -- the SURPLUS / MINIMAL-FUNDING tests may prune: no firebreathing / team-pump source is on
+//                  the battlefield (a pump would spend the lands a ritual saves this turn), the game plays no
+//                  second main (no later main to spend them in), and every untapped mana source of ours is a
+//                  FREE land -- no banked land (storage / depletion counters) and no sacrifice or non-land
+//                  source (Lotus Bloom, a Treasure, a dork), whose use a ritual could be sparing.
+//   free_supply -- mana the non-ritual casts can take WITHOUT a ritual: one per untapped free land (a land
+//                  that makes more than one counts one, the conservative direction) plus the plain
+//                  floating pool.
+struct ReducerSinkCtx
+{
+    const GameState* state        = nullptr;
+    bool             surplus_live = false;
+    int              free_supply  = 0;
+};
+static ReducerSinkCtx BuildReducerSinkCtx(const GameState& state)
+{
+    ReducerSinkCtx rs;
+    if (!PayoffReducerSinkNeededOn() || !PayoffPruneReducerSinkOn()) { return rs; }
+    rs.state = &state;
+    const int me = state.active_player_index;
+    if (state.uses_second_main || ControlsFirebreathingSource(state, me)) { return rs; }
+    // Every untapped mana source of ours must be FREE (a land whose tap costs nothing a later turn can
+    // use). With a banked land (storage / depletion) or a sacrifice / non-land source up, a ritual can be
+    // what keeps it unspent -- dragonstorm smoke d3 s1001 gi67 T3: Rite of Flame pays Ruby Medallion with
+    // the Mountain so Mercadian Bazaar banks a counter for the T5 Dragonstorm -- and the payer may well
+    // tap that source for the ritual-free sibling, so the sibling no longer dominates: no surplus test.
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const bool mana = !d->params.produces.empty() || d->params.mana_rock || d->params.sac_for_mana_amount > 0
+                       || d->params.storage_land;
+        if (!mana) { continue; }
+        bool banked = d->params.storage_land || d->params.enters_tapped_with_depletion > 0
+                   || d->params.sac_for_mana_amount > 0 || !p.card.IsLand();
+        for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { banked = true; break; } }
+        if (banked) { return rs; }
+        ++rs.free_supply;
+    }
+    rs.surplus_live = true;
+    rs.free_supply += state.floating_mana.Total();
+    return rs;
+}
+
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                   bool storm_in_hand, bool search_branch_list = false)
+                                   bool storm_in_hand, bool search_branch_list = false,
+                                   const ReducerSinkCtx* reducer_ctx = nullptr)
 {
     // A fair creature justifies a ritual by default; under the storm-hold rule, when a storm payoff is
     // in hand, it does NOT -- only the storm finishers (Dragonstorm/Apex) do, so the ritual is held.
     const bool creature_pays = !(s_storm_hold && storm_in_hand);
     const bool reducer_pays  = search_branch_list && PayoffPruneReducerSinkOn();
-    bool has_ritual = false, has_payoff = false;
+    bool has_ritual = false, has_payoff = false, has_reducer = false;
+    int nonritual_cost = 0;   // MTG_PAYOFF_REDUCER_SINK_NEEDED: what the subset's other actions cost
     for (int j : sel)
     {
         if (cands[j].ritual_float > 0) { has_ritual = true; }
+        else { nonritual_cost += cands[j].cost.ManaValue(); }
         const CardDefinition* d = cands[j].def;
         if (!d) { continue; }
         if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0
-            || (creature_pays && d->card.IsCreature())
-            || (reducer_pays && !d->params.reduces_spell_color.empty() && !d->card.IsLand()))
+            || (creature_pays && d->card.IsCreature()))
         {
             has_payoff = true;
         }
+        else if (reducer_pays && !d->params.reduces_spell_color.empty() && !d->card.IsLand())
+        {
+            has_reducer = true;
+        }
     }
-    return has_ritual && !has_payoff;
+    if (!has_ritual || has_payoff) { return false; }
+    if (!has_reducer) { return true; }
+    // The reducer is the ritual's ONLY sink. MTG_PAYOFF_REDUCER_SINK_NEEDED: the exception exists for a
+    // ritual that FUNDS the reducer -- "Rite of Flame -> Ruby Medallion" off one Mountain -- so it admits
+    // the subset only when that is what happens. Two sound tests, both before any apply:
+    if (reducer_ctx != nullptr && reducer_ctx->state != nullptr)
+    {
+        // (1) SURPLUS: the free sources already pay every non-ritual action of the subset, so each
+        // ritual's mana has nowhere to go (no pump, no second main: surplus_live) and the subset is the
+        // ritual-free sibling's board with the rituals moved from hand to graveyard -- dominated, never a
+        // different line. dragonstorm overnight d3 s7007 gi466 T2: {Mountain, Rite, Medallion, Desperate,
+        // Seething} on Territory + Mountain burnt three rituals for 5 floating {R}, and the budgeted search
+        // tied it with {Mountain, Medallion}.
+        if (reducer_ctx->surplus_live && reducer_ctx->free_supply >= nonritual_cost) { return true; }
+        // (2) PHANTOM: the subset cannot be paid in the order both apply worlds cast it (the deck's cast
+        // order and arrangement -- SubsetPayableSequential, the rescue walk with live costs and ritual
+        // floats), so its apply realises some prefix that is its own subset in this list. The same game's
+        // land-less twin {Rite, Medallion, Desperate, Seething} on the lone Territory (no {R} for Rite,
+        // {C} short of Medallion) read as payable by the flat sum, sorted first among the tied T2 plans,
+        // took the pass's budget and was committed: the executor cast nothing and lost the land drop.
+        // Suspend is {0} and makes no mana (skipped); any other non-cast kind (a SacForMana crack) is
+        // outside the walk's model, so such a subset is admitted as before.
+        thread_local std::vector<int> seq;
+        seq.clear();
+        bool modelled = true;
+        for (int j : sel)
+        {
+            if (cands[j].kind == Action::Kind::Suspend) { continue; }
+            if (cands[j].kind != Action::Kind::CastFromHand || cands[j].def == nullptr) { modelled = false; break; }
+            seq.push_back(j);
+        }
+        if (!modelled) { return false; }
+        if (!SubsetPayableSequential(*reducer_ctx->state, cands, seq)) { return true; }
+        // (3) MINIMAL FUNDING, the surplus test per ritual: a ritual whose removal leaves the rest of the
+        // subset payable (the same walk) funds nothing -- its net mana floats unspent (no pump, no second
+        // main: surplus_live) -- so the subset without it, which keeps it in hand, dominates this one. The
+        // same game's T1 on one Mountain: {Rite, Desperate, Medallion} floats Desperate's {R} for nothing
+        // beside {Rite, Medallion}; the budgeted search took it, and the T4 Apex was a ritual short (T7;
+        // {Rite, Medallion} -> T6). A ritual's graveyard copy is worth nothing a held copy is not (Rite of
+        // Flame's count is reached by casting the held one), so keeping it is never worse.
+        if (reducer_ctx->surplus_live)
+        {
+            thread_local std::vector<int> drop1;
+            for (std::size_t r = 0; r < seq.size(); ++r)
+            {
+                if (cands[seq[r]].ritual_float <= 0) { continue; }
+                drop1.assign(seq.begin(), seq.end());
+                drop1.erase(drop1.begin() + static_cast<std::ptrdiff_t>(r));
+                if (SubsetPayableSequential(*reducer_ctx->state, cands, drop1)) { return true; }
+            }
+        }
+    }
+    return false;
 }
 
 // Reject a subset whose Equip has a STRANDED piece: the equipment or the host is still in hand and
@@ -20452,6 +20565,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     if (p.combat_aura_swap_choice != -1) { fold(static_cast<uint64_t>(p.combat_aura_swap_choice + 2) * 83); }
     // Raubahn's attack attach -- same must-fold rule, value-gated (own domain tag).
     if (p.attack_attach_choice != -1) { fold(0xA77A0000ull + static_cast<uint64_t>(p.attack_attach_choice + 2)); }
+    // The searched banked hold -- same must-fold rule, value-gated (own domain tag).
+    if (p.fb_hold_choice != -1) { fold(0xFB400000ull + static_cast<uint64_t>(p.fb_hold_choice + 2)); }
     // LAND-SEARCH picks (core/LandSearch.h) -- same must-fold rule; value-gated so every deck without
     // a land-search card keeps its exact signature value.
     if (!p.land_search_pins.empty())
@@ -20746,7 +20861,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
         && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
-        && p.attack_attach_choice == -1
+        && p.attack_attach_choice == -1 && p.fb_hold_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0
@@ -38804,6 +38919,7 @@ namespace solvememo
             || a.bruna_gather_choice != b.bruna_gather_choice
             || a.combat_aura_swap_choice != b.combat_aura_swap_choice
             || a.attack_attach_choice != b.attack_attach_choice
+            || a.fb_hold_choice != b.fb_hold_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.land_slot != b.land_slot
@@ -50893,7 +51009,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || plan.fling_victim_choice != -1 || plan.tectonic_mode_choice >= 0
                         || plan.tectonic_keep_choice >= 0 || plan.bruna_gather_choice >= 0
                         || plan.combat_aura_swap_choice >= 0 || plan.saga_target_choice >= 0
-                        || plan.attack_attach_choice >= 0
+                        || plan.attack_attach_choice >= 0 || plan.fb_hold_choice >= 0
                         || plan.saga_ch1_choice != -1 || !plan.sac_pins.empty()
                         || plan.tapmode_choice != 0 || plan.freshmode_choice != 0
                         || plan.bounce_choice >= 1 || plan.etbcounter_choice >= 0
@@ -51278,6 +51394,11 @@ static void SimulateCombat(GameState& state)
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Shared with the
     // executor (AIEngine::Firebreathe) on the byte-identical AvailableManaPool pool -> lockstep.
     // Inert unless a firebreathing param is present -> other decks byte-identical.
+    // MTG_FB_HOLD_SEARCHED: this combat's searched banked-hold rank, CONSUMED here whether or not a pump
+    // happens -- AIEngine::Firebreathe consumes it at the same point (lockstep), so an inert pin leaves the
+    // post-combat state equal to the unpinned plan's (MTG_COMBAT_PIN_FOLD then folds the variant).
+    const int fb_hold_pin = state.scripted_fb_hold;
+    state.scripted_fb_hold = -1;
     if (!atk_idx.empty() && ControlsFirebreathingSource(state, active))
     {
         // Provider-owned count (FirebreatheActivations), the SAME hook the executor reads, so the
@@ -51294,7 +51415,7 @@ static void SimulateCombat(GameState& state)
                 return TapForCostDirect(s, c, /*for_creature=*/false); }
             : nullptr;
         // MTG_FB_HOLD_BANKED: a non-lethal pump keeps the depletion / storage lands (Combat.h).
-        FbBankedHoldScope _fb_banked(FbHoldBankedThisCombat(state, atk_idx, fb_payer));
+        FbBankedHoldScope _fb_banked(FbHoldBankedThisCombat(state, atk_idx, fb_payer, fb_hold_pin));
         if (fb_k < 0) { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state),
                                            std::numeric_limits<int>::max(), fb_payer); }
         else          { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state), fb_k,
@@ -51552,6 +51673,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
+    state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
     ap.lands_played_this_turn     = 0;
@@ -53082,6 +53204,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Provider payoff-prune opt-in, hoisted out of eval_and_push: a virtual call, constant for the
     // enumeration, previously dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
+    // ...and the reducer sink's "is a ritual needed?" facts (MTG_PAYOFF_REDUCER_SINK_NEEDED), once per
+    // enumeration; only the branch-list prune below reads them.
+    const ReducerSinkCtx reducer_ctx = payoff_prune_on ? BuildReducerSinkCtx(state) : ReducerSinkCtx{};
     // Lockstep twin of Solve's sac-table handles (see SubsetFilterPre).
     const std::vector<const CardDefinition*>* sac_tab =
         pre.sac_src_def.empty() ? nullptr : &pre.sac_src_def;
@@ -53801,7 +53926,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // branch list intact so it can still arbitrate the cast-a-dragon-now line.
         if (payoff_prune_on
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
-            && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false, /*search_branch_list=*/true)) { return; }
+            && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false, /*search_branch_list=*/true,
+                                      &reducer_ctx)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
@@ -62635,6 +62761,100 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED BANKED HOLD (Plan::fb_hold_choice, MTG_FB_HOLD_SEARCHED; 2026-10-20) -- the Raubahn attach
+    // fan-out's shape (base plans only, so the axis is additive; decided in main, consumed at the combat
+    // pump through GameState::scripted_fb_hold). The pump's banked hold (MTG_FB_HOLD_BANKED: keep a
+    // depletion / storage land out of a non-lethal Scourge / Lathliss pump, unless NEXT turn's projection
+    // says only spending kills) is a real two-sided decision -- the bank now, as damage, or later, as mana
+    // -- and the verdict's projection cannot see next turn's main phase (a Scourge cast for its ETB pings,
+    // a Lotus Bloom coming off suspend). Taken at every node, it made such lines unfindable at ANY budget
+    // (dragonstorm overnight d3 s7007 gi466: T5 held both Needles, the T6 kill lost at d3 b10 and d8 b0).
+    // The verdict now only ORDERS the two sides: rank 0 (the base plan) is the verdict, rank 1 the other
+    // side; a state already holding a rank (a re-solve inside the turn) makes the other rank the variant
+    // (StatePinVariantRanks). Fanned only on a PRE-combat list (the pin is read in this turn's combat), not
+    // inside a continuation derivation (the outer plan carries combat pins), not in human play, and only
+    // while the hold can be contested THIS turn: an untapped banked source on the battlefield (every banked
+    // land enters tapped, so no land drop adds one) and a firebreathing / team-pump source on the
+    // battlefield or in hand (Lathliss cast this turn pumps the attacking Dragons). A variant whose combat
+    // turns out uncontested (no attacker, a lethal pump) consumes its pin unread and lands on its base
+    // plan's post-combat state, which MTG_COMBAT_PIN_FOLD folds before any tail is scored.
+    if (!cont_axes_only && !HumanPlayActive() && is_pre_combat && FbHoldSearchedOn() && FbHoldBankedOn()
+        && FbBankedSourceMask(state) != 0)
+    {
+        const int me = state.active_player_index;
+        const Player& fbp = state.players[static_cast<std::size_t>(me)];
+        bool pump_live = ControlsFirebreathingSource(state, me);
+        for (const Card& c : fbp.hand)
+        {
+            if (pump_live) { break; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && (d->params.firebreathing_cost.has_value() || d->params.team_pump_cost.has_value()))
+            { pump_live = true; }
+        }
+        // ...and an ATTACKER this turn, without which nothing is pumped: an untapped creature of ours that can
+        // attack now, or a way to one -- a haste source on the battlefield or in hand (the Raubahn axis's
+        // list), a hasty creature in hand, or a hand card that puts / reveals creatures this turn (Dragonstorm,
+        // Apex of Power: either can land Karrthus or Kolaghan). A Lathliss in hand on a creature-less T1 is
+        // not a contested hold, and its variants only spent the budget (dragonstorm held-out d3 s9200001).
+        if (pump_live)
+        {
+            auto gives_haste = [](const CardDefinition* d)
+            {
+                return d != nullptr
+                    && (d->params.grants_haste || d->params.equip_grants_haste || d->params.grants_temp_haste
+                        || d->params.haste_on_flying_enter || d->params.sac_outlet_grants_haste
+                        || d->params.team_pump_grants_haste);
+            };
+            bool attacker = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != me || p.def_absent) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (gives_haste(d)
+                    || (!p.tapped && p.card.IsCreature() && CanAttackFull(p, state.battlefield, me)))
+                { attacker = true; break; }
+            }
+            for (const Card& c : fbp.hand)
+            {
+                if (attacker) { break; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr
+                    && (gives_haste(d) || (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste))
+                        || d->params.tutor_to_battlefield || d->params.impulse_exile > 0))
+                { attacker = true; }
+            }
+            pump_live = attacker;
+        }
+        if (pump_live)
+        {
+            const std::vector<int> ranks = StatePinVariantRanks(state.scripted_fb_hold, 2);
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                // Base plans only (the Raubahn filter, plus the land-search pins and the land-search
+                // base rule's other single-axis tags), so the cost stays additive.
+                if (PlanIsAxisVariantExceptOrder(p) || !p.sac_pins.empty() || p.rad_mode >= 0
+                    || p.vial_charge_choice >= 0 || p.fling_victim_choice != -1
+                    || p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0
+                    || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                    || p.attack_attach_choice >= 0 || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
+                    || p.freshmode_choice != 0 || p.tapmode_choice != 0 || p.dig_choice != -1
+                    || p.soulbond_decline || p.fb_hold_choice >= 0)
+                { continue; }
+                for (const int k : ranks)
+                {
+                    TurnSolver::Plan v = p;
+                    v.fb_hold_choice = static_cast<std::int8_t>(k);
+                    extra.push_back(std::move(v));
+                }
+            }
+            TRACE("fbholdaxis", "T%d %zu plan(s) -> %zu banked-hold variant(s)",
+                  state.turn_number, all.size(), extra.size());
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
     // Axis-variant attribution (MTG_BRANCH_STATS; see branchstats::RecordAxis). Classified by
     // the choice tag -- the fans above set exactly one per variant ("one axis at a time").
     if (branchstats::Enabled())
@@ -63039,6 +63259,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
             add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
+            add(pl.fb_hold_choice);  // the searched banked hold: in padding, so the size pin cannot catch it
             add(pl.land_from_top);   // Courser: in padding, so the size pin below cannot catch it
             add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
             add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
@@ -66676,9 +66897,11 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
     if (DedupKeyCombatPinsOn())
     {
         // + Raubahn's attack attach (2026-10-17), a new LAST slot so every earlier slot's tag is unmoved.
+        // + the searched banked-hold rank (MTG_FB_HOLD_SEARCHED, 2026-10-20), the next LAST slot.
         const int cpins[] = { state.scripted_bruna_gather, state.scripted_combat_aura_swap,
-                              state.scripted_combat_aura_swap_in, state.scripted_attack_attach };
-        for (int i = 0; i < 4; ++i)
+                              state.scripted_combat_aura_swap_in, state.scripted_attack_attach,
+                              state.scripted_fb_hold };
+        for (int i = 0; i < 5; ++i)
         {
             if (cpins[i] != -1)
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
@@ -84743,6 +84966,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
     if (p.combat_landfall_target_choice >= 0)
     { s.scripted_combat_landfall_target = static_cast<std::int8_t>(p.combat_landfall_target_choice); }
+    // The searched banked-hold rank (MTG_FB_HOLD_SEARCHED), read at THIS turn's combat pump.
+    if (p.fb_hold_choice >= 0) { s.scripted_fb_hold = p.fb_hold_choice; }
 }
 
 TurnSolver::BpOccurrence TurnSolver::ClassifyBpOccurrence(const Plan& p, int idx)

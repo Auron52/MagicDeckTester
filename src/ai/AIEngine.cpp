@@ -485,7 +485,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
 {
     return p.lackey_choice >= 0 || p.fling_victim_choice != -1
         || p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0 || p.bruna_gather_choice >= 0
-        || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0
+        || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0 || p.fb_hold_choice >= 0
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
@@ -518,6 +518,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.bruna_gather_choice >= 0     && s.scripted_bruna_gather != p.bruna_gather_choice)        { ok = false; }
     if (p.combat_aura_swap_choice >= 0 && s.scripted_combat_aura_swap != p.combat_aura_swap_choice) { ok = false; }
     if (p.attack_attach_choice >= 0    && s.scripted_attack_attach != p.attack_attach_choice)      { ok = false; }
+    if (p.fb_hold_choice >= 0          && s.scripted_fb_hold != p.fb_hold_choice)                  { ok = false; }
     if (p.attack_land_search_choice >= 0 && s.scripted_attack_land_search != p.attack_land_search_choice) { ok = false; }
     if (p.combat_crack_choice >= 0     && s.scripted_combat_land_search_crack != p.combat_crack_choice) { ok = false; }
     if (p.combat_landfall_target_choice >= 0
@@ -8008,6 +8009,11 @@ void AIEngine::LandDrawCensusEndTurn(const GameState& state)
 void AIEngine::Firebreathe(GameState& state, std::vector<int>& attacker_indices)
 {
     g_fb_activations_this_turn = 0;   // MTG_FB_TRACE diagnostic; reset every combat
+    // MTG_FB_HOLD_SEARCHED: this combat's searched banked-hold rank, CONSUMED here whether or not a pump
+    // happens -- the rollout's SimulateCombat consumes it at the same point (lockstep), so an inert pin
+    // leaves both worlds' post-combat state equal to the unpinned plan's.
+    const int fb_hold_pin = state.scripted_fb_hold;
+    state.scripted_fb_hold = -1;
     if (attacker_indices.empty()) { return; }
     if (!ControlsFirebreathingSource(state, state.active_player_index)) { return; }
     ManaPool pool = AvailableManaPool(state);
@@ -8048,7 +8054,7 @@ void AIEngine::Firebreathe(GameState& state, std::vector<int>& attacker_indices)
     // MTG_FB_HOLD_BANKED: a non-lethal pump keeps the depletion / storage lands (see Combat.h). The
     // human-chooser path above is left to the human. Lockstep twin in the rollout's SimulateCombat.
     FbBankedHoldScope _fb_banked(g_play_firebreathe_chooser == nullptr
-                                 && FbHoldBankedThisCombat(state, attacker_indices, payer));
+                                 && FbHoldBankedThisCombat(state, attacker_indices, payer, fb_hold_pin));
     if (fb_k < 0) { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, std::numeric_limits<int>::max(), payer); }
     else          { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, fb_k, payer); }
 }

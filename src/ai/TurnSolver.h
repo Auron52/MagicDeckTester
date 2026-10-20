@@ -1322,6 +1322,17 @@ public:
         // -1 = the provider's front. Emitted by AppendSubdecisionAxes beside an attacking Titan with a
         // targeted landfall watcher on the battlefield or cast by the plan; width <= 4.
         int8_t combat_landfall_target_choice = -1;
+        // SEARCHED BANKED HOLD (MTG_FB_HOLD_SEARCHED, 2026-10-20; the next byte of the same padding). The
+        // combat pump's hold of a depletion / storage land (MTG_FB_HOLD_BANKED) is a decision -- spend the
+        // bank on this combat's pump, or keep it for a later turn -- that the engine's verdict
+        // (FbHoldBankedThisCombat) used to take at every node. The verdict now ORDERS the two sides: -1
+        // (default) == the verdict, byte-identical to no branch; 0 == the verdict, explicitly (a plan on a
+        // state already holding a flip); 1 == the OTHER side. Read only where the hold is contested (a
+        // banked source up, the full pump not lethal). Copied onto GameState::scripted_fb_hold (decided in
+        // main, consumed at the combat pump -- the bruna_gather_choice route). Emitted by
+        // AppendSubdecisionAxes on a pre-combat list whose state has an untapped banked source and a
+        // firebreathing / team-pump source on the battlefield or in hand.
+        int8_t fb_hold_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);

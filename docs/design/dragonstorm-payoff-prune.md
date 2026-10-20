@@ -132,3 +132,26 @@ Per the user's call ("adopt prune, hold Unclaimed — revisit Unclaimed after re
 4. Committed: `DecisionProvider.h`, `DecisionProviders.{h,cpp}`, `TurnSolver.cpp`, this doc, and the A/B
    scripts (`scripts/dragon_payoffprune_ab.sh`, `dragon_payoffprune_heldout.sh`,
    `dragon_prune_baseline_ab.sh`). cards.json NOT touched.
+
+## The reducer sink, and what it may admit (2026-10-13 / 2026-10-20)
+
+`MTG_PAYOFF_PRUNE_REDUCER_SINK` (e0b86b05, default ON) counts a permanent spell-cost reducer cast in the
+subset (Ruby Medallion) as the ritual's sink in the SEARCH branch list, so "Rite of Flame -> Ruby
+Medallion" off one Mountain is findable again. As written it admitted EVERY ritual subset whose only
+payoff is a Medallion. `MTG_PAYOFF_REDUCER_SINK_NEEDED` (default ON; =0 byte-identical) keeps the
+exception to what it was written for -- a ritual that funds the reducer -- with three sound tests
+(`SubsetWastesAccelerant`, branch list only):
+
+* **surplus** -- the free sources already pay the subset's non-ritual casts;
+* **phantom** -- the subset cannot be paid in the deck's cast order (`SubsetPayableSequential`), so its
+  apply realises a prefix that is its own subset in the list;
+* **minimal funding** -- dropping one ritual leaves the rest payable, so that ritual's mana floats unspent.
+
+Surplus and minimal funding prune only when nothing else could spend what a ritual saves: no
+firebreathing / team-pump source on the battlefield, no second main, and every untapped mana source a
+free land (a banked Mercadian Bazaar / Dwarven Hold / Sandstone Needle, a Lotus Bloom or a Treasure turns
+them off -- smoke d3 s1001 gi67 T3 spends Rite of Flame on the Medallion precisely so the Bazaar banks a
+counter for the T5 Dragonstorm). Motivating game: overnight d3 s7007 gi466 (seed 7473), where T2's
+`{Rite, Medallion, Desperate, Seething}` burnt three rituals beside the Medallion, its land-less phantom
+twin then took the pass's budget, and T1's `{Rite, Desperate, Medallion}` was a ritual short of the T4 Apex
+(T7; with the lever and `MTG_FB_HOLD_SEARCHED`, T6 at d3 b10 and d8 b0, the old engine's line).
