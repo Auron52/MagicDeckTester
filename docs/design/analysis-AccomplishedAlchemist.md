@@ -1179,6 +1179,15 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   200-game d3 set) and `MTG_AA_WISH_BLUE` (neutral). Four persistent losses come from the rule excluding a
   SECOND Alchemist -- the USER's call whether "good whenever you don't have one" should read "... in play".
 
+* **Discard buckets (2026-10-20), the readings taken (defaults; say if any is wrong):** (1) within-bucket orders
+  LIFEGAIN Nourish > Feed > Weather > Trufflesnout > Boar, UNTAP Crab Umbra > Staff > Galvanic > Witch, WINCON
+  Stroke > Staff > Scholar > Ezuri; (2) with Umbra AND Stroke in hand the Staff is a spare (it fills both only when
+  it is a bucket's best) -- the measured alternative `MTG_AA_DISCARD_STAFF_FIRST` repairs the 200-game seeds but
+  is +0.002 / +0.015 on held-out, left OFF; (3) Ezuri counts as WINCON here (the wish rule does not count it);
+  (4) a Brindle Boar or any untapper (Witch included) in play fills its bucket; (5) Wishes fill only non-mana
+  gaps; (6) lands strictly before dorks / land Auras in the MANA remainder; (7) one LIFEGAIN keep -- the one
+  rule-worse label (seed 930213) wanted both Feed and Nourish over a third Forest.
+
 ## Claude-play sweep
 - commit: `251c426e`
 - seeds: 80001-80020 (claude-play deals by seed only) games: 20
