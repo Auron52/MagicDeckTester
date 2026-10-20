@@ -16,7 +16,9 @@ quality loss. Chunk P3 (2026-10-19) landed three more byte-identical cuts (the g
 cells ~2%) and found nothing lossless left that reaches the line; it surfaced the continuation-cache
 eviction (g60 -17% with an unbounded cache) as a USER call. The mulligan-trial optimization (2026-10-20, branch `aa-opt-mull`) landed `MTG_BOTTOM_PREF_ORDER` (trial order + strict stop, byte-identical; d5 b20 units -4.8%, ms -6%) and assessed the winless certificate as inert for budgeted play -- still over the line. Next: a USER decision on the bottom_eval arm (or on running the mulligan stage under
 `MTG_ALLOW_UNTESTED_DECK=1`), and/or the per-node enumeration cost found in the same attempt; then the suite
-rows, then profile -> mulligan -> value leaf. Viewer flags are the viewer worktree's. Open USER items are
+rows, then profile -> mulligan -> value leaf. Branch `aa-opt-branch` (2026-10-20, "Optimization: branching") then landed four
+branching folds (greedy untap count / target, greedy + searched Crab Umbra host): play unchanged on 1,598
+paired games, d5 b20 0.743x instructions / 0.897x core time -- still ~1.15x over the line. Viewer flags are the viewer worktree's. Open USER items are
 listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -125,6 +127,136 @@ The `bottom_eval_*` fields are untouched (that arm is the USER's call, "Suite en
   cost is turns 1-3 of each trial at full play settings. What is left on the bottoming side is a USER decision: the
   `bottom_eval_*` arm (Suite entry attempt) or running the mulligan stage (keep table) under
   `MTG_ALLOW_UNTESTED_DECK=1`.
+
+## Optimization: branching (2026-10-20) -- landed: four greedy/searched branching folds; still over the line
+
+Branch `aa-opt-branch` (forked from `accomplished-alchemist` @ 39848afe). Commits: e0440a96 (the census
+instruments + MTG_GREEDY_UNTAP_K_DOM, MTG_GREEDY_UNTAP_TARGET_TIE, MTG_GREEDY_AURA_HOST_LATE,
+MTG_AURA_HOST_LATE_BIND), 84426f1a (the {T}-ability count extension), and this section. Scratch:
+`/workspaces/MagicDeckTester/build/scratch/aa/opt/` (`cen/` repro censuses, `shard/` the 200-game d5 census
+in 25 single-thread processes, `pstat/` instruction counts, `cost/` pooled A/Bs). Base = 39848afe
+(`opt/mtg.base`).
+
+* **The census.** `MTG_BRANCH_SHAPE` / `MTG_BRANCH_HEAVY` only ever captured the SEARCH walk
+  (EnumeratePlans). Added: the same heavy capture for the GREEDY walk (SolveUncached, the rollout leaf),
+  and both walks' subset VISITS aggregated by group shape (card x kind x size). Seed 70001, d5 b20, 200
+  games, single-thread shards: **greedy walk 772.4 M visits, search walk 108.3 M** (the greedy walk is
+  ~35% of the cell's CPU, EnumeratePlans ~15%; perf, 24 threads). Shapes covering 92% of the listed greedy
+  visits held an activated-untapper family (Staff of Domination: target x K x the {T} modes, up to 24
+  options; Crab Umbra untap x K); 63% of the listed search visits held a Crab Umbra cast group (up to 15
+  hosts: the battlefield creatures plus every creature in hand, three identical Alchemists among them).
+* **Fold 1 -- MTG_GREEDY_UNTAP_K_DOM (default ON, heurarm).** Greedy walk only. Every K of one
+  (source, target, shape) carries ONE activation's bill (`cost`), and consider() reads nothing off an
+  ActivateUntap but the bill, the source and `eval` (= K; 5000 for the loop) -- the payers, colour gates,
+  attack-tap projection and the one-use-per-source rule never see the count. So the higher-eval twin wins
+  every comparison a lower K could win: the lower K are never chosen. Extended to a LONE source's
+  repeatable {T} ability (Staff's draw / lifegain counts; damage-scaling modes never match the key);
+  refused when another source shares an interchangeable-source tag (the source fold reads tags across
+  sources).
+* **Fold 2 -- MTG_GREEDY_UNTAP_TARGET_TIE (default ON, heurarm).** Greedy walk only. No consider() term
+  reads an untap TARGET either, so two variants differing only in the target tie EXACTLY and the walk's
+  (wins, rank, smallest mask) order gives the tie to the lower candidate index: only the first-emitted
+  target can be chosen. (The greedy cannot tell untapping a 6-life Alchemist from untapping an Elf --
+  surfaced below.)
+* **Fold 3 -- MTG_GREEDY_AURA_HOST_LATE (default ON, heurarm).** Greedy walk only. A host-inert creature
+  Aura (`CreatureAuraHostInert`: no P/T, keyword, enter-tap, restriction, swap, bestow face -- Crab Umbra)
+  ties on every host, and materialize_best's RetargetSolveAuraHosts re-picks the host over EVERY host the
+  candidates offer anyway; the walk keeps the first host option only.
+* **Fold 4 -- MTG_AURA_HOST_LATE_BIND (default ON, heurarm).** The SEARCH walk (EnumeratePlans,
+  autonomous; human play, the un-pruned oracle and the AURA_HOST_BRANCH control walk every host). The
+  name-keyed plan signature puts every host variant of a plan in one dedup class and the dedup keeps the
+  best AuraPlanHostKey member (USER 2026-10-06), so the walk emitted ~H plans to keep one. Now the Aura's
+  group keeps one representative and its plan binds, when built, the best-keyed LEGAL host (battlefield
+  creature, or a hand creature the subset casts; the uncast-host rule reads "some legal host exists").
+  Same class maximum; frames whose host product could exceed 4096 stay unfolded. The key itself has an
+  exact fast path: for a host-inert Aura the board half (lethal / dmg / now) is the same for every host
+  unless a Kor-style aura_self_buff or Bruna's attack_gather_auras is on the post-plan board, so the
+  comparison is the dork tie-break -- first legal non-mana-creature host.
+* **Soundness evidence.** (1) Unit tests (test_accomplished_alchemist.cpp): the greedy plan is
+  byte-identical with each greedy fold on/off over 10 boards; the searched plan LIST is identical with the
+  late binding on/off over 4 boards (one and two Umbras, hand hosts). (2) `MTG_GREEDY_FOLD_VERIFY=1`
+  re-runs every greedy walk unfolded: seed 70007 gi6 20,737 walks / 645 differ, seed 70124 gi123 251,281 /
+  7,517 differ -- **0 of the differences with <= 31 candidates**. Every difference is the walk's tie-break
+  mask ALIASING (`int mask |= 1 << j` past 31 candidates is undefined and in practice wraps): there the
+  walk's tie among equal-scored subsets was already settled by visit order, and the folds settle it
+  differently -- a different member of a set the greedy scores as equal, never a lower-scored plan.
+  (3) `MTG_AURA_LATE_BIND_VERIFY=1` (fast key vs the full odometer): seed 90061 gi60, 434,001 bindings,
+  0 disagreements. (4) mtg-test 1502/1502 (3 new); scenarios 228/228; smoke 124/128 with exactly the
+  four known moves at their known digests (selesnya d3 a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0
+  ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11) -- every other case byte-identical.
+* **Work removed** (d5 b20 seed 70001, 200 games, single-thread shards): greedy visits 772.4 M -> 236.8 M
+  (0.31x; 317.3 M before the {T}-ability count extension), search visits 108.3 M -> 71.9 M (0.66x). Instructions, single thread: seed 90061 gi60
+  466.4 G -> 285.6 G (0.61x), seed 70124 gi123 808.0 G -> 354.1 G (0.44x), seed 90287 gi286 d3 b10 9,321.8 G -> 5,660.4 G (0.61x; same 1,794,357
+  units and win turn).
+* **Play: no win turn moved.** Base and the final binary as two concurrent 15-thread batches over ONE
+  manifest each (seed 70001 x 200 and held-out seed 90001 x 600, both cells; 1,600 games per arm, gi286
+  included): every game has the SAME win turn (0 faster, 0 slower in every cell; avg d3 b10 5.8150 /
+  5.6900 held-out, d5 b20 5.7450 / 5.6400 held-out, both arms). The seed-70001 cells keep their job digests
+  (ed03ab6957a09593, f4d9cf88b0c3a26c), 0 of 400 per-game digests moved. Held-out: 3 of 1,200 games
+  PLAY-CHANGED at the same win turn, attributed by per-job flags on the final binary -- d3 gi132 (T5 win
+  either way) moves only with MTG_GREEDY_UNTAP_K_DOM (an aliased-mask tie inside a rollout), d3 gi311
+  and d5 gi311 (T6 either way) only with MTG_AURA_HOST_LATE_BIND: at T5 the search commits "Alchemist +
+  Staff + Umbra" instead of "Harbinger + Alchemist + Umbra" (the reordered equal-valued candidates
+  re-spend a finite budget; 42,638 -> 43,121 units). Work units
+  move slightly (d5 62.71 M -> 62.32 M on seed 70001): the aliased tie-breaks pick different equal-scored
+  greedy plans inside rollouts, which moves leaf values, never a committed decision on these games.
+  (Base-vs-base units also differ by ~0.01% between pooled runs here -- the plan-cache pool binding.)
+  No slower game, so nothing to recover at 10x.
+* **Cost** (seed 70001, 200 games per cell, base and final as two concurrent batches, `perf stat` over the
+  whole batch -- instructions are contention-free, task-clock is core time under the box's load):
+
+  | cell | instructions | core-s (task-clock) | core-ms / game |
+  |---|---|---|---|
+  | d3 b10 | 5.951 T -> 4.480 T (0.753x) | 1,342 -> 1,154 (0.860x) | 6,712 -> 5,771 |
+  | d5 b20 | 11.164 T -> 8.290 T (0.743x) | 2,283 -> 2,047 (0.897x) | 11,416 -> 10,237 |
+
+  The 1,600-game play batches above, `perf stat` per arm (both cells, held-out included, gi286 ran 3,797 /
+  5,009 s base vs 2,834 / 3,831 s final at d3 / d5): 93.88 T -> 65.17 T instructions (0.694x), 24,264 ->
+  19,842 core-s (0.818x).
+
+  Core time falls less than instructions: what was removed is the cheap inner work of the walks (a
+  visit is an increment, a few predicate reads and a score sum), and what is left is the expensive
+  per-node part (plan application, payment, the host key, allocation). **Still over the 8,907 ms line at
+  d5 b20: 10.2 s per game here, 1.15x over** (P3's base measured 12.6 s under heavier contention, i.e.
+  ~11.3 s / 1.27x on that footing).
+* **What is left in the walks (census after).** Greedy: the largest shapes are now plain cast subsets
+  ("+4 single", ...) and a Staff group of 3-4 options (one untap target at its top K, the loop where
+  offered, the draw and the lifegain at their top count); two identical Staffs keep their {T} counts
+  (shared tags). Search: Utopia
+  Sprawl's colour x host-class options (real choices: the locked colour and a tapped vs untapped host),
+  Stroke's (target, X), Galvanic's partner, the untap K x target product, Living Wish's six targets.
+* **Candidates examined and NOT folded:**
+  - Living Wish variants inside continuations (seed 90287 gi286: the tutor axis returned 300.7 M of the
+    396 M plans scored, continuation lists 8,185 entries on average, 66,559 at the worst T8 state). Each
+    variant fetches a different card: not an identity. The [bp-cands] probe's "11.1% duplicate entries"
+    was a BpCandFingerprint blind spot (ability_mode: Staff's draw and lifegain at the same count hashed
+    alike; 40 of 40 sampled pairs); fixed in the fingerprint (diagnostic keys only, no play effect). The
+    narrowing is the USER's bucket rule, being built separately.
+  - Utopia Sprawl / Wild Growth host classes: identical hosts already prefix-fold (chunk P); the name-keyed
+    dedup folds the remaining hosts too, but a land Aura's host changes the subset's PAYMENT (a tapped vs
+    untapped Forest), so a late binding would still have to re-check feasibility per host -- not done.
+  - Untap K x target in the SEARCH walk: real outcomes (mana, pump, the Alchemist's state). "More
+    net-positive iterations never hurt" is a dominance only with a per-shape proof (colour of the
+    Alchemist's mana, the untapper's end state); LOSSY until proven -- not prototyped.
+  - Accomplished Alchemist's colour is a payment-time choice, not an enumerated axis; Stroke (target,
+    X), Galvanic's partner and Trufflesnout's mode are distinct outcomes.
+* **Findings for the USER (not changed):**
+  - **The greedy's tie-break mask overflows.** SolveUncached's `int mask |= 1 << j` is undefined for
+    j >= 31; on the verify repros every walk the folds changed (645 of 20,737; 7,517 of 251,281) had more
+    than 31 candidates, i.e. its tie between equal-scored subsets was being settled by an aliased bit
+    pattern (in practice the first one visited). The
+    same mask keys the mana-verdict cache (`gmask`): on a deck with mana-inert independent actions AND
+    more than 31 candidates two different group selections could share a cached verdict. AccomplishedAlchemist
+    has no independents (cache never armed); other decks were not checked. A fix (64-bit or a sorted-index
+    compare) moves play on every such deck -- USER's call.
+  - **The greedy cannot see an untap target or count.** Its score for an untapper is `eval = K` and the
+    bill of ONE activation, so it picks the highest K and, among targets, the first emitted -- never the
+    target that pays (the 6-life Alchemist). The folds preserve that policy exactly; a value term for the
+    untap would be a playout-heuristic change (A/B-gated), not a fold.
+  - **The tail games' biggest single waste is an aborted pass, not branching.** gi60 T1 spent 450 k of
+    the game's 495 k units, gi123 T1 455 k of 1.55 M, gi286 T6 226 k: each the deepest ID pass, admitted by
+    the start gate and aborted at the 25x overrun guard, its work discarded (rescuable 0). That is the
+    start-gate estimate on this deck (MTG_OVERRUN_MULT / the estimate) -- a budget question for the USER.
 
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 
