@@ -118,7 +118,7 @@ Monitor line (every period) and an end-of-pool summary on stderr (never the repo
 | 4 | sub FLOOR -> first wave | first wave computed only when every kind-1 batch committed; one slow batch held it, serially, on one thread | **D2** spreads the batch over threads; **D1** rolls the provisional first wave into the memo while it runs; **D4a** computes the true wave off the producer. Still a barrier for *values* (by design: the wave reads committed means) but no longer for *work* |
 | 5 | wave k -> wave k+1 | same gate per wave, plus the marking pass (2x backward induction + subcomposition scan; ~minutes on EDF) run ON THE PRODUCER, so feeding stopped and the queue drained | same three fixes; the marking pass now runs on the planner thread while the producer keeps feeding |
 | 6 | sub converged -> refs (floor->refine) | `compute_refs` held `fold_mtx` through two full `ComputeDopt` passes: every size-7 worker froze at its next fold | **D4b** Dopt (and the sub recompute) computed BEFORE taking `fold_mtx` -- its inputs are final and quiescent; only vg + reconcile stay under the lock |
-| 7 | size-7 floor speculation bound (r0+4) | precompute memo backfills past it during the floor | unchanged (already barrier-free) |
+| 7 | size-7 floor speculation bound (r0+4) | precompute memo backfills past it during the floor | **NOT barrier-free -- see §7.** The sweep was LATCHED and starved by the blocking wave enqueue, so on Bruna it ran alone after the sub-refine converged; fixed by §7's E1-E3 |
 | 8 | refine tail -> final emit | each live cell advances only cont_lookahead=4 past its count, so the last few live cells are serial chains and the box idles | **D4c** refine-tail precompute: backfill (queue < QCAP/4) rolls the next `r` of every live cell into `pre_val`, round-robin; rollouts past a freeze are wasted, on cores that had nothing else |
 | 9 | pool join -> raw/profile/report | serial single-thread compute (recompute, BuildPolicyFromTables, reports) | **unchanged** -- no games remain; pure compute |
 | 10 | shutdown | queued speculative tasks (kind < 0) would still be rolled after `producing=false` | skipped |
@@ -198,3 +198,54 @@ the large one: the provisional first wave (KittyEquipment v3's first wave was 50
 rollouts) starts rolling into the memo the moment the floor's last batches are in flight, instead of after the
 straggler, and D4a keeps the producer feeding through each wave's minutes-long marking pass. Not
 measured on EDF itself (a run that size cannot share the box with the live generation).
+
+## 7. Follow-up 2026-10-20: the producer itself was a barrier (Bruna)
+
+**What happened.** Bruna's `fast` gen (K=21, 671,400 size-7 cells, flip_eps 0.10) finished its size-7
+floor in 62 h and its sub-refine converged after ~140 more hours -- and then sat in `phase=floor` with
+~99 h of size-7 floor speculation still to run before refs could fix. `roll7` had read exactly 2,685,600
+for those 140 h: the sweep advanced 384 rollouts (one `spec_chunk`) per WAVE. Cause: the producer is one
+thread, and every feeding stage enqueued its whole list in one loop blocking on a QCAP-deep (96) queue --
+`feed_wave` for a 324,290-batch wave sat inside that loop for the 76 h the wave took to RUN. The filler
+got one chunk between waves; and because the sweep is LATCHED (`spec_active` blocks `compute_refs`
+until it saturates), the whole of it then ran alone. D1-D4 do not touch this: `feed_wave` and
+`push_sub_batch` still block per batch.
+
+The box was busy throughout, so the cost was not idle cores; it was ORDER: the speculation pushed every
+cell-side to r0+4 before any freeze could apply, and the refine pass then fed `cont_lookahead`
+rollouts per cell back to back, so a freezing cell's next 3 rollouts were already rolling.
+
+**Fixes (all default ON):**
+
+| id | flag | what | identity |
+|---|---|---|---|
+| E1 | `MTG_KEEP_FEED_BOUNDED` | every feeding stage (size-7 floor, sub floor, each wave, the refine pass) keeps a cursor; each producer iteration spends one budget of `spec_chunk` feeds across them in priority order (floor > sub floor > wave > sub-spec > size-7 speculation > precompute) and comes back round, so nothing the producer owns waits on a stage's run time | byte-identical |
+| E2 | `MTG_KEEP_FEED_RR` | refine pass and floor speculation feed ONE `r` per cell per pass (bounded by `cont_lookahead` / `r0+spec_budget` as before): a cell's next rollout is queued a pass later, after its last has folded, so a freeze wastes nothing; few-cell tails still fill the box through the lookahead | byte-identical |
+| E3 | `MTG_KEEP_SKIP_FROZEN` | a queued size-7 rollout whose cell froze after it was fed is not rolled (the fold discarded it anyway) | byte-identical |
+| E4 | `MTG_KEEP_SPEC_UNLATCH` | the speculation sweep stops when nothing else holds the floor phase, and refs fix from wherever it got to (USER 2026-10-20: *"I don't care about reproducibility as much as quality"*) | **not** byte-reproducible across schedules (speculated depth at refs time is timing); values reconciled per cell as before |
+
+Monitor: `skip7=` (rollouts not rolled under E3); the end-of-pool usefulness line reports it too; E4
+logs `floor speculation UNLATCHED at cell-side k/N` once.
+
+**Measured on slivers_vial (2026-10-20).** `MTG_KEEP_EXHAUSTIVE`, adaptive bottoming, K=10 (7,758
+size-7 cells), R=10, d1/b3, r_batch 2, seed 4242, `MTG_KEEP_REFS_OFFSET=0`; same binary, flags select
+the arm; harness `logs/bruna_mullgen/slv_ident/run.sh` (gitignored).
+
+| arm | raw / profile / report | size-7 speculation fed | used | rolled and discarded |
+|---|---|---|---|---|
+| old (E1-E4 all `=0`) | baseline | 62,064 | 29,215 (47.1%) | 32,849 |
+| E1-E3 on, `MTG_KEEP_SPEC_UNLATCH=0` | **byte-identical** | 62,064 | 29,215 | 32,785 (E3 skipped 64) |
+| all defaults (E1-E4) | **byte-identical** | 6,965 | 6,965 (100%) | **0** |
+
+All three arms fold the same 159,076 rollouts. The old arm's sub-refine converged at 2,501 s and its
+latched sweep then ran ALONE until refs fixed at 4,465 s, after which 76.7% of the cell-sides froze at
+once -- the Bruna shape in miniature. With E4 the sweep unlatched at cell-side 6,965/15,516 the moment
+the sub-refine converged and refs fixed 8 s later. ~31% fewer size-7 rollouts for the identical table.
+The shared-branch binary (upstream engine) gives the same old == new identity (`slv_shared`).
+
+Resume: a run hard-killed during sub-refine wave 2 and resumed lands on a table whose 9 size-6
+sub-cells carry different COUNTS than the uninterrupted run (values per rollout are pure, so only
+sample sizes differ). This is the scheduling-state gap recorded in `keepgen-resume-exactness.md` --
+the journal persists accumulators, not which wave a sub-cell was in.
+It is pre-existing, not E1-E4: the OLD schedule (all four `=0`), killed in wave 2 and resumed, likewise
+differs from its own uninterrupted run (1 size-6 sub-cell's count; no value differs) -- `slv_oldres`.

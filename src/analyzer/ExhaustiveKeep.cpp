@@ -1995,6 +1995,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // cores did work that shipped". Diagnostic only -- relaxed atomics, never a decision input.
         std::atomic<long long> prerolled{ 0 };   // kind -1 rollouts actually rolled (not skipped as already held)
         std::atomic<long long> spec7_fed{ 0 };   // size-7 floor-speculation rollouts fed (past r0, pre-refs)
+        std::atomic<long long> skip7{ 0 };       // queued size-7 rollouts NOT rolled because their cell froze first
         std::atomic<long long> spec7_used{ 0 };  // ...of which ended inside the cell's FINAL count (end of run)
         std::atomic<long long> sspec_req{ 0 };   // speculative sub-wave rollouts enqueued (kind -2)
         std::atomic<long long> sspec_rolled{ 0 };// ...actually rolled (not dropped as already consumed)
@@ -2128,6 +2129,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                       { std::cerr << " MISMATCH=" << pb; } }
                     if (const long long s7 = gp.spec7_fed.load(std::memory_order_relaxed); s7 > 0)
                     { std::cerr << "  spec7=" << s7; }
+                    if (const long long sk = gp.skip7.load(std::memory_order_relaxed); sk > 0)
+                    { std::cerr << "  skip7=" << sk; }
                     if (const long long sq = gp.sspec_req.load(std::memory_order_relaxed); sq > 0)
                     { std::cerr << "  subspec=" << sq << " rolled=" << gp.sspec_rolled.load(std::memory_order_relaxed)
                                 << " hit=" << gp.sspec_hit.load(std::memory_order_relaxed)
@@ -4768,6 +4771,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (auto& pf : pre_have) { pf.store(0, std::memory_order_relaxed); }   // explicit: atomics
         // REFINE-TAIL precompute (see the refine branch of the producer). Same memo, same purity argument.
         const bool pre_refine_on = pre_on && EnvOn("MTG_KEEP_PRECOMPUTE_REFINE", true);
+        // Skip a queued size-7 rollout whose cell has frozen since it was fed (see the worker). Byte-identical.
+        const bool skip_frozen_on = EnvOn("MTG_KEEP_SKIP_FROZEN", true);
         std::vector<long long> pre_next(pre_refine_on ? static_cast<std::size_t>(NC) * 2 : 0, 0);  // next r to precompute
         std::vector<std::size_t> live_ks;   // live size-7 cell-sides seen by the refine branch's last scan
         std::size_t pre_rr = 0;             // round-robin cursor into live_ks
@@ -5022,6 +5027,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 const int i = static_cast<int>(task[1]), pd = static_cast<int>(task[2]);
                 const long long r = task[3];
+                // SKIP A FROZEN CELL'S QUEUED ROLLOUT (MTG_KEEP_SKIP_FROZEN, default ON, byte-identical). The
+                // refine producer feeds every live cell cont_lookahead past its count, and reconcile freezes
+                // cells whose floor-tail speculation is still queued, so a cell that freezes leaves rollouts
+                // behind it in the queue. The fold below discards them (its loop is gated on !frozen7), so
+                // rolling them is pure waste -- up to cont_lookahead-1 rollouts per frozen cell-side, i.e.
+                // millions on a large deck. A freeze never un-sets, so the skip cannot drop a value the fold
+                // would have used. Only the bookkeeping the fold path does on exit is kept.
+                if (skip_frozen_on && afroze[static_cast<std::size_t>(i) * 2 + pd].load(std::memory_order_acquire))
+                {
+                    gen_prog.skip7.fetch_add(1, std::memory_order_relaxed);
+                    in_flight.fetch_sub(1);
+                    prod_cv.notify_one();
+                    continue;
+                }
                 // Take the precomputed value when one is parked (see pre_val). Bit-identical by
                 // construction -- run_one is pure in (seed_base, r, w, pd) -- so this is a pure
                 // wall-clock saving and cannot move the table. NOT under trace_on: the trace needs
@@ -5346,6 +5365,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         bool        spec_active = false;    // a sweep has started and has not yet saturated
         bool        spec_resweep = false;   // this sweep skipped a not-yet-floored cell -> sweep again
         bool        spec_saturated = false; // every live cell-side has been fed to r0+spec_budget
+        bool        spec_sweep_fed = false; // feed_rr: the current sweep fed at least one rollout
+        std::size_t refine_cursor = 0;      // feed_bounded: next cell-side of the refine pass
         // PRECOMPUTE sweep state. Picks up exactly where speculation saturates -- i.e. at the moment the
         // old code had nothing left to enqueue and let the cores go idle. Walks (cell-side, r) pairs from
         // fed[] up to r_max filling pre_val; enqueues nothing that any accumulator can see.
@@ -5355,6 +5376,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // never drains between iterations (the workers see one continuous stream), small enough that
         // sub_refine_step() runs on a seconds-scale clock rather than a per-sweep one.
         const long long spec_chunk = static_cast<long long>(QCAP) * 4;
+        // UNLATCH (MTG_KEEP_SPEC_UNLATCH, default ON; USER 2026-10-20: "I don't care about reproducibility
+        // as much as quality"). The sweep exists to fill cores while the floor phase is incomplete. Latched,
+        // a sweep that the producer never got to run during the sub-refine (it is fed from the same thread
+        // that blocks enqueueing each wave) ran ALONE after convergence: Bruna 2026-10-19/20, ~4.7M
+        // rollouts / ~99 h at the end of the floor phase, refs and every freeze waiting on it. Unlatched,
+        // the sweep stops the moment nothing else holds the phase and refs fix from wherever it got to.
+        // Values are unaffected (reconcile replays the freeze test per cell over whatever was speculated);
+        // what changes is HOW MANY speculative rollouts a cell has at refs time, which depends on timing,
+        // so a run is no longer byte-reproducible across schedules. =0 restores the latch.
+        const bool spec_unlatch = EnvOn("MTG_KEEP_SPEC_UNLATCH", true);
         // Returns the number of rollouts actually enqueued, so a caller can spend a bounded FEED budget
         // (feeds are QCAP-throttled and thus the unit of producer wall-clock; cells scanned are not).
         auto feed_upto = [&](int i, int pd, long long limit) -> long long   // enqueue size-7 rollouts [fed, limit)
@@ -5430,14 +5461,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             ++fed_total; any_fed = true;
             gen_prog.rollsub.fetch_add(br1 - br0, std::memory_order_relaxed);
         };
-        auto feed_sub = [&]()
+        auto feed_sub = [&](long long budget = std::numeric_limits<long long>::max()) -> long long
         {
-            while (sub_cursor < fused_sub_tasks.size())
+            long long n = 0;
+            while (sub_cursor < fused_sub_tasks.size() && n < budget)
             {
                 const Task& st = fused_sub_tasks[sub_cursor];
                 ++sub_cursor;
                 push_sub_batch(1, st.w, st.pd, st.r0, st.r1);
+                ++n;
             }
+            return n;
         };
 
         // ---- THE SUB PLANNER THREAD ---------------------------------------------------------------------
@@ -5668,6 +5702,39 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         if (wave_async || sub_spec_on) { planner.th = std::thread(planner_loop); }
         PlannerGuard planner_guard{ planner };
 
+        // BOUNDED FEEDING (MTG_KEEP_FEED_BOUNDED, default ON). Every feeding stage of the producer -- the
+        // size-7 floor, the sub-table floor, each adaptive wave, the refine pass -- used to enqueue its WHOLE
+        // list in one loop that blocks on a QCAP-deep queue, so the producer sat inside one stage for as
+        // long as that stage's work took to RUN: 62 h for Bruna's size-7 floor, 76 h for its first wave.
+        // Nothing else the producer owns (the next stage, a filler, a planner hand-off, the refs gate) could
+        // happen meanwhile; that is how Bruna's floor speculation advanced 384 rollouts per WAVE and then had
+        // to run alone after convergence. Now each stage keeps a cursor and every producer iteration spends
+        // one budget of spec_chunk feeds across the stages in priority order (critical path first), so the
+        // loop comes round every few seconds. Scheduling only: values are pure in (seed_base, r, w, pd) and
+        // each cell folds in r order, so =0 (the old blocking loops) produces the same table.
+        const bool feed_bounded = EnvOn("MTG_KEEP_FEED_BOUNDED", true);
+        // ONE ROLLOUT PER CELL PER PASS (MTG_KEEP_FEED_RR, default ON). The refine pass fed each live cell
+        // cont_lookahead rollouts back to back, and the floor speculation fed r0 -> r0+spec_budget the same
+        // way, so a cell's next rollouts were already ROLLING on other workers when its freeze landed and
+        // were thrown away (MTG_KEEP_SKIP_FROZEN can only drop the ones still queued). Fed one r per cell per
+        // pass, a cell's next rollout is enqueued a whole pass later, after its previous one has folded, so a
+        // freeze costs nothing. When few cells are left the passes are short and the lookahead still fills
+        // the box. Same values, same fold order per cell (vg's timing-driven refresh aside, as before).
+        const bool feed_rr = EnvOn("MTG_KEEP_FEED_RR", true);
+        std::vector<Task> wave_q;               // the true wave being fed (bounded feeding)
+        std::size_t       wave_cursor = 0;      // next batch of wave_q
+        auto wave_feed_chunk = [&](long long budget) -> long long   // feed up to `budget` batches of wave_q
+        {
+            long long n = 0;
+            while (wave_cursor < wave_q.size() && n < budget)
+            {
+                const Task& st = wave_q[wave_cursor++];
+                push_sub_batch(2, st.w, st.pd, st.r0, st.r1);
+                ++n;
+            }
+            if (wave_cursor >= wave_q.size()) { wave_q.clear(); wave_cursor = 0; }
+            return n;
+        };
         // Feed one computed wave (or mark the sub-refine converged when it is empty).
         std::vector<Task> spec_list;            // the current speculative plan, fed as backfill
         std::size_t       spec_pos = 0;         // next task of spec_list
@@ -5705,7 +5772,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             }
             sub_wave_pending.store(static_cast<long long>(wave.size()));
             gen_prog.subwsz.store(static_cast<long long>(wave.size()), std::memory_order_relaxed);
-            for (const Task& st : wave) { push_sub_batch(2, st.w, st.pd, st.r0, st.r1); }
+            if (feed_bounded) { wave_q = std::move(wave); wave_cursor = 0; }   // fed by wave_feed_chunk
+            else { for (const Task& st : wave) { push_sub_batch(2, st.w, st.pd, st.r0, st.r1); } }
             gen_prog.subwave.fetch_add(1, std::memory_order_relaxed);
             ++refine_waves;
         };
@@ -5757,6 +5825,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             if (!sub_spec_on || sub_converged || !cd_classified) { return 0; }
             if (sub_cursor < fused_sub_tasks.size()) { return 0; }                       // real floor work first
+            if (wave_cursor < wave_q.size()) { return 0; }                                // ...and the true wave
             if (sub_wave_pending.load() == 0 && sub_remaining.load() == 0) { return 0; } // the true wave is due
             {
                 std::lock_guard<std::mutex> lk(planner.mx);
@@ -5807,6 +5876,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             if (abandon_failed.load()) { break; }
             const bool refine = refs_ready.load();
             bool any_below_floor = false, any_live = false; any_fed = false;
+            // This iteration's feed budget, spent by the stages in priority order (see feed_bounded).
+            long long budget = feed_bounded ? spec_chunk : std::numeric_limits<long long>::max();
             // RESUME FIX (2026-09-01): the fused sub-table batches must be drained in the REFINE phase
             // too, because a journal resume that restores refs publishes refs_ready BEFORE this loop
             // starts -- so `refine` is true on the very first iteration, the floor branch below never
@@ -5820,7 +5891,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // the identical order and stays byte-identical; this only drains what that run already
             // drained to empty. Feed ORDER cannot move a value anyway -- run_one is a pure function of
             // (seed_base, r, w, pd) and the fold is deterministic.
-            if (refine) { feed_sub(); }
+            if (refine) { budget -= feed_sub(budget); }
             if (!refine)
             {
                 // Floor pass 1 (mandatory): drive every cell to r0. The slow floor cell's rollouts are
@@ -5831,11 +5902,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     const long long c = S7.cnt[i][pd];                      // racy read (x86-64 atomic); benign
                     if (c >= r_max) { continue; }
                     any_live = true;
-                    if (c < r0) { any_below_floor = true; feed_upto(i, pd, r0); }
+                    if (c < r0) { any_below_floor = true; if (budget > 0) { budget -= feed_upto(i, pd, r0); } }
                 }
                 // FUSION filler: drain the sub-table floor/cap batches into the pool, overlapping them with
                 // the size-7 floor (this is the work Pass A used to run behind a join).
-                feed_sub();
+                if (budget > 0) { budget -= feed_sub(budget); }
                 // Change-detection classifies off the COMPLETE fused sub-floor, once, before the first
                 // refine wave can mark anything (a resolved cell must not be re-marked).
                 if (!cd_classified && sub_remaining.load() == 0)
@@ -5845,13 +5916,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     apply_prior_override_sub();
                     cd_classified = true;
                 }
-                // Advance the adaptive sub-refine one wave when its prior wave has committed.
+                // Advance the adaptive sub-refine one wave when its prior wave has committed, and keep
+                // feeding the current one.
                 if (cd_classified) { sub_refine_step(); }
+                if (budget > 0) { budget -= wave_feed_chunk(budget); }
                 // SPECULATIVE NEXT SUB-WAVE, ahead of every size-7 filler: the sub-wave chain is the
                 // critical path to refs (size-7 refine cannot start before it converges), while size-7
                 // speculation and precompute are work the refine phase would do anyway. A full chunk of
                 // sub speculation therefore takes this iteration's filler slot.
-                const long long sspec_fed = sub_spec_step();
+                const long long sspec_fed = budget > 0 ? sub_spec_step() : 0;
+                budget -= sspec_fed;
                 // Floor pass 2 (speculation filler): while the floor phase is INCOMPLETE for ANY reason
                 // (a size-7 cell still finishing r0, sub-tables still capping, or the fused sub-refine not
                 // yet converged) -> feed already-floored size-7 cells up to r0+spec_budget so idle cores
@@ -5880,12 +5954,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // would let compute_refs fire on a half-speculated state, and its reconcile (which
                 // truncates at the first freeze hit over (r0, cnt]) would then depend on where the sweep
                 // happened to be -- a different answer per run. spec_active is the gate's interlock below.
-                if (sspec_fed < spec_chunk && floor_spec && !spec_saturated && (spec_active || floor_incomplete))
+                if (spec_unlatch && spec_active && !floor_incomplete)
+                {
+                    spec_active = false; spec_saturated = true;
+                    std::cerr << "[keepgen]   floor speculation UNLATCHED at cell-side " << spec_cursor << "/"
+                              << static_cast<std::size_t>(NC) * 2 << " (" << gen_prog.spec7_fed.load()
+                              << " fed): nothing else holds the floor phase -> refs fix now ("
+                              << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
+                }
+                if (budget > 0 && sspec_fed < spec_chunk && floor_spec && !spec_saturated && (spec_active || floor_incomplete))
                 {
                     spec_active = true;
                     const std::size_t NS = static_cast<std::size_t>(NC) * 2;
-                    long long budget = spec_chunk;
-                    while (budget > 0 && spec_cursor < NS)
+                    long long sbudget = std::min<long long>(budget, spec_chunk);
+                    while (sbudget > 0 && spec_cursor < NS)
                     {
                         const std::size_t k = spec_cursor++;
                         const int i = static_cast<int>(k >> 1), pd = static_cast<int>(k & 1);
@@ -5897,8 +5979,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         if (c < r0)    { spec_resweep = true; continue; }
                         if (c >= r_max) { continue; }
                         const long long f0 = fed[k];
-                        const long long nfed = feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget));
-                        budget -= nfed;
+                        // feed_rr: one level per sweep (see feed_rr), so the sweep stops evenly if unlatched.
+                        const long long lim = std::min<long long>(r_max, r0 + spec_budget);
+                        const long long nfed = feed_upto(i, pd, feed_rr ? std::min<long long>(lim, f0 + 1) : lim);
+                        sbudget -= nfed; budget -= nfed;
+                        if (nfed > 0) { spec_sweep_fed = true; }
                         // USEFULNESS: remember the speculated range; the end of the run counts how much of
                         // it lies inside the cell's final count (the rest was truncated by reconcile/freeze).
                         if (nfed > 0)
@@ -5910,8 +5995,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     }
                     if (spec_cursor >= NS)   // sweep complete
                     {
-                        if (spec_resweep) { spec_cursor = 0; spec_resweep = false; }   // stragglers
-                        else              { spec_saturated = true; spec_active = false; }
+                        // feed_rr: a sweep that fed anything has not reached the bound everywhere yet.
+                        if (spec_resweep || (feed_rr && spec_sweep_fed))
+                        { spec_cursor = 0; spec_resweep = false; spec_sweep_fed = false; }   // next level / stragglers
+                        else { spec_saturated = true; spec_active = false; }
                     }
                 }
                 // PRECOMPUTE FILLER. Runs exactly where the box used to idle: speculation has saturated
@@ -5924,7 +6011,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // a quarter full, so kind 0/1/2 always have room and feed_upto never queues behind a
                 // precompute. A filler that can outrun the progress step it fills for is the FiveColour
                 // failure recorded above; this one cannot, because it yields the moment real work appears.
-                if (sspec_fed < spec_chunk && pre_on && floor_spec && spec_saturated && floor_incomplete)
+                if (budget > 0 && sspec_fed < spec_chunk && pre_on && floor_spec && spec_saturated && floor_incomplete)
                 {
                     const std::size_t NS2 = static_cast<std::size_t>(NC) * 2;
                     long long budget = spec_chunk;
@@ -5956,6 +6043,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // Track the completed level = min committed among still-live (unfrozen, <cap) cells: every
                 // such cell has been sampled to at least this level, so vg re-derived here is "from a
                 // completed R" (the user's lagged-safe recompute). Frozen/capped cells are settled already.
+                // A wave in the refine phase (journal resume with refs restored) keeps its priority over
+                // size-7 refine work, as it had when feed_wave enqueued it whole.
+                if (budget > 0) { budget -= wave_feed_chunk(budget); }
                 long long min_live_c = r_max;
                 live_ks.clear();
                 for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
@@ -5965,8 +6055,25 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     if (c >= r_max) { continue; }
                     any_live = true;
                     if (c < min_live_c) { min_live_c = c; }
-                    feed_upto(i, pd, std::min<long long>(r_max, c + cont_lookahead));
+                    if (!feed_bounded) { feed_upto(i, pd, std::min<long long>(r_max, c + cont_lookahead)); }
                     live_ks.push_back(static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd));
+                }
+                // The refine feed, bounded (see feed_bounded / feed_rr): resume the pass where the last
+                // iteration left it, at most one rollout per cell per pass, until this iteration's budget is
+                // spent. live_ks is in cell-side order, so the cursor is a cell-side index.
+                if (feed_bounded && !live_ks.empty())
+                {
+                    const std::size_t nl = live_ks.size();
+                    const std::size_t pos = static_cast<std::size_t>(
+                        std::lower_bound(live_ks.begin(), live_ks.end(), refine_cursor) - live_ks.begin());
+                    for (std::size_t s = 0; s < nl && budget > 0; ++s)
+                    {
+                        const std::size_t k = live_ks[(pos + s) % nl];
+                        const int i = static_cast<int>(k >> 1), pd = static_cast<int>(k & 1);
+                        const long long lim = std::min<long long>(r_max, S7.cnt[i][pd] + cont_lookahead);
+                        budget -= feed_upto(i, pd, feed_rr ? std::min<long long>(lim, fed[k] + 1) : lim);
+                        refine_cursor = k + 1;
+                    }
                 }
                 // REFINE-TAIL PRECOMPUTE (MTG_KEEP_PRECOMPUTE_REFINE, default ON). A live cell is fed only
                 // cont_lookahead rollouts past its committed count, because rollouts past its eventual
@@ -6173,7 +6280,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             if (gen_prog.sspec_bad.load() > 0) { std::cerr << ", " << gen_prog.sspec_bad.load() << " MISMATCH"; }
             if (gen_prog.prebad.load() > 0)    { std::cerr << ", precompute " << gen_prog.prebad.load() << " MISMATCH"; }
             std::cerr << "); split " << gen_prog.split_batches.load() << " batches / "
-                      << gen_prog.split_rolls.load() << " rollouts\n"
+                      << gen_prog.split_rolls.load() << " rollouts; skipped " << gen_prog.skip7.load()
+                      << " queued size-7 rollouts of frozen cells\n"
                       << "[keepgen] worker idle: " << idle_s << " core-s of " << (pool_s * nw) << " ("
                       << (pool_s > 0 ? 100.0 * idle_s / (pool_s * nw) : 0.0) << "% of " << nw
                       << " workers x " << pool_s << " s pool wall)\n" << std::flush;
