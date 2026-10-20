@@ -45,6 +45,9 @@ def deck_maps():
         for k, v in re.findall(r'\[([a-z_0-9]+)\]=("[^"]*"|\S+)', block.group(1)):
             m[k] = v.strip('"')
         maps[var] = m
+    # Vampires is not a suite deck (the 3x cost gate, 2026-10-20), so its paths are given here.
+    maps["DECK_FILE"].setdefault("vampires", "decks/Vampires/Vampire.cod")
+    maps["DECK_PROF"].setdefault("vampires", "decks/Vampires/Vampire.profile.json")
     return maps["DECK_FILE"], maps["DECK_PROF"]
 
 

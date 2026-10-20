@@ -274,14 +274,6 @@
    "total_core_ms": 207966,
    "worst_case": "th_regression_d5_s2002"
   },
-  "vampires": {
-   "cost_per_game_ms": 8517.18,
-   "jobs": 7,
-   "key": "vampires",
-   "tier": "regression",
-   "total_core_ms": 1933612,
-   "worst_case": "vampires2hg_regression_d5_s2002"
-  },
   "whiteknights": {
    "cost_per_game_ms": 72.78,
    "jobs": 6,

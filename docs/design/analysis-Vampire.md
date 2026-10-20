@@ -165,6 +165,29 @@ The rows stay on this branch (they carry the GT every check above used); nothing
 the suite over 3x so the mulligan profile can be generated (which brings it into range), or stays out until a perf
 route gets it there, is the USER's call (question 45; `MTG_ALLOW_UNTESTED_DECK` is a USER override).
 
+**USER 2026-10-20 (question 45): the gate is hard -- Vampires stays OUT of the suite and needs more work first; the
+code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
+
+## Landing (2026-10-20) -- the code on the shared branch, the deck OUT of the suite
+- Rebased the 56 `vampires-analysis` commits onto origin `phase-1-2-deck-analyzer` 8e771a391 (78 commits ahead of
+  the analysis base) in `.claude/worktrees/vampires-land`, branch `vampires-land`. Hand merges, all with the
+  NivMizzetCombo / searched-banked-hold work that landed meanwhile: the Curiosity / Tandem Lookout combat draw
+  grant now fires once per damage STEP in the CR 510.4 two-step path (it counted a double striker as two
+  events in the single-step loop, which a double striker no longer reaches) -- new unit test; both searched
+  combat pins (`scripted_fb_hold`, slot 36, unmoved; `scripted_combat_transform`, slot 37) in the dedup key;
+  convoke's reduction applies to X's own cost before Remand's rider joins the bill; GameState 1136 -> 1152
+  (both sides' padding fields together, every field already classified).
+- **Out of the suite:** the 29 entries (DECK_FILE / DECK_PROF + smoke 4, regression 7, overnight 16) are removed
+  and kept as `docs/design/analysis-Vampire.suite-rows.patch` (`git apply` it to re-admit; it applies cleanly
+  to `test/regression_cases.sh` as of this landing), with every `vampires*` GT key / `.wins` file and its
+  `test/suite_cost.json` entry. The suite cannot see this deck's play again until it is re-admitted.
+- **Other decks:** smoke + regression re-run on the rebased binary against origin's ground truth, verdict per
+  moved row in the landing commit.
+- **Next (the first goal):** a route under 3x that does not need a keep table (the keep table is gated behind
+  suite membership). 68-76% of the units are pre-keep-table bottoming rollouts, so the folds of questions 40-42
+  (a few % each) cannot get there alone; the lever that can is the one NivMizzetCombo's question 15 names --
+  the deck's bottom-evaluation setting -- which changes play and is therefore the USER's call.
+
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
 pre-fix engine (every new test failed there), then fixed:
@@ -863,7 +886,12 @@ rules; gi1565's least-flexible pick).
     the activation hold reserves it first). [default: unchanged -- the order is yours; not measured]
 44. **The 5c2 48-block re-run** (the script's own suggestion after NO SIGN; ~96k d5 games, ~4-5 h). Not run: at
     0 / 12,000 the larger sample could only confirm the lever does not bind. [default: keep ON, not re-run]
-45. **COST GATE: Vampires is over 3x** (see "Stage 5 measurements + the 3x COST GATE"). Options: (a) land the rows
+45. **ANSWERED 2026-10-20 (USER): (b), and the gate is HARD.** *"No, the suite entrance is a hard rule for a
+    reason. It means the deck needs more work. However, that doesn't prevent us from pushing the code so it is
+    somewhere rather than local, as long as the changes don't break another deck."* No `MTG_ALLOW_UNTESTED_DECK`.
+    The code is landed on the shared branch WITHOUT the suite rows (they are kept as
+    `docs/design/analysis-Vampire.suite-rows.patch`; see "Landing" below); getting under 3x is the first goal,
+    ahead of both generators. Original question: **COST GATE: Vampires is over 3x** (see "Stage 5 measurements + the 3x COST GATE"). Options: (a) land the rows
     (an over-3x entry, USER override) and generate the mulligan profile, whose keep table removes the 68-76% of units
     that are bottoming rollouts (measured: then ~1.6x Snow); (b) keep the deck out of the suite until a perf route
     gets it under 3x first (no keep table is allowed before suite membership, so (b) needs a non-mulligan route --
