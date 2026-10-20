@@ -18,7 +18,11 @@ eviction (g60 -17% with an unbounded cache) as a USER call. The mulligan-trial o
 `MTG_ALLOW_UNTESTED_DECK=1`), and/or the per-node enumeration cost found in the same attempt; then the suite
 rows, then profile -> mulligan -> value leaf. Branch `aa-opt-branch` (2026-10-20, "Optimization: branching") then landed four
 branching folds (greedy untap count / target, greedy + searched Crab Umbra host): play unchanged on 1,598
-paired games, d5 b20 0.743x instructions / 0.897x core time -- still ~1.15x over the line. Viewer flags are the viewer worktree's. Open USER items are
+paired games, d5 b20 0.743x instructions / 0.897x core time -- still ~1.15x over the line. 2026-10-20: the USER's
+Living Wish bucket rule landed DEFAULT ON (branch `aa-wish`; -12% units on the held-out d5 cell, gi286 6,157 s
+-> 492 s); see "USER Living Wish buckets (2026-10-20)". The three optimization branches (mull, branch, wish) were
+combined onto `accomplished-alchemist` 2026-10-20; the combined measurement is in "Combined optimization (2026-10-20)".
+Open USER items are
 listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -257,6 +261,102 @@ in 25 single-thread processes, `pstat/` instruction counts, `cost/` pooled A/Bs)
     the game's 495 k units, gi123 T1 455 k of 1.55 M, gi286 T6 226 k: each the deepest ID pass, admitted by
     the start gate and aborted at the 25x overrun guard, its work discarded (rescuable 0). That is the
     start-gate estimate on this deck (MTG_OVERRUN_MULT / the estimate) -- a budget question for the USER.
+## USER Living Wish buckets (2026-10-20) -- landed DEFAULT ON (the USER's rule); two amendments PROPOSED, OFF
+
+Branch `aa-wish` (worktree `.claude/worktrees/aa-wish`, forked from 39848afe). Commits e474b968 (the rule +
+12 unit cases), 07038489 (the `aawishproof` trace), 177b4e98 (two PROPOSED amendments, default OFF).
+Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/wish/` (`ab/` the pooled A/B, `x10/` the 10x reruns,
+`trace*/` the proof traces, `amend/` the amendment arms; `an.py` / `cls.py` / `why.py`).
+
+**The rule, verbatim (USER 2026-10-20):** "We should create a heuristic for Living Wish as there are only 7
+relevant targets and most can be eliminated based on what you have in hand. Accomplished Alchemist is good
+whenever you don't have one. Arbor Elf or lands are specifically when you don't have 4-5 mana, (the elf
+preferred when we can untap for more than 1 mana) I would only take Brindle Boar if we have no other lifegain
+in hand. Galvanic Alchemist should only be taken if we have no untapper (Crab Umbra, Staff of Domination) in
+hand. (maybe we can allow it when you have Seedcradle Witch if you only have something that gains 4 like the
+Boar) I would kind of like to skip Trufflesnout ... Scholar of Athreos is the wincon and should be taken only
+if we have no wincon or draw in hand or if we need nothing else. (it's fine to end the game with the Scholar
+once we have the infinite mana) Essentially everything divides into buckets Mana, Accomplished Alchemist,
+Lifegain, Untap, Wincon/Draw and we only need to search for buckets where our current hand is lacking." Plus
+"Staff of Domination is a special card in the list as it can do the untap and the draw", and on Eternal Witness:
+"We don't need Eternal Witness in Goldfishing. It is good in real games because it can do things like bringing
+back a killed Alchemist" (in a goldfish nothing kills our creatures).
+
+**The implemented reading** (`AccomplishedAlchemistProvider::TutorCandidates` -> `AaWishBucketSet`, wish
+fetches only; keyed on params; "held" = hand OR our battlefield):
+
+| bucket | lacking iff | offers |
+|---|---|---|
+| Mana | projected mana < 4 (the USER's "4-5": 4 taken as the threshold) = lands in play + land-Aura extra + mana creatures in play (Arbor Elf also counts its best Forest's Aura bonus) + lands in HAND; the Alchemist's X not counted | Arbor Elf ALONE when it re-taps a land-Aura Forest (> 1 mana); else Arbor Elf + Forest, + Island only with no blue source held (the Alchemist is not one: its X is 0 without a gain) |
+| Alchemist | no Accomplished Alchemist held | Accomplished Alchemist |
+| Lifegain | no cast_lifegain / etb_modal_lifegain card in hand, no sac_outlet_lifegain creature in hand or play; the Staff's {2},{T}: gain 1 does NOT count | Brindle Boar (Trufflesnout never) |
+| Untap | no Crab Umbra / Staff / Galvanic held, and no Seedcradle Witch -- the Witch counts unless the held lifegain SUMS to < 5 (printed base: Nourish 6, Feed 5, Weather 3, Boar 4, Trufflesnout 4) | Galvanic Alchemist |
+| Wincon/Draw | no Stroke of Genius / Staff of Domination / Scholar held | Scholar of Athreos -- also when NO bucket is lacking |
+
+Order = the USER's bucket order (Mana: Elf, Forest, Island; Alchemist; Lifegain; Untap; Wincon) -- the rollout's
+default pick. Eternal Witness is never offered. Nothing admitted -> the whole legal list. Width 9 while on
+(coverage of the widest admitted set, 7, and the fallback). The loop's Scholar kill is untouched (the closed-form
+loop binds the wish's target by name). Human play / the Tutor unprune gate keep the full list (the rule's set
+ranked first by RankedTutorCandidates). `MTG_AA_WISH_BUCKETS` (heurarm AA_WISH_BUCKETS), default ON; =0 is the
+old sideboard-order list at width 6 -- byte-identical: the off arm's s70001 d5 b20 digest is f4d9cf88b0c3a26c,
+P3's committed cell.
+
+**Measurement** (one pooled batch, both arms via heurarm, 3,200 games; win turn with an unwon game = 9; cost in
+work UNITS, which are contention-free -- the box was shared with a sibling agent's batches, so wall ms is noisy
+and given only for the tail):
+
+| cell | off avg | on avg | delta | faster / slower | units mean off -> on | units p90 | slowest game |
+|---|---|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.8150 | 5.6950 | **-0.120** | 25 / 12 | 166.9k -> 160.3k | 458k -> 447k | 133 s -> 69 s |
+| s70001 d5 b20 (200) | 5.7450 | 5.6350 | **-0.110** | 24 / 7 | 313.5k -> 292.3k | 947k -> 874k | 360 s -> 279 s |
+| s90001 d5 b20 (600 held-out) | 5.6400 | 5.6167 | **-0.023** | 48 / 48 | 294.5k -> 259.5k (-12%) | 786k -> 698k | 6,157 s -> 591 s |
+| s90001 d3 b10 (600 held-out) | 5.6900 | 5.6883 | -0.002 | 48 / 53 | 160.4k -> 143.6k (-10%) | 422k -> 376k | 4,859 s -> 263 s |
+
+Net <= 0 on every cell. The off arm reproduces P3's committed cells exactly (digests ed03ab6957a09593 /
+f4d9cf88b0c3a26c). **The gi286 class collapses**: seed 90287 gi286 -- the 40-minute "Living Wish variant
+width" game of P3 -- is 6,157 s and UNWON (off) vs 492 s and T7 (on) at d5 b20; at d3 b10 it is 4,859 s T8 vs
+215 s unwon, and the on arm wins T7 at 10x (b100, 321 s) -- no wish ever RESOLVES in that game, so the d3 move is
+search allocation through the wish axis's rollouts, not a fetch.
+
+**Slower games at 10x budget (both arms):** 119 slower games; **83 recover** (on <= off at 10x), **36 persist**
+(s70001: 5 at d3, 5 at d5 -- the same five games; s90001: 14 at d3, 12 at d5). The 17 persistent d5 games were
+traced (`MTG_TUTOR_CHOSEN_RANK=1 MTG_TRACE=aawishproof`, both arms; 6 of 238 single-game reruns differ from the
+pooled game by cache history) and every one attributes to a named rule clause:
+* **Trufflesnout excluded (7):** s70001 g19 / g26 / g178 (lifegain HELD -- the control wished Trufflesnout on T2
+  with 3 mana, a 3-drop body / 4 life), s90001 g15 / g189 / g257 / g571 (lifegain lacking -- the control preferred
+  Trufflesnout to the Brindle Boar the rule offers).
+* **A second (or third) Alchemist excluded (4):** s90001 g116 / g410 / g524 / g550 -- an Alchemist already in
+  PLAY (with Staff + Umbra, or Witch), the control fetched another; more Alchemists multiply each gain.
+* **Blue (3):** s90001 g74 / g147 / g160 -- no blue source, Stroke / Crab Umbra in hand, but mana >= 4 (hand lands
+  counted), so the rule offered no Island; g550's first fetch is the same (Elvish Harbinger IN HAND counted as
+  blue).
+* **Forest at mana 4 (1):** s70001 g167 -- the hand land made it 4, the control wanted the 5th mana.
+* **Same set, different pick (2):** s70001 g147, s90001 g376 -- the rule admitted the control's card; the search
+  took another (the default front moved: Mana first, where the sideboard order had the Alchemist first).
+
+**Two amendments, built and measured, PROPOSED, default OFF (the USER's call):**
+
+| cell | USER rule | + `MTG_AA_WISH_BLUE` | + `MTG_AA_WISH_TRUFFLE` |
+|---|---|---|---|
+| s70001 d3 b10 | 5.6950 | 5.6900 (8 f / 5 s vs rule) | 5.7950 (2 / 13) |
+| s70001 d5 b20 | 5.6350 | 5.6350 (6 / 6) | 5.6400 (4 / 6) |
+| s90001 d5 b20 | 5.6167 | 5.6233 (23 / 26) | **5.6000 (29 / 20)** |
+| s90001 d3 b10 | 5.6883 | 5.6883 (24 / 23) | **5.6500 (34 / 16)** |
+| units mean (d5 held-out) | 259.5k | 272.1k | 254.5k |
+
+* `MTG_AA_WISH_BLUE` (blue as its own need: Island whenever no blue source is FIRMLY held -- a dork in hand no
+  longer counts -- while a held card needs {U}): neutral to slightly worse and ~5% dearer. Not recommended.
+* `MTG_AA_WISH_TRUFFLE` (Trufflesnout beside the Boar when lifegain is lacking): better on the 1,200 held-out games
+  (-0.017 / -0.038) and cheaper, worse on the 200-game d3 set (+0.100); pooled over all 800 games per depth
+  -0.011 (d5) / -0.004 (d3). The USER's own "slight question mark" on Trufflesnout shows up as a real but mixed
+  effect -- a candidate, not a recommendation.
+* NOT built: admitting a second Alchemist (it reverses the USER's "whenever you don't have one"), and counting
+  only ONE hand land toward the mana threshold (one game).
+
+**Smoke:** 124 / 128 -- only the four known pre-existing moves at their known digests (selesnya d3
+a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11); the deck is
+not in the suite, so nothing else could move. Not accepted. Unit: mtg-test 1512 / 1512 (13 new wish cases, also
+green under `MTG_UNPRUNE=tutor` and `MTG_UNPRUNED=1`); scenarios 228 / 228.
 
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 
@@ -982,6 +1082,16 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   same memory, but cache history moves work units on some decks, so it is a play change -- USER's call. The
   gi286 class is not a cache problem: its continuation lists are GB-scale (an unbounded cache hit 33 GB in
   68 s), i.e. the Living Wish variant width inside continuation derivations.
+
+* **Living Wish buckets (2026-10-20), the readings taken (defaults; say if any is wrong):** (1) mana threshold 4
+  of the USER's "4-5", counting lands + dorks + land-Aura bonuses in play and EVERY land in hand (not dorks /
+  Auras in hand); (2) the Staff's gain-1 is not lifegain; (3) the Witch counts as an untapper when the held
+  lifegain SUMS to >= 5; (4) Scholar also counts as a held wincon (so a second is not wished), Ezuri does NOT
+  count as a wincon; (5) the Alchemist is not a blue source for the Island test; (6) order = the USER's bucket
+  order (Mana first), which moved the rollout's default pick off the Alchemist. Measured better on every cell.
+  Two amendments measured and left OFF: `MTG_AA_WISH_TRUFFLE` (mixed: -0.017 / -0.038 held-out, +0.100 on the
+  200-game d3 set) and `MTG_AA_WISH_BLUE` (neutral). Four persistent losses come from the rule excluding a
+  SECOND Alchemist -- the USER's call whether "good whenever you don't have one" should read "... in play".
 
 ## Claude-play sweep
 - commit: `251c426e`
