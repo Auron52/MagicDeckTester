@@ -1196,9 +1196,19 @@ inline const char* Name(int slot)
 // -1 unset (use the env default) | 0 force off | 1 force on.
 using Arm = std::array<std::int8_t, COUNT>;
 
-inline Arm Unset() { Arm a; a.fill(-1); return a; }
+// constexpr, and t_arm is constinit (P4, 2026-10-20): a DYNAMICALLY initialised thread_local is reached
+// through a TLS wrapper that calls the TU's __tls_init guard on EVERY access, and Flag() below is read
+// tens of millions of times a game (22 M in one AccomplishedAlchemist game, plus BpEnumBuildKey's
+// whole-arm fold) -- ~0.5-1% of the instructions were those wrapper calls. A constant initialiser puts
+// the all-unset arm straight into the thread's TLS image instead: the same value, read directly.
+constexpr Arm Unset()
+{
+    Arm a{};
+    for (std::size_t i = 0; i < a.size(); ++i) { a[i] = -1; }
+    return a;
+}
 
-inline thread_local Arm t_arm = Unset();
+inline thread_local constinit Arm t_arm = Unset();
 
 // DIAGNOSTIC ONLY: the batch job this worker thread is playing (BatchRunner sets it at every job switch;
 // nullptr outside --batch). Read by trace lines that must be attributable inside a pooled batch
