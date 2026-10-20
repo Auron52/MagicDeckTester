@@ -1,0 +1,76 @@
+diff --git a/test/regression_cases.sh b/test/regression_cases.sh
+index 6a9218aa8..31c04d8d5 100644
+--- a/test/regression_cases.sh
++++ b/test/regression_cases.sh
+@@ -68,6 +68,7 @@ declare -A DECK_FILE=(
+   [landfall]=decks/Landfall/Landfall.cod
+   [galadriel]=decks/Galadriel/Galadriel.cod
+   [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
++  [vampires]=decks/Vampires/Vampire.cod
+ )
+ declare -A DECK_PROF=(
+   [fungusv2]=decks/Fungus/Fungus.profile.json
+@@ -103,6 +104,7 @@ declare -A DECK_PROF=(
+   [landfall]=decks/Landfall/Landfall.profile.json
+   [galadriel]=decks/Galadriel/Galadriel.profile.json
+   [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
++  [vampires]=decks/Vampires/Vampire.profile.json
+ )
+ 
+ # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
+@@ -524,6 +526,17 @@ SMOKE_CASES=(
+   "colossus 0 1001 1000 0"
+   "colossus 3 1001  150 10"
+   "colossus 5 1001   75 20"
++  # vampires: ADDED 2026-10-18 by the analysis (docs/design/analysis-Vampire.md), all three tiers at
++  # once (the all-or-none rule), at the colossus / pirates gate shape and the overnight ENTRY set. B/R/W
++  # Vampire tribal on Aether Vial: madness (Falkenrath Gorger), discard / sacrifice outlets, Bloodghast
++  # recursion, Drana's first-strike-step counters, Bloodline Keeper's transform. No value leaf and no
++  # keep table yet, so GT WILL move when they land. vampires2hg: Bloodghast's haste (an opponent at <= 10
++  # life), "an opponent lost life this turn" (Pit Fighter, Socialite) and Captivating Vampire's targets
++  # all read the 2HG life total / heads.
++  "vampires 0 1001 1000 0"
++  "vampires 3 1001  150 10"
++  "vampires 5 1001   75 20"
++  "vampires2hg 3 1001 50 10"
+ )
+ 
+ # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
+@@ -773,6 +786,14 @@ REGRESSION_CASES=(
+   "colossus 3 3003  150 10"
+   "colossus 5 2002   75 20"
+   "colossus 5 3003   75 20"
++  # vampires: see the SMOKE block.
++  "vampires 0 2002 1000 0"
++  "vampires 3 2002  150 10"
++  "vampires 3 3003  150 10"
++  "vampires 5 2002   75 20"
++  "vampires 5 3003   75 20"
++  "vampires2hg 3 2002 100 10"
++  "vampires2hg 5 2002  50 20"
+ )
+ 
+ # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
+@@ -1382,4 +1403,22 @@ OVERNIGHT_CASES=(
+   "colossus 5 5005  500 40"
+   "colossus 5 6006  500 40"
+   "colossus 5 7007  500 40"
++  # vampires: see the SMOKE block. The ENTRY set; it expands to the FULL set just before a keep table
++  # is adopted.
++  "vampires 0 4004 2000 0"
++  "vampires 0 6006 2000 0"
++  "vampires 0 8008 2000 0"
++  "vampires 0 10010 2000 0"
++  "vampires 3 4004  400 10"
++  "vampires 3 5005  400 10"
++  "vampires 3 6006  400 10"
++  "vampires 3 7007  400 10"
++  "vampires 5 4004  300 20"
++  "vampires 5 5005  300 20"
++  "vampires 5 6006  300 20"
++  "vampires 5 7007  300 20"
++  "vampires2hg 5 4004 100 20"
++  "vampires2hg 5 5005 100 20"
++  "vampires2hg 5 6006 100 20"
++  "vampires2hg 5 7007 100 20"
+ )
