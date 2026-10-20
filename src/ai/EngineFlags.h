@@ -1892,6 +1892,27 @@ inline bool BpResumeLineHoldOn()
     return heurarm::Flag(heurarm::BP_RESUME_LINE_HOLD, env_on);
 }
 
+// MTG_EXEC_CLEAN_BP_DEFERRED -- DEFAULT ON; =0 restores the inline replay byte-identically (heurarm slot
+// EXEC_CLEAN_BP_DEFERRED). The executor's CLEAN-set cast loop replayed a committed breakpoint segment AT THE
+// CAST for every class equip_bp_truncates answers for, but only site 6's INLINE class is resolved at the cast
+// by the rollout: a plain cantrip's partition under MTG_BP_NODE (and sites 5 / 6-deferred) is DEFER +
+// TRUNCATE in ApplyPlanDirect -- the continuation runs after the main casts and the trailing passes,
+// including the deferred Karoo drop. A plain cantrip reaches the clean set only through a REMAND rider
+// (BpNameOf is the Remand; the cast itself, e.g. Soulfire Eruption, carries no opaque param), which is why
+// the "site 6 is the only class in a clean set" premise held until Remand was modelled. Under the flag a
+// committed deferred-class segment truncates the plan there, as the opaque loops do, and the end-of-main
+// catch-all replays it after the Karoo -- the rollout's point. Hinata s12111487 gi 486
+// (MTG_HINATA_GAMBLE_PAST_DORK=1, d5 b30): T5 m1 Soulfire + Remand -> [Reality Spasm] ran BEFORE the
+// Boilerworks, whose bounce then returned the Island the Spasm had just untapped, and the Boilerworks stayed
+// tapped; the rollout played the Karoo first (bouncing the spent Island) and its Spasm untapped the
+// Boilerworks -- two more mana for main 2 and the T5 kill the search had scored. Executor only (the rollout is
+// the reference); a non-committed plan keeps its inline re-solve.
+inline bool ExecCleanBpDeferredOn()
+{
+    static const bool env_on = EnvOn("MTG_EXEC_CLEAN_BP_DEFERRED", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EXEC_CLEAN_BP_DEFERRED, env_on);
+}
+
 
 
 // ---- UNBUDGETED-PLAY SCOPE + the leaf memo it USED to arm -------------------------------------

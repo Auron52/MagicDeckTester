@@ -7183,7 +7183,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // hooking the broad predicate here armed breakpoints those decks never had (smoke went
         // 26/36 with 2 searched slower and 26 play-changed). Site 6 is the only class that both
         // lands in a clean set and has a rollout twin arming at the cast.
-        if (s_full_depth && equip_bp_truncates(BpNameOf(a)))
+        // MTG_EXEC_CLEAN_BP_DEFERRED (DEFAULT ON; =0 restores the inline replay byte-identically): the
+        // site-6 INLINE class is the only one the rollout resolves at the cast, but equip_bp_truncates
+        // also answers for the DEFERRED partition classes (a plain cantrip under MTG_BP_NODE, sites 5 /
+        // 6-deferred), which the rollout resolves AFTER the main casts and the trailing passes -- the
+        // deferred Karoo drop among them. They reach this clean set through a REMAND rider: BpNameOf is
+        // the Remand (a plain cantrip) while the cast itself (Soulfire Eruption) carries no opaque
+        // param. Replaying such a committed segment here ran the continuation BEFORE the Karoo, where
+        // the rollout ran it after: Hinata s12111487 gi 486 (MTG_HINATA_GAMBLE_PAST_DORK=1, d5 b30) T5
+        // Soulfire + Remand -> [Reality Spasm] untapped the Island the Boilerworks then bounced, and the
+        // Boilerworks stayed tapped; the search (Karoo first, its bounce takes the spent Island, the
+        // Spasm untaps the Boilerworks) had two more mana and the T5 kill. Truncate here as the
+        // opaque loops do; the end-of-main catch-all replays the segment after the Karoo.
+        const CardDefinition* clean_bpd = (fd_plan_committed && ExecCleanBpDeferredOn())
+                                        ? CardDatabase::Instance().Lookup(BpNameOf(a)) : nullptr;
+        const bool clean_bp_inline = !(fd_plan_committed && ExecCleanBpDeferredOn())
+                                  || (clean_bpd != nullptr && TurnSolver::EquipmentDrawBreakpointInline()
+                                      && TurnSolver::EquipmentDrawBreakpoint(state, *clean_bpd));
+        if (s_full_depth && clean_bp_inline && equip_bp_truncates(BpNameOf(a)))
         {
             if (fd_plan_committed)
             { if (cast_paid) { replay_segment(); } }

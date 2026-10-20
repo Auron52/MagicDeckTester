@@ -563,6 +563,7 @@ enum Slot : int
     FB_HOLD_FOLD_FREE,        // MTG_FB_HOLD_FOLD_FREE a searched banked-hold variant's node unit (FSLineWin kFsPre, the la_cand loop's kLookaheadCand) is charged only once MTG_COMBAT_PIN_FOLD has NOT folded it -- an uncontested or dominated flip is its base plan's combat, so it re-prices to nothing (44% of the frontier's variants on the held-out 2HG / dragonstorm probe). Re-prices only; inert at an unlimited budget. Default ON; =0 -> charged before the apply
     FB_HOLD_STRICT,           // MTG_FB_HOLD_STRICT the searched banked hold's other side displaces the incumbent only by a STRICTLY earlier win (SolveWithLookahead's candidate loop; FSLineWin is strict already): no equal-win-turn tie on the graded leaf, and its rollout asked only about earlier turns (the exact tie prune's cutoff), skipped when none is left. The verdict orders the two sides; an equal-turn line is the same result, so nothing becomes unfindable. Default ON; =0 -> a variant ties like any candidate
     BP_RESUME_LINE_HOLD,      // MTG_BP_RESUME_LINE_HOLD  a breakpoint-node / prefix-cache RESUME (BpPrefixSnap) restores the line's unpaid-cost hold (g_line_unpaid_cost) as the prefix left it, instead of re-binding the WHOLE plan's bill: the resumed continuation otherwise paid under a phantom hold for casts the prefix had already paid, so the search scored payments (LineFloatTapFirstPlan keeping a floating colour) that neither the executor nor a full apply makes. Hinata s12111487 gi 486 (MTG_HINATA_GAMBLE_PAST_DORK=1, d8 b0): the T5 node child held Soulfire Eruption's paid {R}{R}{R}, paid Ornithopter's {2} with Sol Ring and kept the floating {R}; the game spent the {R} and the recast Irencrag Feat was one red short -- committed T5, realised T6. Search side only (the executor never resumes). DEFAULT ON; =0 -> the phantom hold, byte-identical
+    EXEC_CLEAN_BP_DEFERRED,   // MTG_EXEC_CLEAN_BP_DEFERRED the executor's CLEAN-set cast loop (AIEngine::TakeTurn) replays a committed breakpoint segment AT THE CAST only for the site-6 INLINE class; the DEFERRED partition classes equip_bp_truncates also answers for (a plain cantrip under MTG_BP_NODE -- reached through a REMAND rider, whose BpNameOf is the Remand while the cast is a non-opaque spell) truncate and replay at the end-of-main catch-all, after the deferred Karoo drop, where the rollout resolves them. Hinata s12111487 gi 486 (MTG_HINATA_GAMBLE_PAST_DORK=1, d5 b30): T5 Soulfire + Remand -> [Reality Spasm] ran before the Boilerworks, whose bounce then took the Island the Spasm had just untapped; the search played the Karoo first and untapped the Boilerworks -- two mana and the T5 kill. Executor side only. DEFAULT ON; =0 -> the inline replay, byte-identical
     COUNT
 };
 
@@ -1076,6 +1077,7 @@ inline const char* Name(int slot)
         "MTG_FB_HOLD_FOLD_FREE",
         "MTG_FB_HOLD_STRICT",
         "MTG_BP_RESUME_LINE_HOLD",
+        "MTG_EXEC_CLEAN_BP_DEFERRED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
