@@ -23,6 +23,9 @@
 #include <algorithm>
 #include <climits>   // INT_MIN -- the refloat need model's argmax seed (demand can go negative)
 #include <array>
+#include <cstdint>
+#include <cstring>   // LandAuraMemo: UntapLandHosts stored by memcpy
+#include <type_traits>
 #include <atomic>
 #include <chrono>    // ShedStats::CostScope -- pricing the shed path, not just counting it
 #include <cstdio>
@@ -21336,7 +21339,7 @@ inline const std::vector<Color>& LandAuraProducesFor(const CardDefinition& ad, c
     return ad.params.land_aura_produces;
 }
 
-inline int LandAuraBonusOfLand(const GameState& state, const Permanent& land)
+inline int LandAuraBonusOfLandUncached(const GameState& state, const Permanent& land)
 {
     if (!land.card.IsLand()) { return 0; }
     if (!state.deck_has_land_aura) { return 0; }   // no land Aura in this game (StampDeckTraits)
@@ -21522,7 +21525,7 @@ inline bool UntapLandBonusCovers(const ManaPool& a, const ManaPool& b)
 // battlefield order). Returns the class count; 0 when `src` is not such a source or no controlled
 // Forest carries a land Aura (the Arbor then yields its plain {G}). Walks the land Auras first, so
 // only ENCHANTED Forests are ever examined.
-inline int UntapLandHostsOf(const GameState& state, const Permanent& src, UntapLandHosts& out)
+inline int UntapLandHostsOfUncached(const GameState& state, const Permanent& src, UntapLandHosts& out)
 {
     out.n = 0;
     const CardDefinition* sd = UntapLandSourceDef(state, src);
@@ -21574,6 +21577,105 @@ inline int UntapLandHostsOf(const GameState& state, const Permanent& src, UntapL
         ++out.n;
     }
     return out.n;
+}
+
+// ---- THE PER-WALK LAND-AURA MEMO (P4, 2026-10-20) -----------------------------------------------------
+// The pool walks ask each source's land-Aura answer several times over ONE board they do not change.
+// AvailableManaPool, for every untapped source: PermanentManaYield folds LandAuraBonus into the yield,
+// then AddSourceToPool asks LandAuraBonus again to credit the Aura in its own colour -- and for an
+// untap-target-land source (Arbor Elf) each of LandAuraBonus, UntapLandHostCount and LandAuraAddToPool
+// re-derives the Forest classes, four UntapLandHostsOf walks per Arbor per pool. A land's bonus is a
+// battlefield walk of its own, so the pool was O(lands x permanents) twice over. Together that was 4-6%
+// of an AccomplishedAlchemist game.
+//
+// Both primitives are functions of the board alone (attachments, controllers, definitions, the locked
+// colour -- never tapped state or the float), so a walk over a board it does not change may compute each
+// once per permanent. LandAuraMemoScope binds such a walk to `state`: while it is bound, the two
+// primitives below answer a permanent OF THAT battlefield from the memo (filled on first ask by the
+// unchanged function), and every other board -- a copy, a scratch -- is computed exactly as before. The
+// memo stores exactly what the function returned, so this is an identity, not a narrowing.
+//
+// THE SCOPE'S CONTRACT: bind it only in a function that takes the board by CONST reference and keeps it
+// alive for the scope's whole life (nothing reachable from it can change a const board; the engine has
+// no const_cast on GameState). The first binding wins: a scope opened while another is bound (the same
+// board or not) binds nothing, and the inner walk reads through the outer memo or computes directly.
+struct LandAuraMemo
+{
+    static constexpr int kMax       = 48;   // a larger battlefield is simply not memoised
+    static constexpr int kHostSlots = 2;    // untap-target-land sources memoised per walk
+    static constexpr std::int16_t kUnasked = -1;
+    // Deliberately no member initialisers: the scope fills exactly what it uses (n entries), so binding
+    // a walk costs a few stores, not a 1 KB zero-fill.
+    const GameState* state;
+    std::uintptr_t   base;     // state->battlefield.data()
+    int              n;        // state->battlefield.size()
+    int              n_hosts;
+    std::int16_t     land_bonus[kMax];   // LandAuraBonusOfLandUncached, kUnasked = not yet
+    std::int8_t      hosts_at[kMax];     // slot in hosts_raw holding UntapLandHostsOfUncached, -1 = none
+    alignas(UntapLandHosts) unsigned char hosts_raw[kHostSlots][sizeof(UntapLandHosts)];
+};
+static_assert(std::is_trivially_copyable_v<UntapLandHosts>, "the memo stores UntapLandHosts by memcpy");
+inline thread_local LandAuraMemo* t_land_aura_memo = nullptr;
+
+struct LandAuraMemoScope
+{
+    LandAuraMemo m;
+    bool         owner = false;
+    explicit LandAuraMemoScope(const GameState& s)
+    {
+        if (t_land_aura_memo != nullptr || !s.deck_has_land_aura) { return; }   // every reader early-outs
+        const int n = static_cast<int>(s.battlefield.size());
+        if (n > LandAuraMemo::kMax) { return; }
+        m.state   = &s;
+        m.base    = reinterpret_cast<std::uintptr_t>(s.battlefield.data());
+        m.n       = n;
+        m.n_hosts = 0;
+        std::fill_n(m.land_bonus, n, LandAuraMemo::kUnasked);
+        std::fill_n(m.hosts_at, n, static_cast<std::int8_t>(-1));
+        t_land_aura_memo = &m;
+        owner = true;
+    }
+    ~LandAuraMemoScope() { if (owner) { t_land_aura_memo = nullptr; } }
+    LandAuraMemoScope(const LandAuraMemoScope&)            = delete;
+    LandAuraMemoScope& operator=(const LandAuraMemoScope&) = delete;
+};
+
+// The memo slot of `p` when a walk over `state` is bound and `p` IS one of its battlefield permanents
+// (not a copy of one), else -1.
+inline int LandAuraMemoIndex(const GameState& state, const Permanent& p)
+{
+    const LandAuraMemo* m = t_land_aura_memo;
+    if (m == nullptr || m->state != &state) { return -1; }
+    const std::uintptr_t a = reinterpret_cast<std::uintptr_t>(&p);
+    if (a < m->base || reinterpret_cast<std::uintptr_t>(state.battlefield.data()) != m->base) { return -1; }
+    const std::uintptr_t off = a - m->base;
+    if (off % sizeof(Permanent) != 0) { return -1; }
+    const std::uintptr_t i = off / sizeof(Permanent);
+    return i < static_cast<std::uintptr_t>(m->n) ? static_cast<int>(i) : -1;
+}
+
+inline int LandAuraBonusOfLand(const GameState& state, const Permanent& land)
+{
+    const int i = LandAuraMemoIndex(state, land);
+    if (i < 0) { return LandAuraBonusOfLandUncached(state, land); }
+    std::int16_t& slot = t_land_aura_memo->land_bonus[i];
+    if (slot == LandAuraMemo::kUnasked) { slot = static_cast<std::int16_t>(LandAuraBonusOfLandUncached(state, land)); }
+    return slot;
+}
+
+inline int UntapLandHostsOf(const GameState& state, const Permanent& src, UntapLandHosts& out)
+{
+    const int i = LandAuraMemoIndex(state, src);
+    if (i < 0) { return UntapLandHostsOfUncached(state, src, out); }
+    LandAuraMemo& m = *t_land_aura_memo;
+    if (m.hosts_at[i] >= 0) { std::memcpy(&out, m.hosts_raw[m.hosts_at[i]], sizeof(UntapLandHosts)); return out.n; }
+    const int n = UntapLandHostsOfUncached(state, src, out);
+    if (m.n_hosts < LandAuraMemo::kHostSlots)
+    {
+        std::memcpy(m.hosts_raw[m.n_hosts], &out, sizeof(UntapLandHosts));
+        m.hosts_at[i] = static_cast<std::int8_t>(m.n_hosts++);
+    }
+    return n;
 }
 
 // Class count only (0 for every permanent that is not an untap-target-land source).
@@ -32725,6 +32827,7 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
 // agnostic total (the Hinata discount reduces GENERIC, which any spare mana can re-pay).
 inline int SpareUntappedMana(const GameState& state, int controller)
 {
+    LandAuraMemoScope _lam(state);   // const board: each source's land-Aura answer once (P4)
     ManaPool pool;
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     const ManaGrant grant = LiveManaGrant(state, controller);

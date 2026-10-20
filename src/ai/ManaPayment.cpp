@@ -4617,6 +4617,7 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
 // pair (TurnSolver's BuildPool / AIEngine::BuildAvailableMana).
 ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
 {
+    LandAuraMemoScope _lam(state);   // const board: each source's land-Aura answer once (P4)
     ManaPool pool;
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     const ManaGrant grant = LiveManaGrant(state, state.active_player_index);
@@ -4782,6 +4783,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
 {
     ColorFeasibility f;
     if (!ColorExactEnabled()) { return f; }
+    LandAuraMemoScope _lam(state);   // const board: each source's land-Aura answer once (P4)
     const bool scaled_exact = ColorExactScaledEnabled();
     // Credit for a source whose yield the build cannot bound (see ColorExactScaledEnabled): larger than
     // any reachable count, small enough that cover[]'s int sums cannot overflow.

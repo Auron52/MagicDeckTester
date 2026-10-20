@@ -3421,6 +3421,7 @@ static const bool s_cco_noncreature_pool = EnvOn("MTG_CCO_NONCREATURE_POOL");
 // Used to verify that non-creature spells are payable without those sources.
 static ManaPool BuildNonCreaturePool(const GameState& state)
 {
+    LandAuraMemoScope _lam(state);   // const board: each source's land-Aura answer once (P4)
     ManaPool pool;
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     // HOISTED, and it must stay hoisted: LiveManaGrant walks the whole battlefield, so calling
