@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a9a17278  date 2026-10-20
+# Regression ground truth -- commit 93c01329  date 2026-10-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -172,9 +172,9 @@ antilife_regression_d5_s2002=4.3000/230b712d1d37d360
 antilife_regression_d5_s3003=4.1880/ea2badbabc780092
 hinata_regression_d0_s2002=6.8470/297e0148af67319b
 hinata_regression_d3_s2002=5.5600/926a0c568a10b98c
-hinata_regression_d3_s3003=5.6100/7caee4ad2ded2158
+hinata_regression_d3_s3003=5.6100/b17ee41241240c91
 hinata_regression_d5_s2002=5.6600/cbb82b3a9730fabd
-hinata_regression_d5_s3003=5.6300/c8b91e50bab650aa
+hinata_regression_d5_s3003=5.6300/435e656fd23314ab
 dragonstorm_regression_d0_s2002=5.0120/cde74120c7eb5150
 dragonstorm_regression_d3_s2002=4.3067/e6529044f6618d0d
 dragonstorm_regression_d3_s3003=4.5000/ec1c4f71bf35e651
