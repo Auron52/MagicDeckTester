@@ -35,3 +35,52 @@ Measure how the cut behaves on the OTHER decks and decide whether to adopt it as
 Expected payoff is MODEST (on Goblins it was ~7% of the deep rollout, because the cost is the turn 3-4
 BUILD-UP nodes, not the lethal leaves the cut skips). The value leaf already makes shipped play ~90x
 faster, so this only speeds the pure-rollout / depth-matrix arm.
+
+## 2026-10-20: the cut was NOT sound -- now verified (MTG_LETHAL_CUT_VERIFY, default ON)
+
+"Nothing is lost" above held only while `pending_atk` (PendingAttackDamage) was real damage. It is a
+projection, and it can read lethal on a board whose attack does not kill. The case that proved it:
+**Bruna overnight s4004 gi334** (seed 4338, d3 b10; also d8 b0), owned by c5b72e56 (Bruna opting in).
+
+* The T6 search verified a T8 kill: Greaves equip + Arcanum Wings on a Somberwald Sage, then at the
+  post-entry breakpoint (site 9) continuation #1 = Avacyn's Pilgrim + Greaves onto it. In combat the
+  Wings swaps for Colossification ({2}{U}, paid by Birds + the hasty Pilgrim's {W} through Skycloud
+  Expanse): 20 damage.
+* At the executor's real T8 breakpoint, Remote Farm had paid the Wings and FLOATED a {W}. The swap term
+  of the projection (CountAttackGatherPump -> ApplyCombatAuraSwap on a copy of the main-phase board)
+  paid the swap with that float and read 20 against 20 life (0 with the pool drained). Mana empties
+  before combat (CR 500.4). The cut returned attack-only as the ONLY continuation, the committed
+  `bp_choice=1` overran the one-entry list, nothing was applied, and combat found the swap unpaid.
+  T8 win -> unwon.
+
+The fix: both hosts apply the plan they would return on a copy and simulate combat (SimulateCombat,
+the executor's lockstep combat) before skipping anything -- the go-off / equip-route siblings' rule. A
+refused trial restores the frame, so the walk is exactly the no-cut walk. The cut is now an identity: it
+fires only where the attack-only plan really kills. `MTG_LETHAL_CUT_VERIFY=0` restores the unverified
+cut; `MTG_TRACE=lethalcut` prints every refusal. Unit: test_bruna_sweep.cpp, "Board-lethal cut: a lethal
+projected with main-phase floating mana does not collapse the frame".
+
+### Deferred: the projection's combat-swap term itself (not changed)
+
+The verification makes the CUT sound; it does not make `pending_atk` right, and other readers still
+trust it -- consider()'s `wins` (Solve's greedy ranking, EnumeratePlans' `wins_this_turn`, the
+wins-first sorts) and SolveWithLookahead's "first winning candidate returns" loop. The swap term is
+wrong in BOTH directions:
+
+* **over-credit**: it pays the {2}{U} with main-phase floating mana (above);
+* **under-credit**: it is computed once on the PRE-plan board, so a plan that ADDS the swap's mana
+  (the Pilgrim + Greaves continuation above) is not credited with the swap it makes payable.
+
+Draining the float on the projection's copy (mirroring SimulateCombat's CR 500.4 drain) fixes the first
+and leaves the second, so on this very board it would flip the winning continuation's flag from
+"wins" (right for the wrong reason) to "does not win". That is a play change with mixed signs on Bruna
+(the only deck with an aura-swap card), so it needs its own held-out A/B and was not bundled with the
+soundness fix. Measure with a default-OFF lever on Bruna's suite rows plus a large held-out sample.
+
+Observed, not resolved: every SEARCH-side derivation of that T8 site-9 list ran on a board with no
+combat-swap pin (`scripted_combat_aura_swap = -1`, projection 0), while the executor's ran with the
+committed pin (= 1). Inferred, not proven: base plans write no pin and inherit the state's, so the two
+lists' base-plan indices should agree -- unless the DERIVATION depends on the pin, which the unverified
+cut did (with the cut verified, this game realises the scored continuation). The swap-pin VARIANTS are
+built differently on a pinned vs an unpinned state (EnumeratePlansWithLand: NO-SWAP becomes the
+variant), so a committed choice that indexes a variant is worth checking the same way.
