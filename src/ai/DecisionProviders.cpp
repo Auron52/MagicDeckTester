@@ -5835,17 +5835,19 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
     }
     const bool accel_useful = lands_bf < 2;
     const bool go_off_next  = mana_next >= 3;              // == mana_bf >= 3 unless SOL MANA is on
-    // UNTAPPED (MTG_GALADRIEL_SCRY_UNTAPPED): every Temple enters tapped, so with under three mana in play
-    // and no untapped land in hand, Galadriel waits a turn after her third land. An untapped land on top
-    // (Crystal Grotto, Rumble Arena, Zhalfirin Void, The Grey Havens -- all scry lands) lets her come down
-    // the turn it is played; her extra attack is the margin for an early X=3 Crackle (the seed-5 USER
-    // reference; overnight s4004 g996, s7007 g707). Two mana in play: it is next turn's drop, and the two
-    // lands in play must pay {G}{U} by themselves. One: next turn's drop comes from hand, then this one.
+    // UNTAPPED (MTG_GALADRIEL_SCRY_UNTAPPED): every Temple enters tapped, so with two mana in play and no
+    // untapped land in hand, Galadriel waits a turn after her third land. An untapped land on top (Crystal
+    // Grotto, Rumble Arena, Zhalfirin Void, The Grey Havens -- all scry lands) is next turn's drop and she
+    // comes down with it; her extra attack is the margin for an early X=3 Crackle (the seed-5 USER
+    // reference; overnight s4004 g996, s7007 g707). The two lands in play must pay {G}{U} by themselves.
+    // ONLY at two mana: a first draft also kept one at ONE mana (to be held a turn), and that branch
+    // measured WORSE (24k held-out games: +0.04 t at d0, net +24 turns searched) -- the land is played at
+    // the next drop instead of being held, ahead of the coloured Temples.
     {
         static const bool untapped_env = EnvOn("MTG_GALADRIEL_SCRY_UNTAPPED", false);
         if (timing && GaladrielScryClauseOn(heurarm::GALADRIEL_SCRY_UNTAPPED, untapped_env) && missing == 0
             && td->card.IsLand() && !tp.enters_tapped && tp.etb_scry > 0 && untapped_hand == 0
-            && ((mana_next == 2 && pair_deficit(false, nullptr) == 0) || (mana_next == 1 && lands_hand >= 1)))
+            && mana_next == 2 && pair_deficit(false, nullptr) == 0)
         { return true; }
     }
     // "you still need to prioritize getting the colours even if short on lands. It is only beyond

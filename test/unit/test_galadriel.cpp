@@ -651,25 +651,7 @@ TEST_CASE("Galadriel scry AMENDMENT: G/U pairing, a held Crackle, Sol Ring mana,
         CHECK(KeepsGal(s, kSkerry));            // shipped: short on lands, any land
         Arm::On();
     }
-    SUBCASE("UNTAPPED: under 3 mana, no untapped land in hand -> an untapped land puts her down a turn early (s7007 g707)")
-    {
-        GameState s = FreshGal();
-        s.turn_number = 1;
-        PutGal(s, kTemple, 1);                  // G/U
-        HandGal(s, kGaladriel, 2);
-        HandGal(s, "Temple of Enlightenment", 3);   // next turn's drop, and the U
-        HandGal(s, kGaladriel, 4);
-        HandGal(s, "Temple of Triumph", 5);
-        CHECK(KeepsGal(s, "Crystal Grotto"));
-        CHECK(KeepsGal(s, "Zhalfirin Void"));
-        CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));   // tapped: nothing gained
-        Arm::Off();
-        CHECK_FALSE(KeepsGal(s, "Crystal Grotto"));
-        Arm::On();
-        HandGal(s, kHavens, 6);                 // an untapped land already in hand
-        CHECK_FALSE(KeepsGal(s, "Crystal Grotto"));
-    }
-    SUBCASE("UNTAPPED at two lands: only when the two lands in play pay {G}{U} by themselves")
+    SUBCASE("UNTAPPED: two lands in play pay {G}{U}, no untapped land in hand -> an untapped land is next turn's drop and she comes with it")
     {
         GameState s = FreshGal();
         s.turn_number = 2;
@@ -678,9 +660,27 @@ TEST_CASE("Galadriel scry AMENDMENT: G/U pairing, a held Crackle, Sol Ring mana,
         HandGal(s, kGaladriel, 3);
         HandGal(s, "Temple of Triumph", 4);
         CHECK(KeepsGal(s, "Rumble Arena"));
+        CHECK(KeepsGal(s, "Zhalfirin Void"));
+        CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));   // tapped: nothing gained
+        Arm::Off();
+        CHECK_FALSE(KeepsGal(s, "Rumble Arena"));
+        Arm::On();
+        HandGal(s, kHavens, 5);                 // an untapped land already in hand
+        CHECK_FALSE(KeepsGal(s, "Rumble Arena"));
+        s.players[0].hand.pop_back();
         s.battlefield.pop_back();
         PutGal(s, "Temple of Malice", 2);       // B/R: the U would come from a hand land
-        HandGal(s, "Temple of Deceit", 5);
+        HandGal(s, "Temple of Deceit", 6);
         CHECK_FALSE(KeepsGal(s, "Rumble Arena"));
+    }
+    SUBCASE("UNTAPPED: not at ONE land in play (that branch measured worse -- the land is played at once)")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 1;
+        PutGal(s, kTemple, 1);                  // G/U
+        HandGal(s, kGaladriel, 2);
+        HandGal(s, "Temple of Enlightenment", 3);
+        HandGal(s, "Temple of Triumph", 4);
+        CHECK_FALSE(KeepsGal(s, "Crystal Grotto"));
     }
 }
