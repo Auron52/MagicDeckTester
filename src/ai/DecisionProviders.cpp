@@ -12331,6 +12331,16 @@ static bool HinataDorkTie()
     return heurarm::Flag(heurarm::HINATA_DORK_TIE, on);
 }
 
+// MTG_HINATA_DORK_BEFORE_GAMBLE (under the order; DEFAULT OFF): the FIXED alternative to the searched slot of
+// MTG_HINATA_GAMBLE_PAST_DORK (see CastOrderingCandidates), measured beside it -- Ornithopter of Paradise ranked
+// between Reality Spasm (7) and Gamble (8), still inside the USER's 08-28 range ("after Hinata, but before
+// Soulfire Eruption"), so a still-in-hand Ornithopter is never Gamble's random-discard victim. See CastOrderRank.
+static bool HinataDorkBeforeGamble()
+{
+    static const bool on = EnvOn("MTG_HINATA_DORK_BEFORE_GAMBLE");   // DEFAULT OFF; =1 -> the fixed rank
+    return heurarm::Flag(heurarm::HINATA_DORK_BEFORE_GAMBLE, on);
+}
+
 static int HinataFullOrderRank(const CardDefinition& def)
 {
     const CardParams& p = def.params;
@@ -12485,6 +12495,10 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
     // falls to the NAME in the comparator (CastOrderTotalByName below), never to plan / hand order.
     // Scaled by 64 to leave room.
     const int rank = HinataFullOrderRank(def);
+    // MTG_HINATA_DORK_BEFORE_GAMBLE (DEFAULT OFF, a measured alternative): Ornithopter between Reality Spasm (7)
+    // and Gamble (8) -- half a tier, so nothing else moves. The dork has no range (CastOrderRankLatest).
+    if (def.tmpl == CardTemplate::ManaDork && HinataDorkBeforeGamble() && !HinataDorkTie())
+    { return 7 * 64 + 32; }
     const int base = rank * 64;
     if (rank >= 30)
     {
@@ -12620,6 +12634,42 @@ void HinataProvider::ArrangeCastOrder(const GameState& s, const std::vector<Acti
     }
     // (2) the proposed Reality Spasm placement (see above).
     if (HinataSpasmLate()) { HinataPlaceSpasmsLate(s, acts, order); }
+    // (3) MTG_HINATA_DORK_THEN_GAMBLE (DEFAULT OFF -- a PROPOSED fixed alternative to MTG_HINATA_GAMBLE_PAST_DORK,
+    // the USER decides): in a plan holding Gamble and an Ornithopter of Paradise, every Ornithopter cast after the
+    // Gamble moves to immediately before it, so Gamble's random discard never sees a still-in-hand Ornithopter.
+    // Only that one relation moves -- an Ornithopter keeps its slot after the cantrips when the plan has no Gamble
+    // (MTG_HINATA_DORK_BEFORE_GAMBLE moves it ahead of everything from Gamble on, cantrips included). Irencrag
+    // and the payoffs come after both, so the placement in (1) and Irencrag's follower are unchanged.
+    static const bool s_dork_then_gamble = EnvOn("MTG_HINATA_DORK_THEN_GAMBLE");   // DEFAULT OFF; =1 -> on
+    if (heurarm::Flag(heurarm::HINATA_DORK_THEN_GAMBLE, s_dork_then_gamble))
+    {
+        auto def_at = [&](int i) -> const CardDefinition*
+        { return acts[i].def ? acts[i].def : CardDatabase::Instance().Lookup(acts[i].card_name); };
+        auto cast_is = [&](int i, bool want_gamble)
+        {
+            if (acts[i].kind != Action::Kind::CastFromHand || acts[i].sacrifice_land) { return false; }
+            const CardDefinition* d = def_at(i);
+            if (d == nullptr) { return false; }
+            return want_gamble ? d->params.tutor_to_hand : d->tmpl == CardTemplate::ManaDork;
+        };
+        int gpos = -1;
+        for (int k = 0; k < static_cast<int>(order.size()); ++k)
+        { if (cast_is(order[static_cast<std::size_t>(k)], true)) { gpos = k; break; } }
+        if (gpos >= 0)
+        {
+            thread_local std::vector<int> before, dorks, after;
+            before.assign(order.begin(), order.begin() + gpos);
+            dorks.clear(); after.clear();
+            for (std::size_t k = static_cast<std::size_t>(gpos); k < order.size(); ++k)
+            { (cast_is(order[k], false) ? dorks : after).push_back(order[k]); }
+            if (!dorks.empty())
+            {
+                order.assign(before.begin(), before.end());
+                order.insert(order.end(), dorks.begin(), dorks.end());
+                order.insert(order.end(), after.begin(), after.end());
+            }
+        }
+    }
 }
 
 // GAMBLE'S SLOT RELATIVE TO THE CANTRIPS IS SEARCHED (MTG_HINATA_GAMBLE_SEARCHED, under the order; DEFAULT ON
@@ -12660,8 +12710,34 @@ static bool HinataPonderPreordainSearched()
     return heurarm::Flag(heurarm::HINATA_PP_SEARCHED, on);
 }
 
+// MTG_HINATA_GAMBLE_PAST_DORK (under the order; DEFAULT OFF -- a PROPOSED amendment, the USER decides): Gamble's
+// searched slot also reaches PAST Ornithopter of Paradise. A plan holding Gamble and an Ornithopter ranked after
+// it is also offered with Gamble moved to just after the last Ornithopter / Preordain / Ponder / Expressive
+// Iteration that follows it -- never past Irencrag or a payoff, so Irencrag's placement and follower are the same
+// in every candidate. The fan above stops short of the Ornithopter ("Gamble never moves past Ornithopter").
+//
+// WHY THE ORNITHOPTER MATTERS TO GAMBLE. Gamble's "discard a card at random" is drawn from the hand as it stands
+// when Gamble resolves (SpellEffects: the victim is mixed from the hand SIZE and indexes the stored hand), so a
+// still-in-hand Ornithopter changes WHICH card the discard takes -- the one interaction the 08-28 placement
+// reasoning ("it only matters as a target for Soulfire and Crackle") did not cover. Under the bound order the
+// Ornithopter -> Gamble sequence is never realised, and the main-1 / main-2 split cannot stand in for it when
+// the Gamble's {R} is the second half of a Karoo's {U}{R} bundle that paid the Ornithopter: floating mana empties
+// at the end of main 1. Root-caused on hinata overnight s6006 gi 256 (seed 6262): T3 Island, Ornithopter, Gamble
+// -> Crackle with Power discards a dead Soulfire Eruption, T4 Island + Hinata, T5 Reality Spasm X=5 -> Crackle
+// X=4 + her attack is lethal; the bound order casts Gamble first, its discard takes the Island the T4 Hinata
+// needs, and the game is T6 at its own settings AND at d8 b0 (the [m2t] trace shows main 2 holding Gamble with
+// one {U} and no {R}). Completeness: every candidate is offered at every budget, nothing is pruned.
+static bool HinataGamblePastDork()
+{
+    static const bool on = EnvOn("MTG_HINATA_GAMBLE_PAST_DORK");   // DEFAULT OFF; =1 -> the amendment
+    return heurarm::Flag(heurarm::HINATA_GAMBLE_PAST_DORK, on);
+}
+
 bool HinataProvider::WantsCastOrderingSearch() const
-{ return HinataOrderFullEnabled() && (HinataGambleSearched() || HinataPonderPreordainSearched()); }
+{
+    return HinataOrderFullEnabled()
+        && (HinataGambleSearched() || HinataPonderPreordainSearched() || HinataGamblePastDork());
+}
 
 bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
                                             const std::vector<Action>& reorder,
@@ -12672,6 +12748,7 @@ bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vecto
     if (!WantsCastOrderingSearch()) { return false; }
     const bool fan_g = HinataGambleSearched();
     const bool fan_p = HinataPonderPreordainSearched();
+    const bool fan_d = HinataGamblePastDork();
     const int n = static_cast<int>(reorder.size());
     auto def_of = [&](int i) -> const CardDefinition*
     { return reorder[i].def ? reorder[i].def : CardDatabase::Instance().Lookup(reorder[i].card_name); };
@@ -12687,6 +12764,27 @@ bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vecto
         const CardDefinition* d = def_of(i);
         return is_cast(i) && d != nullptr
             && (d->params.cast_reorder > 0 || d->params.cast_scry > 0 || d->params.expressive_iteration);
+    };
+    auto is_dork = [&](int i)   // Ornithopter of Paradise -- the rank function's own test (HinataFullOrderRank)
+    { const CardDefinition* d = def_of(i); return is_cast(i) && d != nullptr && d->tmpl == CardTemplate::ManaDork; };
+    // MTG_HINATA_GAMBLE_PAST_DORK: Gamble after the last find card OR Ornithopter that follows it; unchanged when
+    // none does. Irencrag and the payoffs rank after both, so Gamble still lands ahead of them.
+    auto gamble_past_dork = [&](std::vector<int> o)
+    {
+        int gpos = -1, last = -1;
+        for (int k = 0; k < n; ++k)
+        {
+            const int x = o[static_cast<std::size_t>(k)];
+            if (gpos < 0 && is_gamble(x)) { gpos = k; }
+            else if (gpos >= 0 && (is_find(x) || is_dork(x))) { last = k; }
+        }
+        if (gpos >= 0 && last >= 0)
+        {
+            const int g = o[static_cast<std::size_t>(gpos)];
+            o.erase(o.begin() + gpos);
+            o.insert(o.begin() + last, g);   // `last` shifted down by one: lands just after it
+        }
+        return o;
     };
     // Gamble after the last find card that follows it; unchanged when none does.
     auto gamble_late = [&](std::vector<int> o)
@@ -12727,9 +12825,13 @@ bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vecto
     };
     bool relevant = false;
     {
-        bool g = false, f = false, po = false, pr = false;
-        for (int i = 0; i < n; ++i) { g = g || is_gamble(i); f = f || is_find(i); po = po || is_ponder(i); pr = pr || is_preordain(i); }
-        relevant = (fan_g && g && f) || (fan_p && po && pr);
+        bool g = false, f = false, po = false, pr = false, dk = false;
+        for (int i = 0; i < n; ++i)
+        {
+            g = g || is_gamble(i); f = f || is_find(i); po = po || is_ponder(i); pr = pr || is_preordain(i);
+            dk = dk || is_dork(i);
+        }
+        relevant = (fan_g && g && f) || (fan_p && po && pr) || (fan_d && g && (f || dk));
     }
     if (!relevant) { return true; }   // nothing to search: keep the base plan un-searched
     std::vector<int> canon(static_cast<std::size_t>(n));
@@ -12741,6 +12843,11 @@ bool HinataProvider::CastOrderingCandidates(const GameState& s, const std::vecto
     if (fan_g) { cands.push_back(gamble_late(canon)); }
     if (fan_p) { cands.push_back(ponder_first(canon)); }
     if (fan_g && fan_p) { cands.push_back(gamble_late(ponder_first(canon))); }
+    if (fan_d)
+    {
+        cands.push_back(gamble_past_dork(canon));
+        if (fan_p) { cands.push_back(gamble_past_dork(ponder_first(canon))); }
+    }
     auto same_names = [&](const std::vector<int>& x, const std::vector<int>& y)
     {
         if (x.size() != y.size()) { return false; }
@@ -40553,6 +40660,68 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         return best;
     };
     const int m2_pot = project_m2(castable.size());
+    // MTG_SELESNYA_WAVE_THREE_TURNS (DEFAULT OFF -- a PROPOSED amendment to the USER's Wave rule, the USER
+    // decides). The USER's threshold is "8+ mana within 2 turns (X = 5)", read on the deterministic projection
+    // above, which deploys hand Elves on the FIRST turn only. The amendment also passes the Wave when that same
+    // projection, carried one turn further, reaches 8 on the THIRD turn: M3 = board lands + up to three kept land
+    // drops + the board dorks AND the best deployment of the hand Elves over the next two turns (turn 1 within
+    // M1, turn 2 within the M2 that turn-1 deployment makes), Priest / Archdruid re-counted over every new Elf.
+    // Same conservative readings as M1/M2 (no draws, Lodge's untap not counted, an Alchemist yields 1).
+    // Bounded exhaustive: each of the first kMaxDeploy hand Elves is deployed on turn 1, turn 2 or not at all
+    // (3^8 at most), computed only when a Wave in hand misses the two-turn bar.
+    //
+    // Root-caused on selesnya overnight s7007 gi 10 (seed 7017): the turn-2 cleanup holds Elvish Mystic x2,
+    // Priest of Titania, Wellwisher, Ageless Entity x2, Genesis Wave and Wirewood Lodge over a lone Selesnya
+    // Sanctuary. M2 = 6 (Priest + Mystic deployed), so the Wave is shed; the generic shed kept it and cast it
+    // on turn 5 (the third turn) for X = 9, winning that turn -- T6 without it, even at d8 b0. Here M3 = 8.
+    static const bool s_wave3_env = EnvOn("MTG_SELESNYA_WAVE_THREE_TURNS");   // DEFAULT OFF; =1 -> the amendment
+    const bool wave3 = heurarm::Flag(heurarm::SELESNYA_WAVE_THREE_TURNS, s_wave3_env);
+    int m3_memo = -1;
+    auto project_m3 = [&]() -> int
+    {
+        if (m3_memo >= 0) { return m3_memo; }
+        std::vector<int> pool(castable.begin(), castable.end());   // the USER's Elf order, castable first
+        pool.insert(pool.end(), uncastable.begin(), uncastable.end());
+        const int k_n = std::min(static_cast<int>(pool.size()), kMaxDeploy);
+        const int drops3 = std::min(3, keep_lands);
+        int total = 1;
+        for (int k = 0; k < k_n; ++k) { total *= 3; }
+        const CardDefinition* dep1[kMaxDeploy];
+        const CardDefinition* dep12[kMaxDeploy];
+        int slot[kMaxDeploy];
+        int best = 0;
+        for (int code = 0; code < total; ++code)
+        {
+            int c = code, cost1 = 0, cost2 = 0, n1 = 0, n12 = 0;
+            for (int k = 0; k < k_n; ++k) { slot[k] = c % 3; c /= 3; }
+            for (int k = 0; k < k_n; ++k)
+            {
+                if (slot[k] != 1) { continue; }
+                const CardDefinition* d = defs[at(pool[at(k)])];
+                cost1 += d->card.m_mana_cost.ManaValue();
+                dep1[n1++] = d;
+            }
+            if (cost1 > m1) { continue; }
+            int m2 = board_land_mana + drops2;
+            for (const CardDefinition* d : board_dorks) { m2 += dork_out(*d, dep1, n1); }
+            for (int k = 0; k < n1; ++k)                { m2 += dork_out(*dep1[k], dep1, n1); }
+            for (int k = 0; k < n1; ++k) { dep12[n12++] = dep1[k]; }
+            for (int k = 0; k < k_n; ++k)
+            {
+                if (slot[k] != 2) { continue; }
+                const CardDefinition* d = defs[at(pool[at(k)])];
+                cost2 += d->card.m_mana_cost.ManaValue();
+                dep12[n12++] = d;
+            }
+            if (cost2 > m2) { continue; }
+            int m3 = board_land_mana + drops3;
+            for (const CardDefinition* d : board_dorks) { m3 += dork_out(*d, dep12, n12); }
+            for (int k = 0; k < n12; ++k)               { m3 += dork_out(*dep12[k], dep12, n12); }
+            best = std::max(best, m3);
+        }
+        m3_memo = best;
+        return best;
+    };
 
     // ---- 5. PAYOFFS: castability x enablement, 2 + a soft 3rd FROM THE HAND --------------------------
     // `dist` / `gap` = the deterministic two-turn projection above (1 = off M1, 2 = off M2, 3 = out of
@@ -40615,7 +40784,8 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
         pi.dist = (pi.eff <= m1 && w1 >= wreq) ? 1 : (pi.eff <= m2_pot && w2 >= wreq) ? 2 : 3;
         pi.gap  = std::max(0, pi.eff - m2_pot) + std::max(0, wreq - w2);
         pi.enabled   = !gated(pi.kind) || lg_available;
-        pi.effective = pi.enabled && (pi.kind != P_WAVE || pi.dist <= 2);   // the Wave's own 8-mana rule
+        pi.effective = pi.enabled && (pi.kind != P_WAVE || pi.dist <= 2   // the Wave's own 8-mana rule
+                                      || (wave3 && pi.eff <= project_m3()));   // ...or on the 3rd turn (proposed)
         pi.stranded  = false;
         pi.ev        = 0.0;
         if (dist_model)
@@ -40632,8 +40802,14 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     std::vector<PayInfo> good, bad;
     if (!dist_model)
     {
-        // The previous distance logic, exactly: reachable within 2 turns and enabled, nearer first.
-        for (const PayInfo& pi : all_pay) { (pi.dist <= 2 && pi.enabled ? good : bad).push_back(pi); }
+        // The previous distance logic, exactly: reachable within 2 turns and enabled, nearer first. (A Wave
+        // the proposed third-turn bar passes counts as reachable; with that lever off, a Wave is effective
+        // only at dist <= 2, so this is the old split exactly.)
+        for (const PayInfo& pi : all_pay)
+        {
+            const bool reach = pi.dist <= 2 || (pi.kind == P_WAVE && pi.effective);
+            (reach && pi.enabled ? good : bad).push_back(pi);
+        }
         std::stable_sort(good.begin(), good.end(), [](const PayInfo& a, const PayInfo& b)
         {
             if (a.dist != b.dist) { return a.dist < b.dist; }
@@ -40670,6 +40846,23 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
             return a.idx < b.idx;
         });
     }
+    // MTG_SELESNYA_PAYOFF_DISTINCT (DEFAULT OFF -- a PROPOSED clause, the USER decides): a SECOND copy of an
+    // effective payoff ranks after every other effective payoff, so the 2 hard + soft 3rd slots take
+    // different payoffs before a duplicate (stable: each group keeps the ranking's order).
+    static const bool s_distinct_env = EnvOn("MTG_SELESNYA_PAYOFF_DISTINCT");   // DEFAULT OFF; =1 -> on
+    if (heurarm::Flag(heurarm::SELESNYA_PAYOFF_DISTINCT, s_distinct_env) && good.size() > 1)
+    {
+        std::vector<PayInfo> firsts, dups;
+        for (const PayInfo& pi : good)
+        {
+            bool seen = false;
+            for (const PayInfo& f : firsts)
+            { if (ap.hand[at(f.idx)].m_name == ap.hand[at(pi.idx)].m_name) { seen = true; break; } }
+            (seen ? dups : firsts).push_back(pi);
+        }
+        firsts.insert(firsts.end(), dups.begin(), dups.end());
+        good.swap(firsts);
+    }
     // 2 hard + a soft 3rd, filled from the hand: a payoff in play fills none (USER 2026-10-10).
     constexpr int keep_pay = 3;
     constexpr int hard_pay = 2;
@@ -40682,6 +40875,27 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
             if (good[p].kind != P_PARAGON || good[p].dist > 2) { continue; }
             if (static_cast<int>(p) > target)
             { std::rotate(good.begin() + target, good.begin() + static_cast<std::ptrdiff_t>(p), good.begin() + static_cast<std::ptrdiff_t>(p) + 1); }
+            break;
+        }
+    }
+    // MTG_SELESNYA_WAVE_HARD_SLOT (DEFAULT OFF -- a PROPOSED clause, the USER decides): an EFFECTIVE Genesis Wave
+    // (its mana rule holds) takes a HARD slot the way the Paragon does ("keep one Paragon when reachable soon and
+    // enabled"), instead of falling to the soft 3rd behind more castable payoffs -- the USER: "Genesis wave you
+    // want when you have a lot of mana or a great curve to get there soon". A Paragon the rule above placed in the
+    // 2nd hard slot keeps it; the Wave then takes the 1st.
+    static const bool s_wave_hard_env = EnvOn("MTG_SELESNYA_WAVE_HARD_SLOT");   // DEFAULT OFF; =1 -> on
+    if (heurarm::Flag(heurarm::SELESNYA_WAVE_HARD_SLOT, s_wave_hard_env))
+    {
+        for (std::size_t p = 0; p < good.size(); ++p)
+        {
+            if (good[p].kind != P_WAVE) { continue; }
+            if (p >= static_cast<std::size_t>(hard_pay))
+            {
+                const PayInfo& h = good[static_cast<std::size_t>(hard_pay - 1)];
+                const int target = (h.kind == P_PARAGON && h.dist <= 2) ? hard_pay - 2 : hard_pay - 1;
+                std::rotate(good.begin() + target, good.begin() + static_cast<std::ptrdiff_t>(p),
+                            good.begin() + static_cast<std::ptrdiff_t>(p) + 1);
+            }
             break;
         }
     }
@@ -40796,6 +41010,32 @@ std::vector<int> SelesnyaLifegainProvider::CleanupDiscardCandidates(
     for (std::size_t k = castable.size(); k > elf_keep; --k) { if (!kept[at(castable[k - 1])]) { put(castable[k - 1]); } }
     for (auto it = ladder.rbegin(); it != ladder.rend(); ++it) { put(*it); }
     for (int i = 0; i < n; ++i) { put(i); }   // defensive: every non-staged card has a class
+
+    // DIAGNOSTIC ONLY, never for play: MTG_DIAG_SELESNYA_SHED="<turn>:<card number>" sheds that card first at
+    // that turn's cleanup (if it is in hand), so a root-cause can play out every candidate discard through the
+    // real search. Executor and rollout both read this provider, so the forced shed stays lockstep. Unset = off.
+    {
+        static const std::pair<int, int> s_diag = []()
+        {
+            const char* e = std::getenv("MTG_DIAG_SELESNYA_SHED");   // value-carrying: raw getenv + parse
+            if (e == nullptr || *e == '\0') { return std::make_pair(-1, -1); }
+            char* rest = nullptr;
+            const long t = std::strtol(e, &rest, 10);
+            if (rest == nullptr || *rest != ':') { return std::make_pair(-1, -1); }
+            const long num = std::strtol(rest + 1, nullptr, 10);
+            return std::make_pair(static_cast<int>(t), static_cast<int>(num));
+        }();
+        if (s_diag.first >= 0 && s.turn_number == s_diag.first)
+        {
+            for (std::size_t k = 0; k < shed.size(); ++k)
+            {
+                if (ap.hand[at(shed[k])].m_number != s_diag.second) { continue; }
+                std::rotate(shed.begin(), shed.begin() + static_cast<std::ptrdiff_t>(k),
+                            shed.begin() + static_cast<std::ptrdiff_t>(k) + 1);
+                break;
+            }
+        }
+    }
 
     if (ShedStats::Enabled())
     {

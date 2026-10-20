@@ -181,3 +181,79 @@ restores the order as first built. Test S15.
   S3b, S8, S11 re-derived for (a) / (b); S11b keeps the gap-ordering check; M1 (payoffs in play, both
   arms), M2 (a Paragon in play), M3-M5 (the model: drawn land drops, CastFactor x value, stranded
   cheapest-first). S1, S3b, S8, S11, M1, M2, M3, M4, M5 fail on the pre-ruling code.
+
+#### PROPOSED amendment (2026-10-20, pending the USER): the Wave's third turn, and a kept Wave in a hard slot
+
+**Status: built behind default-OFF levers, measured, NOT adopted -- the USER decides.** Root-caused from the
+2026-10-19 overnight rebaseline: `selesnya_overnight_d3_s7007` / `_d5_s7007` gi 10 (seed 7017) went T5 -> T6 and
+stays T6 at `--depth 8 --budget-ms 0`; `MTG_SELESNYA_BUCKET_DISCARD=0` restores T5.
+
+**The discard.** Turn-2 cleanup (on the draw), board a lone Selesnya Sanctuary, hand Elvish Mystic x2, Priest of
+Titania, Wellwisher, Ageless Entity x2, Genesis Wave, Wirewood Lodge (the only land). The buckets shed the **Genesis
+Wave**; the old generic max-MV ranking shed an **Ageless Entity**, kept the Wave, and cast it on turn 5 for X = 9
+(37 damage that turn). Every candidate shed was played out through the real search
+(`MTG_DIAG_SELESNYA_SHED=2:<card>`, a diagnostic in the provider) at the case settings and at d8 b0:
+
+| shed at turn 2 | d3 b20 | d5 b40 | d8 b0 | the Wave |
+|---|---|---|---|---|
+| Ageless Entity (either copy) | T5 | T5 | T5 | cast T5, X = 9 |
+| Elvish Mystic (either copy) | T5 | T5 | T5 | cast T5, X = 7 |
+| Wellwisher | T5 | T5 | T5 | cast T5, X = 8 |
+| **Genesis Wave** (the rule) | T6 | T6 | T6 | -- |
+| Priest of Titania | T6 | T6 | T6 | not cast |
+| Wirewood Lodge | T6 | T6 | T6 | not cast |
+
+Every T5 line keeps the Wave (and Priest and the land) and casts it on turn 5. The right shed is the second Ageless.
+
+**The clauses.** Two act together:
+1. *"GENESIS WAVE kept only with 8+ mana within 2 turns (X = 5)"*, read on the deterministic two-turn projection:
+   M1 = 2 (Sanctuary) + 1 (Lodge) = 3, which deploys Priest + Mystic; M2 = 2 + 1 + Priest (2 Elves) + Mystic = 6 < 8,
+   so the Wave is "not effective" and sheds first ("payoffs not reachable / not enabled (Wave below 8 first)"). The
+   Wave was cast on the THIRD turn after this cleanup -- with Priest of Titania and three more Elves in hand, the
+   "great curve to get there soon" the USER described, which a window ending at turn 2 cannot see.
+2. *"PAYOFFS 2 + soft 3rd, ranked by castability"*: even with the Wave effective, the two Ageless Entity (5 mana,
+   castable a turn sooner) take both hard slots and the Wave is the soft 3rd -- the first card the keep ladder sheds
+   backwards. So clause 1 alone does not change this discard (measured: still the Wave).
+
+A discard is not searched (the provider's ranking is the decision at every budget), so no depth reaches it.
+
+**Proposed amendment, in the rule's own terms:**
+
+> *GENESIS WAVE kept with 8+ mana within 2 turns (X = 5) -- or on the third turn, counting the Elves in hand we can
+> deploy on the second (`MTG_SELESNYA_WAVE_THREE_TURNS`); and a Wave we keep takes a HARD payoff slot, as the Paragon
+> does (`MTG_SELESNYA_WAVE_HARD_SLOT`).*
+
+* `MTG_SELESNYA_WAVE_THREE_TURNS`: the same deterministic projection carried one turn further (M3 = board lands + up
+  to three kept land drops + board dorks + the best deployment of the hand Elves over the next two turns, Priest /
+  Archdruid re-counted; no draws, Lodge's untap not counted, as for M1 / M2). Here M3 = 2 + 1 + Priest (3) + 2 = 8.
+* `MTG_SELESNYA_PAYOFF_DISTINCT`: a second copy of an effective payoff ranks after every other effective payoff
+  (different payoffs fill the 2 hard + soft 3rd before a duplicate).
+* `MTG_SELESNYA_WAVE_HARD_SLOT`: an effective Wave takes a HARD slot, as "keep one Paragon when reachable soon and
+  enabled" does.
+
+**Target game** (seed 7017, gi 10; d3 b20 / d5 b40 / d8 b0): base T6 / T6 / T6; `_WAVE_THREE_TURNS` alone T6 / T6 /
+T6; `_PAYOFF_DISTINCT` alone and `_WAVE_HARD_SLOT` alone T6 / T6 / T6 (the Wave is still not effective);
+`_WAVE_THREE_TURNS` + `_PAYOFF_DISTINCT` T5 / T5 / T5; `_WAVE_THREE_TURNS` + `_WAVE_HARD_SLOT` T5 / T5 / T5 (both
+shed the second Ageless and play the same game). All levers =0 are byte-identical to HEAD (target digests, smoke and
+regression rows). Unit case: "Selesnya discard PROPOSED" in `test/unit/test_selesnyalifegain_discard.cpp`.
+
+**Held-out A/B** (2026-10-20; pooled `--batch`, arms as per-job heurarm flags, seeds paired `seed = BASE + gi`,
+`game_index = gi`, BASE 12200001 + 1000 x block, d0 cell +50000; loss = 9; ship = the deck's own play settings, d5
+b20):
+
+| arm | ship | d0 |
+|---|---|---|
+| `_WAVE_THREE_TURNS` alone | 0 (0 changed / 6,000) | 0 (1 changed / 6,000) |
+| `_PAYOFF_DISTINCT` alone | 0 (0 / 6,000) | 0 (3 / 6,000) |
+| `_WAVE_HARD_SLOT` alone | 0 (0 / 6,000) | 0 (1 / 6,000) |
+| `_WAVE_THREE_TURNS` + `_PAYOFF_DISTINCT` | 0 (10 changed / 18,000) | 0 (1 faster / 1 slower; 82 changed / 106,000) |
+| **`_WAVE_THREE_TURNS` + `_WAVE_HARD_SLOT`** | **0** (3 changed / 18,000) | **-2** (2 faster / 0 slower; 44 changed / 106,000) |
+
+Units 1.000 on every ship cell. A cleanup that holds a Wave the two-turn bar rejects is rare (under the recommended
+pair play changes in 3 of 18,000 ship games and 44 of 106,000 d0 games), and every changed ship game is an unwon game
+either way. Both d0 faster games under the
+recommended pair are the same mechanism: the base sheds the Wave, the amendment keeps it and casts it (s12324483 gi
+482 T7 -> T6, Wave X = 8; s12305885 gi 884 T8 -> T7, Wave X = 7). The recommended pair has NO slower game, so it
+meets the bar (net <= 0 on every cell; nothing to recover); `_PAYOFF_DISTINCT` is broader (it reorders every hand
+with a duplicate payoff) and has one d0 slower game. **Recommended (agent; the USER decides):
+`MTG_SELESNYA_WAVE_THREE_TURNS` + `MTG_SELESNYA_WAVE_HARD_SLOT`.**

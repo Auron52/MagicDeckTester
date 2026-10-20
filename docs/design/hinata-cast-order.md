@@ -339,6 +339,86 @@ A Preordain / Ponder fix that recovers BOTH gi 82 and gi 626 would have to reach
 continuations (the Soulfire-exile chain), not the plan's cast order -- the place this would be built if the USER
 wants the tie-break searched rather than ruled.
 
+### 0.7 PROPOSED amendment: Gamble can also go after Ornithopter (2026-10-20, pending the USER)
+
+**Status: built behind default-OFF levers, measured, NOT adopted -- the USER decides.** Root-caused from the
+2026-10-19 overnight rebaseline, where `hinata_overnight_d3_s6006` / `_d5_s6006` gi 256 (seed 6262) went T5 -> T6
+and stays T6 at `--depth 8 --budget-ms 0`; `MTG_HINATA_ORDER_FULL=0` restores T5.
+
+**The turn.** T3, hand Gamble, Hinata, Reality Spasm, Soulfire Eruption, Island x2, Ornithopter (just drawn); board
+Izzet Boilerworks. The old (generic-tier) line: Island, **Ornithopter, then Gamble** -> Crackle with Power; Gamble's
+random discard takes the dead Soulfire Eruption; T4 Island + Hinata; T5 Forbidden Orchard, Reality Spasm X=5,
+Crackle X=4 (20) + her attack = T5. The settled order realises the same set **Gamble first** (slot 4 before slot 8):
+with the Ornithopter still in hand the discard draws from six cards instead of five and takes the **Island** that
+T4's Hinata needs; whichever card Gamble fetches, T5 is out of reach (the search's T3 Gamble fetched Sol Ring).
+
+**The clause.** "Gamble (4) ... Ornithopter of Paradise (8)" -- the TOTAL order puts every Gamble ahead of every
+Ornithopter in a plan, and the Gamble fan (0.6) is written to stop short of it ("Gamble never moves past
+Ornithopter"). The 08-28 reasoning for Ornithopter's slot ("it only matters as a target for Soulfire and Crackle")
+misses its one other same-turn role: Gamble's "discard a card at random" is drawn from the hand AS IT STANDS when
+Gamble resolves (SpellEffects.cpp: the victim is mixed from the hand size and indexes the stored hand), so whether
+the Ornithopter is still in hand changes which card Gamble discards.
+
+**Why depth / budget cannot get it back.** (1) Inside main 1 the plan {Ornithopter, Gamble} has exactly one
+realisation, the order's, at every depth and budget; the cast-ordering fan offers no Ornithopter-first candidate.
+(2) The split route -- Ornithopter in main 1, Gamble in main 2 -- is a different game: the Ornithopter's {2} is
+paid from Boilerworks' {U}{R} bundle, so the {R} either pays the Ornithopter or floats and empties at the end of
+main 1. `MTG_M2T_TRACE=3` at d8 b0 shows every main 2 after {Island, Ornithopter} holding Gamble with one {U} (or
+nothing) and only the pass plan. `MTG_DISCARD_TRACE=1` confirms the search never resolved a T3 Gamble on a
+five-card hand, at the case settings or at d8 b0.
+
+**Proposed amendment, in the order's own terms** (`MTG_HINATA_GAMBLE_PAST_DORK`, default OFF):
+
+> *Gamble's slot is searched past Ornithopter too: a plan with Gamble and Ornithopter is also tried with Gamble
+> after the Ornithopter (and after the cantrips), still before Irencrag and the payoffs -- Gamble's random discard
+> comes out of what is still in hand, so casting Ornithopter first changes what it can hit.*
+
+`HinataProvider::CastOrderingCandidates` adds one candidate (Gamble moved to just after the last Ornithopter /
+cantrip / Expressive Iteration that follows it), deduplicated; nothing is pruned, so every candidate is findable at
+every budget. Measured beside it, two FIXED alternatives (default OFF):
+* `MTG_HINATA_DORK_BEFORE_GAMBLE` -- Ornithopter ranked between Reality Spasm and Gamble (still inside the USER's
+  08-28 "after Hinata, but before Soulfire Eruption"), so ahead of the cantrips too;
+* `MTG_HINATA_DORK_THEN_GAMBLE` -- the narrow one: in a plan holding Gamble, every Ornithopter after it moves to
+  immediately before it (`ArrangeCastOrder` step 3); an Ornithopter in a plan with no Gamble keeps its slot.
+
+**Target game** (seed 6262, gi 256; d3 b10 / d5 b20 / d8 b0): base T6 / T6 / T6; each of the three levers T5 / T5 /
+T5; `MTG_HINATA_ORDER_FULL=0` T5 / T5 / T5 -- every T5 arm plays the identical game (digest dc2b64c851fba30e). All
+levers =0 are byte-identical to HEAD (target digests; hinata / hinata2hg smoke and regression rows; 6,500 held-out
+games of the base arm re-run on the final binary, 0 changed).
+
+**Held-out A/B** (2026-10-20; one pooled `--batch` per binary, arms as per-job heurarm flags, seeds paired
+`seed = BASE + gi`, `game_index = gi`; hinata BASE 12100001 + 1000 x block, hinata2hg 12150001 + 1000 x block, d0
+cell +50000; loss = 9; ship = the profile's own play settings, d5 b30 value_play):
+
+| arm | hinata ship (12 x 500) | hinata2hg ship (6 x 250) | hinata d0 (12 x 500) | units (ship) |
+|---|---|---|---|---|
+| `_GAMBLE_PAST_DORK` (searched) | **+3** (2 faster / 5 slower; 46 changed) | **+3** (0 / 3) | 0 (inert: the fan is search-window only) | 1.003 / 1.002 |
+| `_DORK_THEN_GAMBLE` (narrow fixed) | +13 (5 / 16) | -1 (2 / 1) | +29 (21 / 30) | 1.002 / 0.998 |
+| `_DORK_BEFORE_GAMBLE` (fixed) | +84 (25 / 107) | +14 (5 / 17) | +62 (35 / 68) | 1.004 / 0.981 |
+
+Both fixed placements lose: on the average hand the order's Gamble-first IS right (an Ornithopter still in hand
+is a cheap buffer for the random discard -- the coordinator's "safest on the fullest hand"). Only the searched slot
+is close. Its two faster games are exactly this mechanism (s12109356 gi 355 T8 -> T7 and s12111048 gi 47 T7 -> T6:
+Ornithopter, then Gamble, whose discard takes a Soulfire Eruption instead of the Ornithopter / a needed card).
+
+**Recovery of the searched slot's 8 slower games** (the arm's own flags): stage 1 (depth max(5, old), b100) recovers
+6; stage 2 (d8 b0) recovers 7 (2HG gi 91 even goes T5 -> T4). **One does not recover: hinata ship s12111487 gi 486**
+(T5 -> T6, still T6 at d8 b0, where base is T5). Its T4 picks the Ornithopter -> Gamble -> Soulfire line, which the
+line search scores as a T5 kill (`MTG_FSW_TRACE` T4 d2 `tail=5`), and at T5 the line search again finds a kill on
+the REAL board (`T5 d1 p=land=Izzet Boilerworks ... tail=5`) -- but the executed T5 (Soulfire, Reality Spasm x2,
+Preordain, Ponder, Sol Ring, Ornithopter, Irencrag Feat, then Remand on its own Irencrag) ends with Crackle in hand.
+That is a search / execution divergence on the T5 board, downstream of the order: the amendment's T4 choice is the
+search's own best, and the line the search believes in is not the one TakeTurn realises. Not root-caused further
+(owed: a lockstep check of that T5 chain). Repro: `--seed 12111487 --game-index 486 --games 1`, hinata shipped
+profile, `MTG_HINATA_GAMBLE_PAST_DORK=1`, `--depth 8 --budget-ms 0`.
+
+**Verdict (agent; the USER decides).** No variant meets the bar (every cell net <= 0 AND every slower game recovers
+at d8 b0). The searched slot is the right SHAPE (nothing pruned; inert at d0; +0.2-0.3% work) and is the only one near
+neutral, but it is +3 / +3 on the two shipped cells and leaves gi 486. Recommended: **keep the settled order as is**
+and record s6006 gi 256 as a known loss of the Gamble-before-Ornithopter slot; if the USER wants the Ornithopter ->
+Gamble line findable regardless, `MTG_HINATA_GAMBLE_PAST_DORK` is the amendment to take (not either fixed placement),
+and gi 486's T5 divergence should be fixed first.
+
 ---
 
 # HISTORY -- the August order and its measurements (sections 1-8, kept as written)

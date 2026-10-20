@@ -542,3 +542,54 @@ TEST_CASE("Hinata PROPOSED MTG_HINATA_PP_SEARCHED: Ponder before Preordain offer
         CHECK(NamesHo(acts, out[3]) == std::vector<std::string>{ kPon, kPre, kGam, kCrk });
     }
 }
+
+// PROPOSED amendments (default OFF, the USER decides; docs/design/hinata-cast-order.md 0.7). Root case: hinata
+// overnight s6006 gi 256 (seed 6262) T3 -- Island, Ornithopter, Gamble -> Crackle discards a dead Soulfire and T5
+// is lethal; the settled order realises {Ornithopter, Gamble} Gamble-first, its random discard takes the Island,
+// T6 even at d8 b0. Gamble's discard is drawn from the hand AS IT STANDS at resolution, so whether the
+// Ornithopter is still in hand changes the victim.
+TEST_CASE("Hinata PROPOSED MTG_HINATA_GAMBLE_PAST_DORK / MTG_HINATA_DORK_BEFORE_GAMBLE: Ornithopter before Gamble")
+{
+    const GameState s = BoardHo(WithIsland(12), {}, 20, 16);
+    {
+        // As settled (+ the Gamble fan): Gamble first, and a set with no cantrip is not searched at all.
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_GAMBLE_SEARCHED, true);
+        CHECK(RealisedNamesHo(s, { kOrni, kGam }) == std::vector<std::string>{ kGam, kOrni });
+        std::vector<std::vector<int>> out;
+        CHECK(HoProv().CastOrderingCandidates(s, {}, CastsHo(s, { kOrni, kGam, kCrk }), out));
+        CHECK(out.empty());
+    }
+    {
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_GAMBLE_SEARCHED, true);
+        arms.Set(heurarm::HINATA_GAMBLE_PAST_DORK, true);
+        REQUIRE(HoProv().WantsCastOrderingSearch());
+        const std::vector<Action> a = CastsHo(s, { kCrk, kOrni, kGam });
+        std::vector<std::vector<int>> out;
+        REQUIRE(HoProv().CastOrderingCandidates(s, {}, a, out));
+        REQUIRE(out.size() == 2);
+        CHECK(NamesHo(a, out[0]) == std::vector<std::string>{ kGam, kOrni, kCrk });   // the order
+        CHECK(NamesHo(a, out[1]) == std::vector<std::string>{ kOrni, kGam, kCrk });   // past the Ornithopter
+        // With a cantrip: the cantrip fan's slot AND the slot past the Ornithopter, never past the payoff.
+        const std::vector<Action> b = CastsHo(s, { kCrk, kOrni, kPon, kGam });
+        REQUIRE(HoProv().CastOrderingCandidates(s, {}, b, out));
+        REQUIRE(out.size() == 3);
+        CHECK(NamesHo(b, out[0]) == std::vector<std::string>{ kGam, kPon, kOrni, kCrk });
+        CHECK(NamesHo(b, out[1]) == std::vector<std::string>{ kPon, kGam, kOrni, kCrk });
+        CHECK(NamesHo(b, out[2]) == std::vector<std::string>{ kPon, kOrni, kGam, kCrk });
+    }
+    {
+        // The fixed alternative: Ornithopter between Reality Spasm and Gamble, after Hinata.
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_DORK_BEFORE_GAMBLE, true);
+        CHECK(RealisedNamesHo(s, { kGam, kOrni, kHin, kSpasm }) == std::vector<std::string>{ kHin, kSpasm, kOrni, kGam });
+    }
+    {
+        // The NARROW fixed alternative: only the Gamble / Ornithopter relation moves.
+        HoArms arms(true);
+        arms.Set(heurarm::HINATA_DORK_THEN_GAMBLE, true);
+        CHECK(RealisedNamesHo(s, { kGam, kOrni, kPon, kCrk }) == std::vector<std::string>{ kOrni, kGam, kPon, kCrk });
+        CHECK(RealisedNamesHo(s, { kOrni, kPon, kCrk }) == std::vector<std::string>{ kPon, kOrni, kCrk });   // no Gamble
+    }
+}

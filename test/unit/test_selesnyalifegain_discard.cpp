@@ -558,3 +558,37 @@ TEST_CASE("Selesnya discard M5: stranded payoffs keep the quota cheapest first")
     CHECK(SelM(s) == std::vector<int>{ 3, 5, 0, 1, 4, 2, 7, 6 });
     CHECK(Gen(s).front() == 0);
 }
+
+// PROPOSED amendments (default OFF, the USER decides; docs/design/selesnyalifegain-discard-policy.md). The
+// selesnya overnight s7007 gi 10 (seed 7017) turn-2 cleanup: a lone Selesnya Sanctuary in play, Wirewood Lodge
+// the only land in hand. M1 = 2 + 1 = 3 (Priest + Mystic deploy); M2 = 2 + 1 + Priest(2) + Mystic = 6 < 8, so the
+// Wave is not effective and sheds first (the game is T6 even at d8 b0; keeping the Wave and shedding an Ageless,
+// a Mystic or the Wellwisher is T5 -- every such line casts the Wave on turn 5). The third turn, with the other
+// Mystic deployed on turn 2: M3 = 2 + 1 + Priest(3) + 2 Mystics = 8. Even then the Wave is the soft 3rd behind
+// the two (more castable) Ageless, so the third-turn bar ALONE still sheds it; with a duplicate giving way
+// (_PAYOFF_DISTINCT) or the Wave in a hard slot (_WAVE_HARD_SLOT) the second Ageless sheds instead.
+TEST_CASE("Selesnya discard PROPOSED: the Wave's third-turn bar + a distinct / hard payoff slot (gi 10's hand)")
+{
+    const GameState s = MakeSel(
+        { "Elvish Mystic", "Elvish Mystic", "Genesis Wave", "Priest of Titania", "Ageless Entity",
+          "Wellwisher", "Ageless Entity", "Wirewood Lodge" },
+        { "Selesnya Sanctuary" });
+    auto with = [&](std::initializer_list<int> slots)
+    {
+        for (int k : slots) { heurarm::t_arm[k] = 1; }
+        std::vector<int> v = SelArm(s, 1);
+        for (int k : slots) { heurarm::t_arm[k] = -1; }
+        return v;
+    };
+    CHECK(SelArm(s, 1).front() == 2);                                    // as settled: the Wave
+    CHECK(with({ heurarm::SELESNYA_WAVE_THREE_TURNS }).front() == 2);   // effective, but the soft 3rd
+    CHECK(with({ heurarm::SELESNYA_PAYOFF_DISTINCT }).front() == 2);    // still not effective
+    CHECK(with({ heurarm::SELESNYA_WAVE_HARD_SLOT }).front() == 2);     // still not effective
+    const std::vector<int> d = with({ heurarm::SELESNYA_WAVE_THREE_TURNS, heurarm::SELESNYA_PAYOFF_DISTINCT });
+    const std::vector<int> h = with({ heurarm::SELESNYA_WAVE_THREE_TURNS, heurarm::SELESNYA_WAVE_HARD_SLOT });
+    CHECK(d.front() == 6);   // the second Ageless Entity
+    CHECK(h.front() == 6);
+    CheckPermutation(s, d);
+    CheckPermutation(s, h);
+    CHECK(s.players[0].hand[static_cast<std::size_t>(Gen(s).front())].m_name.str() == "Ageless Entity");   // generic max-MV
+}
