@@ -61242,7 +61242,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // watcher on the battlefield or cast/put by the plan, and a plan in which a land CAN enter (a land
     // drop, or any cast -- a ramp spell puts one). Outer plans only (cont_axes_only): the policy is
     // installed for the whole turn, so a continuation inherits it. Human play picks on the board.
-    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_landfall)
+    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_landfall
+        && !ResolveProvider(state).LandfallCounterTargetIsPick(state))   // the provider's pick (Landfall, USER 2026-10-20)
     {
         const int me = state.active_player_index;
         auto targeted = [](const CardDefinition* d)
@@ -62667,7 +62668,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 //      resolution. The pin is read in combat only (CombatLandfallTargetScope), so on a state
                 //      already holding one (a breakpoint re-solve) the base inherits it and the front (an
                 //      explicit 0) is a variant (StatePinVariantRanks).
-                if (state.deck_has_landfall)
+                if (state.deck_has_landfall && !ResolveProvider(state).LandfallCounterTargetIsPick(state))   // the provider's pick
                 {
                     auto targeted = [](const CardDefinition* d)
                     {
