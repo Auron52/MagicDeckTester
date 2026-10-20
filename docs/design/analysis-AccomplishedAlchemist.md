@@ -21,7 +21,8 @@ branching folds (greedy untap count / target, greedy + searched Crab Umbra host)
 paired games, d5 b20 0.743x instructions / 0.897x core time -- still ~1.15x over the line. 2026-10-20: the USER's
 Living Wish bucket rule landed DEFAULT ON (branch `aa-wish`; -12% units on the held-out d5 cell, gi286 6,157 s
 -> 492 s); see "USER Living Wish buckets (2026-10-20)". The three optimization branches (mull, branch, wish) were
-combined onto `accomplished-alchemist` 2026-10-20; the combined measurement is in "Combined optimization (2026-10-20)".
+combined onto `accomplished-alchemist` 2026-10-20; the combined measurement is in "Combined optimization (2026-10-20)". 2026-10-20 (branch `aa-discard`): the USER's cleanup-discard
+bucket rule landed DEFAULT ON (held-out -0.015 d3 / -0.022 d5); see "USER discard buckets (2026-10-20)".
 Open USER items are
 listed under "Open questions surfaced to USER".
 
@@ -261,6 +262,91 @@ in 25 single-thread processes, `pstat/` instruction counts, `cost/` pooled A/Bs)
     the game's 495 k units, gi123 T1 455 k of 1.55 M, gi286 T6 226 k: each the deepest ID pass, admitted by
     the start gate and aborted at the 25x overrun guard, its work discarded (rescuable 0). That is the
     start-gate estimate on this deck (MTG_OVERRUN_MULT / the estimate) -- a budget question for the USER.
+## USER discard buckets (2026-10-20) -- landed DEFAULT ON (the USER's rule); one amendment PROPOSED, OFF
+
+Branch `aa-discard` (worktree `.claude/worktrees/aa-discard`, forked from `accomplished-alchemist` @ 0d16858b).
+Commits a6cf4f88 (the rule + 6 unit cases), 5f7e330f (the PROPOSED `MTG_AA_DISCARD_STAFF_FIRST`, + 1 case).
+Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-discard/` (`ab/` the pooled A/B, `x10/` the 10x reruns,
+`amend/` the amendment arm, `ev_off/` + the worktree's `logs/discard_analysis/` the evidence traces, `tr/` the
+single-game traces). **Supersedes the agent proposal** at `build/scratch/aa/discard_buckets_proposal.md`
+(2026-10-19; never implemented).
+
+**The rule, verbatim (USER 2026-10-20):** "the discard heuristic for this deck is simple. Buckets are the same as
+all of my other rules. You keep the best of each bucket and lands etc. for the rest. Living Wish can fill any gaps
+and Staff can fill both." Before it the deck shed by the INHERITED SelesnyaLifegain buckets, whose PAYOFFS bucket
+is empty for this list, so they shed Nourish / Feed the Clan as "lifegain with no payoff".
+
+**The implemented reading** (`AccomplishedAlchemistProvider::CleanupDiscardShedOrder`; roles keyed on params via
+the wish rule's shared `AaIs*` predicates):
+
+| step | reading |
+|---|---|
+| buckets | ALCHEMIST (Accomplished Alchemist); LIFEGAIN (Nourish, Feed the Clan, Weather the Storm, Trufflesnout, Brindle Boar); UNTAP (Crab Umbra, Staff of Domination, Galvanic Alchemist, Seedcradle Witch); WINCON/DRAW (Stroke of Genius, Staff of Domination, Scholar of Athreos, Ezuri). MANA = lands, Arbor Elf, Utopia Sprawl, Wild Growth, Elvish Harbinger (a dork) |
+| net of board | a bucket filled on OUR battlefield owes nothing: Alchemist -> ALCHEMIST; any untapper incl. the Witch -> UNTAP; Staff -> UNTAP + WINCON; Scholar / Ezuri -> WINCON; Brindle Boar -> LIFEGAIN (its sacrifice is a gain still to come; the wish rule's reading). Spells are consumed, so nothing else fills LIFEGAIN |
+| keep | the best HAND card of each owed bucket. Agent default orders (the USER's to correct): LIFEGAIN Nourish > Feed the Clan > Weather the Storm > Trufflesnout > Brindle Boar; UNTAP Crab Umbra > Staff > Galvanic > Seedcradle Witch; WINCON Stroke > Staff > Scholar > Ezuri. Copies tie -> the earlier hand card |
+| Staff | a member of BOTH UNTAP and WINCON; kept as either bucket's best it fills both. With a Crab Umbra AND a Stroke in hand it is the best of neither, so it is a spare (agent reading of "Staff can fill both") |
+| Living Wish | one Wish per bucket still empty after the dedicated cards (hand order); a Wish past the gaps is a spare. Wishes fill only the four non-mana buckets |
+| the rest | MANA: lands first (an Island moves to the front while no blue source is on our battlefield and a KEPT card needs {U}), then Utopia Sprawl > Arbor Elf > Wild Growth > Elvish Harbinger |
+| shed order | unclassified (Eternal Witness) -> spare bucket cards, worst within-bucket rank first (equal ranks: WINCON, UNTAP, LIFEGAIN, ALCHEMIST) -> spare Wishes -> MANA worst first -> the kept bucket cards |
+
+ONE index through `CleanupDiscardRankingWithOrder` (staged / required-piece protections engine-enforced);
+prefix-stable (no verdict reads a card that sheds before it). `MTG_AA_BUCKET_DISCARD` (heurarm
+`AA_BUCKET_DISCARD`), default ON; =0 is the inherited Selesnya policy exactly (unit-checked).
+`MTG_AA_DISCARD_FAN=1` (testing only) returns the whole order for the evidence run.
+
+**Evidence (the labels; 400 games d3 b10, seed 930000, `MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`, both arms
+fanned):** inherited Selesnya 18 decisions, 100% optimal, regret 0; the USER's rule 22 decisions, 90.9% optimal,
+mean regret 0.091 (2 rule-worse). Rate ~0.05 sheds/game, so the label stakes are ~0.005 turns/game.
+* seed 930213 T1 (hand 8: Alchemist, Forest x3, Arbor Elf, Feed the Clan, Crab Umbra, Nourish): the rule sheds
+  the spare lifegain (Feed); the labels want a mana card (Forest / Arbor Elf -> 6) -- and score shedding the ONLY
+  untapper (Crab Umbra) just as well (6), while either lifegain spell costs a turn. Rule-structural (one LIFEGAIN
+  keep) and, given the Umbra label, read as **clairvoyance**, not a visible-info miss. Surfaced to the USER.
+* seed 930224 T4 (hand 9): the rule sheds a spare Staff (7); identical Crab Umbra copies label 7 and 6 -- **churn**.
+The analyzer's own stage-3 A/B (`MTG_DISCARD_ORDER`) is structurally inert for this provider (the lever is read
+only when the provider names no order), so it was stopped after the evidence stage; the labels above are its
+trace, scored with its own `_LabelStats`.
+
+**A/B (one pooled batch, heurarm arms, 3,200 games; unwon = 9; cost in contention-free work units -- the box was
+shared with two sibling agents, so wall ms is not comparable):**
+
+| cell | inherited | USER rule | delta | faster / slower | units mean | units p90 |
+|---|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.6950 | 5.7150 | +0.020 | 2 / 5 | 149.7k -> 151.4k | 444k -> 443k |
+| s70001 d5 b20 (200) | 5.6300 | 5.6400 | +0.010 | 4 / 6 | 271.7k -> 280.0k | 798k -> 925k |
+| s90001 d3 b10 (600 held-out) | 5.6883 | 5.6733 | **-0.015** | 24 / 16 | 132.8k -> 135.5k | 350k -> 347k |
+| s90001 d5 b20 (600 held-out) | 5.6167 | 5.5950 | **-0.022** | 26 / 15 | 243.6k -> 247.4k | 693k -> 710k |
+
+Pooled per depth (800 games): d3 -0.006, d5 -0.014. The inherited arm reproduces the wish branch's held-out cells
+(5.6883 / 5.6167). Cost +1-3% units mean.
+
+**Slower games at 10x budget (both arms):** 42 slower; **35 recover**, **7 persist** = five games (s70001 g6 d3,
+g158 d3+d5, g188 d5; s90001 g146 d3, g558 d3+d5). First divergences (single-game logs, `tr/`):
+* g188: the rule's own T1 real shed -- Staff (spare: Umbra + Stroke in hand) where the inherited arm's searched
+  pass kept the Staff and shed the Umbra; no blue source held.
+* g558: T4 cast Crab Umbra (rule) vs Staff of Domination (inherited); g6: T2 Elvish Harbinger vs Staff; g158: T2
+  Harbinger's tutor-to-top takes a second Harbinger instead of the Alchemist; g146: T1 Utopia Sprawl held. No real
+  shed precedes these: the rule reaches them only through the ROLLOUT's cleanup (search allocation), not a
+  visible-info miss at a real cleanup. g158 is the case the sibling Harbinger-tutor rule addresses.
+
+**Amendment, built and measured, PROPOSED, default OFF:** `MTG_AA_DISCARD_STAFF_FIRST` -- UNTAP becomes Staff >
+Crab Umbra (the Staff is colourless and fills Wincon/Draw too). Same seeds, pooled (on-arm identity re-checked:
+digest 6d12938b54ca185a both runs):
+
+| cell | inherited | USER rule | + STAFF_FIRST | vs rule f / s |
+|---|---|---|---|---|
+| s70001 d3 b10 | 5.6950 | 5.7150 | 5.6950 | 3 / 0 |
+| s70001 d5 b20 | 5.6300 | 5.6400 | 5.6200 | 3 / 0 |
+| s90001 d3 b10 | 5.6883 | 5.6733 | 5.6750 | 9 / 10 |
+| s90001 d5 b20 | 5.6167 | 5.5950 | 5.6100 | 4 / 13 |
+
+It repairs the regression-seed cells (and is <= the inherited policy on all four), but gives back +0.002 / +0.015
+on the 1,200 held-out games; units 149.3k / 275.8k / 135.2k / 244.0k. Not recommended over the rule's order; a
+blue-conditional version (Staff first only while no blue source is held) is the untested next candidate.
+
+**Smoke:** 124 / 128 -- only the four known pre-existing moves at their known digests (selesnya d3
+a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11); the deck is not
+in the suite. Not accepted. Unit: mtg-test 1524 / 1524; scenarios 228 / 228.
+
 ## USER Living Wish buckets (2026-10-20) -- landed DEFAULT ON (the USER's rule); two amendments PROPOSED, OFF
 
 Branch `aa-wish` (worktree `.claude/worktrees/aa-wish`, forked from 39848afe). Commits e474b968 (the rule +
