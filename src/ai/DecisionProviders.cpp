@@ -43994,32 +43994,49 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
             for (int mask = 0; mask < (1 << nl); ++mask)
             {
                 ManaCost lc;
-                int gain = 0, ncast = 0;
+                int ncast = 0;
                 for (int k = 0; k < nl; ++k) { if (mask & (1 << k)) { SumManaCostInto(lc, life[k].cost); ++ncast; } }
-                // Storm copies: the storm spell cast LAST, after the subset's other casts AND the deploy's
-                // (sweep: Crab Umbra then Weather the Storm is 3 x 2 = 6 life, X >= 4 -- the first table
-                // counted 3 and missed it). The generic cast order may differ; the trial is the arbiter.
-                for (int k = 0; k < nl; ++k)
+                // Storm copies: the storm spell cast LAST, after the subset's other casts -- and after the
+                // deploy's too when the deploy is paid FIRST, out of the other mana (sweep: Crab Umbra then
+                // Weather the Storm is 3 x 2 = 6 life, X >= 4). A deploy paid out of the Alchemist's own tap
+                // comes AFTER the gain, so it adds nothing to the count (sweep: the first cut credited it either
+                // way and offered 39 boards nothing could win). The trial is the arbiter of the real order.
+                auto gain_with = [&](int deploy_before) -> int
                 {
-                    if (!(mask & (1 << k))) { continue; }
-                    gain += life[k].storm ? life[k].gain * (s.spells_cast_this_turn + ncast + L.deploy_casts)
-                                          : life[k].gain;
-                }
+                    int g = 0;
+                    for (int k = 0; k < nl; ++k)
+                    {
+                        if (!(mask & (1 << k))) { continue; }
+                        g += life[k].storm ? life[k].gain * (s.spells_cast_this_turn + ncast + deploy_before)
+                                           : life[k].gain;
+                    }
+                    return g;
+                };
                 if (mask != 0 && !P0.CanPay(lc)) { continue; }
-                const int X  = std::max(1, x0 + gain);
+                const int Xa = std::max(1, x0 + gain_with(L.deploy_casts));   // deploy paid first (order a)
+                const int Xb = std::max(1, x0 + gain_with(0));                // deploy after the gain (order b)
                 const int P1 = static_cast<int>(P0.Total()) - lc.ManaValue();
                 if (P1 < 0) { continue; }
                 // Deploy order (a): from the other mana; (b): out of the Alchemist's own first tap.
                 // `other` = what of P is NOT the Alchemist's own one-colour tap (the Witch's first untap needs it).
-                struct Start { int P; bool aT; int other; };
+                // `other` counts only the units that can pay the Witch's SECOND colour ({G} or {W}): what the
+                // board's other sources make in green / white / any colour, less the green / white the LIFE casts
+                // need, less the generic they need beyond the off-colour units (sweep S-8db9fd4830: Forest,
+                // Forest, Forest, Island -- Nourish and the Witch took the Forests and the Island cannot pay
+                // {G} or {W}; the first table counted the Island). Exact for this deck's mana (lands, dorks,
+                // land Auras); read only by the Witch rows.
+                const int gw0     = P0.green + P0.white + P0.wild;
+                const int off_gw  = static_cast<int>(P0.Total()) - gw0;
+                const int gw_life = lc.green + lc.white + std::max(0, lc.generic - off_gw);
+                struct Start { int P; bool aT; int other; int X; };
                 std::vector<Start> starts;
                 const int dmv = L.deploy.ManaValue();
-                if (dmv == 0) { starts.push_back(Start{ P1, A.tapped, P1 }); }
+                if (dmv == 0) { starts.push_back(Start{ P1, A.tapped, gw0 - gw_life, Xb }); }
                 else
                 {
                     ManaCost both = lc; SumManaCostInto(both, L.deploy);
-                    if (P0.CanPay(both)) { starts.push_back(Start{ P1 - dmv, A.tapped, P1 - dmv }); }
-                    if (!A.tapped && L.deploy_one_colour && P1 + X >= dmv) { starts.push_back(Start{ P1 + X - dmv, true, P1 }); }
+                    if (P0.CanPay(both)) { starts.push_back(Start{ P1 - dmv, A.tapped, gw0 - gw_life - dmv, Xa }); }
+                    if (!A.tapped && L.deploy_one_colour && P1 + Xb >= dmv) { starts.push_back(Start{ P1 + Xb - dmv, true, gw0 - gw_life, Xb }); }
                 }
                 bool can_gain = false; int gain_cost = 0, gain_untap = 0; bool sT = false;
                 if (L.staff)
@@ -44053,6 +44070,7 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
                     // Sweep state S-72a9e4edf6 (two Forests, both spent on Nourish, Witch cast off the
                     // Alchemist's white): offered, and nothing on the board can pay the {G}.
                     if (L.shape == kUntapPumpTarget && st.other < 1) { continue; }
+                    const int X = st.X;
                     const int op = UntapLoopBootOp(st.P, X, sT, st.aT, L.staff, L.c_untap,
                                                    L.staff ? L.self_untap : gain_untap, can_gain, gain_cost);
                     if (op < 0) { continue; }
@@ -44285,6 +44303,51 @@ inline bool Moved(const GameState& a, const GameState& b, int me)
         || OpponentHasLost(b);
 }
 
+// The walk's CHILD identity: the board up to relabelling identical permanents -- (name, tapped, host name,
+// sickness, pairing, locked colour) as a multiset, the hand by name, the float, life gained, the storm count,
+// both libraries' sizes and life totals. Two plans that pay with different-but-identical Forests reach the
+// same board for every purpose the go-off has, and the walk's width is for DISTINCT boards (sweep
+// S-66bb8dfbbb: seven payment variants of "Crab Umbra, Nourish" took the whole width). Only ever a PRUNE of
+// the walk's own breadth -- a merge it gets wrong costs a missed route, never a wrong one (the apply replays
+// the proven plans and verifies).
+inline std::uint64_t ChildKey(const GameState& s, int me)
+{
+    std::vector<std::uint64_t> perms;
+    std::unordered_map<int, std::uint64_t> name_of;
+    for (const Permanent& p : s.battlefield) { name_of[p.card.m_number] = std::hash<std::string>{}(p.card.m_name.str()); }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        std::uint64_t v = name_of[p.card.m_number];
+        comboroute::Mix(v, (p.tapped ? 1u : 0u) | (p.entered_this_turn ? 2u : 0u) | (p.paired_with != 0 ? 4u : 0u));
+        comboroute::Mix(v, static_cast<std::uint64_t>(p.chosen_color + 2));
+        if (p.aura_attached_to != 0)
+        {
+            const auto it = name_of.find(p.aura_attached_to);
+            comboroute::Mix(v, it != name_of.end() ? it->second : 77ULL);
+        }
+        perms.push_back(v);
+    }
+    std::sort(perms.begin(), perms.end());
+    std::vector<std::uint64_t> hand;
+    for (const Card& c : s.players[me].hand) { hand.push_back(std::hash<std::string>{}(c.m_name.str())); }
+    std::sort(hand.begin(), hand.end());
+    std::uint64_t h = 0xC0FFEEULL;
+    for (std::uint64_t v : perms) { comboroute::Mix(h, v); }
+    comboroute::Mix(h, 0x5EC7ULL);
+    for (std::uint64_t v : hand) { comboroute::Mix(h, v); }
+    const ManaPool& f = s.floating_mana;
+    comboroute::Mix(h, static_cast<std::uint64_t>(f.white + 64 * f.blue + 4096 * f.black));
+    comboroute::Mix(h, static_cast<std::uint64_t>(f.red + 64 * f.green + 4096 * f.colorless + 262144 * f.wild));
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[me].life_gained_this_turn) + 1);
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.spells_cast_this_turn) + 3);
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[me].library.size()) + 5);
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[1 - me].library.size()) + 7);
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life + 1000));
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[me].lands_played_this_turn) + 9);
+    return h;
+}
+
 static int Dfs(GameState& s, int me, int links_left, Walk& w)
 {
     if (OpponentHasLost(s)) { return 1; }
@@ -44363,7 +44426,26 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
              < std::tie(y.finisher, y.no_untapper, y.neg_life, y.size, y.idx);
     };
     std::stable_sort(loops.begin(), loops.end(), by_rank);
-    std::stable_sort(setups.begin(), setups.end(), by_setup);
+    // TWO SETUP ORDERS, INTERLEAVED: untapper-first (Weather the Storm's storm count wants the deploy cast
+    // before it) and life-first (a {U} untapper paid off the Alchemist's own tap needs the life gained
+    // BEFORE that tap: "Nourish, then tap for six blue, then Crab Umbra" -- sweep S-66bb8dfbbb, which the
+    // untapper-first order alone lost). Each order's best not yet taken, alternately.
+    {
+        std::vector<Ranked> a1 = setups, a2 = setups, merged;
+        std::stable_sort(a1.begin(), a1.end(), by_setup);
+        std::stable_sort(a2.begin(), a2.end(), by_rank);
+        std::vector<char> taken(plans.size(), 0);
+        std::size_t i1 = 0, i2 = 0;
+        while (merged.size() < setups.size())
+        {
+            while (i1 < a1.size() && taken[static_cast<std::size_t>(a1[i1].idx)]) { ++i1; }
+            if (i1 < a1.size()) { taken[static_cast<std::size_t>(a1[i1].idx)] = 1; merged.push_back(a1[i1]); }
+            while (i2 < a2.size() && taken[static_cast<std::size_t>(a2[i2].idx)]) { ++i2; }
+            if (i2 < a2.size()) { taken[static_cast<std::size_t>(a2[i2].idx)] = 1; merged.push_back(a2[i2]); }
+            if (i1 >= a1.size() && i2 >= a2.size()) { break; }
+        }
+        setups.swap(merged);
+    }
     // LOOPS FIRST, THEN SETUPS -- not "setups only when no loop plan exists": a board with a weak loop on it
     // (Weather the Storm + the Staff's bootstrap, X = 3) still needs the setup link that makes the strong one
     // (cast Crab Umbra first, so Weather's storm count is 2: X = 6). Engine frame X-36693ec269.
@@ -44407,7 +44489,7 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
                              child.players[me].life_gained_this_turn, ComputeUntapLoopNeed(child, me).payoff);
             }
             if (!Moved(s, child, me)) { continue; }
-            const std::uint64_t ck = TurnSolver::MidTurnStateKeyOf(child);
+            const std::uint64_t ck = ChildKey(child, me);
             if (std::find(seen_children.begin(), seen_children.end(), ck) != seen_children.end()) { continue; }
             seen_children.push_back(ck);
             ++tried;

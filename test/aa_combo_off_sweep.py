@@ -213,7 +213,7 @@ def probe_win(fix, budget_ms=100):
                 if act.get("type") == "CAST_SPELL" and nm == "Stroke of Genius" and any(
                         (x or {}).get("who") == "opponent" for x in act.get("targets") or []):
                     kind = "combo"
-                if act.get("type") == "ABILITY" and "Scholar" in nm:
+                if act.get("type") == "ABILITY" and ("Scholar" in nm or nm == "Combo Off"):
                     kind = "combo"
     except Exception:
         kind = None
