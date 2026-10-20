@@ -7,6 +7,8 @@
 #include "../core/DamageEvents.h"   // dmgev::t_pay_hold (MTG_FB_HOLD_BANKED)
 #include "EngineFlags.h"
 #include "ManaPayment.h"           // AvailableManaPool
+#include <atomic>
+#include <cstdio>
 #include <limits>
 
 // LOWER BOUND on the combat damage `p` would deal if it attacked right now, mirroring the base_pw
@@ -400,19 +402,86 @@ static bool FbNextTurnLethal(GameState& probe, std::vector<int>& idx, FbPayer pa
     return FbProbeCombat(probe, idx, payer, /*hold=*/false);
 }
 
+// ---- MTG_FB_HOLD_STATS (see Combat.h) -----------------------------------------------------------------
+namespace fbholdstats
+{
+static std::atomic<unsigned long long> g_n[kCount];
+bool On() { static const bool v = EnvOn("MTG_FB_HOLD_STATS"); return v; }
+void Bump(Slot s) { if (On()) { g_n[s].fetch_add(1, std::memory_order_relaxed); } }
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[fb-hold-stats] fan lists=%llu variants=%llu | flip pin unread=%llu read=%llu"
+                             " (no-bank %llu, lethal %llu, dominated %llu, FLIPPED %llu) | unpinned contested=%llu"
+                             " | frontier variants folded=%llu scored=%llu\n",
+                     g_n[kFanLists].load(), g_n[kFanVariants].load(), g_n[kPinUnread].load(),
+                     g_n[kPinRead].load(), g_n[kPinNoBank].load(), g_n[kPinLethal].load(),
+                     g_n[kPinDominated].load(), g_n[kPinFlipped].load(), g_n[kBaseContested].load(),
+                     g_n[kVariantFolded].load(), g_n[kVariantScored].load());
+    }
+};
+static Dumper g_dumper;
+}   // namespace fbholdstats
+
+// MTG_FB_HOLD_FLIP_DOMINANCE (see EngineFlags.h): can the searched other side of a CONTESTED hold be
+// strictly better than the verdict's? With no post-combat main this turn the bank cannot be spent after
+// combat, and the full pump is not lethal, so NEITHER side wins this turn: the earliest either can win is
+// next turn. When either world is projected lethal next turn (FbNextTurnLethal: the depletion sweep, the
+// storage +1, the untap, the clairvoyant draw and its land drop, the same attackers with the full pump --
+// a line the next turn really offers, against a passive opponent), that world wins next turn, the other
+// can at best tie it, and ties go to the base plan -- so the flip is dominated and the pin reads as the
+// verdict (its variant folds after combat). A restricted or full second main (Angels' Giada, Jorn,
+// Omnitool, a main-2 deck) could spend the held bank this turn, so there the flip is always searched.
+static bool FbFlipDominatedByNextTurn(const GameState& state, GameState& spend_after, std::vector<int>& sidx,
+                                      const std::vector<int>& atk_idx, FbPayer payer, bool* spend_lethal_out)
+{
+    const bool spend_lethal = FbNextTurnLethal(spend_after, sidx, payer);
+    if (spend_lethal_out) { *spend_lethal_out = spend_lethal; }
+    if (spend_lethal) { return true; }
+    GameState hold = state;
+    std::vector<int> hidx = atk_idx;
+    FbProbeCombat(hold, hidx, payer, /*hold=*/true);
+    return FbNextTurnLethal(hold, hidx, payer);
+}
+
 bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer, int pin)
 {
     if (payer == nullptr || atk_idx.empty() || !FbHoldBankedOn()) { return false; }
-    if (FbBankedSourceMask(state) == 0) { return false; }
+    const bool flip_req = (pin == 1 && FbHoldSearchedOn());
+    if (flip_req) { fbholdstats::Bump(fbholdstats::kPinRead); }
+    if (FbBankedSourceMask(state) == 0) { if (flip_req) { fbholdstats::Bump(fbholdstats::kPinNoBank); } return false; }
     // Lethal with EVERYTHING? The full pump on a copy, the caller's own payer (no hold is live yet),
     // then the shared damage resolution. Speculative: no play-viewer events from the probe.
     TapSpeculationScope _spec;
     GameState spend = state;
     std::vector<int> sidx = atk_idx;
-    if (FbProbeCombat(spend, sidx, payer, /*hold=*/false)) { return false; }
+    if (FbProbeCombat(spend, sidx, payer, /*hold=*/false))
+    { if (flip_req) { fbholdstats::Bump(fbholdstats::kPinLethal); } return false; }
+    if (!flip_req) { fbholdstats::Bump(fbholdstats::kBaseContested); }
     // CONTESTED from here: a banked source is up and the full pump does not end the game, so holding the
     // bank and spending it are both real lines. The verdict below is the ORDER (the heuristic's side);
     // MTG_FB_HOLD_SEARCHED lets the searched pin take the other side.
+    if (flip_req && FbHoldFlipDominanceOn() && !state.uses_second_main && !state.deck_has_attack_untap
+        && !state.deck_has_attack_dig_hand && !ResolveProvider(state).RestrictedSecondMainLive(state))
+    {
+        // The flip pin on a contested hold: read as the verdict when the flip cannot be strictly better
+        // (FbFlipDominatedByNextTurn). The two projections it runs are the verdict's own, so the verdict
+        // is computed from them below -- byte-identical to the unpinned verdict.
+        bool spend_lethal = false;
+        GameState spend_after = spend;
+        std::vector<int> sidx2 = sidx;
+        if (FbFlipDominatedByNextTurn(state, spend_after, sidx2, atk_idx, payer, &spend_lethal))
+        {
+            fbholdstats::Bump(fbholdstats::kPinDominated);
+            if (!FbHoldBankedNextTurnOn() || !spend_lethal) { return true; }
+            GameState hold = state;
+            std::vector<int> hidx = atk_idx;
+            FbProbeCombat(hold, hidx, payer, /*hold=*/true);
+            return FbNextTurnLethal(hold, hidx, payer);
+        }
+    }
     const auto verdict = [&]() -> bool
     {
         if (!FbHoldBankedNextTurnOn()) { return true; }
@@ -427,7 +496,8 @@ bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_
         return FbNextTurnLethal(hold, hidx, payer);
     };
     const bool v = verdict();
-    return (pin == 1 && FbHoldSearchedOn()) ? !v : v;
+    if (flip_req) { fbholdstats::Bump(fbholdstats::kPinFlipped); }
+    return flip_req ? !v : v;
 }
 
 FbBankedHoldScope::FbBankedHoldScope(bool on) : prev(t_fb_hold_banked) { t_fb_hold_banked = on; }

@@ -77,6 +77,17 @@ std::uint64_t FbBankedSourceMask(const GameState& state);
 bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer,
                             int pin = -1);
 
+// MTG_FB_HOLD_STATS=1 (diagnostic, print-only, default off): where the searched banked hold's variants go.
+// Slots: the axis fan (lists, variants), the pump sites' reads of a flip pin (unread: no attacker / no pump
+// source; read: by outcome), and the unpinned contested combats for scale. Printed once at exit.
+namespace fbholdstats
+{
+enum Slot { kFanLists, kFanVariants, kPinUnread, kPinRead, kPinNoBank, kPinLethal, kPinDominated, kPinFlipped,
+            kBaseContested, kVariantFolded, kVariantScored, kCount };
+bool On();
+void Bump(Slot s);
+}
+
 // The hold is published per thread for the duration of one pump (both sites) ...
 struct FbBankedHoldScope
 {

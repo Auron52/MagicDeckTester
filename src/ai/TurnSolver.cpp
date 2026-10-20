@@ -51399,6 +51399,9 @@ static void SimulateCombat(GameState& state)
     // post-combat state equal to the unpinned plan's (MTG_COMBAT_PIN_FOLD then folds the variant).
     const int fb_hold_pin = state.scripted_fb_hold;
     state.scripted_fb_hold = -1;
+    if (fb_hold_pin == 1 && fbholdstats::On()
+        && (atk_idx.empty() || !ControlsFirebreathingSource(state, active)))
+    { fbholdstats::Bump(fbholdstats::kPinUnread); }
     if (!atk_idx.empty() && ControlsFirebreathingSource(state, active))
     {
         // Provider-owned count (FirebreatheActivations), the SAME hook the executor reads, so the
@@ -62781,50 +62784,122 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     if (!cont_axes_only && !HumanPlayActive() && is_pre_combat && FbHoldSearchedOn() && FbHoldBankedOn()
         && FbBankedSourceMask(state) != 0)
     {
+        // ...and a PUMP THAT CAN REACH AN ATTACKER this turn, without which the bank pays for nothing. A
+        // firebreathing creature (Scourge {R}, Resplendent Angel) pumps only ITSELF, so it counts only if it
+        // can attack: untapped and able now, or a haste source reachable. A team pump (Lathliss {1}{R}: the
+        // Dragons; a Beachhead) pumps the others, so it counts beside any attacker. An attacker is an untapped
+        // creature of ours that can attack now, or a way to one: a haste source on the battlefield or in hand
+        // (the Raubahn axis's list), a hasty creature in hand, or a hand card that puts / reveals creatures
+        // this turn (Dragonstorm, Apex of Power: either can land Karrthus or Kolaghan). Anything else is not a
+        // contested hold, and its variants only spent the budget (a Lathliss in hand on a creature-less T1, a
+        // summoning-sick Scourge beside an attacking Utvara: dragonstorm held-out d3 s9200001 / 2HG s910000).
         const int me = state.active_player_index;
         const Player& fbp = state.players[static_cast<std::size_t>(me)];
-        bool pump_live = ControlsFirebreathingSource(state, me);
+        auto gives_haste = [](const CardDefinition* d)
+        {
+            return d != nullptr
+                && (d->params.grants_haste || d->params.equip_grants_haste || d->params.grants_temp_haste
+                    || d->params.haste_on_flying_enter || d->params.sac_outlet_grants_haste
+                    || d->params.team_pump_grants_haste);
+        };
+        bool haste_reach = false, attacker_now = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (gives_haste(d)) { haste_reach = true; }
+            if (!p.tapped && p.card.IsCreature() && CanAttackFull(p, state.battlefield, me)) { attacker_now = true; }
+        }
+        // PER PLAN (MTG_FB_HOLD_PLAN_REACH, default ON): what the state can reach is not what THIS plan
+        // reaches. A Dragonstorm or an Apex in hand makes "a Kolaghan could arrive" true of every list, but
+        // only a plan that CASTS it can bring an attacker or a pump into this combat; on the held-out
+        // dragonstorm / 2HG run 3.9M of 6.0M variants reached a combat with no attacker or no pump at all
+        // (MTG_FB_HOLD_STATS "unread"), each paying an apply and a combat to fold. So the state facts split
+        // into what is ON THE BATTLEFIELD (it is there whatever the plan casts) and what a plan must cast:
+        //   attacker  = an untapped creature able to attack now, or the plan casts a haste source / a hasty
+        //               creature / a card that puts or reveals creatures (tutor_to_battlefield, impulse_exile);
+        //   pump      = a team pump on the battlefield or cast; a self-pump creature that attacks (able now,
+        //               or haste from the battlefield or the plan's casts); or a put / reveal cast (it can
+        //               land Lathliss or a hasty Scourge).
+        // A plan with neither cannot read its pin, so its variant is never emitted. Sound by construction:
+        // every action whose card could bring an attacker or a pump counts, whatever its kind.
+        bool haste_bf = haste_reach;   // (only battlefield haste so far)
+        bool self_pump_now = false, self_pump_bf = false, team_bf = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (d->params.team_pump_cost.has_value() || (d->params.firebreathing_cost.has_value() && !p.card.IsCreature()))
+            { team_bf = true; }
+            else if (d->params.firebreathing_cost.has_value())
+            {
+                self_pump_bf = true;
+                if (!p.tapped && CanAttackFull(p, state.battlefield, me)) { self_pump_now = true; }
+            }
+        }
+        bool hasty_in_hand = false;
         for (const Card& c : fbp.hand)
         {
-            if (pump_live) { break; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d != nullptr && (d->params.firebreathing_cost.has_value() || d->params.team_pump_cost.has_value()))
-            { pump_live = true; }
+            if (d == nullptr) { continue; }
+            if (gives_haste(d) || d->params.tutor_to_battlefield || d->params.impulse_exile > 0) { haste_reach = true; }
+            if (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste)) { hasty_in_hand = true; }
         }
-        // ...and an ATTACKER this turn, without which nothing is pumped: an untapped creature of ours that can
-        // attack now, or a way to one -- a haste source on the battlefield or in hand (the Raubahn axis's
-        // list), a hasty creature in hand, or a hand card that puts / reveals creatures this turn (Dragonstorm,
-        // Apex of Power: either can land Karrthus or Kolaghan). A Lathliss in hand on a creature-less T1 is
-        // not a contested hold, and its variants only spent the budget (dragonstorm held-out d3 s9200001).
-        if (pump_live)
+        const bool attacker = attacker_now || haste_reach || hasty_in_hand;
+        bool pump_live = false;
+        if (attacker)
         {
-            auto gives_haste = [](const CardDefinition* d)
-            {
-                return d != nullptr
-                    && (d->params.grants_haste || d->params.equip_grants_haste || d->params.grants_temp_haste
-                        || d->params.haste_on_flying_enter || d->params.sac_outlet_grants_haste
-                        || d->params.team_pump_grants_haste);
-            };
-            bool attacker = false;
             for (const Permanent& p : state.battlefield)
             {
+                if (pump_live) { break; }
                 if (p.controller_index != me || p.def_absent) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (gives_haste(d)
-                    || (!p.tapped && p.card.IsCreature() && CanAttackFull(p, state.battlefield, me)))
-                { attacker = true; break; }
+                if (d == nullptr) { continue; }
+                if (d->params.team_pump_cost.has_value()) { pump_live = true; }
+                else if (d->params.firebreathing_cost.has_value())
+                {
+                    pump_live = !p.card.IsCreature() || haste_reach
+                             || (!p.tapped && CanAttackFull(p, state.battlefield, me));
+                }
             }
             for (const Card& c : fbp.hand)
             {
-                if (attacker) { break; }
+                if (pump_live) { break; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (d != nullptr
-                    && (gives_haste(d) || (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste))
-                        || d->params.tutor_to_battlefield || d->params.impulse_exile > 0))
-                { attacker = true; }
+                if (d == nullptr) { continue; }
+                if (d->params.team_pump_cost.has_value()) { pump_live = true; }
+                else if (d->params.firebreathing_cost.has_value())
+                { pump_live = !d->card.IsCreature() || haste_reach || d->card.HasKeyword(Keyword::Haste); }
             }
-            pump_live = attacker;
         }
+        static const bool s_plan_reach = EnvOn("MTG_FB_HOLD_PLAN_REACH", true);
+        const bool plan_reach = heurarm::Flag(heurarm::FB_HOLD_PLAN_REACH, s_plan_reach);
+        // Does THIS plan bring an attacker and a pump that reaches it into the combat? (see above)
+        auto plan_reaches = [&](const TurnSolver::Plan& p) -> bool
+        {
+            bool c_haste = false, c_fetch = false, c_team = false, c_self = false, c_hasty_self = false;
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d == nullptr) { continue; }
+                if (gives_haste(d)) { c_haste = true; }
+                if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0) { c_fetch = true; }
+                if (d->params.team_pump_cost.has_value() || (d->params.firebreathing_cost.has_value() && !d->card.IsCreature()))
+                { c_team = true; }
+                else if (d->params.firebreathing_cost.has_value())
+                {
+                    c_self = true;
+                    if (d->card.HasKeyword(Keyword::Haste)) { c_hasty_self = true; }
+                }
+                if (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste)) { c_haste = true; }
+            }
+            const bool haste_any = haste_bf || c_haste || c_fetch;
+            const bool atk = attacker_now || c_haste || c_fetch;
+            const bool pump = team_bf || c_team || c_fetch || self_pump_now
+                           || (self_pump_bf && haste_any) || (c_self && (haste_any || c_hasty_self));
+            return atk && pump;
+        };
         if (pump_live)
         {
             const std::vector<int> ranks = StatePinVariantRanks(state.scripted_fb_hold, 2);
@@ -62841,6 +62916,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.freshmode_choice != 0 || p.tapmode_choice != 0 || p.dig_choice != -1
                     || p.soulbond_decline || p.fb_hold_choice >= 0)
                 { continue; }
+                if (plan_reach && !plan_reaches(p)) { continue; }
                 for (const int k : ranks)
                 {
                     TurnSolver::Plan v = p;
@@ -62850,6 +62926,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             TRACE("fbholdaxis", "T%d %zu plan(s) -> %zu banked-hold variant(s)",
                   state.turn_number, all.size(), extra.size());
+            if (fbholdstats::On() && !extra.empty())
+            {
+                fbholdstats::Bump(fbholdstats::kFanLists);
+                for (std::size_t q = 0; q < extra.size(); ++q) { fbholdstats::Bump(fbholdstats::kFanVariants); }
+            }
             all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                   std::make_move_iterator(extra.end()));
         }
@@ -71319,7 +71400,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
-        ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
+        // MTG_FB_HOLD_FOLD_FREE: a searched banked-hold variant is charged its node unit only once the
+        // combat-pin fold below has NOT folded it -- an uncontested or dominated flip is its base plan's
+        // combat, so it re-prices to nothing (see FbHoldFoldFreeOn).
+        const bool fb_fold_free = p.fb_hold_choice >= 0 && pin_fold_here && FbHoldFoldFreeOn();
+        if (!fb_fold_free) { ConsumeAt(budget, unitsite::kFsPre); }   // one interior node (plan applied)
         pbsite::Note(pbsite::kFsPre, p, budget);
         cantripattr::Scope _cas(cantripattr::AxisOf(p));   // MTG_CANTRIP_ATTRIB (diagnostic)
         ChargePutBackVariant(budget, p);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
@@ -71833,6 +71918,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const bool fresh = pin_fold_seen.insert(BuildDedupKey(s)).second;
             if (put_fold_expect)
             { (fresh ? g_put_bounce_verify_bad : g_put_bounce_verify_ok).fetch_add(1, std::memory_order_relaxed); }
+            if (p.fb_hold_choice >= 0 && fbholdstats::On())
+            { fbholdstats::Bump(fresh ? fbholdstats::kVariantScored : fbholdstats::kVariantFolded); }
             if (!fresh && PlanHasCombatPin(p))
             {
                 g_combat_pin_folded[1].fetch_add(1, std::memory_order_relaxed);
@@ -71841,6 +71928,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 continue;
             }
         }
+        if (fb_fold_free) { ConsumeAt(budget, unitsite::kFsPre); }   // the deferred unit (not folded)
         int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
         TurnSolver::SearchLine tail{ max_turns + 1, {} };
         if (edge_tail_elide)
@@ -77309,7 +77397,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
             // One work unit for this candidate's inline first turn (combat + post
             // main); the remaining turns are counted inside SimulateToEnd.
-            ConsumeAt(budget, unitsite::kLookaheadCand);
+            // MTG_FB_HOLD_FOLD_FREE: a searched banked-hold variant pays this unit only once the combat-pin
+            // fold below has not folded it (FSLineWin's twin; see FbHoldFoldFreeOn).
+            const bool fb_fold_free = is_pre_combat && plan.fb_hold_choice >= 0 && pin_fold_here
+                                   && FbHoldFoldFreeOn();
+            if (!fb_fold_free) { ConsumeAt(budget, unitsite::kLookaheadCand); }
             pbsite::Note(is_pre_combat ? pbsite::kLaPre : pbsite::kLaPost, plan, budget);
             cantripattr::Scope _cas(cantripattr::AxisOf(plan));   // MTG_CANTRIP_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
@@ -77622,6 +77714,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (dupdiff::On() && PlanHasCombatPin(plan)) { dupdiff::PinClass(state, plan, !fresh); }
                     if (put_fold_expect)
                     { (fresh ? g_put_bounce_verify_bad : g_put_bounce_verify_ok).fetch_add(1, std::memory_order_relaxed); }
+                    if (plan.fb_hold_choice >= 0 && fbholdstats::On())
+                    { fbholdstats::Bump(fresh ? fbholdstats::kVariantScored : fbholdstats::kVariantFolded); }
                     if (!fresh && PlanHasCombatPin(plan))
                     {
                         g_combat_pin_folded[0].fetch_add(1, std::memory_order_relaxed);
@@ -77629,6 +77723,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         continue;
                     }
                 }
+                if (fb_fold_free) { ConsumeAt(budget, unitsite::kLookaheadCand); }   // the deferred unit
 
                 // Post-combat (second) main if this deck wants one. SEARCHED, not greedy: this is
                 // the decisive site for "cast now vs hold for after combat" -- the candidate being
@@ -77836,7 +77931,17 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // about turns < pass_best_win (cutoff one tighter) -- and when no such turn is left (the
             // best already wins on the earliest turn this rollout could return), not run at all.
             int cand_cutoff = pass_best_win;
-            if (tie_prune_here && pass_has_best && pass_best_win <= max_turns
+            // MTG_FB_HOLD_STRICT (see FbHoldStrictOn): a searched banked-hold variant matters only by a
+            // STRICTLY earlier win than the best so far -- it never takes a tie (below) -- so its rollout
+            // is asked only about earlier turns, and not run at all when none is left (the exact tie
+            // prune's rule, for the variant whatever the budget).
+            const bool fb_strict = plan.fb_hold_choice >= 0 && FbHoldStrictOn();
+            if (fb_strict && pass_has_best && pass_best_win <= max_turns)
+            {
+                if (pass_best_win <= copy.turn_number) { ++candidates_done; continue; }
+                cand_cutoff = pass_best_win - 1;
+            }
+            else if (tie_prune_here && pass_has_best && pass_best_win <= max_turns
                 && !(plan.value > pass_best.value)
                 && (pass_best_inf >= 0 || !state.inf_life_possible || !leafeval::InfWinTie()))
             {
@@ -77902,6 +78007,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             bool better;
             if (!pass_has_best)                      { better = true; }
             else if (win_turn != pass_best_win)      { better = win_turn < pass_best_win; }
+            else if (fb_strict)                      { better = false; }   // a flip never takes a tie
             else if (leafeval::InfWinTie() && win_turn <= max_turns
                      && (leaf_inf >= 0) != (pass_best_inf >= 0))
             { better = leaf_inf >= 0; }

@@ -199,6 +199,40 @@ inline bool FbHoldSearchedOn()
     return heurarm::Flag(heurarm::FB_HOLD_SEARCHED, env_on);
 }
 
+// MTG_FB_HOLD_FLIP_DOMINANCE (DEFAULT ON; =0 -> every contested flip is searched) -- the searched banked
+// hold's other side is read as the verdict where it cannot be strictly better: no post-combat main this
+// turn and either world projected lethal next turn (FbFlipDominatedByNextTurn, Combat.cpp). A sound
+// collapse: the other side can at best tie a next-turn kill, and ties go to the base plan. Read only
+// inside FbHoldBankedThisCombat (both pump sites), so executor and rollout stay in lockstep.
+inline bool FbHoldFlipDominanceOn()
+{
+    static const bool env_on = EnvOn("MTG_FB_HOLD_FLIP_DOMINANCE", true);
+    return heurarm::Flag(heurarm::FB_HOLD_FLIP_DOMINANCE, env_on);
+}
+
+// MTG_FB_HOLD_FOLD_FREE (DEFAULT ON; =0 -> charged before the apply, as every candidate) -- a searched
+// banked-hold variant's node unit (FSLineWin kFsPre, the la_cand loop's kLookaheadCand) is charged only
+// once MTG_COMBAT_PIN_FOLD has NOT folded it: a variant whose flip turned out uncontested or dominated is
+// its base plan's combat, so it re-prices to nothing. Re-prices only: never read at an unlimited budget's
+// outcome (the fold and the scoring are unchanged), so nothing becomes unfindable.
+inline bool FbHoldFoldFreeOn()
+{
+    static const bool env_on = EnvOn("MTG_FB_HOLD_FOLD_FREE", true);
+    return heurarm::Flag(heurarm::FB_HOLD_FOLD_FREE, env_on);
+}
+
+// MTG_FB_HOLD_STRICT (DEFAULT ON; =0 -> a variant ties like any candidate) -- the verdict ORDERS the two
+// sides of a searched banked hold, so the other side displaces the incumbent only by a STRICTLY earlier
+// win (SolveWithLookahead's candidate loop; FSLineWin's frontier is strict already): it never takes an
+// equal-win-turn tie on the graded leaf, and its rollout is asked only about earlier turns (the exact tie
+// prune's cutoff), skipped when none is left. Complete at any budget: a line the other side wins earlier
+// is still found; an equal-turn line is the same result.
+inline bool FbHoldStrictOn()
+{
+    static const bool env_on = EnvOn("MTG_FB_HOLD_STRICT", true);
+    return heurarm::Flag(heurarm::FB_HOLD_STRICT, env_on);
+}
+
 // MTG_PAYOFF_REDUCER_SINK_NEEDED (DEFAULT ON; =0 -> every reducer subset admitted, byte-identical) -- the
 // Dragonstorm payoff prune's reducer sink (MTG_PAYOFF_PRUNE_REDUCER_SINK) admits a ritual-bearing subset
 // whose only payoff is a spell-cost reducer (Ruby Medallion) ONLY when the subset's non-ritual casts are

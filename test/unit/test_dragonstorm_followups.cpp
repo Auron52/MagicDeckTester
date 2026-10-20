@@ -528,11 +528,31 @@ TEST_CASE("Searched banked hold: the pin takes the other side of the verdict (MT
         }
         {
             // 16 life, the verdict SPENDS (only spending kills next turn, MTG_FB_HOLD_BANKED_NEXT_TURN): the
-            // other side holds.
-            GameState s = PumpBoardFu("Sandstone Needle", 16);
-            s.scripted_fb_hold = 1;
-            RolloutSimulateCombat(s);
-            CHECK(s.players[1].life == (on ? 10 : 8));
+            // other side would hold -- but it can at best tie the next-turn kill, so the flip is DOMINATED
+            // and reads as the verdict (MTG_FB_HOLD_FLIP_DOMINANCE); without the dominance it holds.
+            for (const bool dom : { true, false })
+            {
+                CAPTURE(dom);
+                ArmFu adom(heurarm::FB_HOLD_FLIP_DOMINANCE, dom);
+                GameState s = PumpBoardFu("Sandstone Needle", 16);
+                s.scripted_fb_hold = 1;
+                RolloutSimulateCombat(s);
+                CHECK(s.players[1].life == ((on && !dom) ? 10 : 8));
+                CHECK(s.scripted_fb_hold == -1);
+            }
+        }
+        {
+            // 14 life, the verdict HOLDS because both worlds kill next turn: the flip (spend) only ties, so it
+            // is dominated as well; without the dominance it spends.
+            for (const bool dom : { true, false })
+            {
+                CAPTURE(dom);
+                ArmFu adom(heurarm::FB_HOLD_FLIP_DOMINANCE, dom);
+                GameState s = PumpBoardFu("Sandstone Needle", 14);
+                s.scripted_fb_hold = 1;
+                RolloutSimulateCombat(s);
+                CHECK(s.players[1].life == ((on && !dom) ? 6 : 8));
+            }
         }
         {
             // Uncontested -- lethal with the Needle (8 life): holding is dominated, the pin is ignored.
@@ -549,6 +569,33 @@ TEST_CASE("Searched banked hold: the pin takes the other side of the verdict (MT
             for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
             { if (p.fb_hold_choice == 1) { ++variants; } }
             CHECK((variants > 0) == on);
+            // MTG_FB_HOLD_PLAN_REACH: no variant for a plan that brings no attacker AND pump reaching it. A
+            // summoning-sick Scourge cast this turn (no haste source) beside an attacking non-pump creature
+            // pumps nothing, so neither the pass nor the Scourge plan carries one.
+            {
+                GameState t = BoardFu({ "Mountain", "Mountain", "Mountain", "Mountain", "Sandstone Needle" }, {}, 6);
+                PutDepletionCounters(t, t.battlefield.back(), 2);
+                PutFu(t, "Utvara Hellkite", 401);
+                t.players[0].hand.push_back(CardFu("Scourge of Valkas", 51));
+                int tv = 0;
+                for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(t, /*is_pre_combat=*/true))
+                { if (p.fb_hold_choice >= 0) { ++tv; } }
+                CHECK(tv == 0);
+                // ...while Lathliss's team pump reaches the attacking Utvara -- but only on a plan that casts
+                // her: the Lotus Bloom suspend alone brings no pump, so it carries no variant.
+                t.players[0].hand.push_back(CardFu("Lathliss, Dragon Queen", 52));
+                t.players[0].hand.push_back(CardFu("Lotus Bloom", 53));
+                int with_lathliss = 0, without = 0;
+                for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(t, /*is_pre_combat=*/true))
+                {
+                    if (p.fb_hold_choice < 0) { continue; }
+                    bool casts_l = false;
+                    for (const Action& x : p.actions) { if (x.card_name.str() == "Lathliss, Dragon Queen") { casts_l = true; } }
+                    ++(casts_l ? with_lathliss : without);
+                }
+                CHECK((with_lathliss > 0) == on);
+                CHECK(without == 0);
+            }
             // ...and never on a post-combat list (its pin could not be read).
             int m2 = 0;
             for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
