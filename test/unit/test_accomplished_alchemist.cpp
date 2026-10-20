@@ -2365,3 +2365,35 @@ TEST_CASE("Wish buckets: human play / the Tutor unprune gate keeps the whole lis
     if (DecisionUnpruned(UnprunedGate::Tutor)) { CHECK(WishCandsAa(s) == kAaSide); }
     else { CHECK(WishCandsAa(s) == std::vector<std::string>{ "Scholar of Athreos" }); }
 }
+
+TEST_CASE("Wish buckets, PROPOSED amendments (default OFF): blue as its own need; Trufflesnout beside the Boar")
+{
+    struct Arm2
+    {
+        std::int8_t b, t;
+        Arm2(int blue, int truf) : b(heurarm::t_arm[heurarm::AA_WISH_BLUE]), t(heurarm::t_arm[heurarm::AA_WISH_TRUFFLE])
+        { heurarm::t_arm[heurarm::AA_WISH_BLUE] = static_cast<std::int8_t>(blue);
+          heurarm::t_arm[heurarm::AA_WISH_TRUFFLE] = static_cast<std::int8_t>(truf); }
+        ~Arm2() { heurarm::t_arm[heurarm::AA_WISH_BLUE] = b; heurarm::t_arm[heurarm::AA_WISH_TRUFFLE] = t; }
+    };
+    // 4 mana (not short), Stroke in hand needs {U}, no blue source: the USER's rule offers no land.
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    { Arm2 a(0, 0); ExpectWishAa(s, { "Scholar of Athreos" }); }
+    { Arm2 a(1, 0); ExpectWishAa(s, { "Island", "Scholar of Athreos" }); }
+    // A dork in HAND is not a firm blue source under the amendment; a blue land in hand is.
+    GameState h = s;
+    HandAa(h, "Elvish Harbinger");
+    { Arm2 a(1, 0); ExpectWishAa(h, { "Island", "Scholar of Athreos" }); }
+    GameState sp = s;
+    HandAa(sp, "Utopia Sprawl");
+    { Arm2 a(1, 0); ExpectWishAa(sp, { "Scholar of Athreos" }); }
+    // Trufflesnout joins the Boar only while lifegain is lacking.
+    GameState g = WishAa();
+    HandAa(g, "Accomplished Alchemist"); HandAa(g, "Crab Umbra"); HandAa(g, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(g, "Forest"); }
+    PutAa(g, "Island");
+    { Arm2 a(0, 0); ExpectWishAa(g, { "Brindle Boar" }); }
+    { Arm2 a(0, 1); ExpectWishAa(g, { "Trufflesnout", "Brindle Boar" }); }
+}

@@ -43026,6 +43026,8 @@ struct AaWishCensus
 {
     bool alchemist = false, untapper = false, witch = false, wincon = false, lifegain = false;
     bool blue = false, elf_multi = false;
+    bool blue_firm = false;   // a blue source on the battlefield, or a land / land Aura in hand (no dork in hand)
+    bool blue_need = false;   // a held card needs {U}: a {U} pip in hand, or a Crab Umbra-style {U} untap in play
     int  mana = 0, gain_total = 0;
 };
 
@@ -43054,7 +43056,7 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
         if (d->card.IsLand())
         {
             ++c.mana;
-            if (AaHasColour(pp.produces, Color::Blue)) { c.blue = true; }
+            if (AaHasColour(pp.produces, Color::Blue)) { c.blue = c.blue_firm = true; }
             int bonus = 0;
             for (const Permanent& a : s.battlefield)
             {
@@ -43062,7 +43064,7 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
                 const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
                 if (ad == nullptr || !ad->params.is_land_aura) { continue; }
                 bonus += ad->params.land_aura_extra_mana;
-                if (AaHasColour(LandAuraProducesFor(*ad, a), Color::Blue)) { c.blue = true; }
+                if (AaHasColour(LandAuraProducesFor(*ad, a), Color::Blue)) { c.blue = c.blue_firm = true; }
             }
             c.mana += bonus;
             bool forest = false;
@@ -43072,8 +43074,9 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
         else if (d->card.IsCreature() && !pp.produces.empty() && !pp.mana_per_life_gained)
         {
             ++c.mana;                                    // a dork; Arbor Elf's Forest bonus is added below
-            if (AaHasColour(pp.produces, Color::Blue)) { c.blue = true; }
+            if (AaHasColour(pp.produces, Color::Blue)) { c.blue = c.blue_firm = true; }
         }
+        if (pp.untap_enchanted_cost && pp.untap_enchanted_cost->blue > 0) { c.blue_need = true; }
     }
     // Arbor Elf re-taps our best-decorated Forest: one mana plus that Forest's land-Aura bonus.
     for (const Permanent& p : s.battlefield)
@@ -43095,6 +43098,9 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
         if (d->card.IsLand()) { ++c.mana; }
         if ((AaHasColour(pp.produces, Color::Blue) && !pp.mana_per_life_gained)
             || (pp.is_land_aura && AaHasColour(pp.land_aura_produces, Color::Blue))) { c.blue = true; }
+        if ((d->card.IsLand() && AaHasColour(pp.produces, Color::Blue))
+            || (pp.is_land_aura && AaHasColour(pp.land_aura_produces, Color::Blue))) { c.blue_firm = true; }
+        if (d->card.m_mana_cost.blue > 0) { c.blue_need = true; }
     }
     return c;
 }
@@ -43117,6 +43123,11 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
                                                 const std::vector<std::string>& all, std::string* why = nullptr)
 {
     const AaWishCensus c = AaTakeWishCensus(s, controller);
+    // The two PROPOSED amendments (default OFF; measured, the USER's call -- see the ledger).
+    static const bool s_blue_env = EnvOn("MTG_AA_WISH_BLUE", false);
+    static const bool s_truf_env = EnvOn("MTG_AA_WISH_TRUFFLE", false);
+    const bool amend_blue  = heurarm::Flag(heurarm::AA_WISH_BLUE, s_blue_env);
+    const bool amend_truf  = heurarm::Flag(heurarm::AA_WISH_TRUFFLE, s_truf_env);
     const bool mana_lacking  = c.mana < 4;
     const bool untap_lacking = !c.untapper && !(c.witch && c.gain_total >= 5);
     const bool need_nothing  = c.alchemist && !mana_lacking && c.lifegain && !untap_lacking && c.wincon;
@@ -43126,6 +43137,12 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
              + (c.alchemist ? "" : " ALCH") + (c.lifegain ? "" : " GAIN") + (untap_lacking ? " UNTAP" : "")
              + (c.wincon ? "" : " WIN") + (c.elf_multi ? " elf2" : "") + (c.blue ? " blue" : "")
              + " gain=" + std::to_string(c.gain_total);
+        // Where the held pieces sit (diagnostic only): hand names, then our nonland permanents.
+        std::string h = " hand=[", b = "] bf=[";
+        for (const Card& x : s.players[controller].hand) { h += x.m_name.str() + ","; }
+        for (const Permanent& q : s.battlefield)
+        { if (q.controller_index == controller && !q.card.IsLand()) { b += q.card.m_name.str() + ","; } }
+        *why += h + b + "]";
     }
     // Rank = the USER's bucket order (lower first); -1 = not offered.
     enum : int { kElf = 0, kForest, kIsland, kAlch, kGain, kUntap, kWin };
@@ -43149,12 +43166,18 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         {
             const bool lands_ok = mana_lacking && !(c.elf_multi && elf_legal);   // "the elf preferred"
             if (lands_ok && AaHasColour(p.produces, Color::Green)) { r = kForest; }
-            else if (lands_ok && AaHasColour(p.produces, Color::Blue) && !c.blue) { r = kIsland; }
+            else if (AaHasColour(p.produces, Color::Blue))
+            {
+                if (amend_blue) { if (!c.blue_firm && (lands_ok || c.blue_need)) { r = kIsland; } }
+                else if (lands_ok && !c.blue) { r = kIsland; }
+            }
         }
         else if (p.sac_outlet_lifegain > 0)             { if (!c.lifegain) { r = kGain; } }
+        else if (p.etb_modal_lifegain > 0)              { if (amend_truf && !c.lifegain) { r = kGain; } }
         else if (p.soulbond_grants_untap_self_cost)     { if (untap_lacking) { r = kUntap; } }
         else if (p.drain_cost)                          { if (!c.wincon || need_nothing) { r = kWin; } }
-        // Trufflesnout (etb_modal_lifegain) and Eternal Witness (etb_return_gy_to_hand): never offered.
+        // Trufflesnout (etb_modal_lifegain): never offered (MTG_AA_WISH_TRUFFLE, a PROPOSED amendment, admits it
+        // beside the Boar). Eternal Witness (etb_return_gy_to_hand): never offered.
         if (r >= 0) { ranked.emplace_back(r, nm); }
     }
     std::stable_sort(ranked.begin(), ranked.end(),
