@@ -611,6 +611,7 @@ enum Slot : int
     AA_WISH_BUCKETS,          // MTG_AA_WISH_BUCKETS  AccomplishedAlchemist: the USER's Living Wish BUCKET rule (2026-10-20) -- the wish is offered only the sideboard cards of the buckets (Mana, Accomplished Alchemist, Lifegain, Untap, Wincon/Draw) our hand + battlefield lack; Trufflesnout / Eternal Witness never (AccomplishedAlchemistProvider::TutorCandidates). Default ON (the USER's rule); =0 -> every legal sideboard name at the base width 6
     AA_WISH_BLUE,             // MTG_AA_WISH_BLUE  PROPOSED amendment of the AA wish buckets (default OFF, the USER's call): BLUE is its own need -- Island is offered whenever no blue source is FIRMLY held (a permanent, or a land / land Aura in hand; a dork in hand no longer counts) while a held card needs {U} (a {U} pip in hand, or a Crab Umbra in play), whether or not the mana count is short
     AA_WISH_TRUFFLE,          // MTG_AA_WISH_TRUFFLE  PROPOSED amendment of the AA wish buckets (default OFF, the USER's call): Trufflesnout joins Brindle Boar in the Lifegain bucket (offered when no lifegain is held)
+    AA_HARBINGER_BUCKETS,     // MTG_AA_HARBINGER_BUCKETS  AccomplishedAlchemist: the USER's Elvish Harbinger rule (2026-10-20) -- the ETB Elf tutor is offered only Accomplished Alchemist when none is held, else the missing pieces (Seedcradle Witch for Untap, Ezuri for Wincon, Arbor Elf for Mana), never another Harbinger; the decline stays (AccomplishedAlchemistProvider::TutorCandidates). Default ON (the USER's rule); =0 -> every library Elf
     COUNT
 };
 
@@ -1172,6 +1173,7 @@ inline const char* Name(int slot)
         "MTG_AA_WISH_BUCKETS",
         "MTG_AA_WISH_BLUE",
         "MTG_AA_WISH_TRUFFLE",
+        "MTG_AA_HARBINGER_BUCKETS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

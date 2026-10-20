@@ -43029,6 +43029,7 @@ struct AaWishCensus
     bool blue_firm = false;   // a blue source on the battlefield, or a land / land Aura in hand (no dork in hand)
     bool blue_need = false;   // a held card needs {U}: a {U} pip in hand, or a Crab Umbra-style {U} untap in play
     int  mana = 0, gain_total = 0;
+    bool ezuri = false;       // a team pump (Ezuri) held -- read ONLY by the Elvish Harbinger rule's Wincon bucket
 };
 
 bool AaHasColour(const std::vector<Color>& v, Color c) { return std::find(v.begin(), v.end(), c) != v.end(); }
@@ -43043,6 +43044,7 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
         { c.untapper = true; }
         if (p.untap_pump_cost) { c.witch = true; }
         if (p.draw_target_player || p.tap_draw_cost || p.drain_cost) { c.wincon = true; }
+        if (p.team_pump_cost) { c.ezuri = true; }
     };
     int best_forest_bonus = 0;
     for (const Permanent& p : s.battlefield)
@@ -43188,10 +43190,88 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     return out;
 }
 
+// ---- THE USER'S ELVISH HARBINGER RULE (2026-10-20, MTG_AA_HARBINGER_BUCKETS) ------------------------------------
+// The USER, verbatim: "we should also have a heuristic for Elvish Harbinger. This one is even easier. Search for
+// the piece you are missing. Accomplished Alchemist is the priority if you don't have it and should be pretty
+// much an auto-pick. Otherwise Seedcradle for untaps or Ezuri for a win condition. In rare cases you might get
+// an arbor elf, but that wouldn't be common." And: "You would never search another Harbinger."
+//
+// THE READING (the wish rule's census, so the two rules agree on what is "held" = hand + battlefield):
+//   * No Accomplished Alchemist held and one is in the library -> { Accomplished Alchemist } alone.
+//   * Otherwise the union, in this order, of: Seedcradle Witch while UNTAP is lacking (no Crab Umbra / Staff
+//     of Domination / Galvanic Alchemist / Seedcradle Witch held -- a held Witch fills the bucket here
+//     whatever the lifegain total, since a second Witch adds nothing); Ezuri while WINCON is lacking (no
+//     Stroke / Staff / Scholar / Ezuri held); Arbor Elf while MANA is lacking (projected mana < 4, the wish
+//     rule's threshold).
+//   * Never Elvish Harbinger.
+//   * The union empty, or none of it in the library -> { Seedcradle, Ezuri, Arbor Elf } in the library; that
+//     empty too -> {} (PerformTutor fetches nothing: the decline).
+// A RESTRICTION + ORDER of the searched tutor axis; the engine's tutor_optional decline variant is added on
+// top as before. Human play / MTG_UNPRUNED (the Tutor gate) keep the whole library list.
+static bool AaHarbingerBucketsOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_HARBINGER_BUCKETS", true);   // DEFAULT ON (the USER's rule); =0 = off
+    return heurarm::Flag(heurarm::AA_HARBINGER_BUCKETS, s_env);
+}
+
+// Elvish Harbinger's ETB: a LIBRARY search for an Elf put on top.
+static bool AaIsHarbingerTutor(const CardParams& pp)
+{
+    if (pp.wish_from_sideboard || pp.tutor_from_graveyard || !pp.tutor_to_top) { return false; }
+    return std::find(pp.tutor_types.begin(), pp.tutor_types.end(), "Elf") != pp.tutor_types.end();
+}
+
+static std::vector<std::string> AaHarbingerSet(const GameState& s, int controller, const std::vector<std::string>& all)
+{
+    enum : int { kNone = -1, kAlch = 0, kWitch, kEzuri, kElf };
+    auto role = [](const std::string& nm) -> int
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { return kNone; }
+        const CardParams& p = d->params;
+        if (p.mana_per_life_gained) { return kAlch; }
+        if (p.untap_pump_cost)      { return kWitch; }
+        if (p.team_pump_cost)       { return kEzuri; }
+        if (d->card.IsCreature() && !p.mana_requires_land_subtype.empty()) { return kElf; }
+        return kNone;                                    // Elvish Harbinger (and any other Elf): never
+    };
+    std::string by_role[4];
+    for (const std::string& nm : all)
+    {
+        const int r = role(nm);
+        if (r != kNone && by_role[r].empty()) { by_role[r] = nm; }
+    }
+    const AaWishCensus c = AaTakeWishCensus(s, controller);
+    if (!c.alchemist && !by_role[kAlch].empty()) { return { by_role[kAlch] }; }
+    const bool want[4] = { false, !c.untapper && !c.witch, !c.wincon && !c.ezuri, c.mana < 4 };
+    std::vector<std::string> out;
+    for (int r = kWitch; r <= kElf; ++r) { if (want[r] && !by_role[r].empty()) { out.push_back(by_role[r]); } }
+    if (!out.empty()) { return out; }
+    for (int r = kWitch; r <= kElf; ++r) { if (!by_role[r].empty()) { out.push_back(by_role[r]); } }
+    return out;
+}
+
 std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const GameState& s, int controller,
                                                                         const CardParams& pp) const
 {
     std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    if (AaIsHarbingerTutor(pp))
+    {
+        // PROOF INSTRUMENT (MTG_TRACE=aaharbproof, diagnostic only): the rule's set in EITHER arm, on the
+        // [tutor-chosen] line (MTG_TUTOR_CHOSEN_RANK), beside what the control arm fetched.
+        if (g_real_resolution && TRACE_ON("aaharbproof"))
+        {
+            std::string l;
+            for (const std::string& n : AaHarbingerSet(s, controller, all)) { l += (l.empty() ? "" : " | ") + n; }
+            std::string why;
+            (void)AaWishBucketSet(s, controller, all, &why);
+            const AaWishCensus c = AaTakeWishCensus(s, controller);
+            g_tutor_proof_set = std::string(AaHarbingerBucketsOn() ? "R" : "C") + "{" + l + "} census{" + why
+                              + (c.witch ? " witch" : "") + (c.ezuri ? " ezuri" : "") + "}";
+        }
+        if (DecisionUnpruned(UnprunedGate::Tutor) || !AaHarbingerBucketsOn()) { return all; }
+        return AaHarbingerSet(s, controller, all);
+    }
     if (!pp.wish_from_sideboard) { return all; }
     // PROOF INSTRUMENT (MTG_TRACE=aawishproof, diagnostic only -- never read by play): at a REAL resolution,
     // stash the rule's set in EITHER arm, so MTG_TUTOR_CHOSEN_RANK's [tutor-chosen] line shows a control-arm

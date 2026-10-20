@@ -2336,6 +2336,17 @@ TEST_CASE("Wish buckets: nothing admitted -> the whole legal list (a wish is nev
     CHECK(WishCandsAa(s) == rest);
 }
 
+namespace
+{
+struct HarbArmAa
+{
+    std::int8_t saved;
+    explicit HarbArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_HARBINGER_BUCKETS])
+    { heurarm::t_arm[heurarm::AA_HARBINGER_BUCKETS] = static_cast<std::int8_t>(v); }
+    ~HarbArmAa() { heurarm::t_arm[heurarm::AA_HARBINGER_BUCKETS] = saved; }
+};
+}   // namespace
+
 TEST_CASE("Wish buckets: =0 restores every name at the base width; a non-wish tutor is untouched")
 {
     GameState s = WishAa();
@@ -2348,7 +2359,8 @@ TEST_CASE("Wish buckets: =0 restores every name at the base width; a non-wish tu
     {
         WishArmAa on(1);
         CHECK(AaProv().TutorSearchWidth() == 9);
-        // Elvish Harbinger's library Elf tutor is not a wish: the generic list.
+        // Elvish Harbinger's library Elf tutor is not a wish: the generic list (its own rule pinned off).
+        HarbArmAa hoff(0);
         GameState h = FreshAa();
         LibAa(h, "Accomplished Alchemist"); LibAa(h, "Arbor Elf");
         h.m_provider = &AaProv();
@@ -2398,4 +2410,157 @@ TEST_CASE("Wish buckets, PROPOSED amendments (default OFF): blue as its own need
     PutAa(g, "Island");
     { Arm2 a(0, 0); ExpectWishAa(g, { "Brindle Boar" }); }
     { Arm2 a(0, 1); ExpectWishAa(g, { "Trufflesnout", "Brindle Boar" }); }
+}
+
+// ---- THE USER'S ELVISH HARBINGER RULE (2026-10-20, MTG_AA_HARBINGER_BUCKETS) ---------------------------------
+// The ETB Elf tutor: Accomplished Alchemist alone while none is held; else Seedcradle (Untap lacking), Ezuri
+// (Wincon lacking), Arbor Elf (Mana lacking); never Harbinger; fallback {Seedcradle, Ezuri, Arbor} in the
+// library, then {} (the decline). The Tutor unprune gate (human play / MTG_UNPRUNED) keeps the library list.
+namespace
+{
+GameState HarbAa(bool alch_in_lib = true)
+{
+    GameState s = FreshAa();
+    for (const char* n : { "Elvish Harbinger", "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }) { LibAa(s, n); }
+    if (alch_in_lib) { LibAa(s, "Accomplished Alchemist"); }
+    s.m_provider = &AaProv();
+    return s;
+}
+std::vector<std::string> HarbCandsAa(const GameState& s)
+{
+    return AaProv().TutorCandidates(s, 0, DefAa("Elvish Harbinger").params);
+}
+void ExpectHarbAa(const GameState& s, const std::vector<std::string>& want)
+{
+    const std::vector<std::string> full =
+        AaProv().GenericProvider::TutorCandidates(s, 0, DefAa("Elvish Harbinger").params);
+    CHECK(HarbCandsAa(s) == (DecisionUnpruned(UnprunedGate::Tutor) ? full : want));
+}
+}   // namespace
+
+TEST_CASE("Harbinger rule: no Alchemist held and one in the library -> the Alchemist alone")
+{
+    HarbArmAa on(1);
+    ExpectHarbAa(HarbAa(), { "Accomplished Alchemist" });
+    GameState s = HarbAa();                                  // the other buckets full: still the auto-pick
+    HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectHarbAa(s, { "Accomplished Alchemist" });
+}
+
+TEST_CASE("Harbinger rule: Alchemist held -> the missing pieces in the USER's order; never another Harbinger")
+{
+    HarbArmAa on(1);
+    GameState h = HarbAa();
+    HandAa(h, "Accomplished Alchemist");
+    ExpectHarbAa(h, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });   // everything lacking
+    GameState p = HarbAa();
+    PutAa(p, "Accomplished Alchemist");                      // in play fills the bucket too
+    for (int k = 0; k < 4; ++k) { PutAa(p, "Forest"); }
+    ExpectHarbAa(p, { "Seedcradle Witch", "Ezuri, Renegade Leader" });   // 4 mana: no Arbor Elf
+    if (!DecisionUnpruned(UnprunedGate::Tutor)) { for (const std::string& n : HarbCandsAa(p)) { CHECK(n != "Elvish Harbinger"); } }
+}
+
+TEST_CASE("Harbinger rule: UNTAP -- Seedcradle only with no Crab Umbra / Staff / Galvanic / Witch held")
+{
+    HarbArmAa on(1);
+    GameState s = HarbAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectHarbAa(s, { "Seedcradle Witch" });
+    for (const char* u : { "Crab Umbra", "Staff of Domination", "Galvanic Alchemist", "Seedcradle Witch" })
+    {
+        GameState h = s;
+        HandAa(h, u);
+        ExpectHarbAa(h, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });   // nothing lacking: fallback
+    }
+}
+
+TEST_CASE("Harbinger rule: WINCON -- Ezuri only with no Stroke / Staff / Scholar / Ezuri held")
+{
+    HarbArmAa on(1);
+    GameState s = HarbAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Crab Umbra");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectHarbAa(s, { "Ezuri, Renegade Leader" });
+    for (const char* w : { "Stroke of Genius", "Staff of Domination", "Scholar of Athreos", "Ezuri, Renegade Leader" })
+    {
+        GameState h = s;
+        PutAa(h, w);
+        ExpectHarbAa(h, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });
+    }
+}
+
+TEST_CASE("Harbinger rule: MANA -- Arbor Elf only below 4 projected mana")
+{
+    HarbArmAa on(1);
+    GameState s = HarbAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    ExpectHarbAa(s, { "Arbor Elf" });
+    PutAa(s, "Elvish Harbinger");                            // the entering Harbinger itself is the 4th mana
+    ExpectHarbAa(s, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });
+}
+
+TEST_CASE("Harbinger rule: fallback -- lacking pieces absent from the library; then the decline only")
+{
+    HarbArmAa on(1);
+    // Untap lacking, but no Witch in the library -> the remaining {Ezuri, Arbor Elf}, never Harbinger.
+    GameState s = FreshAa();
+    LibAa(s, "Elvish Harbinger"); LibAa(s, "Ezuri, Renegade Leader"); LibAa(s, "Arbor Elf");
+    s.m_provider = &AaProv();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Stroke of Genius");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectHarbAa(s, { "Ezuri, Renegade Leader", "Arbor Elf" });
+    // Only Harbinger (+ a second Alchemist while one is held) left -> {}: PerformTutor fetches nothing.
+    GameState d = FreshAa();
+    LibAa(d, "Elvish Harbinger"); LibAa(d, "Accomplished Alchemist");
+    d.m_provider = &AaProv();
+    HandAa(d, "Accomplished Alchemist");
+    ExpectHarbAa(d, {});
+    // No Alchemist anywhere: the union as usual.
+    GameState n = HarbAa(/*alch_in_lib=*/false);
+    ExpectHarbAa(n, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });
+}
+
+TEST_CASE("Harbinger rule: =0 restores the generic library list; the wish is untouched")
+{
+    GameState s = HarbAa();
+    {
+        HarbArmAa off(0);
+        CHECK(HarbCandsAa(s) == AaProv().GenericProvider::TutorCandidates(s, 0, DefAa("Elvish Harbinger").params));
+    }
+    GameState w = WishAa();
+    std::vector<std::string> a, b;
+    { HarbArmAa off(0); a = WishCandsAa(w); }
+    { HarbArmAa on(1);  b = WishCandsAa(w); }
+    CHECK(a == b);
+}
+
+TEST_CASE("Harbinger rule: human play / the Tutor unprune gate keeps the whole library list")
+{
+    HarbArmAa on(1);
+    const GameState s = HarbAa();
+    if (DecisionUnpruned(UnprunedGate::Tutor))
+    { CHECK(HarbCandsAa(s) == AaProv().GenericProvider::TutorCandidates(s, 0, DefAa("Elvish Harbinger").params)); }
+    else { CHECK(HarbCandsAa(s) == std::vector<std::string>{ "Accomplished Alchemist" }); }
+}
+
+TEST_CASE("Harbinger rule: the searched plans fetch only the rule's pick, and the decline survives")
+{
+    HarbArmAa on(1);
+    GameState s = HarbAa();
+    for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+    HandAa(s, "Elvish Harbinger");
+    std::set<std::string> tops;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        if (!CastsOnlyAa(p, "Elvish Harbinger")) { continue; }
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, p, /*is_pre_combat=*/true);
+        REQUIRE_FALSE(t.players[0].library.empty());
+        tops.insert(t.players[0].library.front().m_name.str());
+    }
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { CHECK(tops.count("Ezuri, Renegade Leader") == 1); }
+    else { CHECK(tops == std::set<std::string>{ "Accomplished Alchemist", "Forest" }); }
 }
