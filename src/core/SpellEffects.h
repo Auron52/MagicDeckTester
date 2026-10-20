@@ -30722,6 +30722,15 @@ inline Color UntapPreTapColour(const ManaPool& fl, const ManaCost& unit, const s
             if (d > best_d && makes(cols[i])) { best = i; best_d = d; }
         }
         if (best >= 0) { return cols[best]; }
+        // (2b) EVERY OWED PIP IS COVERED and the payoff still is not funded: what is short is GENERIC, and the
+        // ordinary payer that pays the payoff after the loop drains generic in WUBRG order -- so mana of a
+        // later colour is not generic fodder until every earlier one is gone, and each {2}{B} drain's generic
+        // ate the {B} the next drain needed (AccomplishedAlchemist COMBO OFF sweep, 2026-10-20: Staff loop +
+        // Living Wish -> Scholar ran to the ceiling with 43 green floating). Tap the FIRST colour of that
+        // order the source makes. A mana-payment choice; MTG_UNTAP_LOOP_SURPLUS_GENERIC=0 restores (3).
+        static const bool s_loop_surplus = EnvOn("MTG_UNTAP_LOOP_SURPLUS_GENERIC", true);
+        if (heurarm::Flag(heurarm::UNTAP_LOOP_SURPLUS_GENERIC, s_loop_surplus))
+        { for (int i = 0; i < 5; ++i) { if (makes(cols[i])) { return cols[i]; } } }
     }
     Color col = prod.front();
     if      (unit.white > 0 && makes(Color::White)) { col = Color::White; }
@@ -31373,6 +31382,15 @@ inline int UntapLoopHandLifegain(const GameState& s, int ctrl)
 inline bool UntapLoopFloatPays(const ManaPool& fl, const UntapLoopNeed& need)
 {
     if (need.payoff == kLoopPayNone) { return false; }
+    // The payoff is paid AFTER the loop, by the ordinary payer -- so simulate it OUTSIDE the loop's
+    // surplus-first generic scope (MTG_UNTAP_LOOP_SURPLUS_GENERIC reads g_untap_loop_owed), or the loop's
+    // own stop test and the continuation's kill fold would price the same float two ways and disagree.
+    struct OwedOff
+    {
+        const ManaCost* prev;
+        OwedOff() : prev(g_untap_loop_owed) { g_untap_loop_owed = nullptr; }
+        ~OwedOff() { g_untap_loop_owed = prev; }
+    } _owed_off;
     ManaPool pool = fl;
     auto pay = [&pool](const ManaCost& c) -> bool
     {
@@ -33108,6 +33126,37 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
             while (cost.generic > 0 && allow > 0) { --cost.generic; --*pool[i]; --allow; }
         }
         drain(cost.generic, reserve.colorless);
+    }
+    // THE UNTAP LOOP'S SURPLUS-FIRST GENERIC (AccomplishedAlchemist COMBO OFF sweep, 2026-10-20). Inside the
+    // closed-form loop (g_untap_loop_owed live: ApplyUntapLoop's scope only) every untap activation pays its
+    // generic out of the float the loop is BANKING, and the WUBRG order below eats the scarcest colour first:
+    // a Staff of Domination loop funding Scholar of Athreos ({2}{W} cast, twenty {2}{B} drains) tapped the
+    // Alchemist for white, paid the Staff's {3}+{1} with that same white, re-tapped for white ... and ran to
+    // the 256-step ceiling with 500 mana floating and the kill never funded (sweep states S-2e11b1243c and
+    // the whole LOOP-STAFF + FIN-SCHOLAR / FIN-WISH-SCHOLAR family: 0 wins of 33 offers). So, while the loop
+    // runs, generic eats the colour most in SURPLUS over what the loop still owes -- the same rule the human
+    // menu's surplus-first order below applies to a line. A mana-payment choice (the standing exemption);
+    // MTG_UNTAP_LOOP_SURPLUS_GENERIC (heurarm UNTAP_LOOP_SURPLUS_GENERIC), default ON; =0 -> WUBRG.
+    if (g_untap_loop_owed != nullptr && cost.generic > 0)
+    {
+        static const bool s_loop_surplus = EnvOn("MTG_UNTAP_LOOP_SURPLUS_GENERIC", true);
+        if (heurarm::Flag(heurarm::UNTAP_LOOP_SURPLUS_GENERIC, s_loop_surplus))
+        {
+            const ManaCost& ow = *g_untap_loop_owed;
+            struct Ent { int* res; int surplus; };
+            Ent e[5] = {
+                { &reserve.white, reserve.white - ow.white },
+                { &reserve.blue,  reserve.blue  - ow.blue  },
+                { &reserve.black, reserve.black - ow.black },
+                { &reserve.red,   reserve.red   - ow.red   },
+                { &reserve.green, reserve.green - ow.green },
+            };
+            std::stable_sort(std::begin(e), std::end(e),
+                             [](const Ent& a, const Ent& b) { return a.surplus > b.surplus; });
+            for (Ent& x : e) { drain(cost.generic, *x.res); }
+            if (hold_c) { drain(cost.generic, reserve.colorless); }
+            return;
+        }
     }
     // SURPLUS-FIRST GENERIC ORDER (human play only; USER, EDF seed 9 gi=8 T4, 2026-09-10). The
     // historical order below is WUBRG -- an arbitrary ranking that spent a banked {W} on Cloud of

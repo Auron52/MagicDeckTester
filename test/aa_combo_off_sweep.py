@@ -27,8 +27,8 @@ POPULATIONS
 HOW A STATE IS ASKED: a `--scenario` fixture with `expect_combo_off` under MTG_HUMAN_PLAY=1 (the viewer's
 own entry point, then the flagged plan re-applied through ApplyPlan exactly as a click), and -- where the
 answer can move the class -- a WIN probe: the same board with max_turns == turn, autonomous, d5 b100, then
-(for a would-be d) d5 b1000.  The win probe steps into the turn through an untap + draw the offer probe
-never sees, so it is an UPPER bound; `untap_confound` marks boards with tapped permanents.
+(for a would-be d) d5 b1000, resumed at MAIN 1 of the authored board (`resume_at`: no untap, no draw) so the
+two probes see the same position.
 
 Every combo kill in this deck lands in MAIN 1 (the opponent decked or drained to 0), so the WIN probe's
 opponent library / life at the end tells a combo win from a combat one: decked or `opponent_life <= 0`
@@ -188,7 +188,10 @@ def probe_offer(fix):
 def probe_win(fix, budget_ms=100):
     f = dict(fix)
     f.pop("env", None)
-    f.pop("resume_at", None)
+    # THE BOARD AS AUTHORED: resume at main 1 of this turn -- no untap, no draw, no land from the draw step.
+    # Stepping in through an untap made every "sick Alchemist" and every tapped-out board a false class c
+    # (the first sweep: 26 of its 52 c's were the untap step's doing).
+    f["resume_at"] = "main1"
     f["max_turns"] = f["turn"]
     f["depth"] = 5
     f["budget_ms"] = budget_ms

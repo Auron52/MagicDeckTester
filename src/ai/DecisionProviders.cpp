@@ -43987,15 +43987,16 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
                 const int P1 = static_cast<int>(P0.Total()) - lc.ManaValue();
                 if (P1 < 0) { continue; }
                 // Deploy order (a): from the other mana; (b): out of the Alchemist's own first tap.
-                struct Start { int P; bool aT; };
+                // `other` = what of P is NOT the Alchemist's own one-colour tap (the Witch's first untap needs it).
+                struct Start { int P; bool aT; int other; };
                 std::vector<Start> starts;
                 const int dmv = L.deploy.ManaValue();
-                if (dmv == 0) { starts.push_back(Start{ P1, A.tapped }); }
+                if (dmv == 0) { starts.push_back(Start{ P1, A.tapped, P1 }); }
                 else
                 {
                     ManaCost both = lc; SumManaCostInto(both, L.deploy);
-                    if (P0.CanPay(both)) { starts.push_back(Start{ P1 - dmv, A.tapped }); }
-                    if (!A.tapped && L.deploy_one_colour && P1 + X >= dmv) { starts.push_back(Start{ P1 + X - dmv, true }); }
+                    if (P0.CanPay(both)) { starts.push_back(Start{ P1 - dmv, A.tapped, P1 - dmv }); }
+                    if (!A.tapped && L.deploy_one_colour && P1 + X >= dmv) { starts.push_back(Start{ P1 + X - dmv, true, P1 }); }
                 }
                 bool can_gain = false; int gain_cost = 0, gain_untap = 0; bool sT = false;
                 if (L.staff)
@@ -44024,6 +44025,11 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
                 for (const Start& st : starts)
                 {
                     if (st.P < 0) { continue; }
+                    // TWO COLOURS PER WITCH UNTAP ({2}{G}{W}) and the Alchemist makes ONE per tap: the first
+                    // activation needs a second source besides it (later ones alternate off the float).
+                    // Sweep state S-72a9e4edf6 (two Forests, both spent on Nourish, Witch cast off the
+                    // Alchemist's white): offered, and nothing on the board can pay the {G}.
+                    if (L.shape == kUntapPumpTarget && st.other < 1) { continue; }
                     const int op = UntapLoopBootOp(st.P, X, sT, st.aT, L.staff, L.c_untap,
                                                    L.staff ? L.self_untap : gain_untap, can_gain, gain_cost);
                     if (op < 0) { continue; }
@@ -44207,33 +44213,57 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         return 0;   // the float pays a kill and none of the kill plans lands it: no further link helps
     }
     std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
-    std::vector<std::pair<int, int>> loops, setups;   // (#actions incl. land, index)
+    // THE WALK'S ORDER (an order over the engine's own plans, never a pick: every admitted plan is tried
+    // until one proves a kill). Stage order is the USER's: a loop plan that spends a FINISHER before the loop
+    // runs (a Stroke cast for the X the plan-start pool affords, a Scholar cast from the plan-start pool) is
+    // tried last -- the finisher is the third stage; then the loop that carries the MOST lifegain (stage 1's
+    // X), then the fewest actions. Measured: by size alone the walk spent its width on standalone loops that
+    // gain nothing and never reached "cast Nourish, then loop" on a six-land board.
+    struct Ranked { int finisher; int neg_life; int size; int idx; };
+    auto rank_of = [&](const TurnSolver::Plan& p, int i)
+    {
+        Ranked r{ 0, 0, static_cast<int>(p.actions.size()) + (p.land_to_play.empty() ? 0 : 1), i };
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr) { continue; }
+            if (d->params.cast_lifegain > 0) { r.neg_life -= std::max(d->params.cast_lifegain, d->params.cast_lifegain_ferocious); }
+            if ((d->params.draw_target_player && d->tmpl == CardTemplate::DrawX)
+                || (d->card.IsCreature() && UntapLoopDrainCard(d->params))) { r.finisher = 1; }
+        }
+        return r;
+    };
+    std::vector<Ranked> loops, setups;
     for (int i = 0; i < static_cast<int>(plans.size()); ++i)
     {
         const TurnSolver::Plan& p = plans[static_cast<std::size_t>(i)];
-        const int sz = static_cast<int>(p.actions.size()) + (p.land_to_play.empty() ? 0 : 1);
-        if (IsLoopPlan(p))       { loops.emplace_back(sz, i); }
-        else if (IsSetupPlan(p)) { setups.emplace_back(sz, i); }
+        if (IsLoopPlan(p))       { loops.push_back(rank_of(p, i)); }
+        else if (IsSetupPlan(p)) { setups.push_back(rank_of(p, i)); }
     }
-    std::stable_sort(loops.begin(), loops.end());
-    std::stable_sort(setups.begin(), setups.end());
-    const std::vector<std::pair<int, int>>& cand = loops.empty() ? setups : loops;
+    auto by_rank = [](const Ranked& x, const Ranked& y)
+    { return std::tie(x.finisher, x.neg_life, x.size, x.idx) < std::tie(y.finisher, y.neg_life, y.size, y.idx); };
+    std::stable_sort(loops.begin(), loops.end(), by_rank);
+    std::stable_sort(setups.begin(), setups.end(), by_rank);
+    const std::vector<Ranked>& cand = loops.empty() ? setups : loops;
     // WIDTH counts links that MOVED the board: an apply that changes nothing (a loop offered on life the plan
     // does not gain, a cast the payment drops) is not a branch, it only spends the node bound.
     const int width = loops.empty() ? kSetupWidth : kLoopWidth;
     int tried = 0;
     for (std::size_t j = 0; j < cand.size() && tried < width && w.nodes_left > 0; ++j)
     {
-        const int idx = cand[j].second;
+        const int idx = cand[j].idx;
         GameState child = s;
         TurnSolver::ApplyPlan(child, plans[static_cast<std::size_t>(idx)], /*is_pre_combat=*/true);
         --w.nodes_left; ++w.applies;
         if (TraceOn())
         {
-            std::fprintf(stderr, "[aa-route] t%d link%d %s #%d %s -> float %d life_gained %d\n",
+            const ManaPool& f = child.floating_mana;
+            std::fprintf(stderr, "[aa-route] t%d link%d %s #%d %s -> float %d (W%d U%d B%d R%d G%d C%d *%d) life_gained %d need %d\n",
                          s.turn_number, kLinks - links_left, loops.empty() ? "SETUP" : "LOOP", idx,
                          TurnSolver::PlanLineSummary(plans[static_cast<std::size_t>(idx)], s).c_str(),
-                         (int)child.floating_mana.Total(), child.players[me].life_gained_this_turn);
+                         (int)f.Total(), f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
+                         child.players[me].life_gained_this_turn, ComputeUntapLoopNeed(child, me).payoff);
         }
         if (!Moved(s, child, me)) { continue; }
         ++tried;

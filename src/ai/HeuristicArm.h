@@ -618,6 +618,7 @@ enum Slot : int
     AA_HARB_WITCH_WIN,        // MTG_AA_HARB_WITCH_WIN  PROPOSED amendment of the AA Harbinger rule (default OFF, the USER's call): Seedcradle Witch is also offered while WINCON is lacking (its +3/+3 pump is a loop kill), beside Ezuri
     AA_HARB_ALCH_DEFAULT,     // MTG_AA_HARB_ALCH_DEFAULT  PROPOSED amendment of the AA Harbinger rule (default OFF, the USER's call): no Alchemist held -> the Alchemist FIRST (the default pick), then Witch / Ezuri / Arbor Elf, all searched, instead of the Alchemist alone
     AA_COMBO_ROUTE,           // MTG_AA_COMBO_ROUTE  AccomplishedAlchemist COMBO OFF (USER 2026-10-20): the mechanical untap-loop go-off (lifegain -> Alchemist untap/tap loop -> Stroke / Living Wish -> Scholar), emitted as ONE ComboRoute action only when its trial on a copy WINS this turn (AlchemistComboRouteOffer); the viewer's Combo Off button rides it. Default ON (the USER asked for it); =0 -> no route action
+    UNTAP_LOOP_SURPLUS_GENERIC, // MTG_UNTAP_LOOP_SURPLUS_GENERIC  the closed-form untap loop pays GENERIC pips out of the colour most in SURPLUS over what the loop still owes (g_untap_loop_owed), not WUBRG -- the Staff's {3}+{1} no longer eats the {W} / {B} a chained Scholar kill is banking (AccomplishedAlchemist COMBO OFF sweep, 2026-10-20). A mana-payment choice; default ON; =0 -> WUBRG
     COUNT
 };
 
@@ -1186,6 +1187,7 @@ inline const char* Name(int slot)
         "MTG_AA_HARB_WITCH_WIN",
         "MTG_AA_HARB_ALCH_DEFAULT",
         "MTG_AA_COMBO_ROUTE",
+        "MTG_UNTAP_LOOP_SURPLUS_GENERIC",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
