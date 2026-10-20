@@ -6084,6 +6084,40 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         return d.tmpl == CardTemplate::BasicLand || d.params.mana_rock
             || (d.tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield));
     };
+    // THE UNSEEN GUARD YIELDS TO A SHORTAGE THE LINE NAMES (MTG_LINE_FLOAT_UNSEEN_GUARD). The unseen
+    // clause below is a bet on demand the line cannot name; it must not override demand the line DOES
+    // name. If the plain payment (the reserve drained, generic included) would leave a colour a later pip
+    // of the line owes with NO provider at all -- none floating, and no untapped source that makes it for
+    // a noncreature spell -- then the line's next pip of that colour is unpayable unless the rung keeps
+    // one, and the rung's known benefit wins. dragonstorm s1112019 gi19 T3, the rung's own named shape
+    // with Apex of Power in the line: Mountain tapped for Rite of Flame, {R}{R} floating, Ruby
+    // Medallion's {2} to pay, the Territory the only untapped land; held, the float paid both pips and
+    // Desperate Ritual's {R} had nothing to pay it (the T4 kill fell to T5, at d8 b0 too). On the T4
+    // boards the guard exists for (s4050 g46 / s5254 g249) one {R} still floats after the plain payment
+    // and the Mountains make more, so it stands. Board state only: the library is never read. A pay-sac
+    // source (Lotus Bloom, a Treasure) counts as a provider of every colour.
+    bool known_short = false;
+    if (unseen)
+    {
+        for (int ci = 0; ci < 5 && !known_short; ++ci)
+        {
+            if (later[ci] <= 0 || ra[ci] > 0 || r_all.wild > 0) { continue; }
+            bool provider = false;
+            for (const Permanent& o : state.battlefield)
+            {
+                if (o.controller_index != active || o.tapped) { continue; }
+                const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
+                if (od == nullptr) { continue; }
+                if (PaySacSpendableNow(state, o, *od)) { provider = true; break; }
+                if (!is_src(o, *od) || PermanentManaYield(state, o, *od) <= 0) { continue; }
+                for (Color k : ProducesForPayment(state, active, *od, /*for_creature=*/false, &o))
+                { if (colour_idx(k) == ci) { provider = true; break; } }
+                if (provider) { break; }
+            }
+            if (!provider) { known_short = true; }
+        }
+    }
+    const bool unseen_guard = unseen && !known_short;
     // Colours an unrestricted untapped source other than `self` can make (for a later creature pip).
     auto other_makes = [&](int self, int ci) -> bool
     {
@@ -6119,13 +6153,14 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         }
         if (ok && d->params.colored_creature_only && !for_creature)
         {
-            // `unseen` (MTG_LINE_FLOAT_UNSEEN_GUARD): the line casts a breakpoint opener, so cards it does
-            // not name yet will be castable later this turn and `later` under-states their pips. Every
-            // colour this land makes for a creature then counts as possibly owed.
+            // `unseen_guard` (MTG_LINE_FLOAT_UNSEEN_GUARD): the line casts a breakpoint opener, so cards it
+            // does not name yet will be castable later this turn and `later` under-states their pips. Every
+            // colour this land makes for a creature then counts as possibly owed -- unless the line it DOES
+            // name is short without the rung (known_short, above).
             for (Color c : EffectiveProducesFor(state, active, *d, &p))
             {
                 const int ci = colour_idx(c);
-                if (ci >= 0 && (later[ci] > 0 || unseen) && !other_makes(i, ci)) { ok = false; break; }
+                if (ci >= 0 && (later[ci] > 0 || unseen_guard) && !other_makes(i, ci)) { ok = false; break; }
             }
         }
         if (ok)

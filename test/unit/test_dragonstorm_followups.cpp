@@ -612,6 +612,46 @@ TEST_CASE("Line float: a line that will reveal cards it cannot name keeps the cr
     }
 }
 
+TEST_CASE("Line float unseen guard yields when the named line is short without the rung (MTG_LINE_FLOAT_UNSEEN_GUARD)")
+{
+    // dragonstorm s1112019 gi19 T3: the rung's own named shape (Mountain tapped for Rite of Flame, {R}{R}
+    // floating, Ruby Medallion's {2}, Unclaimed Territory the only untapped land) with Apex of Power in the
+    // line. Held, the float pays both pips and Desperate Ritual's {R} has nothing left to pay it; the rung
+    // must fire whatever the line might reveal later.
+    ManaCost med;
+    med.generic = 2;
+    ManaCost owes;               // + Desperate Ritual {R} (under the Medallion) and the rest of the line
+    owes.generic = 8;
+    owes.red     = 5;
+    ArmFu rung(heurarm::LINE_FLOAT_TAP_FIRST, true);
+    for (const bool guard : { true, false })
+    {
+        CAPTURE(guard);
+        ArmFu arm(heurarm::LINE_FLOAT_UNSEEN_GUARD, guard);
+        {
+            // No red provider left after the plain payment: the rung fires on both arms.
+            GameState s = BoardFu({ "Unclaimed Territory" }, {}, 3);
+            s.floating_mana.red = 2;
+            LineCostFu lc(owes);
+            LineOpensUnseenScope lou(true);
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK(PermFu(s, "Unclaimed Territory").tapped);
+            CHECK(s.floating_mana.red == 1);
+        }
+        {
+            // An untapped Mountain still makes the owed {R}: not short, so the guard holds the Territory.
+            GameState s = BoardFu({ "Unclaimed Territory", "Mountain" }, {}, 3);
+            s.floating_mana.red = 2;
+            LineCostFu lc(owes);
+            LineOpensUnseenScope lou(true);
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK(PermFu(s, "Unclaimed Territory").tapped == !guard);
+            CHECK(s.floating_mana.red == (guard ? 0 : 1));
+            CHECK_FALSE(PermFu(s, "Mountain").tapped);
+        }
+    }
+}
+
 TEST_CASE("Line float unseen guard: the line's breakpoint opener is the one ParamKeyedDrawClass names (MTG_LINE_FLOAT_UNSEEN_GUARD)")
 {
     const GameState s = BoardFu({ "Mountain" }, { "Seething Song", "Apex of Power", "Rite of Flame" }, 4);
