@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "NEGATIVE: lifegain + Alchemist + Stroke but no untapper anywhere (none on the battlefield, none in hand, no",
+    "Living Wish for a Galvanic). One tap of the Alchemist is not a loop."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 40,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Nourish",
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": false,
+  "combo_off_rule_probe": true
+}

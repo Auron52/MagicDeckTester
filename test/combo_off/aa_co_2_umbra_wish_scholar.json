@@ -1,0 +1,52 @@
+{
+  "_comment": [
+    "THE WISH FINISH (USER 2026-10-20: 'or wish for the win-con there'): no Stroke -- Living Wish fetches Scholar",
+    "of Athreos off the loop's float, the Scholar is cast, and it drains the opponent out. Three links after the",
+    "loop, all inside one click. Rule LIFE-HAND+LOOP-UMBRA+FIN-WISH-SCHOLAR."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 40,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Crab Umbra",
+      "equips": "Accomplished Alchemist"
+    }
+  ],
+  "hand": [
+    "Nourish",
+    "Living Wish"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true,
+  "expect_history_contains": [
+    "Living Wish",
+    "Scholar of Athreos"
+  ]
+}

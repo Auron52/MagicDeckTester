@@ -43606,6 +43606,812 @@ std::vector<int> AccomplishedAlchemistProvider::MainPhaseTeamPumpCounts(const Ga
     return { k };
 }
 
+// =================================================================================================
+// ACCOMPLISHED ALCHEMIST -- COMBO OFF (2026-10-20)
+// =================================================================================================
+//
+// USER, 2026-10-20: *"We should use the combo off logic for this deck. It is very much the type of deck
+// that needs it."* And on the shape of the go-off: *"it is another combo that can have many steps just
+// like EDF. After playing the lifegain you untap and tap Alchemist a whole lot to generate mana, then
+// either cast a finishing spell like Stroke of Genius targeting the opponent or wish for the win-con
+// there."* So the line has THREE STAGES, and both halves below are written in them:
+//
+//   LIFE   -- lifegain this turn raises X (Accomplished Alchemist taps for X = life gained this turn);
+//   LOOP   -- an untapper on the Alchemist turns X > its per-untap cost into unbounded mana
+//             (Crab Umbra / Galvanic Alchemist {2}{U}: X >= 4; Seedcradle Witch {2}{G}{W}: X >= 5;
+//             Staff of Domination {3}+{1}: X >= 5, with its own {2},{T}: gain 1 life as a bootstrap);
+//   FINISH -- Stroke of Genius at the opponent (deck-out), or Living Wish -> Scholar of Athreos and drain.
+//
+// The EDF doctrine carries over unchanged (USER 2026-09-10/11): the RULE TABLE decides DISPLAY from a
+// small set of information -- board + hand inventory and the sideboard a Living Wish reaches, no search,
+// no floating pool -- and must be AGGRESSIVE; the ROUTE decides EXECUTION and must be EXACT (a click wins,
+// or rolls back and says so loudly). And the search queries the same pair to "skip a huge chain of
+// operations" (TurnSolver.cpp, `edfco`).
+// =================================================================================================
+
+namespace aarule
+{
+// MTG_AA_CO_WHY=1 -- diagnosis only: one [aa-co-why] line per refused (alchemist, untapper) pair.
+inline bool WhyOn() { static const bool on = EnvOn("MTG_AA_CO_WHY"); return on; }
+
+inline bool IsLivingWishCreature(const CardDefinition* d)
+{
+    return d && d->params.tutor_to_hand && d->params.wish_from_sideboard
+        && std::find(d->params.tutor_types.begin(), d->params.tutor_types.end(), "Creature")
+               != d->params.tutor_types.end();
+}
+inline bool IsStrokeAtOpponent(const GameState& s, const CardDefinition* d)
+{
+    return d && d->params.draw_target_player && d->tmpl == CardTemplate::DrawX && s.opponent_library_dealt
+        && !s.opponent_decked;
+}
+inline int CastLifegainOf(const GameState& s, int c, const CardDefinition& d)
+{
+    int g = d.params.cast_lifegain;
+    if (d.params.cast_lifegain_ferocious > 0)
+    {
+        // Feed the Clan: 10 instead of 5 while we control a creature with power >= 4 (ferocious).
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != c || (!p.card.IsCreature() && !p.is_animated)) { continue; }
+            if (CombatPowerOf(p, s) >= std::max(1, d.params.ferocious_min_power))
+            { g = std::max(g, d.params.cast_lifegain_ferocious); break; }
+        }
+    }
+    return std::max(0, g);
+}
+
+// One LOOP option: an untapper reachable this turn and what deploying it costs.
+struct LoopOpt
+{
+    const char* name   = "";
+    int   shape        = 0;          // ActivatedUntapShape
+    ManaCost deploy;                 // the setup cast(s) still to pay (zero when already in place)
+    int   c_untap      = 0;          // one untap activation (mana value)
+    int   self_untap   = 0;          // Staff: its {1}; otherwise the gain-Staff's {1}
+    bool  staff        = false;
+    bool  deploy_one_colour = true;  // every pip of `deploy` is one colour -> the Alchemist's tap can pay it
+    int   wishes_used  = 0;
+    int   witch_num    = 0;          // a Witch on the battlefield (its own pump = a combat finisher, not used)
+};
+
+// One FINISH option, with the mana its kill costs once the loop runs.
+struct FinOpt
+{
+    const char* name   = "";
+    int   need_mv      = 0;
+    int   wishes_used  = 0;
+};
+
+// FINISH inventory (stage 3). MAIN-PHASE KILLS ONLY -- a kill that lands before combat, because that is
+// what the route's verdict (OpponentHasLost after its last link) can prove. Ezuri's team pump and the
+// Witch's +3/+3 win in COMBAT; they are left to the search (the "c-prime" class of the sweep), not offered.
+//   FIN-STROKE        Stroke of Genius in HAND, aimed at the opponent: {X}{2}{U}, X = the lethal X
+//                     (opponentdeck::ForcedDrawLethalX -- the opponent's library + 1 as the engine counts).
+//   FIN-SCHOLAR       Scholar of Athreos on the BATTLEFIELD: {2}{B} per opponent life (drain to lethal).
+//   FIN-SCHOLAR-HAND  ...in HAND: + its {2}{W} cast (its drain has no {T}: summoning sickness is moot).
+//   FIN-WISH-SCHOLAR  a Living Wish in hand + Scholar in the SIDEBOARD: {1}{G} + {2}{W} + the drains.
+//   FIN-STAFF-DIG     a Staff of Domination (battlefield, or the LOOP's own Staff) + a Stroke of Genius in
+//                     the LIBRARY above the last card: {5}+{1} per draw down to it, then the Stroke (the
+//                     loop's documented draw-to-find; the search is clairvoyant about library order).
+inline std::vector<FinOpt> Finishers(const GameState& s, int c, bool staff_on_board)
+{
+    std::vector<FinOpt> out;
+    const Player& me = s.players[static_cast<std::size_t>(c)];
+    const int opp_life = std::max(1, s.players[static_cast<std::size_t>(1 - c)].life);
+    const int lx = opponentdeck::ForcedDrawLethalX(s);
+    int stroke_mv = -1;
+    for (const Card& h : me.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (lx > 0 && IsStrokeAtOpponent(s, d) && stroke_mv < 0)
+        { stroke_mv = EffectiveSpellCost(*d, s, 1).ManaValue() + lx * std::max(1, (int)d->card.m_mana_cost.x_pips); }
+    }
+    if (stroke_mv >= 0) { out.push_back(FinOpt{ "FIN-STROKE", stroke_mv, 0 }); }
+    auto drains = [&](const CardDefinition& d) -> int
+    {
+        const int per = std::max(1, DrainLossPerActivation(d.params));
+        const int n = (opp_life + per - 1) / per;
+        return n * std::max(1, d.params.drain_cost->ManaValue());
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->card.IsCreature() && UntapLoopDrainCard(d->params))
+        { out.push_back(FinOpt{ "FIN-SCHOLAR", drains(*d), 0 }); break; }
+    }
+    for (const Card& h : me.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d && d->card.IsCreature() && UntapLoopDrainCard(d->params))
+        { out.push_back(FinOpt{ "FIN-SCHOLAR-HAND", drains(*d) + EffectiveSpellCost(*d, s, 1).ManaValue(), 0 }); break; }
+    }
+    const CardDefinition* wish = nullptr;
+    for (const Card& h : me.hand)
+    { const CardDefinition* d = CardDatabase::Instance().LookupCached(h); if (IsLivingWishCreature(d)) { wish = d; break; } }
+    if (wish != nullptr)
+    {
+        for (const Card& sb : me.sideboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(sb);
+            if (d && d->card.IsCreature() && UntapLoopDrainCard(d->params))
+            {
+                out.push_back(FinOpt{ "FIN-WISH-SCHOLAR", drains(*d) + EffectiveSpellCost(*d, s, 1).ManaValue()
+                                                              + EffectiveSpellCost(*wish, s, 1).ManaValue(), 1 });
+                break;
+            }
+        }
+    }
+    if (staff_on_board && lx > 0)
+    {
+        const auto& lib = me.library;
+        for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lib[i]);
+            if (!IsStrokeAtOpponent(s, d)) { continue; }
+            const int k = static_cast<int>(i) + 1;
+            out.push_back(FinOpt{ "FIN-STAFF-DIG", k * 6 + EffectiveSpellCost(*d, s, 1).ManaValue() + lx, 0 });
+            break;
+        }
+    }
+    return out;
+}
+}   // namespace aarule
+
+// THE RULE TABLE. A rule is the conjunction LIFE + LOOP + FINISH; its name is the three parts joined by
+// "+", e.g. "LIFE-HAND+LOOP-UMBRA+FIN-STROKE".
+//
+//   ALCHEMIST   an Accomplished Alchemist WE control that can tap this turn (not summoning-sick; tapped is
+//               fine -- the loop's first untap re-enables it). Every row needs one.
+//   LIFE (stage 1) -- the X the loop runs on:
+//     LIFE-GAINED  life already gained this turn reaches the untapper's threshold with no further cast;
+//     LIFE-HAND    plus a SUBSET of the hand's lifegain spells (Nourish 6, Feed the Clan 5 / 10 ferocious,
+//                  Weather the Storm 3 x storm count), paid EXACTLY (ManaPool::CanPay) from the board's
+//                  other untapped mana, cast BEFORE the Alchemist taps;
+//     LIFE-STAFF   no lifegain spell: a Staff of Domination's {2},{T}: gain 1 life bootstraps X instead.
+//   LOOP (stage 2) -- the untapper, on the battlefield or deployed this turn:
+//     LOOP-UMBRA / -UMBRA-HAND        Crab Umbra on the Alchemist / in hand ({U}), {2}{U} per untap;
+//     LOOP-GALVANIC / -HAND / -WISH   the Alchemist soulbonded to a Galvanic Alchemist / one in hand
+//                                     ({2}{U}) / Living Wish -> one from the sideboard ({1}{G} + {2}{U});
+//     LOOP-STAFF / -STAFF-HAND        Staff of Domination in play / in hand ({3}); {3},{T} + {1} per untap;
+//     LOOP-WITCH / -WITCH-HAND        Seedcradle Witch in play / in hand ({G/W}); {2}{G}{W} per untap.
+//     EXACT: after the LIFE casts and the deploy cost, the loop's own bootstrap search (UntapLoopBootOp --
+//     the very function the resolver re-runs before every op) must reach "Alchemist untapped with X > the
+//     per-iteration cost" from (other mana P, X, Staff tapped, Alchemist tapped). Two deploy orders are
+//     tried: paid from the other mana, or out of the Alchemist's own first tap (one colour per tap, so only
+//     a deploy whose pips are all one colour).
+//   FINISH (stage 3) -- see aarule::Finishers. BANK: the loop's safety ceiling (kUntapLoopCeiling steps, two
+//     per iteration, 16 held back for the bootstrap) times the net per iteration must cover the kill's mana.
+//     A Living Wish spent on LOOP-GALVANIC-WISH is not available to FIN-WISH-SCHOLAR.
+//
+// MTG_COMBO_OFF_RULES=0 turns the table off (the EDF hatch, shared).
+bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, std::string* rule) const
+{
+    static const bool s_rules = EnvOn("MTG_COMBO_OFF_RULES", true);
+    if (!s_rules) { return false; }
+    using namespace aarule;
+    const Player& me = s.players[static_cast<std::size_t>(c)];
+    if (s.players[static_cast<std::size_t>(1 - c)].life <= 0 || s.opponent_decked) { return false; }
+
+    // ---- inventory -------------------------------------------------------------------------------
+    std::vector<int> alchs;
+    bool staff_bf = false;
+    int  gain_staff = -1;   // a battlefield Staff whose {2},{T}: gain 1 life can bootstrap X
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != c || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.mana_per_life_gained && p.card.IsCreature())
+        {
+            Permanent probe = p;
+            probe.tapped = false;
+            if (CanTapNow(probe, s.battlefield)) { alchs.push_back(i); }
+        }
+        if (d->params.untap_target_creature_cost.has_value() && d->params.self_untap_cost.has_value())
+        {
+            staff_bf = true;
+            if (d->params.tap_lifegain_cost.has_value() && gain_staff < 0) { gain_staff = i; }
+        }
+    }
+    if (alchs.empty())
+    {
+        if (WhyOn()) { std::cout << "[aa-co-why] t" << s.turn_number << " no Alchemist that can tap this turn\n"; }
+        return false;
+    }
+
+    struct LifeCard { ManaCost cost; int gain; bool storm; };
+    std::vector<LifeCard> life;
+    int wishes = 0;
+    const CardDefinition *umbra_h = nullptr, *galv_h = nullptr, *staff_h = nullptr, *witch_h = nullptr,
+                         *wish_h = nullptr, *galv_sb = nullptr;
+    for (const Card& h : me.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d == nullptr) { continue; }
+        if (d->params.cast_lifegain > 0 && life.size() < 6)
+        { life.push_back(LifeCard{ EffectiveSpellCost(*d, s, 1), CastLifegainOf(s, c, *d), d->params.storm }); }
+        if (IsLivingWishCreature(d)) { ++wishes; if (!wish_h) { wish_h = d; } }
+        if (d->params.untap_enchanted_cost.has_value() && !umbra_h) { umbra_h = d; }
+        if (d->params.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature() && !galv_h) { galv_h = d; }
+        if (d->params.untap_target_creature_cost.has_value() && d->params.self_untap_cost.has_value() && !staff_h)
+        { staff_h = d; }
+        if (d->params.untap_pump_cost.has_value() && !witch_h) { witch_h = d; }
+    }
+    for (const Card& sb : me.sideboard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(sb);
+        if (d && d->params.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature()) { galv_sb = d; break; }
+    }
+
+    // FINISH first: it is the cheapest refusal (no finisher, no row).
+    const bool staff_reach = staff_bf || staff_h != nullptr;
+    const std::vector<FinOpt> fins = Finishers(s, c, staff_reach);
+    if (fins.empty())
+    {
+        if (WhyOn()) { std::cout << "[aa-co-why] t" << s.turn_number << " no main-phase finisher reachable\n"; }
+        return false;
+    }
+
+    // Gain-Staff costs (the bootstrap's GAIN op), off the battlefield Staff or the one being deployed.
+    auto staff_costs = [&](const CardDefinition& sd, Card probe, int& c_untap, int& self_untap, int& gain_cost)
+    {
+        c_untap    = EffectiveActivationCost(s, c, probe, *sd.params.untap_target_creature_cost).ManaValue();
+        self_untap = EffectiveActivationCost(s, c, probe, *sd.params.self_untap_cost).ManaValue();
+        gain_cost  = sd.params.tap_lifegain_cost.has_value()
+                   ? EffectiveActivationCost(s, c, probe, *sd.params.tap_lifegain_cost).ManaValue() : -1;
+    };
+    auto one_colour = [](const ManaCost& m)
+    {
+        const int kinds = (m.white > 0) + (m.blue > 0) + (m.black > 0) + (m.red > 0) + (m.green > 0);
+        return kinds <= 1 && m.colorless == 0;
+    };
+
+    for (const int ai : alchs)
+    {
+        const Permanent& A = s.battlefield[static_cast<std::size_t>(ai)];
+        const ManaPool P0 = AvailableManaPool(s, &A);
+        const int x0 = me.life_gained_this_turn;
+
+        // ---- LOOP options for this Alchemist ------------------------------------------------------
+        std::vector<LoopOpt> loops;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != c || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (d->params.untap_enchanted_cost.has_value() && p.aura_attached_to == A.card.m_number)
+            {
+                LoopOpt o; o.name = "LOOP-UMBRA"; o.shape = kUntapEnchanted;
+                o.c_untap = EffectiveActivationCost(s, c, p.card, *d->params.untap_enchanted_cost).ManaValue();
+                loops.push_back(o);
+            }
+            if (d->params.untap_target_creature_cost.has_value() && d->params.self_untap_cost.has_value())
+            {
+                LoopOpt o; o.name = "LOOP-STAFF"; o.shape = kUntapStaffTarget; o.staff = true;
+                int g = 0; staff_costs(*d, p.card, o.c_untap, o.self_untap, g);
+                loops.push_back(o);
+            }
+            if (d->params.untap_pump_cost.has_value())
+            {
+                LoopOpt o; o.name = "LOOP-WITCH"; o.shape = kUntapPumpTarget; o.witch_num = p.card.m_number;
+                o.c_untap = EffectiveActivationCost(s, c, p.card, *d->params.untap_pump_cost).ManaValue();
+                loops.push_back(o);
+            }
+        }
+        if (const std::optional<ManaCost> g = SoulbondGrantedUntapCost(s, A))
+        {
+            LoopOpt o; o.name = "LOOP-GALVANIC"; o.shape = kUntapSoulbondSelf;
+            o.c_untap = EffectiveActivationCost(s, c, A.card, *g).ManaValue();
+            loops.push_back(o);
+        }
+        if (umbra_h)
+        {
+            LoopOpt o; o.name = "LOOP-UMBRA-HAND"; o.shape = kUntapEnchanted;
+            o.deploy = EffectiveSpellCost(*umbra_h, s, 1);
+            o.c_untap = umbra_h->params.untap_enchanted_cost->ManaValue();
+            o.deploy_one_colour = one_colour(o.deploy);
+            loops.push_back(o);
+        }
+        if (galv_h)
+        {
+            LoopOpt o; o.name = "LOOP-GALVANIC-HAND"; o.shape = kUntapSoulbondSelf;
+            o.deploy = EffectiveSpellCost(*galv_h, s, 1);
+            o.c_untap = galv_h->params.soulbond_grants_untap_self_cost->ManaValue();
+            o.deploy_one_colour = one_colour(o.deploy);
+            loops.push_back(o);
+        }
+        if (wish_h && galv_sb)
+        {
+            LoopOpt o; o.name = "LOOP-GALVANIC-WISH"; o.shape = kUntapSoulbondSelf; o.wishes_used = 1;
+            o.deploy = EffectiveSpellCost(*wish_h, s, 1);
+            SumManaCostInto(o.deploy, EffectiveSpellCost(*galv_sb, s, 1));
+            o.c_untap = galv_sb->params.soulbond_grants_untap_self_cost->ManaValue();
+            o.deploy_one_colour = one_colour(o.deploy);
+            loops.push_back(o);
+        }
+        if (staff_h && !staff_bf)
+        {
+            LoopOpt o; o.name = "LOOP-STAFF-HAND"; o.shape = kUntapStaffTarget; o.staff = true;
+            o.deploy = EffectiveSpellCost(*staff_h, s, 1);
+            int g = 0; staff_costs(*staff_h, staff_h->card, o.c_untap, o.self_untap, g);
+            o.deploy_one_colour = true;   // {3}: generic
+            loops.push_back(o);
+        }
+        if (witch_h)
+        {
+            LoopOpt o; o.name = "LOOP-WITCH-HAND"; o.shape = kUntapPumpTarget;
+            o.deploy = EffectiveSpellCost(*witch_h, s, 1);
+            o.c_untap = witch_h->params.untap_pump_cost->ManaValue();
+            o.deploy_one_colour = true;   // {G/W}: one pip
+            loops.push_back(o);
+        }
+        if (loops.empty())
+        {
+            if (WhyOn()) { std::cout << "[aa-co-why] t" << s.turn_number << " alchemist#" << A.card.m_number << " no untapper reachable\n"; }
+            continue;
+        }
+
+        // The gain op of the bootstrap: a battlefield Staff, or the Staff this LOOP deploys.
+        int bf_gain_cost = -1, bf_gain_untap = 0;
+        bool bf_gain_tapped = false;
+        if (gain_staff >= 0)
+        {
+            const Permanent& gs = s.battlefield[static_cast<std::size_t>(gain_staff)];
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(gs.card);
+            int cu = 0; staff_costs(*gd, gs.card, cu, bf_gain_untap, bf_gain_cost);
+            bf_gain_tapped = gs.tapped;
+        }
+
+        // ---- LIFE subsets x LOOP options ----------------------------------------------------------
+        const int nl = static_cast<int>(life.size());
+        for (const LoopOpt& L : loops)
+        {
+            const int c_steady = L.staff ? L.c_untap + L.self_untap : L.c_untap;
+            for (int mask = 0; mask < (1 << nl); ++mask)
+            {
+                ManaCost lc;
+                int gain = 0, ncast = 0;
+                for (int k = 0; k < nl; ++k) { if (mask & (1 << k)) { SumManaCostInto(lc, life[k].cost); ++ncast; } }
+                // Storm copies: the storm spell cast LAST of the subset (the generic cast order may differ;
+                // the trial is the arbiter).
+                for (int k = 0; k < nl; ++k)
+                {
+                    if (!(mask & (1 << k))) { continue; }
+                    gain += life[k].storm ? life[k].gain * (s.spells_cast_this_turn + ncast) : life[k].gain;
+                }
+                if (mask != 0 && !P0.CanPay(lc)) { continue; }
+                const int X  = std::max(1, x0 + gain);
+                const int P1 = static_cast<int>(P0.Total()) - lc.ManaValue();
+                if (P1 < 0) { continue; }
+                // Deploy order (a): from the other mana; (b): out of the Alchemist's own first tap.
+                struct Start { int P; bool aT; };
+                std::vector<Start> starts;
+                const int dmv = L.deploy.ManaValue();
+                if (dmv == 0) { starts.push_back(Start{ P1, A.tapped }); }
+                else
+                {
+                    ManaCost both = lc; SumManaCostInto(both, L.deploy);
+                    if (P0.CanPay(both)) { starts.push_back(Start{ P1 - dmv, A.tapped }); }
+                    if (!A.tapped && L.deploy_one_colour && P1 + X >= dmv) { starts.push_back(Start{ P1 + X - dmv, true }); }
+                }
+                bool can_gain = false; int gain_cost = 0, gain_untap = 0; bool sT = false;
+                if (L.staff)
+                {
+                    // The loop's own Staff gains too (UntapLoopNextOp: the untapper Staff, or the first one).
+                    const CardDefinition* sd = staff_h;
+                    if (L.deploy.ManaValue() == 0)
+                    {
+                        for (const Permanent& p : s.battlefield)
+                        {
+                            if (p.controller_index != c) { continue; }
+                            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                            if (d && d->params.untap_target_creature_cost && d->params.self_untap_cost) { sd = d; sT = p.tapped; break; }
+                        }
+                    }
+                    if (sd && sd->params.tap_lifegain_cost.has_value())
+                    {
+                        int cu = 0, su = 0;
+                        staff_costs(*sd, sd->card, cu, su, gain_cost);
+                        can_gain = gain_cost >= 0;
+                    }
+                    gain_untap = L.self_untap;
+                }
+                else if (bf_gain_cost >= 0)
+                { can_gain = true; gain_cost = bf_gain_cost; gain_untap = bf_gain_untap; sT = bf_gain_tapped; }
+                for (const Start& st : starts)
+                {
+                    if (st.P < 0) { continue; }
+                    const int op = UntapLoopBootOp(st.P, X, sT, st.aT, L.staff, L.c_untap,
+                                                   L.staff ? L.self_untap : gain_untap, can_gain, gain_cost);
+                    if (op < 0) { continue; }
+                    // BANK: X after the bootstrap is at least c_steady + 1.
+                    const long long net  = std::max(X, c_steady + 1) - c_steady;
+                    const long long bank = static_cast<long long>(kUntapLoopCeiling / 2 - 16) * net + st.P;
+                    for (const FinOpt& F : fins)
+                    {
+                        if (F.wishes_used + L.wishes_used > wishes) { continue; }
+                        if (std::string(F.name) == "FIN-STAFF-DIG" && !staff_bf && !L.staff) { continue; }
+                        if (F.need_mv > bank) { continue; }
+                        const char* life_name = mask != 0 ? "LIFE-HAND"
+                                              : (X >= c_steady + 1 ? "LIFE-GAINED" : "LIFE-STAFF");
+                        if (rule) { *rule = std::string(life_name) + "+" + L.name + "+" + F.name; }
+                        return true;
+                    }
+                }
+            }
+            if (WhyOn())
+            {
+                std::cout << "[aa-co-why] t" << s.turn_number << " alchemist#" << A.card.m_number << " " << L.name
+                          << " refused: x0=" << x0 << " P0=" << P0.Total() << " lifegain_cards=" << nl
+                          << " c_steady=" << c_steady << " deploy=" << L.deploy.ManaValue() << "\n";
+            }
+        }
+    }
+    return false;
+}
+
+// THE MECHANICAL UNTAP-LOOP GO-OFF -- the EXECUTION half (see the header in DecisionProviders.h).
+//
+// WHY A ROUTE, when the search can already find the line. The go-off is several decisions long -- the
+// lifegain cast (and the untapper's setup cast), the closed-form loop, the finisher, and for the Living Wish
+// line the wish, the Scholar's cast and the drains -- and the search reaches the later links only through
+// site-9 breakpoint continuations, which are SEARCHED-ONLY (a base plan's apply never opens them). Two
+// consumers need the whole line as ONE thing: the viewer's button (USER: "display must be AGGRESSIVE,
+// execution must be EXACT" -- a click must win), and the search's COMBO OFF query, which can skip "a huge
+// chain of operations" only on a plan it can trial-apply to a kill (TurnSolver.cpp, `edfco`).
+//
+// SOUND, NOT A PICK. In autonomous play the action is emitted only when this walk, on a COPY, ends with the
+// opponent dead this turn -- and a win this turn dominates every other plan (the goldfish score is the win
+// turn). Nothing is removed from the menu: every base plan and every breakpoint variant is still there, so
+// completeness at any budget is untouched; the route is one more candidate. The walk itself only ORDERS
+// the engine's own plans (loop plans first, then setup casts), it never invents an action.
+//
+// THE WALK, link by link, each link one of the engine's own plans applied through TurnSolver::ApplyPlan:
+//   FINISH  if the float already pays the cheapest MAIN-PHASE kill, the kill-fold list
+//           (TurnSolver::UntapLoopKillPlans -- the search continuation's own list) -- Stroke at the
+//           opponent, the drain, or the chained Living Wish / Scholar cast;
+//   LOOP    otherwise the executor menu's plans that carry the closed-form loop (ActivateUntap,
+//           chosen_x = kUntapLoopToNeed), fewest actions first -- "cast Nourish, then loop" is one plan;
+//   SETUP   failing any loop plan, plans made only of combo-piece casts (lifegain, an untapper, a Living
+//           Wish), fewest actions first -- the untapper cast this link is activatable on the next.
+// A bounded DFS (kLinks deep, kNodes applies), memoised per decision on the full board. Inside it the
+// loop funds MAIN-PHASE kills only (g_untap_loop_no_pump): a combat kill cannot be proved before combat.
+namespace aaroute
+{
+inline thread_local int t_in_route = 0;
+struct Guard { Guard() { ++t_in_route; } ~Guard() { --t_in_route; } };
+struct NoPumpScope
+{
+    int prev;
+    NoPumpScope() : prev(g_untap_loop_no_pump) { g_untap_loop_no_pump = 1; }
+    ~NoPumpScope() { g_untap_loop_no_pump = prev; }
+};
+inline bool TraceOn() { static const bool v = EnvOn("MTG_AA_ROUTE_TRACE"); return v; }
+// MTG_AA_ROUTE_STATS=1 (diagnostic, count-only): walks, their verdicts, applies inside walks, and the walk
+// wall time, printed once at exit -- the route's own cost, which the search budget does not meter.
+inline bool StatsOn() { static const bool v = EnvOn("MTG_AA_ROUTE_STATS"); return v; }
+inline std::atomic<std::uint64_t> g_walks{0}, g_wins{0}, g_applies{0}, g_walk_us{0}, g_memo_hits{0},
+                                  g_rewalks{0}, g_offers{0}, g_rule_no{0};
+struct StatsDumper
+{
+    ~StatsDumper()
+    {
+        if (!StatsOn()) { return; }
+        std::fprintf(stderr, "[aa-route-stats] offers=%llu rule_no=%llu memo_hits=%llu walks=%llu wins=%llu "
+                     "applies=%llu walk_ms=%.1f rewalks=%llu\n",
+                     (unsigned long long)g_offers.load(), (unsigned long long)g_rule_no.load(),
+                     (unsigned long long)g_memo_hits.load(), (unsigned long long)g_walks.load(),
+                     (unsigned long long)g_wins.load(), (unsigned long long)g_applies.load(),
+                     g_walk_us.load() / 1000.0, (unsigned long long)g_rewalks.load());
+    }
+};
+inline StatsDumper g_stats_dumper;
+
+constexpr int kLinks      = 6;   // FINISH can be three links (wish, Scholar, drain) after LOOP + SETUP
+constexpr int kKillWidth  = 2;
+constexpr int kLoopWidth  = 3;
+constexpr int kSetupWidth = 4;
+constexpr int kNodes      = 24;  // applies per walk -- SAFETY bound, the common walk is 2-4
+
+struct Walk
+{
+    int nodes_left = kNodes;
+    std::vector<TurnSolver::Plan> path;   // the links, as the PLANS themselves (see Replay)
+    int applies = 0;
+};
+
+inline bool IsLoopPlan(const TurnSolver::Plan& p)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::ActivateUntap && a.chosen_x >= kUntapLoopToNeed) { return true; } }
+    return false;
+}
+inline bool IsComboPieceCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return false; }
+    const CardParams& p = d->params;
+    return p.cast_lifegain > 0 || p.untap_enchanted_cost.has_value() || p.untap_pump_cost.has_value()
+        || (p.untap_target_creature_cost.has_value() && p.self_untap_cost.has_value())
+        || (p.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
+        || (p.tutor_to_hand && p.wish_from_sideboard);
+}
+inline bool IsSetupPlan(const TurnSolver::Plan& p)
+{
+    int casts = 0;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::PlayLand) { continue; }
+        if (!IsComboPieceCast(a)) { return false; }
+        ++casts;
+    }
+    return casts > 0;
+}
+inline std::uint64_t Fingerprint(const GameState& s, int me)
+{
+    // The search's own full mid-turn key (BuildBreakpointKey), plus what a go-off reads that a plan memo
+    // might not: life gained this turn (X), and the WHOLE library in order (the Staff digs below the top).
+    std::uint64_t h = TurnSolver::MidTurnStateKeyOf(s);
+    comboroute::Mix(h, 0xA1C4E3157ULL);
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[me].life_gained_this_turn) + 1);
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life) + 3);
+    comboroute::Mix(h, static_cast<std::uint64_t>(s.players[1 - me].library.size()) + 5);
+    comboroute::Mix(h, s.opponent_decked ? 7ULL : 9ULL);
+    for (const Card& c : s.players[me].library) { comboroute::Mix(h, static_cast<std::uint64_t>(c.m_number) * 13 + 1); }
+    comboroute::Mix(h, EquipRouteStateKey(s, me));
+    return h;
+}
+// Did the link change anything? (A no-op apply -- a dropped cast, a loop that found nothing to buy -- is
+// not a link; recursing on it would only burn the node bound.)
+inline bool Moved(const GameState& a, const GameState& b, int me)
+{
+    return a.players[me].hand.size() != b.players[me].hand.size()
+        || a.battlefield.size() != b.battlefield.size()
+        || a.floating_mana.Total() != b.floating_mana.Total()
+        || a.players[me].life_gained_this_turn != b.players[me].life_gained_this_turn
+        || a.players[1 - me].life != b.players[1 - me].life
+        || a.players[1 - me].library.size() != b.players[1 - me].library.size()
+        || OpponentHasLost(b);
+}
+
+static int Dfs(GameState& s, int me, int links_left, Walk& w)
+{
+    if (OpponentHasLost(s)) { return 1; }
+    if (links_left <= 0 || w.nodes_left <= 0) { return 0; }
+    std::vector<TurnSolver::Plan> kills = TurnSolver::UntapLoopKillPlans(s, /*is_pre_combat=*/true);
+    if (!kills.empty())
+    {
+        const int n = std::min<int>(kKillWidth, static_cast<int>(kills.size()));
+        for (int i = 0; i < n && w.nodes_left > 0; ++i)
+        {
+            GameState child = s;
+            TurnSolver::ApplyPlan(child, kills[static_cast<std::size_t>(i)], /*is_pre_combat=*/true);
+            --w.nodes_left; ++w.applies;
+            if (TraceOn())
+            {
+                std::fprintf(stderr, "[aa-route] t%d link%d KILL #%d %s -> opp life %d lib %zu lost=%d\n",
+                             s.turn_number, kLinks - links_left, i,
+                             TurnSolver::PlanLineSummary(kills[static_cast<std::size_t>(i)], s).c_str(),
+                             child.players[1 - me].life, child.players[1 - me].library.size(),
+                             OpponentHasLost(child) ? 1 : 0);
+            }
+            if (!Moved(s, child, me)) { continue; }
+            w.path.push_back(kills[static_cast<std::size_t>(i)]);
+            if (Dfs(child, me, links_left - 1, w) == 1) { s = std::move(child); return 1; }
+            w.path.pop_back();
+        }
+        return 0;   // the float pays a kill and none of the kill plans lands it: no further link helps
+    }
+    std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    std::vector<std::pair<int, int>> loops, setups;   // (#actions incl. land, index)
+    for (int i = 0; i < static_cast<int>(plans.size()); ++i)
+    {
+        const TurnSolver::Plan& p = plans[static_cast<std::size_t>(i)];
+        const int sz = static_cast<int>(p.actions.size()) + (p.land_to_play.empty() ? 0 : 1);
+        if (IsLoopPlan(p))       { loops.emplace_back(sz, i); }
+        else if (IsSetupPlan(p)) { setups.emplace_back(sz, i); }
+    }
+    std::stable_sort(loops.begin(), loops.end());
+    std::stable_sort(setups.begin(), setups.end());
+    const std::vector<std::pair<int, int>>& cand = loops.empty() ? setups : loops;
+    // WIDTH counts links that MOVED the board: an apply that changes nothing (a loop offered on life the plan
+    // does not gain, a cast the payment drops) is not a branch, it only spends the node bound.
+    const int width = loops.empty() ? kSetupWidth : kLoopWidth;
+    int tried = 0;
+    for (std::size_t j = 0; j < cand.size() && tried < width && w.nodes_left > 0; ++j)
+    {
+        const int idx = cand[j].second;
+        GameState child = s;
+        TurnSolver::ApplyPlan(child, plans[static_cast<std::size_t>(idx)], /*is_pre_combat=*/true);
+        --w.nodes_left; ++w.applies;
+        if (TraceOn())
+        {
+            std::fprintf(stderr, "[aa-route] t%d link%d %s #%d %s -> float %d life_gained %d\n",
+                         s.turn_number, kLinks - links_left, loops.empty() ? "SETUP" : "LOOP", idx,
+                         TurnSolver::PlanLineSummary(plans[static_cast<std::size_t>(idx)], s).c_str(),
+                         (int)child.floating_mana.Total(), child.players[me].life_gained_this_turn);
+        }
+        if (!Moved(s, child, me)) { continue; }
+        ++tried;
+        w.path.push_back(plans[static_cast<std::size_t>(idx)]);
+        if (Dfs(child, me, links_left - 1, w) == 1) { s = std::move(child); return 1; }
+        w.path.pop_back();
+    }
+    return 0;
+}
+
+// Replay a proven path on `s`, narrating each link into the play history (the sink is bound only on a
+// live human-play apply; null everywhere else). Returns 1 iff the opponent is dead at the end.
+//
+// THE PATH IS THE PLANS, NOT THEIR INDICES. The trial runs wherever the emission site is reached -- inside a
+// rollout, a breakpoint derivation, a viewer frame -- and the apply runs in the executor; the enumerator's
+// breadth caps and wave admission read that context, so the SAME board can enumerate a different list in
+// the two places (measured: the first cut replayed by index and found an empty kill list on 1 in 3 applies).
+// A recorded plan applied to the identical board is the identical line: the lockstep law, by construction.
+static int Replay(GameState& s, int me, const std::vector<TurnSolver::Plan>& path)
+{
+    for (const TurnSolver::Plan& p : path)
+    {
+        if (g_play_event_sink != nullptr)
+        { EmitPlayEvent(s.turn_number, "cast", TurnSolver::PlanLineSummary(p, s)); }
+        TurnSolver::ApplyPlan(s, p, /*is_pre_combat=*/true);
+    }
+    (void)me;
+    return OpponentHasLost(s) ? 1 : 0;
+}
+
+struct Verdict { int r = 0; std::vector<TurnSolver::Plan> path; };
+// PER GAME, keyed on the full board (Fingerprint): a verdict is a function of the board -- including the
+// library ORDER, which is fixed within a game -- so it is reused across decisions; cleared at every game
+// start (TurnSolver::ClearPerGameCaches) so a batch worker never carries one game's verdicts into the next.
+struct Memo
+{
+    std::uint64_t epoch = ~0ULL;   // unused (kept for the trace); the scope is the game
+    std::unordered_map<std::uint64_t, Verdict> m;
+};
+inline Memo& TheMemo() { static thread_local Memo memo; return memo; }
+
+static Verdict Walk1(const GameState& s, int me);
+
+// The trial: the walk on a copy, memoised on the board fingerprint.
+static const Verdict& Trial(const GameState& s, int me)
+{
+    Memo& memo = TheMemo();
+    if (memo.m.size() > (1u << 16)) { memo.m.clear(); }
+    const std::uint64_t key = Fingerprint(s, me);
+    const auto it = memo.m.find(key);
+    if (it != memo.m.end()) { if (StatsOn()) { g_memo_hits.fetch_add(1, std::memory_order_relaxed); } return it->second; }
+    return memo.m.emplace(key, Walk1(s, me)).first->second;
+}
+
+static Verdict Walk1(const GameState& s, int me)
+{
+    Verdict v;
+    {
+        // The human's scripted one-shot pins (a tutor pick, a top choice, ...) are CONSUMED by the
+        // resolution that reads them; a trial inside a viewer frame must not eat them (the EDF gate's
+        // own save/restore, for the same reason).
+        struct Pins
+        {
+            int a = g_scripted_top_choice, b = g_scripted_etbdig_choice, c = g_scripted_saga_ch1,
+                d = g_scripted_tutor_choice, e = g_scripted_reorder_choice, f = g_scripted_tapmode,
+                g = g_scripted_freshmode, h = g_scripted_sac_cursor;
+            ~Pins()
+            {
+                g_scripted_top_choice = a; g_scripted_etbdig_choice = b; g_scripted_saga_ch1 = c;
+                g_scripted_tutor_choice = d; g_scripted_reorder_choice = e; g_scripted_tapmode = f;
+                g_scripted_freshmode = g; g_scripted_sac_cursor = h;
+            }
+        } _pins;
+        Guard _g;
+        NoPumpScope _np;
+        ExecutorMenuScope _exec;      // the walk enumerates as the autonomous executor (also inside a viewer frame)
+        RevealLogPause _quiet;
+        ComboOffApplyPause _nochoosers;
+        const auto t0 = std::chrono::steady_clock::now();
+        GameState copy = s;
+        Walk w;
+        v.r = Dfs(copy, me, kLinks, w);
+        if (v.r == 1) { v.path = w.path; }
+        if (StatsOn())
+        {
+            g_walks.fetch_add(1, std::memory_order_relaxed);
+            if (v.r == 1) { g_wins.fetch_add(1, std::memory_order_relaxed); }
+            g_applies.fetch_add(static_cast<std::uint64_t>(w.applies), std::memory_order_relaxed);
+            g_walk_us.fetch_add(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                    std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
+        }
+        if (TraceOn())
+        {
+            std::fprintf(stderr, "[aa-route] t%d TRIAL %s: %d link(s), %d apply(s)\n", s.turn_number,
+                         v.r == 1 ? "WIN" : "no", (int)w.path.size(), w.applies);
+        }
+    }
+    return v;
+}
+}   // namespace aaroute
+
+bool AlchemistComboRouteOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_COMBO_ROUTE", true);   // DEFAULT ON (USER 2026-10-20); =0 disables
+    return heurarm::Flag(heurarm::AA_COMBO_ROUTE, s_env);
+}
+bool AlchemistComboRouteInProgress() { return aaroute::t_in_route > 0; }
+void AlchemistComboRouteClearMemo() { aaroute::TheMemo().m.clear(); aaroute::TheMemo().epoch = ~0ULL; }
+
+bool AccomplishedAlchemistProvider::UntapLoopRouteEnabled() const { return AlchemistComboRouteOn(); }
+
+int AlchemistComboRouteOffer(const GameState& s, int me)
+{
+    if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
+    const DecisionProvider& prov = ResolveProvider(s);
+    // THE RULE IS THE PRE-FILTER: microseconds on every board that cannot go off, so the trial (several
+    // enumerations and applies) is paid only where the inventory says a go-off exists.
+    if (aaroute::StatsOn()) { aaroute::g_offers.fetch_add(1, std::memory_order_relaxed); }
+    if (!prov.ComboOffPossible(s, me, nullptr))
+    {
+        if (aaroute::StatsOn()) { aaroute::g_rule_no.fetch_add(1, std::memory_order_relaxed); }
+        return 0;
+    }
+    if (aaroute::Trial(s, me).r == 1) { return 1; }
+    // DISPLAY AGGRESSIVE (human play only): the rule fired and the walk did not prove it -- still offer the
+    // button ("not yet proven"); a click that does not win rolls back and says so (AIEngine's combo_off
+    // branch). Never in autonomous play: there an unproven route would be a candidate that claims a win.
+    return HumanPlayActive() ? 3 : 0;
+}
+
+int AlchemistComboRouteApply(GameState& s, int me)
+{
+    if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
+    // ALL-OR-NOTHING: only a proven path is played on the live state.
+    aaroute::Verdict v = aaroute::Trial(s, me);   // a copy: the walk below may touch the memo
+    if (v.r != 1) { return 0; }
+    // ...AND PROVEN HERE. The memoised path was proven where the emission site ran (a rollout, a breakpoint
+    // derivation); this apply may run in another context (the executor), and an ApplyPlan whose breakpoint
+    // continuations read that context could land differently. So the path is replayed on a COPY first, and
+    // if it does not kill here the walk is re-run here (no memo) -- a click or a committed line never plays
+    // a path this context has not itself proven.
+    {
+        aaroute::Guard _g;
+        aaroute::NoPumpScope _np;
+        ExecutorMenuScope _exec;
+        RevealLogPause _quiet;
+        ComboOffApplyPause _nochoosers;
+        GameState probe = s;
+        if (aaroute::Replay(probe, me, v.path) != 1)
+        {
+            if (aaroute::TraceOn())
+            { std::fprintf(stderr, "[aa-route] t%d memoised path does not kill in this context: re-walking\n", s.turn_number); }
+            if (aaroute::StatsOn()) { aaroute::g_rewalks.fetch_add(1, std::memory_order_relaxed); }
+            v = aaroute::Walk1(s, me);
+            if (v.r != 1) { return 0; }
+        }
+    }
+    aaroute::Guard _g;
+    aaroute::NoPumpScope _np;
+    ExecutorMenuScope _exec;
+    ComboOffApplyPause _nochoosers;
+    const int r = aaroute::Replay(s, me, v.path);
+    if (r != 1)
+    {
+        std::fprintf(stderr, "[aa-route] !! t%d APPLY replay did not kill on a board the trial proved (%zu links)\n",
+                     s.turn_number, v.path.size());
+    }
+    return r;
+}
+
+int ComboRouteApplyFor(GameState& s, int me)
+{
+    const DecisionProvider& p = ResolveProvider(s);
+    if (p.EquipRouteEnabled())     { return EquipRouteApply(s, me); }
+    if (p.UntapLoopRouteEnabled()) { return AlchemistComboRouteApply(s, me); }
+    return EdfComboRouteApply(s, me);
+}
+
 // ---- SelesnyaLifegainProvider::CleanupDiscardCandidates ----------------------
 //
 // THE USER-SETTLED buckets (2026-10-09): docs/design/selesnyalifegain-discard-policy.md, "SETTLED".

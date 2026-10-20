@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "LIFE-GAINED: a mid-turn frame after Nourish already resolved (life_gained_this_turn 6). Umbra on the",
+    "Alchemist, Stroke in hand: the loop + Stroke is the whole go-off."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 40,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Crab Umbra",
+      "equips": "Accomplished Alchemist"
+    }
+  ],
+  "hand": [
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true,
+  "life_gained_this_turn": 6,
+  "resume_at": "main1"
+}

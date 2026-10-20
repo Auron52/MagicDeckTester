@@ -30911,6 +30911,14 @@ struct UntapLoopNeed
 inline thread_local int g_untap_loop_kill_only  = 0;
 inline thread_local int g_untap_loop_kill_count = 0;
 inline thread_local InternedName g_untap_loop_kill_card{};   // chained payoffs: the setup card (wish target)
+// MAIN-PHASE KILLS ONLY (the AccomplishedAlchemist COMBO OFF route, 2026-10-20): while non-zero the loop's need
+// skips the payoffs that win only in COMBAT (Ezuri's team pump, kLoopPayPump / kLoopPayCastPump, and the
+// Witch's own +3/+3, UntapLoopPumpIterations), so the loop funds a kill that has LANDED when the main phase
+// ends -- Stroke of Genius at the opponent, or the drain. The route's verdict is OpponentHasLost after its
+// last link, which a combat kill cannot satisfy in main 1. Set ONLY by the route (aaroute::NoPumpScope),
+// in every world that runs it (trial, rollout apply, executor apply), so the worlds stay in lockstep.
+// Zero everywhere else: byte-identical.
+inline thread_local int g_untap_loop_no_pump = 0;
 
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies);   // ManaPayment.cpp
 
@@ -30972,7 +30980,7 @@ inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefiniti
     // Wish is one only while the sideboard still holds a drain creature it can fetch.
     if (d.card.IsCreature() && (UntapLoopDrainCard(d.params)
                                 || (d.params.team_pump_cost.has_value() && d.params.team_pump_power > 0
-                                    && !d.params.team_pump_taps_source)))
+                                    && !d.params.team_pump_taps_source && g_untap_loop_no_pump == 0)))
     { return true; }
     if (d.params.tutor_to_hand && d.params.wish_from_sideboard)
     {
@@ -31033,8 +31041,8 @@ inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
             const ManaCost unit = EffectiveActivationCost(s, ctrl, p.card, *d->params.drain_cost);
             consider(kLoopPayDrain, ScaleFlatManaCost(unit, n), n, unit);
         }
-        // (c) the team pump to lethal.
-        if (d->params.team_pump_cost.has_value())
+        // (c) the team pump to lethal (not under the COMBO OFF route's main-phase-kills-only scope).
+        if (d->params.team_pump_cost.has_value() && g_untap_loop_no_pump == 0)
         {
             const int k = TeamPumpLethalCount(s, ctrl, *d);
             if (k > 0)
@@ -31121,7 +31129,7 @@ inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
                 SumManaCostInto(total, pre);
                 consider_chain(kLoopPayCastDrain, total, n, unit, &pre, 1, d->card.m_name);
             }
-            else if (d->params.team_pump_cost.has_value())
+            else if (d->params.team_pump_cost.has_value() && g_untap_loop_no_pump == 0)
             {
                 const int k = TeamPumpLethalCount(s, ctrl, *d);
                 if (k > 0)
@@ -31435,7 +31443,7 @@ inline bool UntapLoopNeedFunded(const GameState& s, int ctrl, int* need_mv, Unta
 inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, int target_id)
 {
     UntapLoopNeed need = ComputeUntapLoopNeed(state, ctrl);
-    const int k_pump = UntapLoopPumpIterations(state, ctrl, shape, source_id, target_id);
+    const int k_pump = g_untap_loop_no_pump != 0 ? 0 : UntapLoopPumpIterations(state, ctrl, shape, source_id, target_id);
     if (need.payoff == kLoopPayNone && k_pump <= 0) { return 0; }
     const bool staff_shape = shape == kUntapStaffTarget;
     ManaCost goal = need.cost;

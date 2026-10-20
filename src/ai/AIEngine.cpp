@@ -5158,10 +5158,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // provider dispatch and same all-or-nothing contract as the main-plan branch.
             else if (a.kind == Action::Kind::ComboRoute)
             {
-                const DecisionProvider& cr_prov = ResolveProvider(state);
-                const int cr = cr_prov.EquipRouteEnabled()
-                             ? EquipRouteApply(state, state.active_player_index)
-                             : EdfComboRouteApply(state, state.active_player_index);
+                const int cr = ComboRouteApplyFor(state, state.active_player_index);
                 if (m_logger)
                 {
                     m_logger->LogAbility(0, "Combo Off", cr == 1 ? "combo route: win"
@@ -6255,10 +6252,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // sharing the kind is what lets every other reader of a verified go-off stay unchanged.
             // Dispatching on the provider rather than on a second kind also keeps the lockstep
             // law local: whichever route emitted the action is the route that applies it.
-            const DecisionProvider& rp = ResolveProvider(state);
-            const int r = rp.EquipRouteEnabled()
-                        ? EquipRouteApply(state, state.active_player_index)
-                        : EdfComboRouteApply(state, state.active_player_index);
+            const int r = ComboRouteApplyFor(state, state.active_player_index);
             if (m_logger)
             {
                 m_logger->LogAbility(0, "Combo Off", r == 1 ? "combo route: win"

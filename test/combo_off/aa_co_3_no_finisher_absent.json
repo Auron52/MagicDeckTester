@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "NEGATIVE: the loop is there (Umbra on the Alchemist, Nourish in hand) but nothing turns the mana into a",
+    "kill this turn -- no Stroke, no Living Wish, no Scholar, no Staff to dig. The button must NOT appear."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 40,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Crab Umbra",
+      "equips": "Accomplished Alchemist"
+    }
+  ],
+  "hand": [
+    "Nourish",
+    "Forest"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": false,
+  "combo_off_rule_probe": true
+}

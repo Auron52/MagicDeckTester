@@ -879,6 +879,22 @@ public:
     // site in CollectActions consults this first, so a deck without it never scans. Generic = false.
     virtual bool ComboRouteEnabled() const { return false; }
 
+    // UntapLoopRouteEnabled -- does this deck get the MECHANICAL UNTAP-LOOP GO-OFF (AccomplishedAlchemist,
+    // 2026-10-20; AlchemistComboRouteOffer / AlchemistComboRouteApply in DecisionProviders.cpp) as a
+    // searched plan action? The third ComboRoute sibling, same contract: ONE standalone action, emitted in
+    // autonomous play only when playing the go-off out on a copy WINS this turn (the USER's three stages:
+    // lifegain -> the untap/tap loop on the Alchemist -> Stroke of Genius at the opponent, or Living Wish
+    // for Scholar of Athreos and drain). Gated by ComboOffPossible first, so a board the rule table refuses
+    // never pays for a trial. Generic = false.
+    virtual bool UntapLoopRouteEnabled() const { return false; }
+
+    // ComboOffSearchDefault -- the PROVIDER-LEVEL default of the search's two COMBO OFF queries
+    // (MTG_EDF_CO_ROOT / MTG_EDF_CO_LOOK, TurnSolver.cpp `edfco`) when the env leaves them unset. Generic
+    // = false (EldraziDisplacerFlicker included: its measured default stays OFF, byte-identical);
+    // AccomplishedAlchemist = true (USER 2026-10-20: "We should use the combo off logic for this deck").
+    // The env var, and a batch job's heurarm slot, still override it in either direction.
+    virtual bool ComboOffSearchDefault() const { return false; }
+
     // EquipRouteEnabled -- does this deck get the MECHANICAL EQUIP-CHAIN GO-OFF as a searched plan
     // action (EquipRouteTrial / EquipRouteApply)? The sibling of ComboRouteEnabled, same contract
     // and same emission site, for the free-Equipment draw engine instead of the blink loop.

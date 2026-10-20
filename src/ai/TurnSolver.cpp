@@ -40483,6 +40483,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // THE MECHANICAL UNTAP-LOOP GO-OFF (AccomplishedAlchemist COMBO OFF, 2026-10-20; AlchemistComboRouteOffer /
+        // AlchemistComboRouteApply in DecisionProviders.cpp). The third sibling, read the same way everywhere: ONE
+        // standalone ComboRoute action. Autonomous play emits it only when its walk on a copy WINS this turn
+        // (offer 1) -- a sound dominance candidate, nothing removed; human play also emits it when only the RULE
+        // TABLE fires (offer 3, display aggressive), and the COMBO OFF gate in EnumerateMainPlans then labels it
+        // "not yet proven". Provider-gated first (every other deck never scans), never inside the kill fold's
+        // kill-only CollectActions (that list is the kill alone) and never inside the route's own walk.
+        if (g_untap_loop_kill_only == 0)
+        {
+            const DecisionProvider& uprov = ResolveProvider(state);
+            const int uroute = uprov.UntapLoopRouteEnabled()
+                             ? AlchemistComboRouteOffer(state, state.active_player_index) : 0;
+            if (uroute != 0)
+            {
+                Action a;
+                a.kind           = Action::Kind::ComboRoute;
+                a.card_name      = InternedName("Combo Off");
+                a.def            = nullptr;
+                a.hand_index     = -1;
+                a.chosen_x       = 999;   // a go-off for every reader that sizes one by chosen_x (> 3)
+                a.eval           = (uroute == 1) ? 999 : 0;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
         // THE MECHANICAL EQUIP-CHAIN GO-OFF (2026-10-03; EquipRouteTrial / EquipRouteApply in
         // DecisionProviders.cpp). The EDF route's sibling, and read the same way everywhere: ONE
         // standalone action, emitted only when playing the turn out on a copy of THIS board is
@@ -57369,10 +57395,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Provider-dispatched between the two routes sharing this kind, identically to the
             // executor's branch -- the rollout and the executor applying different routes for the
             // same action is precisely the lockstep break that makes a scored win unreproducible.
-            if (ResolveProvider(state).EquipRouteEnabled())
-            { EquipRouteApply(state, state.active_player_index); }
-            else
-            { EdfComboRouteApply(state, state.active_player_index); }
+            ComboRouteApplyFor(state, state.active_player_index);
         }
         else if (a.kind == Action::Kind::ActivateBlink)
         {
@@ -74526,6 +74549,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                       // continuations are empty by design, see the BpUnbranchedCanon gate), so its
                       // results must never be served to -- or taken from -- an ordinary frame.
                       && !EquipRouteInProgress()
+                      // ...and the same for the untap-loop route's walk: its frames never carry the
+                      // route action (no nested emission), so they must not trade lists with the ordinary
+                      // frames that do (2026-10-20: a cached outer list served inside the walk handed it
+                      // its own route plan back).
+                      && !AlchemistComboRouteInProgress()
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
     if (!memo_ok)
     {
@@ -74802,6 +74830,7 @@ void TurnSolver::ClearPerGameCaches()
     ++bplibcheck::t_game;   // MTG_BP_ENUM_LIBCHECK's game ordinal (diagnostic stamp only)
     // The EDF combo route's board-keyed trial memo -- same channel, see EdfComboRouteClearMemo.
     EdfComboRouteClearMemo();
+    AlchemistComboRouteClearMemo();
     // The hybrid's per-game learned cost model (emulated ladder R/G, single-pass R, research R).
     HybridLearnedStateClear();
     // The payable-mana cache (SpellEffects.cpp): pure in design, but every key hole it has had was a
@@ -77112,6 +77141,12 @@ std::uint64_t TurnSolver::DedupKeyOf(const GameState& state)
     return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
 }
 
+std::uint64_t TurnSolver::MidTurnStateKeyOf(const GameState& state)
+{
+    const TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/true);
+    return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+}
+
 std::vector<TurnSolver::Plan> TurnSolver::IdlePassWithAxes(const GameState& state)
 {
     std::vector<Plan> v(1);
@@ -78917,15 +78952,27 @@ namespace edfco
 //
 // `=1` on either enables one half without touching the other, and both carry a heurarm slot so a
 // lever sweep rides ONE pooled batch (CLAUDE.md's one-tail rule).
-inline bool RootOn()
+//
+// PROVIDER-LEVEL DEFAULT (2026-10-20). With the env var UNSET the default is the provider's
+// `ComboOffSearchDefault()` -- false for every provider but AccomplishedAlchemist (USER 2026-10-20: "We
+// should use the combo off logic for this deck"), so EldraziDisplacerFlicker keeps the measured OFF above
+// byte-identically. A set env var (=0 or =1) wins over the provider either way, and a batch job's heurarm
+// slot wins over both, so a one-pool A/B still pins each arm.
+inline bool RootOn(const DecisionProvider& prov)
 {
-    static const bool v = EnvOn("MTG_EDF_CO_ROOT");
-    return heurarm::Flag(heurarm::EDF_CO_ROOT, v);
+    // EnvOn read under BOTH defaults: unset -> (true, false), so the provider's default picks; "=0" ->
+    // (false, false) and "=1" -> (true, true), so a set value wins whatever the provider says.
+    static const bool if_on  = EnvOn("MTG_EDF_CO_ROOT", true);
+    static const bool if_off = EnvOn("MTG_EDF_CO_ROOT", false);
+    return heurarm::Flag(heurarm::EDF_CO_ROOT, prov.ComboOffSearchDefault() ? if_on : if_off);
 }
-inline bool LookOn()
+inline bool LookOn(const DecisionProvider& prov)
 {
-    static const bool v = EnvOn("MTG_EDF_CO_LOOK");
-    return heurarm::Flag(heurarm::EDF_CO_LOOK, v);
+    // EnvOn read under BOTH defaults: unset -> (true, false), so the provider's default picks; "=0" ->
+    // (false, false) and "=1" -> (true, true), so a set value wins whatever the provider says.
+    static const bool if_on  = EnvOn("MTG_EDF_CO_LOOK", true);
+    static const bool if_off = EnvOn("MTG_EDF_CO_LOOK", false);
+    return heurarm::Flag(heurarm::EDF_CO_LOOK, prov.ComboOffSearchDefault() ? if_on : if_off);
 }
 // MTG_EDF_CO_LOOK_TRIAL (DEFAULT ON) -- does the LOOKAHEAD arm pay for the trial apply, or take the
 // rule's word?
@@ -79004,7 +79051,9 @@ int TurnSolver::EdfComboOffShortcut(const GameState& state, const std::vector<Pl
 {
     if (HumanPlayActive()) { return -1; }
     const DecisionProvider& prov = ResolveProvider(state);
-    if (!prov.HasExtraLethalModel()) { return -1; }
+    // A provider with a COMBO OFF rule table: EldraziDisplacerFlicker (keyed, as since Session 25, on its
+    // lethal model) or a deck whose go-off is the mechanical untap-loop route (AccomplishedAlchemist).
+    if (!prov.HasExtraLethalModel() && !prov.UntapLoopRouteEnabled()) { return -1; }
     const int stat = at_root ? 0 : 1;
     if (edfco::StatsOn()) { edfco::g_nodes[stat].fetch_add(1, std::memory_order_relaxed); }
 
@@ -81240,7 +81289,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // every deeper ply is lookahead -> MTG_EDF_CO_LOOK. Both VERIFY, and in this host that is not
     // a choice: FSLineWin's returned win turn is the number the committed line is scored on, so an
     // unverified claim would report a win the replay does not produce.
-    if (bp_root ? edfco::RootOn() : edfco::LookOn())
+    if (bp_root ? edfco::RootOn(ResolveProvider(state)) : edfco::LookOn(ResolveProvider(state)))
     {
         const int co = TurnSolver::EdfComboOffShortcut(state, pre, /*is_pre_combat=*/true,
                                                        /*verify=*/true, /*at_root=*/bp_root);
@@ -87242,7 +87291,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // class of error ExtraLethalDamage already makes by contract -- it mis-RANKS a plan, it cannot
     // report a win the game did not produce, because SimulateToEndImpl applies the plan for real
     // and reads the resulting state.
-    if (enforce_budget ? edfco::RootOn() : edfco::LookOn())
+    if (enforce_budget ? edfco::RootOn(ResolveProvider(state)) : edfco::LookOn(ResolveProvider(state)))
     {
         const int co = EdfComboOffShortcut(state, candidates, is_pre_combat,
                                            /*verify=*/enforce_budget || edfco::LookTrialOn(),
@@ -91359,6 +91408,59 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     return true;
 }
 
+// THE UNTAP LOOP'S KILL PLANS (chunk C2b's kill fold, factored out 2026-10-20 so the AccomplishedAlchemist
+// COMBO OFF route plays its finisher through the SAME list the search's continuation does). When the FLOAT
+// pays the cheapest this-turn kill (UntapLoopNeedFunded), the plans that ARE that kill -- exactly one kill
+// action and nothing else but a land -- through CollectActions with only the kill kind admitted
+// (g_untap_loop_kill_only). Land-free plans when any exist, else the land-carrying ones; EMPTY when no
+// kill is funded or none was enumerated (the caller falls back to its full list). Uncached on purpose: the
+// kill-only CollectActions must never seed the plan cache under the board's ordinary key. The caller owns
+// g_bp_enum_depth (both callers are already inside a derivation scope).
+static std::vector<TurnSolver::Plan> UntapLoopKillPlansFor(const GameState& state, bool is_pre_combat)
+{
+    std::vector<TurnSolver::Plan> plans;
+    UntapLoopNeed kn;
+    if (state.floating_mana.Total() > 0
+        && UntapLoopNeedFunded(state, state.active_player_index, nullptr, &kn)
+        && (kn.payoff == kLoopPayStroke || kn.payoff == kLoopPayDrain || kn.payoff == kLoopPayPump
+            || kn.payoff == kLoopPayCastDrain || kn.payoff == kLoopPayWishDrain || kn.payoff == kLoopPayCastPump))
+    {
+        struct KillScope
+        {
+            int pk, pc; InternedName pn;
+            KillScope(int k, int c, const InternedName& n)
+                : pk(g_untap_loop_kill_only), pc(g_untap_loop_kill_count), pn(g_untap_loop_kill_card)
+            { g_untap_loop_kill_only = k; g_untap_loop_kill_count = c; g_untap_loop_kill_card = n; }
+            ~KillScope() { g_untap_loop_kill_only = pk; g_untap_loop_kill_count = pc; g_untap_loop_kill_card = pn; }
+        } _ks(kn.payoff, kn.count, kn.card);
+        std::vector<TurnSolver::Plan> kills = EnumeratePlansWithLandUncached(state, is_pre_combat);
+        std::vector<TurnSolver::Plan> keep, keep_noland;
+        for (TurnSolver::Plan& kp : kills)
+        {
+            int n_kill = 0, n_other = 0;
+            bool land = false;
+            for (const Action& a : kp.actions)
+            {
+                if (a.kind == Action::Kind::PlayLand) { land = true; continue; }
+                if (UntapLoopKillAction(state, a, kn.payoff, kn.count)) { ++n_kill; } else { ++n_other; }
+            }
+            if (n_kill != 1 || n_other != 0) { continue; }
+            (land || !kp.land_to_play.empty() ? keep : keep_noland).push_back(std::move(kp));
+        }
+        if (!keep_noland.empty())  { plans = std::move(keep_noland); }
+        else if (!keep.empty())    { plans = std::move(keep); }
+    }
+    return plans;
+}
+
+std::vector<TurnSolver::Plan> TurnSolver::UntapLoopKillPlans(const GameState& state, bool is_pre_combat)
+{
+    ++g_bp_enum_depth;   // a continuation-shaped list, never a new decision: no breakpoint fan-out
+    std::vector<Plan> out = UntapLoopKillPlansFor(state, is_pre_combat);
+    --g_bp_enum_depth;
+    return out;
+}
+
 // THE CONTINUATION LIST: derive, rank, and apply the condemnation MARKING (drop modes 2 and 3).
 //
 // Factored out of BpEnumEntryFor for two reasons, one of which is a correctness one. (1) The enum
@@ -91423,37 +91525,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     // replays by index), never in human play.
     {
         static const bool s_kill_fold = EnvOn("MTG_UNTAP_LOOP_KILL_FOLD", true);   // DEFAULT ON; =0 disables
-        UntapLoopNeed kn;
-        if (s_kill_fold && !HumanPlayActive() && state.floating_mana.Total() > 0
-            && UntapLoopNeedFunded(state, state.active_player_index, nullptr, &kn)
-            && (kn.payoff == kLoopPayStroke || kn.payoff == kLoopPayDrain || kn.payoff == kLoopPayPump
-                || kn.payoff == kLoopPayCastDrain || kn.payoff == kLoopPayWishDrain || kn.payoff == kLoopPayCastPump))
-        {
-            struct KillScope
-            {
-                int pk, pc; InternedName pn;
-                KillScope(int k, int c, const InternedName& n)
-                    : pk(g_untap_loop_kill_only), pc(g_untap_loop_kill_count), pn(g_untap_loop_kill_card)
-                { g_untap_loop_kill_only = k; g_untap_loop_kill_count = c; g_untap_loop_kill_card = n; }
-                ~KillScope() { g_untap_loop_kill_only = pk; g_untap_loop_kill_count = pc; g_untap_loop_kill_card = pn; }
-            } _ks(kn.payoff, kn.count, kn.card);
-            std::vector<TurnSolver::Plan> kills = EnumeratePlansWithLandUncached(state, is_pre_combat);
-            std::vector<TurnSolver::Plan> keep, keep_noland;
-            for (TurnSolver::Plan& kp : kills)
-            {
-                int n_kill = 0, n_other = 0;
-                bool land = false;
-                for (const Action& a : kp.actions)
-                {
-                    if (a.kind == Action::Kind::PlayLand) { land = true; continue; }
-                    if (UntapLoopKillAction(state, a, kn.payoff, kn.count)) { ++n_kill; } else { ++n_other; }
-                }
-                if (n_kill != 1 || n_other != 0) { continue; }
-                (land || !kp.land_to_play.empty() ? keep : keep_noland).push_back(std::move(kp));
-            }
-            if (!keep_noland.empty())  { plans = std::move(keep_noland); }
-            else if (!keep.empty())    { plans = std::move(keep); }
-        }
+        if (s_kill_fold && !HumanPlayActive()) { plans = UntapLoopKillPlansFor(state, is_pre_combat); }
     }
     if (plans.empty()) { plans = EnumeratePlansWithLand(state, is_pre_combat); }
     const bool bp_interrupted = g_bp_derive_interrupted;
@@ -95824,6 +95896,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
 void TurnSolver::ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat)
 {
     ApplyPlanDirect(state, plan, is_pre_combat);
+}
+
+std::string TurnSolver::PlanLineSummary(const Plan& plan, const GameState& state)
+{
+    return LineSummaryOfPlan(plan, &state);
 }
 
 // The human menu's half of the land_slot twin fold (Landfall claude-play sweep flag 2; the search's

@@ -3161,6 +3161,15 @@ public:
     // =0 -> every legal sideboard name in sideboard order, exactly as before. Human play / MTG_UNPRUNED
     // (the Tutor gate) keeps the full list. See the .cpp for the reading of each bucket.
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    // THE COMBO OFF RULE TABLE (2026-10-20; USER: "We should use the combo off logic for this deck. It is
+    // very much the type of deck that needs it."). Named conjunctions over board + hand inventory (+ the
+    // sideboard Living Wish reaches), in the USER's three stages LIFE -> LOOP -> FINISH; exact (mana) via
+    // the loop's own bootstrap search (UntapLoopBootOp). See the .cpp for every rule.
+    bool ComboOffPossible(const GameState& s, int controller, std::string* rule) const override;
+    // The mechanical untap-loop go-off (AlchemistComboRouteOffer / Apply) -- MTG_AA_COMBO_ROUTE.
+    bool UntapLoopRouteEnabled() const override;
+    // The search's COMBO OFF queries are ON for this deck by default (USER 2026-10-20).
+    bool ComboOffSearchDefault() const override { return true; }
     // 9 while the bucket rule is on: a COVERAGE bound, so every name the rule can admit (7 in the
     // widest case) and its empty-set fallback (the 9-name sideboard) is searched. =0 -> the base 6.
     int TutorSearchWidth() const override;
@@ -3878,3 +3887,24 @@ bool EquipRouteInProgress();                                  // true inside a r
 // kill on a counterless board (2026-10-05).
 std::uint64_t EquipRouteStateKey(const GameState& s, int controller);
 bool EquipRouteDfsActive();                                   // ...and inside its DFS specifically (not the certificate)
+
+// THE MECHANICAL UNTAP-LOOP GO-OFF (DecisionProvider::UntapLoopRouteEnabled; AccomplishedAlchemist,
+// 2026-10-20). The USER's three stages played out link by link through the engine's OWN plans:
+// (1) LIFEGAIN cast(s) [+ the untapper's setup cast], (2) the closed-form untap/tap LOOP on the
+// Alchemist (ActivateUntap chosen_x = kUntapLoopToNeed, which banks exactly the cheapest kill),
+// (3) the FINISHER off the kill-fold list (Stroke of Genius at the opponent; Living Wish -> Scholar of
+// Athreos -> drain; Ezuri's pump). A bounded DFS over those links on a COPY; the apply replays the
+// winning path on the live state (same plans, same order -- the lockstep law).
+//   Offer -- the emission gate: 0 nothing; 1 the route WINS this turn (a verified candidate);
+//            3 human play only, the rule table fires and no route was proven (display AGGRESSIVE:
+//            the button shows "not yet proven", and a click that does not win rolls back loudly).
+//   Apply -- run the proven path on `s` (all-or-nothing: a board the trial did not prove is untouched).
+int  AlchemistComboRouteOffer(const GameState& s, int controller);
+int  AlchemistComboRouteApply(GameState& s, int controller);  // 1 WIN, 0 nothing played
+void AlchemistComboRouteClearMemo();
+bool AlchemistComboRouteInProgress();
+bool AlchemistComboRouteOn();                                 // MTG_AA_COMBO_ROUTE (heurarm AA_COMBO_ROUTE)
+
+// The ONE dispatch of Action::Kind::ComboRoute (rollout, executor main plan, executor continuation):
+// whichever route the provider owns. Three routes share the kind; they are mutually exclusive per deck.
+int  ComboRouteApplyFor(GameState& s, int controller);

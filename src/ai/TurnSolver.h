@@ -2195,6 +2195,13 @@ public:
     // like the search; ApplyPlan runs the canonical execution order (land, casts, Land's
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
+    // The untap loop's KILL plans when the float already pays the cheapest this-turn kill (the chunk-C2b
+    // kill fold's list, shared with BpDeriveContinuationList); empty otherwise. The AccomplishedAlchemist
+    // COMBO OFF route plays its finisher off this list (DecisionProviders.cpp, aaroute).
+    static std::vector<Plan> UntapLoopKillPlans(const GameState& state, bool is_pre_combat);
+    // The viewer's one-line summary of a plan on `state` (LineSummaryOfPlan) -- the AccomplishedAlchemist
+    // COMBO OFF route narrates each link it plays with it, so the history lists the actions, not a macro.
+    static std::string PlanLineSummary(const Plan& plan, const GameState& state);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
     // The rollout's staged-card re-lay at an executor pass head (TurnSolver.cpp MergeStagedToHandEnd,
     // lockstep #5): staged hand cards move to the END, order kept. Public only so a unit test can hold
@@ -2211,6 +2218,11 @@ public:
     // The post-apply state identity every candidate dedup keys on (BuildDedupKey), folded to 64 bits.
     // Tests only: it is how a unit case checks that two states collide (or do not) in that key.
     static std::uint64_t     DedupKeyOf(const GameState& state);
+    // The full mid-turn state identity the breakpoint plan memo keys on (BuildBreakpointKey, pre-combat),
+    // folded to 64 bits. The AccomplishedAlchemist COMBO OFF route memoises its proven path on it: a
+    // hand-rolled partial key let two boards that differ in a field it skipped (a land Aura's locked
+    // colour, a pump until end of turn) share one verdict.
+    static std::uint64_t     MidTurnStateKeyOf(const GameState& state);
     // The PASS a PRE-combat search host appends when a main enumerates nothing (FSLineWin's idle node:
     // land decided), routed through the post-dedup sub-decision fan-out like an enumerated plan
     // (AppendIdlePassAxes: the no-dig twin AND every pin it carries into this turn's combat and beyond).

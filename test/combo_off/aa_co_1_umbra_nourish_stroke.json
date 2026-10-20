@@ -1,0 +1,53 @@
+{
+  "_comment": [
+    "THE CANONICAL GO-OFF (USER 2026-10-20): lifegain -> untap/tap the Alchemist -> Stroke at the opponent.",
+    "Crab Umbra already on a non-sick Accomplished Alchemist; Nourish (gain 6) and Stroke of Genius in hand.",
+    "Rule LIFE-HAND+LOOP-UMBRA+FIN-STROKE; the route casts Nourish + loops ({2}{U} per untap, X = 6), then",
+    "Stroke X = the opponent's library at the opponent. The history must list each link, never a macro."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 40,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Crab Umbra",
+      "equips": "Accomplished Alchemist"
+    }
+  ],
+  "hand": [
+    "Nourish",
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true,
+  "expect_history_contains": [
+    "Nourish",
+    "Stroke of Genius"
+  ]
+}
