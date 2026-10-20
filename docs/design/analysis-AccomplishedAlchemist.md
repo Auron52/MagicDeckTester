@@ -71,6 +71,81 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
 
+## Combined optimization (2026-10-20) -- mull + branching + wish on `accomplished-alchemist`; at the line within contention noise
+
+The three branches were cherry-picked onto 39848afe: `MTG_BOTTOM_PREF_ORDER` (4a6fb7bd), the branching folds
+(39803388, 8048a434) and the USER's Living Wish buckets (a3dd986a..8ab567c4). Conflicts in `src/ai/HeuristicArm.h` and
+`test/unit/test_accomplished_alchemist.cpp` were resolved as a union. The heurarm enum and its name table line up, with
+the four fold slots and then the three wish slots in the same order in both. The `static_assert` on the count holds.
+The test-file union had dropped the closing brace of the late-bound Crab Umbra test case, so the build failed. That
+is fixed in 0d16858b. Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/comb/`. It holds `mtg.base` (39848afe,
+the `mopt` snapshot), `mtg.new` (0d16858b), `base/` and `new/` (the pooled batches), `pstat/` (paired `perf stat`
+cells), `g23*/` (the one moved game) and `an.py`.
+
+* **Build/tests.** Full rebuild (objects deleted first). mtg-test 1517 / 1517 and scenarios 228 / 228. Smoke is
+  124 / 128, and only the four known pre-existing moves failed, each at its known digest: selesnya d3
+  a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11. Smoke was not
+  accepted.
+* **Measurement.** Base and new ran as two concurrent 16-thread batches over ONE manifest each: seed 70001 x 200
+  and held-out seed 90001 x 600, both cells, 1,600 games per arm. An unwon game counts as win turn 9. The base arm
+  reproduces the committed off-arm digests on all four cells (ed03ab6957a09593, f4d9cf88b0c3a26c, 1971ba6aee67bfd0,
+  c3735ac8352a1d27).
+
+  | cell | avg base -> new | faster / slower | units mean base -> new | units p90 | units max | slowest game base -> new |
+  |---|---|---|---|---|---|---|
+  | s70001 d3 b10 | 5.8150 -> 5.6950 (-0.120) | 25 / 12 | 166.9k -> 149.7k (0.897x) | 458k -> 444k | 1,973k -> 1,887k | 242 s -> 143 s |
+  | s70001 d5 b20 | 5.7450 -> 5.6300 (-0.115) | 25 / 7 | 313.5k -> 271.7k (0.867x) | 947k -> 798k | 4,090k -> 3,979k | 773 s -> 63 s |
+  | s90001 d3 b10 | 5.6900 -> 5.6883 (-0.002) | 48 / 53 | 160.4k -> 132.8k (0.828x) | 422k -> 350k | 5,341k -> 5,330k | gi286 6,137 s T8 -> 446 s unwon |
+  | s90001 d5 b20 | 5.6400 -> 5.6167 (-0.023) | 48 / 48 | 294.5k -> 243.6k (0.827x) | 786k -> 693k | 8,293k -> 8,266k | gi286 7,890 s unwon -> 287 s T7 |
+
+  Net <= 0 on every cell. The box was shared throughout: sibling agents' builds and batches pushed the load average to
+  40-97 on 32 logical cores, and new finished about 1.5 h before base's gi286 tail. **The batch wall ms therefore
+  cannot be compared across arms.** For example, new's s70001 d3 mean was 23.9 s against base's 17.6 s, on fewer
+  units. Units are contention-free. Wall ms is given only for the tail games, where the gap is >10x.
+* **Composition: each branch's expected effect holds.**
+  - **Wish rule.** New reproduces the aa-wish on-arm's win turns on 1,599 of 1,600 games. The s70001 d3 digest
+    (6d9f924c48f68526) and all four averages and faster/slower counts are the wish A/B's (5.6950 / 5.6350 / 5.6167 /
+    5.6883; 25/12, 24/7, 48/48, 48/53). The gi286 collapse carries over.
+  - **Folds.** No win turn moved: the held-out digests differ from aa-wish's at identical win turns, which is the
+    branching section's PLAY-CHANGED same-turn class. Units vs the aa-wish on-arm are 0.924-0.939x per cell, from the
+    folds' greedy tie-breaks plus the trial order.
+  - **`MTG_BOTTOM_PREF_ORDER` moved ONE game: s70001 d5 gi23, T8 -> T7.** This is the only win-turn difference from
+    the wish-on arm. In a single-game rerun it reproduces (T7, 1,712,723 units). Each fold off, and all four off,
+    leaves it unchanged. `MTG_BOTTOM_PREF_ORDER=0` restores T8 (1,773,133 units).
+  - **The gi23 mechanism (`MTG_BOTTOM_TRIAL_TRACE=1`).** Trial id ...218 scores T6 when it runs THIRD (old order) but
+    T8 when it runs FIRST (preference order). So the pass minimum G=6 is held by {218, 219} in the old order and by
+    {219} alone in the new one. The bottomed card differs, and so does the game.
+  - **What this means for the proof.** This is the cross-trial channel the mulligan-trials section named, a shared
+    history across trials: the bottoming TT plus the caches a finite budget re-spends. That section reported it did
+    not show on base. It shows here, under the wish rule. So `MTG_BOTTOM_PREF_ORDER` is "same bottoms GIVEN the trial
+    values", not byte-identical in general: trial values depend on trial order. The move is 1 of 1,600 games and
+    faster. It is surfaced for the USER, not changed.
+* **Cost: paired `perf stat` over s70001 d5 b20 x 200.** Base and new ran as two concurrent 12-thread batches.
+  Instructions do not depend on contention; task-clock (core time) does, so read it as the paired ratio:
+
+  | | instructions | core-s | core-ms / game |
+  |---|---|---|---|
+  | base 39848afe | 11.164 T | 2,665 | 13,327 |
+  | new 0d16858b | 7.454 T (0.668x) | 2,005 (0.752x) | 10,026 |
+
+  s70001 d3 b10, new alone: 4.209 T instructions (base 5.951 T on the branching run, 0.707x) and 5,740 core-ms per
+  game. The held-out d5 cell costs 0.90x of s70001's units per game (243.6k vs 271.7k).
+* **The suite_gate figure.** The gate is the mean core-ms per game at the worst searched cell (d5 b20) against
+  8,907 ms. The same base binary has measured 10,227 (mopt, 24-way wall), 11,416 (branching task-clock), 12,643 (P3,
+  30-way) and 13,327 (today, load 40-97). Applying today's paired 0.752x to those gives:
+  - new at 7,694 / 8,586 / 9,510 / 10,026 ms;
+  - 0.86x / 0.96x / 1.07x / 1.13x of the line;
+  - on the held-out seeds, ~0.90x of each figure (~6.9-9.0 s).
+
+  **The combined deck is at the line, inside the measurement's contention noise.** It is under the line on the two
+  quieter footings and over it on the two contended ones. Only `suite_gate.py --measure-all` can decide it: one pooled
+  tier run on a quiet box, on the same footing as galadriel's 2,969 ms. That needs the suite rows, which are not added
+  yet (the USER's suite-entry decision is still open).
+* **For the USER (not changed):**
+  1. The `MTG_BOTTOM_PREF_ORDER` trial-order dependence above (s70001 d5 gi23).
+  2. The deck is now within noise of the 3x line. Whether to attempt the suite entry (rows + a quiet-box
+     `--measure-all`) is the USER's call.
+
 ## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
 
 Branch `aa-opt-mull` (from accomplished-alchemist @ 39848afe). Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/mopt/`
