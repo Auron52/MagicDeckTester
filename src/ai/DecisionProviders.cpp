@@ -288,13 +288,17 @@ static std::vector<std::string> GenericTutorList(const GameState& s, int control
         const Card&           card = def ? def->card : lc;
         // Empty tutor_types == no restriction ("search for a card", e.g. Gamble): every card is
         // a legal target. A non-empty filter keeps only the matching types (Idyllic/Enlightened).
+        // Each conjunct short-circuits (P4, 2026-10-20): all four are pure reads, so testing the rest
+        // of a card the type filter already rejected only spent work -- 34 M TutorNumericFilterOk
+        // calls in one AccomplishedAlchemist game (Elvish Harbinger's Elf search walks the whole
+        // library at every resolution, and almost nothing in it is an Elf).
         bool type_ok = pp.tutor_types.empty();
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
-        if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // Natural Order: green only
-        if (!TutorNumericFilterOk(card, pp)) { type_ok = false; }   // Ranger/Recruiter MV/toughness
-        if (!TutorLandCapOk(s, controller, card, pp, land_slack)) { type_ok = false; }   // Beseech
         if (!type_ok) { continue; }
+        if (!CardHasColorNamed(card, pp.tutor_color)) { continue; }   // Natural Order: green only
+        if (!TutorNumericFilterOk(card, pp)) { continue; }   // Ranger/Recruiter MV/toughness
+        if (!TutorLandCapOk(s, controller, card, pp, land_slack)) { continue; }   // Beseech
         const std::string* key = &lc.m_name.str();
         if (std::find(seen.begin(), seen.end(), key) != seen.end()) { continue; }
         seen.push_back(key);
