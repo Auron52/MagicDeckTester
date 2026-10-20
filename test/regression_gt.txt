@@ -1,11 +1,11 @@
-# Regression ground truth -- commit bff87208d  date 2026-10-18
+# Regression ground truth -- commit 710fb3899  date 2026-10-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-13): Periodic overnight rebaseline for the 91-commit rebase onto origin's 60 (PGO+LTO binary, 21m10s makespan, 32/32 workers 100%): searched 420 faster / 34 slower, d0 1980 faster / 31 slower, 12 NEW kittyv3 keys; kitty/kittyv2 improve throughout (kittyv2 d3 up to -0.272t). All 34 searched-SLOWER classified by classify_turn_later.sh: 23 churn. Of the 11 PERSISTS (8 unique games), 9 are attributed by single-lever bisection to MTG_EQUIP_ONE_HOST -- the lever off restores the exact baseline turn -- and EVERY one is on the v1 list, which maindecks 4 Kor Duelist and so FALSIFIES the lever's 'NO DOUBLE STRIKE' dominance premise (its gate FrameHasDoubleStrikeSource is frame-local, the concentration it causes is persistent board state); the kittyv2 game is the negative control and is NOT owned by it (Kor Duelist sideboard-only there). The remaining 2 (kitty d3 s4004 gi396, kittyv2 d5 s5005 gi15) are owned by NO lever on this branch -- unchanged with all 7 equip levers AND MTG_OMNITOOL_M2 off -- consistent with upstream's counter-keying correctness fixes (canonical CounterList, target-fold keys reading counter TOTALS not size(), counter-threshold re-evaluation), which these Umezawa's Jitte lists exercise directly. MTG_EQUIP_ONE_HOST is LEFT at its adopted default: it is a USER ruling and narrowing it to a deck-level trait is the USER's call, reported not patched. Prior overnight notes dropped deliberately -- every cell re-measured here, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: overnight d3/d5 rows RESIZED to fluctuator's shape (4x500 b20 / 4x250 b40, 3,000 searched games) at the keep-table adoption, measured TABLE-ABSENT so the adoption that follows is like-for-like; the 8 moves are the larger sample re-defining the key, not a play change (d0 rows byte-identical, and all 20 pre-resize kittyv3 keys reproduced exactly table-absent across smoke/regression/overnight).
 # accepted-with-regressions (overnight, 2026-10-14): kittyv3 only: ADOPT the v3 exhaustive keep table (a9a17e64) -- all 12 overnight keys improve, mean -0.6251t (range -0.4800..-0.7380), measured against the table-ABSENT baseline accepted on these same resized rows in 16842c72 so the only difference is the table; held-out confirmation of generation's keep A/B -0.724933t and confounded-bottoming -0.155600t.
 # accepted-with-regressions (overnight, 2026-10-17): colossus: deck ADDED to all three tiers with the overnight ENTRY set (12 NEW keys, d0 4x2000, d3 4x400 b10, d5 4x300 b20; analysis-Colossus Hammer.md), PGO binary of 0d410db07, makespan 2m23s. Expands to the FULL set just before a keep table is adopted.
-# accepted-with-regressions (smoke, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 4 slower / 6 faster, ALL hinata + hinata2hg = the Remand self-target rider (every slower game ties or beats base at unlimited budget; analysis-NivMizzetCombo.md T2). Same-turn line moves: auras d3/d5/2hg, kittyv3 2hg, bruna 2hg, snow d3 = the breakpoint un-gate c52ed5c9d (a card drawn mid-turn is cast that phase). d0: hinata 6.723->6.783 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); goblins d0 = un-gate; bruna/dragons/fivecolour/mirrorwing/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; +-0.001 greedy churn). galadriel + colossus byte-identical to origin GT. CARRIED (colossus cells unchanged by this accept): the USER's full cast order + equips, Path never cast, tutor rule + Lizard amendment (4f984afac), Aid lethal-first; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); 2hg gi34 (the tutor rule drops Dragonfire Blade beside a free attach) was raised to the USER.
-# accepted-with-regressions (regression, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 15 slower / 29 faster: ALL 15 slower are hinata + hinata2hg = the Remand self-target rider (the same 15 as the T2 isolation run; at unlimited budget new <= base on every one -- 13 tie, d5 s3003 gi64 new T5 vs base T7, gi27 a loss in BOTH; analysis-NivMizzetCombo.md T2). hinata d3 s3003 gi128 5->4 = MTG_LA_NESTED_BAIL (re-price). Same-turn line moves: goblins d3/d5/2hg + bruna d3 = the breakpoint un-gate c52ed5c9d; fivecolour2hg d3 gi38 same turn. d0: hinata 6.791->6.847 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); breaching 4.832->4.826 + fungusv2 = the mana-fidelity fixes; bruna/dragons/fivecolour/mirrorwing (5.884->5.889)/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; d0 greedy churn, e.g. mirrorwing gi236: T4 now affords Ancestral Anger beside Zada). galadriel + colossus byte-identical to origin GT. Refs 630 / 0 drift. CARRIED (colossus cells unchanged by this accept): the USER's tutor rule as stated + Lizard amendment (4f984afac) decide s2002 gi25 / gi112; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); s2002 gi79 / gi129 / gi136 recover at depth W b100 (budget truncation).
+# accepted-with-regressions (smoke, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
+# accepted-with-regressions (regression, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -128,9 +128,9 @@ bruna_smoke_d5_s1001=4.9200/b46b1507da4cf508
 snow_smoke_d0_s1001=6.1710/72d36f9ec29bf8da
 snow_smoke_d3_s1001=5.8400/0250540527c14a97
 snow_smoke_d5_s1001=5.8000/51401cf5b384e6fc
-landfall_smoke_d0_s1001=7.5910/d4bff365cee69d95
-landfall_smoke_d3_s1001=6.0000/c930836eb68a3888
-landfall_smoke_d5_s1001=5.8667/4531d4162b8fccbd
+landfall_smoke_d0_s1001=7.4410/90c75d3c95a0f662
+landfall_smoke_d3_s1001=6.0000/48047bc2e9848a95
+landfall_smoke_d5_s1001=5.8667/11a73ea414d70d8d
 galadriel_smoke_d0_s1001=6.9400/876fdad1871c1c5a
 galadriel_smoke_d3_s1001=4.9933/e962de98bc12e846
 galadriel_smoke_d5_s1001=4.8933/0bebbdb5d1970e7b
@@ -301,11 +301,11 @@ snow_regression_d3_s2002=5.7000/a366ba71c35f920c
 snow_regression_d3_s3003=5.7000/34f95b27767ff9d4
 snow_regression_d5_s2002=5.6667/672a8d6ba4950919
 snow_regression_d5_s3003=5.7667/6cc882e78899ed4a
-landfall_regression_d0_s2002=7.6220/6aa62603a8dfe3ba
-landfall_regression_d3_s2002=5.8500/8fa5520970a51b3d
-landfall_regression_d3_s3003=5.8500/e2263cccef69817e
-landfall_regression_d5_s2002=5.7500/a853da5da0b9df8a
-landfall_regression_d5_s3003=5.8500/0e4a470dfa01a812
+landfall_regression_d0_s2002=7.5010/07517ac2c0ae2b03
+landfall_regression_d3_s2002=5.9250/35cb8867be2bf87e
+landfall_regression_d3_s3003=5.8000/90cdc236333c1c0e
+landfall_regression_d5_s2002=5.7500/f924adbe2234b2ac
+landfall_regression_d5_s3003=5.6500/5757c46d4c6b5002
 galadriel_regression_d0_s2002=6.9500/02803c76ba13231d
 galadriel_regression_d3_s2002=4.7600/7316ce7a7639b625
 galadriel_regression_d3_s3003=4.9333/4663bc6f2f79cfff
