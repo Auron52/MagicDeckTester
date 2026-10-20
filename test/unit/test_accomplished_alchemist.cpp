@@ -2715,3 +2715,20 @@ TEST_CASE("Discard buckets: =0 restores the inherited SelesnyaLifegain policy; t
         CHECK(AaProv().CleanupDiscardShedStable());
     }
 }
+
+TEST_CASE("Discard buckets, PROPOSED amendment (default OFF): Staff of Domination ahead of Crab Umbra in Untap")
+{
+    struct StaffArm
+    {
+        std::int8_t v;
+        explicit StaffArm(int on) : v(heurarm::t_arm[heurarm::AA_DISCARD_STAFF_FIRST])
+        { heurarm::t_arm[heurarm::AA_DISCARD_STAFF_FIRST] = static_cast<std::int8_t>(on); }
+        ~StaffArm() { heurarm::t_arm[heurarm::AA_DISCARD_STAFF_FIRST] = v; }
+    };
+    // Umbra + Staff + Stroke: the rule keeps Umbra (Untap) and Stroke (Wincon), the Staff is the spare; under the
+    // amendment the Staff is the Untap keep and the Umbra is the spare.
+    const GameState s = DiscAa({ "Accomplished Alchemist", "Nourish", "Staff of Domination", "Crab Umbra",
+                                 "Stroke of Genius", "Forest", "Forest", "Forest" });
+    { StaffArm a(0); CHECK(ShedOneAa(s) == "Staff of Domination"); }
+    { StaffArm a(1); CHECK(ShedOneAa(s) == "Crab Umbra"); }
+}

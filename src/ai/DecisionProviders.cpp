@@ -43328,6 +43328,10 @@ std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const Ga
 //     within-bucket rank first (equal ranks: WINCON, UNTAP, LIFEGAIN, ALCHEMIST spares in that order) -> spare
 //     Wishes -> MANA worst first (Harbinger ... Sprawl, then the lands from the back) -> the kept bucket cards
 //     (gap-filling Wishes, then WINCON, UNTAP, LIFEGAIN, ALCHEMIST).
+//   * MTG_AA_DISCARD_STAFF_FIRST (heurarm AA_DISCARD_STAFF_FIRST), a PROPOSED amendment, default OFF: UNTAP
+//     becomes Staff of Domination > Crab Umbra > Galvanic > Witch (the Staff is colourless and fills Wincon/Draw
+//     too; the Umbra needs {U} to cast and to untap). Built from the A/B's persistent slower games (Staff vs
+//     Umbra at a real shed / cast); see the ledger.
 //   * Prefix-stable: shedding a spare or a mana card never changes another card's bucket verdict (the {U} test
 //     reads KEPT cards only), so a multi-card cleanup reads its sheds off one consultation.
 // ONE index through CleanupDiscardRankingWithOrder (staged / required-piece protections stay engine-enforced).
@@ -43365,8 +43369,11 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
     if (n <= 0) { return {}; }
     auto at = [](int i) { return static_cast<std::size_t>(i); };
     enum : int { kAlch = 0, kGain, kUntap, kWin, kBuckets };
+    // PROPOSED amendment (default OFF, the USER's call): Staff of Domination ahead of Crab Umbra in UNTAP.
+    static const bool s_staff_env = EnvOn("MTG_AA_DISCARD_STAFF_FIRST", false);
+    const bool staff_first = heurarm::Flag(heurarm::AA_DISCARD_STAFF_FIRST, s_staff_env);
     // Within-bucket rank (lower = better kept), -1 = not a member.
-    auto rank_in = [](const CardDefinition& d, int b) -> int
+    auto rank_in = [staff_first](const CardDefinition& d, int b) -> int
     {
         const CardParams& p = d.params;
         switch (b)
@@ -43379,8 +43386,8 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
             if (p.sac_outlet_lifegain > 0) { return 4; }            // Brindle Boar
             return -1;
         case kUntap:
-            if (p.untap_enchanted_cost) { return 0; }               // Crab Umbra
-            if (p.untap_target_creature_cost) { return 1; }         // Staff of Domination
+            if (p.untap_enchanted_cost) { return staff_first ? 1 : 0; }         // Crab Umbra
+            if (p.untap_target_creature_cost) { return staff_first ? 0 : 1; }   // Staff of Domination
             if (p.soulbond_grants_untap_self_cost) { return 2; }    // Galvanic Alchemist
             if (AaIsWitch(p)) { return 3; }                         // Seedcradle Witch
             return -1;

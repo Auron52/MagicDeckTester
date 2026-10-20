@@ -613,6 +613,7 @@ enum Slot : int
     AA_WISH_TRUFFLE,          // MTG_AA_WISH_TRUFFLE  PROPOSED amendment of the AA wish buckets (default OFF, the USER's call): Trufflesnout joins Brindle Boar in the Lifegain bucket (offered when no lifegain is held)
     AA_HARBINGER_BUCKETS,     // MTG_AA_HARBINGER_BUCKETS  AccomplishedAlchemist: the USER's Elvish Harbinger rule (2026-10-20) -- the ETB Elf tutor is offered only Accomplished Alchemist when none is held, else the missing pieces (Seedcradle Witch for Untap, Ezuri for Wincon, Arbor Elf for Mana), never another Harbinger; the decline stays (AccomplishedAlchemistProvider::TutorCandidates). Default ON (the USER's rule); =0 -> every library Elf
     AA_BUCKET_DISCARD,        // MTG_AA_BUCKET_DISCARD  AccomplishedAlchemist: the USER's cleanup-discard BUCKET rule (2026-10-20) -- keep the best hand card of each bucket (Alchemist, Lifegain, Untap, Wincon/Draw) not already filled on the battlefield (Staff fills Untap AND Wincon/Draw), a Living Wish per remaining gap, mana for the rest; spares shed first (AccomplishedAlchemistProvider::CleanupDiscardShedOrder). Default ON; =0 -> the inherited SelesnyaLifegain buckets
+    AA_DISCARD_STAFF_FIRST,   // MTG_AA_DISCARD_STAFF_FIRST  PROPOSED amendment of the AA discard buckets (default OFF, the USER's call): Staff of Domination ranks ahead of Crab Umbra in the Untap bucket
     AA_DISCARD_FAN,           // MTG_AA_DISCARD_FAN  TESTING ONLY (discard-analysis evidence / A/B): the AA bucket rule returns its WHOLE shed order instead of one index, so the executor's searched cleanup trials every card. Default OFF
     COUNT
 };
@@ -1177,6 +1178,7 @@ inline const char* Name(int slot)
         "MTG_AA_WISH_TRUFFLE",
         "MTG_AA_HARBINGER_BUCKETS",
         "MTG_AA_BUCKET_DISCARD",
+        "MTG_AA_DISCARD_STAFF_FIRST",
         "MTG_AA_DISCARD_FAN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
