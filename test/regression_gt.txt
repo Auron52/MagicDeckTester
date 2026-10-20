@@ -1,7 +1,5 @@
-# Regression ground truth -- commit 074c93a6  date 2026-10-19
+# Regression ground truth -- commit 1243ae13  date 2026-10-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 4 slower / 6 faster, ALL hinata + hinata2hg = the Remand self-target rider (every slower game ties or beats base at unlimited budget; analysis-NivMizzetCombo.md T2). Same-turn line moves: auras d3/d5/2hg, kittyv3 2hg, bruna 2hg, snow d3 = the breakpoint un-gate c52ed5c9d (a card drawn mid-turn is cast that phase). d0: hinata 6.723->6.783 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); goblins d0 = un-gate; bruna/dragons/fivecolour/mirrorwing/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; +-0.001 greedy churn). galadriel + colossus byte-identical to origin GT. CARRIED (colossus cells unchanged by this accept): the USER's full cast order + equips, Path never cast, tutor rule + Lizard amendment (4f984afac), Aid lethal-first; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); 2hg gi34 (the tutor rule drops Dragonfire Blade beside a free attach) was raised to the USER.
-# accepted-with-regressions (regression, 2026-10-18): NivMizzetCombo analysis engine changes, rebased onto 2176032dd (the deck itself NOT admitted: 3x cost rule). Searched 15 slower / 29 faster: ALL 15 slower are hinata + hinata2hg = the Remand self-target rider (the same 15 as the T2 isolation run; at unlimited budget new <= base on every one -- 13 tie, d5 s3003 gi64 new T5 vs base T7, gi27 a loss in BOTH; analysis-NivMizzetCombo.md T2). hinata d3 s3003 gi128 5->4 = MTG_LA_NESTED_BAIL (re-price). Same-turn line moves: goblins d3/d5/2hg + bruna d3 = the breakpoint un-gate c52ed5c9d; fivecolour2hg d3 gi38 same turn. d0: hinata 6.791->6.847 = Remand riders offered to the d0 greedy (Q10, OPEN USER decision, kept pending); breaching 4.832->4.826 + fungusv2 = the mana-fidelity fixes; bruna/dragons/fivecolour/mirrorwing (5.884->5.889)/selesnya d0 = MTG_PREPAY_FLOAT_POOL, th d0 = MTG_RAMP_FEED_ROUTE (each =0 restores the prior digest; d0 greedy churn, e.g. mirrorwing gi236: T4 now affords Ancestral Anger beside Zada). galadriel + colossus byte-identical to origin GT. Refs 630 / 0 drift. CARRIED (colossus cells unchanged by this accept): the USER's tutor rule as stated + Lizard amendment (4f984afac) decide s2002 gi25 / gi112; searched slowers that need the Path shuffle are clairvoyance (USER 2026-10-13); s2002 gi79 / gi129 / gi136 recover at depth W b100 (budget truncation).
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -32,7 +30,7 @@ antilife_smoke_d5_s1001=4.1800/98f08878a259d50a
 hinata_smoke_d0_s1001=6.7830/0b80ac146283b4df
 hinata_smoke_d3_s1001=5.6533/762a2e5b8f7e79ad
 hinata_smoke_d5_s1001=5.7867/5ed565656e495510
-dragonstorm_smoke_d0_s1001=4.9950/4f537f4fc4d2b5dd
+dragonstorm_smoke_d0_s1001=4.9950/f3832104d01eaa97
 dragonstorm_smoke_d3_s1001=4.4733/6eed29d25647c08f
 dragonstorm_smoke_d5_s1001=4.4667/33a37fbbe5b64b2f
 auras_smoke_d0_s1001=4.3650/4554540dea59a72f
@@ -179,9 +177,9 @@ hinata_regression_d5_s2002=5.6600/cbb82b3a9730fabd
 hinata_regression_d5_s3003=5.6300/c8b91e50bab650aa
 dragonstorm_regression_d0_s2002=5.0120/cde74120c7eb5150
 dragonstorm_regression_d3_s2002=4.3067/5782d4140d30fa16
-dragonstorm_regression_d3_s3003=4.5033/a1f153b0e089d367
+dragonstorm_regression_d3_s3003=4.5000/e6bc75a25970744a
 dragonstorm_regression_d5_s2002=4.2800/df81ae7e5fc41241
-dragonstorm_regression_d5_s3003=4.5000/1d82473d8d498822
+dragonstorm_regression_d5_s3003=4.5000/87ee7f989953291b
 auras_regression_d0_s2002=4.3480/9b07602910b4b77d
 auras_regression_d3_s2002=4.0760/ccfdcae52b3c4f91
 auras_regression_d3_s3003=4.1480/a4a7c084da7da6cc
@@ -273,8 +271,8 @@ pirates_regression_d3_s2002=4.3533/4481d78c621f8ab9
 pirates_regression_d3_s3003=4.4267/af26c0ad2293b00a
 pirates_regression_d5_s2002=4.4000/654fb7d77c1e3797
 pirates_regression_d5_s3003=4.4133/6fa339523b9a475f
-selesnya_regression_d0_s2002=5.7170/4973625cc1f41a76
-selesnya_regression_d3_s2002=5.0667/31372d609a710b42
+selesnya_regression_d0_s2002=5.7160/d75a4244b1dd567c
+selesnya_regression_d3_s2002=5.0667/1d30e53bcf12b631
 selesnya_regression_d3_s3003=5.1533/cf80fd9c02589527
 selesnya_regression_d5_s2002=5.0000/ec6d3189f8c01022
 selesnya_regression_d5_s3003=5.2000/7de5e3cfc3ee73f4
@@ -288,7 +286,7 @@ pd_regression_d3_s2002=5.6250/b830c4dbcd23ed01
 pd_regression_d3_s3003=5.5000/5f581878b0c1c5cf
 pd_regression_d5_s2002=5.7200/1d296ad4b11f0cd8
 pd_regression_d5_s3003=5.3600/c5ddc2fe8c5e820e
-bruna_regression_d0_s2002=6.1890/785f797543916e4f
+bruna_regression_d0_s2002=6.1890/88f8a4c701e01bf0
 bruna_regression_d3_s2002=5.1400/16e25d56451fc2cb
 bruna_regression_d3_s3003=5.0400/9af3b004f66b9f11
 bruna_regression_d5_s2002=5.0533/e0d204fa5add4481
