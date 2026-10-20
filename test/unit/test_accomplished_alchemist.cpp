@@ -2732,3 +2732,26 @@ TEST_CASE("Discard buckets, PROPOSED amendment (default OFF): Staff of Dominatio
     { StaffArm a(0); CHECK(ShedOneAa(s) == "Staff of Domination"); }
     { StaffArm a(1); CHECK(ShedOneAa(s) == "Crab Umbra"); }
 }
+
+TEST_CASE("Harbinger rule, PROPOSED amendments (default OFF): the Witch for a lacking wincon; the Alchemist as the default")
+{
+    struct Arm2
+    {
+        std::int8_t w, a;
+        Arm2(int ww, int ad) : w(heurarm::t_arm[heurarm::AA_HARB_WITCH_WIN]), a(heurarm::t_arm[heurarm::AA_HARB_ALCH_DEFAULT])
+        { heurarm::t_arm[heurarm::AA_HARB_WITCH_WIN] = static_cast<std::int8_t>(ww);
+          heurarm::t_arm[heurarm::AA_HARB_ALCH_DEFAULT] = static_cast<std::int8_t>(ad); }
+        ~Arm2() { heurarm::t_arm[heurarm::AA_HARB_WITCH_WIN] = w; heurarm::t_arm[heurarm::AA_HARB_ALCH_DEFAULT] = a; }
+    };
+    HarbArmAa on(1);
+    // Untap held (Crab Umbra), wincon lacking: the USER's rule offers Ezuri; the amendment adds the Witch first.
+    GameState s = HarbAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Crab Umbra");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    { Arm2 a(0, 0); ExpectHarbAa(s, { "Ezuri, Renegade Leader" }); }
+    { Arm2 a(1, 0); ExpectHarbAa(s, { "Seedcradle Witch", "Ezuri, Renegade Leader" }); }
+    // No Alchemist held: alone under the rule; first of every non-Harbinger Elf under the amendment.
+    const GameState n = HarbAa();
+    { Arm2 a(0, 0); ExpectHarbAa(n, { "Accomplished Alchemist" }); }
+    { Arm2 a(0, 1); ExpectHarbAa(n, { "Accomplished Alchemist", "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }); }
+}

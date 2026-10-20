@@ -43251,9 +43251,25 @@ static std::vector<std::string> AaHarbingerSet(const GameState& s, int controlle
         if (r != kNone && by_role[r].empty()) { by_role[r] = nm; }
     }
     const AaWishCensus c = AaTakeWishCensus(s, controller);
-    if (!c.alchemist && !by_role[kAlch].empty()) { return { by_role[kAlch] }; }
-    const bool want[4] = { false, !c.untapper && !c.witch, !c.wincon && !c.ezuri, c.mana < 4 };
+    // Two PROPOSED amendments (default OFF; measured, the USER's call -- see the ledger):
+    //   MTG_AA_HARB_WITCH_WIN   -- the Witch's own +3/+3 pump is a loop kill (the untap loop's Witch payoff), so it
+    //                              is offered for a lacking WINCON too, beside Ezuri.
+    //   MTG_AA_HARB_ALCH_DEFAULT -- "pretty much an auto-pick" as the DEFAULT rather than the only option: no
+    //                              Alchemist held -> the Alchemist FIRST, then every other non-Harbinger Elf
+    //                              (Witch, Ezuri, Arbor Elf), all searched.
+    static const bool s_ww_env = EnvOn("MTG_AA_HARB_WITCH_WIN", false);
+    static const bool s_ad_env = EnvOn("MTG_AA_HARB_ALCH_DEFAULT", false);
+    const bool witch_win = heurarm::Flag(heurarm::AA_HARB_WITCH_WIN, s_ww_env);
+    const bool alch_dflt = heurarm::Flag(heurarm::AA_HARB_ALCH_DEFAULT, s_ad_env);
     std::vector<std::string> out;
+    if (!c.alchemist && !by_role[kAlch].empty())
+    {
+        out.push_back(by_role[kAlch]);
+        if (alch_dflt) { for (int r = kWitch; r <= kElf; ++r) { if (!by_role[r].empty()) { out.push_back(by_role[r]); } } }
+        return out;
+    }
+    const bool win_lacking = !c.wincon && !c.ezuri;
+    const bool want[4] = { false, (!c.untapper && !c.witch) || (witch_win && win_lacking), win_lacking, c.mana < 4 };
     for (int r = kWitch; r <= kElf; ++r) { if (want[r] && !by_role[r].empty()) { out.push_back(by_role[r]); } }
     if (!out.empty()) { return out; }
     for (int r = kWitch; r <= kElf; ++r) { if (!by_role[r].empty()) { out.push_back(by_role[r]); } }

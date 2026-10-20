@@ -615,6 +615,8 @@ enum Slot : int
     AA_BUCKET_DISCARD,        // MTG_AA_BUCKET_DISCARD  AccomplishedAlchemist: the USER's cleanup-discard BUCKET rule (2026-10-20) -- keep the best hand card of each bucket (Alchemist, Lifegain, Untap, Wincon/Draw) not already filled on the battlefield (Staff fills Untap AND Wincon/Draw), a Living Wish per remaining gap, mana for the rest; spares shed first (AccomplishedAlchemistProvider::CleanupDiscardShedOrder). Default ON; =0 -> the inherited SelesnyaLifegain buckets
     AA_DISCARD_STAFF_FIRST,   // MTG_AA_DISCARD_STAFF_FIRST  PROPOSED amendment of the AA discard buckets (default OFF, the USER's call): Staff of Domination ranks ahead of Crab Umbra in the Untap bucket
     AA_DISCARD_FAN,           // MTG_AA_DISCARD_FAN  TESTING ONLY (discard-analysis evidence / A/B): the AA bucket rule returns its WHOLE shed order instead of one index, so the executor's searched cleanup trials every card. Default OFF
+    AA_HARB_WITCH_WIN,        // MTG_AA_HARB_WITCH_WIN  PROPOSED amendment of the AA Harbinger rule (default OFF, the USER's call): Seedcradle Witch is also offered while WINCON is lacking (its +3/+3 pump is a loop kill), beside Ezuri
+    AA_HARB_ALCH_DEFAULT,     // MTG_AA_HARB_ALCH_DEFAULT  PROPOSED amendment of the AA Harbinger rule (default OFF, the USER's call): no Alchemist held -> the Alchemist FIRST (the default pick), then Witch / Ezuri / Arbor Elf, all searched, instead of the Alchemist alone
     COUNT
 };
 
@@ -1180,6 +1182,8 @@ inline const char* Name(int slot)
         "MTG_AA_BUCKET_DISCARD",
         "MTG_AA_DISCARD_STAFF_FIRST",
         "MTG_AA_DISCARD_FAN",
+        "MTG_AA_HARB_WITCH_WIN",
+        "MTG_AA_HARB_ALCH_DEFAULT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
