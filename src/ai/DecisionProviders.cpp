@@ -44166,7 +44166,8 @@ constexpr int kLinks      = 6;   // FINISH can be three links (wish, Scholar, dr
 constexpr int kKillWidth  = 2;
 constexpr int kLoopWidth  = 3;
 constexpr int kSetupWidth = 6;
-constexpr int kNodes      = 24;  // applies per walk -- SAFETY bound, the common walk is 2-4
+constexpr int kNodes      = 32;  // DISTINCT children per walk -- SAFETY bound, the common walk is 2-4
+constexpr int kApplies    = 128; // every apply, duplicates included -- the hard cost bound
 
 // One link: an engine plan, optionally preceded by tapping a mana_per_life_gained creature for ONE colour
 // (see PreTapColour -- the route's own mana-payment choice, the standing exemption).
@@ -44178,7 +44179,8 @@ struct Link
 };
 struct Walk
 {
-    int nodes_left = kNodes;
+    int nodes_left   = kNodes;
+    int applies_left = kApplies;
     std::vector<Link> path;   // the links, as the PLANS themselves (see Replay)
     int applies = 0;
 };
@@ -44351,16 +44353,16 @@ inline std::uint64_t ChildKey(const GameState& s, int me)
 static int Dfs(GameState& s, int me, int links_left, Walk& w)
 {
     if (OpponentHasLost(s)) { return 1; }
-    if (links_left <= 0 || w.nodes_left <= 0) { return 0; }
+    if (links_left <= 0 || w.nodes_left <= 0 || w.applies_left <= 0) { return 0; }
     std::vector<TurnSolver::Plan> kills = TurnSolver::UntapLoopKillPlans(s, /*is_pre_combat=*/true);
     if (!kills.empty())
     {
         const int n = std::min<int>(kKillWidth, static_cast<int>(kills.size()));
-        for (int i = 0; i < n && w.nodes_left > 0; ++i)
+        for (int i = 0; i < n && w.nodes_left > 0 && w.applies_left > 0; ++i)
         {
             GameState child = s;
             TurnSolver::ApplyPlan(child, kills[static_cast<std::size_t>(i)], /*is_pre_combat=*/true);
-            --w.nodes_left; ++w.applies;
+            --w.nodes_left; --w.applies_left; ++w.applies;
             if (TraceOn())
             {
                 std::fprintf(stderr, "[aa-route] t%d link%d KILL #%d %s -> opp life %d lib %zu lost=%d\n",
@@ -44484,10 +44486,11 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         const int pnum = pcol >= 0 ? LiveBurstCreature(s, me) : 0;
         for (int variant = (pnum != 0 ? 0 : 1); variant < 2 && w.nodes_left > 0; ++variant)
         {
+            if (w.applies_left <= 0) { break; }
             GameState child = s;
             if (variant == 0 && !PreTap(child, me, pnum, pcol)) { continue; }
             TurnSolver::ApplyPlan(child, plan, /*is_pre_combat=*/true);
-            --w.nodes_left; ++w.applies;
+            --w.applies_left; ++w.applies;
             if (TraceOn())
             {
                 const ManaPool& f = child.floating_mana;
@@ -44501,6 +44504,11 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             const std::uint64_t ck = ChildKey(child, me);
             if (std::find(seen_children.begin(), seen_children.end(), ck) != seen_children.end()) { continue; }
             seen_children.push_back(ck);
+            // A DUPLICATE costs an apply, not a node: the first cut charged every apply to the node bound, and
+            // a Galvanic Alchemist's partner / payment variants (identical boards) spent it before the kill
+            // link was reached -- s70001 gi118 T4, the executor's walk ran out at the loop and its committed
+            // route played as a no-op (T4 -> T7).
+            --w.nodes_left;
             ++tried;
             w.path.push_back(Link{ plan, variant == 0 ? pnum : 0, variant == 0 ? pcol : -1 });
             if (Dfs(child, me, links_left - 1, w) == 1) { s = std::move(child); return 1; }
