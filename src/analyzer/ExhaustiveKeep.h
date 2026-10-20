@@ -53,7 +53,7 @@ struct ExhaustiveKeepConfig
     // and the slow/projection reports with it (docs/design/keepgen-no-off-switches.md).
     int      r_floor   = 0;     // R_0: initial rollouts for every cell (0 => the default floor of 2)
     int      r_batch   = 16;    // rollouts added per refine wave to a still-ambiguous cell
-    double   flip_eps  = 0.02;  // stop refining a cell once P(decision flips vs threshold) < this
+    double   flip_eps  = 0.10;  // (USER 2026-10-18: 0.10 everywhere, was 0.02) stop refining a cell once P(decision flips vs threshold) < this
     double   se_prior  = 8.0;   // pseudo-count for shrinking a cell's sample variance toward the global
                                // (pooled) variance in the STOP gate only. Guards against a low-R cell's
                                // sample variance being spuriously small (win-turn is right-skewed, so a

@@ -172,6 +172,8 @@ sed -i "s#$D#<D>#g; s#$SCRATCH#<S>#g" "$D"/*.report "$D"/*.err 2>/dev/null
 # SAME binary (proven by running this twice against one build). Drop it before comparing; every semantic
 # line (a PRIOR-RAW refusal, a PRUNE-SET carry count, a fingerprint mismatch, the adaptive wave summary)
 # is left intact, so a real change still shows.
+#   * the schedule read-outs (usefulness / worker idle / per-wave timestamps / monitor) -- counts of
+#     speculative work and idle time are scheduling by definition (the table is not).
 #   * stderr progress lines -- the PERCENTAGE is time-sampled, so the "(N/M tasks|rollouts)" counts at
 #     that instant move even when the run is byte-identical. Match on the shape, not the phase name, so a
 #     new phase cannot silently escape this. Covers discovery, the continuous "rollouts fed" heartbeat and
@@ -179,7 +181,7 @@ sed -i "s#$D#<D>#g; s#$SCRATCH#<S>#g" "$D"/*.report "$D"/*.err 2>/dev/null
 #   * the report's gen-time projection and slowest-rollout tables -- pure ms measurements and their
 #     derived hour estimates, whose ORDER also changes when two cells time within noise of each other.
 #     (The tables print at several points now, so the ms-line pattern is matched anywhere.)
-sed -i -E '/[0-9]+% +\([0-9]+\/[0-9]+ (tasks|rollouts)/d; /continuous: [0-9]+ rollouts fed/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.err 2>/dev/null
+sed -i -E '/\[keepgen\] (usefulness|worker idle):/d; /sub-refine (wave [0-9]+:|converged after)/d; /\[keepgen\]   monitor:/d; /[0-9]+% +\([0-9]+\/[0-9]+ (tasks|rollouts)/d; /continuous: [0-9]+ rollouts fed/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.err 2>/dev/null
 sed -i -E '/^  floor pass: [0-9]+s @ /d; /^  projected (COMPLETE|FAST)/d; /^  overnight target:/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.report 2>/dev/null
 sed -i -E 's#[0-9]+/s#<rate>/s#g; s#\b[0-9]+s\b#<t>s#g' "$D"/*.err "$D"/*.report 2>/dev/null
 

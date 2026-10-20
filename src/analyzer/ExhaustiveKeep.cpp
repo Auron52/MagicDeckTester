@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
@@ -17,12 +19,14 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <ostream>
 #include <set>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "EquivalenceDiscovery.h"
@@ -170,6 +174,61 @@ void StampRolloutCfg(nlohmann::json& meta, const RolloutCfg& rc)
     meta["depth"] = rc.depth; meta["budget_ms"] = rc.budget_ms; meta["max_turns"] = rc.max_turns;
     if (rc.start_life >= 0) { meta["start_life"] = rc.start_life; }
     if (rc.opp_heads  >= 0) { meta["opp_heads"]  = rc.opp_heads; }
+}
+
+// ---- THE ADAPTIVE REFINEMENT SCHEDULE (flip_eps / r_batch / se_prior) -------------------------
+// These three "tune the schedule without being able to switch it off" (main.cpp's own words about
+// why the old R_FLOOR knob was removed and these were kept), and until now NOTHING fingerprinted
+// them -- not the 7-field journal chain, not RolloutCfg, and they were not even STAMPED into the
+// meta. So a journal rolled at flip_eps=0.02 RESUMED SILENTLY under 0.10, leaving cells refined
+// under one stop gate and cells refined under another inside one artifact, with nothing recording
+// that it happened.
+//
+// WHY IT MATTERS MORE THE HIGHER THE CAP (the user's point, 2026-10-11): flip_eps is the STOP gate
+// on refinement, and refinement climbs from floor R=2 toward the cap. A bigger cap is a longer
+// ladder for the gate to cut short, so the higher R is, the more of the table this knob decides.
+// Mixing two values inside one R=30 `fast` table is therefore materially worse than mixing them
+// inside an R=16 one -- which is exactly the run now being launched.
+//
+// ABSENT = UNVERIFIABLE, NOT A MISMATCH -- deliberately, following the start_life / opp_heads
+// precedent above: every journal and raw banked before this stamp existed carries no field and must
+// keep resuming, rather than being invalidated wholesale by a check that did not exist when it was
+// rolled.
+struct ScheduleCfg
+{
+    double flip_eps = -1.0, se_prior = -1.0;
+    int    r_batch  = -1;
+    bool present() const { return flip_eps >= 0.0 && se_prior >= 0.0 && r_batch >= 0; }
+    std::string str() const
+    {
+        if (!present()) { return std::string("<not recorded>"); }
+        char b[96];
+        std::snprintf(b, sizeof b, "flip_eps=%g/r_batch=%d/se_prior=%g", flip_eps, r_batch, se_prior);
+        return std::string(b);
+    }
+};
+
+inline ScheduleCfg ScheduleCfgOf(const ExhaustiveKeepConfig& cfg)
+{ return { cfg.flip_eps, cfg.se_prior, cfg.r_batch }; }
+
+inline ScheduleCfg ScheduleCfgFromMeta(const nlohmann::json& m)
+{ return { m.value("flip_eps", -1.0), m.value("se_prior", -1.0), m.value("r_batch", -1) }; }
+
+inline void StampScheduleCfg(nlohmann::json& meta, const ScheduleCfg& sc)
+{
+    if (!sc.present()) { return; }
+    meta["flip_eps"] = sc.flip_eps; meta["r_batch"] = sc.r_batch; meta["se_prior"] = sc.se_prior;
+}
+
+// Doubles, so compare with a tolerance rather than ==: these round-trip through JSON text and an
+// operator types "0.1", not a bit pattern. 1e-9 is far tighter than any meaningful setting.
+inline CfgVerdict ScheduleCfgCompare(const ScheduleCfg& mine, const ScheduleCfg& theirs)
+{
+    if (!theirs.present() || !mine.present()) { return CfgVerdict::Unverifiable; }
+    const bool same = std::fabs(mine.flip_eps - theirs.flip_eps) < 1e-9
+                   && std::fabs(mine.se_prior - theirs.se_prior) < 1e-9
+                   && mine.r_batch == theirs.r_batch;
+    return same ? CfgVerdict::Match : CfgVerdict::Differs;
 }
 
 CfgVerdict CompareRolloutCfg(const RolloutCfg& a, const RolloutCfg& b)
@@ -362,7 +421,12 @@ struct SizeTable
 
 // Best (HAND-m)-subcomposition value of hand `h` for pd (1=play, 0=draw): enumerate the
 // subcompositions bounded by the hand and take the min over those present in the size-(HAND-m) table.
-double KeepVal(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd)
+// `vf(m, idx, pd, &v)` supplies a cell's value (false => treat the cell as absent). The plain
+// overloads below pass the tables' own V, so they are the SAME arithmetic as before; the generator's
+// speculative sub-wave planner passes a snapshot instead (see sub_plan in RunExhaustiveKeep).
+template <class VF>
+double KeepValWith(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd,
+                   const VF& vf)
 {
     std::vector<std::vector<int>> subs;
     std::vector<int> cur(K, 0);
@@ -370,8 +434,24 @@ double KeepVal(const std::vector<SizeTable>& tables, int K, const std::vector<in
     double best = 1e9;
     const SizeTable& t = tables[m];                  // tables[HAND - (HAND-m)] -- the size-(HAND-m) table
     for (const std::vector<int>& s : subs)
-    { auto it = t.index.find(s); if (it != t.index.end()) { best = std::min(best, t.V[it->second][pd]); } }
+    {
+        auto it = t.index.find(s);
+        if (it == t.index.end()) { continue; }
+        double v;
+        if (vf(m, it->second, pd, &v)) { best = std::min(best, v); }
+    }
     return best;
+}
+
+struct TableV
+{
+    const std::vector<SizeTable>& tables;
+    bool operator()(int m, int idx, int pd, double* v) const { *v = tables[m].V[idx][pd]; return true; }
+};
+
+double KeepVal(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd)
+{
+    return KeepValWith(tables, K, h, m, pd, TableV{ tables });
 }
 
 // The cell index in tables[m] that ATTAINS KeepVal -- the argmin subcomposition. Its noise is what
@@ -411,18 +491,30 @@ std::vector<double> HandWeights(const std::vector<SizeTable>& tables, const std:
 // Backward induction: Dopt[m] = expected win-turn of the OPTIMAL keep policy at mull level m.
 // Dopt[max_mull] is the forced keep (no mulligan left); below it each hand takes the better of keeping
 // (KeepVal) and mulliganing (Dopt[m+1]), weighted by its draw probability.
-std::vector<double> ComputeDopt(const std::vector<SizeTable>& tables, int K,
-                                const std::vector<double>& P, int max_mull, int pd)
+// `cancel` (optional): polled every 4096 hands; when it reads true the result is partial and the
+// caller must discard it (only the speculative planner passes one).
+template <class VF>
+std::vector<double> ComputeDoptWith(const std::vector<SizeTable>& tables, int K,
+                                    const std::vector<double>& P, int max_mull, int pd, const VF& vf,
+                                    const std::atomic<bool>* cancel = nullptr)
 {
     const SizeTable& H7 = tables[0];
     const int M = max_mull;
     std::vector<double> Dopt(M + 1, 0.0);
+    auto stop = [&](std::size_t i) { return cancel != nullptr && (i & 4095) == 0 && cancel->load(); };
     for (std::size_t i = 0; i < H7.comps.size(); ++i)
-    { Dopt[M] += P[i] * KeepVal(tables, K, H7.comps[i], M, pd); }
+    { if (stop(i)) { return Dopt; } Dopt[M] += P[i] * KeepValWith(tables, K, H7.comps[i], M, pd, vf); }
     for (int m = M - 1; m >= 0; --m)
         for (std::size_t i = 0; i < H7.comps.size(); ++i)
-        { Dopt[m] += P[i] * std::min(KeepVal(tables, K, H7.comps[i], m, pd), Dopt[m + 1]); }
+        { if (stop(i)) { return Dopt; }
+          Dopt[m] += P[i] * std::min(KeepValWith(tables, K, H7.comps[i], m, pd, vf), Dopt[m + 1]); }
     return Dopt;
+}
+
+std::vector<double> ComputeDopt(const std::vector<SizeTable>& tables, int K,
+                                const std::vector<double>& P, int max_mull, int pd)
+{
+    return ComputeDoptWith(tables, K, P, max_mull, pd, TableV{ tables });
 }
 
 // ---- Offline bottoming bias correction: SHRINKAGE ONLY. The GATE is permanently closed. ---------
@@ -1283,6 +1375,7 @@ static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const Exhaus
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
         StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));   // what the samples were searched at
+        StampScheduleCfg(root["meta"], ScheduleCfgOf(cfg)); // ...and how refinement was PACED
         // MIXED PROVENANCE. The raw is the POOLABLE artifact, so it is the one place a mixed origin must
         // never be inferable only from absence: `play_digest` names the engine that finished the table,
         // and this names every engine whose rollouts are in it. RunKeepMerge still gates on play_digest
@@ -1897,6 +1990,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::atomic<long long> pre{ 0 };     // kind -1 tasks enqueued
         std::atomic<long long> prehit{ 0 };  // kind 0 tasks served from the memo instead of rolling
         std::atomic<long long> prebad{ 0 };  // memo values that FAILED the verify re-roll (must be 0)
+        // USEFULNESS ACCOUNTING (2026-10-18). Every speculative mechanism reports what it PRODUCED and
+        // what the table ultimately CONSUMED, so "the cores were busy" can be told apart from "the
+        // cores did work that shipped". Diagnostic only -- relaxed atomics, never a decision input.
+        std::atomic<long long> prerolled{ 0 };   // kind -1 rollouts actually rolled (not skipped as already held)
+        std::atomic<long long> spec7_fed{ 0 };   // size-7 floor-speculation rollouts fed (past r0, pre-refs)
+        std::atomic<long long> skip7{ 0 };       // queued size-7 rollouts NOT rolled because their cell froze first
+        std::atomic<long long> spec7_used{ 0 };  // ...of which ended inside the cell's FINAL count (end of run)
+        std::atomic<long long> sspec_req{ 0 };   // speculative sub-wave rollouts enqueued (kind -2)
+        std::atomic<long long> sspec_rolled{ 0 };// ...actually rolled (not dropped as already consumed)
+        std::atomic<long long> sspec_hit{ 0 };   // sub rollouts served from the speculative memo
+        std::atomic<long long> sspec_bad{ 0 };   // memo values that FAILED the verify re-roll (must be 0)
+        std::atomic<long long> sspec_plans{ 0 }; // speculative sub-wave plans computed
+        std::atomic<long long> sspec_levels{ 0 };// speculated waves folded from the memo to plan one further
+        std::atomic<long long> split_batches{ 0 };  // sub batches split into per-rollout tasks
+        std::atomic<long long> split_rolls{ 0 };    // ...rollouts they carried
+        // WORKER IDLE: microseconds workers spent waiting on an EMPTY queue while the producer was
+        // still running. This is the direct measurement of a barrier -- a core with nothing it is
+        // allowed to do -- and the number every schedule change here is judged on.
+        std::atomic<long long> idle_us{ 0 };
+        std::atomic<int>       nthreads{ 0 };
         std::atomic<long long> subwsz{ 0 };  // cells marked by the LAST sub-refine wave. The sub half has no
                                              // frozen/total ratio to read (its work is the shrinking set of
                                              // still-ambiguous bottoming argmins, not a fixed cell count), so
@@ -1956,6 +2069,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 std::unique_lock<std::mutex> lk(mx);
                 long long prev_7 = 0, prev_rs = 0, prev_sd = 0; double prev_el = 0.0;
+                long long prev_idle = 0;
                 long long prev_fed_seen = 0;   // rollouts enqueued as of the previous wake (unbanked-work warning)
                 while (!cv.wait_for(lk, std::chrono::seconds(period), [this] { return stop; }))
                 {
@@ -2009,9 +2123,35 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     std::cerr << "  journal=" << jn << " (" << jage << "s ago)";
                     // Precompute, reported only once it has engaged (silent on a run that never idled).
                     if (const long long pq = gp.pre.load(std::memory_order_relaxed); pq > 0)
-                    { std::cerr << "  pre=" << pq << " hit=" << gp.prehit.load(std::memory_order_relaxed);
+                    { std::cerr << "  pre=" << pq << " rolled=" << gp.prerolled.load(std::memory_order_relaxed)
+                                << " hit=" << gp.prehit.load(std::memory_order_relaxed);
                       if (const long long pb = gp.prebad.load(std::memory_order_relaxed); pb > 0)
                       { std::cerr << " MISMATCH=" << pb; } }
+                    if (const long long s7 = gp.spec7_fed.load(std::memory_order_relaxed); s7 > 0)
+                    { std::cerr << "  spec7=" << s7; }
+                    if (const long long sk = gp.skip7.load(std::memory_order_relaxed); sk > 0)
+                    { std::cerr << "  skip7=" << sk; }
+                    if (const long long sq = gp.sspec_req.load(std::memory_order_relaxed); sq > 0)
+                    { std::cerr << "  subspec=" << sq << " rolled=" << gp.sspec_rolled.load(std::memory_order_relaxed)
+                                << " hit=" << gp.sspec_hit.load(std::memory_order_relaxed)
+                                << " plans=" << gp.sspec_plans.load(std::memory_order_relaxed)
+                                << " chained=" << gp.sspec_levels.load(std::memory_order_relaxed);
+                      if (const long long sb = gp.sspec_bad.load(std::memory_order_relaxed); sb > 0)
+                      { std::cerr << " MISMATCH=" << sb; } }
+                    if (const long long sb = gp.split_batches.load(std::memory_order_relaxed); sb > 0)
+                    { std::cerr << "  split=" << sb << "/" << gp.split_rolls.load(std::memory_order_relaxed); }
+                    // IDLE share of the worker capacity since the last wake: the barrier read-out.
+                    {
+                        const long long iu = gp.idle_us.load(std::memory_order_relaxed);
+                        const int nt = gp.nthreads.load(std::memory_order_relaxed);
+                        if (nt > 0 && dt > 0.0)
+                        {
+                            const long long pm = static_cast<long long>(
+                                1000.0 * static_cast<double>(iu - prev_idle) / (dt * 1e6 * nt) + 0.5);
+                            std::cerr << "  idle=" << (pm / 10) << "." << (pm % 10) << "%";
+                        }
+                        prev_idle = iu;
+                    }
                     std::cerr << "  cap=" << gp.cap.load(std::memory_order_relaxed) << "\n" << std::flush;
                     // Feeding work while the journal is silent IS the violation of "resumable at any
                     // point", so name it rather than leaving the operator to infer it from an mtime.
@@ -2242,6 +2382,32 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         { work_idx[HAND - H][i] = static_cast<int>(work.size()); work.push_back({ H, i }); }
     }
 
+    // ---- MEASURED per-cell cost, for SLOWEST-FIRST wave dispatch -----------------------------------
+    // Microseconds accumulated per (size, cell, side) by run_batch, inside the acc_mtx commit it
+    // already holds. READ ONLY to ORDER a wave's dispatch; never folded into a label, a count, a
+    // freeze test, the journal or the sidecar. That is what makes it free: the comment on the
+    // continuous pool states the design invariant plainly -- a rollout's seed is a pure function of
+    // (seed_base, r, w, pd), "so this is byte-identical regardless of scheduling timing". Dispatch
+    // ORDER cannot move a number.
+    //
+    // WHY ORDER MATTERS HERE AND NOWHERE ELSE. The size-7 floor is a continuous queue with no
+    // barrier, and it is already well packed -- measured on the 2026-10-10 run, it went 80% -> 100%
+    // in 13% of its elapsed time, so there is nothing to win. The adaptive bottoming waves are the
+    // opposite: `sub_refine_step` computes the next wave only once `sub_wave_pending == 0`, so EVERY
+    // wave ends in a hard barrier, and that phase is the dominant cost of a large generation (one
+    // wave measured at 50,063 tasks ~= 801,000 rollouts, 17-24 h). A heavy-tailed batch dispatched in
+    // cell-index order can leave a 20-minute rollout starting last, stranding 31 of 32 cores against
+    // the barrier; longest-first is the classic fix and it costs one sort per wave.
+    //
+    // THE ESTIMATE IS THE GENERATOR'S OWN MEASUREMENT, which is why no cost model or hint file is
+    // needed: every sub-cell gets r_floor rollouts in the sub FLOOR, which completes before the first
+    // wave is computed, so by the time ordering matters every cell already has a measured cost. Cells
+    // with no measurement sort last at 0, which is the right default -- an unmeasured cell is one the
+    // run has never had to pay for.
+    std::vector<std::vector<long long>> cell_us(tables.size());
+    for (int H = HAND; H >= min_size; --H)
+    { cell_us[HAND - H].assign(TB(H).comps.size() * 2, 0); }
+
     const std::map<std::string, int>& bof = bucket_of;   // const ref -> concurrent-safe find()
 
     // ---- Cross-run PRUNE-SET carry (MTG_KEEP_PRUNE_SET): see LoadPruneCarry above ----------------
@@ -2284,6 +2450,139 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     };
     auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
     { Slow().Observe(ms, "keep-rollout", [&]{ return describe_cell(H, comp, pd, r, rs); }); };
+
+    // ---- PER-ROLLOUT WALL BACKSTOP, and what an abandoned rollout does (USER RULING 2026-10-10) ----
+    // Until this existed the keep generator armed NO per-rollout bound of any kind: `gamework` was
+    // armed only by BatchRunner, so `RolloutKeepWinTurn` here ran unbounded. That is not a theoretical
+    // gap. On KittyEquipment v3 it produced single rollouts of 3,405 s / 2,420 s / 2,177 s (56.7 /
+    // 40.3 / 36.3 MINUTES) and the size-7 pool sat at `roll7=217588 (0/s)` for the last hour of a
+    // 9.5 h run, holding the barrier while the box idled. 6,132 rollouts over 30 s cost 220 CPU-h --
+    // about 72% of the whole machine from ~1.5% of the rollouts.
+    //
+    // THE USER'S RULING, in their words: *"Why not just leave it out like we did for this run by
+    // manually cancelling it. That said, if this happens a significant number of times we error out.
+    // Maybe even if it is over something like 10-50 rollouts"*, then: *"We don't want more than 50 for
+    // sure and it might make sense to be even more aggressive, not allowing 10."*
+    //
+    // So: LEAVE IT OUT, and FAIL OUT if it keeps happening.
+    //   * LEAVE IT OUT is sound here and needs no new machinery, which is what made the ruling the
+    //     right call. A cell's rollout count is already per-cell and adaptive ("adaptive sampling adds
+    //     rollouts per-cell, so count varies by cell"), and `recompute` divides by that count and skips
+    //     `c <= 0`. An abandoned rollout therefore leaves its cell with one fewer SAMPLE, not a hole:
+    //     no partial win-turn is folded in, so the label is unbiased-by-construction rather than
+    //     contaminated by a truncated game that would have scored as a late win.
+    //   * FAIL OUT is the point, not a safety valve. A pile of abandoned rollouts is evidence the
+    //     ENGINE needs optimising, and quietly dropping them would convert that signal into a slightly
+    //     thinner table nobody inspects. Same reasoning as the phase-A fail-out in valueleaf.sh.
+    //
+    // WALL ONLY, NO PREDICTIVE STAGE. *** THE PHASE-A RULING ONCE CITED HERE AS AUTHORITY ("Yeah, I
+    // guess just a wall-cap is okay. However, we need to let it be relatively soft.") WAS A
+    // VALUE-LEAF RULING AND DOES NOT AUTHORISE ANYTHING IN THIS FILE -- see the default below, which
+    // is now 0 because the user ruled this generator out of scope entirely. *** `Begin(0)` leaves the unit
+    // ceiling disarmed, and with no unit ceiling stage 1 is inert by construction anyway
+    // (GameWorkMeter.h: "NO CEILING => NO STAGE 1") -- so the generation-side work ceiling
+    // MTG_DECISION_WORK_X stays the only unit-denominated bound, exactly as it was.
+    //
+    // THIS CAP IS ONLY MEANINGFUL BECAUSE OF a28b566e. The flag is set by `CheckDeadline` on a
+    // 4,096-unit stride and then has to be OBSERVED. `GameEngine::PlayOutFrom` polls it per turn, and
+    // the greedy subset walk in TurnSolver.cpp polls it on a 1,024-visit stride as of a28b566e --
+    // before that fix the one region that burns these hours consulted no bound at all, so a cap armed
+    // here would have expired and changed nothing.
+    //
+    // A CAP IS A STALL GUARD, NOT THE COST FIX, and the numbers say so plainly: on the v3 evidence a
+    // 1,200 s cap reclaims 3.2 of 220 CPU-h. The cost is the broad 30-300 s band (1,799 rollouts,
+    // 91 CPU-h), which no cap can remove without condemning thousands. Do not reach for a lower cap
+    // as a performance lever -- that is the fail-out's job to refuse.
+    // *** DEFAULT 0 = NO WALL. USER, 2026-10-12: "There should be no abandon wall for mulligan
+    // profiles!" / "It was definitely never intended to apply to the mulligan profile." / "It was
+    // narrowly applying only to value-leaf phase A and C." / "Which are the most expensive games we
+    // run." THE PHASE-A RULING QUOTED ABOVE WAS NEVER ABOUT THIS GENERATOR, and citing it here was
+    // the defect -- three unauthorised generalisations in one step:
+    //   SCOPE      value-leaf phase A (matching C)        -> the mulligan keep generator
+    //   MAGNITUDE  "Maybe 3-4 hours?", adopted 4 h        -> 1200 s, TWELVE TIMES tighter
+    //   SITING     above the tail: 4 h cut NOTHING that   -> BELOW the tail: keep rollouts measure
+    //              completed (worst finisher 3.996 h)        max 3,405 s with 81 rollouts >= 1200 s
+    //   CONSEQUENCE phase A: "fewer training rows, and    -> FAIL-OUT: no profile at all
+    //              rows are ADDITIVE"
+    // WHAT IT COST: the v3 run reached sub-refine 64,422/64,422 (100%), subwave 5 converged, 0 frozen
+    // cells, 367,208 rollouts over 12.8 h -- and wrote NOTHING, to reclaim the 3.2 of 220 CPU-h this
+    // comment itself prices the cap at (1.5%).
+    // AND IT IS WALL-CLOCK (gamework::ArmDeadline -> steady_clock), so which rollouts get abandoned
+    // depends on MACHINE LOAD. Phase A states that caveat and justifies accepting it there (its
+    // pathology sustains 186 units/s against a healthy ~4,800, so no unit ceiling can reach it, and a
+    // cut game only loses late training rows). NEITHER half of that argument transfers: a keep
+    // rollout is a far cheaper unit of work, and the keep table is a SHIPPED, POOLABLE artifact whose
+    // cross-machine merge rests on parity fingerprints -- a load-dependent labeller breaks it by
+    // construction, and the repo's rule is to size off UNITS, never ms.
+    // *** THE GOVERNING RULE, and the one to apply before ever adding abandonment anywhere else.
+    // USER, 2026-10-12: "It's also important that whatever process uses that abandonment has the
+    // ability to work around some of the games being lost. Mulligan profiles do not." So the test is
+    // NOT "is this phase expensive" -- it is "CAN THE CONSUMER ABSORB A MISSING GAME?":
+    //   value-leaf phase A  CAN: training rows are ADDITIVE. A cut game keeps every row it banked,
+    //                       only late turns are lost, `finish` already accepts fewer rows, and a
+    //                       later run at a higher cap adds them back.
+    //   value-leaf phase C  CAN: a wall-cut game is excluded from every cell alike AND phase C.5
+    //                       must PROVE the cut changed no verdict -- an explicit discharge of the loss.
+    //   mulligan keep table CANNOT. Each cell IS a decision, consumed directly as policy. A lost
+    //                       rollout biases that cell's mean; a lost cell-side silently falls back to
+    //                       its prior. Nothing is additive and no stage verifies the loss was
+    //                       harmless, so the damage is unbounded in quality and invisible in shape.
+    // Note what the fail-out below really was: an admission that this consumer CANNOT absorb the loss
+    // -- answered by destroying the whole artifact rather than by not losing games. The correct answer
+    // is the one here: on this path, do not abandon.
+    // The knob is kept so a future unit-denominated backstop has a home, and so a diagnostic run can
+    // opt in; it must stay 0 for any generation whose output ships. The leave-it-out / fail-out
+    // machinery below is inert while this is 0.
+    const double rollout_wall_sec = static_cast<double>(EnvInt("MTG_KEEP_ROLLOUT_WALL_SEC", 0));
+    // Clamped to the user's stated ceiling: *"We don't want more than 50 for sure."* The default sits
+    // at the aggressive end of the range they named, per *"it might make sense to be even more
+    // aggressive, not allowing 10."* A larger request is honoured up to 50 and then capped, loudly.
+    constexpr long long kAbandonFailMax = 50;
+    const long long abandon_fail_at =
+        std::min<long long>(kAbandonFailMax, std::max<long long>(1, EnvInt("MTG_KEEP_ABANDON_FAIL_AT", 10)));
+    std::atomic<long long> abandoned_rollouts{ 0 };
+    std::atomic<bool>      abandon_failed{ false };
+    // WHY THE SIZE-7 PATH LEAVES OUT THE WHOLE CELL-SIDE, not the single rollout. On the continuous
+    // path the fold's `c` is BOTH the sample count and the index into `slot` (`SLOT(i, pd, c)`), and
+    // `slot` is sized to r_max -- so skipping one rollout mid-cell either stalls the prefix (the floor
+    // gate's `if (c < r0) any_below_floor = true` then never clears, hanging the phase) or needs a
+    // second cursor plus slack in the slot array plus a journal field to survive resume. That is
+    // surgery on the most delicate part of the generator, for a sample size the fail-out bounds at
+    // NINE: generation stops at the 10th abandonment, so "leave it out" can never apply to more than
+    // 9 rollouts in a whole run. Dropping the affected CELL-SIDE instead is strictly more
+    // conservative, needs no restructuring, and lands in a state the pipeline already handles -- an
+    // unsampled cell, which `recompute` skips (`c <= 0`) and the model falls back to its prior for.
+    // run_batch (the sub-tables) does leave out the single rollout, because there the accumulation is
+    // a plain sum and `kept` is enough.
+    //
+    // RESUME LIMITATION, stated rather than hidden: the journal has already persisted the cell's
+    // records, and poison is in-memory only, so a RESUMED run re-admits those <= 9 cell-sides with
+    // the substituted value folded in. Bounded to 9 of 213,492 cell-sides and only on a resume after
+    // a fail-out -- which is itself a run the user is meant to inspect, not resume blindly.
+    // Sized here because the cell enumeration above (t.comps / t.cnt.assign) is already final at this
+    // point, so the [i*2+pd] index is stable for the rest of the run.
+    std::vector<char>      poison7(TB(HAND).comps.size() * 2, 0);
+    std::mutex             poison_mtx;
+    // Arm/observe helpers, so the two rollout sites (run_batch and run_one) cannot drift apart.
+    auto arm_rollout = [&]()
+    {
+        if (rollout_wall_sec <= 0.0) { return; }   // =0 disables the backstop entirely
+        gamework::Begin(0);                        // reset + disarm the unit ceiling (wall only)
+        gamework::ArmDeadline(0.0, rollout_wall_sec);
+    };
+    // Returns true when THIS rollout was abandoned (so the caller must drop its sample). Records it,
+    // and trips the fail-out once the count reaches the threshold.
+    auto note_if_abandoned = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs)
+    {
+        if (rollout_wall_sec <= 0.0 || !gamework::Abandoned()) { return false; }
+        const long long n = abandoned_rollouts.fetch_add(1) + 1;
+        std::cerr << "[keepgen] ABANDONED-WALL rollout #" << n << "/" << abandon_fail_at << " after "
+                  << static_cast<long long>(gamework::Elapsed()) << "s (cap "
+                  << static_cast<long long>(rollout_wall_sec) << "s) -- LEFT OUT of its cell: "
+                  << describe_cell(H, comp, pd, r, rs) << "\n" << std::flush;
+        if (n >= abandon_fail_at) { abandon_failed.store(true); }
+        return true;
+    };
 
     // ---- Per-cell JOURNAL (crash-recovery for the continuous pool) --------------------------------
     // Instead of periodically snapshotting the whole raw (a fold-blocking multi-MB write every sweep --
@@ -2483,82 +2782,6 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     };
 
-    auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
-    {
-        const int H = work[w].H, idx = work[w].idx;
-        const std::vector<int>& comp = tables[HAND - H].comps[idx];
-        double sum = 0.0, sumsq = 0.0;
-        std::vector<char> hit;                       // execution-trace scratch (per rollout), if tracing
-        std::set<int>     cell_touched;              // union over this task's rollouts
-        if (trace_on) { hit.assign(touch_names.size(), 0); }
-        for (long long r = r0; r < r1; ++r)
-        {
-            // Fresh shuffle per rollout: pulling the top comp[b] cards of each bucket samples WHICH
-            // specific members fill the slots (proportional to their deck counts). The library
-            // continuation is then RE-SHUFFLED below (see the fix note) so its order is unbiased.
-            const uint64_t rs = cfg.seed + 21'000'000ULL
-                              + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
-                              + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
-            GameState s = GoldFishRunner::SetupGame(deck, rs);
-            s.m_required_pieces = &rollout_profile.required_pieces;
-            s.m_card_scores     = rollout_profile.card_scores.empty()
-                                ? nullptr : &rollout_profile.card_scores;
-            s.on_the_play       = (pd == 1);
-            Player& ap = s.ActivePlayer();
-            ap.hand.clear();
-            for (int b = 0; b < K; ++b)
-            {
-                int need = comp[b];
-                for (std::size_t k = 0; k < ap.library.size() && need > 0; )
-                {
-                    auto bit = bof.find(ap.library[k].m_name.str());
-                    if (bit != bof.end() && bit->second == b)
-                    { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin() + k); --need; }
-                    else { ++k; }
-                }
-            }
-            // FIX (library-continuation bias): the top-pull above removes the EARLIEST copies of the
-            // hand's card types, leaving the remaining library's top depleted of those types and
-            // enriched in everything else -- notably LANDS. That made a spell-heavy / land-light hand
-            // draw into its lands far too fast (measured: P(2 lands in first 2 draws) 0.29 vs the true
-            // 0.20), inflating win-turn and spuriously KEEPING land-light hands. Re-shuffle the leftover
-            // so the continuation is a fresh uniform permutation of the remaining cards; the hand's
-            // member sampling from the top is already correct, only the ORDER was biased. Deterministic
-            // + portable (SaltSeed), so pooling parity holds; a fixed salt keeps it independent of the
-            // opening shuffle.
-            ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
-            double wt;
-            const auto t_roll = std::chrono::steady_clock::now();
-            if (trace_on)
-            {
-                std::fill(hit.begin(), hit.end(), 0);
-                wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, &hit);
-                for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } }
-            }
-            else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
-            capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
-            sum += wt; sumsq += wt * wt;
-        }
-        SizeTable& t = tables[HAND - H];
-        double js; double jq; long long jn;
-        {
-            // Consistent with a concurrent mid-flight checkpoint read (write_raw_atomic under acc_mtx):
-            // a cell is committed atomically (all four fields together) or not at all -> the checkpoint
-            // never sees a torn cell. One thread owns each (cell,pd) per pass, so this doesn't serialize
-            // distinct cells' accumulation -- only the brief commit vs a checkpoint snapshot.
-            std::lock_guard<std::mutex> lk(acc_mtx);
-            t.sum[idx][pd]   += sum;
-            t.sumsq[idx][pd] += sumsq;
-            if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
-            t.cnt[idx][pd]   += (r1 - r0);
-            js = t.sum[idx][pd]; jq = t.sumsq[idx][pd]; jn = t.cnt[idx][pd];
-        }
-        // Journal this commit (continuous path only -> journal_on; sub-tables here, size-7 lands via the
-        // pool's worker). f is unused for sub-tables on resume (Pass A skips a cell once cnt>=cell_init).
-        journal_append(H, idx, pd, js, jq, jn, 0);
-    };
-
     // Single rollout r of cell w, mode pd -> win-turn (does NOT commit; the continuous path stores the
     // result in a per-(cell,r) slot and folds it deterministically). Same seed stream as run_batch
     // (pure function of seed_base,r,w,pd), so a cell's value is byte-identical to the wave path for the
@@ -2566,9 +2789,39 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // `hit` (execution-trace): non-null => this rollout records which cards' effects ran. The
     // continuous path's size-7 rollouts go through HERE, not through run_batch, so omitting it is what
     // left MTG_KEEP_TRACE recording nothing on the only generation path there is.
+    // MTG_KEEP_DIAG_SLOW_ROLLOUT="w:pd:r:ms[,w:pd:r:ms...]" (or ';'-separated; DIAGNOSTIC ONLY, default empty). After rolling
+    // rollout (w, pd, r) normally, SLEEP ms -- a straggler on demand, so a schedule change can be measured
+    // against a known barrier instead of waiting for a deck to produce one. -1 in w/pd/r is a wildcard
+    // (every matching entry sleeps, summed): "-1:-1:-1:50" makes every rollout cost 50 ms of WALL but no
+    // CPU, which turns a run into a pure SCHEDULE benchmark that a loaded box cannot distort. The value is
+    // untouched (the sleep follows the roll) and keyed on the rollout's identity, never on timing, so a
+    // run with it set writes the same raw as one without; it only moves wall clock. Never set on a
+    // generation that ships.
+    struct DiagSlow { long long w, pd, r, ms; };
+    static const std::vector<DiagSlow> diag_slow = []{
+        std::vector<DiagSlow> v;
+        const char* e = std::getenv("MTG_KEEP_DIAG_SLOW_ROLLOUT");
+        if (!e || !*e) { return v; }
+        std::string spec = e, item;
+        std::replace(spec.begin(), spec.end(), ';', ',');   // ';' too, so the spec can sit inside a ','-list
+        std::stringstream ss(spec);
+        while (std::getline(ss, item, ','))
+        {
+            DiagSlow d{ -1, -1, -1, 0 };
+            if (std::sscanf(item.c_str(), "%lld:%lld:%lld:%lld", &d.w, &d.pd, &d.r, &d.ms) == 4) { v.push_back(d); }
+        }
+        return v;
+    }();
     auto run_one = [&](AIEngine& ai, int w, int pd, long long r,
                        std::vector<char>* hit = nullptr) -> double
     {
+        // FAILED OUT => do no more work. Breaking the PRODUCER alone is not enough: the queue holds up
+        // to QCAP (8 x threads = 256) already-dispatched tasks, and draining those normally would keep
+        // abandoning rollouts at a full cap each -- at 1800 s that is hours of pointless work after the
+        // decision to stop. Bailing HERE is deadlock-free, which stopping the workers is not: a worker
+        // that stops popping leaves the producer blocked in `q_nf.wait(q.size() < QCAP)` with nobody
+        // left to notify it. Measured: with the fail-out at 3 the run reached #28 before this existed.
+        if (abandon_failed.load()) { return std::numeric_limits<double>::quiet_NaN(); }
         const int H = work[w].H, idx = work[w].idx;
         const std::vector<int>& comp = tables[HAND - H].comps[idx];
         const uint64_t rs = cfg.seed + 21'000'000ULL
@@ -2595,11 +2848,159 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
         const auto t_roll = std::chrono::steady_clock::now();
         double wt;
+        arm_rollout();
         if (hit) { std::fill(hit->begin(), hit->end(), 0); wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, hit); }
         else     { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
         capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
+        // Abandoned => NOT A LABEL. This path's caller stores the result in a per-(cell,r) slot and
+        // folds it deterministically, so it needs a value it can recognise as absent rather than a
+        // truncated win-turn; NaN is that value and every consumer below tests for it explicitly.
+        if (note_if_abandoned(H, comp, pd, r, rs)) { return std::numeric_limits<double>::quiet_NaN(); }
+        for (const DiagSlow& d : diag_slow)
+        {
+            if ((d.w < 0 || d.w == w) && (d.pd < 0 || d.pd == pd) && (d.r < 0 || d.r == r))
+            { std::this_thread::sleep_for(std::chrono::milliseconds(d.ms)); }
+        }
         return wt;
+    };
+
+    // ---- SPECULATIVE SUB-ROLLOUT MEMO (MTG_KEEP_SUB_SPEC, see sub_spec_step in the pool) ----------
+    // A sub-table rollout is a pure function of (seed_base, r, w, pd) -- the same property the size-7
+    // PRECOMPUTE memo rests on, and the one RolloutKeepWinTurn's per-game cache clear guarantees -- so
+    // a value rolled early by a speculative task is bit-identical to the value the real batch would
+    // roll. Keyed by (w, pd, r); sharded so the per-rollout lookup never serialises the workers.
+    // state 1 = requested (a kind -2 task is queued), 3 = being rolled by a kind -2 task, 2 = value held.
+    // A consumer that finds state 1 ERASES the entry and rolls the value itself (the queued speculative
+    // task then sees it gone and skips the roll); one that finds state 3 WAITS for it -- it would take at
+    // least as long to roll it again -- and then takes it; one that finds state 2 takes it and erases it.
+    struct SubMemoEnt   { double v; long long us; char state; };
+    struct SubMemoShard { std::mutex mx; std::condition_variable cv; std::unordered_map<std::uint64_t, SubMemoEnt> m; };
+    static constexpr std::size_t kSubMemoShards = 64;
+    std::array<SubMemoShard, kSubMemoShards> sub_memo;
+    bool sub_spec_on = false;                         // decided at pool start (see the pool)
+    const bool sub_spec_verify = EnvOn("MTG_KEEP_SUB_SPEC_VERIFY");
+    auto sub_key = [](int w, int pd, long long r) -> std::uint64_t
+    { return (static_cast<std::uint64_t>(w) << 24) | (static_cast<std::uint64_t>(pd) << 23)
+           | static_cast<std::uint64_t>(r); };
+    auto memo_shard = [&](std::uint64_t key) -> SubMemoShard&
+    { return sub_memo[static_cast<std::size_t>((key * 0x9E3779B97F4A7C15ULL) >> 58)]; };
+    // One sub-table rollout, served from the speculative memo when a value is parked there. `us` gets
+    // the rollout's measured cost (the ROLL's, even when the value came from the memo) because it feeds
+    // cell_us, which orders later waves slowest-first: a memo hit must not make a heavy cell look cheap.
+    auto sub_rollout = [&](AIEngine& ai, int w, int pd, long long r, std::vector<char>* hit,
+                           long long* us) -> double
+    {
+        if (sub_spec_on && hit == nullptr)
+        {
+            const std::uint64_t key = sub_key(w, pd, r);
+            SubMemoShard& sh = memo_shard(key);
+            bool got = false; double v = 0.0; long long vus = 0;
+            {
+                std::unique_lock<std::mutex> lk(sh.mx);
+                auto it = sh.m.find(key);
+                if (it != sh.m.end() && it->second.state == 3)
+                {
+                    sh.cv.wait(lk, [&]{ auto j = sh.m.find(key); return j == sh.m.end() || j->second.state != 3; });
+                    it = sh.m.find(key);
+                }
+                if (it != sh.m.end())
+                {
+                    if (it->second.state == 2) { got = true; v = it->second.v; vus = it->second.us; }
+                    sh.m.erase(it);   // consumed (or claimed back from a not-yet-run speculation)
+                }
+            }
+            if (got)
+            {
+                gen_prog.sspec_hit.fetch_add(1, std::memory_order_relaxed);
+                if (sub_spec_verify)   // MTG_KEEP_SUB_SPEC_VERIFY: prove the purity claim on THIS run
+                {
+                    const double live = run_one(ai, w, pd, r, nullptr);
+                    if (!(live == v || (std::isnan(live) && std::isnan(v))))
+                    {
+                        gen_prog.sspec_bad.fetch_add(1, std::memory_order_relaxed);
+                        std::cerr << "[keepgen] SUB-SPEC MISMATCH w=" << w << " pd=" << pd << " r=" << r
+                                  << ": memo=" << v << " live=" << live << " -- run_one is NOT pure in"
+                                     " (seed_base, r, w, pd); the speculative memo is unsound\n" << std::flush;
+                        v = live;
+                    }
+                }
+                *us = vus;
+                return v;
+            }
+        }
+        const auto t0 = std::chrono::steady_clock::now();
+        const double wt = run_one(ai, w, pd, r, hit);
+        *us = static_cast<long long>(std::chrono::duration<double, std::micro>(
+                                         std::chrono::steady_clock::now() - t0).count());
+        return wt;
+    };
+    // Commit one sub-table batch: fold its per-rollout values IN r ORDER into a batch-local sum (the
+    // exact arithmetic the serial loop always used: sum += wt; sumsq += wt*wt over r0..r1-1, NaN =
+    // abandoned = left out), then add that sum to the cell under acc_mtx and journal the cell. ONE
+    // definition, used by the serial batch AND by the split batch's last finisher, so the two paths
+    // cannot drift apart.
+    auto commit_sub = [&](int w, int pd, const std::vector<double>& vals, long long batch_us,
+                          const std::set<int>& cell_touched)
+    {
+        const int H = work[w].H, idx = work[w].idx;
+        double sum = 0.0, sumsq = 0.0;
+        long long kept = 0;
+        for (const double wt : vals)
+        {
+            // LEFT OUT, per the user's ruling: a truncated game's win-turn is not a label. Skipping the
+            // accumulate AND the count (below, via `kept`) is what makes this one fewer sample rather
+            // than a contaminated one -- see the ruling block above capture_slow.
+            if (std::isnan(wt)) { continue; }
+            sum += wt; sumsq += wt * wt; ++kept;
+        }
+        SizeTable& t = tables[HAND - H];
+        double js; double jq; long long jn;
+        {
+            // Consistent with a concurrent mid-flight checkpoint read (write_raw_atomic under acc_mtx):
+            // a cell is committed atomically (all four fields together) or not at all -> the checkpoint
+            // never sees a torn cell. One thread owns each (cell,pd) per pass, so this doesn't serialize
+            // distinct cells' accumulation -- only the brief commit vs a checkpoint snapshot.
+            std::lock_guard<std::mutex> lk(acc_mtx);
+            t.sum[idx][pd]   += sum;
+            t.sumsq[idx][pd] += sumsq;
+            if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
+            // `kept`, NOT (r1 - r0): an abandoned rollout contributed nothing to sum/sumsq, so counting
+            // it here would divide a short sum by a full n and pull every such cell's mean win-turn
+            // DOWN -- i.e. make the deck look faster exactly on the hands that are hardest to play.
+            t.cnt[idx][pd]   += kept;
+            // MEASURED per-cell cost, for SLOWEST-FIRST wave dispatch (see cell_us). Folded inside the
+            // lock that is already held, so it adds no contention and cannot race.
+            cell_us[HAND - H][static_cast<std::size_t>(idx) * 2 + pd] += batch_us;
+            js = t.sum[idx][pd]; jq = t.sumsq[idx][pd]; jn = t.cnt[idx][pd];
+        }
+        // Journal this commit (continuous path only -> journal_on; sub-tables here, size-7 lands via the
+        // pool's worker). f is unused for sub-tables on resume (Pass A skips a cell once cnt>=cell_init).
+        journal_append(H, idx, pd, js, jq, jn, 0);
+    };
+    // Append rollouts [r0,r1) to sub-table cell `w`, mode `pd`, serially on this thread.
+    auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
+    {
+        std::vector<double> vals;
+        vals.reserve(static_cast<std::size_t>(std::max<long long>(0, r1 - r0)));
+        long long batch_us = 0;                      // measured cost of this batch, for wave ORDERING only
+        std::vector<char> hit;                       // execution-trace scratch (per rollout), if tracing
+        std::set<int>     cell_touched;              // union over this task's rollouts
+        if (trace_on) { hit.assign(touch_names.size(), 0); }
+        for (long long r = r0; r < r1; ++r)
+        {
+            // Fresh shuffle per rollout (run_one): pulling the top comp[b] cards of each bucket samples
+            // WHICH specific members fill the slots, then the library continuation is RE-SHUFFLED so its
+            // order is unbiased. run_one returns NaN for an abandoned rollout and, once the fail-out has
+            // tripped, for every later one without rolling it (the old loop's `break`).
+            long long us = 0;
+            const double wt = sub_rollout(ai, w, pd, r, trace_on ? &hit : nullptr, &us);
+            if (trace_on)
+            { for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } } }
+            batch_us += us;                          // wave ORDERING only; never a result
+            vals.push_back(wt);
+        }
+        commit_sub(w, pd, vals, batch_us, cell_touched);
     };
 
     // ---- REPLAY one captured rollout (root-cause a degenerate game in isolation) -----------------
@@ -2670,12 +3071,42 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // as well as the logged tail. Same identity function as the gen (run_one), so reproducible.
         if (const int ns = EnvInt("MTG_KEEP_REPLAY_SAMPLE", 0); ns > 0)
         {
+            // MTG_KEEP_REPLAY_PICK=<i,j,k,...> -- keep ONLY these sample indices. DIAGNOSTIC ONLY.
+            //
+            // WHY IT EXISTS. A paired A/B over the sample names the rollouts whose win turn MOVED
+            // (e.g. "sample2397 w=33215 pd=1 r=21: 4 -> 5"), and the repo's adoption bar then asks
+            // the completeness question about exactly those: does the regression DISAPPEAR as the
+            // budget grows? A lever that only re-prices work is inert at a large budget; one that
+            // removed the line is not, and that is the lossy shape CLAUDE.md refuses. Without this
+            // filter the only way to re-run sample2397 is to re-run samples 0..2397 with it, which
+            // costs ~2,400 rollouts per budget per arm and buries the five cells under the noise of
+            // the other 2,395.
+            //
+            // THE INDEX MUST KEEP ITS IDENTITY, which is the one subtle part: the xorshift is
+            // advanced for EVERY k and only the wanted k are pushed, so sample2397 here is the same
+            // (w, pd, r) as sample2397 in a full run and the two are directly joinable. Filtering
+            // the sequence instead of the output would silently renumber every later cell.
+            std::set<int> pick;
+            if (const char* pk = std::getenv("MTG_KEEP_REPLAY_PICK"); pk && *pk)
+            {
+                const char* p = pk;
+                while (*p)
+                {
+                    while (*p && !std::isdigit(static_cast<unsigned char>(*p))) { ++p; }
+                    if (!*p) { break; }
+                    pick.insert(std::atoi(p));
+                    while (std::isdigit(static_cast<unsigned char>(*p))) { ++p; }
+                }
+                std::cerr << "[replay-list] PICK " << pick.size() << " of " << ns
+                          << " sample indices\n";
+            }
             std::vector<int> w7;
             for (int w = 0; w < static_cast<int>(work.size()); ++w) { if (work[w].H == HAND) { w7.push_back(w); } }
             std::uint64_t x = 0x243F6A8885A308D3ULL;
             for (int k = 0; k < ns && !w7.empty(); ++k)
             {
                 x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+                if (!pick.empty() && pick.count(k) == 0) { continue; }   // advance, do not emit
                 RItem it{};
                 it.w = w7[static_cast<std::size_t>(x % w7.size())];
                 it.pd = static_cast<int>((x >> 20) & 1ULL);
@@ -3018,18 +3449,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // cannot drift apart.
     const SizeTable& H7 = tables[0];
     const std::vector<double> P = HandWeights(tables, count, static_cast<int>(deck.mainboard.size()));
-    // Shrunk stderr of the mean for the STOP gate: pull the cell's sample variance toward the table's
-    // pooled variance `vg` with se_prior pseudo-observations, so a low-R cell's spuriously-small sample
-    // variance can't fake confidence (see MTG_KEEP_SE_PRIOR).
-    auto gate_se = [&](const SizeTable& t, int i, int pd, double vg) -> double
-    {
-        const long long c = t.cnt[i][pd];
-        if (c < 1) { return 0.0; }
-        const double mean = t.V[i][pd];
-        const double vc   = c > 1 ? std::max(0.0, t.sumsq[i][pd] / c - mean * mean) : vg;
-        const double vs   = (c * vc + cfg.se_prior * vg) / (c + cfg.se_prior);
-        return std::sqrt(vs / c);
-    };
+    // (Shrunk stderr of the mean for the STOP gate -- the cell's sample variance pulled toward the
+    // table's pooled variance `vg` with se_prior pseudo-observations, so a low-R cell's spuriously-small
+    // sample variance can't fake confidence (see MTG_KEEP_SE_PRIOR) -- lives in sub_mark_core as `gse`,
+    // over an accessor, so the real wave and the speculative planner share one formula.)
 
     // Adaptive schedule (influence-driven) -- the ONLY schedule. Sample EVERY cell to the floor r0, then
     // add rollouts only to cells that could still change a keep decision or bias the threshold, until
@@ -3099,6 +3522,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // Stamped on BOTH shapes: a checkpoint is resumed by this same run (so it must agree), and a
         // probe chunk is consumed by a later gen (so that gen must be able to check it).
         StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));
+        StampScheduleCfg(root["meta"], ScheduleCfgOf(cfg));
         if (as_probe) { root["meta"]["probe"] = true; root["meta"]["floor_complete"] = true; }
         json buckets = json::array();
         for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
@@ -3228,7 +3652,39 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                          "RESUME(journal)", journal_path, &retain_active)
                    // A restart at another depth is a different run, not a continuation of this one.
                    && RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(m), "RESUME(journal)",
-                                       journal_path);
+                                       journal_path)
+                   // ...and NEITHER IS A RESTART AT ANOTHER REFINEMENT SCHEDULE. flip_eps decides
+                   // when a sub-cell stops refining, so resuming a 0.02 journal under 0.10 produces
+                   // ONE table holding cells settled by two different stop gates -- a mix nothing
+                   // in the artifact would have recorded. Checked here rather than folded into the
+                   // 7-field chain above so an UNVERIFIABLE (pre-stamp) journal still resumes.
+                   && [&]{
+                          const ScheduleCfg mine = ScheduleCfgOf(cfg);
+                          const ScheduleCfg theirs = ScheduleCfgFromMeta(m);
+                          switch (ScheduleCfgCompare(mine, theirs))
+                          {
+                          case CfgVerdict::Match: return true;
+                          case CfgVerdict::Unverifiable:
+                              std::cerr << "[keepgen] RESUME(journal): " << journal_path
+                                        << " predates the refinement-schedule stamp -- UNVERIFIABLE"
+                                           " (this run " << mine.str() << "). Resuming; if that"
+                                           " journal was rolled at a different flip_eps/r_batch/"
+                                           "se_prior the table will MIX schedules.\n" << std::flush;
+                              return true;
+                          case CfgVerdict::Differs:
+                          default:
+                              std::cerr << "[keepgen] RESUME(journal): " << journal_path
+                                        << " cannot be resumed -- REFINEMENT SCHEDULE differs"
+                                           " (journal " << theirs.str() << " vs this run "
+                                        << mine.str() << "). flip_eps is the refine STOP gate, so"
+                                           " mixing two values inside one table settles some cells"
+                                           " at one confidence and some at another -- and the"
+                                           " higher the cap R, the more of the table it decides."
+                                           " Relaunch at the journal's schedule to resume it.\n"
+                                        << std::flush;
+                              return false;
+                          }
+                      }();
             if (matched && retain_active)
             {
                 retain_foreign_digest = m.value("play_digest", std::string());
@@ -3594,7 +4050,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     if (w < 0) { continue; }
                     double s = 0.0, q = 0.0;
                     for (long long r = 0; r < c.n; ++r)
-                    { const double wt = run_one(ai, w, c.pd, r); s += wt; q += wt * wt; }
+                    // An abandoned rollout returns NaN (see run_one). Skipping it keeps this
+                    // DIAGNOSTIC's comparison readable instead of turning the whole cell NaN; the
+                    // rollout is left out exactly as it is everywhere else.
+                    { const double wt = run_one(ai, w, c.pd, r);
+                      if (!std::isnan(wt)) { s += wt; q += wt * wt; } }
                     new_sum[k] = s; new_sumsq[k] = q;
                     const long long d = vdone.fetch_add(c.n) + c.n;
                     if (k % 25 == 0)
@@ -4008,27 +4468,60 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // loop below EXACTLY, but skips size-7 (the vg[0] pool + the m=0 gate) -- both unused for sub-cells --
     // so it never reads size-7 accumulators and is safe to run concurrent with the size-7 floor. Returns
     // the tasks in `out` (empty => the sub-tables have converged). refined_rollouts is bumped as marked.
-    auto compute_sub_wave_tasks = [&](std::vector<Task>& out)
+    // `eps` and `out` are parameters so the SAME marking logic can be run as a read-only DRY RUN at a
+    // different flip_eps (out == nullptr). That is what prices MTG_KEEP_FLIP_EPS without a second
+    // multi-hour generation: on KittyEquipment v3 the first adaptive wave was 50,063 tasks x 16
+    // rollouts ~= 801,000 rollouts, which at the observed 8-13 rollouts/s is 17-28 HOURS for one wave
+    // -- comfortably the dominant phase of the whole generation, far above the size-7 floor's ~6 h. The
+    // wave size is the only number that says what a looser gate would buy, and it was previously
+    // observable only by running the gen to this point. A dry run is pure computation over the tables
+    // (no rollouts), so the diagnostic is nearly free.
+    // ---- The MARKING CORE, generic over WHERE the cell values come from -------------------------------
+    // `A` answers V / cnt / sumsq / start / present for (table m, cell i, pd). The REAL wave passes the
+    // tables themselves (start == cnt, every cell present) -- character for character the arithmetic
+    // this lambda always ran, so the real wave is unchanged. The SPECULATIVE planner (sub_plan, in the
+    // pool) passes a private SNAPSHOT, which is what makes speculation structurally unable to write
+    // committed state: it never holds a reference to anything it could mutate. `start` is the count a
+    // new batch would start from (the snapshot's projected count, past any batch still in flight);
+    // `present` lets a snapshot leave out a cell whose first batch has not committed yet (its V is not
+    // a measurement, so it must not win an argmin). `cancel` (optional) aborts a speculative plan when
+    // the real wave needs the planner; the caller then discards the partial result.
+    auto sub_mark_core = [&](const auto& A, const std::array<std::vector<double>, 2>& Dopt, double eps,
+                             std::vector<Task>* out, bool count_refined,
+                             const std::vector<std::vector<long long>>& cost,
+                             const std::atomic<bool>* cancel) -> long long
     {
-        out.clear();
+        if (out != nullptr) { out->clear(); }
         const double SQRT2 = 1.4142135623730951;
-        const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
         std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });
         for (int H = HAND - 1; H >= min_size; --H)   // skip size-7: vg[0] is unused in sub_only and reading it races the pool
         {
-            const SizeTable& t = tables[HAND - H]; std::array<long long, 2> ng = { 0, 0 };
-            for (std::size_t i = 0; i < t.comps.size(); ++i)
+            const int ti = HAND - H;
+            const std::size_t nt = tables[ti].comps.size(); std::array<long long, 2> ng = { 0, 0 };
+            for (std::size_t i = 0; i < nt; ++i)
                 for (int pd = 0; pd < 2; ++pd)
-                { const long long c = t.cnt[i][pd];
-                  if (c > 1) { const double mn = t.V[i][pd];
-                               vg[HAND - H][pd] += std::max(0.0, t.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
-            for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[HAND - H][pd] /= ng[pd]; } }
+                { const long long c = A.cnt(ti, i, pd);
+                  if (c > 1) { const double mn = A.V(ti, i, pd);
+                               vg[ti][pd] += std::max(0.0, A.sumsq(ti, i, pd) / c - mn * mn); ++ng[pd]; } }
+            for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[ti][pd] /= ng[pd]; } }
         }
+        // gate_se, over the accessor (the same shrunk-stderr formula, term for term).
+        auto gse = [&](int ti, int i, int pd, double vgv) -> double
+        {
+            const long long c = A.cnt(ti, static_cast<std::size_t>(i), pd);
+            if (c < 1) { return 0.0; }
+            const double mean = A.V(ti, static_cast<std::size_t>(i), pd);
+            const double vc   = c > 1 ? std::max(0.0, A.sumsq(ti, static_cast<std::size_t>(i), pd) / c - mean * mean) : vgv;
+            const double vs   = (c * vc + cfg.se_prior * vgv) / (c + cfg.se_prior);
+            return std::sqrt(vs / c);
+        };
         std::set<std::array<int, 3>> mark;
         std::vector<std::vector<int>> subs;
         std::vector<int> cur(K, 0);
         for (int pd = 0; pd < 2; ++pd)
             for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            {
+                if (cancel != nullptr && (i & 1023) == 0 && cancel->load()) { return -1; }
                 for (int m = 1; m <= cfg.max_mull; ++m)
                 {
                     // One enumeration of the hand's (HAND-m)-subcompositions serves both the argmin and
@@ -4042,8 +4535,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         auto it = t.index.find(s);
                         if (it == t.index.end()) { continue; }
+                        if (!A.present(m, static_cast<std::size_t>(it->second), pd)) { continue; }
                         cand.push_back(it->second);
-                        if (t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; }
+                        const double v = A.V(m, static_cast<std::size_t>(it->second), pd);
+                        if (v < best) { best = v; arg = it->second; }
                     }
                     if (arg < 0) { continue; }
                     // A hand settled as a confident MULLIGAN at this level never reads its sub-cells
@@ -4051,16 +4546,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // The terminal level is a forced keep and is always needed.
                     if (m != cfg.max_mull)
                     {
-                        const double kv  = t.V[arg][pd];
+                        const double kv  = A.V(m, static_cast<std::size_t>(arg), pd);
                         const double thr = Dopt[pd][m + 1];
-                        const double se  = gate_se(t, arg, pd, vg[m][pd]);
+                        const double se  = gse(m, arg, pd, vg[m][pd]);
                         const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
                                                      : (kv == thr ? 0.5 : 0.0);
                         const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
-                                                  && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
+                                                  && (kv - thr > 0.0) && (flip <= eps);
                         if (confident_mull) { continue; }
                     }
-                    if (!pc.resolved[m][arg][pd] && t.cnt[arg][pd] < r_max) { mark.insert({ m, arg, pd }); }
+                    if (!pc.resolved[m][arg][pd] && A.start(m, static_cast<std::size_t>(arg), pd) < r_max)
+                    { mark.insert({ m, arg, pd }); }
                     // RACE THE CONTENDERS (2026-09-16). Marking only the current argmin is the
                     // "winner's-curse-of-omission" the adaptive_bottom note above warns about, and it is
                     // exactly what broke FiveColour's bottoming: a candidate whose two floor rollouts came
@@ -4085,28 +4581,71 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // is what turns that filter from an exclusion of the unlucky into a guard against
                     // the merely unsampled. Cost: more sub-cell rollouts on decks with near-tie removals
                     // (the decks where they matter); decisive candidates still stop at the floor.
-                    const double se_a = gate_se(t, arg, pd, vg[m][pd]);
+                    const double se_a = gse(m, arg, pd, vg[m][pd]);
                     for (const int c : cand)
                     {
-                        if (c == arg || pc.resolved[m][c][pd] || t.cnt[c][pd] >= r_max) { continue; }
-                        const double d    = t.V[c][pd] - t.V[arg][pd];          // >= 0: arg is the argmin
-                        const double se_c = gate_se(t, c, pd, vg[m][pd]);
+                        if (c == arg || pc.resolved[m][c][pd]
+                            || A.start(m, static_cast<std::size_t>(c), pd) >= r_max) { continue; }
+                        const double d    = A.V(m, static_cast<std::size_t>(c), pd)
+                                          - A.V(m, static_cast<std::size_t>(arg), pd);   // >= 0: arg is the argmin
+                        const double se_c = gse(m, c, pd, vg[m][pd]);
                         const double sd   = std::sqrt(se_a * se_a + se_c * se_c);
                         const double p_better = (sd > 0) ? 0.5 * std::erfc(d / (sd * SQRT2))
                                                          : (d == 0.0 ? 0.5 : 0.0);
-                        if (p_better > cfg.flip_eps) { mark.insert({ m, c, pd }); }
+                        if (p_better > eps) { mark.insert({ m, c, pd }); }
                     }
                 }
+            }
+        long long marked = 0;
         for (const std::array<int, 3>& mk : mark)
         {
             const int H_idx = mk[0], arg = mk[1], pd = mk[2];
-            const long long c   = tables[H_idx].cnt[arg][pd];
+            const long long c   = A.start(H_idx, static_cast<std::size_t>(arg), pd);
             const long long add = std::min<long long>(cfg.r_batch, r_max - c);
             if (add <= 0) { continue; }
-            out.push_back({ work_idx[H_idx][arg], pd, c, c + add });
-            refined_rollouts += add;
+            ++marked;
+            if (out == nullptr) { continue; }          // dry run: count only, mutate nothing
+            out->push_back({ work_idx[H_idx][arg], pd, c, c + add });
+            if (count_refined) { refined_rollouts += add; }
         }
+        // SLOWEST FIRST. Every wave ends in a hard barrier (sub_wave_pending == 0 gates the next one),
+        // so the wave's makespan is set by when its most expensive task STARTS. Dispatching in
+        // cell-index order can put a 20-minute rollout last and hold 31 of 32 cores idle against the
+        // barrier; longest-processing-time-first is the standard remedy. Ordering is provably
+        // result-neutral (the seed is a pure function of (seed_base, r, w, pd)), so this is a pure
+        // wall-clock change -- no label moves, no digest moves, no quality question to settle.
+        if (out != nullptr && EnvOn("MTG_KEEP_SLOWEST_FIRST", true))
+        {
+            std::stable_sort(out->begin(), out->end(), [&](const Task& a, const Task& b) {
+                const auto costof = [&](const Task& t) -> long long {
+                    const int H = work[t.w].H, ix = work[t.w].idx;
+                    const std::size_t k = static_cast<std::size_t>(ix) * 2 + static_cast<std::size_t>(t.pd);
+                    const std::vector<long long>& v = cost[HAND - H];
+                    return k < v.size() ? v[k] : 0;
+                };
+                return costof(a) > costof(b);
+            });
+        }
+        return marked;
     };
+    // The tables themselves, as a marking accessor (the real wave and the flip_eps dry runs).
+    struct RealAcc
+    {
+        const std::vector<SizeTable>& tb;
+        double    V(int ti, std::size_t i, int pd) const     { return tb[ti].V[i][pd]; }
+        long long cnt(int ti, std::size_t i, int pd) const   { return tb[ti].cnt[i][pd]; }
+        double    sumsq(int ti, std::size_t i, int pd) const { return tb[ti].sumsq[i][pd]; }
+        long long start(int ti, std::size_t i, int pd) const { return tb[ti].cnt[i][pd]; }
+        bool      present(int, std::size_t, int) const       { return true; }
+    };
+    auto compute_sub_wave_tasks_at = [&](std::vector<Task>* out, double eps) -> long long
+    {
+        const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
+        return sub_mark_core(RealAcc{ tables }, Dopt, eps, out, /*count_refined=*/true, cell_us, nullptr);
+    };
+    // The real caller keeps its original name and signature, so every call site below is unchanged.
+    auto compute_sub_wave_tasks = [&](std::vector<Task>& out)
+    { compute_sub_wave_tasks_at(&out, cfg.flip_eps); };
 
     // Floor-pass GEN-TIME PROJECTION + degenerate-cell diagnostic + recommend probe/stop. Fires once when
     // the continuous floor completes: it prices this deck's rollouts at the gen depth, projects the full
@@ -4230,6 +4769,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::vector<double>            pre_val(pre_on ? SL : 0, 0.0);
         std::vector<std::atomic<char>> pre_have(pre_on ? SL : 0);
         for (auto& pf : pre_have) { pf.store(0, std::memory_order_relaxed); }   // explicit: atomics
+        // REFINE-TAIL precompute (see the refine branch of the producer). Same memo, same purity argument.
+        const bool pre_refine_on = pre_on && EnvOn("MTG_KEEP_PRECOMPUTE_REFINE", true);
+        // Skip a queued size-7 rollout whose cell has frozen since it was fed (see the worker). Byte-identical.
+        const bool skip_frozen_on = EnvOn("MTG_KEEP_SKIP_FROZEN", true);
+        std::vector<long long> pre_next(pre_refine_on ? static_cast<std::size_t>(NC) * 2 : 0, 0);  // next r to precompute
+        std::vector<std::size_t> live_ks;   // live size-7 cell-sides seen by the refine branch's last scan
+        std::size_t pre_rr = 0;             // round-robin cursor into live_ks
+        // USEFULNESS of size-7 floor speculation: the [lo, hi) range each cell-side was speculated over.
+        std::vector<int> spec7_lo(static_cast<std::size_t>(NC) * 2, 0), spec7_hi(static_cast<std::size_t>(NC) * 2, 0);
         std::vector<long long> fed(static_cast<std::size_t>(NC) * 2, 0);
         std::vector<std::atomic<char>> afroze(static_cast<std::size_t>(NC) * 2);   // lock-free view for producer
         // Floor snapshot (sum/sumsq/cnt at exactly c==r0), captured at the r0-crossing under fold_mtx. vg_ref
@@ -4300,6 +4848,39 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::array<double, 2> vg_roll{ 0.0, 0.0 };
         long long vg_base = r0;
 
+        // ---- SPLIT SUB BATCHES (MTG_KEEP_BATCH_SPLIT, default ON) ---------------------------------------
+        // A kind-1 (sub floor / cap) or kind-2 (adaptive wave) batch [r0,r1) used to run serially on ONE
+        // thread, so a cell with a few slow rollouts held a core -- and, because every sub-wave ends in a
+        // barrier, held the WHOLE next wave -- for the sum of their times. Split, each rollout is its own
+        // queue task (kind 3) writing into the batch's slot array; whichever task finishes LAST folds the
+        // slots in r order through commit_sub, the same function the serial batch uses, so the cell's
+        // sum/sumsq/cnt, its journal record and everything downstream are bit-identical (a rollout is a
+        // pure function of (seed_base, r, w, pd); only WHICH thread rolls it changes). =0 restores the
+        // one-thread batch.
+        const bool split_on = EnvOn("MTG_KEEP_BATCH_SPLIT", true);
+        struct SplitBatch
+        {
+            int w = 0, pd = 0, kind = 0;
+            long long r0 = 0;
+            std::vector<double>    vals;
+            std::vector<long long> us;
+            std::atomic<long long> left{ 0 };
+            std::mutex             mx;        // guards `touched` (execution-trace only)
+            std::set<int>          touched;
+        };
+        // Every sub-table batch commit bumps this; the speculative planner replans only when it moved.
+        std::atomic<long long> sub_commit_seq{ 0 };
+        // Speculative sub rollouts queued or rolling (kind -2): a plan whose rollouts are all done can be
+        // chained one wave further (see sub_plan), so its completion is a replan trigger too.
+        std::atomic<long long> sub_spec_outstanding{ 0 };
+        // SPECULATIVE NEXT SUB-WAVE (MTG_KEEP_SUB_SPEC, default ON; =0 restores the barrier-only path).
+        // See the planner below. Off where the memo could not be byte-exact: under a per-rollout WALL
+        // (abandonment is wall-clock, so a speculative roll could be abandoned where the real one would
+        // not -- and that knob must stay 0 for anything that ships anyway) and under the execution trace
+        // (the memo carries the value, not the touched-card set). Only meaningful with an adaptive
+        // sub-refine (no waves => nothing to speculate).
+        sub_spec_on = EnvOn("MTG_KEEP_SUB_SPEC", true) && sub_refine_on && rollout_wall_sec <= 0.0 && !trace_on;
+
         // The freeze test for level c given that cell's prefix (sum_c/sumsq_c at exactly c samples). Shared
         // by the inline fold (refine) and the reconcile replay (post-speculation) so the two can never drift.
         auto freeze_hit = [&](int i, int pd, long long c, double sum_c, double sumsq_c) -> bool
@@ -4338,11 +4919,76 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 std::array<long long, 5> task;
                 {
                     std::unique_lock<std::mutex> lk(qmtx);
-                    q_ne.wait(lk, [&]{ return !q.empty() || !producing.load(); });
+                    if (q.empty() && producing.load())
+                    {
+                        // IDLE: a core with nothing it is allowed to do. Measured, not inferred.
+                        const auto ti0 = std::chrono::steady_clock::now();
+                        q_ne.wait(lk, [&]{ return !q.empty() || !producing.load(); });
+                        gen_prog.idle_us.fetch_add(static_cast<long long>(std::chrono::duration<double, std::micro>(
+                            std::chrono::steady_clock::now() - ti0).count()), std::memory_order_relaxed);
+                    }
                     if (q.empty()) { if (!producing.load()) { break; } else { continue; } }
                     task = q.front(); q.pop_front();
                 }
                 q_nf.notify_one();
+                // A speculative task (kind < 0) left in the queue when the pool shuts down has no reader.
+                if (task[0] < 0 && !producing.load()) { continue; }
+                if (task[0] == -2)  // SPECULATIVE SUB ROLLOUT: fill the sub memo, commit NOTHING. See sub_memo.
+                {
+                    const int sw = static_cast<int>(task[1]), spd = static_cast<int>(task[2]);
+                    const long long sr = task[3];
+                    const std::uint64_t key = sub_key(sw, spd, sr);
+                    SubMemoShard& sh = memo_shard(key);
+                    {
+                        std::lock_guard<std::mutex> lk(sh.mx);
+                        auto it = sh.m.find(key);
+                        if (it == sh.m.end() || it->second.state != 1)               // claimed back / held already
+                        { sub_spec_outstanding.fetch_sub(1); continue; }
+                        it->second.state = 3;                                         // rolling: a consumer waits
+                    }
+                    gen_prog.sspec_rolled.fetch_add(1, std::memory_order_relaxed);
+                    const auto t0 = std::chrono::steady_clock::now();
+                    const double v = run_one(ai, sw, spd, sr, nullptr);
+                    const long long us = static_cast<long long>(std::chrono::duration<double, std::micro>(
+                                             std::chrono::steady_clock::now() - t0).count());
+                    {
+                        std::lock_guard<std::mutex> lk(sh.mx);
+                        auto it = sh.m.find(key);
+                        if (it != sh.m.end() && it->second.state == 3) { it->second = SubMemoEnt{ v, us, 2 }; }
+                    }   // (gone => the sub-refine converged and the memo was retired: drop ours)
+                    sh.cv.notify_all();
+                    sub_spec_outstanding.fetch_sub(1);
+                    continue;
+                }
+                if (task[0] == 3)   // SPLIT sub-batch rollout: one slot of a SplitBatch; last one commits
+                {
+                    SplitBatch* sb = reinterpret_cast<SplitBatch*>(static_cast<std::intptr_t>(task[1]));
+                    const long long r = task[2];
+                    long long us = 0;
+                    const double wt = sub_rollout(ai, sb->w, sb->pd, r, trace_on ? &w_hit : nullptr, &us);
+                    const std::size_t z = static_cast<std::size_t>(r - sb->r0);
+                    sb->vals[z] = wt; sb->us[z] = us;
+                    if (trace_on)
+                    {
+                        std::lock_guard<std::mutex> tk(sb->mx);
+                        for (std::size_t k = 0; k < w_hit.size(); ++k)
+                        { if (w_hit[k]) { sb->touched.insert(static_cast<int>(k)); } }
+                    }
+                    // acq_rel: the last finisher must see every other task's slot write.
+                    if (sb->left.fetch_sub(1, std::memory_order_acq_rel) != 1) { continue; }
+                    long long bus = 0;
+                    for (const long long u : sb->us) { bus += u; }
+                    commit_sub(sb->w, sb->pd, sb->vals, bus, sb->touched);
+                    const int kind = sb->kind;
+                    delete sb;
+                    sub_commit_seq.fetch_add(1, std::memory_order_relaxed);
+                    if (kind == 1) { sub_remaining.fetch_sub(1);
+                                     gen_prog.sub_done.fetch_add(1, std::memory_order_relaxed); }
+                    else           { sub_wave_pending.fetch_sub(1); }
+                    in_flight.fetch_sub(1);
+                    prod_cv.notify_one();
+                    continue;
+                }
                 if (task[0] < 0)    // PRECOMPUTE (kind -1): fill the memo, fold NOTHING. See pre_val.
                 {
                     if (!pre_on) { continue; }   // cache declined (too large) -> nothing enqueues these
@@ -4352,8 +4998,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // A kind-0 racing it just rolls the value itself and both write the same number.
                     const int pi = static_cast<int>(task[1]), ppd = static_cast<int>(task[2]);
                     const std::size_t ps = SLOT(pi, ppd, task[3]);
+                    // A cell frozen since this was queued will never ask for the value: skip the roll.
+                    if (afroze[static_cast<std::size_t>(pi) * 2 + ppd].load(std::memory_order_acquire)) { continue; }
+                    if (task[3] < S7.cnt[pi][ppd]) { continue; }   // already folded (racy read; benign)
                     if (!pre_have[ps].load(std::memory_order_acquire))
                     {
+                        gen_prog.prerolled.fetch_add(1, std::memory_order_relaxed);
                         const double pv = run_one(ai, work_idx[0][pi], ppd, task[3], nullptr);
                         pre_val[ps] = pv;
                         pre_have[ps].store(1, std::memory_order_release);   // value BEFORE the flag
@@ -4363,6 +5013,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (task[0] >= 1)   // sub-table batch (fusion filler): whole batch on one thread, self-committing
                 {
                     run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), task[3], task[4]);
+                    sub_commit_seq.fetch_add(1, std::memory_order_relaxed);
                     // sub_done counts KIND-1 only, because sub_total is fused_sub_tasks.size() and those are
                     // the only kind-1 tasks. Counting kind-2 (adaptive sub-refine wave) batches here as well
                     // drives sub= past 100% on any recipe with adaptive bottoming -- i.e. exactly `fast`.
@@ -4376,6 +5027,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 const int i = static_cast<int>(task[1]), pd = static_cast<int>(task[2]);
                 const long long r = task[3];
+                // SKIP A FROZEN CELL'S QUEUED ROLLOUT (MTG_KEEP_SKIP_FROZEN, default ON, byte-identical). The
+                // refine producer feeds every live cell cont_lookahead past its count, and reconcile freezes
+                // cells whose floor-tail speculation is still queued, so a cell that freezes leaves rollouts
+                // behind it in the queue. The fold below discards them (its loop is gated on !frozen7), so
+                // rolling them is pure waste -- up to cont_lookahead-1 rollouts per frozen cell-side, i.e.
+                // millions on a large deck. A freeze never un-sets, so the skip cannot drop a value the fold
+                // would have used. Only the bookkeeping the fold path does on exit is kept.
+                if (skip_frozen_on && afroze[static_cast<std::size_t>(i) * 2 + pd].load(std::memory_order_acquire))
+                {
+                    gen_prog.skip7.fetch_add(1, std::memory_order_relaxed);
+                    in_flight.fetch_sub(1);
+                    prod_cv.notify_one();
+                    continue;
+                }
                 // Take the precomputed value when one is parked (see pre_val). Bit-identical by
                 // construction -- run_one is pure in (seed_base, r, w, pd) -- so this is a pure
                 // wall-clock saving and cannot move the table. NOT under trace_on: the trace needs
@@ -4403,6 +5068,28 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 else
                 { wt = run_one(ai, work_idx[0][i], pd, r, trace_on ? &w_hit : nullptr); }
+                // ABANDONED (wall backstop) => this cell-side is LEFT OUT entirely; see poison7 above.
+                // The fold still runs so the prefix advances and no phase gate hangs, but the cell-side
+                // is zeroed before recompute, so nothing derived from it reaches the table. The
+                // substituted value matters only to a blind resume (poison is in-memory), so it is the
+                // cell's own running mean -- the least-wrong imputation available -- rather than a 0,
+                // which would read as a turn-0 win and make the hardest hands look like the best ones.
+                if (std::isnan(wt))
+                {
+                    // TWO different NaNs reach here and only ONE is an abandonment. After the fail-out,
+                    // run_one returns NaN for every queued task WITHOUT rolling it, and one producer
+                    // iteration can feed every cell before the loop re-checks the flag -- so poisoning
+                    // on NaN alone marked all 106,746 cell-sides and logged "LEFT OUT 106746" when 15
+                    // rollouts had actually been abandoned. Nothing corrupt could escape (a fail-out
+                    // writes neither profile nor raw), but the number was simply false. Poison only
+                    // when the cap is still the reason a rollout came back empty.
+                    const std::size_t pk = static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd);
+                    { std::lock_guard<std::mutex> plk(poison_mtx);
+                      if (pk < poison7.size() && !abandon_failed.load()) { poison7[pk] = 1; } }
+                    const long long cn = tables[0].cnt[i][pd];
+                    wt = cn > 0 ? tables[0].sum[i][pd] / static_cast<double>(cn)
+                                : static_cast<double>(cfg.max_turns);
+                }
                 if (trace_on)   // fold this rollout's cards into the cell's union (same lock as the commit)
                 {
                     std::lock_guard<std::mutex> tk(acc_mtx);
@@ -4489,12 +5176,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // fixed refs. Called once.
         auto compute_refs = [&]()
         {
-            std::lock_guard<std::mutex> fk(fold_mtx);
-            // The sub-tables are sampled by THIS pool (Pass A no longer joins or recomputes), so recompute
-            // their V now, before ComputeDopt reads them. Sub-cells are final here (the gate waits on
-            // sub_remaining==0 and sub_converged). Under acc_mtx (run_batch's commit lock); the lock order
-            // fold_mtx->acc_mtx is unique to compute_refs -> no cycle. Values are byte-identical to the old
-            // Pass-A recompute (same whole-batch run_batch accumulation).
+            // DOPT OUTSIDE fold_mtx (MTG_KEEP_REFS_DOPT_UNLOCKED, default ON). Everything Dopt reads -- the
+            // sub-tables' accumulators/V and the size-7 COMPOSITIONS -- is final and quiescent here (the
+            // gate waits on sub_remaining==0 and sub_converged, and size-7 workers never touch sub-tables),
+            // so computing it before taking fold_mtx gives the same numbers. Under the lock it used to
+            // freeze every size-7 worker at its next fold for the whole backward induction (two full
+            // passes over every hand at every mull level -- a minute or more on a large deck): the
+            // floor->refine barrier, paid with the box full of finished rollouts it could not fold.
+            const bool dopt_early = EnvOn("MTG_KEEP_REFS_DOPT_UNLOCKED", true);
+            std::array<std::vector<double>, 2> dopt_pre{ std::vector<double>{}, std::vector<double>{} };
+            auto sub_recompute_for_refs = [&]()
             {
                 std::lock_guard<std::mutex> ak(acc_mtx);
                 for (int H = HAND - 1; H >= min_size; --H)
@@ -4509,12 +5200,28 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                             t.V[si][sp] = mean; t.se[si][sp] = cc > 1 ? std::sqrt(var / cc) : 0.0;
                         }
                 }
+            };
+            if (dopt_early)
+            {
+                sub_recompute_for_refs();
+                apply_prior_override_sub();
+                dopt_pre = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
             }
-            // ...and re-assert the change-detection carry on top of it: the recompute above derives V from
-            // the fresh (thin) samples, which would otherwise clobber the prior's high-R value on resolved
-            // cells and silently un-do the carry for the Dopt the whole refine gates against. Inert unless
-            // change_detect.
-            apply_prior_override_sub();
+            std::lock_guard<std::mutex> fk(fold_mtx);
+            // The sub-tables are sampled by THIS pool (Pass A no longer joins or recomputes), so recompute
+            // their V now, before ComputeDopt reads them. Sub-cells are final here (the gate waits on
+            // sub_remaining==0 and sub_converged). Under acc_mtx (run_batch's commit lock); the lock order
+            // fold_mtx->acc_mtx is unique to compute_refs -> no cycle. Values are byte-identical to the old
+            // Pass-A recompute (same whole-batch run_batch accumulation).
+            if (!dopt_early)
+            {
+                sub_recompute_for_refs();
+                // ...and re-assert the change-detection carry on top of it: the recompute above derives V
+                // from the fresh (thin) samples, which would otherwise clobber the prior's high-R value on
+                // resolved cells and silently un-do the carry for the Dopt the whole refine gates against.
+                // Inert unless change_detect.
+                apply_prior_override_sub();
+            }
             std::array<double, 2> vg{ 0.0, 0.0 }; std::array<long long, 2> ng{ 0, 0 };
             for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
             { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd; const long long c = floor_cnt[k];
@@ -4523,7 +5230,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[pd] /= ng[pd]; } }
             vg_ref = vg;
             vg_roll = vg; vg_base = r0;   // rolling vg starts at the floor; recompute_vg advances it in refine
-            Dopt_ref = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
+            if (dopt_early) { Dopt_ref = std::move(dopt_pre); }
+            else { Dopt_ref = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) }; }
 
             // Reconcile: for each live cell speculated past r0, replay the freeze test over (r0, cnt] in
             // fixed order from the r0 snapshot; freeze + truncate at the first hit (byte-identical to the
@@ -4616,6 +5324,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   << " threads (+ " << fused_sub_tasks.size() << " fused sub-table batches"
                   << (sub_refine_on ? " + adaptive sub-refine" : "") << ")\n" << std::flush;
         gen_prog.cap.store(r_max, std::memory_order_relaxed);
+        gen_prog.nthreads.store(nw, std::memory_order_relaxed);
+        const auto t_pool = std::chrono::steady_clock::now();
         gen_prog.cells.store(static_cast<long long>(NC) * 2, std::memory_order_relaxed);
         // A run with no adaptive sub-refine (bottoming-full, or the `recommend` scout) is converged from
         // the start -- report it that way rather than as a wave count stuck at zero.
@@ -4664,6 +5374,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // never drains between iterations (the workers see one continuous stream), small enough that
         // sub_refine_step() runs on a seconds-scale clock rather than a per-sweep one.
         const long long spec_chunk = static_cast<long long>(QCAP) * 4;
+        // UNLATCH (MTG_KEEP_SPEC_UNLATCH, default ON; USER 2026-10-20: "I don't care about reproducibility
+        // as much as quality"). The sweep exists to fill cores while the floor phase is incomplete. Latched,
+        // a sweep that the producer never got to run during the sub-refine (it is fed from the same thread
+        // that blocks enqueueing each wave) ran ALONE after convergence: Bruna 2026-10-19/20, ~4.7M
+        // rollouts / ~99 h at the end of the floor phase, refs and every freeze waiting on it. Unlatched,
+        // the sweep stops the moment nothing else holds the phase and refs fix from wherever it got to.
+        // Values are unaffected (reconcile replays the freeze test per cell over whatever was speculated);
+        // what changes is HOW MANY speculative rollouts a cell has at refs time, which depends on timing,
+        // so a run is no longer byte-reproducible across schedules. =0 restores the latch.
+        const bool spec_unlatch = EnvOn("MTG_KEEP_SPEC_UNLATCH", true);
         // Returns the number of rollouts actually enqueued, so a caller can spend a bounded FEED budget
         // (feeds are QCAP-throttled and thus the unit of producer wall-clock; cells scanned are not).
         auto feed_upto = [&](int i, int pd, long long limit) -> long long   // enqueue size-7 rollouts [fed, limit)
@@ -4690,54 +5410,430 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // one high. It was invisible because the generator check only exercised the (now deleted) uniform
         // path, where these tasks never went through the pool.
         std::size_t sub_cursor = 0;
+        // PROJECTED sub-cell counts, producer-owned: the count each sub cell-side will hold once every batch
+        // fed for it so far commits. The speculative planner starts its tasks HERE, past whatever is still in
+        // flight, so it never re-requests a rollout a real batch already owns.
+        std::vector<std::vector<long long>> sub_proj(tables.size());
+        for (std::size_t ti = 1; ti < tables.size(); ++ti)
+        {
+            sub_proj[ti].assign(tables[ti].comps.size() * 2, 0);
+            for (std::size_t si = 0; si < tables[ti].comps.size(); ++si)
+                for (int sp = 0; sp < 2; ++sp) { sub_proj[ti][si * 2 + sp] = tables[ti].cnt[si][sp]; }
+        }
+        // Enqueue ONE sub-table batch [r0,r1) of cell w: as a single serial task (kind 1/2), or -- split --
+        // as one kind-3 task per rollout sharing a SplitBatch whose last finisher commits it. Either way it
+        // is ONE batch to the counters (in_flight, sub_remaining / sub_wave_pending, fed_total).
+        auto push_sub_batch = [&](int kind, int w, int pd, long long br0, long long br1)
+        {
+            {
+                const int Hw = work[w].H, iw = work[w].idx;
+                long long& pj = sub_proj[HAND - Hw][static_cast<std::size_t>(iw) * 2 + pd];
+                pj = std::max(pj, br1);
+            }
+            if (split_on && br1 - br0 >= 2)
+            {
+                SplitBatch* sb = new SplitBatch();
+                sb->w = w; sb->pd = pd; sb->kind = kind; sb->r0 = br0;
+                sb->vals.assign(static_cast<std::size_t>(br1 - br0), 0.0);
+                sb->us.assign(static_cast<std::size_t>(br1 - br0), 0);
+                sb->left.store(br1 - br0, std::memory_order_relaxed);
+                in_flight.fetch_add(1);      // before the first rollout can possibly complete the batch
+                for (long long r = br0; r < br1; ++r)
+                {
+                    { std::unique_lock<std::mutex> lk(qmtx);
+                      q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                      q.push_back({ 3, static_cast<long long>(reinterpret_cast<std::intptr_t>(sb)), r, 0, 0 }); }
+                    q_ne.notify_one();
+                }
+                gen_prog.split_batches.fetch_add(1, std::memory_order_relaxed);
+                gen_prog.split_rolls.fetch_add(br1 - br0, std::memory_order_relaxed);
+            }
+            else
+            {
+                { std::unique_lock<std::mutex> lk(qmtx);
+                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                  q.push_back({ kind, static_cast<long long>(w), static_cast<long long>(pd), br0, br1 }); }
+                q_ne.notify_one();
+                in_flight.fetch_add(1);
+            }
+            ++fed_total; any_fed = true;
+            gen_prog.rollsub.fetch_add(br1 - br0, std::memory_order_relaxed);
+        };
         auto feed_sub = [&]()
         {
             while (sub_cursor < fused_sub_tasks.size())
             {
                 const Task& st = fused_sub_tasks[sub_cursor];
-                { std::unique_lock<std::mutex> lk(qmtx);
-                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd),
-                                st.r0, st.r1 }); }
-                q_ne.notify_one();
-                ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true;
-                gen_prog.rollsub.fetch_add(st.r1 - st.r0, std::memory_order_relaxed);
+                ++sub_cursor;
+                push_sub_batch(1, st.w, st.pd, st.r0, st.r1);
             }
         };
+
+        // ---- THE SUB PLANNER THREAD ---------------------------------------------------------------------
+        // Two jobs, both of which used to be impossible or used to run on the PRODUCER (the thread that
+        // feeds every core) while the pool drained:
+        //   * TRUE wave (MTG_KEEP_SUB_WAVE_ASYNC, default ON): the next adaptive sub-refine wave, computed
+        //     once every sub batch has committed. Same inputs, same function, same output as before -- the
+        //     sub-tables are quiescent (sub_wave_pending == sub_remaining == 0 and nothing else writes them),
+        //     so WHICH thread computes it cannot move a number. What moves is the producer: it keeps feeding
+        //     size-7 floor work, speculation and the precompute memo for the minutes the marking pass takes
+        //     on a large deck, instead of stalling every core behind it at each wave boundary.
+        //   * SPECULATIVE wave (MTG_KEEP_SUB_SPEC, default ON): while a wave -- or the sub floor -- still has
+        //     batches in flight, compute a PROVISIONAL next wave from a private snapshot of everything
+        //     committed so far (in-flight cells start at their projected count; a cell whose first batch
+        //     has not committed is left out of every argmin). Its rollouts are rolled into the sub memo
+        //     (kind -2), so when the true wave arrives most of its rollouts are already done. The snapshot
+        //     is a copy taken under acc_mtx and the planner never holds a reference to committed state it
+        //     could write, so a wrong guess costs only the wasted rollouts -- never a value.
+        // One thread, jobs strictly sequential: the true wave pre-empts a running speculative plan via
+        // `cancel` (the partial plan is discarded), so the planner never reads tables while the true job
+        // writes their V (recompute_sub / apply_prior_override_sub run only inside the true job here).
+        const bool wave_async = EnvOn("MTG_KEEP_SUB_WAVE_ASYNC", true) && sub_refine_on;
+        struct SubPlanner
+        {
+            std::mutex              mx;
+            std::condition_variable cv;
+            bool stop = false;
+            bool true_req = false, true_pending = false, true_ready = false;
+            std::vector<Task> true_out;
+            bool spec_req = false, spec_busy = false, spec_ready = false;
+            std::vector<std::vector<long long>> spec_proj;
+            std::vector<Task> spec_out;
+            std::atomic<bool> cancel{ false };
+            std::thread th;
+        } planner;
+        // The TRUE wave's computation -- the body sub_refine_step always ran before feeding, unchanged.
+        auto true_wave_compute = [&](std::vector<Task>& wave)
+        {
+            recompute_sub();               // fold the just-finished wave's sub-cell samples into V/se
+            apply_prior_override_sub();     // change-detection: restore prior V on resolved sub-cells
+            compute_sub_wave_tasks(wave);   // next wave's argmin sub-cells (empty => converged)
+            // PRICE THE GATE, every wave, read-only. The adaptive bottoming refine is the dominant
+            // phase of a large generation (v3: one wave of 50,063 tasks ~= 801,000 rollouts, 17-28 h),
+            // and flip_eps is the only knob that sizes it -- but its effect was observable ONLY by
+            // running a whole second generation to this point. Dry-running the same marking logic at a
+            // few looser gates turns "raise flip_eps?" from a guess into a priced, user-ownable choice.
+            // Pure computation over the already-folded tables: no rollouts, nothing mutated.
+            // ONCE, on the first wave only. The marking pass enumerates subcompositions for every
+            // size-7 hand at every mull level; repeating it per wave would cost that much again every
+            // wave. The first wave is also where the number is worth most: it is the largest, and it
+            // arrives early enough to act on.
+            static bool flip_swept = false;
+            if (!wave.empty() && !flip_swept && EnvOn("MTG_KEEP_FLIP_SWEEP", true))
+            {
+                flip_swept = true;
+                std::cerr << "[keepgen]   flip_eps price (this wave, tasks x<=" << cfg.r_batch
+                          << " rollouts): " << cfg.flip_eps << "=" << wave.size() << " (IN USE)";
+                for (const double e : { 0.05, 0.10, 0.20 })
+                {
+                    if (e <= cfg.flip_eps) { continue; }
+                    std::cerr << "  " << e << "=" << compute_sub_wave_tasks_at(nullptr, e);
+                }
+                std::cerr << "\n            (a looser gate accepts more risk of picking the wrong"
+                             " bottoming line -- it changes the TABLE, so it is a user ruling;"
+                             " MTG_KEEP_FLIP_SWEEP=0 silences this)\n" << std::flush;
+            }
+        };
+        // A SPECULATIVE plan: snapshot -> provisional wave. Returns false when cancelled.
+        struct SpecAcc
+        {
+            const std::vector<std::vector<std::array<double, 2>>>&    sV;
+            const std::vector<std::vector<std::array<double, 2>>>&    sQ;
+            const std::vector<std::vector<std::array<long long, 2>>>& sN;
+            const std::vector<std::vector<long long>>&                pj;
+            const std::vector<std::vector<char>>&                     ex;
+            double    V(int ti, std::size_t i, int pd) const     { return sV[ti][i][pd]; }
+            long long cnt(int ti, std::size_t i, int pd) const   { return sN[ti][i][pd]; }
+            double    sumsq(int ti, std::size_t i, int pd) const { return sQ[ti][i][pd]; }
+            long long start(int ti, std::size_t i, int pd) const
+            { return std::max(sN[ti][i][pd], pj[ti][i * 2 + static_cast<std::size_t>(pd)]); }
+            bool      present(int ti, std::size_t i, int pd) const { return !ex[ti][i * 2 + static_cast<std::size_t>(pd)]; }
+        };
+        auto sub_plan = [&](const std::vector<std::vector<long long>>& pj, std::vector<Task>& out) -> bool
+        {
+            const std::size_t NT = tables.size();
+            std::vector<std::vector<std::array<double, 2>>>    sV(NT), sQ(NT), sS(NT);
+            std::vector<std::vector<std::array<long long, 2>>> sN(NT);
+            std::vector<std::vector<char>>                     ex(NT);
+            std::vector<std::vector<long long>>                scost(NT);
+            {
+                std::lock_guard<std::mutex> ak(acc_mtx);   // a consistent cut of every committed batch
+                for (std::size_t ti = 1; ti < NT; ++ti)
+                {
+                    const SizeTable& t = tables[ti];
+                    sS[ti] = t.sum; sQ[ti] = t.sumsq; sN[ti] = t.cnt; sV[ti] = t.V; scost[ti] = cell_us[ti];
+                }
+            }
+            for (std::size_t ti = 1; ti < NT; ++ti)
+            {
+                ex[ti].assign(tables[ti].comps.size() * 2, 0);
+                for (std::size_t si = 0; si < tables[ti].comps.size(); ++si)
+                    for (int sp = 0; sp < 2; ++sp)
+                    {
+                        const long long c = sN[ti][si][sp];
+                        if (c > 0) { sV[ti][si][sp] = sS[ti][si][sp] / c; }   // recompute_sub's mean
+                        else if (pj[ti][si * 2 + sp] > 0) { ex[ti][si * 2 + sp] = 1; }   // first batch in flight
+                        if (pc.change_detect && pc.resolved[ti][si][sp]) { sV[ti][si][sp] = pc.pri_V[ti][si][sp]; }
+                    }
+            }
+            // m == 0 is the size-7 table itself (ComputeDopt's Dopt[0] keeps the whole hand). The snapshot
+            // holds sub-tables only; size-7 V is not written during the pool (the fold writes sum/cnt,
+            // recompute() runs after the join), so read it in place exactly as the real wave does. Dopt[0]
+            // is never consulted by the marking (it gates on Dopt[m+1], m >= 1) nor by the refs.
+            auto vf = [&](int m, int idx, int pd, double* v) -> bool
+            {
+                if (m == 0) { *v = tables[0].V[idx][pd]; return true; }
+                if (ex[m][static_cast<std::size_t>(idx) * 2 + pd]) { return false; }
+                *v = sV[m][idx][pd]; return true;
+            };
+            // CHAIN through memo-held waves (MTG_KEEP_SUB_SPEC_DEPTH, default 16 levels). A wave depends on
+            // the previous wave's RESULTS, but a speculated wave whose rollouts are ALL already parked in
+            // the memo has known results: they are the very values the real batches will fold. So fold
+            // them into the snapshot exactly as commit_sub would (batch-local sum in r order, NaN left
+            // out, then added to the cell) and plan the wave after it -- and again, until a level still
+            // needs rollouts. That level is what gets fed. Without this, a straggler longer than one wave
+            // of work left the box speculating only ONE wave ahead and then idling against the barrier;
+            // with it, the whole chain that does not depend on the straggler's own cell can run during
+            // it. Read-only on the memo (values stay for the real batches to consume).
+            std::vector<std::vector<long long>> pjl = pj;   // the projection advances with each folded level
+            auto memo_peek = [&](int w, int pd, long long r, double* v) -> bool
+            {
+                const std::uint64_t key = sub_key(w, pd, r);
+                SubMemoShard& sh = memo_shard(key);
+                std::lock_guard<std::mutex> lk(sh.mx);
+                auto it = sh.m.find(key);
+                if (it == sh.m.end() || it->second.state != 2) { return false; }
+                *v = it->second.v; return true;
+            };
+            const int max_depth = std::max(1, EnvInt("MTG_KEEP_SUB_SPEC_DEPTH", 16));
+            std::vector<double> vals;
+            for (int depth = 0; depth < max_depth; ++depth)
+            {
+                const std::array<std::vector<double>, 2> Dopt = {
+                    ComputeDoptWith(tables, K, P, cfg.max_mull, 0, vf, &planner.cancel),
+                    ComputeDoptWith(tables, K, P, cfg.max_mull, 1, vf, &planner.cancel) };
+                if (planner.cancel.load()) { return false; }
+                const long long n = sub_mark_core(SpecAcc{ sV, sQ, sN, pjl, ex }, Dopt, cfg.flip_eps, &out,
+                                                  /*count_refined=*/false, scost, &planner.cancel);
+                if (n < 0 || planner.cancel.load()) { return false; }
+                if (out.empty() || depth + 1 >= max_depth) { return true; }   // speculation converged / depth cap
+                // Is this whole level already rolled? Then fold it and look one wave further.
+                bool all_held = true;
+                for (const Task& t : out)
+                {
+                    for (long long r = t.r0; r < t.r1 && all_held; ++r)
+                    { double v; if (!memo_peek(t.w, t.pd, r, &v)) { all_held = false; } }
+                    if (!all_held) { break; }
+                }
+                if (!all_held) { return true; }
+                for (const Task& t : out)
+                {
+                    const int ti = HAND - work[t.w].H, si = work[t.w].idx;
+                    double sum = 0.0, sumsq = 0.0; long long kept = 0;
+                    for (long long r = t.r0; r < t.r1; ++r)
+                    {
+                        double v = 0.0; memo_peek(t.w, t.pd, r, &v);
+                        if (std::isnan(v)) { continue; }
+                        sum += v; sumsq += v * v; ++kept;
+                    }
+                    sS[ti][si][t.pd] += sum; sQ[ti][si][t.pd] += sumsq; sN[ti][si][t.pd] += kept;
+                    if (sN[ti][si][t.pd] > 0) { sV[ti][si][t.pd] = sS[ti][si][t.pd] / sN[ti][si][t.pd]; }
+                    if (pc.change_detect && pc.resolved[ti][si][t.pd]) { sV[ti][si][t.pd] = pc.pri_V[ti][si][t.pd]; }
+                    long long& p = pjl[ti][static_cast<std::size_t>(si) * 2 + t.pd];
+                    p = std::max(p, t.r1);
+                }
+                gen_prog.sspec_levels.fetch_add(1, std::memory_order_relaxed);
+            }
+            return true;
+        };
+        auto planner_loop = [&]()
+        {
+            std::unique_lock<std::mutex> lk(planner.mx);
+            for (;;)
+            {
+                planner.cv.wait(lk, [&]{ return planner.stop || planner.true_req || planner.spec_req; });
+                if (planner.stop) { break; }
+                if (planner.true_req)
+                {
+                    planner.true_req = false;
+                    lk.unlock();
+                    std::vector<Task> wave;
+                    true_wave_compute(wave);
+                    lk.lock();
+                    planner.true_out = std::move(wave);
+                    planner.true_ready = true;
+                    prod_cv.notify_one();
+                    continue;
+                }
+                planner.spec_req = false; planner.spec_busy = true;
+                planner.cancel.store(false);
+                std::vector<std::vector<long long>> pj = std::move(planner.spec_proj);
+                lk.unlock();
+                std::vector<Task> o;
+                const bool ok = sub_plan(pj, o);
+                lk.lock();
+                planner.spec_busy = false;
+                planner.cv.notify_all();   // a producer computing the true wave itself waits on this
+                if (ok)
+                {
+                    planner.spec_out = std::move(o); planner.spec_ready = true;
+                    gen_prog.sspec_plans.fetch_add(1, std::memory_order_relaxed);
+                    prod_cv.notify_one();
+                }
+            }
+        };
+        // Started now and stopped by this guard on EVERY exit from the pool block (normal end, the
+        // recommend stop, a throw): the thread captures this scope's locals by reference.
+        struct PlannerGuard
+        {
+            SubPlanner& p;
+            ~PlannerGuard()
+            {
+                { std::lock_guard<std::mutex> lk(p.mx); p.stop = true; p.cancel.store(true); }
+                p.cv.notify_all();
+                if (p.th.joinable()) { p.th.join(); }
+            }
+        };
+        if (wave_async || sub_spec_on) { planner.th = std::thread(planner_loop); }
+        PlannerGuard planner_guard{ planner };
+
+        // Feed one computed wave (or mark the sub-refine converged when it is empty).
+        std::vector<Task> spec_list;            // the current speculative plan, fed as backfill
+        std::size_t       spec_pos = 0;         // next task of spec_list
+        long long         spec_r = -1;          // next r inside spec_list[spec_pos] (-1 = not started)
+        long long         spec_seq_planned = -1;
+        long long         spec_fed_since_plan = 0;   // rollouts fed from the current plan
+        // Retire the sub speculation once the sub-tables have converged: nothing can consume it any more.
+        auto sub_spec_retire = [&]()
+        {
+            if (!sub_spec_on) { return; }
+            spec_list.clear(); spec_pos = 0; spec_r = -1;
+            for (SubMemoShard& sh : sub_memo) { std::lock_guard<std::mutex> lk(sh.mx); sh.m.clear(); }
+            std::lock_guard<std::mutex> lk(planner.mx);
+            planner.spec_ready = false; planner.spec_out.clear(); planner.cancel.store(true);
+        };
+        auto feed_wave = [&](std::vector<Task>& wave)
+        {
+            if (wave.empty())
+            {
+                sub_converged = true; gen_prog.subconv.store(1, std::memory_order_relaxed); sub_spec_retire();
+                std::cerr << "[keepgen]   sub-refine converged after " << refine_waves << " waves ("
+                          << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
+                return;
+            }
+            std::cerr << "[keepgen]   sub-refine wave " << (refine_waves + 1) << ": " << wave.size() << " batches ("
+                      << static_cast<long long>(gen_elapsed()) << "s; sub-spec hits so far "
+                      << gen_prog.sspec_hit.load(std::memory_order_relaxed) << ")\n" << std::flush;
+            // A speculative plan made for THIS wave is superseded by the real one (its memo entries stay:
+            // a later wave can still consume them).
+            if (sub_spec_on)
+            {
+                spec_list.clear(); spec_pos = 0; spec_r = -1;
+                std::lock_guard<std::mutex> lk(planner.mx);
+                planner.spec_ready = false; planner.spec_out.clear();
+            }
+            sub_wave_pending.store(static_cast<long long>(wave.size()));
+            gen_prog.subwsz.store(static_cast<long long>(wave.size()), std::memory_order_relaxed);
+            for (const Task& st : wave) { push_sub_batch(2, st.w, st.pd, st.r0, st.r1); }
+            gen_prog.subwave.fetch_add(1, std::memory_order_relaxed);
+            ++refine_waves;
+        };
         // fuse_subfloor: advance the adaptive sub-refine ONE wave at a time, driven from the producer so it
-        // shares the pool with the size-7 floor (kind-2 tasks) -- byte-identical to the run_refine_waves
-        // barrier, but the size-7 floor fills cores during each wave's serial recompute/mark instead of the
-        // barrier stranding them. Only steps when the current wave has fully committed (sub_wave_pending==0),
-        // so recompute_sub/compute_sub_wave_tasks never race a kind-2 worker; size-7 workers never touch the
-        // sub-tables it reads. No-op unless fuse_subfloor.
+        // shares the pool with the size-7 floor (kind-2 tasks). A wave is computed only once the previous
+        // one has fully committed (sub_wave_pending==0), so recompute_sub/compute_sub_wave_tasks never race a
+        // kind-2 worker; size-7 workers never touch the sub-tables it reads. No-op unless fuse_subfloor.
         auto sub_refine_step = [&]()
         {
             // sub_remaining==0 additionally required: the sub-table FLOOR is now fused into this same pool,
             // so the first wave must not be computed off half-sampled sub-cells (Pass A's join used to
             // guarantee that). Both counters at zero == "every sub-cell committed its current target".
             if (sub_converged || sub_wave_pending.load() != 0 || sub_remaining.load() != 0) { return; }
-            recompute_sub();               // fold the just-finished wave's sub-cell samples into V/se
-            apply_prior_override_sub();     // change-detection: restore prior V on resolved sub-cells
-            std::vector<Task> wave;
-            compute_sub_wave_tasks(wave);   // next wave's argmin sub-cells (empty => converged)
-            if (wave.empty())
-            { sub_converged = true; gen_prog.subconv.store(1, std::memory_order_relaxed); return; }
-            sub_wave_pending.store(static_cast<long long>(wave.size()));
-            gen_prog.subwsz.store(static_cast<long long>(wave.size()), std::memory_order_relaxed);
-            for (const Task& st : wave)
+            if (!wave_async)
             {
+                // Computed HERE, on the producer: first make sure the planner is not mid-snapshot of the
+                // tables this is about to write (recompute_sub / apply_prior_override_sub).
+                if (sub_spec_on)
+                {
+                    std::unique_lock<std::mutex> lk(planner.mx);
+                    planner.spec_req = false;     // a request not yet picked up must not start mid-write
+                    planner.cancel.store(true);
+                    planner.cv.wait(lk, [&]{ return !planner.spec_busy; });
+                }
+                std::vector<Task> wave; true_wave_compute(wave); feed_wave(wave); return;
+            }
+            std::unique_lock<std::mutex> lk(planner.mx);
+            if (planner.true_ready)
+            {
+                std::vector<Task> wave = std::move(planner.true_out);
+                planner.true_ready = false; planner.true_pending = false;
+                lk.unlock();
+                feed_wave(wave);
+                return;
+            }
+            if (!planner.true_pending)
+            {
+                planner.true_pending = true; planner.true_req = true;
+                planner.spec_req = false;     // a plan for THIS wave is moot once the real one is due
+                planner.cancel.store(true);   // pre-empt a running speculative plan
+                planner.cv.notify_all();
+            }
+        };
+        // SPECULATIVE sub-wave feed (see the planner). Runs only in the TAIL of a sub stage -- every real
+        // batch of the floor / current wave already enqueued, some still in flight -- which is exactly when
+        // the next wave is held back by stragglers and nothing on the critical path is left to feed.
+        // Returns the rollouts it enqueued.
+        auto sub_spec_step = [&]() -> long long
+        {
+            if (!sub_spec_on || sub_converged || !cd_classified) { return 0; }
+            if (sub_cursor < fused_sub_tasks.size()) { return 0; }                       // real floor work first
+            if (sub_wave_pending.load() == 0 && sub_remaining.load() == 0) { return 0; } // the true wave is due
+            {
+                std::lock_guard<std::mutex> lk(planner.mx);
+                if (planner.spec_ready)
+                { spec_list = std::move(planner.spec_out); spec_pos = 0; spec_r = -1; planner.spec_ready = false; }
+                const long long seq = sub_commit_seq.load();
+                if (!planner.spec_busy && !planner.spec_req && !planner.true_pending
+                    && spec_pos >= spec_list.size()
+                    && (seq != spec_seq_planned || (spec_fed_since_plan > 0 && sub_spec_outstanding.load() == 0)))
+                {
+                    planner.spec_proj = sub_proj; planner.spec_req = true; spec_seq_planned = seq;
+                    spec_fed_since_plan = 0;
+                    planner.cv.notify_all();
+                }
+            }
+            long long fed = 0;
+            while (spec_pos < spec_list.size() && fed < spec_chunk)
+            {
+                const Task& st = spec_list[spec_pos];
+                const int Hs = work[st.w].H, is = work[st.w].idx;
+                const long long pj = sub_proj[HAND - Hs][static_cast<std::size_t>(is) * 2 + st.pd];
+                if (spec_r < 0) { spec_r = std::max(st.r0, pj); }
+                if (spec_r < pj) { spec_r = pj; }      // a real batch has claimed these since the plan
+                if (spec_r >= st.r1) { ++spec_pos; spec_r = -1; continue; }
+                const long long r = spec_r++;
+                const std::uint64_t key = sub_key(st.w, st.pd, r);
+                {
+                    SubMemoShard& sh = memo_shard(key);
+                    std::lock_guard<std::mutex> lk(sh.mx);
+                    if (!sh.m.emplace(key, SubMemoEnt{ 0.0, 0, 1 }).second) { continue; }   // already asked
+                }
+                sub_spec_outstanding.fetch_add(1);
                 { std::unique_lock<std::mutex> lk(qmtx);
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ 2, static_cast<long long>(st.w), static_cast<long long>(st.pd), st.r0, st.r1 }); }
+                  q.push_back({ -2, static_cast<long long>(st.w), static_cast<long long>(st.pd), r, 0 }); }
                 q_ne.notify_one();
-                in_flight.fetch_add(1); ++fed_total; any_fed = true;
-                gen_prog.rollsub.fetch_add(st.r1 - st.r0, std::memory_order_relaxed);
+                ++fed; ++spec_fed_since_plan; any_fed = true;
+                gen_prog.sspec_req.fetch_add(1, std::memory_order_relaxed);
             }
-            gen_prog.subwave.fetch_add(1, std::memory_order_relaxed);
-            ++refine_waves;
+            return fed;
         };
         for (;;)
         {
+            // FAIL-OUT (user ruling 2026-10-10). Stop FEEDING the moment the abandonment budget is
+            // spent; the in-flight tasks drain normally, so the journal stays consistent and whatever
+            // was banked is still poolable. The refusal itself -- no profile -- is enforced after the
+            // pool joins, where every other "do not ship this" guard in this file lives.
+            if (abandon_failed.load()) { break; }
             const bool refine = refs_ready.load();
             bool any_below_floor = false, any_live = false; any_fed = false;
             // RESUME FIX (2026-09-01): the fused sub-table batches must be drained in the REFINE phase
@@ -4780,6 +5876,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 // Advance the adaptive sub-refine one wave when its prior wave has committed.
                 if (cd_classified) { sub_refine_step(); }
+                // SPECULATIVE NEXT SUB-WAVE, ahead of every size-7 filler: the sub-wave chain is the
+                // critical path to refs (size-7 refine cannot start before it converges), while size-7
+                // speculation and precompute are work the refine phase would do anyway. A full chunk of
+                // sub speculation therefore takes this iteration's filler slot.
+                const long long sspec_fed = sub_spec_step();
                 // Floor pass 2 (speculation filler): while the floor phase is INCOMPLETE for ANY reason
                 // (a size-7 cell still finishing r0, sub-tables still capping, or the fused sub-refine not
                 // yet converged) -> feed already-floored size-7 cells up to r0+spec_budget so idle cores
@@ -4808,7 +5909,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // would let compute_refs fire on a half-speculated state, and its reconcile (which
                 // truncates at the first freeze hit over (r0, cnt]) would then depend on where the sweep
                 // happened to be -- a different answer per run. spec_active is the gate's interlock below.
-                if (floor_spec && !spec_saturated && (spec_active || floor_incomplete))
+                if (spec_unlatch && spec_active && !floor_incomplete)
+                {
+                    spec_active = false; spec_saturated = true;
+                    std::cerr << "[keepgen]   floor speculation UNLATCHED at cell-side " << spec_cursor << "/"
+                              << static_cast<std::size_t>(NC) * 2 << " (" << gen_prog.spec7_fed.load()
+                              << " fed): nothing else holds the floor phase -> refs fix now ("
+                              << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
+                }
+                if (sspec_fed < spec_chunk && floor_spec && !spec_saturated && (spec_active || floor_incomplete))
                 {
                     spec_active = true;
                     const std::size_t NS = static_cast<std::size_t>(NC) * 2;
@@ -4824,7 +5933,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         // cursor would walk past it forever, so remember to sweep once more.
                         if (c < r0)    { spec_resweep = true; continue; }
                         if (c >= r_max) { continue; }
-                        budget -= feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget));
+                        const long long f0 = fed[k];
+                        const long long nfed = feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget));
+                        budget -= nfed;
+                        // USEFULNESS: remember the speculated range; the end of the run counts how much of
+                        // it lies inside the cell's final count (the rest was truncated by reconcile/freeze).
+                        if (nfed > 0)
+                        {
+                            if (spec7_hi[k] == 0) { spec7_lo[k] = static_cast<int>(f0); }
+                            spec7_hi[k] = static_cast<int>(fed[k]);
+                            gen_prog.spec7_fed.fetch_add(nfed, std::memory_order_relaxed);
+                        }
                     }
                     if (spec_cursor >= NS)   // sweep complete
                     {
@@ -4842,7 +5961,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // a quarter full, so kind 0/1/2 always have room and feed_upto never queues behind a
                 // precompute. A filler that can outrun the progress step it fills for is the FiveColour
                 // failure recorded above; this one cannot, because it yields the moment real work appears.
-                if (pre_on && floor_spec && spec_saturated && floor_incomplete)
+                if (sspec_fed < spec_chunk && pre_on && floor_spec && spec_saturated && floor_incomplete)
                 {
                     const std::size_t NS2 = static_cast<std::size_t>(NC) * 2;
                     long long budget = spec_chunk;
@@ -4875,6 +5994,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // such cell has been sampled to at least this level, so vg re-derived here is "from a
                 // completed R" (the user's lagged-safe recompute). Frozen/capped cells are settled already.
                 long long min_live_c = r_max;
+                live_ks.clear();
                 for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
                 {
                     if (afroze[static_cast<std::size_t>(i) * 2 + pd].load()) { continue; }
@@ -4883,6 +6003,41 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     any_live = true;
                     if (c < min_live_c) { min_live_c = c; }
                     feed_upto(i, pd, std::min<long long>(r_max, c + cont_lookahead));
+                    live_ks.push_back(static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd));
+                }
+                // REFINE-TAIL PRECOMPUTE (MTG_KEEP_PRECOMPUTE_REFINE, default ON). A live cell is fed only
+                // cont_lookahead rollouts past its committed count, because rollouts past its eventual
+                // freeze level are discarded. That bound is right for MERGED work, but it is also a
+                // per-cell serial chain: when only a few cells are left live, each advances 4 rollouts at
+                // a time and the rest of the box idles until the last one freezes -- the refine->emit
+                // barrier. The memo removes it without touching the fold: the value of rollout r of a
+                // cell is fixed whether it is rolled now or later, so roll ahead into pre_val (backfill
+                // only, one r per live cell per pass so every live cell advances evenly) and let the
+                // kind-0 task for that slot take it. Rollouts past a freeze are wasted, but on cores
+                // that had nothing else they were allowed to do.
+                if (pre_refine_on && !trace_on && !live_ks.empty())
+                {
+                    long long budget = spec_chunk;
+                    const std::size_t nl = live_ks.size();
+                    std::size_t s = 0;
+                    for (; s < nl && budget > 0; ++s)
+                    {
+                        const std::size_t k = live_ks[(pre_rr + s) % nl];
+                        const long long r = std::max<long long>(fed[k], pre_next[k]);
+                        if (r >= r_max) { continue; }
+                        const int i = static_cast<int>(k >> 1), pd = static_cast<int>(k & 1);
+                        if (pre_have[SLOT(i, pd, r)].load(std::memory_order_acquire)) { pre_next[k] = r + 1; continue; }
+                        {
+                            std::unique_lock<std::mutex> lk(qmtx);
+                            if (q.size() >= QCAP / 4) { break; }   // backfill only -- real work keeps its room
+                            q.push_back({ -1, static_cast<long long>(i), static_cast<long long>(pd), r, 0 });
+                        }
+                        q_ne.notify_one();
+                        pre_next[k] = r + 1;
+                        gen_prog.pre.fetch_add(1, std::memory_order_relaxed);
+                        --budget;
+                    }
+                    pre_rr = (pre_rr + s) % nl;
                 }
                 // Refresh vg from the refined accumulators once the completed level has advanced >= offset
                 // past the last refresh (cheap pre-check; recompute_vg re-checks + does the O(NC) pool under
@@ -4918,6 +6073,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     cd_classified = true;
                 }
                 if (cd_classified) { sub_refine_step(); }
+                sub_spec_step();   // a resumed sub-refine speculates exactly as a fresh one does
             }
             // Floor complete = every size-7 cell folded to >= r0 AND every sub-cap batch done AND the fused
             // sub-refine converged (Dopt reads sub-table V, so refs cannot be fixed until the sub-tables are
@@ -5002,6 +6158,65 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         producing.store(false); q_ne.notify_all();
         for (std::thread& th : pool) { th.join(); }
+        // LEAVE OUT the cell-sides that lost a rollout to the wall backstop, BEFORE recompute reads the
+        // accumulators (see poison7). Zeroing the count is what "left out" means to every consumer at
+        // once: recompute skips `c <= 0`, the raw sidecar records no samples for it, and the model falls
+        // back to its prior exactly as it does for a cell nothing ever sampled. Bounded by the fail-out
+        // to at most abandon_fail_at - 1 cell-sides in a whole run.
+        {
+            long long dropped_sides = 0;
+            std::lock_guard<std::mutex> plk(poison_mtx);
+            for (std::size_t k = 0; k < poison7.size(); ++k)
+            {
+                if (!poison7[k]) { continue; }
+                const int i = static_cast<int>(k >> 1), pd = static_cast<int>(k & 1);
+                S7.sum[i][pd] = 0.0; S7.sumsq[i][pd] = 0.0; S7.cnt[i][pd] = 0;
+                ++dropped_sides;
+            }
+            if (dropped_sides > 0)
+            {
+                std::cerr << "[keepgen] LEFT OUT " << dropped_sides << " size-7 cell-side(s) that lost a"
+                             " rollout to the " << static_cast<long long>(rollout_wall_sec)
+                          << "s wall backstop -- they fall back to their prior, as an unsampled cell does\n"
+                          << std::flush;
+            }
+        }
+        // ---- USEFULNESS + IDLE SUMMARY (stderr only; never the report, never a result) -----------------
+        // What every speculative mechanism PRODUCED vs what the table CONSUMED, and how much of the
+        // pool's worker capacity sat idle. "Busy" is not "useful": this is the line that says which.
+        {
+            long long s7_used = 0;
+            for (std::size_t k = 0; k < spec7_hi.size(); ++k)
+            {
+                if (spec7_hi[k] <= spec7_lo[k]) { continue; }
+                const long long c = S7.cnt[static_cast<int>(k >> 1)][static_cast<int>(k & 1)];
+                s7_used += std::max<long long>(0, std::min<long long>(spec7_hi[k], c) - spec7_lo[k]);
+            }
+            gen_prog.spec7_used.store(s7_used, std::memory_order_relaxed);
+            const double pool_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_pool).count();
+            const double idle_s = static_cast<double>(gen_prog.idle_us.load()) / 1e6;
+            auto pct = [](long long a, long long b) -> double
+            { return b > 0 ? 100.0 * static_cast<double>(a) / static_cast<double>(b) : 0.0; };
+            const long long s7f = gen_prog.spec7_fed.load(), prr = gen_prog.prerolled.load(),
+                            prh = gen_prog.prehit.load(), ssr = gen_prog.sspec_rolled.load(),
+                            ssh = gen_prog.sspec_hit.load();
+            std::cerr << std::fixed << std::setprecision(1)
+                      << "[keepgen] usefulness: size7-spec used " << s7_used << "/" << s7f << " fed ("
+                      << pct(s7_used, s7f) << "%); precompute hit " << prh << "/" << prr << " rolled ("
+                      << pct(prh, prr) << "%); sub-spec hit " << ssh << "/" << ssr << " rolled ("
+                      << pct(ssh, ssr) << "%, " << gen_prog.sspec_req.load() << " requested, "
+                      << gen_prog.sspec_plans.load() << " plans, " << gen_prog.sspec_levels.load()
+                      << " waves chained through the memo";
+            if (gen_prog.sspec_bad.load() > 0) { std::cerr << ", " << gen_prog.sspec_bad.load() << " MISMATCH"; }
+            if (gen_prog.prebad.load() > 0)    { std::cerr << ", precompute " << gen_prog.prebad.load() << " MISMATCH"; }
+            std::cerr << "); split " << gen_prog.split_batches.load() << " batches / "
+                      << gen_prog.split_rolls.load() << " rollouts; skipped " << gen_prog.skip7.load()
+                      << " queued size-7 rollouts of frozen cells\n"
+                      << "[keepgen] worker idle: " << idle_s << " core-s of " << (pool_s * nw) << " ("
+                      << (pool_s > 0 ? 100.0 * idle_s / (pool_s * nw) : 0.0) << "% of " << nw
+                      << " workers x " << pool_s << " s pool wall)\n" << std::flush;
+            std::cerr.unsetf(std::ios::floatfield);
+        }
         recompute();
         // recompute() derives V from the fresh accumulators, so it clobbers the change-detection carry on
         // resolved cells -- re-assert it before the raw/profile/report are written off these tables.
@@ -5010,8 +6225,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // (a dropped mount, a full disk) used to be ignored and the journal deleted anyway, which would have
         // thrown away the whole generation. Retry for up to 2 h (the in-memory tables are the only copy of
         // any work the journal could not bank), and keep the journal unless the raw really landed.
-        bool raw_ok = cfg.out_raw.empty();
-        if (!cfg.out_raw.empty())
+        // ON A FAIL-OUT, DO NOT WRITE THE RAW. Once the backlog bails (run_one returns NaN without
+        // rolling), the in-memory tables hold cells whose rollouts were skipped rather than measured,
+        // so a chunk written from them would be a poolable artifact containing unmeasured cells -- the
+        // worst possible outcome, since pooling is exactly what a chunk is for. The JOURNAL is the
+        // resume artifact and it is append-only and already on disk, holding every cell that genuinely
+        // completed; mullgen.sh's preflight reads it. So skipping the raw loses nothing real.
+        bool raw_ok = cfg.out_raw.empty() || abandon_failed.load();
+        if (!cfg.out_raw.empty() && !abandon_failed.load())
         {
             raw_ok = write_raw_atomic(cfg.out_raw);
             for (int attempt = 1; !raw_ok && attempt <= 240; ++attempt)
@@ -5027,12 +6248,28 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         if (journal_on && (journal_f.is_open() || journal_failed))
         {
-            if (raw_ok)
+            if (raw_ok && !abandon_failed.load())
             {
                 // Superseded: close and remove it so a later invocation doesn't resume from a stale journal
                 // for an already-finished run.
                 journal_f.close();
-                std::error_code ec; std::filesystem::remove(journal_path, ec);
+                // MTG_KEEP_JOURNAL_KEEP=1 (DIAGNOSTIC ONLY): keep the superseded journal as
+                // <journal>.done instead of deleting it, so two runs' journal RECORDS can be diffed (sorted
+                // -- record order is commit order, which is scheduling). Never resumable under that name.
+                std::error_code ec;
+                if (EnvOn("MTG_KEEP_JOURNAL_KEEP")) { std::filesystem::rename(journal_path, journal_path + ".done", ec); }
+                else                                { std::filesystem::remove(journal_path, ec); }
+            }
+            else if (raw_ok)
+            {
+                // FAILED OUT on abandonments: the run is NOT finished, so the journal is not superseded.
+                // Keeping it is the whole point -- the hours already banked stay resumable once the
+                // engine is fast enough to clear the backstop. (A journal is days of compute; the one
+                // rule this file never bends is that nothing deletes one that still has work in it.)
+                { std::lock_guard<std::mutex> jl(journal_mtx); journal_emit_locked(std::string()); }
+                journal_f.close();
+                std::cerr << "[keepgen] journal KEPT (" << journal_path
+                          << ") -- the run failed out, it did not finish\n" << std::flush;
             }
             else
             {
@@ -5047,6 +6284,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         rollouts_done += fed_total;
         std::cerr << "[keepgen] continuous size-7 DONE: " << fed_total << " rollouts, "
                   << static_cast<long long>(gen_elapsed()) << "s total\n" << std::flush;
+        // THE FAIL-OUT, enforced here rather than at the feed: the raw chunk is already on disk above,
+        // so everything measured stays poolable, and the journal was kept. What must not happen is a
+        // PROFILE -- a table fitted to a run this slow is a table fitted to a labeller that kept being
+        // cut off, and shipping it would convert an optimisation signal into a silently thinner model.
+        if (abandon_failed.load())
+        {
+            const long long n = abandoned_rollouts.load();
+            os << "\nFAILED OUT: " << n << " rollouts hit the " << static_cast<long long>(rollout_wall_sec)
+               << "s per-rollout wall backstop (threshold " << abandon_fail_at << ").\n"
+                  "That many abandoned rollouts is an ENGINE-OPTIMISATION signal, not a cap to loosen:\n"
+                  "the labeller cannot play these hands inside a sane bound, so the table it would\n"
+                  "produce is fitted to a player that kept being cut off. NO PROFILE WAS WRITTEN.\n"
+                  "The raw chunk and the journal are both kept -- resume once the engine is faster.\n"
+                  "Slowest rollouts are in <out_raw>.slow.log; replay them with MTG_KEEP_REPLAY_LIST.\n";
+            std::cerr << "[keepgen] FAILED OUT: " << n << " rollouts abandoned at the "
+                      << static_cast<long long>(rollout_wall_sec) << "s wall backstop (threshold "
+                      << abandon_fail_at << ") -- NO PROFILE. Optimise, then resume.\n" << std::flush;
+            Slow().Dump(os, "at the fail-out");
+            return;
+        }
     }
     // ================================================================================================
 
@@ -5144,7 +6401,7 @@ struct Acc { double sum[2] = { 0, 0 }; double sumsq[2] = { 0, 0 }; long long cnt
 // Reproduces the in-game A/B delta cheaply. VALIDATION: slivers full-bottom raw -> +~0.006 (in-game
 // was +0.0057). Knobs: MTG_KEEP_SIM_FLOOR (sub-table floor R, default 2 = the project's adaptive_
 // bottom floor), MTG_KEEP_SIM_TRIALS (Monte-Carlo floor-noise realizations, default 128),
-// MTG_KEEP_SIM_FLIP_EPS (refine stop gate, default 0.02 = cfg.flip_eps), MTG_KEEP_SIM_SEED. Reads the
+// MTG_KEEP_SIM_FLIP_EPS (refine stop gate, default 0.10 = cfg.flip_eps), MTG_KEEP_SIM_SEED. Reads the
 // pooled true means+variances directly; writes nothing (a measurement) -> returns without a profile.
 // Extracted from RunKeepMerge verbatim (B1). The block always returned, so the caller now returns
 // unconditionally after the call -- same control flow, one less 330-line branch in a 958-line function.
@@ -5160,7 +6417,7 @@ static void RunAdaptiveBottomRegretSim(std::ostream& os, const Decklist& deck,
     const int trials = []{ const char* s = std::getenv("MTG_KEEP_SIM_TRIALS");
         return (s && *s) ? std::max(1, std::atoi(s)) : 128; }();
     const double flip_eps = []{ const char* s = std::getenv("MTG_KEEP_SIM_FLIP_EPS");
-        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();
     const uint64_t sim_seed = []{ const char* s = std::getenv("MTG_KEEP_SIM_SEED");
         return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xADA1B0770DULL; }();
     // MTG_KEEP_SIM_CAP=k: model a cheaper gen whose sub-tables (both the full baseline AND the
@@ -5847,7 +7104,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     // SYNTH_BOTTOM_R (which corrupts the argmin with noise and mis-plays), this reproduces the SELECTIVE
     // refinement the real gen does -> validated to PLAY like a real adaptive gen (slivers in-game).
     //   floor = MTG_KEEP_SYNTH_ABOT_FLOOR (default 2); cap for refined cells = SYNTH_R if set else raw R;
-    //   flip_eps = MTG_KEEP_SYNTH_ABOT_FLIP_EPS (default 0.02); one deterministic realization (ABOT_SEED).
+    //   flip_eps = MTG_KEEP_SYNTH_ABOT_FLIP_EPS (default 0.10); one deterministic realization (ABOT_SEED).
     long long recon_bottom_floor = -1;
     if (EnvOn("MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM"))
     {
@@ -5857,7 +7114,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
             const long long ab_floor = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLOOR");
                 return (s && *s) ? std::max<long long>(1, std::atoll(s)) : 2LL; }();
             const double ab_eps = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLIP_EPS");
-                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();
             const uint64_t ab_seed = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_SEED");
                 return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xABE770DDULL; }();
             const long long ab_cap = (synth_r > 0) ? synth_r : std::max<long long>(1, effective_R);
