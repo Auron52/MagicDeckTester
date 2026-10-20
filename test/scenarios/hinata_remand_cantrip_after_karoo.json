@@ -1,0 +1,141 @@
+{
+  "deck": "decks/Hinata2/Hinata2.cod",
+  "turn": 5,
+  "resume_at": "main1",
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 14,
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Forbidden Orchard",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forbidden Orchard",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Ornithopter of Paradise",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Hinata, Dawn-Crowned",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Ornithopter of Paradise",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "token": true,
+      "power": 3,
+      "toughness": 3,
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    }
+  ],
+  "hand": [
+    "Reflecting Pool",
+    "Memory Lapse",
+    "Remand",
+    "Remand",
+    "Izzet Boilerworks",
+    "Soulfire Eruption",
+    "Mystic Monastery",
+    "Izzet Boilerworks",
+    "Hinata, Dawn-Crowned",
+    "Hinata, Dawn-Crowned",
+    "Hinata, Dawn-Crowned"
+  ],
+  "library_top": [
+    "Reality Spasm",
+    "Reality Spasm",
+    "Reflecting Pool",
+    "Preordain",
+    "Ornithopter of Paradise",
+    "Distorting Wake",
+    "Ponder",
+    "Distorting Wake",
+    "Icy Blast",
+    "Irencrag Feat",
+    "Cascade Bluffs",
+    "Sol Ring",
+    "Crackle with Power",
+    "Ponder",
+    "Mystic Monastery",
+    "Soulfire Eruption",
+    "Preordain",
+    "Ponder",
+    "Crackle with Power"
+  ],
+  "library_filler": "Icy Blast",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 30,
+  "max_turns": 5,
+  "expect_win_turn": 5,
+  "comment": "MTG_EXEC_CLEAN_BP_DEFERRED (2026-10-20, docs/design/rollout-executor-lockstep.md #18). Hinata s12111487 gi 486's T5 board (MTG_HINATA_GAMBLE_PAST_DORK=1, shipped d5 b30), the Soulfire dig's staged cards held as hand cards. The kill: main 1 Izzet Boilerworks (the deferred Karoo) + Soulfire Eruption with a REMAND rider -- Remand counters it back to hand and draws Reality Spasm -- then, AFTER the Karoo, the Spasm untaps the Boilerworks among six sources; main 2 Soulfire again, Spasm, Preordain + Remand, Preordain, Sol Ring, Ponder, Irencrag Feat, Crackle with Power. The cast is non-opaque, so the executor runs it through its CLEAN-set loop, which used to replay the Remand's continuation at the cast: the Spasm then ran BEFORE the Karoo, untapped the Island the Boilerworks bounced, the Boilerworks stayed tapped and main 2 was two mana short (no win, opponent at 8). The rollout defers a plain cantrip's continuation past the Karoo; the executor now does too. MTG_EXEC_CLEAN_BP_DEFERRED=0 fails this fixture (also at --depth 8 --budget-ms 0)."
+}

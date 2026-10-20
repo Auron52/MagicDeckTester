@@ -54,6 +54,8 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 8 | the replay derives its traits from the records of ONE nesting level, but the rollout paid under the WHOLE continuation it planned -- a nested breakpoint realises the planned tail one level down, so the outer level's `mana_casts` reads 1 where the rollout paid under 2 and the one-shot hold fires only on the replay side | **FIXED** (below): the record carries the scope it was paid under |
 | 9 | a continuation's **Aether Vial deploy** was applied by the rollout and RECORDED NOWHERE -- `apply_vial` never pushed onto the sink, unlike every other continuation action kind -- so the committed line replayed without the creature | **FIXED** -- found on both machines the same day; the fix that landed is `7ef0734b` (`MTG_BP_RECORD_VIAL`, default ON) |
 | 16 | a continuation's CAST MODE was dropped on the way to the executor: the site-9 (and pod) appliers called `cast_by_name` without `adventure`/`kicked`, and the breakpoint recorder copied `bestow` but no other mode (convoke, evoke, kicker, devour, loyalty ...) | **FIXED** 2026-10-17 -- `fungus-v2-fd-diverge-7021.md` |
+| 17 | a breakpoint-node / prefix-cache RESUME re-bound the line's unpaid-cost hold from the WHOLE plan's bill, so the resumed continuation paid under a phantom demand for casts the prefix had already paid -- a payment no full apply (and so no executor) makes | **FIXED** 2026-10-20 behind `MTG_BP_RESUME_LINE_HOLD` (default ON; below) |
+| 18 | the executor's CLEAN-set cast loop replayed a committed DEFERRED-class segment (a Remand-ridden plain cantrip) at the cast, before the deferred Karoo drop; the rollout runs it after | **FIXED** 2026-10-20 behind `MTG_EXEC_CLEAN_BP_DEFERRED` (default ON; below) |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -663,3 +665,54 @@ children, waves) passes a sink. The null-sink callers are `Solve` / `SolveWithLo
 `resolve_draw_breakpoint` + the second pass -- also defers), rollouts, and two diagnostics (`nil`,
 `[fd-pred]`). Each mode therefore matches the executor route that consumes its plans. Fixed the one
 that did not: `[fd-pred]` now replays with a scratch sink, as the search applied the line.
+
+## #17 -- a breakpoint-node resume re-bound the line's unpaid-cost hold (found + fixed 2026-10-20)
+
+`ApplyPlanDirect` binds `g_line_unpaid_cost` from the WHOLE plan's bill at entry (`LineUnpaidCostScope`)
+and `apply_one` pays it down cast by cast, so a full apply reaches the deferred re-solve holding only
+what the plan still owes. `BpPrefixSnap` carried the board, the sink and the scripted pins, but not
+that hold, and a resume (`bp_resume`: the node's children, the prefix-cache wave variants) skips the
+prefix casts that pay it down. So every resumed continuation ran under the full bill -- casts already
+paid included. The payer reads the hold (`LineFloatTapFirstPlan` keeps a floating colour the line
+still "owes", the line-aware float spend, the sink holds), so the search scored payments the executor
+never makes: the executor plays the committed line through a full apply. It also made the prefix
+cache, documented as result-neutral, depend on whether a variant hit the cache.
+
+Hinata s12111487 gi 486 (`MTG_HINATA_GAMBLE_PAST_DORK=1`, `--depth 8 --budget-ms 0`;
+`[fd-diverge] realized_win=6 predicted_win=5 proven_at_turn=1`). The T1 search's T5 main-2 node
+child `[Reality Spasm, Reality Spasm, Preordain] -> Ponder -> [Sol Ring, Ornithopter, Irencrag Feat +
+Remand] -> [Irencrag Feat, Crackle]` ran under Soulfire Eruption's already-paid `{R}{R}{R}`: it paid
+Ornithopter's `{2}` with Sol Ring and kept the floating `{R}`, one red more for the recast Irencrag.
+The game (and the `[fd-pred]` full re-apply) held 0 there, paid the `{2}` with the floating `{R}` +
+wild, and the recast Irencrag's `{R}{R}{R}` was one red short: Crackle with Power stayed in hand.
+Found with a temporary per-cast payment trace in `apply_one` (float, untapped sources, the hold):
+the winning rollout line's Ornithopter payment printed `line={R}{R}{R}`, the executor's `line=0`.
+
+Fix: the capture records the hold, the resume restores it (the entry scope still restores the outer
+hold on exit). With it the search scores the line the game can pay -- Soulfire, Spasm, Preordain,
+Spasm, Ponder, Sol Ring + Remand on Sol Ring (draws Crackle), Sol Ring, Ornithopter, Irencrag,
+Crackle X=4 -- and the game wins T5 (digest `4ca37c41d44f8224`); `=0` reproduces `95dd7b4651c62d62`.
+Mechanism pin: `test/unit/test_bp_resume_line_hold.cpp` (`TurnSolver::BpResumeLineHoldForTest`).
+
+## #18 -- the clean-set cast loop replayed a Remand-ridden cantrip continuation before the Karoo (found + fixed 2026-10-20)
+
+Same game at the SHIPPED settings (d5 b30 value_play), where #17 is inert: T5 m1 is Soulfire Eruption
+with a Remand rider. `BpNameOf` is the Remand -- a plain cantrip, so under `MTG_BP_NODE` the plan's
+partition is DEFER + TRUNCATE in `ApplyPlanDirect`: the continuation `[Reality Spasm]` runs after the
+main casts and the trailing passes, the deferred Karoo drop (Izzet Boilerworks) among them. The cast
+itself (Soulfire) carries no ordering-opaque param, so the executor ran the plan through its CLEAN-set
+loop, whose `equip_bp_truncates` block replays a committed segment AT THE CAST -- right only for the
+site-6 INLINE class (that comment's premise, "site 6 is the only class in a clean set", stopped holding
+once Remand riders existed). So the Spasm untapped Island #23, the Boilerworks then bounced that
+Island and stayed tapped; the rollout (`[fd-pred]` opp -7) bounced the spent Island and its Spasm
+untapped the Boilerworks -- two mana more for main 2 and the T5 kill. Read off `MTG_BP_TRACE`: the
+first difference is main 2's Soulfire, `apply untapped=[Orchard, Orchard, Island, Izzet Boilerworks]`
+vs `exec untapped=[Orchard, Orchard, Island]`.
+
+Fix: in the clean loop a committed segment of a DEFERRED class truncates there, exactly as the opaque
+loops do, and the end-of-main catch-all replays it after the Karoo; the site-6 inline class keeps its
+inline replay, and a non-committed plan keeps its inline re-solve. gi 486 at d5 b30: T5
+(`4def9588ba9db379`); `=0` reproduces `4fecb23ba8a43dbf` (T6). Only Remand decks can reach it (Hinata,
+NivMizzetCombo, Unpredictable Cyclone). No mechanism-level unit test (the executor path needs a
+committed line); `test/scenarios/hinata_remand_cantrip_after_karoo.json` pins it on the gi 486 T5 board (PASS T5 with the flag, no win with `=0`, at d5 b30 and at d8 b0).
+
