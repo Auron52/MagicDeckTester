@@ -44740,7 +44740,11 @@ struct BpPrefixSnap
     int  pin_bounce = -1;            // the put-Karoo bounce pin (ScriptedPutBounce) as the prefix left it
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
+    ManaCost              line_unpaid;               // g_line_unpaid_cost as the prefix left it (MTG_BP_RESUME_LINE_HOLD)
 };
+// The hold a resumed apply runs its continuation under, as last set by the resume branch (this thread).
+// Written there unconditionally (one copy, resume-only), read by nothing but BpResumeLineHoldForTest.
+static thread_local ManaCost g_bp_resume_line_seen;
 
 // Summed MANA a line's hand casts still owe, for the mid-line sink hold (see g_line_unpaid_cost).
 // Reads Action::cost -- the effective cost the SUBSET MATH afforded the plan with -- so the hold and
@@ -50379,6 +50383,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...and the put-Karoo bounce pin (re-installed by _spb; a prefix that spent it stays spent).
         if (put_bounce_pin >= 1) { g_scripted_bounce_choice = bp_resume->pin_bounce; }
         if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
+        // ...and the line's unpaid-cost hold as the prefix left it (MTG_BP_RESUME_LINE_HOLD, DEFAULT ON). The
+        // entry's LineUnpaidCostScope bound the WHOLE plan's bill, and the prefix casts that would have paid it
+        // down are not re-applied here, so without this the continuation pays under a phantom demand for casts
+        // already paid -- a payment the executor's full apply never makes (EngineFlags.h has the repro). The
+        // entry scope still restores the outer hold on exit.
+        if (BpResumeLineHoldOn()) { g_line_unpaid_cost = bp_resume->line_unpaid; }
+        g_bp_resume_line_seen = g_line_unpaid_cost;   // BpResumeLineHoldForTest's read-back (write-only in play)
     }
     else
     {
@@ -50737,6 +50748,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
+            bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
         }
         // MTG_BP_NODE pend (see BpNodeEnabled): a BASE plan applied by a node-hosting caller stops
         // HERE -- the partition point, post-draw and post-Karoo, its blind tail already truncated
@@ -50771,6 +50783,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
+            bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
             return;
         }
         deferred_cantrip_resolve = false;
@@ -59687,6 +59700,27 @@ static void NodeNestedToWalker(BpWaveWalker& w, const std::vector<TurnSolver::Pl
         if (nn.want > nn.pend_at + 1) { w.AddHostedNested(plans, nn.idx, nn.pend_at, nn.want); }
         if (nn.demoted > 0)           { w.AddHostedDemoted(plans, nn.idx, nn.pend_at, nn.demoted); }
     }
+}
+
+// See the declaration in TurnSolver.h. The node host's capture + resume, minus the scoring.
+bool TurnSolver::BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
+                                         ManaCost& at_capture, ManaCost& at_resume)
+{
+    GameState s1 = state;
+    BpPrefixSnap snap;
+    std::vector<Action> bp;
+    ApplyPlanDirect(s1, plan, is_pre_combat, &bp, &snap);
+    if (!snap.pending) { return false; }
+    at_capture = snap.line_unpaid;
+    Plan v = plan;
+    v.bp_choice = kBpEmptyChoice;
+    v.bp_at     = snap.bp_seen;
+    GameState s3 = snap.state;
+    std::vector<Action> bp3;
+    g_bp_resume_line_seen = ManaCost{};
+    ApplyPlanDirect(s3, v, is_pre_combat, &bp3, nullptr, &snap);
+    at_resume = g_bp_resume_line_seen;
+    return true;
 }
 
 // See the declaration in TurnSolver.h. A host's loop with the apply replaced by a fixed report.

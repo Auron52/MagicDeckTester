@@ -2219,6 +2219,11 @@ public:
     // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
     // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
     static int ProjectedAttackDamage(const GameState& state);
+    // MTG_BP_RESUME_LINE_HOLD test hook: apply `plan` with a breakpoint-node capture; if it pends, resume its
+    // EMPTY child from the snapshot. Returns false when the apply did not pend. `at_capture` is the line's
+    // unpaid-cost hold where the full apply stopped; `at_resume` the hold the resumed apply ran under.
+    static bool BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
+                                        ManaCost& at_capture, ManaCost& at_resume);
     struct WalkerStep { int base; int bp_choice; int bp_at; bool scored; };
     static std::vector<WalkerStep> WaveWalkerTraceForTest(const GameState& state,
                                                           const std::vector<Plan>& plans,

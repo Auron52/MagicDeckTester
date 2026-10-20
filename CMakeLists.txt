@@ -298,6 +298,7 @@ add_executable(mtg-test
     test/unit/test_provider_prunes.cpp
     test/unit/test_m2_land_drop.cpp
     test/unit/test_staged_lockstep.cpp
+    test/unit/test_bp_resume_line_hold.cpp
     test/unit/test_rollout_land_act_color.cpp
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp

@@ -562,6 +562,7 @@ enum Slot : int
     FB_HOLD_PLAN_REACH,       // MTG_FB_HOLD_PLAN_REACH the searched banked hold's variant is emitted only for a plan that brings an ATTACKER and a PUMP REACHING IT into this combat: an attacker able now or brought by the plan's casts (a haste source, a hasty creature, a put / reveal card -- Dragonstorm, Apex), and a pump on the battlefield (a team pump, a self-pump creature that attacks) or cast. A plan with neither cannot read its pin: on the held-out dragonstorm / 2HG run 3.9M of 6.0M variants reached a combat with no attacker or no pump (MTG_FB_HOLD_STATS "unread"), each paying an apply and a combat to fold. A sound collapse. Default ON; =0 -> the state-level test only
     FB_HOLD_FOLD_FREE,        // MTG_FB_HOLD_FOLD_FREE a searched banked-hold variant's node unit (FSLineWin kFsPre, the la_cand loop's kLookaheadCand) is charged only once MTG_COMBAT_PIN_FOLD has NOT folded it -- an uncontested or dominated flip is its base plan's combat, so it re-prices to nothing (44% of the frontier's variants on the held-out 2HG / dragonstorm probe). Re-prices only; inert at an unlimited budget. Default ON; =0 -> charged before the apply
     FB_HOLD_STRICT,           // MTG_FB_HOLD_STRICT the searched banked hold's other side displaces the incumbent only by a STRICTLY earlier win (SolveWithLookahead's candidate loop; FSLineWin is strict already): no equal-win-turn tie on the graded leaf, and its rollout asked only about earlier turns (the exact tie prune's cutoff), skipped when none is left. The verdict orders the two sides; an equal-turn line is the same result, so nothing becomes unfindable. Default ON; =0 -> a variant ties like any candidate
+    BP_RESUME_LINE_HOLD,      // MTG_BP_RESUME_LINE_HOLD  a breakpoint-node / prefix-cache RESUME (BpPrefixSnap) restores the line's unpaid-cost hold (g_line_unpaid_cost) as the prefix left it, instead of re-binding the WHOLE plan's bill: the resumed continuation otherwise paid under a phantom hold for casts the prefix had already paid, so the search scored payments (LineFloatTapFirstPlan keeping a floating colour) that neither the executor nor a full apply makes. Hinata s12111487 gi 486 (MTG_HINATA_GAMBLE_PAST_DORK=1, d8 b0): the T5 node child held Soulfire Eruption's paid {R}{R}{R}, paid Ornithopter's {2} with Sol Ring and kept the floating {R}; the game spent the {R} and the recast Irencrag Feat was one red short -- committed T5, realised T6. Search side only (the executor never resumes). DEFAULT ON; =0 -> the phantom hold, byte-identical
     COUNT
 };
 
@@ -1074,6 +1075,7 @@ inline const char* Name(int slot)
         "MTG_FB_HOLD_PLAN_REACH",
         "MTG_FB_HOLD_FOLD_FREE",
         "MTG_FB_HOLD_STRICT",
+        "MTG_BP_RESUME_LINE_HOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

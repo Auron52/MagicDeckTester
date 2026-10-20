@@ -1866,6 +1866,32 @@ inline bool BpReplayCostOn()
     return heurarm::Flag(heurarm::BP_REPLAY_COST, env_on);
 }
 
+// MTG_BP_RESUME_LINE_HOLD -- DEFAULT ON; =0 restores the phantom hold byte-identically (A/B hatch,
+// heurarm slot BP_RESUME_LINE_HOLD for the pooled batch).
+//
+// A resumed apply must leave exactly the state a full apply would (BpPrefixSnap's own contract). The
+// snapshot carried the board, the sink and the scripted pins, but NOT the line's unpaid-cost hold
+// (g_line_unpaid_cost): ApplyPlanDirect binds it from the WHOLE plan's bill at entry and apply_one
+// subtracts each cast as it pays, so at the deferred re-solve a full apply holds only what the plan
+// still owes, while a resume -- which skips the prefix casts -- held the full bill, including casts
+// already paid. The payer reads that hold (LineFloatTapFirstPlan, the line-aware float spend, the
+// replicate / sink holds), so every node child and every prefix-cache wave variant paid its
+// continuation under a phantom demand the executor never has. The executor never resumes; it plays
+// the committed line through a full apply, so the scored line and the played line split on payment.
+//
+// Hinata s12111487 gi 486 (MTG_HINATA_GAMBLE_PAST_DORK=1, --depth 8 --budget-ms 0): the T5 main-2
+// node's child [Reality Spasm, Reality Spasm, Preordain] -> Ponder -> [Sol Ring, Ornithopter,
+// Irencrag Feat + Remand] -> [Irencrag Feat, Crackle] ran under Soulfire Eruption's already-paid
+// {R}{R}{R}, so Ornithopter's {2} was paid with Sol Ring and the floating {R} kept -- one red more
+// for the recast Irencrag. The game (line = 0 there) paid the {2} with the floating {R} + wild, the
+// recast Irencrag was one {R} short, and Crackle stayed in hand: committed T5, realised T6. Read by
+// TurnSolver only (the resume branch of ApplyPlanDirect); kept here with the other lockstep levers.
+inline bool BpResumeLineHoldOn()
+{
+    static const bool env_on = EnvOn("MTG_BP_RESUME_LINE_HOLD", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::BP_RESUME_LINE_HOLD, env_on);
+}
+
 
 
 // ---- UNBUDGETED-PLAY SCOPE + the leaf memo it USED to arm -------------------------------------
