@@ -32104,6 +32104,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
           haste_ready = true; }
         return &haste_src;
     };
+    // THE BOARD'S POOL, priced once per call and LAZILY (P4, 2026-10-20). Every emission block below
+    // that sizes a fan by the mana on hand asked AvailableManaPool(state) itself -- the untap-target and
+    // mana-sink count fans once per (source, target), Stroke of Genius's X once per copy in hand -- ~3
+    // full battlefield walks per call on an AccomplishedAlchemist board, 1-2% of a game. `state` is const
+    // for this whole function and nothing in it binds a scope the pool reads (the board, the fresh-hold
+    // pin installed by an APPLY, and process-constant flags), so every one of those calls returned this
+    // same pool: identity, not a narrowing. Lazy for the haste gather's reason -- most calls never ask.
+    bool     pool_ready = false;
+    ManaPool pool_memo;
+    auto turn_pool = [&]() -> const ManaPool& {
+        if (!pool_ready) { pool_memo = AvailableManaPool(state); pool_ready = true; }
+        return pool_memo;
+    };
     // The fade k-axis board/hand read (MTG_FADE_K_WINDOW), lazy for exactly the same reason: only a
     // Saproling Burst holding enough counters to be worth narrowing ever asks for it, and it is one
     // battlefield walk plus one hand walk shared by every Burst on the board.
@@ -32367,7 +32380,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (s_bp_whynot && !dominated) { ++g_wn_notdominated; }
             if (dominated)
             {
-                ManaPool now = AvailableManaPool(state);
+                ManaPool now = turn_pool();
                 now.AddPool(state.floating_mana);
                 const bool payable_cand = now.CanPay(EffectiveCost(def, state));
                 if (!payable_cand) { trace_spared("unpay", nullptr); }
@@ -32741,7 +32754,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const int fo = static_cast<int>(cc.free_other.size());
                 const int ag = static_cast<int>(cc.atk_green.size());
                 const int ao = static_cast<int>(cc.atk_other.size());
-                const int pool_total = AvailableManaPool(state).Total();
+                const int pool_total = turn_pool().Total();
                 // Provider fetch narrowing (PutTargetPolicy/PutTargetOk; narrow=false =
                 // unnarrowed) -- the same policy as the Birthing Pod site, so the two
                 // put-tutors cannot drift. Allocation-free by contract.
@@ -32861,7 +32874,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     && !ResolveProvider(state).OffersTuckRemovalCast(state, def, /*self_target=*/false))
                 { continue; }   // the provider's prune (default: never cast autonomously)
                 ManaCost tbase  = EffectiveCost(def, state);
-                ManaPool tpool  = AvailableManaPool(state);
+                ManaPool tpool  = turn_pool();
                 int tpips = def.card.m_mana_cost.x_pips; if (tpips < 1) { tpips = 1; }
                 const int tmax = (tpool.Total() - tbase.ManaValue()) / tpips;
                 if (tmax < 0) { continue; }   // cannot pay even the base -> uncastable now
@@ -32895,7 +32908,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (def.params.x_damage_each_creature_and_player)
             {
                 const ManaCost qbase = EffectiveCost(def, state);
-                ManaPool qpool = AvailableManaPool(state);
+                ManaPool qpool = turn_pool();
                 qpool.AddPool(state.floating_mana);
                 int qpips = def.card.m_mana_cost.x_pips; if (qpips < 1) { qpips = 1; }
                 const int qmax = (qpool.Total() - qbase.ManaValue()) / qpips;
@@ -32939,7 +32952,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (def.params.reveal_x_put_permanents)
             {
                 const ManaCost gbase = EffectiveCost(def, state);   // {G}{G}{G}; ManaValue ignores X
-                ManaPool gpool = AvailableManaPool(state);
+                ManaPool gpool = turn_pool();
                 gpool.AddPool(state.floating_mana);                 // the Rolling Earthquake shape
                 int gpips = def.card.m_mana_cost.x_pips; if (gpips < 1) { gpips = 1; }
                 const int gmax0 = (gpool.Total() - gbase.ManaValue()) / gpips;
@@ -33026,7 +33039,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (def.tmpl == CardTemplate::DrawX)
             {
                 const ManaCost dbase = EffectiveCost(def, state);   // {2}{U}; ManaValue ignores X
-                ManaPool dpool = AvailableManaPool(state);
+                ManaPool dpool = turn_pool();
                 dpool.AddPool(state.floating_mana);                 // the Rolling Earthquake shape
                 int dpips = def.card.m_mana_cost.x_pips; if (dpips < 1) { dpips = 1; }
                 const int dmax = (dpool.Total() - dbase.ManaValue()) / dpips;
@@ -33065,7 +33078,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             if (def.tmpl != CardTemplate::DirectDamage) { continue; }
             ManaCost base  = EffectiveCost(def, state);   // fixed part; ManaValue() ignores X
-            ManaPool xpool = AvailableManaPool(state);
+            ManaPool xpool = turn_pool();
             // Hinata combo: a ritual in hand (Reality Spasm) funds a bigger X this turn. Credit
             // its NET mana so this payoff's max X reaches the combo's lethal value. Over-generates
             // candidates affordable ONLY with the ritual; Solve::consider rejects any subset that
@@ -34139,7 +34152,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             std::vector<int> x_values{ 0 };
             if (def.card.m_mana_cost.has_x)
             {
-                const ManaPool xp = AvailableManaPool(state);
+                const ManaPool xp = turn_pool();
                 int max_x = (xp.Total() - base_cost.ManaValue()) / x_pips;
                 if (max_x < 0) { max_x = 0; }
                 for (int xv : ResolveProvider(state).XCandidates(state, def, max_x))
@@ -34944,7 +34957,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             int kmax = 0;
             if (rep_mv > 0)
             {
-                int pool = AvailableManaPool(state).Total();
+                int pool = turn_pool().Total();
                 // A plan that has not played its land yet will have one more mana by the time it
                 // casts, so bound against the pool the LINE will have, not the one standing now.
                 // Without this the fan silently stops one copy short on exactly the turns the
@@ -37746,7 +37759,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (!unit) { continue; }
                     if (total_mana < 0)
                     {
-                        ManaPool have = AvailableManaPool(state);
+                        ManaPool have = turn_pool();
                         have.AddPool(state.floating_mana);
                         total_mana = static_cast<int>(have.Total());
                     }
@@ -37821,7 +37834,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // pre-scaled so the subset enumerator prices the line correctly.
                 const ManaCost per = sd->params.activated_reveal_top_cost.value();
                 const int per_mv   = per.ManaValue();
-                int kmax = per_mv > 0 ? AvailableManaPool(state).Total() / per_mv : 1;
+                int kmax = per_mv > 0 ? turn_pool().Total() / per_mv : 1;
                 // MTG_REVEALTOP_KMAX (DEFAULT 3; 0 = uncapped): bounded branching -- >3
                 // activations/turn is fringe. The value hatch exists so the width cap can be
                 // probed at all (recoverability audit 4b); uncapped, K is still bounded by the
@@ -37910,7 +37923,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                             sd->params.blink_cost.value());
                 const int per_mv = per.ManaValue();
                 const int affordable = per_mv > 0
-                                     ? (AvailableManaPool(state).Total() + state.floating_mana.Total()) / per_mv
+                                     ? (turn_pool().Total() + state.floating_mana.Total()) / per_mv
                                      : 1;
                 if (affordable >= 1)
                 {
@@ -38250,7 +38263,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (!fold_fanout)
                         {
                             const int per_mv = std::max(1, cost.ManaValue());
-                            ManaPool have = AvailableManaPool(state);
+                            ManaPool have = turn_pool();
                             have.AddPool(state.floating_mana);
                             counts = ResolveProvider(state).ManaSinkActivationCounts(
                                 state, src, m.mode,
@@ -38265,7 +38278,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     else if (taps && sd->params.self_untap_cost.has_value()
                              && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::BlinkTarget))
                     {
-                        ManaPool have = AvailableManaPool(state);
+                        ManaPool have = turn_pool();
                         have.AddPool(state.floating_mana);
                         const int total  = static_cast<int>(have.Total());
                         const int first  = cost.ManaValue();
@@ -38492,7 +38505,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             {
                 const ManaCost ucost = EffectiveActivationCost(state, state.active_player_index,
                                                                src.card, *sd->params.reconfigure_cost);
-                ManaPool have = AvailableManaPool(state);
+                ManaPool have = turn_pool();
                 have.AddPool(state.floating_mana);
                 if (have.CanPay(ucost))
                 {
@@ -38820,7 +38833,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             // both... it should offer before only for the purposes of sacrificing them
                             // for mana."* So a pre-Season pop is a FUNDING decision, and where the
                             // lands already pay there is nothing to decide.
-                            ManaPool smp = AvailableManaPool(state);
+                            ManaPool smp = turn_pool();
                             smp.AddPool(state.floating_mana);
                             const int savail = static_cast<int>(smp.Total());
                             int mana_only = static_cast<int>(state.floating_mana.Total());
@@ -39183,7 +39196,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                          ? sd->params.firebreathing_cost.value()
                                          : sd->params.team_pump_cost.value();
                 const int per_mv = per.ManaValue();
-                int kmax = per_mv > 0 ? AvailableManaPool(state).Total() / per_mv : 1;
+                int kmax = per_mv > 0 ? turn_pool().Total() / per_mv : 1;
                 if (mode == 1)
                 { kmax = std::min<int>(kmax, static_cast<int>(state.players[state.active_player_index].hand.size())); }
                 if (kmax > 3) { kmax = 3; }   // bounded branching; >3 activations/turn is fringe
@@ -39299,7 +39312,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                      && state.floating_mana.Total() > 0)   // the float is the only mana the converter misses
             {
                 const ManaCost per = sd->params.team_pump_cost.value();
-                ManaPool have = AvailableManaPool(state);
+                ManaPool have = turn_pool();
                 have.AddPool(state.floating_mana);
                 const int afford = static_cast<int>(have.Total()) / std::max(1, per.ManaValue());
                 if (afford >= 1)
@@ -39778,7 +39791,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // The demand-driven burst count, computed EXACTLY as the per-source burst
                         // below computes it, so the pooled set reproduces today's reachable totals
                         // rather than a set of its own.
-                        const int base = AvailableManaPool(state).Total();
+                        const int base = turn_pool().Total();
                         int reach_mv = 0;
                         for (const Card& hc : ap.hand)
                         {
@@ -39969,7 +39982,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
                     ++V;
                 }
-                const int base = AvailableManaPool(state).Total();   // mana this turn WITHOUT Skirk
+                const int base = turn_pool().Total();   // mana this turn WITHOUT Skirk
                 int reach_mv = 0;   // most expensive hand spell newly reachable with <= V sacs
                 for (const Card& hc : ap.hand)
                 {
@@ -40389,7 +40402,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const ManaCost& ac = *sd->params.pod_activation_cost;
                 const int mana_floor = (cc.ManaValue() - cc.phyrexian_count)
                                      + (ac.ManaValue() - ac.phyrexian_count);
-                ManaPool hp_pool = AvailableManaPool(state);
+                ManaPool hp_pool = turn_pool();
                 hp_pool.AddPool(state.floating_mana);
                 if (hp_pool.Total() < mana_floor) { continue; }
                 emit_pod_source(hc, sd);
@@ -41093,7 +41106,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (actions[i].kind == Action::Kind::CastFromHand) { continue; }
                 if (!phy_pool_ready)
                 {
-                    phy_pool = AvailableManaPool(state);
+                    phy_pool = turn_pool();
                     phy_pool.AddPool(state.floating_mana);
                     phy_pool_ready = true;
                 }
@@ -41149,7 +41162,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             if (!tb_pool_ready)
             {
-                tb_pool = AvailableManaPool(state);
+                tb_pool = turn_pool();
                 tb_pool.AddPool(state.floating_mana);
                 tb_pool_ready = true;
             }
