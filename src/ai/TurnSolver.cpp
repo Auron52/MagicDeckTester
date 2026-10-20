@@ -92215,6 +92215,24 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // THE SCRATCH ENTRY IS DEAD FROM HERE ON, SO FREE IT BEFORE DERIVING (memory only; 2026-10-20).
+    // The lifetime contract (TurnSolver.h, EnumerateBreakpointPlansRef) ends a returned entry's life at
+    // the next enumeration on this thread, and this IS the next enumeration. Until now the previous
+    // uncached list stayed resident in `scratch` for the whole derivation below and was only dropped by
+    // the assignment at the bottom -- i.e. after the new list was complete. That costs nothing on a
+    // normal deck, but an uncached list is by definition one the byte pool refused, and on
+    // AccomplishedAlchemist those are the Living Wish continuation lists of 179k-193k plans (577-621 MB
+    // each, MTG_ENUM_HIWATER_KB): every heavy keep-rollout thread held the OLD giant list while it built
+    // the NEW one, ~1.0-1.4 GB per thread, and 32 such threads took the mulligan generator past its
+    // 43 GB RSS cap. Releasing here takes a heavy thread to ~0.4 GB. Nothing reads scratch except through a
+    // pointer this function returned, and every holder of one reads it before re-entering the enumerator
+    // (the contract; verified at every caller: the two ApplyPlanDirect sites, EnumerateBreakpointPlans /
+    // Demoted, which copy, and EnumerateBreakpointPlansRef's two users, which read at once), so no value
+    // any caller sees can change -- play, units and the plan pool's accounting (scratch was never
+    // accounted) are byte-identical.
+    static thread_local BpEnumEntry scratch;
+    scratch = BpEnumEntry{};
+
     // Derive, rank, and (drop modes 2/3) mark the condemned entries -- see BpDeriveContinuationList,
     // which the verifier above shares so a marked list is never diffed against an unmarked one.
     std::vector<TurnSolver::Plan> demoted;   // MTG_BP_NEW_ONLY_DEMOTE (empty with the lever off)
@@ -92328,9 +92346,9 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             return &res.first->second;
         }
     }
-    // Cache disabled: hand back a thread_local scratch entry (fresh verdict slots each fill, so
+    // Cache disabled: hand back the thread_local scratch entry (fresh verdict slots each fill, so
     // nothing is reused across calls -- the no-cache world stays a true re-probe-every-time A/B).
-    static thread_local BpEnumEntry scratch;
+    // Declared, and already emptied, above the derivation.
     scratch = BpEnumEntry{};
     scratch.plans   = std::move(plans);
     scratch.demoted = std::move(demoted);
