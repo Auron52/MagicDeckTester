@@ -204,7 +204,12 @@ inline bool LineFloatTapFirstOn()
 // another unrestricted untapped source. dragonstorm s4050 g46 / s5254 g249 T4: Lotus Bloom's {R}{R}{R}
 // floated, the rung paid the first Seething Song's generic with the Territory, and Apex then exiled
 // Dragonlord Kolaghan, whose {B} only the Territory made -- the T4 kill was gone at every depth and
-// budget (d8 b0 too). Inert unless LineFloatTapFirstOn() (it only narrows that rung's spare set).
+// budget (d8 b0 too). EXCEPTION -- the guard yields to a shortage the line NAMES: if the plain payment
+// would leave a colour a later pip of the line owes with no provider at all (none floating, no untapped
+// source making it for a noncreature spell; a pay-sac source counts as every colour), only the
+// known-demand guard stands (dragonstorm s1112019 gi19: holding the Territory left Desperate Ritual's
+// {R} unpaid). Board state only -- the library is never read. Inert unless LineFloatTapFirstOn() (it
+// only narrows that rung's spare set).
 inline bool LineFloatUnseenGuardOn()
 {
     static const bool env_on = EnvOn("MTG_LINE_FLOAT_UNSEEN_GUARD", true);
