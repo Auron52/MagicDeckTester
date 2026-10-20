@@ -23,6 +23,9 @@ Living Wish bucket rule landed DEFAULT ON (branch `aa-wish`; -12% units on the h
 -> 492 s); see "USER Living Wish buckets (2026-10-20)". The three optimization branches (mull, branch, wish) were
 combined onto `accomplished-alchemist` 2026-10-20; the combined measurement is in "Combined optimization (2026-10-20)". 2026-10-20 (branch `aa-discard`): the USER's cleanup-discard
 bucket rule landed DEFAULT ON (held-out -0.015 d3 / -0.022 d5); see "USER discard buckets (2026-10-20)".
+2026-10-20: the USER's Elvish Harbinger rule landed DEFAULT ON (branch `aa-harbinger`); it measures
++0.005..+0.035 worse (-11..-17% units); two PROPOSED amendments (default OFF) make it better than the control on every
+cell -- see "USER Elvish Harbinger rule (2026-10-20)".
 Open USER items are
 listed under "Open questions surfaced to USER".
 
@@ -422,6 +425,98 @@ blue-conditional version (Staff first only while no blue source is held) is the 
 **Smoke:** 124 / 128 -- only the four known pre-existing moves at their known digests (selesnya d3
 a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11); the deck is not
 in the suite. Not accepted. Unit: mtg-test 1524 / 1524; scenarios 228 / 228.
+## USER Elvish Harbinger rule (2026-10-20) -- landed DEFAULT ON (the USER's rule); measures WORSE; two amendments PROPOSED, OFF
+
+Branch `aa-harbinger` (worktree `.claude/worktrees/aa-harbinger`, forked from `accomplished-alchemist` @ 0d16858b).
+Commits 56bcc019 (the rule + 9 unit cases + the `aaharbproof` trace), 3b330b2c (two PROPOSED amendments, default
+OFF, + 1 unit case). Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-harbinger/` (`ab/` the pooled A/B,
+`x10/` the 10x reruns + shipped-budget traces of every slower/faster game, `amend/` the amendment arms, `x10b/`
+the amendments' 10x reruns; `an.py` / `cls.py` / `clause.py` / `why.py`).
+
+**The rule, verbatim (USER 2026-10-20):** "we should also have a heuristic for Elvish Harbinger. This one is even
+easier. Search for the piece you are missing. Accomplished Alchemist is the priority if you don't have it and
+should be pretty much an auto-pick. Otherwise Seedcradle for untaps or Ezuri for a win condition. In rare cases
+you might get an arbor elf, but that wouldn't be common." And: "You would never search another Harbinger."
+
+**The implemented reading** (`AccomplishedAlchemistProvider::TutorCandidates` -> `AaHarbingerSet`, Harbinger's
+library Elf tutor only; the wish rule's census, "held" = hand OR our battlefield):
+* No Accomplished Alchemist held and one in the library -> **{Accomplished Alchemist}** alone.
+* Else, in this order, the union of: **Seedcradle Witch** while UNTAP is lacking (no Crab Umbra / Staff / Galvanic
+  / Witch held -- a held Witch fills it whatever the lifegain total); **Ezuri** while WINCON is lacking (no Stroke /
+  Staff / Scholar / Ezuri held -- Ezuri counts here, unlike the wish rule); **Arbor Elf** while MANA is lacking
+  (projected mana < 4, the wish threshold; the entering Harbinger itself counts as a dork).
+* Never Elvish Harbinger. Union empty or not in the library -> {Witch, Ezuri, Arbor Elf} in the library; that empty
+  too -> {} (PerformTutor fetches nothing). The engine's tutor_optional decline variant is unchanged.
+* Human play / the Tutor unprune gate keep the whole library list. `MTG_AA_HARBINGER_BUCKETS` (heurarm
+  AA_HARBINGER_BUCKETS), default ON; =0 is the generic list. `MTG_TRACE=aaharbproof` + `MTG_TUTOR_CHOSEN_RANK=1`
+  prints the rule's set and census beside each Harbinger fetch in either arm (diagnostic only).
+
+**Measurement** (one pooled batch, both arms via heurarm, 3,200 games; unwon = 9; units are contention-free --
+the box was shared with sibling batches and a compile, and the ON arm ran first under the heaviest load, so its
+wall ms is inflated and is NOT comparable):
+
+| cell | off avg | on avg | delta | faster / slower | units mean off -> on | units p90 | units max |
+|---|---|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.6950 | 5.7250 | **+0.030** | 17 / 18 | 149.7k -> 132.6k (-11%) | 444k -> 432k | 1.89M -> 1.25M |
+| s70001 d5 b20 (200) | 5.6300 | 5.6350 | **+0.005** | 22 / 18 | 271.7k -> 225.7k (-17%) | 798k -> 732k | 3.98M -> 1.99M |
+| s90001 d5 b20 (600 held-out) | 5.6167 | 5.6450 | **+0.028** | 52 / 57 | 243.6k -> 212.1k (-13%) | 693k -> 573k | 8.27M -> 5.53M |
+| s90001 d3 b10 (600 held-out) | 5.6883 | 5.7233 | **+0.035** | 60 / 65 | 132.8k -> 117.2k (-12%) | 350k -> 284k | 5.33M -> 3.44M |
+
+Wall ms/game (off arm, mean / p90 / max): d3 s70001 7,770 / 20,693 / 85,788; d5 s70001 10,578 / 30,366 / 106,699;
+d5 s90001 11,627 / 29,806 / 422,522; d3 s90001 7,856 / 17,169 / 200,419. Digests: off d3/d5 s70001
+6d9f924c48f68526 / c707a6f66e5dd288, on 903592183114220e / ec78e703098b8e69 (the on arm reproduced exactly in
+the amendment batch).
+
+**The USER's rule is worse on every cell (+0.005 .. +0.035) and 11-17% cheaper.** It stays the default (the
+USER's rule); the root cause and an amended version follow.
+
+**Slower games at 10x budget (both arms):** 158 slower games; **89 recover**, **69 persist**. Every slower (and
+faster) game was re-run at the shipped budget with the proof trace and classified by the FIRST Harbinger fetch
+where the arms differ (the clause that decided it):
+
+| clause (control's fetch vs the rule's set) | slower | persist @10x | faster |
+|---|---|---|---|
+| never-Harbinger (control chained another Harbinger) | 47 | 18 | 47 |
+| Alchemist auto-pick; control took Ezuri | 45 | 25 | 38 |
+| Alchemist auto-pick; control took Arbor Elf | 14 | 8 | 2 |
+| Alchemist auto-pick; control took Seedcradle Witch | 12 | 6 | 6 |
+| Alchemist auto-pick; control took it on another turn | 3 | 0 | 6 |
+| Witch excluded (untap held, WINCON lacking -> rule offers Ezuri) | 12 | 10 | 3 |
+| in set, other pick / timing / same set different pick | 9 | 2 | 24 |
+| Arbor Elf excluded | 0 | 0 | 7 |
+| off declined / no Harbinger in the off arm | 2 | 0 | 11 |
+| second Alchemist excluded | 1 | 0 | 3 |
+| no Harbinger-fetch difference (search allocation) | 13 | 0 | 4 |
+
+Root cause: **"never Harbinger" is neutral** (47 / 47), but **the Alchemist auto-pick loses** (74 slower vs 52
+faster: with no Alchemist yet, the to-TOP fetch of Ezuri for a beatdown turn, or an Arbor Elf / Witch first and
+the Alchemist from the next Harbinger, is often faster) and **the Witch is a wincon too** (12 vs 3: with Crab
+Umbra held and no Stroke / Staff / Scholar, the control fetches the Witch, whose own +3/+3 pump is the untap loop's
+kill, over the rule's Ezuri).
+
+**Two amendments, built and measured, PROPOSED, default OFF (the USER's call):**
+* `MTG_AA_HARB_WITCH_WIN` -- the Witch is also offered while WINCON is lacking, beside (before) Ezuri.
+* `MTG_AA_HARB_ALCH_DEFAULT` -- "pretty much an auto-pick" as the DEFAULT, not the only option: no Alchemist held
+  -> the Alchemist FIRST (the rollout's default pick), then Witch / Ezuri / Arbor Elf, all searched. Never Harbinger
+  in either.
+
+| cell | off | USER rule | + WITCH_WIN | + ALCH_DEFAULT | + both | units mean (both) |
+|---|---|---|---|---|---|---|
+| s70001 d3 b10 | 5.6950 | 5.7250 | 5.7200 | 5.6850 | **5.6800** (12 f / 8 s vs off) | 128.3k (-14% vs off) |
+| s70001 d5 b20 | 5.6300 | 5.6350 | 5.6400 | 5.6100 | **5.5950** (12 / 6) | 234.1k (-14%) |
+| s90001 d5 b20 | 5.6167 | 5.6450 | 5.6317 | 5.5967 | **5.5817** (36 / 16) | 213.0k (-13%) |
+| s90001 d3 b10 | 5.6883 | 5.7233 | 5.7017 | 5.6517 | **5.6367** (48 / 17) | 118.2k (-11%) |
+
+Both amendments together are better than the control on every cell (-0.015 / -0.035 / -0.035 / -0.052) and keep
+the rule's ~11-14% unit saving. 10x on the 47 games "both" loses vs the control: **42 recover, 5 persist** (3
+distinct games: s90001 gi233 -- the control's T2 Harbinger -> Harbinger -> Ezuri chain, the never-Harbinger
+clause; gi341 and d3 gi151 -- the arms had already diverged before the first Harbinger). **Recommended: adopt both
+amendments** -- the USER's call.
+
+**Smoke:** 124 / 128 -- only the four known pre-existing moves at their known digests (selesnya d3
+a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11). Not accepted.
+Unit: mtg-test 1527 / 1527 (10 new Harbinger cases; the Harbinger and wish cases also green under
+`MTG_UNPRUNE=tutor` and `MTG_UNPRUNED=1`); scenarios 228 / 228.
 
 ## USER Living Wish buckets (2026-10-20) -- landed DEFAULT ON (the USER's rule); two amendments PROPOSED, OFF
 
@@ -1245,6 +1340,13 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   gi286 class is not a cache problem: its continuation lists are GB-scale (an unbounded cache hit 33 GB in
   68 s), i.e. the Living Wish variant width inside continuation derivations.
 
+* **Elvish Harbinger rule (2026-10-20): it measures WORSE; adopt the two amendments?** The USER's rule is +0.005 ..
+  +0.035 turns worse on all four cells (11-17% cheaper). Root cause: the Alchemist auto-pick (74 slower vs 52 faster
+  games) and the Witch-as-wincon (12 vs 3); never-Harbinger is neutral. `MTG_AA_HARB_ALCH_DEFAULT` (Alchemist first
+  but not alone) + `MTG_AA_HARB_WITCH_WIN` (Witch offered for a lacking wincon) together measure -0.015 / -0.035 /
+  -0.035 / -0.052 vs the control. Both default OFF until the USER decides. Readings taken: a held Witch fills Untap
+  whatever the lifegain total; Ezuri counts as a held wincon here (it does not for the wish rule); the fallback
+  excludes a second Alchemist.
 * **Living Wish buckets (2026-10-20), the readings taken (defaults; say if any is wrong):** (1) mana threshold 4
   of the USER's "4-5", counting lands + dorks + land-Aura bonuses in play and EVERY land in hand (not dorks /
   Auras in hand); (2) the Staff's gain-1 is not lifegain; (3) the Witch counts as an untapper when the held
