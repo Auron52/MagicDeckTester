@@ -104,8 +104,9 @@ cells), `g23*/` (the one moved game) and `an.py`.
   units. Units are contention-free. Wall ms is given only for the tail games, where the gap is >10x.
 * **Composition: each branch's expected effect holds.**
   - **Wish rule.** New reproduces the aa-wish on-arm's win turns on 1,599 of 1,600 games. The s70001 d3 digest
-    (6d9f924c48f68526) and all four averages and faster/slower counts are the wish A/B's (5.6950 / 5.6350 / 5.6167 /
-    5.6883; 25/12, 24/7, 48/48, 48/53). The gi286 collapse carries over.
+    (6d9f924c48f68526) matches the wish A/B's exactly. Three cells match its averages and faster/slower counts (s70001
+    d3 5.6950, 25/12; s90001 d5 5.6167, 48/48; s90001 d3 5.6883, 48/53). s70001 d5 is 5.6300 and 25/7, against the
+    wish A/B's 5.6350 and 24/7; the difference is gi23, below. The gi286 collapse carries over.
   - **Folds.** No win turn moved: the held-out digests differ from aa-wish's at identical win turns, which is the
     branching section's PLAY-CHANGED same-turn class. Units vs the aa-wish on-arm are 0.924-0.939x per cell, from the
     folds' greedy tie-breaks plus the trial order.
