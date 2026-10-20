@@ -591,3 +591,96 @@ TEST_CASE("Galadriel scry LAND TIMING: land keeps on mana in play, Sol Ring + fi
         heurarm::t_arm[heurarm::GALADRIEL_LAND_TIMING] = 1;
     }
 }
+
+// ---- THE PROPOSED AMENDMENT (MTG_GALADRIEL_SCRY_AMEND, default OFF, 2026-10-20): four clauses, each on the
+// overnight 2026-10-19 board the shipped rule lost honestly (the non-clairvoyant search won a turn earlier).
+TEST_CASE("Galadriel scry AMENDMENT: G/U pairing, a held Crackle, Sol Ring mana, an untapped third land")
+{
+    EnsureCardsLoadedGal();
+    struct Arm
+    {
+        Arm()  { heurarm::t_arm[heurarm::GALADRIEL_SCRY_AMEND] = 1; }
+        ~Arm() { heurarm::t_arm[heurarm::GALADRIEL_SCRY_AMEND] = -1; }
+        static void Off() { heurarm::t_arm[heurarm::GALADRIEL_SCRY_AMEND] = 0; }
+        static void On()  { heurarm::t_arm[heurarm::GALADRIEL_SCRY_AMEND] = 1; }
+    } arm;
+    SUBCASE("PAIR: a lone Temple of Mystery pays one of {G}{U}, so a second G or U source is a fix (s6006 g20)")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 1;
+        PutGal(s, kTemple, 1);                  // G/U -- the only G or U source
+        HandGal(s, kGaladriel, 2);
+        HandGal(s, "Temple of Malice", 3);      // B/R
+        HandGal(s, kHavens, 4);                 // {C}
+        CHECK(KeepsGal(s, "Temple of Enlightenment"));   // U: Mystery then pays G
+        CHECK(KeepsGal(s, "Temple of Plenty"));          // G
+        CHECK_FALSE(KeepsGal(s, "Temple of Triumph"));   // R/W fixes nothing
+        CHECK_FALSE(KeepsGal(s, kCrackle));              // one pip short: bad shape (the USER's rule)
+        Arm::Off();                                      // shipped: Mystery read as both colours
+        CHECK_FALSE(KeepsGal(s, "Temple of Enlightenment"));
+        CHECK(KeepsGal(s, kCrackle));
+        Arm::On();
+        HandGal(s, "Temple of Deceit", 5);               // U from a second land: the pair is in
+        CHECK_FALSE(KeepsGal(s, "Temple of Enlightenment"));
+    }
+    SUBCASE("CRACKLE HELD: a second Crackle is thrown before Galadriel too (s4004 g187)")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 1;
+        PutGal(s, "Temple of Malady", 1);       // B/G
+        HandGal(s, kSkerry, 2);                 // U
+        HandGal(s, kGaladriel, 3);
+        HandGal(s, kSkerry, 4);
+        HandGal(s, kCrackle, 5);
+        CHECK_FALSE(KeepsGal(s, kCrackle));
+        Arm::Off();
+        CHECK(KeepsGal(s, kCrackle));
+        Arm::On();
+    }
+    SUBCASE("SOL MANA: two lands + Sol Ring cast her next turn, so the land to follow must scry (s4004 g824)")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 2;
+        PutGal(s, "Temple of Malady", 1);       // G
+        PutGal(s, "Temple of Deceit", 2);       // U
+        HandGal(s, kGaladriel, 3);
+        HandGal(s, "Sol Ring", 4);
+        CHECK_FALSE(KeepsGal(s, kSkerry));      // starts no chain
+        CHECK(KeepsGal(s, "Temple of Plenty"));
+        Arm::Off();
+        CHECK(KeepsGal(s, kSkerry));            // shipped: short on lands, any land
+        Arm::On();
+    }
+    SUBCASE("UNTAPPED: under 3 mana, no untapped land in hand -> an untapped land puts her down a turn early (s7007 g707)")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 1;
+        PutGal(s, kTemple, 1);                  // G/U
+        HandGal(s, kGaladriel, 2);
+        HandGal(s, "Temple of Enlightenment", 3);   // next turn's drop, and the U
+        HandGal(s, kGaladriel, 4);
+        HandGal(s, "Temple of Triumph", 5);
+        CHECK(KeepsGal(s, "Crystal Grotto"));
+        CHECK(KeepsGal(s, "Zhalfirin Void"));
+        CHECK_FALSE(KeepsGal(s, "Temple of Plenty"));   // tapped: nothing gained
+        Arm::Off();
+        CHECK_FALSE(KeepsGal(s, "Crystal Grotto"));
+        Arm::On();
+        HandGal(s, kHavens, 6);                 // an untapped land already in hand
+        CHECK_FALSE(KeepsGal(s, "Crystal Grotto"));
+    }
+    SUBCASE("UNTAPPED at two lands: only when the two lands in play pay {G}{U} by themselves")
+    {
+        GameState s = FreshGal();
+        s.turn_number = 2;
+        PutGal(s, kTemple, 1);                  // G/U
+        PutGal(s, "Temple of Enlightenment", 2);    // U: with Mystery's G, the pair is in play
+        HandGal(s, kGaladriel, 3);
+        HandGal(s, "Temple of Triumph", 4);
+        CHECK(KeepsGal(s, "Rumble Arena"));
+        s.battlefield.pop_back();
+        PutGal(s, "Temple of Malice", 2);       // B/R: the U would come from a hand land
+        HandGal(s, "Temple of Deceit", 5);
+        CHECK_FALSE(KeepsGal(s, "Rumble Arena"));
+    }
+}

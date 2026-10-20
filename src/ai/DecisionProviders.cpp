@@ -5510,6 +5510,16 @@ static bool GaladrielScryOn()
     return heurarm::Flag(heurarm::GALADRIEL_SCRY, on);   // per-job lever: both A/B arms in one batch
 }
 
+// THE PROPOSED AMENDMENT of the USER's pre-Galadriel scry rule (MTG_GALADRIEL_SCRY_AMEND, DEFAULT OFF;
+// 2026-10-20, root-caused from the 44 overnight games the rule loses to the non-clairvoyant search). The
+// rule is the USER's, so the USER decides; =1 turns on all four clauses (PAIR, CRACKLE_HELD, SOL_MANA,
+// UNTAPPED -- see ScryKeepOnTop), and each clause's own flag turns it on alone, for attribution.
+static bool GaladrielScryClauseOn(heurarm::Slot clause, bool clause_env)
+{
+    static const bool amend = EnvOn("MTG_GALADRIEL_SCRY_AMEND", false);
+    return heurarm::Flag(clause, clause_env) || heurarm::Flag(heurarm::GALADRIEL_SCRY_AMEND, amend);
+}
+
 // Can next turn's mana pay a Crackle with Power for the kill? Every source we control untaps; a land
 // in hand adds next turn's drop. Lethal X = ceil((opponent life - our creatures' power) / 5), cost
 // 3X + {R}{R}; each {R} short of the native red sources must come through an any-colour filter, whose
@@ -5722,15 +5732,73 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         return std::max(0, n - (fed ? nf : 0));
     };
     const bool filters_fed = sol_held || filter_ok;
-    const int  miss_n = timing ? still_missing(have, filters_held, filters_fed) : 0;
-    if (timing) { missing = miss_n == 0 ? 0u : missing; }
+    // ---- THE PROPOSED AMENDMENT (MTG_GALADRIEL_SCRY_AMEND, DEFAULT OFF -- the scry rule is the USER's, so
+    // the USER decides; with it and every clause flag off this is the shipped rule). Its four clauses:
+    // PAIR (MTG_GALADRIEL_SCRY_PAIR):Galadriel's {G}{U} is TWO pips, so the colours are covered only by two
+    // DIFFERENT real sources. covers() ORs colour bits, so a lone Temple of Mystery read as both G and U
+    // although it pays one; the rule then bottomed the second G/U source (s6006 g20: Mystery + Malice +
+    // Havens bottomed Temple of Enlightenment, Galadriel was a turn late). The count returned is the
+    // number of pips no distinct source can pay; each fed filter still fills one (USER: "it only fills
+    // one colour").
+    static const bool pair_env = EnvOn("MTG_GALADRIEL_SCRY_PAIR", false);
+    const bool am_pair = timing && GaladrielScryClauseOn(heurarm::GALADRIEL_SCRY_PAIR, pair_env);
+    auto pair_deficit = [&](bool with_hand, const CardDefinition* extra) -> int
+    {
+        int g_only = 0, u_only = 0, both = 0;
+        auto add = [&](const CardDefinition& d)
+        {
+            if (!(d.card.IsLand() || d.params.mana_rock) || d.params.any_color_filter) { return; }
+            unsigned m = 0;
+            for (Color c : d.params.produces) { m |= colour_bit(c); }
+            if (m == 3u) { ++both; } else if (m == 1u) { ++g_only; } else if (m == 2u) { ++u_only; }
+        };
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr) { add(*d); }
+        }
+        if (with_hand)
+        {
+            for (const Card& c : pl.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr) { add(*d); }
+            }
+        }
+        if (extra != nullptr) { add(*extra); }
+        const bool two = (g_only > 0 && u_only + both > 0) || (u_only > 0 && g_only + both > 0) || both >= 2;
+        return two ? 0 : (g_only + u_only + both > 0 ? 1 : 2);
+    };
+    const int  miss_n = !timing ? 0
+        : am_pair ? std::max(0, pair_deficit(true, nullptr) - (filters_fed ? filters_held : 0))
+                  : still_missing(have, filters_held, filters_fed);
+    // (Without PAIR a positive miss_n implies a missing bit, so the 3u marker is reached only under PAIR.)
+    if (timing) { missing = miss_n == 0 ? 0u : (missing != 0u ? missing : 3u); }
     const bool bad_colours = missing != 0;                 // G or U missing: Galadriel uncastable
-    const bool short_lands = lands_bf + lands_hand < 3;
+    // SOL MANA (MTG_GALADRIEL_SCRY_SOL_MANA): Sol Ring held counts as a land for "short on lands", and a
+    // Sol Ring in hand (castable off one land) adds its two to next turn's mana -- so with two lands and
+    // Sol Ring she comes down next turn WITHOUT the land drop, and the land that must follow her is a
+    // SCRY land (s4004 g824: the short-on-lands keep took Saprazzan Skerry, which starts no chain).
+    static const bool sol_env = EnvOn("MTG_GALADRIEL_SCRY_SOL_MANA", false);
+    const bool am_sol = timing && GaladrielScryClauseOn(heurarm::GALADRIEL_SCRY_SOL_MANA, sol_env);
+    bool sol_in_hand = false;
+    int untapped_hand = 0;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.mana_rock) { sol_in_hand = true; }
+        if (d->card.IsLand() && !d->params.enters_tapped) { ++untapped_hand; }
+    }
+    const int  mana_next   = mana_bf + ((am_sol && sol_in_hand && lands_bf >= 1) ? 2 : 0);
+    const bool short_lands = lands_bf + lands_hand + ((am_sol && sol_held) ? 1 : 0) < 3;
     // Under the arm the top card is a fix when it lowers that count: a real G/U source, a filter that
     // can be fed, or Sol Ring feeding a held filter.
+    const int  top_filter = (td->card.IsLand() && tp.any_color_filter) ? 1 : 0;
     const bool timing_fix = timing && miss_n > 0 && (td->card.IsLand() || tp.mana_rock)
-        && still_missing(have | covers(*td), filters_held + ((td->card.IsLand() && tp.any_color_filter) ? 1 : 0),
-                         filters_fed || tp.mana_rock) < miss_n;
+        && (am_pair ? std::max(0, pair_deficit(true, td) - ((filters_fed || tp.mana_rock) ? filters_held + top_filter : 0))
+                    : still_missing(have | covers(*td), filters_held + top_filter, filters_fed || tp.mana_rock)) < miss_n;
     const bool fixes = timing ? timing_fix : ((td->card.IsLand() || tp.mana_rock) && (covers(*td) & missing) != 0);
     const bool accel = tp.mana_rock || (td->card.IsLand() && tp.produces_amount > 1);
     (void)rocks_bf;
@@ -5766,7 +5834,20 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         }
     }
     const bool accel_useful = lands_bf < 2;
-    const bool go_off_next  = mana_bf >= 3;
+    const bool go_off_next  = mana_next >= 3;              // == mana_bf >= 3 unless SOL MANA is on
+    // UNTAPPED (MTG_GALADRIEL_SCRY_UNTAPPED): every Temple enters tapped, so with under three mana in play
+    // and no untapped land in hand, Galadriel waits a turn after her third land. An untapped land on top
+    // (Crystal Grotto, Rumble Arena, Zhalfirin Void, The Grey Havens -- all scry lands) lets her come down
+    // the turn it is played; her extra attack is the margin for an early X=3 Crackle (the seed-5 USER
+    // reference; overnight s4004 g996, s7007 g707). Two mana in play: it is next turn's drop, and the two
+    // lands in play must pay {G}{U} by themselves. One: next turn's drop comes from hand, then this one.
+    {
+        static const bool untapped_env = EnvOn("MTG_GALADRIEL_SCRY_UNTAPPED", false);
+        if (timing && GaladrielScryClauseOn(heurarm::GALADRIEL_SCRY_UNTAPPED, untapped_env) && missing == 0
+            && td->card.IsLand() && !tp.enters_tapped && tp.etb_scry > 0 && untapped_hand == 0
+            && ((mana_next == 2 && pair_deficit(false, nullptr) == 0) || (mana_next == 1 && lands_hand >= 1)))
+        { return true; }
+    }
     // "you still need to prioritize getting the colours even if short on lands. It is only beyond
     // that that you would accept anything" (USER): a non-fixing land is kept only once G and U are
     // covered (with LAND TIMING, also only once acceleration is in play or no longer useful).
@@ -5798,7 +5879,15 @@ bool GaladrielProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) 
         { return true; }
     }
     if (tp.scry_reveal_land_to_battlefield) { return false; }   // a second copy (one is in hand)
-    if (IsCrackle(*td)) { return !bad_colours; }
+    if (IsCrackle(*td))
+    {
+        // CRACKLE HELD (MTG_GALADRIEL_SCRY_CRACKLE_HELD): one Crackle wins once the chain has run, so a
+        // second is a dead draw -- the Galadriel-out rule already throws "a Crackle we already hold"
+        // (s4004 g187: the kept second Crackle took the scry land the T4 chain needed).
+        static const bool held_env = EnvOn("MTG_GALADRIEL_SCRY_CRACKLE_HELD", false);
+        if (crackle_hand > 0 && GaladrielScryClauseOn(heurarm::GALADRIEL_SCRY_CRACKLE_HELD, held_env)) { return false; }
+        return !bad_colours;
+    }
     if (accel) { return !bad_colours && (!timing || accel_useful); }
     return false;
 }
