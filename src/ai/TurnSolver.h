@@ -3384,3 +3384,10 @@ void RolloutSimulateCombat(GameState& state);
 // copy classes built (the battlefield half of MTG_HAND_COPY_CLASS_FOLD). Thread-local and
 // never reset, so a test reads a delta around the call it makes.
 long long CopyHostFoldTestCount(int which);
+// TEST HOOK (2026-10-20 greedy branching folds): this THREAD's running count of greedy-walk options dropped --
+// 0 = untap counts dominated (MTG_GREEDY_UNTAP_K_DOM), 1 = creature-Aura hosts collapsed
+// (MTG_GREEDY_AURA_HOST_LATE). Never reset; read a delta.
+long long GreedyFoldTestCount(int which);
+// TEST HOOK: this THREAD's running count of creature-Aura host options the searched walk late-binds instead
+// of walking (MTG_AURA_HOST_LATE_BIND). Never reset; read a delta.
+long long AuraLateBindTestCount();

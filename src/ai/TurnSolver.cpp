@@ -24122,6 +24122,11 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         { fold(0x4D41444Eull + static_cast<uint64_t>(a.madness_choice) * 64 + static_cast<uint64_t>(a.madness_arm)); }   // "MADN"
         if (a.kind == Action::Kind::SacCreatureOutlet && !a.victim_name.empty())
         { fold(0x56494354ull); folds(a.victim_name.str()); }   // "VICT"
+        // The permanent-ability MODE (2026-10-20): Staff of Domination's draw (mode 3) and its lifegain
+        // (mode 15) at the same count were one fingerprint, so the [bp-cands] duplicate probe read two
+        // distinct plans as a repeat (0.1% of a list on AccomplishedAlchemist seed 90061). Diagnostic
+        // and BpLen keys only -- nothing that steers play reads this hash.
+        if (a.ability_mode != Action::AbilityMode::None) { fold(0x414D00ull + static_cast<uint64_t>(a.ability_mode)); }
         // The LAND-PUT CREDIT class (Search for Tomorrow): a must-fold like devour_count -- the
         // credit restricts the searched basic, so two classes are two different plays. Gated on the
         // param + a stamped credit, so every other deck's fingerprint is unchanged.
@@ -43852,6 +43857,15 @@ namespace shapestats
     };
     inline std::mutex         g_heavy_mtx;
     inline std::vector<Heavy> g_heavy;     // kept sorted DESC by odo, truncated to HeavyWant()
+    // The SAME capture for the GREEDY walk (TurnSolver::SolveUncached, the rollout leaf). Kept apart:
+    // the two walks are different enumerations (see "the TWO walks, measured apart" in the dump), and
+    // on the AccomplishedAlchemist cells the greedy walk is ~7x the search walk's visits, so its
+    // option groups are where unreasonable branching costs most -- and they were invisible here.
+    inline std::mutex         g_gheavy_mtx;
+    inline std::vector<Heavy> g_gheavy;
+    inline std::mutex         g_gshape_mtx;   // greedy visits by multi-option group shape
+    inline std::map<std::string, std::pair<std::uint64_t, std::uint64_t>> g_gshape;   // key -> (visits, calls)
+    inline std::map<std::string, std::pair<std::uint64_t, std::uint64_t>> g_eshape;   // same, EnumeratePlans walk
 
     // LOCK-FREE ADMISSION FLOOR -- the visit count of the WEAKEST kept entry, 0 until the list is
     // full. Without it this instrument is unusable in a pooled run: OfferHeavy took g_heavy_mtx on
@@ -43863,12 +43877,15 @@ namespace shapestats
     // under the lock, so the kept set is identical either way.
     inline std::atomic<std::uint64_t> g_heavy_floor{0};
     inline std::uint64_t HeavyFloor() { return g_heavy_floor.load(std::memory_order_relaxed); }
+    inline std::atomic<std::uint64_t> g_gheavy_floor{0};
+    inline std::uint64_t GreedyHeavyFloor() { return g_gheavy_floor.load(std::memory_order_relaxed); }
 
-    inline void OfferHeavy(Heavy&& h)
+    inline void OfferHeavyTo(std::mutex& mtx, std::vector<Heavy>& g_heavy,
+                             std::atomic<std::uint64_t>& g_heavy_floor, Heavy&& h)
     {
         const int want = HeavyWant();
         if (want == 0) { return; }
-        std::lock_guard<std::mutex> lk(g_heavy_mtx);
+        std::lock_guard<std::mutex> lk(mtx);
         // RANKED BY SUBSET VISITS, the work unit -- not by odometer, which was measured to be a
         // space nobody walks (see the devour A/B: -88% odo on the top decision, -0.8% visits).
         if (static_cast<int>(g_heavy.size()) >= want && h.f.entered <= g_heavy.back().f.entered)
@@ -43891,15 +43908,17 @@ namespace shapestats
         if (static_cast<int>(g_heavy.size()) >= want)
         { g_heavy_floor.store(g_heavy.back().f.entered, std::memory_order_relaxed); }
     }
+    inline void OfferHeavy(Heavy&& h) { OfferHeavyTo(g_heavy_mtx, g_heavy, g_heavy_floor, std::move(h)); }
+    inline void OfferGreedyHeavy(Heavy&& h) { OfferHeavyTo(g_gheavy_mtx, g_gheavy, g_gheavy_floor, std::move(h)); }
 
     // Same line-tag + key=value convention as scripts/review_games.py: readable AND parseable, so
     // an agent can split it and a human reads the same bytes.
-    inline void DumpHeavy()
+    inline void DumpHeavyFrom(std::mutex& mtx, std::vector<Heavy>& g_heavy, const char* walk)
     {
-        std::lock_guard<std::mutex> lk(g_heavy_mtx);
+        std::lock_guard<std::mutex> lk(mtx);
         if (g_heavy.empty()) { return; }
-        std::fprintf(stderr, "\n=== BRANCH SHAPE: the %d HEAVIEST individual decisions, ranked by "
-                             "SUBSET VISITS (the work unit) ===\n", (int)g_heavy.size());
+        std::fprintf(stderr, "\n=== BRANCH SHAPE: the %d HEAVIEST individual decisions (%s walk), ranked by "
+                             "SUBSET VISITS (the work unit) ===\n", (int)g_heavy.size(), walk);
         for (std::size_t i = 0; i < g_heavy.size(); ++i)
         {
             const Heavy& h = g_heavy[i];
@@ -43924,6 +43943,152 @@ namespace shapestats
             std::fprintf(stderr,
                 "  ODOMETER = product over groups of (1+size) x 2^%d independent\n", h.num_ind);
         }
+    }
+    inline void DumpHeavy()
+    {
+        DumpHeavyFrom(g_heavy_mtx, g_heavy, "EnumeratePlans");
+        DumpHeavyFrom(g_gheavy_mtx, g_gheavy, "GREEDY SolveUncached");
+        std::lock_guard<std::mutex> lk(g_gshape_mtx);
+        for (int which = 0; which < 2; ++which)
+        {
+        auto& M = which == 0 ? g_gshape : g_eshape;
+        if (M.empty()) { continue; }
+        std::fprintf(stderr, "\n[%s walk]", which == 0 ? "GREEDY SolveUncached" : "EnumeratePlans");
+        std::vector<std::pair<std::string, std::pair<std::uint64_t, std::uint64_t>>> v(M.begin(), M.end());
+        std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.second.first > b.second.first; });
+        std::uint64_t tot = 0;
+        for (const auto& x : v) { tot += x.second.first; }
+        std::fprintf(stderr, "\n=== GREEDY WALK VISITS BY SHAPE (multi-option groups; total visits %llu over %zu shapes) ===\n",
+                     (unsigned long long)tot, v.size());
+        for (std::size_t i = 0; i < v.size() && i < 40; ++i)
+        {
+            std::fprintf(stderr, "  %6.2f%%  visits=%llu calls=%llu  %s\n",
+                         tot ? 100.0 * (double)v[i].second.first / (double)tot : 0.0,
+                         (unsigned long long)v[i].second.first, (unsigned long long)v[i].second.second,
+                         v[i].first.c_str());
+        }
+        }
+    }
+    inline std::string GroupShapeKey(const std::vector<Action>& c, const std::vector<std::vector<int>>& g)
+    {
+        std::vector<std::string> parts;
+        int singles = 0;
+        for (const std::vector<int>& gp : g)
+        {
+            if (gp.size() < 2) { if (gp.size() == 1) { ++singles; } continue; }
+            parts.push_back(c[gp[0]].card_name.str() + "/" + ActionKindTag(c[gp[0]].kind) + "x" + std::to_string(gp.size()));
+        }
+        std::sort(parts.begin(), parts.end());
+        std::string key;
+        for (const std::string& x : parts) { key += x; key += ' '; }
+        key += "+" + std::to_string(singles) + "single";
+        return key;
+    }
+    inline void RecordShapeVisits(bool greedy, const std::vector<Action>& c, const std::vector<std::vector<int>>& g,
+                                  std::uint64_t visits)
+    {
+        const std::string key = GroupShapeKey(c, g);
+        std::lock_guard<std::mutex> lk(g_gshape_mtx);
+        auto& e = (greedy ? g_gshape : g_eshape)[key];
+        e.first += visits; e.second += 1;
+    }
+    // The HEAVY capture's rendering, shared by both walks (factored out of EnumeratePlans, 2026-10-20).
+    inline std::string BoardDesc(const GameState& state)
+    {
+        std::string out;
+            {
+                std::map<std::string, int> tok;
+                std::vector<std::string> perms;
+                int lands = 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const std::string nm = p.card.m_name.str();
+                    if (p.card.IsLand())      { ++lands; }
+                    else if (p.is_token)      { ++tok[nm]; }
+                    else                      { perms.push_back(nm); }
+                }
+                std::string bd = "lands=" + std::to_string(lands) + " perms=";
+                for (std::size_t z = 0; z < perms.size(); ++z)
+                { bd += (z ? "," : "") + perms[z]; }
+                if (perms.empty()) { bd += "-"; }
+                bd += " tokens=";
+                if (tok.empty()) { bd += "0"; }
+                else
+                {
+                    bool first = true;
+                    for (const auto& kv : tok)
+                    { bd += (first ? "" : ",") + std::to_string(kv.second) + "x" + kv.first; first = false; }
+                }
+                std::replace(bd.begin(), bd.end(), ' ', ' ');
+                out = bd;
+            }
+        return out;
+    }
+    inline void RenderGroups(const GameState& state, const std::vector<Action>& cands,
+                             const std::vector<std::vector<int>>& groups, std::vector<std::string>& out)
+    {
+            for (const std::vector<int>& gp : groups)
+            {
+                std::string line = "size=" + std::to_string(gp.size()) + " card="
+                                 + (gp.empty() ? std::string("-")
+                                               : std::string(cands[gp[0]].card_name));
+                line += " variants=[";
+                for (std::size_t z = 0; z < gp.size(); ++z)
+                {
+                    const Action& a = cands[gp[z]];
+                    if (z) { line += " | "; }
+                    line += shapestats::ActionKindTag(a.kind);
+                    if (a.chosen_x != 0)      { line += ":X=" + std::to_string(a.chosen_x); }
+                    // Mycoloth's devour k is a SEARCHED axis and is the single biggest source of
+                    // group size on Fungus, so it must be visible or a 13-variant group renders as
+                    // 13 identical "cast" entries and looks like a duplication bug.
+                    if (a.devour_count >= 0)  { line += ":devour=" + std::to_string(a.devour_count); }
+                    if (a.sac_count != 1)     { line += ":sacN=" + std::to_string(a.sac_count); }
+                    if (a.ability_mode != Action::AbilityMode::None)
+                    { line += ":mode=" + shapestats::AbilityModeTag(a.ability_mode); }
+                    if (!static_cast<const std::string&>(a.tutor_target).empty())
+                    { line += ":tutor=" + std::string(a.tutor_target); }
+                    if (!static_cast<const std::string&>(a.chosen_float_color).empty())
+                    { line += ":colour=" + std::string(a.chosen_float_color); }
+                    // The OUTLET permanent, not the victim. Two groups of the same card name are
+                    // either one pooled family (one src) or N unpooled copies (N srcs), and the
+                    // victim alone cannot tell them apart -- both the pooled and the per-source
+                    // paths put the canonical victim on the count==1 variant and 0 on the burst.
+                    if (a.sac_source_id != 0) { line += ":src=" + std::to_string(a.sac_source_id); }
+                    if (a.pooled_sac)         { line += ":POOLED"; }
+                    if (a.sac_victim_id != 0) { line += ":victim=" + std::to_string(a.sac_victim_id); }
+                    // WHICH host an Aura enchants is the ENTIRE content of a land-aura variant.
+                    // Without it a 4-wide Wild Growth group renders as four identical "cast"
+                    // entries, and a reviewer cannot tell a real choice from a pure symmetry --
+                    // which is the one judgement this dump exists to support. Name + tap state,
+                    // because those are exactly the fields that decide interchangeability.
+                    if (a.enchant_target != 0)
+                    {
+                        std::string host = "#" + std::to_string(a.enchant_target);
+                        for (const Permanent& hp : state.battlefield)
+                        {
+                            if (hp.card.m_number != a.enchant_target) { continue; }
+                            host = hp.card.m_name.str() + std::string(hp.tapped ? "(T)" : "");
+                            break;
+                        }
+                        if (host[0] == '#')   // a HAND card cast earlier in the same plan
+                        {
+                            for (const Card& hc : state.ActivePlayer().hand)
+                            { if (hc.m_number == a.enchant_target) { host += "=hand:" + hc.m_name.str(); break; } }
+                        }
+                        line += ":host=" + host;
+                    }
+                    if (a.draw_target != 0) { line += ":tgt=" + std::to_string(a.draw_target); }
+                    if (a.kind == Action::Kind::ActivateUntap || a.kind == Action::Kind::ActivatePump
+                        || a.kind == Action::Kind::ActivatePermAbility)
+                    { line += ":src=" + std::to_string(a.sac_source_id) + ":m" + std::to_string(a.gy_exile_mode); }
+                    if (a.alt_cost)           { line += ":alt"; }
+                    if (a.splice_count != 0)  { line += ":splice=" + std::to_string(a.splice_count); }
+                }
+                line += "]";
+                out.push_back(line);
+            }
     }
 
     struct Dumper
@@ -45822,6 +45987,24 @@ void TurnSolver::SettleHumanDeferredSwap(GameState& state)
     }
 }
 
+// MTG_GREEDY_FOLD_VERIFY=1 (diagnostic): Solve() re-runs each greedy walk with both greedy folds forced
+// OFF and reports any plan that differs -- the runtime check of the byte-identity claim.
+inline thread_local bool t_greedy_fold_force_off = false;
+inline thread_local int  t_greedy_last_ncands = 0;   // SolveUncached's candidate count (the verify's alias test)
+namespace greedyfoldverify
+{
+inline std::atomic<long long> g_calls{0}, g_bad{0}, g_bad_small{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (g_calls.load() == 0) { return; }
+        std::fprintf(stderr, "[greedy-fold-verify] %lld walks compared, %lld differ, %lld of them with <= 31 candidates"
+                     " (the walk's tie-break mask un-aliased -- must be 0)\n", g_calls.load(), g_bad.load(), g_bad_small.load());
+    }
+};
+inline Dumper g_dumper;
+}
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
     // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
@@ -45833,6 +46016,42 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, c
     const bool memo_ok = solvememo::Enabled() && !HumanPlayActive()
                       && g_cantrip_order_site == nullptr
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
+    static const bool s_fold_verify = EnvOn("MTG_GREEDY_FOLD_VERIFY");
+    if (s_fold_verify && !t_greedy_fold_force_off)
+    {
+        TurnSolver::Plan folded = SolveUncached(state, is_pre_combat, permit);
+        const int ncands = t_greedy_last_ncands;
+        t_greedy_fold_force_off = true;
+        const TurnSolver::Plan full = SolveUncached(state, is_pre_combat, permit);
+        t_greedy_fold_force_off = false;
+        static std::atomic<long long> s_n{0}, s_bad{0};
+        ++s_n;
+        greedyfoldverify::g_calls.fetch_add(1, std::memory_order_relaxed);
+        if (!solvememo::SamePlan(folded, full))
+        {
+            greedyfoldverify::g_bad.fetch_add(1, std::memory_order_relaxed);
+            if (ncands <= 31) { greedyfoldverify::g_bad_small.fetch_add(1, std::memory_order_relaxed); }
+            const long long b = ++s_bad;
+            if (b <= 12)
+            {
+                auto desc = [&](const TurnSolver::Plan& pl)
+                {
+                    std::string o = "v=" + std::to_string(pl.value) + (pl.wins_this_turn ? " WIN" : "") + " [";
+                    for (const Action& a : pl.actions)
+                    {
+                        o += a.card_name.str() + "/k" + std::to_string(static_cast<int>(a.kind)) + "/x"
+                           + std::to_string(a.chosen_x) + "/t" + std::to_string(a.enchant_target)
+                           + "/v" + std::to_string(a.sac_victim_id) + "/e" + std::to_string(a.eval) + " ";
+                    }
+                    return o + "]";
+                };
+                std::fprintf(stderr, "[greedy-fold-verify] MISMATCH #%lld of %lld t%d %s\n  folded %s\n  full   %s\n",
+                             b, s_n.load(), state.turn_number, is_pre_combat ? "m1" : "m2",
+                             desc(folded).c_str(), desc(full).c_str());
+            }
+        }
+        return folded;
+    }
     if (!memo_ok) { return SolveUncached(state, is_pre_combat, permit); }
 
     const TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
@@ -46092,6 +46311,228 @@ static bool LethalCutKillIsReal(const GameState& state, const TurnSolver::Plan& 
     return real;
 }
 
+// ---- GREEDY UNTAP-COUNT DOMINANCE (MTG_GREEDY_UNTAP_K_DOM; DEFAULT ON, =0 restores the full family) -----
+// Branching optimisation, AccomplishedAlchemist 2026-10-20 ("Optimization: branching" in the ledger).
+// An activated untapper (Action::Kind::ActivateUntap: Crab Umbra, Staff of Domination, Galvanic Alchemist's
+// grant, Seedcradle Witch) is emitted as one option per (target, count K): K = 1..3 from the provider plus
+// the closed-form loop. Every variant of one (source, target, shape) carries the SAME subset bill -- `cost`
+// is ONE activation for every K (the rest are paid inside the apply loop) -- and differs only in
+// `chosen_x` and in `eval` (= K; 5000 for the loop). In the GREEDY walk below (the rollout leaf / d0
+// policy, beyond the search window) nothing reads an untap action's `chosen_x`: consider() sums the
+// candidates' cost / eval / damage / power fields, its feasibility tests (flat CanPay, SubsetPayable,
+// ColorFeasibility, the deferred as-executed payer, the attack-tap projection) read the bill and the
+// source, never the count. So two subsets that differ only in which K of one family they hold get
+// IDENTICAL verdicts and a total_eval that differs by the eval gap -- the higher-eval variant wins every
+// such comparison (rank_value IS total_eval with no learned d0 model; ties on (wins, rank) go to the
+// smaller mask, and the eval gap is never zero inside one family). The lower-eval variants therefore can
+// never be the walk's choice: visiting them is pure waste. They are removed from the walk's GROUPS only --
+// `cands` (and so every index, mask bit and the Aura re-pointing) is untouched -- so the walk returns the
+// subset it returned before, byte for byte. A DOMINANCE fold of the greedy's own order, not a narrowing of
+// the search: EnumeratePlans (the searched walk) keeps every K, where the rollout scores what each does.
+// Applied AFTER the situational group cap, so the cap reads the sizes it always read.
+// Stands down with a learned d0 model attached (LearnedPlanScore need not be monotone in total_eval).
+static bool GreedyUntapKDomOn()
+{
+    if (t_greedy_fold_force_off) { return false; }
+    static const bool env = EnvOn("MTG_GREEDY_UNTAP_K_DOM", true);   // DEFAULT ON; =0 restores every K
+    return heurarm::Flag(heurarm::GREEDY_UNTAP_K_DOM, env);   // per-JOB so one pooled batch runs both arms
+}
+namespace untapkdom
+{
+inline std::atomic<long long> g_calls{0}, g_dropped{0}, g_kept{0};
+inline thread_local long long t_dropped[2] = { 0, 0 };   // GreedyFoldTestCount
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (g_calls.load() == 0 || !EnvOn("MTG_GREEDY_UNTAP_K_DOM_STATS")) { return; }
+        std::fprintf(stderr, "[greedy-untap-k-dom] %lld walks folded, %lld options dropped, %lld kept\n",
+                     g_calls.load(), g_dropped.load(), g_kept.load());
+    }
+};
+inline Dumper g_dumper;
+}
+long long GreedyFoldTestCount(int which) { return (which == 0 || which == 1) ? untapkdom::t_dropped[which] : 0; }
+// Everything consider() can read off an untap action EXCEPT the count and its eval: two variants with the
+// same key are the same bill, the same source / target / shape, the same damage and power terms.
+static std::uint64_t UntapKDomKey(const Action& a)
+{
+    std::uint64_t h = 0x7A11F00Dull;
+    FoldMix(h, static_cast<std::uint64_t>(a.kind));
+    FoldMix(h, reinterpret_cast<std::uintptr_t>(&a.card_name.str()));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.hand_index)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.sac_source_id)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.sac_victim_id)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.gy_exile_mode)));
+    FoldMixCost(h, a.cost);
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.direct_damage)));
+    FoldMix(h, a.is_noncreature ? 1u : 0u);
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.card_mv)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.equiv_tag)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.ritual_float)));
+    FoldMix(h, static_cast<std::uint64_t>(a.rock_mana.Total()));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.mint_gain)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.discard_lands)));
+    FoldMix(h, (a.sacrifice_land ? 1u : 0u) | (a.free_cast ? 2u : 0u) | (a.alt_cost ? 4u : 0u)
+               | (a.is_draw ? 8u : 0u) | (a.adds_durable_artifact ? 16u : 0u) | (a.haste_prowess ? 32u : 0u));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.vial_attack_power)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.haste_attack_power)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.cond_artifact_haste_power)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.max_casts_after)));
+    FoldMix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.splice_count)));
+    return h;
+}
+// MTG_GREEDY_UNTAP_TARGET_TIE (DEFAULT ON, =0 keeps every target): the same walk cannot tell untap TARGETS
+// apart either -- the target (sac_victim_id) is read by no consider() predicate or score term for an
+// ActivateUntap (the one-use-per-source rule keys the SOURCE; the attack-tap projection, the payers and the
+// colour gates read the bill), so two variants of one (source, shape, bill) that differ only in the target
+// tie EXACTLY, and the walk's (wins, rank, smallest mask) order hands the tie to the LOWER candidate index.
+// So among same-eval variants only the first-emitted target can ever be chosen; the rest are dead options.
+// Byte-identical while the candidates fit the walk's 31-bit tie-break mask; past it the tie was resolved by
+// an aliased bit pattern, and the fold resolves it to the first target instead -- a different member of a
+// set the greedy scores as equal, never a lower-scored plan.
+static bool GreedyUntapTargetTieOn()
+{
+    if (t_greedy_fold_force_off) { return false; }
+    static const bool env = EnvOn("MTG_GREEDY_UNTAP_TARGET_TIE", true);
+    return heurarm::Flag(heurarm::GREEDY_UNTAP_TARGET_TIE, env);
+}
+// Drop, from each group, every ActivateUntap option whose key another option of the SAME group shares with
+// a strictly higher eval -- and, with the target tie on, whose TARGET-BLIND key an EARLIER option of the
+// group shares at an eval at least as high. Returns the number dropped.
+static int DropGreedyDominatedUntapCounts(const std::vector<Action>& cands, std::vector<std::vector<int>>& groups)
+{
+    const bool target_tie = GreedyUntapTargetTieOn();
+    int dropped = 0;
+    for (std::vector<int>& gp : groups)
+    {
+        int n_untap = 0;
+        for (int j : gp) { if (cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateUntap) { ++n_untap; } }
+        if (n_untap < 2) { continue; }
+        static thread_local std::vector<std::uint64_t> keys, blind;
+        keys.assign(gp.size(), 0);
+        blind.assign(gp.size(), 0);
+        for (std::size_t i = 0; i < gp.size(); ++i)
+        {
+            const Action& a = cands[static_cast<std::size_t>(gp[i])];
+            if (a.kind != Action::Kind::ActivateUntap) { continue; }
+            keys[i] = UntapKDomKey(a);
+            if (target_tie) { Action b = a; b.sac_victim_id = 0; blind[i] = UntapKDomKey(b); }
+        }
+        std::vector<int> kept;
+        kept.reserve(gp.size());
+        for (std::size_t i = 0; i < gp.size(); ++i)
+        {
+            const Action& a = cands[static_cast<std::size_t>(gp[i])];
+            bool dominated = false;
+            if (a.kind == Action::Kind::ActivateUntap)
+            {
+                for (std::size_t k = 0; k < gp.size() && !dominated; ++k)
+                {
+                    if (k == i) { continue; }
+                    const Action& b = cands[static_cast<std::size_t>(gp[k])];
+                    if (b.kind != Action::Kind::ActivateUntap) { continue; }
+                    if (keys[k] == keys[i] && b.eval > a.eval) { dominated = true; }
+                    // Target tie: an earlier candidate (smaller mask bit) with the same target-blind key
+                    // and an eval at least as high wins every comparison this option could win.
+                    else if (target_tie && blind[k] == blind[i] && gp[k] < gp[i] && b.eval >= a.eval)
+                    { dominated = true; }
+                }
+            }
+            if (dominated) { ++dropped; } else { kept.push_back(gp[i]); }
+        }
+        if (kept.size() != gp.size()) { gp.swap(kept); }
+    }
+    return dropped;
+}
+
+// ---- GREEDY CREATURE-AURA HOST COLLAPSE (MTG_GREEDY_AURA_HOST_LATE; DEFAULT ON, =0 walks every host) -----
+// Branching optimisation, AccomplishedAlchemist 2026-10-20. A plain creature Aura (Crab Umbra) is emitted as
+// one cast option per legal host, and every option carries the same bill, eval and damage -- only
+// `enchant_target` differs. The GREEDY walk's verdicts and score never read that host for such an Aura:
+// the only consider()-reachable readers of a creature Aura's target are the shroud rule (armed only with a
+// shroud Equipment on the board), the attack-tap projection (an Aura that TAPS its host, or a removal
+// spell aimed at our own creature), and the land-Aura payer (land Auras only). So every host variant of a
+// subset ties, the walk keeps the smallest-mask one, and THEN materialize_best hands the chosen plan to
+// RetargetSolveAuraHosts, which re-points the Aura to the best-keyed host over EVERY host the candidate
+// list offers (incumbent wins ties). The host fan-out inside the walk therefore decides nothing but the
+// incumbent of that re-pointing: walking it is waste. The collapse keeps the group's FIRST option (the
+// smallest-mask variant -- exactly the walk's incumbent whenever the candidate count leaves the mask's
+// bits distinct) and leaves `cands` intact, so the re-pointing still sees every host. Byte-identical on
+// every board whose candidates fit the 31-bit tie-break mask; past it the walk's own tie-break was an
+// aliased bit pattern, and the only possible difference is WHICH key-tied host the re-pointing keeps.
+// Refused (the group keeps every host) for an Aura with a host-dependent term: aura_etb_tap_host, a
+// restricted enchant (another_aura / modified), an aura swap, bestow; for any board that arms the shroud
+// rule; and for any candidate list holding an Equip / attach spell / own-target trick (their predicates
+// read Aura targets). Never in human play (the viewer offers every host).
+static bool GreedyAuraHostLateOn()
+{
+    if (t_greedy_fold_force_off) { return false; }
+    static const bool env = EnvOn("MTG_GREEDY_AURA_HOST_LATE", true);   // DEFAULT ON; =0 walks every host
+    return heurarm::Flag(heurarm::GREEDY_AURA_HOST_LATE, env);
+}
+namespace greedyaurahost
+{
+inline std::atomic<long long> g_calls{0}, g_dropped{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (g_calls.load() == 0 || !EnvOn("MTG_GREEDY_UNTAP_K_DOM_STATS")) { return; }
+        std::fprintf(stderr, "[greedy-aura-host-late] %lld walks collapsed, %lld host options dropped\n",
+                     g_calls.load(), g_dropped.load());
+    }
+};
+inline Dumper g_dumper;
+}
+// A creature Aura none of whose effects depends on WHICH creature carries it, as far as the walks' verdicts
+// and scores can see: no P/T (flat, scaled, set-base or colour-conditional), no keyword grant, no enter-tap,
+// no casting restriction, no swap, not a bestow face, not a removal spell aimed at our own creature. Crab
+// Umbra (untap + totem armor) is the case this exists for; its host matters only to the host key.
+static bool CreatureAuraHostInert(const CardDefinition* d)
+{
+    if (d == nullptr || !d->params.is_aura || d->params.is_land_aura) { return false; }
+    const CardParams& p = d->params;
+    return !p.aura_etb_tap_host && p.aura_enchant_requires.empty() && !p.aura_swap_cost.has_value()
+        && !p.aura_is_bestow_face && p.aura_power_bonus == 0 && p.aura_tough_bonus == 0
+        && !p.aura_grants_lifelink && p.aura_scale_kind.empty() && p.aura_scale_power == 0
+        && p.aura_scale_tough == 0 && p.aura_set_base_power < 0 && p.aura_set_base_toughness < 0
+        && p.aura_color_bonuses.empty() && !RemovalSearchesForController(*d);
+}
+static int CollapseGreedyCreatureAuraHosts(const GameState& state, const std::vector<Action>& cands,
+                                           std::vector<std::vector<int>>& groups)
+{
+    for (const Action& c : cands)
+    {
+        if (c.kind == Action::Kind::Equip || c.kind == Action::Kind::AttachAllEquipment
+            || c.kind == Action::Kind::AttachAllFreeEquipment || c.attach_equip_id != 0
+            || c.enchant_target == kTrickBestOwnTarget) { return 0; }
+    }
+    int dropped = 0;
+    for (std::vector<int>& gp : groups)
+    {
+        if (gp.size() < 2) { continue; }
+        const Action& a0 = cands[static_cast<std::size_t>(gp[0])];
+        if (!IsCreatureAuraCast(a0)) { continue; }
+        const CardDefinition* d = a0.def ? a0.def : CardDatabase::Instance().Lookup(a0.card_name);
+        if (!CreatureAuraHostInert(d)) { continue; }
+        bool same = true;
+        for (std::size_t i = 1; i < gp.size() && same; ++i)
+        {
+            const Action& b = cands[static_cast<std::size_t>(gp[i])];
+            Action bn = b;
+            bn.enchant_target = a0.enchant_target;
+            same = IsCreatureAuraCast(b) && b.hand_index == a0.hand_index && !b.bestow && !a0.bestow
+                && ExactFalseActionDiff(a0, bn).empty();
+        }
+        if (!same) { continue; }
+        dropped += static_cast<int>(gp.size()) - 1;
+        gp.resize(1);
+    }
+    (void)state;
+    return dropped;
+}
+
 TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat,
                                             const GreedyPermit& permit)
 {
@@ -46122,6 +46563,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     g_search_candidate_enum = saved_sce;
     // MTG_PAY_PROBE_MEMO: this enumeration's payability questions about (state, cands) -- see paymemo.
     paymemo::Scope _pay_memo(state, cands);
+    t_greedy_last_ncands = static_cast<int>(cands.size());
     // Does any candidate need the deck's order check (a restrictor or a spliced cast)? One pass, so a
     // deck without either never even scans the subset (see OrderedSubsetRealisable in consider).
     bool order_check_cands = false;
@@ -48446,11 +48888,63 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
     }
 
+    // GREEDY UNTAP-COUNT DOMINANCE (see DropGreedyDominatedUntapCounts): after the cap, before the fold
+    // ordinals / copy classes are built from the groups.
+    if (ev == nullptr && GreedyUntapKDomOn() && !HumanPlayActive())
+    {
+        const int dropped = DropGreedyDominatedUntapCounts(cands, groups);
+        untapkdom::t_dropped[0] += dropped;
+        if (dropped > 0)
+        {
+            untapkdom::g_calls.fetch_add(1, std::memory_order_relaxed);
+            untapkdom::g_dropped.fetch_add(dropped, std::memory_order_relaxed);
+        }
+    }
+
+    // GREEDY CREATURE-AURA HOST COLLAPSE (see CollapseGreedyCreatureAuraHosts): the re-pointing at
+    // materialize_best picks the host; the walk only needs one representative per Aura slot.
+    if (GreedyAuraHostLateOn() && !HumanPlayActive() && !DecisionUnpruned() && pre.aura_shroud_src.empty())
+    {
+        const int dropped = CollapseGreedyCreatureAuraHosts(state, cands, groups);
+        untapkdom::t_dropped[1] += dropped;
+        if (dropped > 0)
+        {
+            greedyaurahost::g_calls.fetch_add(1, std::memory_order_relaxed);
+            greedyaurahost::g_dropped.fetch_add(dropped, std::memory_order_relaxed);
+        }
+    }
+
     if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
     RenumberFoldOrds(cands, groups, independent, auto_sel);
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
+
+    // GREEDY HEAVY CAPTURE (MTG_BRANCH_HEAVY with MTG_BRANCH_SHAPE / the census; measurement only).
+    // The search walk's capture (EnumeratePlans) never saw this walk's groups, and on a heavy deck
+    // this walk is most of the subset visits. Offered at scope exit, when callf holds the visits;
+    // the floor test keeps the strings and the lock off every call that cannot place.
+    struct GreedyHeavyScope
+    {
+        const GameState& st; const std::vector<Action>& c; const std::vector<std::vector<int>>& g;
+        const shapestats::CallFunnel& f; int ind;
+        ~GreedyHeavyScope()
+        {
+            if (shapestats::HeavyWant() <= 0 || !shapestats::Enabled()) { return; }
+            shapestats::RecordShapeVisits(true, c, g, f.entered);
+            if (f.entered <= shapestats::GreedyHeavyFloor()) { return; }
+            shapestats::Heavy h;
+            double o = 1.0;
+            for (const std::vector<int>& gp : g) { o *= (1.0 + static_cast<double>(gp.size())); }
+            h.odo = static_cast<std::uint64_t>(o * static_cast<double>(1u << std::min(ind, 24)));
+            h.turn = st.turn_number; h.board = static_cast<int>(st.battlefield.size());
+            h.hand = static_cast<int>(st.ActivePlayer().hand.size()); h.num_ind = ind;
+            h.ngroups = static_cast<int>(g.size()); h.f = f;
+            h.board_desc = shapestats::BoardDesc(st);
+            shapestats::RenderGroups(st, c, g, h.groups);
+            shapestats::OfferGreedyHeavy(std::move(h));
+        }
+    } _greedy_heavy{ state, cands, groups, callf, num_ind };
 
     // Reject combinations whose Vial deploys exceed the per-charge capacity.
     auto vial_ok = [&](const std::vector<int>& s) -> bool
@@ -52907,6 +53401,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::vector<uint64_t> fps;
                 fps.reserve(cands.size());
                 for (const TurnSolver::Plan& cp : cands) { fps.push_back(BpCandFingerprint(cp)); }
+                // MTG_BP_DUP_SAMPLE=<n> (diagnostic): print the first n duplicate PAIRS -- the plan
+                // text of both entries plus every Plan / Action field on which they still differ.
+                static const int s_dup_sample = EnvInt("MTG_BP_DUP_SAMPLE", 0);
+                static std::atomic<int> s_dup_printed{0};
+                if (s_dup_sample > 0 && s_dup_printed.load() < s_dup_sample)
+                {
+                    std::unordered_map<uint64_t, std::size_t> first;
+                    for (std::size_t ci = 0; ci < cands.size(); ++ci)
+                    {
+                        auto [it, fresh] = first.try_emplace(fps[ci], ci);
+                        if (fresh || s_dup_printed.load() >= s_dup_sample) { continue; }
+                        ++s_dup_printed;
+                        const TurnSolver::Plan& x = cands[it->second];
+                        const TurnSolver::Plan& y = cands[ci];
+                        std::string diff;
+                        for (std::size_t ai = 0; ai < x.actions.size() && ai < y.actions.size(); ++ai)
+                        {
+                            const std::string d = ExactFalseActionDiff(x.actions[ai], y.actions[ai]);
+                            if (!d.empty()) { diff += " a" + std::to_string(ai) + "{" + d + "}"; }
+                        }
+                        std::fprintf(stderr, "[bp-dup] T%d list=%zu ranks %zu/%zu tut=%d/%d scry=%d/%d bp=%d/%d land_slot=%d/%d\n"
+                                     "   A %s\n   B %s\n   action-diff:%s\n",
+                                     state.turn_number, cands.size(), it->second, ci, x.tutor_choice, y.tutor_choice,
+                                     x.scry_choice, y.scry_choice, x.bp_choice, y.bp_choice,
+                                     static_cast<int>(x.land_slot), static_cast<int>(y.land_slot),
+                                     FsPlanText(x).c_str(), FsPlanText(y).c_str(), diff.c_str());
+                    }
+                }
                 std::sort(fps.begin(), fps.end());
                 g_bp_cands_fp_distinct =
                     static_cast<int>(std::unique(fps.begin(), fps.end()) - fps.begin());
@@ -60652,6 +61174,295 @@ struct EnumChargeScope
     }
 };
 
+// ---- LATE-BOUND CREATURE-AURA HOSTS IN THE SEARCHED WALK (MTG_AURA_HOST_LATE_BIND; DEFAULT ON) ----------------
+// Branching optimisation, AccomplishedAlchemist 2026-10-20. A plain creature Aura (Crab Umbra) is one cast
+// option per legal host -- every creature on the battlefield and every creature in hand the same plan
+// casts (AppendCreatureTargetAuraCandidates) -- and the odometer walks every one of them: on the
+// seed-90061 tail decision a 15-host Umbra group times everything else. But the autonomous plan
+// signature keys a creature Aura by NAME (cre_host_sig off), so all of those host variants of one plan
+// land in ONE dedup class, and the dedup keeps exactly one: the best AuraPlanHostKey (USER 2026-10-06,
+// AURA CAST HOST RANKING), first enumerated on a tie. Every other host variant was walked, priced,
+// emitted, sorted and signed only to be discarded.
+// THE FOLD: the Aura's group keeps ONE representative, and the plan that representative produces binds
+// its host when it is built -- the best-keyed host among those LEGAL for that subset (a battlefield
+// creature, or a hand creature the subset casts), by the same AuraPlanHostKeyOn on the same base, first
+// in option order on a tie. The dedup then sees one member per (plan modulo host) instead of H, and its
+// class maximum is the same maximum (max over plans of max over hosts). The feasibility the
+// representative is checked against is the same as every host variant's, because nothing the walk's
+// predicates read depends on WHICH creature a host-inert Aura enchants (CreatureAuraHostInert: no P/T,
+// keyword, enter-tap, restriction or swap; the shroud predicate is armed only with a shroud Equipment and
+// the fold stands down then; the uncast-host rule is applied as "some legal host exists").
+// What can differ from the unfolded walk: (1) WHICH host survives a TIE on the host key (option order
+// here, enumeration order there); (2) where a class's first member sits among equal-valued plans when the
+// first host option is not legal for it. Both are orderings inside the sanctioned heuristic's own ties;
+// the reachable set of (plan, best host) lines is unchanged at every budget.
+// Autonomous only: human play, the un-pruned oracle and the AURA_HOST_BRANCH control arm (the cases whose
+// signature keeps the host) walk every host. Two or more late-bound Auras in one plan bind jointly over
+// the host product; a frame whose product could exceed 4096 is left unfolded (the walk as it was).
+static bool AuraHostLateBindOn()
+{
+    static const bool env = EnvOn("MTG_AURA_HOST_LATE_BIND", true);   // DEFAULT ON; =0 walks every host
+    return heurarm::Flag(heurarm::AURA_HOST_LATE_BIND, env);
+}
+namespace auralatebind
+{
+inline std::atomic<long long> g_frames{0}, g_dropped{0}, g_bound{0}, g_keyed{0};
+inline thread_local long long t_dropped = 0;
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (g_frames.load() == 0 || !EnvOn("MTG_GREEDY_UNTAP_K_DOM_STATS")) { return; }
+        std::fprintf(stderr, "[aura-host-late-bind] %lld enumerations, %lld host options dropped, %lld plans bound"
+                     " (%lld by key)\n", g_frames.load(), g_dropped.load(), g_bound.load(), g_keyed.load());
+    }
+};
+inline Dumper g_dumper;
+}
+long long AuraLateBindTestCount() { return auralatebind::t_dropped; }
+// The late-bound representatives of one enumeration: cand index -> its host list (option order).
+struct AuraLateBind
+{
+    std::vector<int> off;     // per cand: offset into hosts, -1 = not a representative
+    std::vector<int> n;       // per cand: host count
+    std::vector<int> hosts;
+    bool any = false;
+    bool Rep(int j) const { return any && off[static_cast<std::size_t>(j)] >= 0; }
+};
+static void BuildAuraLateBind(const GameState& state, const std::vector<Action>& cands,
+                              std::vector<std::vector<int>>& groups, AuraLateBind& lb)
+{
+    lb.off.assign(cands.size(), -1);
+    lb.n.assign(cands.size(), 0);
+    for (const Action& c : cands)
+    {
+        if (c.kind == Action::Kind::Equip || c.kind == Action::Kind::AttachAllEquipment
+            || c.kind == Action::Kind::AttachAllFreeEquipment || c.attach_equip_id != 0
+            || c.enchant_target == kTrickBestOwnTarget) { return; }
+    }
+    const int me = state.active_player_index;
+    auto on_bf = [&](int num)
+    {
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == me && p.card.IsCreature() && p.card.m_number == num) { return true; } }
+        return false;
+    };
+    std::vector<std::size_t> eligible;
+    long long product = 1;
+    for (std::size_t gi = 0; gi < groups.size(); ++gi)
+    {
+        std::vector<int>& gp = groups[gi];
+        if (gp.size() < 2) { continue; }
+        const Action& a0 = cands[static_cast<std::size_t>(gp[0])];
+        if (!IsCreatureAuraCast(a0) || a0.bestow) { continue; }
+        if (!CreatureAuraHostInert(a0.def ? a0.def : CardDatabase::Instance().Lookup(a0.card_name))) { continue; }
+        bool same = true;
+        for (std::size_t i = 1; i < gp.size() && same; ++i)
+        {
+            const Action& b = cands[static_cast<std::size_t>(gp[i])];
+            if (!IsCreatureAuraCast(b) || b.hand_index != a0.hand_index || b.bestow) { same = false; break; }
+            Action bn = b;
+            bn.enchant_target = a0.enchant_target;
+            same = ExactFalseActionDiff(a0, bn).empty();
+        }
+        if (!same) { continue; }
+        eligible.push_back(gi);
+        product *= static_cast<long long>(gp.size());
+    }
+    if (eligible.empty() || product > 4096) { return; }
+    for (std::size_t gi : eligible)
+    {
+        std::vector<int>& gp = groups[gi];
+        int rep = gp[0];
+        for (int j : gp) { if (on_bf(cands[static_cast<std::size_t>(j)].enchant_target)) { rep = j; break; } }
+        lb.off[static_cast<std::size_t>(rep)] = static_cast<int>(lb.hosts.size());
+        lb.n[static_cast<std::size_t>(rep)]   = static_cast<int>(gp.size());
+        for (int j : gp) { lb.hosts.push_back(cands[static_cast<std::size_t>(j)].enchant_target); }
+        auralatebind::t_dropped += static_cast<long long>(gp.size()) - 1;
+        auralatebind::g_dropped.fetch_add(static_cast<long long>(gp.size()) - 1, std::memory_order_relaxed);
+        gp.assign(1, rep);
+        lb.any = true;
+    }
+    if (lb.any) { auralatebind::g_frames.fetch_add(1, std::memory_order_relaxed); }
+}
+// The hosts of late-bound representative `j` that are legal for the subset `sel`: a creature of ours on the
+// battlefield, or a hand creature the subset casts (SubsetHasAuraOnUncastCreature's rule, per host).
+static void AuraLateBindLegalHosts(const GameState& state, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel, const AuraLateBind& lb, int j,
+                                   std::vector<int>& out)
+{
+    out.clear();
+    const Player& ap = state.ActivePlayer();
+    const int me = state.active_player_index;
+    const int o = lb.off[static_cast<std::size_t>(j)], n = lb.n[static_cast<std::size_t>(j)];
+    for (int k = 0; k < n; ++k)
+    {
+        const int h = lb.hosts[static_cast<std::size_t>(o + k)];
+        bool legal = false;
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == me && p.card.IsCreature() && p.card.m_number == h) { legal = true; break; } }
+        if (!legal)
+        {
+            for (int jdx : sel)
+            {
+                const Action& d = cands[static_cast<std::size_t>(jdx)];
+                if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
+                    || d.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+                const CardDefinition* dd = d.def ? d.def : CardDatabase::Instance().Lookup(d.card_name);
+                if (dd && dd->card.IsCreature() && ap.hand[static_cast<std::size_t>(d.hand_index)].m_number == h)
+                { legal = true; break; }
+            }
+        }
+        if (legal && std::find(out.begin(), out.end(), h) == out.end()) { out.push_back(h); }
+    }
+}
+// SubsetHasAuraOnUncastCreature with the late-bound representatives read as "some legal host exists". The
+// per-action rule is that function's, verbatim, for every other Aura in the selection.
+static bool SubsetHasAuraOnUncastCreatureLB(const GameState& state, const std::vector<Action>& cands,
+                                            const std::vector<int>& sel, const AuraLateBind& lb)
+{
+    if (!lb.any) { return SubsetHasAuraOnUncastCreature(state, cands, sel); }
+    static thread_local std::vector<int> legal;
+    const Player& ap     = state.ActivePlayer();
+    const int     active = state.active_player_index;
+    for (int idx : sel)
+    {
+        if (lb.Rep(idx))
+        {
+            AuraLateBindLegalHosts(state, cands, sel, lb, idx, legal);
+            if (legal.empty()) { return true; }
+            continue;
+        }
+        const Action& c = cands[static_cast<std::size_t>(idx)];
+        if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        if (!cd || !cd->params.is_aura || cd->params.is_land_aura) { continue; }
+        bool ok = false;
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == active && p.card.IsCreature() && p.card.m_number == c.enchant_target) { ok = true; break; } }
+        for (int jdx : sel)
+        {
+            if (ok) { break; }
+            const Action& d = cands[static_cast<std::size_t>(jdx)];
+            if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
+                || d.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            if (dd && dd->card.IsCreature() && ap.hand[static_cast<std::size_t>(d.hand_index)].m_number == c.enchant_target)
+            { ok = true; }
+        }
+        if (!ok) { return true; }
+    }
+    return false;
+}
+// Bind the representatives in `plan.actions` (positions `pos`, cand indices `reps`) to the best-keyed legal
+// combination (BuildAuraLateBind refuses a frame whose host product could exceed 4096, so this is
+// bounded). Returns false when some representative has no legal host.
+static bool BindAuraLateHosts(const GameState& state, bool is_pre_combat, const std::vector<Action>& cands,
+                              const std::vector<int>& sel, const AuraLateBind& lb,
+                              const std::vector<int>& pos, const std::vector<int>& reps,
+                              TurnSolver::Plan& plan)
+{
+    std::vector<std::vector<int>> alts(reps.size());
+    long long combos = 1;
+    for (std::size_t q = 0; q < reps.size(); ++q)
+    {
+        AuraLateBindLegalHosts(state, cands, sel, lb, reps[q], alts[q]);
+        if (alts[q].empty()) { return false; }
+        combos *= static_cast<long long>(alts[q].size());
+    }
+    auralatebind::g_bound.fetch_add(1, std::memory_order_relaxed);
+    for (std::size_t q = 0; q < reps.size(); ++q)
+    { plan.actions[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][0]; }
+    if (combos == 1) { return true; }
+    std::vector<int> pick(reps.size(), 0);
+    // Odometer over the host product, LAST representative fastest (the order the walk reached the host
+    // variants of one plan). Returns false once every combination has been visited.
+    auto advance = [&]() -> bool
+    {
+        for (std::size_t d = reps.size(); d > 0; --d)
+        {
+            if (++pick[d - 1] < static_cast<int>(alts[d - 1].size())) { return true; }
+            pick[d - 1] = 0;
+        }
+        return false;
+    };
+    // FAST PATH (exact): for a host-inert Aura the board half of the key (lethal / dmg / now) is the SAME
+    // for every host -- the Aura adds no power, keyword or tap, and AuraBonusFor's only host-side term is
+    // the HOST's own aura_self_buff (Kor Spiritdancer), the only other reader of attachments in the key
+    // is Bruna's attack_gather_auras -- so with neither on the post-plan board the comparison reduces to
+    // the dork tie-break: each representative takes its first legal host that is not a creature mana
+    // source (else its first legal host), which is exactly the first strictly-best combination the full
+    // odometer below would keep. MTG_AURA_LATE_BIND_VERIFY=1 runs both and reports any disagreement.
+    static const bool s_verify = EnvOn("MTG_AURA_LATE_BIND_VERIFY");
+    const int me = state.active_player_index;
+    const Player& ap = state.ActivePlayer();
+    auto host_def = [&](int h) -> const CardDefinition*
+    {
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == me && p.card.m_number == h) { return p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card); } }
+        for (const Card& c : ap.hand) { if (c.m_number == h) { return CardDatabase::Instance().LookupCached(c); } }
+        return nullptr;
+    };
+    bool fast = true;
+    {
+        auto watch = [](const CardDefinition* d)
+        { return d != nullptr && (d->params.aura_self_buff_power != 0 || d->params.aura_self_buff_tough != 0
+                                   || d->params.attack_gather_auras); };
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.def_absent || !p.card.IsCreature()) { continue; }
+            if (watch(CardDatabase::Instance().LookupCached(p.card))) { fast = false; break; }
+        }
+        for (const Action& a : plan.actions)
+        {
+            if (!fast) { break; }
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (watch(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name))) { fast = false; }
+        }
+    }
+    std::vector<int> fast_pick(reps.size(), 0);
+    if (fast)
+    {
+        for (std::size_t q = 0; q < reps.size(); ++q)
+        {
+            for (std::size_t k = 0; k < alts[q].size(); ++k)
+            {
+                const CardDefinition* hd = host_def(alts[q][k]);
+                if (hd == nullptr || hd->tmpl != CardTemplate::ManaDork) { fast_pick[q] = static_cast<int>(k); break; }
+            }
+            plan.actions[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(fast_pick[q])];
+        }
+        if (!s_verify) { return true; }
+    }
+    auralatebind::g_keyed.fetch_add(1, std::memory_order_relaxed);
+    for (std::size_t q = 0; q < reps.size(); ++q)
+    { plan.actions[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][0]; }
+    GameState work;
+    AuraPlanHostBaseInto(work, state, plan.actions);
+    const std::vector<Permanent> base_bf = work.battlefield;
+    AuraHostKey best = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, plan.actions);
+    std::vector<int> best_pick = pick;
+    while (advance())
+    {
+        for (std::size_t q = 0; q < reps.size(); ++q)
+        { plan.actions[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(pick[q])]; }
+        const AuraHostKey k = AuraPlanHostKeyOn(base_bf, work, state, is_pre_combat, plan.actions);
+        if (AuraHostKeyBetter(k, best)) { best = k; best_pick = pick; }
+    }
+    for (std::size_t q = 0; q < reps.size(); ++q)
+    { plan.actions[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(best_pick[q])]; }
+    if (fast && s_verify && best_pick != fast_pick)
+    {
+        static std::atomic<int> s_bad{0};
+        if (++s_bad <= 20)
+        {
+            std::fprintf(stderr, "[aura-late-bind-verify] MISMATCH T%d reps=%zu fast=%d full=%d hosts=%zu\n",
+                         state.turn_number, reps.size(), fast_pick[0], best_pick[0], alts[0].size());
+        }
+    }
+    return true;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     EnumChargeScope enum_charge;   // MTG_ENUM_CHARGE (default off): bills this walk at exit
@@ -61213,6 +62024,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
     DropRitualGroupsIfNoPayoff(state, pool, cands, groups, group_hand_index, independent);
 
+    // LATE-BOUND CREATURE-AURA HOSTS (see BuildAuraLateBind): the walk carries one representative per
+    // host-inert Aura slot; its plans bind the best-keyed legal host when they are built. Only where the
+    // dedup would fold the hosts anyway (the autonomous, name-keyed signature).
+    AuraLateBind lb;
+    if (AuraHostLateBindOn() && !HumanPlayActive() && !DecisionUnpruned() && !AuraHostBranchOn()
+        && pre.aura_target && pre.aura_shroud_src.empty())
+    { BuildAuraLateBind(state, cands, groups, lb); }
+
     if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
     // MTG_SEQ_CHAIN_TRACE=2: dump this enumeration's candidate/group structure when it holds an
@@ -61602,7 +62421,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject an Aura targeting a this-turn creature that the subset does not actually cast. No-op
         // unless AppendCreatureTargetAuraCandidates injected such a candidate -> byte-identical otherwise.
         if (pre.aura_target && AuraOnNewCreatureEnabled()
-            && SubsetHasAuraOnUncastCreature(state, cands, sel)) { return; }
+            && SubsetHasAuraOnUncastCreatureLB(state, cands, sel, lb)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity. `pre.vial` is false
         // unless a Vial activation was emitted at all, which is the same sel-scan this loop opens with.
         if (pre.vial)
@@ -62777,6 +63596,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         static const bool s_plan_reserve = EnvOn("MTG_ENUM_PLAN_RESERVE", true);
         if (s_plan_reserve) { plan.actions.reserve(sel.size()); }
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
+        if (lb.any)
+        {
+            // plan.actions[i] is cands[sel[i]] here (pushed in selection order, before any reordering).
+            static thread_local std::vector<int> lb_pos, lb_reps;
+            lb_pos.clear(); lb_reps.clear();
+            for (std::size_t i = 0; i < sel.size(); ++i)
+            { if (lb.Rep(sel[i])) { lb_pos.push_back(static_cast<int>(i)); lb_reps.push_back(sel[i]); } }
+            if (!lb_reps.empty()
+                && !BindAuraLateHosts(state, is_pre_combat, cands, sel, lb, lb_pos, lb_reps, plan))
+            { _ct.label = "lb-nohost"; return; }
+        }
         // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER
         // its enabler aura, so stable-sort those conditional payoffs to the end (key 1 vs 0). Apply's own
         // clean-set sort is rank-equal for auras (all rank 20) and stable, so it preserves this order. A
@@ -65154,6 +65984,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Floor test FIRST: skips the per-group string building and the mutex for every call
         // that cannot place. ecallf.entered is the ranking key, so this is the same predicate
         // OfferHeavy applies -- just without paying for the strings to find out.
+        if (shapestats::HeavyWant() > 0) { shapestats::RecordShapeVisits(false, cands, groups, ecallf.entered); }
         if (shapestats::HeavyWant() > 0 && ecallf.entered > shapestats::HeavyFloor())
         {
             shapestats::Heavy h;
@@ -65169,88 +66000,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // Board: non-land permanents named, tokens collapsed to a count -- the same readability
             // rule review_games.py uses, and for the same reason (48 identical Saprolings is a
             // number; listing them buries the few permanents that decide the turn).
-            {
-                std::map<std::string, int> tok;
-                std::vector<std::string> perms;
-                int lands = 0;
-                for (const Permanent& p : state.battlefield)
-                {
-                    if (p.controller_index != state.active_player_index) { continue; }
-                    const std::string nm = p.card.m_name.str();
-                    if (p.card.IsLand())      { ++lands; }
-                    else if (p.is_token)      { ++tok[nm]; }
-                    else                      { perms.push_back(nm); }
-                }
-                std::string bd = "lands=" + std::to_string(lands) + " perms=";
-                for (std::size_t z = 0; z < perms.size(); ++z)
-                { bd += (z ? "," : "") + perms[z]; }
-                if (perms.empty()) { bd += "-"; }
-                bd += " tokens=";
-                if (tok.empty()) { bd += "0"; }
-                else
-                {
-                    bool first = true;
-                    for (const auto& kv : tok)
-                    { bd += (first ? "" : ",") + std::to_string(kv.second) + "x" + kv.first; first = false; }
-                }
-                std::replace(bd.begin(), bd.end(), ' ', ' ');
-                h.board_desc = bd;
-            }
+            h.board_desc = shapestats::BoardDesc(state);
             // One line per option group: the card, the group size, and what actually DISTINGUISHES
             // the variants -- which is the part a reviewer needs to judge whether they all deserve
             // to be separate search branches.
-            for (const std::vector<int>& gp : groups)
-            {
-                std::string line = "size=" + std::to_string(gp.size()) + " card="
-                                 + (gp.empty() ? std::string("-")
-                                               : std::string(cands[gp[0]].card_name));
-                line += " variants=[";
-                for (std::size_t z = 0; z < gp.size(); ++z)
-                {
-                    const Action& a = cands[gp[z]];
-                    if (z) { line += " | "; }
-                    line += shapestats::ActionKindTag(a.kind);
-                    if (a.chosen_x != 0)      { line += ":X=" + std::to_string(a.chosen_x); }
-                    // Mycoloth's devour k is a SEARCHED axis and is the single biggest source of
-                    // group size on Fungus, so it must be visible or a 13-variant group renders as
-                    // 13 identical "cast" entries and looks like a duplication bug.
-                    if (a.devour_count >= 0)  { line += ":devour=" + std::to_string(a.devour_count); }
-                    if (a.sac_count != 1)     { line += ":sacN=" + std::to_string(a.sac_count); }
-                    if (a.ability_mode != Action::AbilityMode::None)
-                    { line += ":mode=" + shapestats::AbilityModeTag(a.ability_mode); }
-                    if (!static_cast<const std::string&>(a.tutor_target).empty())
-                    { line += ":tutor=" + std::string(a.tutor_target); }
-                    if (!static_cast<const std::string&>(a.chosen_float_color).empty())
-                    { line += ":colour=" + std::string(a.chosen_float_color); }
-                    // The OUTLET permanent, not the victim. Two groups of the same card name are
-                    // either one pooled family (one src) or N unpooled copies (N srcs), and the
-                    // victim alone cannot tell them apart -- both the pooled and the per-source
-                    // paths put the canonical victim on the count==1 variant and 0 on the burst.
-                    if (a.sac_source_id != 0) { line += ":src=" + std::to_string(a.sac_source_id); }
-                    if (a.pooled_sac)         { line += ":POOLED"; }
-                    if (a.sac_victim_id != 0) { line += ":victim=" + std::to_string(a.sac_victim_id); }
-                    // WHICH host an Aura enchants is the ENTIRE content of a land-aura variant.
-                    // Without it a 4-wide Wild Growth group renders as four identical "cast"
-                    // entries, and a reviewer cannot tell a real choice from a pure symmetry --
-                    // which is the one judgement this dump exists to support. Name + tap state,
-                    // because those are exactly the fields that decide interchangeability.
-                    if (a.enchant_target != 0)
-                    {
-                        std::string host = "#" + std::to_string(a.enchant_target);
-                        for (const Permanent& hp : state.battlefield)
-                        {
-                            if (hp.card.m_number != a.enchant_target) { continue; }
-                            host = hp.card.m_name.str() + std::string(hp.tapped ? "(T)" : "");
-                            break;
-                        }
-                        line += ":host=" + host;
-                    }
-                    if (a.alt_cost)           { line += ":alt"; }
-                    if (a.splice_count != 0)  { line += ":splice=" + std::to_string(a.splice_count); }
-                }
-                line += "]";
-                h.groups.push_back(line);
-            }
+            shapestats::RenderGroups(state, cands, groups, h.groups);
             shapestats::OfferHeavy(std::move(h));
         }
     }

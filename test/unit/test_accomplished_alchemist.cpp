@@ -2010,3 +2010,140 @@ TEST_CASE("Loop colour: cast Staff off the Alchemist, then the Umbra untap still
     }
     CHECK(seen > 0);
 }
+
+// ---- Greedy-walk branching folds (2026-10-20): the same greedy plan with each fold on and off ----------------
+namespace
+{
+struct GreedyFoldArmsAa
+{
+    std::int8_t pk, ph;
+    GreedyFoldArmsAa(bool kdom, bool host)
+        : pk(heurarm::t_arm[heurarm::GREEDY_UNTAP_K_DOM]), ph(heurarm::t_arm[heurarm::GREEDY_AURA_HOST_LATE])
+    {
+        heurarm::t_arm[heurarm::GREEDY_UNTAP_K_DOM]    = kdom ? 1 : 0;
+        heurarm::t_arm[heurarm::GREEDY_AURA_HOST_LATE] = host ? 1 : 0;
+    }
+    ~GreedyFoldArmsAa()
+    {
+        heurarm::t_arm[heurarm::GREEDY_UNTAP_K_DOM]    = pk;
+        heurarm::t_arm[heurarm::GREEDY_AURA_HOST_LATE] = ph;
+    }
+};
+// Everything the apply worlds read off the greedy's chosen plan.
+std::string GreedyPlanTextAa(const TurnSolver::Plan& p)
+{
+    std::string o = "v" + std::to_string(p.value) + (p.wins_this_turn ? "W" : "") + " land=" + p.land_to_play + ":";
+    for (const Action& a : p.actions)
+    {
+        o += " " + a.card_name.str() + "/k" + std::to_string(static_cast<int>(a.kind)) + "/x" + std::to_string(a.chosen_x)
+           + "/s" + std::to_string(a.sac_source_id) + "/v" + std::to_string(a.sac_victim_id)
+           + "/t" + std::to_string(a.enchant_target) + "/m" + std::to_string(a.gy_exile_mode)
+           + "/a" + std::to_string(static_cast<int>(a.ability_mode));
+    }
+    return o;
+}
+TurnSolver::Plan GreedyAa(const GameState& s, bool kdom, bool host)
+{
+    GreedyFoldArmsAa arms(kdom, host);
+    return TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+}
+}   // namespace
+
+TEST_CASE("Greedy untap-count dominance: the greedy walk picks the same plan with every K or only the top K")
+{
+    // Boards that put an untapper's (target, K) family in the greedy walk: a Staff on a tapped Alchemist
+    // with life gained, a Crab Umbra on it, both, and two Staffs. The dominated K are dropped (the hook
+    // counts them) and the chosen plan is byte-for-byte the plan of the unfolded walk.
+    long long dropped_total = 0;
+    for (int board = 0; board < 6; ++board)
+    {
+        GameState s = FreshAa();
+        s.m_provider = &AaProv();
+        const int alch = PutAa(s, "Accomplished Alchemist");
+        MutAa(s, alch)->tapped = true;
+        s.players[0].life_gained_this_turn = 3 + board;
+        for (int k = 0; k < 4 + (board % 3); ++k) { PutAa(s, "Forest"); }
+        PutAa(s, "Island");
+        if (board != 1) { PutAa(s, "Staff of Domination"); }
+        if (board >= 1) { AttachAa(s, "Crab Umbra", alch); }
+        if (board >= 4) { PutAa(s, "Staff of Domination"); }
+        if (board % 2 == 0) { PutAa(s, "Arbor Elf"); }
+        if (board == 5) { HandAa(s, "Nourish"); HandAa(s, "Elvish Harbinger"); }
+        const long long d0 = GreedyFoldTestCount(0);
+        const TurnSolver::Plan on  = GreedyAa(s, true, false);
+        dropped_total += GreedyFoldTestCount(0) - d0;
+        const TurnSolver::Plan off = GreedyAa(s, false, false);
+        CHECK_MESSAGE(GreedyPlanTextAa(on) == GreedyPlanTextAa(off), "board ", board);
+    }
+    CHECK(dropped_total > 0);
+}
+
+TEST_CASE("Greedy Crab Umbra host collapse: one host in the walk, the re-pointing still picks over every host")
+{
+    long long dropped_total = 0;
+    for (int board = 0; board < 4; ++board)
+    {
+        GameState s = FreshAa();
+        s.m_provider = &AaProv();
+        for (int k = 0; k < 5; ++k) { PutAa(s, "Forest"); }
+        for (int k = 0; k < 2; ++k) { PutAa(s, "Island"); }
+        PutAa(s, "Arbor Elf");
+        const int h1 = PutAa(s, "Elvish Harbinger");
+        PutAa(s, "Elvish Harbinger", board % 2 == 1);
+        const int alch = PutAa(s, "Accomplished Alchemist", board >= 2);
+        if (board == 3) { MutAa(s, h1)->tapped = true; MutAa(s, alch)->tapped = true; }
+        s.players[0].life_gained_this_turn = board;
+        HandAa(s, "Crab Umbra");
+        if (board >= 1) { HandAa(s, "Nourish"); }
+        const long long d0 = GreedyFoldTestCount(1);
+        const TurnSolver::Plan on  = GreedyAa(s, false, true);
+        dropped_total += GreedyFoldTestCount(1) - d0;
+        const TurnSolver::Plan off = GreedyAa(s, false, false);
+        CHECK_MESSAGE(GreedyPlanTextAa(on) == GreedyPlanTextAa(off), "board ", board);
+        bool umbra = false;
+        for (const Action& a : on.actions) { if (a.card_name.str() == "Crab Umbra") { umbra = true; } }
+        CHECK_MESSAGE(umbra, "board ", board, ": the greedy should cast the Umbra here");
+    }
+    CHECK(dropped_total > 0);
+}
+
+TEST_CASE("Late-bound Crab Umbra host (searched walk): the same plan list as walking every host")
+{
+    // The dedup keeps ONE member per name-keyed class -- the best host key -- so binding that host at plan
+    // build must reproduce the unfolded enumeration's list: same plans, same hosts (no key ties on these
+    // boards: the hosts differ in tapped / sick / mana-dork state), same order.
+    struct Arm
+    {
+        std::int8_t p;
+        explicit Arm(bool on) : p(heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND]) { heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND] = on ? 1 : 0; }
+        ~Arm() { heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND] = p; }
+    };
+    auto text = [](const std::vector<TurnSolver::Plan>& v)
+    {
+        std::vector<std::string> o;
+        for (const TurnSolver::Plan& p : v) { o.push_back(GreedyPlanTextAa(p)); }
+        return o;
+    };
+    long long dropped = 0;
+    for (int board = 0; board < 4; ++board)
+    {
+        GameState s = FreshAa();
+        s.m_provider = &AaProv();
+        for (int k = 0; k < 5; ++k) { PutAa(s, "Forest"); }
+        for (int k = 0; k < 2; ++k) { PutAa(s, "Island"); }
+        PutAa(s, "Arbor Elf");
+        const int alch = PutAa(s, "Accomplished Alchemist", board == 1);
+        if (board >= 2) { MutAa(s, alch)->tapped = true; s.players[0].life_gained_this_turn = 4; }
+        PutAa(s, "Galvanic Alchemist");
+        HandAa(s, "Crab Umbra");
+        HandAa(s, "Elvish Harbinger");                    // a same-turn hand host
+        if (board == 3) { HandAa(s, "Crab Umbra"); HandAa(s, "Accomplished Alchemist"); }
+        std::vector<TurnSolver::Plan> on, off;
+        const long long d0 = AuraLateBindTestCount();
+        { Arm a(true);  on  = TurnSolver::EnumerateMainPlans(s, true); }
+        dropped += AuraLateBindTestCount() - d0;
+        { Arm a(false); off = TurnSolver::EnumerateMainPlans(s, true); }
+        CHECK_MESSAGE(text(on) == text(off), "board ", board);
+    }
+    CHECK(dropped > 0);
+}

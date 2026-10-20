@@ -604,6 +604,10 @@ enum Slot : int
     KAROO_POSITION,           // MTG_KAROO_POSITION  the Karoo drop's POSITION is searched (USER 2026-10-22: "allow the sanctuary to be played at the end of the phase at latest"): besides the after-the-casts default, a Karoo plan is cloned with the drop right BEFORE each cast that can observe the land entering (Plan::land_slot <= -2; TurnSolver::KarooSlotCounts, pruned by DecisionProvider::KarooEntryObserver). KarooPositionSearchOn, EngineFlags.h
     HAND_COPY_CLASS_FOLD,     // MTG_HAND_COPY_CLASS_FOLD   SOUND identity fold (chunk P, AccomplishedAlchemist 2026-10-18): identical hand copies of ANY card whose option lists are identical (ActionFoldSig, member for member) are ONE odometer class -- the MTG_AURA_COPY_FOLD canonical form (digits non-increasing in group order) generalised past creature Auras, on BOTH walks. Refuses mana-side/accelerant/splice/restrictor casts, free casts, and a copy another candidate names by number. Default ON; =0 restores the unfolded walk
     LAND_AURA_HOST_CLASS_FOLD,// MTG_LAND_AURA_HOST_CLASS_FOLD  SOUND identity fold (chunk P): land-Aura hosts carrying only land Auras join a (name, tapped, attachments) class instead of always keeping their own slot, and the odometer keeps only positions whose used hosts are a PREFIX of each class (relabelling identical lands is a symmetry of the option set). Never collapses a spread onto a stack. Default ON; =0 restores the first cut
+    GREEDY_UNTAP_K_DOM,       // MTG_GREEDY_UNTAP_K_DOM   SOUND dominance fold (AccomplishedAlchemist branching, 2026-10-20): in the GREEDY walk only, an activated-untapper count K whose (source, target, shape, bill) twin has a higher eval is never the walk's choice (identical verdicts, strictly lower total_eval), so it is not visited. Byte-identical by construction. Default ON; =0 restores every K
+    GREEDY_AURA_HOST_LATE,    // MTG_GREEDY_AURA_HOST_LATE  SOUND fold (AccomplishedAlchemist branching, 2026-10-20): in the GREEDY walk only, a plain creature Aura's host options collapse to the first -- the walk's verdicts never read such an Aura's host, and the chosen plan's host is re-picked over EVERY host by RetargetSolveAuraHosts anyway. Byte-identical while the candidates fit the walk's 31-bit tie-break mask. Default ON; =0 walks every host
+    AURA_HOST_LATE_BIND,      // MTG_AURA_HOST_LATE_BIND  SOUND fold (AccomplishedAlchemist branching, 2026-10-20): in the SEARCHED walk (EnumeratePlans, autonomous) a host-inert creature Aura's host options collapse to one representative whose plan binds the best-keyed LEGAL host when built -- the name-keyed dedup kept exactly that member of the class and discarded the rest. Differs only on host-key ties. Default ON; =0 walks every host
+    GREEDY_UNTAP_TARGET_TIE,  // MTG_GREEDY_UNTAP_TARGET_TIE  fold (AccomplishedAlchemist branching, 2026-10-20): in the GREEDY walk only, an untapper variant whose target-blind twin sits at an EARLIER candidate index with an eval at least as high is never chosen (the walk scores no untap target; ties go to the smaller mask). Byte-identical while the candidates fit the 31-bit tie-break mask. Default ON; =0 keeps every target
     COUNT
 };
 
@@ -1158,6 +1162,10 @@ inline const char* Name(int slot)
         "MTG_KAROO_POSITION",
         "MTG_HAND_COPY_CLASS_FOLD",
         "MTG_LAND_AURA_HOST_CLASS_FOLD",
+        "MTG_GREEDY_UNTAP_K_DOM",
+        "MTG_GREEDY_AURA_HOST_LATE",
+        "MTG_AURA_HOST_LATE_BIND",
+        "MTG_GREEDY_UNTAP_TARGET_TIE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
