@@ -68005,6 +68005,19 @@ inline bool LazyLeafOn()
     static const bool env = EnvOn("MTG_LAZY_LEAF", true);
     return heurarm::Flag(heurarm::LAZY_LEAF, env);
 }
+// THE LAZY PROBE IS NOT RUN WHERE ITS MISS IS ALREADY KNOWN (2026-10-20; unlimited budget only, like the probe).
+// The probe pays one leafless tree to skip the rollouts; it was tuned on the ROLLOUT leaf, and two callers ran it
+// for nothing:
+//  * a ladder whose own leaf is the no-leaf constant (vl_constant): the probe IS that ladder -- same leaf, same
+//    first-verified-win exit, fresh memo -- so a hit commits what the ladder commits and a miss walks the tree twice;
+//  * the hybrid's heuristic ESCALATION after a value pass on the same state proved no in-window win to at least the
+//    escalation's depth (its probe missed untruncated, or its ladder was leafless and completed unverified): the
+//    escalation's probe walks the same leafless tree to the same miss.
+// FullSearchLine reports the depth through which it proved "no leafless in-window win" in g_fsl_leafless_miss_depth
+// (written on exit, 0 = nothing proven); the hybrid arms g_lazy_known_miss_depth with it around the escalation, and
+// FullSearchLine read-and-clears that at entry, so a nested call never sees it.
+inline thread_local int g_fsl_leafless_miss_depth = 0;
+inline thread_local int g_lazy_known_miss_depth   = 0;
 // DEFAULT OFF -- the budgeted extension of the lever above, under measurement (2026-10-09).
 //
 // WHY IT IS WANTED. The lever's whole value is that a decision whose win is provable inside the
@@ -72503,6 +72516,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         exhaust_depth = std::max(1, max_turns - state.turn_number + 1);
         if (depth > exhaust_depth) { depth = exhaust_depth; } else { exhaust_depth = -1; }
     }
+    // The lazy-probe hand-off (see g_lazy_known_miss_depth): consume the caller's proven miss, report ours on exit.
+    const int known_leafless_miss = g_lazy_known_miss_depth;
+    g_lazy_known_miss_depth = 0;
+    int leafless_miss_to = 0;
+    struct LeaflessMissOut { const int& d; ~LeaflessMissOut() { g_fsl_leafless_miss_depth = d; } } _lmo{leafless_miss_to};
     // ORDER-CONDEMNATION root-turn authority on the COMMIT-THE-LINE path. The guard was
     // originally owned only by SolveWithLookahead, so the FSLine machinery ran with
     // g_condemn_root_turn == -1, whose fallback stamps at EVERY projected turn -- a
@@ -73059,10 +73077,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // `probe.truncated` without committing, so a probe the budget cut short proves nothing and the
     // ordinary ladder runs untouched. That truncation path is what makes the extension a scope
     // change rather than new machinery.
-    if (LazyLeafOn() && !emul_done && depth >= 1
+    if (LazyLeafOn() && !emul_done && depth >= 1 && !vl_constant && known_leafless_miss < depth
         && (budget == nullptr || budget->Unlimited() || LazyLeafBudgetedOn()))
     {
         const long long probe_before = budget ? budget->Used() : 0;
+        bool probe_cut = false;
         // A LEAFLESS LADDER, 1..depth, not one cold pass at `depth` (the single-probe arm,
         // MTG_LAZY_LEAF_LADDER=0, was deleted 2026-10-02 -- it is the unsound shape). FSLineWin's first-verified-win exit
         // (FsHorizonExitOn: return on the first tail winning at or before the horizon edge) is sound
@@ -73084,7 +73103,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // A TRUNCATED probe proved nothing -- its no-wins are unmemoisable past the first
             // truncation, so the tree it walked is not the tree it claims. Fall through to the
             // ladder and let the existing machinery judge it; never commit a partial probe.
-            if (probe.truncated) { break; }
+            if (probe.truncated) { probe_cut = true; break; }
             if (probe.win_turn <= max_turns)
             {
                 line = probe;
@@ -73092,6 +73111,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 lazy_done = true;
             }
         }
+        if (!lazy_done && !probe_cut) { leafless_miss_to = depth; }   // every leafless pass 1..depth refuted
         if (s_rollout_stats)
         {
             (lazy_done ? g_lazy_hits : g_lazy_misses).fetch_add(1, std::memory_order_relaxed);
@@ -73286,6 +73306,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // keep deepening to verify or beat it (until the start gate / `depth` stops).
         if (line.win_turn <= state.turn_number + pass_depth - 1) { break; }
     }
+    if (vl_constant && !emul_done && !lazy_done && depth >= 1 && (budget == nullptr || budget->Unlimited())
+        && committed_depth == depth && !line.truncated && line.win_turn > state.turn_number + depth - 1)
+    { leafless_miss_to = depth; }   // the ladder WAS the leafless probe, run to `depth` with no in-window win
     if (s_rollout_stats && !emul_done && depth >= 1 && committed_depth >= 1 && lad_sum_units > 0)
     {
         const int hd = committed_depth < 16 ? committed_depth : 15;
@@ -74026,6 +74049,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         escstats::RecGuard _esk_rec(esk_outer ? 1 : 0);
         line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
     }
+    const int value_leafless_miss = g_fsl_leafless_miss_depth;   // hand-off to the escalation (g_lazy_known_miss_depth)
     g_probe_recording = false;
     g_probe_val_recording = false;
 
@@ -75080,7 +75104,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             esk_skipped = esk_on && esk_outer && esk_T > 1 && esc_budget && !esc_budget->Unlimited()
                        && esk_reach(std::max<long long>(0, esc_budget->Remaining()), esk_T) < esk_T;
             if (esk_skipped) { hline = line; hcommitted = 0; }
-            else { hline = FullSearchLine(state, esc_depth, max_turns, second_main, tt, esc_budget, &hcommitted); }
+            else
+            {
+                g_lazy_known_miss_depth = value_leafless_miss;   // same state: its lazy probe would re-prove the miss
+                hline = FullSearchLine(state, esc_depth, max_turns, second_main, tt, esc_budget, &hcommitted);
+            }
             if (s_esc_measure && esc_budget && hcommitted >= 1)
             {
                 // Ladder work for this escalation (interior + rollout units).
