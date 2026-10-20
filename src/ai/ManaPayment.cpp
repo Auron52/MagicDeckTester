@@ -5136,6 +5136,7 @@ thread_local std::vector<int> g_plan_reserved_sources;
 
 // Line-scoped unpaid cost (see the header). Zero unless a plan application set it.
 thread_local ManaCost g_line_unpaid_cost;
+thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
 thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
 thread_local ManaCost g_act_line_current;
 
@@ -6023,10 +6024,23 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
 // colour a later pip owes. A creature-only-colour land (Territory, Cavern) is spare for a noncreature
 // payment only if every colour the line still owes that it could make for a later CREATURE is also on
 // offer from the reserve or from another unrestricted untapped source -- otherwise it may be that
-// colour's only provider (s7100151 T5: the Territory was Kolaghan's only {B}). The rung reserves every
-// NON-spare source for one held attempt with `k` generic pips kept off the reserve, k = min(the generic
-// the reserve would pay out of colours the line owes, the spare yield); any failure falls through to
-// the unchanged sequence below. A later {C} pip in the line (lu.colorless) disables it.
+// colour's only provider (s7100151 T5: the Territory was Kolaghan's only {B}).
+//
+// THE LINE IS NOT ALWAYS THE WHOLE TURN (MTG_LINE_FLOAT_UNSEEN_GUARD). `later` comes from
+// g_line_unpaid_cost, which holds only the casts the applying line NAMES. A line that casts a breakpoint
+// opener goes on to cast cards it cannot name yet, and the guard above never sees their pips -- exactly
+// the creature demand it exists to protect. dragonstorm s4050 g46 / s5254 g249 T4: Lotus Bloom floated
+// {R}{R}{R}, the line "Seething Song, Seething Song, Apex of Power, Irencrag Feat" owed only red, so the
+// Territory read spare and paid the first Seething Song's generic; Apex then exiled Dragonlord Kolaghan,
+// whose {B} only the Territory made. The float had red to spare (the rituals refill it), so the rung
+// bought nothing and cost the T4 kill -- at every depth and budget, since a payment is not searched.
+// So while g_line_opens_unseen is set, every colour such a land makes for a creature counts as owed:
+// it stays spare only if the reserve or another unrestricted untapped source offers each one.
+//
+// The rung reserves every NON-spare source for one held attempt with `k` generic pips kept off the
+// reserve, k = min(the generic the reserve would pay out of colours the line owes, the spare yield); any
+// failure falls through to the unchanged sequence below. A later {C} pip in the line (lu.colorless)
+// disables it.
 static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_in, bool for_creature,
                                   int& hold_k, std::uint64_t& hold_mask)
 {
@@ -6042,6 +6056,9 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
                            std::max(0, lu.black - cost_in.black), std::max(0, lu.red - cost_in.red),
                            std::max(0, lu.green - cost_in.green) };
     if (later[0] + later[1] + later[2] + later[3] + later[4] == 0) { return false; }
+    // The line names only part of what the rest of the turn will owe (MTG_LINE_FLOAT_UNSEEN_GUARD; see
+    // g_line_opens_unseen and the creature-only-colour test below).
+    const bool unseen = g_line_opens_unseen && LineFloatUnseenGuardOn();
     // What the reserve would pay toward the GENERIC, by colour: the drain with and without the generic.
     ManaPool r_pips = f; ManaCost c_pips = cost_in; c_pips.generic = 0;
     SpendFloatingTowardCost(r_pips, c_pips);
@@ -6102,8 +6119,14 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         }
         if (ok && d->params.colored_creature_only && !for_creature)
         {
+            // `unseen` (MTG_LINE_FLOAT_UNSEEN_GUARD): the line casts a breakpoint opener, so cards it does
+            // not name yet will be castable later this turn and `later` under-states their pips. Every
+            // colour this land makes for a creature then counts as possibly owed.
             for (Color c : EffectiveProducesFor(state, active, *d, &p))
-            { const int ci = colour_idx(c); if (ci >= 0 && later[ci] > 0 && !other_makes(i, ci)) { ok = false; break; } }
+            {
+                const int ci = colour_idx(c);
+                if (ci >= 0 && (later[ci] > 0 || unseen) && !other_makes(i, ci)) { ok = false; break; }
+            }
         }
         if (ok)
         {

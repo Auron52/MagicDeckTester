@@ -177,6 +177,21 @@ inline bool LineFloatTapFirstOn()
     return heurarm::Flag(heurarm::LINE_FLOAT_TAP_FIRST, env_on);
 }
 
+// MTG_LINE_FLOAT_UNSEEN_GUARD (DEFAULT ON; =0 disables -> byte-identical to the rung before it) -- the
+// LINE_FLOAT_TAP_FIRST rung's creature-only-colour guard also covers demand the line cannot NAME yet:
+// while the applying line casts a breakpoint opener (g_line_opens_unseen -- Apex of Power's impulse
+// exile, a cantrip, a tutor to hand), an Unclaimed Territory / Cavern of Souls is not "spare" for a
+// noncreature payment unless every colour it makes for a creature is also on offer from the reserve or
+// another unrestricted untapped source. dragonstorm s4050 g46 / s5254 g249 T4: Lotus Bloom's {R}{R}{R}
+// floated, the rung paid the first Seething Song's generic with the Territory, and Apex then exiled
+// Dragonlord Kolaghan, whose {B} only the Territory made -- the T4 kill was gone at every depth and
+// budget (d8 b0 too). Inert unless LineFloatTapFirstOn() (it only narrows that rung's spare set).
+inline bool LineFloatUnseenGuardOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_FLOAT_UNSEEN_GUARD", true);
+    return LineFloatTapFirstOn() && heurarm::Flag(heurarm::LINE_FLOAT_UNSEEN_GUARD, env_on);
+}
+
 // MTG_LINE_SPARE_GENERIC_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware generic tap
 // (produce_impl in TapForCostSharedOnce, ManaPayment.cpp): a colour-short line's generic pip taps a SPARE
 // source first. One payer for executor, rollout and the payability walks -> lockstep by construction.

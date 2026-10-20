@@ -728,6 +728,37 @@ ManaCost SinkCostWithLineHold(const ManaCost& own);
 // their holds cannot drift apart.
 ManaCost LineCastCostTotal(const std::vector<Action>& acts);
 
+// MTG_LINE_FLOAT_UNSEEN_GUARD: true while the applying line casts a card whose resolution reveals NEW
+// castables this turn -- TurnSolver::ParamKeyedDrawClass, the engine's own breakpoint-opener classifier
+// (Apex of Power's impulse exile, a cantrip, a tutor to hand, cascade, ...). g_line_unpaid_cost holds
+// only the casts the line already names, so while this is set it is a LOWER bound on what the rest of
+// the turn will owe, and a payer that calls a source "spare" because no later pip in it wants that
+// source's colours is reasoning from a list it knows is incomplete. Read by exactly one consumer, the
+// MTG_LINE_FLOAT_TAP_FIRST rung (LineFloatTapFirstPlan): a creature-only-colour land is not spare then.
+// Bound beside the line hold at every site that seeds that hold from an action list (both apply worlds
+// and the payability walks), same nesting contract; false everywhere else.
+extern thread_local bool g_line_opens_unseen;
+
+// Does this line cast a breakpoint opener (see g_line_opens_unseen)? Defined in TurnSolver.cpp beside
+// LineCastCostTotal. Returns false without looking unless MTG_LINE_FLOAT_UNSEEN_GUARD's rung is live
+// (LineFloatUnseenGuardOn), so a flag-off binary never pays for the scan.
+bool LineOpensUnseenCasts(const GameState& state, const std::vector<Action>& acts);
+// One action of it (a hand / graveyard cast of a ParamKeyedDrawClass card). No flag gate: callers gate.
+bool CastOpensUnseen(const GameState& state, const Action& a);
+
+// RAII for g_line_opens_unseen, the LineUnpaidCostScope contract: a nested apply (a breakpoint
+// continuation) binds its own value and restores the outer one on exit.
+class LineOpensUnseenScope
+{
+public:
+    explicit LineOpensUnseenScope(bool v) : m_prev(g_line_opens_unseen) { g_line_opens_unseen = v; }
+    ~LineOpensUnseenScope() { g_line_opens_unseen = m_prev; }
+    LineOpensUnseenScope(const LineOpensUnseenScope&)            = delete;
+    LineOpensUnseenScope& operator=(const LineOpensUnseenScope&) = delete;
+private:
+    bool m_prev;
+};
+
 // (The post-spell greedy mana sinks AnimateLandsShared / ActivateTapTokensShared were deleted
 // 2026-09-30 -- see the note at their old definition in ManaPayment.cpp.)
 

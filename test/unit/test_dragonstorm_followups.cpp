@@ -554,7 +554,84 @@ TEST_CASE("Line float: a spare source pays the generic before floating colour th
             REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
             CHECK(s.floating_mana.red == 0);
         }
+        {
+            // The named case under the unseen guard: a line that names every cast it makes (no breakpoint
+            // opener) is untouched by MTG_LINE_FLOAT_UNSEEN_GUARD -- the Territory still pays the generic.
+            ArmFu guard(heurarm::LINE_FLOAT_UNSEEN_GUARD, true);
+            GameState s = s0;
+            s.floating_mana.red = 2;
+            LineCostFu line(owes_red);
+            LineOpensUnseenScope lou(false);
+            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+            CHECK(s.floating_mana.red == (on ? 1 : 0));
+            CHECK(PermFu(s, "Unclaimed Territory").tapped == on);
+        }
     }
+}
+
+TEST_CASE("Line float: a line that will reveal cards it cannot name keeps the creature-only-colour land (MTG_LINE_FLOAT_UNSEEN_GUARD)")
+{
+    // dragonstorm s4050 g46 / s5254 g249 T4's shape: Unclaimed Territory + Mountain up, Lotus Bloom's {R}{R}{R}
+    // floating, the first Seething Song's {1}{R} (Ruby Medallion out) to pay, and the line "Seething Song,
+    // Seething Song, Apex of Power" owing only red after it. Apex then exiles Dragonlord Kolaghan, whose {B}
+    // only the Territory makes -- but no pip the line NAMES is black, so without the guard the Territory
+    // reads spare and pays the generic, and the T4 kill is gone (the payment is not searched).
+    const GameState s0 = BoardFu({ "Unclaimed Territory", "Mountain" }, {}, 4);
+    ManaCost seething;
+    seething.generic = 1;
+    seething.red     = 1;
+    ManaCost line;               // Seething Song x2 + Apex of Power, each one less under the Medallion
+    line.generic = 8;
+    line.red     = 5;
+    ArmFu rung(heurarm::LINE_FLOAT_TAP_FIRST, true);
+    for (const bool guard : { true, false })
+    {
+        CAPTURE(guard);
+        ArmFu arm(heurarm::LINE_FLOAT_UNSEEN_GUARD, guard);
+        {
+            // A line with no breakpoint opener: the rung pays the generic with the Territory on both arms.
+            GameState s = s0;
+            s.floating_mana.red = 3;
+            LineCostFu lc(line);
+            REQUIRE(TapForCostDirect(s, seething, /*for_creature=*/false));
+            CHECK(PermFu(s, "Unclaimed Territory").tapped);
+            CHECK(s.floating_mana.red == 2);
+        }
+        {
+            // The line casts Apex of Power: with the guard the Territory stays up and the float pays (the rituals
+            // refill the red, so nothing the line names is lost); without it, the rung as before.
+            GameState s = s0;
+            s.floating_mana.red = 3;
+            LineCostFu lc(line);
+            LineOpensUnseenScope lou(true);
+            REQUIRE(TapForCostDirect(s, seething, /*for_creature=*/false));
+            CHECK(PermFu(s, "Unclaimed Territory").tapped == !guard);
+            CHECK(s.floating_mana.red == (guard ? 1 : 2));
+            CHECK_FALSE(PermFu(s, "Mountain").tapped);
+        }
+    }
+}
+
+TEST_CASE("Line float unseen guard: the line's breakpoint opener is the one ParamKeyedDrawClass names (MTG_LINE_FLOAT_UNSEEN_GUARD)")
+{
+    const GameState s = BoardFu({ "Mountain" }, { "Seething Song", "Apex of Power", "Rite of Flame" }, 4);
+    const std::vector<Action> with_apex = { CastFu(s, "Seething Song"), CastFu(s, "Apex of Power") };
+    const std::vector<Action> rituals   = { CastFu(s, "Rite of Flame"), CastFu(s, "Seething Song") };
+    for (const bool rung_on : { true, false })
+    {
+        for (const bool guard : { true, false })
+        {
+            CAPTURE(rung_on);
+            CAPTURE(guard);
+            ArmFu rung(heurarm::LINE_FLOAT_TAP_FIRST, rung_on);
+            ArmFu arm(heurarm::LINE_FLOAT_UNSEEN_GUARD, guard);
+            // Only the live guard scans (=0, or the rung off, binds false: byte-identical to before).
+            CHECK(LineOpensUnseenCasts(s, with_apex) == (rung_on && guard));
+            CHECK_FALSE(LineOpensUnseenCasts(s, rituals));
+        }
+    }
+    CHECK(CastOpensUnseen(s, CastFu(s, "Apex of Power")));
+    CHECK_FALSE(CastOpensUnseen(s, CastFu(s, "Seething Song")));
 }
 
 namespace

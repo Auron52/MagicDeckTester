@@ -8231,6 +8231,7 @@ static bool SubsetPayableAsExecuted(const GameState& state, const std::vector<Ac
     PayScratch _scratch(state);
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(acts));
+    LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, acts));
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, acts); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
@@ -8524,6 +8525,13 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         if (!a.free_cast && !a.alt_cost) { AddManaCost(_walk_total, a.cost); }
     }
     LineUnpaidCostScope _luc(_walk_total);
+    // ...and whether the walked order casts a breakpoint opener (the twin of both apply paths' scope).
+    LineOpensUnseenScope _lou([&]
+    {
+        if (!LineFloatUnseenGuardOn()) { return false; }
+        for (int j : ord) { if (CastOpensUnseen(cp, cands[j])) { return true; } }
+        return false;
+    }());
     // A Vial-PUT ETB Treasure maker (MTG_ETB_TREASURE_SPEND): its exempt Treasure is on the board for
     // the whole walk, as the payable order hoists the put ahead of the casts it funds (rescue-only
     // walk; IsEtbTreasureMakerCast covers puts).
@@ -8899,6 +8907,7 @@ bool TurnSolver::OrderPrepaysWholeTurn(const GameState& state, const std::vector
     PayScratch _scratch(state);
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(sub));
+    LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, sub));
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, sub); }
     PlanTraitsScope _traits_scope(PlanTraitsWanted() ? &traits : nullptr);
@@ -44617,6 +44626,25 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
     return total;
 }
 
+// Does the line cast a breakpoint opener -- a card whose resolution reveals NEW castables this turn, so
+// the hold above is a lower bound on what the turn will owe (g_line_opens_unseen, MTG_LINE_FLOAT_UNSEEN_
+// GUARD)? The classifier is ParamKeyedDrawClass, the one the breakpoint site numbering already trusts in
+// both worlds. Every cast counts, free and alt-cost ones included: what matters is what RESOLVES, not
+// what is paid. Seeded beside LineCastCostTotal at every site that seeds the hold from an action list.
+bool CastOpensUnseen(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && TurnSolver::ParamKeyedDrawClass(state, *d);
+}
+
+bool LineOpensUnseenCasts(const GameState& state, const std::vector<Action>& acts)
+{
+    if (!LineFloatUnseenGuardOn()) { return false; }
+    for (const Action& a : acts) { if (CastOpensUnseen(state, a)) { return true; } }
+    return false;
+}
+
 // ---- Prefix-scoped prepay (MTG_BP_PREFIX_PREPAY) ---------------------------------------------
 // See the call site inside ApplyPlanDirect for the why. Default OFF.
 // MTG_BP_NODE_D0ONLY: host the breakpoint node only at the ROOT search depth.
@@ -45027,6 +45055,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // cast pays. Scoped, so a nested breakpoint re-solve gets its own hold and restores this one.
     // Empty (zero) for every plan without a hand cast, and inert for every deck with no mid-line sink.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // ...and whether this line casts a breakpoint opener, so the hold above is incomplete (see
+    // g_line_opens_unseen). Same scope, same nesting: a continuation's nested apply binds its own.
+    LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
     // What the human's REMAINING QUEUE wants (docs/design/viewer-line-macros.md). Unlike the hold
     // above it is not derived from this plan's costs -- the continuation is in the NEXT committed
     // segment, which this process cannot see, so the viewer declares it. 0 for every plan that
