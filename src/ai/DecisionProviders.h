@@ -3095,6 +3095,8 @@ public:
                                        std::vector<std::vector<int>>& out) const override;
     // The land drop's two spots and the abilities at the END (USER 2026-10-16; MTG_LANDFALL_SPOTS).
     bool        LandEntrySpotsRule(const GameState& s) const override;
+    // Phylath's Plant is the provider's pick, not a searched axis (USER 2026-10-20; MTG_LANDFALL_TARGET_PICK).
+    bool        LandfallCounterTargetIsPick(const GameState& s) const override;
     // The analyze-deck 5i BUCKET discard (PROVISIONAL, MTG_LANDFALL_BUCKET_DISCARD): dead legends, lands over
     // a 2/1 quota, ramp at 6+ lands, threats over a floor of 2 -- see the .cpp.
     std::vector<int> CleanupDiscardCandidates(

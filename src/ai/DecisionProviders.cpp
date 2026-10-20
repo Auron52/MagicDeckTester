@@ -3693,6 +3693,22 @@ static bool LandfallSpotsEnabled()
 
 bool LandfallProvider::LandEntrySpotsRule(const GameState& s) const { (void)s; return LandfallSpotsEnabled(); }
 
+// THE PLANT TARGET IS THE PICK (USER 2026-10-20: "this should have been just the pick. If I gave that rule
+// that was my intention for sure"). Phylath's "four +1/+1 counters on target Plant" goes to the front of
+// LandfallCounterTargetOrder -- a Plant that can attack now, then the biggest, then the oldest: the counters
+// concentrate on the body that swings -- and the engine no longer fans the main-phase / combat rank axes
+// over the other classes (up to 4 copies of every base plan per searched turn; the value-leaf rows of
+// 2026-10-20 had games running past 2 h). MTG_LANDFALL_TARGET_PICK=0 restores the searched axes.
+// The ORDER is approved for GOLDFISHING only (USER 2026-10-20: "That rule works fine as long as we are
+// goldfishing"): against a real opponent (blockers, removal) which Plant to grow is a new question.
+static bool LandfallTargetPickEnabled()
+{
+    static const bool on = EnvOn("MTG_LANDFALL_TARGET_PICK", true);   // DEFAULT ON (the USER's rule); =0 -> searched
+    return heurarm::Flag(heurarm::LANDFALL_TARGET_PICK, on);
+}
+
+bool LandfallProvider::LandfallCounterTargetIsPick(const GameState& s) const { (void)s; return LandfallTargetPickEnabled(); }
+
 bool LandfallProvider::WantsCastOrderingSearch() const { return LandfallOrderEnabled(); }
 
 bool LandfallProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,

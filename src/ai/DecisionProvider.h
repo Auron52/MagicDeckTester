@@ -2878,6 +2878,12 @@ public:
     // payable-prefix probe ran), and no land-search ACTIVATION position twins (Plan::land_search_act_slot)
     // -- the activations stay in the trailing pass. Landfall's USER rule. Base: false (every spot).
     virtual bool LandEntrySpotsRule(const GameState& s) const { (void)s; return false; }
+    // LandfallCounterTargetIsPick -- is LandfallCounterTargetOrder's FRONT class the target of every
+    // targeted landfall trigger (a one-option provider prune), rather than the first of a searched rank
+    // axis? Base false: the engine fans Plan::landfall_target_choice / combat_landfall_target_choice over
+    // the identity-folded classes. LandfallProvider: true (USER 2026-10-20, MTG_LANDFALL_TARGET_PICK).
+    // Human play picks on the board either way.
+    virtual bool LandfallCounterTargetIsPick(const GameState& s) const { (void)s; return false; }
 
     // BounceSearchCandidates -- the SEARCHED Karoo bounce (MTG_BOUNCE_SEARCH, Plan::bounce_choice):
     // the subset of BounceLandCandidates the search branches over, in THAT order, so element 0 is
