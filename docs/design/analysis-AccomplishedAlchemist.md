@@ -26,6 +26,8 @@ bucket rule landed DEFAULT ON (held-out -0.015 d3 / -0.022 d5); see "USER discar
 2026-10-20: the USER's Elvish Harbinger rule landed DEFAULT ON (branch `aa-harbinger`); it measures
 +0.005..+0.035 worse (-11..-17% units); two PROPOSED amendments (default OFF) make it better than the control on every
 cell -- see "USER Elvish Harbinger rule (2026-10-20)".
+2026-10-20 (branch `aa-perf`, off `aa-land` @ 88126463, NOT pushed): Chunk P4 landed eight byte-identical per-node
+cuts -- d5 b20 0.931x instructions / ~0.94x core time, the costliest game 0.885x; see "Chunk P4 (2026-10-20)".
 Open USER items are
 listed under "Open questions surfaced to USER".
 
@@ -73,6 +75,80 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## Chunk P4 (2026-10-20) -- landed: eight byte-identical per-node cuts; d5 b20 0.93x instructions
+
+Branch `aa-perf` (off `aa-land` @ 88126463; local commits, NOT pushed). Scratch:
+`/workspaces/MagicDeckTester/build/scratch/aa-perf/` (`mtg.*` = one binary per commit, `pstat/` = the 200-game
+cells under `perf stat`, `one/` = single-thread single-game counts, `cg/` = callgrind, `prof/` = perf profiles,
+`cgline.py` / `cgcalls.py` / `callers.py` = the callgrind readers).
+
+* **Where the time is now.** The gi60 tail of the earlier chunks is gone on this tree (8 s single-thread, 168,877
+  units). The d5 b20 cell's cost is its heavy games: the top 20 of 200 are 55% of the core time, and they are
+  BOTTOM-TRIAL games (g47: 99% of its 242 G instructions is `AIEngine::BottomCards` -- 21 full rollout games).
+  The profile is flat: callgrind on g47 / g60 / g138 puts `BuildSimKey` first (9.4% / 5.5% / 5.8% self, ~57% of
+  it the `Fold` hash chain itself -- inherent), then the greedy walk (`SolveUncached` + its subset lambda ~4-7%),
+  the payer (`TapForCostShared*` 16% inclusive on g47), `GameState` copies + memcpy ~4%. Nothing over ~6% that
+  is not hashing, payment or copying. The cuts below are the redundancies the callgrind call counts exposed:
+  the same pure answer computed several times on one unchanged board.
+* **The commits** (each byte-identical by construction; the argument is in its code comment and commit message).
+  Instructions = `perf stat -e instructions:u` over seed 70001 x 200 at d5 b20 (the deck profile, 12 threads,
+  one pooled batch per binary); every row reproduces digest fa69d0e08a901ddf (and 46,922,146 units, save the
+  pool-noise runs below):
+
+  | commit | cut | d5 b20 instructions | ratio |
+  |---|---|---|---|
+  | 88126463 | base | 7.1501 T | -- |
+  | b2cb228e | A: `CollectActions` prices `AvailableManaPool(state)` once per call (lazy memo; it asked ~3x on one const board) | 7.1008 T | 0.993 |
+  | c1ea8b7e | B: `SolveWithLookahead` shares its candidates' pre-apply snapshots (`SnapshotActivatableAbilities`, `PrePlanAvailabilityKeys`) -- each candidate is a fresh copy of the same state; one-shot address-checked hand-off, not taken with damage events armed | 6.9378 T | 0.977 |
+  | af9f4a4f | C: per-walk land-Aura memo (`LandAuraMemoScope`) in the four const pool walks -- `AvailableManaPool` derived an Arbor Elf's Forest classes 4x and every land's Aura bonus 2x per pool | 6.8623 T | 0.989 |
+  | eb6af05d | D: `PayloadReserveMask` decides "no domain anchor" before pricing the board (it ran a `DomainColors` walk + a `PermanentManaYield` per source on every plan payment, then returned 0) | 6.7595 T | 0.985 |
+  | 3cf03399 | F: `heurarm::t_arm` constinit (`constexpr Unset`) -- every `heurarm::Flag` read went through the TLS-init wrapper (22 M + 13.7 M calls/game); `MTG_EQUIP_ALL_HOSTS` read once | 6.6673 T | 0.986 |
+  | 158263c7 | B2: the breakpoint-wave applies share the snapshots too (no prefix-snapshot hit) | (with G) | |
+  | dbc76420 | G: `GenericTutorList` short-circuits its four pure filters (Elvish Harbinger's Elf search: 34 M `TutorNumericFilterOk` calls/game) | 6.6589 T | 0.999 (B2+G) |
+  | 13d34eed | I: `ApplyActivatedUntap` asks the live-mana-creature test once per activation and reuses its ability buffer | 6.6419 T | 0.997 |
+
+  The pooled cells carry ~+-0.3% of noise: at 12 threads the 3.2 GB plan-cache pool refuses stores (the
+  `[determinism]` warning; 3-34 refusals per run), which re-spends work and once moved units (+869 on one run,
+  +88 / -74 on two others; single-thread reruns of the moved game gave identical units). So the small cuts were
+  ALSO measured single-thread, where the counts are exact (identical units and digests in every pair):
+
+  | game (d5 b20, single thread) | base | HEAD (B2+G) | +I | total |
+  |---|---|---|---|---|
+  | g123 (seed 70124 gi123, the cell's costliest) | 330.78 G | 296.48 G | 292.81 G | 0.885x |
+  | g47 (seed 70048 gi47, 2.3 M units, 21 bottom trials) | 234.58 G | 218.99 G | 218.22 G | 0.930x |
+  | g60 (seed 90061 gi60) | 25.40 G | 23.75 G | 23.67 G | 0.932x |
+  | g138 (seed 70139 gi138) | 17.16 G | 16.06 G | 16.03 G | 0.935x |
+
+  Per-change single-thread: B2 g138 0.998 / g60 0.999 / g47 0.999; G g47 0.995 / g138 0.999 / g60 1.000;
+  I g123 0.988 / g47 0.996 / g60 0.997 / g138 0.998.
+* **Total, paired** (base and the B2+G tree as two concurrent 12-thread batches, so contention is shared):
+  d5 b20 instructions 7.1321 T -> 6.6708 T (0.935x), task-clock 1,330.7 -> 1,253.2 core-s (0.942x; 6,654 ->
+  6,266 core-ms/game at load ~20-30); d3 b10 4.4723 T -> 4.1644 T (0.931x), task-clock 0.958x (that pair shared
+  the box with a build). With I (HEAD 13d34eed): **d5 b20 6.6419 T = 0.931x of the paired base, d3 b10 4.1514 T
+  = 0.928x**. Core time moves less than instructions: what was removed is cheap, cache-resident work; what is
+  left is hashing, payment and copying.
+* **Byte-identity.** The d5 b20 cell on every commit, and on the stacked trees (after D, after B2+G, after I)
+  also the d3 b10 cell, mtg-test, scenarios and smoke: cells identical (d5 b20 fa69d0e08a901ddf, d3 b10
+  7931b57b4049f19d, units unchanged); mtg-test 1611 / 1611; scenarios 241 / 241; smoke 124 / 128 with exactly the four known pre-existing moves at their known digests (selesnya d3
+  a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11). Not accepted.
+* **Measured and dropped:** an explicit `(first, second)` comparator for `BuildSimKey`'s canon sort (callgrind:
+  `BuildSimKey` inclusive 1,487 M -> 1,488 M, no change -- the compiler already emitted the same compare); skipping
+  `ComputePlanTraits`' attacker pick in a post-combat plan without an own pump (0.000x on g47 / g60 / g138 -- the
+  case does not occur on this deck's hot path).
+* **Lossless but NOT done (deferred, with the reason):**
+  - A library-order digest cached on `Library` (5.6% of `BuildSimKey`, ~0.6% of a heavy game): every non-const
+    accessor would have to invalidate it, a held `Card&` across a `BuildSimKey` call would go stale silently,
+    and a cache written from a `const` method races if a `GameState` is ever read by two threads.
+  - Incremental cost sums in the greedy walk's odometer (`SolveUncached`, ~4-7% of a game): sound, but a
+    refactor of the most delicate loop in the engine for a few percent.
+  - The payer's per-source land-Aura answers (`UntapLandHostsOfUncached` is still ~0.6-1%): the payer mutates
+    the board (a pay-sac Treasure leaves the battlefield mid-payment), so an index-keyed memo is not safe there.
+* **Where this leaves the line.** On today's footing the base tree read 7,084 core-ms/game (load ~36) and 6,654
+  (paired, load ~20-30) at d5 b20; HEAD reads ~0.94x of that in core time (6,266 paired before I). That is under
+  the 8,907 line on both of today's footings, but the earlier contended footings ran up to 1.3x higher, so only
+  `suite_gate.py --measure-all` on a quiet box decides it. The heavy games are bottom trials (99% of g47's
+  instructions), so the big remaining lever is still the USER's: the bottom_eval arm / the mulligan stage.
 
 ## Combined optimization (2026-10-20) -- mull + branching + wish on `accomplished-alchemist`; at the line within contention noise
 
