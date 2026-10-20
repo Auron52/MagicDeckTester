@@ -43111,16 +43111,22 @@ int AccomplishedAlchemistProvider::TutorSearchWidth() const
     return AaWishBucketsOn() ? 9 : GenericProvider::TutorSearchWidth();
 }
 
-std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const GameState& s, int controller,
-                                                                        const CardParams& pp) const
+// The rule's admitted names, in the USER's bucket order ({} = nothing admitted). `why` (optional): the
+// lacking buckets, for the proof trace.
+static std::vector<std::string> AaWishBucketSet(const GameState& s, int controller,
+                                                const std::vector<std::string>& all, std::string* why = nullptr)
 {
-    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
-    if (!pp.wish_from_sideboard || all.size() <= 1 || DecisionUnpruned(UnprunedGate::Tutor) || !AaWishBucketsOn())
-    { return all; }
     const AaWishCensus c = AaTakeWishCensus(s, controller);
     const bool mana_lacking  = c.mana < 4;
     const bool untap_lacking = !c.untapper && !(c.witch && c.gain_total >= 5);
     const bool need_nothing  = c.alchemist && !mana_lacking && c.lifegain && !untap_lacking && c.wincon;
+    if (why != nullptr)
+    {
+        *why = std::string("mana=") + std::to_string(c.mana) + (mana_lacking ? "!" : "")
+             + (c.alchemist ? "" : " ALCH") + (c.lifegain ? "" : " GAIN") + (untap_lacking ? " UNTAP" : "")
+             + (c.wincon ? "" : " WIN") + (c.elf_multi ? " elf2" : "") + (c.blue ? " blue" : "")
+             + " gain=" + std::to_string(c.gain_total);
+    }
     // Rank = the USER's bucket order (lower first); -1 = not offered.
     enum : int { kElf = 0, kForest, kIsland, kAlch, kGain, kUntap, kWin };
     std::vector<std::pair<int, std::string>> ranked;
@@ -43151,13 +43157,31 @@ std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const Ga
         // Trufflesnout (etb_modal_lifegain) and Eternal Witness (etb_return_gy_to_hand): never offered.
         if (r >= 0) { ranked.emplace_back(r, nm); }
     }
-    if (ranked.empty()) { return all; }
     std::stable_sort(ranked.begin(), ranked.end(),
                      [](const auto& a, const auto& b) { return a.first < b.first; });
     std::vector<std::string> out;
     out.reserve(ranked.size());
     for (auto& e : ranked) { out.push_back(std::move(e.second)); }
     return out;
+}
+
+std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const GameState& s, int controller,
+                                                                        const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    if (!pp.wish_from_sideboard) { return all; }
+    // PROOF INSTRUMENT (MTG_TRACE=aawishproof, diagnostic only -- never read by play): at a REAL resolution,
+    // stash the rule's set in EITHER arm, so MTG_TUTOR_CHOSEN_RANK's [tutor-chosen] line shows a control-arm
+    // fetch beside the set the rule would have offered (the Bruna wishproof precedent).
+    if (g_real_resolution && TRACE_ON("aawishproof"))
+    {
+        std::string why, l;
+        for (const std::string& n : AaWishBucketSet(s, controller, all, &why)) { l += (l.empty() ? "" : " | ") + n; }
+        g_tutor_proof_set = std::string(AaWishBucketsOn() ? "R" : "C") + "{" + l + "} lack{" + why + "}";
+    }
+    if (all.size() <= 1 || DecisionUnpruned(UnprunedGate::Tutor) || !AaWishBucketsOn()) { return all; }
+    std::vector<std::string> out = AaWishBucketSet(s, controller, all);
+    return out.empty() ? all : out;
 }
 
 // ---- AccomplishedAlchemistProvider: the closed-form untap loop and its payoffs (chunk C2b) ---------
