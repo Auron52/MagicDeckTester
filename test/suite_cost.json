@@ -2,6 +2,14 @@
  "_multiple": 3.0,
  "_note": "Per-deck suite cost, written by scripts/suite_gate.py. cost_per_game_ms = max per-game core-ms over the deck's searched (depth>0) regression cases; total_core_ms = the whole tier for that deck.",
  "decks": {
+  "alchemist": {
+   "cost_per_game_ms": 4680.52,
+   "jobs": 5,
+   "key": "alchemist",
+   "tier": "regression",
+   "total_core_ms": 1666238,
+   "worst_case": "alchemist_regression_d5_s3003"
+  },
   "angels": {
    "cost_per_game_ms": 63.6933,
    "jobs": 6,

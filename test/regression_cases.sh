@@ -70,6 +70,7 @@ declare -A DECK_FILE=(
   [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
   [vampires]=decks/Vampires/Vampire.cod
+  [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -107,6 +108,7 @@ declare -A DECK_PROF=(
   [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
   [vampires]=decks/Vampires/Vampire.profile.json
+  [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -548,6 +550,16 @@ SMOKE_CASES=(
   "vampires 3 1001  150 10"
   "vampires 5 1001   75 20"
   "vampires2hg 3 1001 50 10"
+  # alchemist: ADDED 2026-10-20 by the analysis (docs/design/analysis-AccomplishedAlchemist.md), all three tiers
+  # at once (the all-or-none rule), at the colossus gate shape and the overnight ENTRY set. Accomplished
+  # Alchemist + an untapper is unbounded mana; the kill is Stroke of Genius at the opponent (deck-out) or a
+  # wished Scholar. No keep table / value leaf yet, so GT WILL move when they land; the overnight ENTRY set
+  # expands to the FULL set just before the keep table is adopted. 2HG canary: Scholar drains each opponent and
+  # Stroke targets ONE head's library.
+  "alchemist 0 1001 1000 0"
+  "alchemist 3 1001  150 10"
+  "alchemist 5 1001   75 20"
+  "alchemist2hg 3 1001 50 10"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -811,6 +823,12 @@ REGRESSION_CASES=(
   "vampires 5 3003   75 20"
   "vampires2hg 3 2002 100 10"
   "vampires2hg 5 2002  50 20"
+  # alchemist: see the SMOKE block.
+  "alchemist 0 2002 1000 0"
+  "alchemist 3 2002  150 10"
+  "alchemist 3 3003  150 10"
+  "alchemist 5 2002   75 20"
+  "alchemist 5 3003   75 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -1458,4 +1476,17 @@ OVERNIGHT_CASES=(
   "vampires2hg 5 5005 150 40"
   "vampires2hg 5 6006 150 40"
   "vampires2hg 5 7007 150 40"
+  # alchemist: see the SMOKE block. ENTRY set (4x400 b10 / 4x300 b20) until the keep table.
+  "alchemist 0 4004 2000 0"
+  "alchemist 0 6006 2000 0"
+  "alchemist 0 8008 2000 0"
+  "alchemist 0 10010 2000 0"
+  "alchemist 3 4004  400 10"
+  "alchemist 3 5005  400 10"
+  "alchemist 3 6006  400 10"
+  "alchemist 3 7007  400 10"
+  "alchemist 5 4004  300 20"
+  "alchemist 5 5005  300 20"
+  "alchemist 5 6006  300 20"
+  "alchemist 5 7007  300 20"
 )

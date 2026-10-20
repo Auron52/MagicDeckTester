@@ -78,6 +78,39 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
 
+## Suite entry (2026-10-20) -- ADDED to all three tiers; suite_gate PASS at 1.58x
+
+Tree `aa-land` (rebase onto phase-1-2-deck-analyzer @ 8e771a39 + Harbinger + discard + Chunk P4 + Combo Off),
+binary a3c592d7, Release (`MTG_PGO` stamp stale), full regression tier on a quiet box (makespan 3m33s):
+
+| case | games | avg | ms/game |
+|---|---|---|---|
+| alchemist_regression_d0_s2002 | 1000 | 7.0670 | 3 |
+| alchemist_regression_d3_s2002 | 150 | 5.1400 | 3,423 |
+| alchemist_regression_d3_s3003 | 150 | 5.4467 | 3,144 |
+| alchemist_regression_d5_s2002 | 75 | 5.0000 | 4,354 |
+| alchemist_regression_d5_s3003 | 75 | 5.1867 | **4,681** (worst searched case) |
+
+`suite_gate.py --cost --no-run`: 4,680.5 / 2,969.1 (galadriel) = **1.58x <= 3x -> PASS** (was ~1.55x OVER the
+8,907 line on 2026-10-19; Combo Off, the USER's wish/Harbinger rules, the folds and P2-P4 brought it in).
+Rows (key `alchemist`; `test/regression_cases.sh`): smoke d0 1000 / d3 150 b10 / d5 75 b20 + `alchemist2hg` d3
+50 b10 canary; regression d0 1000 / d3 2x150 b10 / d5 2x75 b20; overnight ENTRY set d0 4x2000 / d3 4x400 b10 /
+d5 4x300 b20 (expand to the FULL set just before the keep table is adopted). GT accepted for the alchemist keys
+only (smoke 4, regression 5, overnight 12); `check_gt_logs.py` consistent.
+
+**Harness defect found:** `regression.sh --accept --deck=alchemist` after a FULL tier run merged EVERY key's
+aggregate from `test/results/<mode>.env` into `regression_gt.txt` but promoted `.wins` for the filtered deck only
+(17 foreign keys went STALE). The 17 lines were restored by hand; a filtered accept should filter the aggregates
+too.
+
+**NOT accepted -- 13 non-alchemist regression keys moved on this tree** (selesnya d3 x2 / d5 s3003, goblins d3
+x2 / d5 s3003, critter d0 / d3 s3003, melira d0 / d3 s3003, knights d3 s3003, stompy d3 s3003, fungusv2 d0):
+searched slower 0 / faster 6 / play-changed 7; d0 slower 2 (fungusv2 gi89 4->5, melira gi229 6->8) / faster 4.
+Attribution against the upstream binary is in progress (see below / the next section).
+
+No hand-played reference games exist for this deck yet (USER 2026-10-20: "we won't have any references"); the
+reference-replay gates are empty, not passed.
+
 ## Chunk P4 (2026-10-20) -- landed: eight byte-identical per-node cuts; d5 b20 0.93x instructions
 
 Branch `aa-perf` (off `aa-land` @ 88126463; local commits, NOT pushed). Scratch:
