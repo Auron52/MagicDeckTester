@@ -575,6 +575,7 @@ enum Slot : int
     SELESNYA_WAVE_THREE_TURNS,// MTG_SELESNYA_WAVE_THREE_TURNS PROPOSED amendment to the USER's SelesnyaLifegain discard buckets, NOT adopted: Genesis Wave's "8+ mana within 2 turns (X = 5)" also passes when the deterministic projection reaches 8 on the THIRD turn, with the Elves the second turn can deploy (Priest / Archdruid re-counted). Root-caused on selesnya overnight s7007 gi 10 (seed 7017): the turn-2 cleanup shed the Wave (projected M2 = 6) and kept two Ageless Entity; the Wave the generic shed kept was cast on turn 5 for X = 9 and won that turn. docs/design/selesnyalifegain-discard-policy.md. Default OFF (the USER decides); =1 -> the amendment
     SELESNYA_PAYOFF_DISTINCT, // MTG_SELESNYA_PAYOFF_DISTINCT PROPOSED clause for the SelesnyaLifegain payoff quota, NOT adopted: a SECOND copy of an effective payoff ranks after every other effective payoff, so the 2 hard + soft 3rd slots take different payoffs before a duplicate. Default OFF; =1 -> on
     SELESNYA_WAVE_HARD_SLOT,  // MTG_SELESNYA_WAVE_HARD_SLOT PROPOSED clause for the SelesnyaLifegain payoff quota, NOT adopted: an EFFECTIVE Genesis Wave (its mana rule holds) takes a HARD payoff slot, the way "keep one Paragon when reachable soon and enabled" does, instead of falling to the soft 3rd behind more castable payoffs. Default OFF; =1 -> on
+    LANDFALL_TITAN_MIXED,     // MTG_LANDFALL_TITAN_MIXED  PROPOSED amendment to the USER's Primeval Titan pick rule (2026-10-20, DEFAULT OFF -- the USER's call): besides the rule's picks holding the MOST Wilds / Myriad, also SEARCH every pick holding at least one (the other land any nonbasic: Radiant Fountain, Haunted Fengraf, Gruul Turf), listed after the rule's picks. Overnight landfall s7007 g31: the only T6 line is T4 Titan -> Myriad + Fountain (the CRN reshuffle would put Fountain on top; taking it draws Avenger), unfindable at any budget under the rule. LandfallTitanAllowed; =1 searches the mixed picks
     COUNT
 };
 
@@ -1100,6 +1101,7 @@ inline const char* Name(int slot)
         "MTG_SELESNYA_WAVE_THREE_TURNS",
         "MTG_SELESNYA_PAYOFF_DISTINCT",
         "MTG_SELESNYA_WAVE_HARD_SLOT",
+        "MTG_LANDFALL_TITAN_MIXED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

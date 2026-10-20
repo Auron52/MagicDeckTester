@@ -406,6 +406,53 @@ pruned" and gave it (verbatim in `LandfallProvider`'s .cpp block), then the boun
 - **Cost gate, same regression run:** landfall **2,881 ms/game (d5 s3003) / pd 2,695 = 1.07x** (was 2.64x
   at these rows this morning, 4.30x before the fetch rule); the deck's regression total 605 -> 220 core-s.
 
+### The Titan rule's one lost T6 -- overnight s7007 g31 (2026-10-20; a PROPOSED amendment, the USER's call)
+The 2026-10-19 periodic rebaseline (b7d599a2) accepted `landfall_overnight_d3_s7007` / `_d5_s7007` game 31
+at **T7**. The 6bed7c67 engine wins it **T6** at both case settings AND at `--depth 8 --budget-ms 0`
+(99.9M units, 46 min; HEAD there is T7 at 9.1M), so at an unlimited budget HEAD cannot find the old line.
+- **Owner: this rule's Titan width prune (`LandfallTitanAllowed` via `LandSearchPickWidth`, 73e30dd3f).**
+  Bisect: 12877bf7 T6, 48bf0607 T7. The overnight single-flag sweep set `MTG_UNPRUNE=0`, which opens no
+  gate; `MTG_UNPRUNE=landpick` restores T6 on both rows. Opening the landpick clauses one at a time (a
+  temporary diagnostic build, not committed) names exactly one: the Titan pick width restores T6 (d3 24,578
+  units vs 26,054; d8 b0 T6 at 26.2M); never-a-basic, the basic colour sequence, activations-at-end and the
+  land-drop spots each stay T7.
+- **The line:** T1 Myriad Landscape; T2 Forest + Rampant Growth; T3 Forest, Cultivate (Mountain + Mountain),
+  Search for Tomorrow suspended; T4 Mountain, **Primeval Titan -> Myriad Landscape + Radiant Fountain**;
+  T5 Avenger of Zendikar (10 Plants) + Rampant Growth + Wilds crack, Titan attacks; T6 kill. On the T4
+  board (a land in hand, g = 3, r = 2) the rule keeps only the Wilds / Myriad pairs.
+- **Why only that pick works -- a clairvoyant draw-steer, not a playing line.** Titan's search reshuffles
+  with the CRN shuffle (`Library::ShuffleByKey`: each card's rank is a function of the shuffle ordinal and
+  its own number), so the top card after it is the best-ranked card still in the library: Radiant
+  Fountain #48, then Avenger #4. Taking the Fountain is what makes Avenger the T5 draw. Forced through
+  `--claude-play`, every pick the rule keeps (Myriad + Wilds, Wilds + Wilds, Myriad + Myriad, and the
+  Terramorphic twins) draws Fountain, a Myriad or a Wilds on T5; only Myriad + Fountain (either order)
+  draws Avenger. The line is legal and the engine models nothing wrong (the search is clairvoyant by
+  design). But off clairvoyance the pick is no better: from Titan, Myriad and Fountain both enter tapped
+  and tap for {C}, and Myriad can also be cracked.
+- **Where the games part:** at the case settings, T3 (the rule arm plays Wilds + Cultivate + crack); at
+  d8 b0, T1 (Forest, not Myriad). Both come after the T6 is gone, as tie-breaks among T7 lines.
+- **Proposed amendment, built and measured, default OFF:** `MTG_LANDFALL_TITAN_MIXED=1` (heurarm slot)
+  also SEARCHES every Titan pick holding at least one Wilds / Myriad (the other land any nonbasic),
+  listed after the rule's own picks so a tie still takes the rule's pick. It is part of the pick-list
+  memo key. Off = byte-identical (case rows, d8 b0, Landfall smoke + regression).
+  - g31: T6 on both case rows (units 0.81x d3, 0.82x d5); **d8 b0 T6 at 11.6M units** (1.28x HEAD's T7).
+  - Held-out paired A/B, one pooled batch, fresh seeds 6.4M (d3 b10) / 6.5M (PLAY b20), unwon = 9:
+
+    | setting | games | turns (on - off) | faster / slower | play-identical | units on/off |
+    |---|---|---|---|---|---|
+    | d3 b10 | 2,000 | 0.0000 (se 0.0012) | 3 / 3 | 1,987 | 1.429x |
+    | PLAY d5 b20 | 1,000 | 0.0000 | 0 / 0 | 993 | 1.275x |
+
+    Tiers with it ON (would-be collateral): Landfall smoke 3/3 unchanged; regression 4/5 unchanged,
+    `d5_s2002` one game play-changed at the same turn (gi 17, T6 both) -- 0 slower / 0 faster. Units:
+    smoke d3 1.29x / d5 1.09x, regression searched rows 1.11x-1.46x (1.27x total).
+
+- **Recommendation (for the USER; nothing adopted):** keep the rule as it is. The one game it loses at
+  every budget is lost to a draw-steer that only a clairvoyant search can see, and the widening that
+  recovers it costs 1.3-1.4x work with no gain on held-out games. If the completeness invariant should
+  hold for this rule anyway, the amendment above is the smallest widening that recovers g31. Unless the
+  USER adopts it, the lever should be deleted.
+
 ## USER cast order + land spots + 5i discard buckets (2026-10-16, branch `landfall-cast-order`)
 The deck had no order of its own (row 3.1: generic creatures-before-spells). The user's rule:
 *"you need to actually play lands, cast acceleration spells and activate abilities intentionally after the

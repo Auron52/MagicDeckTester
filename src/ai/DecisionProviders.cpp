@@ -2104,13 +2104,37 @@ bool HandHasLand(const GameState& s, int controller)
     return false;
 }
 
+// PROPOSED AMENDMENT to the user's Titan rule (2026-10-20, DEFAULT OFF -- the rule is the USER's, so
+// adopting this is the USER's call): "the Wilds / Myriad pairs, searched" keeps only the picks holding
+// the MOST Wilds / Myriad, so with two of them in the library a pick like Myriad + Radiant Fountain is
+// unfindable at ANY budget. MTG_LANDFALL_TITAN_MIXED=1 also SEARCHES every pick holding at least one
+// Wilds / Myriad (the other land any nonbasic: Fountain, Fengraf, Turf), listed AFTER the rule's own
+// picks so a tie still takes the rule's pick. Found on overnight landfall s7007 g31 (2026-10-19
+// rebaseline: T6 -> T7 at d3 b10, d5 b20 AND d8 b0): its T6 line is T4 Titan -> Myriad + Fountain,
+// because the CRN reshuffle (Library::ShuffleByKey) would put Fountain on top and taking it leaves
+// Avenger of Zendikar as the T5 draw; every rule pick (Wilds / Myriad pairs) draws Fountain, a Myriad
+// or a Wilds instead -- a clairvoyant draw-steer, not a better land. MEASURED (held-out, paired): d3 b10
+// 2,000 games 0.0000 (3 faster / 3 slower) at 1.43x units, PLAY 1,000 games 0.0000 (0 / 0) at 1.28x;
+// g31 T6 at d8 b0 for 11.6M units (1.28x). docs/design/analysis-Landfall.md. Not applied to the Turf
+// pool (Turf + one Wilds / Myriad is already the rule's pair there) or to the out-of-basics order. Part
+// of LandSearchPickOrderKey (the pick-list memo is per thread and outlives a batch job).
+static bool LandfallTitanMixed()
+{
+    static const bool on = EnvOn("MTG_LANDFALL_TITAN_MIXED");   // DEFAULT OFF (a proposal for the USER); =1 searches the mixed picks
+    return heurarm::Flag(heurarm::LANDFALL_TITAN_MIXED, on);
+}
+
 // The user's Titan rule (see the block above): the indices of `picks` it keeps, in list order; EMPTY
 // means "no narrowing" (every pick stays). Reads the pick list (a function of the library multiset),
 // whether a land card is in hand, and g / r -- exactly what LandSearchPickOrderKey keys.
+// `n_rule` (optional) receives how many of the returned indices are the rule's own picks; the rest
+// (MTG_LANDFALL_TITAN_MIXED only) follow them, each part in list order.
 std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller,
-                                              const std::vector<std::vector<std::string>>& picks)
+                                              const std::vector<std::vector<std::string>>& picks,
+                                              std::size_t* n_rule = nullptr)
 {
     std::vector<std::size_t> out;
+    if (n_rule != nullptr) { *n_rule = 0; }
     if (picks.size() < 2) { return out; }
     std::vector<std::vector<TitanLand>> cls(picks.size());
     for (std::size_t i = 0; i < picks.size(); ++i)
@@ -2151,6 +2175,7 @@ std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller
             if (i == 0 || key < best_key) { best = i; best_key = std::move(key); }
         }
         out.push_back(best);
+        if (n_rule != nullptr) { *n_rule = out.size(); }
         return out;
     }
     std::vector<std::size_t> pool;
@@ -2173,8 +2198,21 @@ std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller
     };
     int most = 0;
     for (std::size_t i : pool) { most = std::max(most, wm(i)); }
-    if (most == 0) { return turf_pool ? pool : out; }
+    if (most == 0)
+    {
+        if (turf_pool) { out = std::move(pool); }
+        if (n_rule != nullptr) { *n_rule = out.size(); }
+        return out;
+    }
     for (std::size_t i : pool) { if (wm(i) == most) { out.push_back(i); } }
+    if (n_rule != nullptr) { *n_rule = out.size(); }
+    // The proposed amendment (LandfallTitanMixed, above): the picks holding fewer Wilds / Myriad but at
+    // least one, searched AFTER the rule's own. Nothing to add when the rule already keeps every pick
+    // holding one (most == 1), or in the Turf pool (its pairs are Turf + one Wilds / Myriad already).
+    if (LandfallTitanMixed() && !turf_pool && most > 1)
+    {
+        for (std::size_t i : pool) { const int n = wm(i); if (n >= 1 && n < most) { out.push_back(i); } }
+    }
     return out;
 }
 }   // namespace
@@ -2189,6 +2227,9 @@ bool LandfallProvider::LandSearchPickOrderKey(const GameState& s, int controller
     key |= static_cast<std::uint64_t>(std::min(r.r, 2)) << 13;
     key |= static_cast<std::uint64_t>(r.myriad_situation ? 1 : 0) << 15;
     key |= static_cast<std::uint64_t>(HandHasLand(s, controller) ? 1 : 0) << 16;   // Titan's Turf test
+    // The proposed Titan amendment widens the list; a per-job arm (heurarm) can flip it between jobs
+    // that share this thread's memo, so it is part of the key.
+    key |= static_cast<std::uint64_t>(LandfallTitanMixed() ? 1 : 0) << 17;
     // lib_main / lib_splash, and whether any basic is left for Titan, are functions of the library
     // multiset, which the memo key holds exactly.
     return true;
@@ -2204,9 +2245,12 @@ void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, i
         // Titan: the rule's picks to the front, and within each part the picks holding a basic LAST
         // ("never search for a basic" -- the autonomous list has none; this keeps a basic off the human
         // prompt's default while a basic-free pick exists), each group keeping the base order.
-        const std::vector<std::size_t> keep = LandfallTitanAllowed(s, controller, picks);
-        std::vector<char> in(picks.size(), keep.empty() ? 1 : 0);
-        for (std::size_t i : keep) { in[i] = 1; }
+        // Tier 0 = the rule's picks, 1 = the proposed amendment's extras (MTG_LANDFALL_TITAN_MIXED; empty
+        // when it is off, so the order is the old in / out split), 2 = the rest.
+        std::size_t n_rule = 0;
+        const std::vector<std::size_t> keep = LandfallTitanAllowed(s, controller, picks, &n_rule);
+        std::vector<char> tier(picks.size(), keep.empty() ? 0 : 2);
+        for (std::size_t j = 0; j < keep.size(); ++j) { tier[keep[j]] = j < n_rule ? 0 : 1; }
         std::vector<char> basic(picks.size(), 0);
         for (std::size_t i = 0; i < picks.size(); ++i)
         {
@@ -2218,11 +2262,11 @@ void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, i
         }
         std::vector<std::vector<std::string>> out;
         out.reserve(picks.size());
-        for (int grp = 0; grp < 4; ++grp)
+        for (int grp = 0; grp < 6; ++grp)
         {
-            const char want_in = grp < 2 ? 1 : 0, want_basic = (grp % 2) ? 1 : 0;
+            const char want_tier = static_cast<char>(grp / 2), want_basic = (grp % 2) ? 1 : 0;
             for (std::size_t i = 0; i < picks.size(); ++i)
-            { if (in[i] == want_in && basic[i] == want_basic) { out.push_back(std::move(picks[i])); } }
+            { if (tier[i] == want_tier && basic[i] == want_basic) { out.push_back(std::move(picks[i])); } }
         }
         picks = std::move(out);
         return;
@@ -2255,8 +2299,9 @@ int LandfallProvider::LandSearchPickWidth(const GameState& s, int controller, in
 {
     if (!basic_only)
     {
-        // Titan: keep the rule's picks -- LandSearchPickOrder put them first, so they are a prefix; a
-        // list the rule does not narrow (or one that is not in that shape) keeps the full fan.
+        // Titan: keep the rule's picks -- LandSearchPickOrder put them first, so they are a prefix (with
+        // MTG_LANDFALL_TITAN_MIXED the amendment's extras follow them, still a prefix); a list the rule
+        // does not narrow (or one that is not in that shape) keeps the full fan.
         const std::vector<std::size_t> keep = LandfallTitanAllowed(s, controller, picks);
         for (std::size_t i = 0; i < keep.size(); ++i)
         { if (keep[i] != i) { return static_cast<int>(picks.size()); } }
