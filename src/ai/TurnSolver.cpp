@@ -89175,7 +89175,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         else if (s_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
                         {
                             BpPrefixSnap snap;
-                            ApplyPlanDirect(copy, v, true, nullptr, &snap, nullptr);
+                            {
+                                PreApplyHandoff _pah(la_pre_share, copy);   // no hit: a fresh copy of `state`
+                                ApplyPlanDirect(copy, v, true, nullptr, &snap, nullptr);
+                            }
                             if (snap.valid)
                             {
                                 if (BpWaveProbeOn())
@@ -89187,7 +89190,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                 prefix_cache.emplace(ck, std::move(snap));
                             }
                         }
-                        else { ApplyPlanDirect(copy, v, true); }
+                        else
+                        {
+                            PreApplyHandoff _pah(la_pre_share, copy);   // no hit: a fresh copy of `state`
+                            ApplyPlanDirect(copy, v, true);
+                        }
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
@@ -89209,7 +89216,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     }
                     else
                     {
-                        ApplyPlanDirect(copy, v, false);
+                        {
+                            // A fresh copy of `state` only when no prefix snapshot was hit.
+                            std::optional<PreApplyHandoff> _pah;
+                            if (hit == prefix_cache.end()) { _pah.emplace(la_pre_share, copy); }
+                            ApplyPlanDirect(copy, v, false);
+                        }
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
