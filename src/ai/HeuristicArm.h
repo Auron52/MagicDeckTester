@@ -590,6 +590,13 @@ enum Slot : int
     BP_PO_W0_FOLD,            // MTG_BP_PO_W0_FOLD  the PLAYOUT wave-0 identity (Vampires search-cost round 2, docs/design/vampires-search-cost-2.md): inside a playout (g_rollout_nest > 0) a BASE plan resolves every breakpoint to EMPTY (both canon defaults stand down there), so its EMPTY arm, its rank variants past the first list's length and its chain arm with no chainable continuation (one class-on breakpoint) re-apply the base plan's own line onto the same state. Declined BEFORE the unit charge and the apply when the base apply showed none of the three control-flow asymmetries a bp_choice carries (node partition, site 9, site 8's return-value branch). DEFAULT ON (sound identity fold); =0 restores the applies
     BP_PO_W0_BASE_LEN,        // MTG_BP_PO_W0_BASE_LEN  the playout wave-0 identity's BASE-SIDE list read (same doc): the measured base reads the continuation list at its first class-on occurrence (the one rank 0 targets; memoized on state), and when it is EMPTY rank 0 is a twin of the base too (0 >= n0 = 0), so the whole family collapses without rank 0's apply. DEFAULT ON (sound identity fold, under MTG_BP_PO_W0_FOLD); =0 leaves rank 0 as the measurer
     CAND_DEDUP,               // MTG_CAND_DEDUP  SolveWithLookahead skips a candidate's ROLLOUT when its post-apply state an earlier sibling of the same pass already reached (identical state, identical future; the first copy was scored first). Pre-existing env lever (default OFF since 2026-09-09, "a quality lever, not a speed one"); a slot so its A/B pools into one batch
+    VAMP_FREE_DISCARD,        // MTG_VAMP_FREE_DISCARD  the USER's discard rule (2026-10-21, PROTOTYPE): with a FREE discard in hand (a madness card payable now at a madness cost <= its mana cost, or Bloodghast) the outlet discard pins of Condemned / Pit Fighter / Blood are restricted to the free names. DEFAULT ON; =0 restores every name (VampiresProvider::ActivationDiscardCandidates)
+    VAMP_NO_STEAL,            // MTG_VAMP_NO_STEAL  the USER's rule (2026-10-21): Captivating Vampire's steal is never offered. DEFAULT ON; =0 restores it (VampiresProvider::CollectedActionAllowed)
+    VAMP_SOCIALITE_M2,        // MTG_VAMP_SOCIALITE_M2  the USER's rule (2026-10-21): Vampire Socialite is cast / Vial-put only after combat. DEFAULT ON; =0 restores main 1 (VampiresProvider::CollectedActionAllowed)
+    VAMP_FREE_DISCARD_V2,     // MTG_VAMP_FREE_DISCARD_V2  PROPOSED amendment to the USER's discard rule (2026-10-21): Bloodghast free only with a land to return it this turn; no restriction when discard outlets outnumber free discards. DEFAULT OFF
+    VAMP_FREE_DISCARD_DEAD,   // MTG_VAMP_FREE_DISCARD_DEAD  PROPOSED amendment to the USER's discard rule (2026-10-21): a nonland card no cost of which fits this turn's mana is a free discard too. DEFAULT OFF
+    VAMP_ALWAYS_LAND,         // MTG_VAMP_ALWAYS_LAND  PROPOSED (2026-10-21): Vampires always makes the land drop in main 1 unless a Bloodghast is in hand or on the battlefield (VampiresProvider::OffersLandDeferral). DEFAULT OFF
+    VAMP_ALWAYS_LAND_FODDER,  // MTG_VAMP_ALWAYS_LAND_FODDER  amendment to MTG_VAMP_ALWAYS_LAND: the hold stays while the discard outlets this turn are at least the hand's non-land cards (the held land is fodder). DEFAULT OFF
     COUNT
 };
 
@@ -1130,6 +1137,13 @@ inline const char* Name(int slot)
         "MTG_BP_PO_W0_FOLD",
         "MTG_BP_PO_W0_BASE_LEN",
         "MTG_CAND_DEDUP",
+        "MTG_VAMP_FREE_DISCARD",
+        "MTG_VAMP_NO_STEAL",
+        "MTG_VAMP_SOCIALITE_M2",
+        "MTG_VAMP_FREE_DISCARD_V2",
+        "MTG_VAMP_FREE_DISCARD_DEAD",
+        "MTG_VAMP_ALWAYS_LAND",
+        "MTG_VAMP_ALWAYS_LAND_FODDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

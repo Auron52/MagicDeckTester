@@ -23455,6 +23455,276 @@ struct Report
 inline Report g_report;
 }   // namespace cantripattr
 
+// ---- MTG_VAMP_AXIS_CENSUS (DIAGNOSTIC, DEFAULT OFF; Vampires search cost, 2026-10-21) ---------------
+// WHICH DECISION MULTIPLIES THE SEARCH. For every candidate a plan loop charges a unit for (the
+// SolveWithLookahead root loop, FullSearchLine's pre-combat and second-main loops), the plan is keyed
+// once per AXIS with that axis's choice masked out: the discarded card's name, the madness answer,
+// both, Falkenrath Pit Fighter's victim, the breakpoint arm, the land choice, the action ORDER, Aether
+// Vial vs a hand cast, and the whole Stromkirk Condemned / Pit Fighter / Blood activation. A candidate
+// whose masked key a sibling in the same pass already produced is a VARIANT along that axis: it exists
+// only because the axis branches. Its INCLUSIVE units (gamework::t_used across its whole subtree) are
+// what the axis's fan cost, counted once at the outermost variant (a variant nested inside another
+// variant of the same axis is not counted twice). Split by real game vs mulligan-bottoming trial game
+// (turncensus::t_probe). Plus a per-(outlet, discarded card, madness answer) table for the discard
+// variants. Off: one static bool per candidate, no key built -- byte-identical.
+namespace vampaxis
+{
+enum Axis { kExact, kDisc, kMad, kPin, kVictim, kBp, kLand, kOrder, kVial, kCondAll, kPitfAll, kBloodAll,
+            kLandSlot, kLandName, kLandHold, kDiscCond, kDiscPitf, kDiscBlood, kN };
+static const char* kAxisNames[kN] = {
+    "exact-duplicate", "discard-name", "madness-answer", "discard+madness", "pitf-victim",
+    "breakpoint-arm", "land-choice", "action-order", "vial-vs-cast", "condemned-pump(any)",
+    "pitfighter-act(any)", "blood-act(any)", "land-slot(timing)", "land-name", "land-or-hold",
+    "condemned-discard", "pitfighter-discard", "blood-discard" };
+inline bool On() { static const bool v = EnvOn("MTG_VAMP_AXIS_CENSUS"); return v; }
+// Buckets: [real game | bottom trial] x [searched | inside a playout (g_rollout_nest > 0)].
+constexpr int kB = 4;
+static const char* kBucket[kB] = { "real/search", "real/playout", "trial/search", "trial/playout" };
+inline std::atomic<long long> g_cands[kB], g_root_units[kB], g_roots[kB];
+inline std::atomic<long long> g_var[kN][kB], g_top[kN][kB], g_units[kN][kB];
+inline thread_local int t_in[kN] = {};
+inline thread_local int t_in_root = 0;
+inline std::mutex g_mx;
+struct Cell { long long n = 0, top = 0, units = 0; };
+inline std::map<std::string, Cell> g_disc[kB];
+// HOLD class: a plan that plays NO land while a land is in hand and this turn's drop is open (main 1 /
+// lookahead hosts only). Its outermost inclusive units, per bucket.
+inline std::atomic<long long> g_hold_units[kB], g_hold_n[kB];
+inline thread_local int t_in_hold = 0;   // "<outlet>|<card>|<madness>" -> pin variants
+
+inline std::uint64_t Mix(std::uint64_t h, std::uint64_t v)
+{ return h ^ (v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2)); }
+inline std::uint64_t NameH(const InternedName& n)
+{ return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&n.str())); }
+inline std::uint64_t StrH(const std::string& s) { return std::hash<std::string>{}(s); }
+inline bool IsCond(const Action& a) { return a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 4; }
+inline bool IsPitf(const Action& a) { return a.kind == Action::Kind::SacCreatureOutlet && !a.discard_name.empty(); }
+inline bool IsBlood(const Action& a)
+{
+    return a.kind == Action::Kind::ActivatePermAbility
+        && (a.ability_mode == Action::AbilityMode::TapBlood || a.ability_mode == Action::AbilityMode::BloodDraw);
+}
+inline bool Skip(const Action& a, int ax)
+{
+    if (ax == kCondAll)  { return IsCond(a); }
+    if (ax == kPitfAll)  { return IsPitf(a); }
+    if (ax == kBloodAll) { return IsBlood(a); }
+    if (ax == kLand)     { return a.kind == Action::Kind::PlayLand; }
+    return false;
+}
+inline std::uint64_t ActH(const Action& a, int ax)
+{
+    std::uint64_t kind = static_cast<std::uint64_t>(a.kind);
+    if (ax == kVial && a.kind == Action::Kind::ActivateVial)
+    { kind = static_cast<std::uint64_t>(Action::Kind::CastFromHand); }
+    std::uint64_t h = Mix(0x51ed27, kind);
+    h = Mix(h, NameH(a.card_name));
+    h = Mix(h, static_cast<std::uint64_t>(a.ability_mode));
+    h = Mix(h, static_cast<std::uint64_t>(a.gy_exile_mode));
+    h = Mix(h, static_cast<std::uint64_t>(a.chosen_x));
+    h = Mix(h, static_cast<std::uint64_t>(a.sac_source_id));
+    if (ax != kVictim) { h = Mix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(a.sac_victim_id))); }
+    h = Mix(h, static_cast<std::uint64_t>(a.sac_count));
+    h = Mix(h, NameH(a.tutor_target));
+    h = Mix(h, static_cast<std::uint64_t>(a.enchant_target));
+    if (ax != kVial)
+    {
+        h = Mix(h, static_cast<std::uint64_t>(a.convoke_green));
+        h = Mix(h, static_cast<std::uint64_t>(a.convoke_other));
+    }
+    h = Mix(h, static_cast<std::uint64_t>(a.vamp_casts_needed));
+    h = Mix(h, NameH(a.land_face));
+    h = Mix(h, NameH(a.land_fetch_target));
+    h = Mix(h, a.alt_cost ? 1u : 0u);
+    const bool own_disc = (ax == kDiscCond && IsCond(a)) || (ax == kDiscPitf && IsPitf(a))
+                       || (ax == kDiscBlood && IsBlood(a));
+    if (ax != kDisc && ax != kPin && !own_disc) { h = Mix(h, NameH(a.discard_name)); }
+    if (ax != kMad && ax != kPin && !own_disc)
+    {
+        h = Mix(h, static_cast<std::uint64_t>(static_cast<int>(a.madness_choice) + 7));
+        h = Mix(h, static_cast<std::uint64_t>(static_cast<int>(a.madness_arm) + 7));
+    }
+    return h;
+}
+inline std::uint64_t SeqH(const std::vector<Action>& v, int ax)
+{
+    std::uint64_t h = 0x7a11;
+    if (ax == kOrder)
+    {
+        std::vector<std::uint64_t> hs;
+        for (const Action& a : v) { if (!Skip(a, ax)) { hs.push_back(ActH(a, ax)); } }
+        std::sort(hs.begin(), hs.end());
+        for (std::uint64_t x : hs) { h = Mix(h, x); }
+        return h;
+    }
+    for (const Action& a : v) { if (!Skip(a, ax)) { h = Mix(h, ActH(a, ax)); } }
+    return h;
+}
+inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
+{
+    std::uint64_t h = SeqH(p.actions, ax);
+    if (ax != kBp)
+    {
+        h = Mix(h, SeqH(p.breakpoint_actions, ax));
+        h = Mix(h, static_cast<std::uint64_t>(p.bp_choice + 7));
+        h = Mix(h, static_cast<std::uint64_t>(p.bp_at + 7));
+    }
+    if (ax != kLand)
+    {
+        if (ax != kLandName && ax != kLandHold)
+        {
+            h = Mix(h, StrH(p.land_to_play));
+            h = Mix(h, StrH(p.fetch_target));
+            h = Mix(h, StrH(p.land_face));
+            h = Mix(h, p.land_from_top ? 1u : 0u);
+            h = Mix(h, static_cast<std::uint64_t>(p.rad_mode + 7));
+        }
+        else if (ax == kLandName) { h = Mix(h, p.land_to_play.empty() ? 0x11u : 0x22u); }   // has-land kept
+        if (ax != kLandSlot && ax != kLandHold) { h = Mix(h, static_cast<std::uint64_t>(p.land_slot + 7)); }
+    }
+    const int extra[] = { p.discard_choice, p.dig_choice, p.scry_choice, p.tutor_choice, p.fb_hold_choice,
+                          p.landfall_target_choice, p.combat_transform_choice, p.tapmode_choice,
+                          p.freshmode_choice, p.vial_charge_choice, p.atk_dork_release, p.bounce_choice,
+                          p.etbdig_choice, p.etbcounter_choice, p.ponder_choice, p.putback_choice,
+                          p.combat_landfall_target_choice, p.combat_crack_choice, p.lackey_choice,
+                          p.saga_target_choice, p.saga_ch1_choice, p.sweep_choice, p.le_fire_choice };
+    for (int x : extra) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
+    for (int x : p.sac_pins) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
+    h = Mix(h, p.atk_forfeit ? 1u : 0u);
+    h = Mix(h, p.soulbond_decline ? 1u : 0u);
+    return h;
+}
+// One per plan loop PASS (declared beside the loop).
+struct List { std::unordered_set<std::uint64_t> seen[kN]; };
+struct Scope
+{
+    bool on = false, root = false;
+    int pi = 0;
+    bool top[kN] = {};
+    long long u0 = 0;
+    std::vector<std::string> disc_keys;
+    bool hold = false;
+    Scope(List& L, const TurnSolver::Plan& p, const GameState* st = nullptr)
+    {
+        if (!On()) { return; }
+        on = true;
+        pi = (turncensus::t_probe > 0 ? 2 : 0) + (g_rollout_nest > 0 ? 1 : 0);
+        u0 = gamework::t_used;
+        g_cands[pi].fetch_add(1, std::memory_order_relaxed);
+        for (int ax = 0; ax < kN; ++ax)
+        {
+            const bool var = !L.seen[ax].insert(PlanH(p, ax)).second;
+            if (!var) { continue; }
+            g_var[ax][pi].fetch_add(1, std::memory_order_relaxed);
+            if (t_in[ax]++ == 0) { top[ax] = true; }
+            else { --t_in[ax]; }
+        }
+        if (t_in_root++ == 0) { root = true; }
+        if (st != nullptr && p.land_to_play.empty() && t_in_hold == 0)
+        {
+            const Player& ap = st->players[static_cast<std::size_t>(st->active_player_index)];
+            bool land = false;
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_is_staged) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->card.IsLand()) { land = true; break; }
+            }
+            if (land && ap.lands_played_this_turn < ap.LandDropsAvailable()) { hold = true; ++t_in_hold; }
+        }
+        if (top[kPin])
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.discard_name.empty()) { continue; }
+                const char* o = IsCond(a) ? "condemned" : IsPitf(a) ? "pitfighter" : IsBlood(a) ? "blood" : "other";
+                const char* m = a.madness_choice < 0 ? "-" : a.madness_choice == 0 ? "decline" : "CAST";
+                disc_keys.push_back(std::string(o) + " | " + a.discard_name.str() + " | " + m);
+            }
+        }
+    }
+    ~Scope()
+    {
+        if (!on) { return; }
+        const long long d = gamework::t_used - u0;
+        for (int ax = 0; ax < kN; ++ax)
+        {
+            if (!top[ax]) { continue; }
+            g_top[ax][pi].fetch_add(1, std::memory_order_relaxed);
+            g_units[ax][pi].fetch_add(d, std::memory_order_relaxed);
+            --t_in[ax];
+        }
+        if (root)
+        {
+            g_roots[pi].fetch_add(1, std::memory_order_relaxed);
+            g_root_units[pi].fetch_add(d, std::memory_order_relaxed);
+        }
+        --t_in_root;
+        if (hold) { --t_in_hold; g_hold_units[pi].fetch_add(d, std::memory_order_relaxed); g_hold_n[pi].fetch_add(1, std::memory_order_relaxed); }
+        if (!disc_keys.empty())
+        {
+            std::lock_guard<std::mutex> lk(g_mx);
+            for (const std::string& k : disc_keys)
+            {
+                Cell& c = g_disc[pi][k];
+                ++c.n; ++c.top; c.units += d;
+            }
+        }
+    }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!On()) { return; }
+        long long grand = 0;
+        for (int b = 0; b < kB; ++b) { grand += g_root_units[b].load(); }
+        const double G = grand ? static_cast<double>(grand) : 1.0;
+        std::fprintf(stderr, "[vamp-axis] units under the outermost hooked candidates: %lld\n", grand);
+        for (int b = 0; b < kB; ++b)
+        {
+            std::fprintf(stderr, "[vamp-axis] bucket %-13s candidates=%11lld outermost=%8lld units=%11lld %5.1f%%\n",
+                         kBucket[b], g_cands[b].load(), g_roots[b].load(), g_root_units[b].load(),
+                         100.0 * static_cast<double>(g_root_units[b].load()) / G);
+        }
+        std::fprintf(stderr, "[vamp-axis] %-22s %7s | %s (%% of ALL units, by where the variant sits)\n", "axis", "total",
+                     "real/search real/playout trial/search trial/playout");
+        for (int ax = 0; ax < kN; ++ax)
+        {
+            long long tot = 0;
+            for (int b = 0; b < kB; ++b) { tot += g_units[ax][b].load(); }
+            std::fprintf(stderr, "[vamp-axis] %-22s %6.1f%% | %10.1f%% %11.1f%% %11.1f%% %12.1f%%   variants=%lld\n",
+                         kAxisNames[ax], 100.0 * static_cast<double>(tot) / G,
+                         100.0 * static_cast<double>(g_units[ax][0].load()) / G, 100.0 * static_cast<double>(g_units[ax][1].load()) / G,
+                         100.0 * static_cast<double>(g_units[ax][2].load()) / G, 100.0 * static_cast<double>(g_units[ax][3].load()) / G,
+                         g_var[ax][0].load() + g_var[ax][1].load() + g_var[ax][2].load() + g_var[ax][3].load());
+        }
+        std::fprintf(stderr, "[vamp-axis] HOLD (no land played, a land in hand, drop open) %6.1f%% | %10.1f%% %11.1f%% %11.1f%% %12.1f%%   plans=%lld\n",
+                     100.0 * static_cast<double>(g_hold_units[0].load() + g_hold_units[1].load() + g_hold_units[2].load() + g_hold_units[3].load()) / G,
+                     100.0 * static_cast<double>(g_hold_units[0].load()) / G, 100.0 * static_cast<double>(g_hold_units[1].load()) / G,
+                     100.0 * static_cast<double>(g_hold_units[2].load()) / G, 100.0 * static_cast<double>(g_hold_units[3].load()) / G,
+                     g_hold_n[0].load() + g_hold_n[1].load() + g_hold_n[2].load() + g_hold_n[3].load());
+        std::map<std::string, Cell> all;
+        for (int b = 0; b < kB; ++b)
+        { for (const auto& e : g_disc[b]) { Cell& c = all[e.first]; c.n += e.second.n; c.units += e.second.units; } }
+        std::vector<std::pair<long long, std::string>> v;
+        for (const auto& e : all) { v.push_back({ e.second.units, e.first }); }
+        std::sort(v.rbegin(), v.rend());
+        int shown = 0;
+        for (const auto& e : v)
+        {
+            if (shown++ >= 30) { break; }
+            std::fprintf(stderr, "[vamp-axis-disc] %10lld units %5.1f%%  n=%8lld  %s\n", e.first,
+                         100.0 * static_cast<double>(e.first) / G, all[e.second].n, e.second.c_str());
+        }
+    }
+};
+inline Dumper g_dumper;
+}   // namespace vampaxis
+
+
 // THE PUT-BACK VARIANT PRICE (MTG_PUTBACK_PRICE, per-job; MTG_PUTBACK_PRICE_UNITS = the price, default 2).
 // A Brainstorm fan is every distinct ordered pair of hand classes -- median ~76 per base plan, 280+ on a
 // Niv-Mizzet hand -- and every variant is a full plan applied and scored. The budget otherwise bills a
@@ -38076,6 +38346,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         actions.erase(std::remove_if(actions.begin(), actions.end(),
             [&](const Action& a)
             { return a.kind == Action::Kind::CastFromHand && !prov.Main2CastAllowed(state, a); }),
+            actions.end());
+    }
+    // ...and the same restriction in EITHER main, casts and activations alike
+    // (DecisionProvider::RestrictsCollectedActions / CollectedActionAllowed; Vampires: the USER's rules of
+    // 2026-10-21). Same reach and the same contract as the main-2 block above.
+    if (!actions.empty() && !HumanPlayActive() && ResolveProvider(state).RestrictsCollectedActions())
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+            [&](const Action& a) { return !prov.CollectedActionAllowed(state, a, is_pre_combat); }),
             actions.end());
     }
 
@@ -68006,6 +68286,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                                                                     bool is_pre_combat)
 {
     std::vector<TurnSolver::Plan> all = EnumeratePlansWithLandUncachedBody(state, is_pre_combat);
+    // A PROVIDER'S LAND-DEFERRAL RESTRICTION (DecisionProvider::OffersLandDeferral; Vampires' PROPOSED
+    // MTG_VAMP_ALWAYS_LAND). Pre-combat, while the drop is open and a land is in hand, a provider that says no
+    // drops every plan that plays no land; the land plans (land-first and land-after-the-activations alike)
+    // stay. Nothing is dropped when no plan plays a land. Human play keeps the full menu.
+    if (is_pre_combat && !all.empty() && !HumanPlayActive()
+        && !ResolveProvider(state).OffersLandDeferral(state))
+    {
+        const Player& ap = state.ActivePlayer();
+        bool land_in_hand = false;
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsLand()) { land_in_hand = true; break; }
+        }
+        if (land_in_hand && ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            std::vector<TurnSolver::Plan> kept;
+            kept.reserve(all.size());
+            for (TurnSolver::Plan& p : all) { if (!p.land_to_play.empty()) { kept.push_back(std::move(p)); } }
+            if (!kept.empty()) { all.swap(kept); }
+        }
+    }
     // MTG_VAMP_PLAN_DUMP=<min plans> (inert by default; Vampires Stage 5f): print every enumeration of at
     // least that many plans -- turn, phase, hand, our board, and each plan with its Vampires pins (discard,
     // madness, victim, convoke arm, Blood k, steal spec, breakpoint choice) -- at most MTG_VAMP_PLAN_DUMP_N
@@ -74588,6 +74891,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             return kM2FixNone;
         };
         PrePlanShare m2_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
+        vampaxis::List vax_list_m2;   // MTG_VAMP_AXIS_CENSUS
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -74645,6 +74949,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             pbsite::Note(pbsite::kFsM2, q, budget);
             cantripattr::Scope _cas(cantripattr::AxisOf(q));   // MTG_CANTRIP_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, q);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
+            vampaxis::Scope _vax(vax_list_m2, q);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
             if (s_rollout_stats)
             {
                 m2stats::g_scanned.fetch_add(1, std::memory_order_relaxed);
@@ -76198,6 +76503,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Node children: resume-copy buffer (capacity reuse across children/pends) -- see the m2 host.
     GameState  s3_buf;
     PrePlanShare fsw_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
+    vampaxis::List vax_list_pre;   // MTG_VAMP_AXIS_CENSUS
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -76447,6 +76753,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         pbsite::Note(pbsite::kFsPre, p, budget);
         cantripattr::Scope _cas(cantripattr::AxisOf(p));   // MTG_CANTRIP_ATTRIB (diagnostic)
         ChargePutBackVariant(budget, p);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
+        vampaxis::Scope _vax(vax_list_pre, p, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
         if (s_rollout_stats)
         {
             g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -82390,6 +82697,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         if (candcensus::On())
         { candcensus::g_nodes[census_slot].fetch_add(1, std::memory_order_relaxed); }
         PrePlanShare la_pps;   // every candidate below is applied to a fresh copy of `state`
+        vampaxis::List vax_list;   // MTG_VAMP_AXIS_CENSUS: per pass
         for (const Plan& plan : candidates)
         {
             // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
@@ -82655,6 +82963,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             cantripattr::Scope _cas(cantripattr::AxisOf(plan));   // MTG_CANTRIP_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             VampCandCensus(plan, is_pre_combat);
+            vampaxis::Scope _vax(vax_list, plan, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);

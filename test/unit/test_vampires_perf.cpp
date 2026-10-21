@@ -21,6 +21,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include "vamp_rules_off.h"
 
 namespace
 {
@@ -248,6 +249,7 @@ TEST_CASE("Rule 9: hellbent and the cleanup's seven keep the discard a real choi
 
 TEST_CASE("Rule 9 in the walk: second-main discard-only pumps are not enumerated; main 1 keeps them all")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     Put(s, "Stromkirk Condemned", 1);
@@ -317,6 +319,7 @@ TEST_CASE("D3: at seven cards after the pump the twin holds eight -- the cleanup
 
 TEST_CASE("D3: a land-AFTER clone empties the hand under Asylum Visitor -- the pump discarding the last spell is kept")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     s.phase = Phase::PostCombatMain;
