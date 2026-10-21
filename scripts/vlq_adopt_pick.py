@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Phase E.5's pick among the staged value leaf and the leafless menu shapes (valueleaf.sh).
+"""Phase E.5's pick among the staged value leaf, the leafless menu shapes and the emulated ladder (valueleaf.sh).
 
-  usage: vlq_adopt_pick.py <m_<key>_shape.log | m_<key>_ab.log> [--tol T] [--candidates staged nlesc nlfit]
+  usage: vlq_adopt_pick.py <m_<key>_shape.log | m_<key>_ab.log> [--tol T] [--candidates staged nlesc nlfit emul]
 
 Each candidate arm is judged against `live` by vlq_ab_report.py --verdict, i.e. by the USER's adoption rule
 (2026-10-11): ADOPT iff CHEAPER and quality NOT NOTABLY WORSE. With the shape arms (USER 2026-10-14, the
@@ -39,7 +39,7 @@ def verdict(log, baseline, arm, tol):
 
 
 def main(argv):
-    tol, cands = 0.002, ["staged", "nlesc", "nlfit"]
+    tol, cands = 0.002, ["staged", "nlesc", "nlfit", "emul"]   # emul: the emulated ladder, USER 2026-10-21
     if "--tol" in argv:
         i = argv.index("--tol"); tol = float(argv[i + 1]); del argv[i:i + 2]
     if "--candidates" in argv:

@@ -258,7 +258,8 @@ run's rows, table or markers.
 | C0 leaf calibration | per deck: paired H3..H5, 1-ply vs greedy horizon leaf → the depth K from which the matrix's H cells use the greedy leaf | yes — one pooled batch, short tail (10M-unit ceiling) |
 | C matrix | H×V depth matrix, the whole thing in ONE pool | yes — one pooled batch, one tail |
 | D metadata | derive crossover + NOMINATE a `value_trust_depth_candidate` into the staged sidecar | no |
-| E measure | staged-vs-live A/B + play sweep + **trust acceptance (ON vs OFF)** | yes — one pooled batch |
+| E0 emul R | the emulated ladder's rollout cost per leaf (`emul_r`), per deck, on the staged model at its final play settings | yes — one pooled batch, play-settings games (short tail) |
+| E measure | staged-vs-live A/B + shape arms + play sweep + **trust acceptance (ON vs OFF)** | yes — one pooled batch |
 
 Every batch is a barrier that returns only when its slowest game finishes, so what matters is **how
 many times you pay that tail**, not how big each batch is. Three is the floor and phase C now sits at
@@ -302,6 +303,26 @@ hand-run precedent; Prevent Damage 2026-10-11 is the trade case (-0.036 t at 1.2
   * It records every verdict and the pick in DECISIONS.txt.
   * The shape sidecars are kept as `<queue>/<stem>.value.NLESC.json` / `.NLFIT.json`.
 * **Coverage:** the shapes are measured at play settings only.
+
+**Phase E also measures the EMULATED LADDER, and E.5 can adopt it** (USER 2026-10-21: *"Let's add this mode to
+the check in the value-leaf."*).
+* **The shape:** `value_play {ladder: "emulated", emul_r: [...]}` on the STAGED model. Warm-up passes run on the
+  model; the committing pass runs on the rollout leaf at the depth the all-rollout ladder would reach (its start
+  gate replayed on reconstructed rollout costs, value-pass cost + R x leaves); the model's preferred plan breaks
+  the rollout's ties at the root (`MTG_ID_HINT_ROOT=3`, the default). The line played is always a rollout line.
+* **Phase E0 measures R first** (`scripts/vlq_emul.py`): 2 x 200 play-settings games per deck with per-game
+  calibration, read back per deck from the `emul R by depth, deck=` lines `MTG_ROLLOUT_STATS` prints, frozen into
+  the arm's sidecar as `emul_r`. A per-game R costs more than it saves on a deck with few searched decisions
+  (Landfall 1.11x live), which is why it is frozen. E0 is a real dependency (R needs D's play settings), so it is
+  its own short batch; a deck with no learned model, or no usable R, gets no emul arm and the log says so.
+* **The arm** is `emul`, on phase E's A/B seeds beside `live` / `staged` / `nlesc` / `nlfit`, and E.5's pick
+  (`vlq_adopt_pick.py`) judges it by the same rule; the file is kept as `<queue>/<stem>.value.EMUL.json`.
+* **Evidence:** Landfall -0.0355 turns at 0.93x units / 0.996x instructions of the default; fleet screen
+  2026-10-21: KittyEquipment and Melira Pod ahead at equal units, most hybrid decks 1.2-3.2x the units for no
+  gain (their trusted model line ends the decision cheaply). `docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md`.
+* **Caveat:** the cost test is in work units, and units under-price tree work against rollouts -- the emulated
+  ladder paid ~5-10% more instructions per unit than the rollout ladder on Landfall. A marginal "cheaper" verdict
+  for `emul` is worth a callgrind check before committing it.
 
 **Phase E.6 decides the deck's escalation-skip allowance** (`escalation_skip_r`, USER 2026-10-13).
 It runs between E.5 and F: the allowance is a measurement of the leaf now live, and it can change play,

@@ -344,6 +344,12 @@ TRUST_SEEDS="620000 621000 622000 623000 624000 625000 626000 627000"
 # Non-inferiority margin for the acceptance test, in LP turns. Same number as the deriver's --tol,
 # and deliberately so: the tolerance's ONLY job is now to gate this test.
 TRUST_TOL=0.002
+# PHASE E0, the EMULATED LADDER's per-deck R calibration (USER 2026-10-21): play-settings games of the staged model
+# in the emulated ladder with per-game R calibration, read back per deck (MTG_ROLLOUT_STATS) and frozen into the
+# phase-E arm's emul_r. Seeds clear of AB (600000-607999), play (610000-613999) and trust (620000-627999). 400
+# games put 100s-1000s of samples on depths 1-4 of every deck in the 2026-10-21 fleet calibration.
+EMULCAL_GAMES=200
+EMULCAL_SEEDS="630000 631000"
 ROW_K=3
 # PHASE A PER-GAME WALL BACKSTOP (user, 2026-10-09: "just to be safe we should do a similar
 # condemnation approach to phase C in A" / "It doesn't win us much to grind a couple of games for that
@@ -1201,6 +1207,52 @@ PY
     done
 }
 
+# ------------- PHASE E0: the EMULATED LADDER's rollout cost per leaf, per deck (value_play.emul_r)
+# USER 2026-10-21 ("Let's add this mode to the check in the value-leaf"): phase E also measures the emulated
+# ladder -- warm-up passes on the staged model, the committing pass on the rollout leaf at the depth the rollout
+# ladder would reach, the model breaking the rollout's ties at the root (MTG_ID_HINT_ROOT=3). It beat the default
+# on Landfall at equal instructions (-0.0355 turns) and the shipped shapes on KittyEquipment and Melira Pod in
+# the fleet screen (docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md s7-8). Its replayed start gate needs
+# R, the rollout's cost per leaf by pass depth; calibrating R inside each game costs more than it saves on a deck
+# with few searched decisions (Landfall 1.11x live), so it is measured ONCE here and frozen into the arm's
+# sidecar (scripts/vlq_emul.py). A real data dependency of phase E's emul arm -- R needs the staged model at its
+# final play settings, i.e. after D -- so it is its own pooled batch: play-settings games, one short tail.
+# Never stops the run: a deck with no model or no usable R simply gets no emul arm, which the log says.
+E0_MARK=E0_emulcal
+phase_emulcal() {
+    done_p "$E0_MARK" && return 0
+    local vroot=$VLQ/emulcal_variants; rm -rf "$vroot"; mkdir -p "$vroot"
+    local row key dir stem mkey base games staged s r
+    { for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        staged=logs/eval/$stem.value.STAGED.json
+        rm -f "$VLQ/$stem.emul_r.json"
+        [ -s "$staged" ] || continue
+        python3 scripts/vlq_emul.py sidecar "$staged" "$vroot/$stem.value.EMULCAL.json" || continue
+        make_variant_deck "$vroot/$key" "$dir" "$stem" "$vroot/$stem.value.EMULCAL.json"
+        for s in $EMULCAL_SEEDS; do
+            h_job "$key-emulcal_s$s" "$(deck_file "$vroot/$key" "$stem")" "$vroot/$key/$stem.profile.json" "$EMULCAL_GAMES" "$s"
+        done
+      done; } | h_manifest "$VLQ/emulcal.manifest.json" >/dev/null \
+        || { log "PHASE E0: no staged model with a learned model -- no emulated arm to calibrate"; mark "$E0_MARK"; return 0; }
+    log "PHASE E0: emulated-ladder R calibration, $(grep -c '"name"' "$VLQ/emulcal.manifest.json") jobs in ONE queue"
+    MTG_ROLLOUT_STATS=1 "$(harness_bin)" --batch "$VLQ/emulcal.manifest.json" > "$VLQ/emulcal.log" 2> "$VLQ/emulcal.err" \
+        || { local rc=$?
+             log "PHASE E0: batch FAILED (exit $rc); NOT marked -- re-run to redo it"
+             return 1; }
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        [ -d "$vroot/$key" ] || continue
+        if r=$(python3 scripts/vlq_emul.py r "$VLQ/emulcal.err" "$vroot/$key/$stem.profile.json" 2>&1); then
+            printf '%s\n' "$r" > "$VLQ/$stem.emul_r.json"
+            log "  $stem: emul_r $r (frozen into phase E's emul arm)"
+        else
+            log "  $stem: no usable R -- phase E plays no emul arm ($r)"
+        fi
+    done
+    mark "$E0_MARK"
+}
+
 # --------------------- PHASE E: A/B + play sweeps for every deck, ONE pooled batch (MEASURED ONLY)
 # Bases are spaced by exactly games-per-job so each arm tiles its seed space once: game identity is
 # base+game_index, so closer spacing makes jobs REPLAY games -- which once turned 1.3 sigma into a fake
@@ -1255,6 +1307,18 @@ PY
                 h_job "$key-${sh}_s$s" "$(deck_file "$vroot/$key/$sh" "$stem")" "$vroot/$key/$sh/$stem.profile.json" "$AB_GAMES" "$s"
             done
         done
+        # EMULATED-LADDER ARM (USER 2026-10-21; phase E0 above): the STAGED model in the emulated ladder with the
+        # frozen R phase E0 measured -- exactly the file E.5 would install. Built on the staged sidecar, not the
+        # live one: the warm-ups run on the model, so it is this run's model being judged. Measured even when live
+        # already ships the emulated ladder (live runs the old model and the old R).
+        rm -f "$VLQ/$stem.value.EMUL.json"
+        if [ -s "$VLQ/$stem.emul_r.json" ] \
+           && python3 scripts/vlq_emul.py sidecar "$staged" "$VLQ/$stem.value.EMUL.json" --r "$VLQ/$stem.emul_r.json"; then
+            make_variant_deck "$vroot/$key/emul" "$dir" "$stem" "$VLQ/$stem.value.EMUL.json"
+            for s in $AB_SEEDS; do
+                h_job "$key-emul_s$s" "$(deck_file "$vroot/$key/emul" "$stem")" "$vroot/$key/emul/$stem.profile.json" "$AB_GAMES" "$s"
+            done
+        fi
         # LEAF-RULE A/B (see leafrule_counterfactual): the worst-case OFF settings on the A/B seeds, paired
         # against the staged arm above, which IS the ON product -- so it costs one arm, not two.
         if [ -s "$VLQ/$stem.value.LEAFOFF.json" ]; then
@@ -1351,9 +1415,9 @@ PY
         echo "=== $key: regenerated value-leaf vs live ===" | tee -a "$VLQ/driver.log"
         grep -E "^(live|staged)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_ab.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_ab.log" live 2>&1 | tee -a "$VLQ/driver.log"
-        if grep -qE "^(nlesc|nlfit)_s" "$VLQ/m_$key.log"; then
-            echo "=== $key: search shapes -- the staged model and the leafless menu shapes, all vs live ===" | tee -a "$VLQ/driver.log"
-            grep -E "^(live|staged|nlesc|nlfit)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_shape.log"
+        if grep -qE "^(nlesc|nlfit|emul)_s" "$VLQ/m_$key.log"; then
+            echo "=== $key: search shapes -- the staged model, the leafless menu shapes and the emulated ladder, all vs live ===" | tee -a "$VLQ/driver.log"
+            grep -E "^(live|staged|nlesc|nlfit|emul)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_shape.log"
             python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_shape.log" live 2>&1 | tee -a "$VLQ/driver.log"
         else
             rm -f "$VLQ/m_${key}_shape.log"
@@ -1423,7 +1487,7 @@ PY
 # the verdict line, with its reason and cost ratio, goes to $DECISIONS. This is adoption IN THIS TREE: nothing is committed;
 # committing it with the deck's smoke+regression GT re-accepted (the leaf changes play) is the next step.
 # THE CANDIDATES (USER 2026-10-14, the no-leaf screen): not only the staged model but also phase E's leafless
-# menu shapes (nlesc, nlfit), each judged against live by the same rule; scripts/vlq_adopt_pick.py picks among
+# menu shapes (nlesc, nlfit) and the emulated ladder (emul, USER 2026-10-21), each judged against live by the same rule; scripts/vlq_adopt_pick.py picks among
 # the ones that pass (the cheapest, unless another is notably better than it) and says why.
 phase_adopt() {
     done_p E_adopt && return 0
@@ -1444,6 +1508,7 @@ phase_adopt() {
           staged) src=$staged;                         what="the staged value leaf" ;;
           nlesc)  src=$VLQ/$stem.value.NLESC.json;     what="shape #2, escalation with a leafless probe" ;;
           nlfit)  src=$VLQ/$stem.value.NLFIT.json;     what="shape #3, the final-depth single pass (leafless)" ;;
+          emul)   src=$VLQ/$stem.value.EMUL.json;      what="the emulated ladder (staged model warm-ups, rollout committing pass, frozen emul_r)" ;;
           *)      src=""; what="" ;;
         esac
         case "$rc" in
@@ -1464,7 +1529,7 @@ phase_adopt() {
                printf '%s\n' "$v" | sed 's/^/    /'
                echo "    the staged model stays at $staged; nothing in $dir changed. To adopt a candidate anyway:"
                echo "    cp '$staged' '$dir/$stem.value.json' (or $VLQ/$stem.value.NLESC.json / .NLFIT.json for a"
-               echo "    leafless shape), delete the E6_skipcal marker, and re-run."
+               echo "    leafless shape, .EMUL.json for the emulated ladder), delete the E6_skipcal marker, and re-run."
                echo; } >> "$DECISIONS" ;;
           *) log "  $stem: verdict FAILED (rc=$rc) -- see $alog"; printf '%s\n' "$v" | while IFS= read -r l; do log "    $l"; done
              return 1 ;;
@@ -1537,7 +1602,7 @@ finish|run)
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
     _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
     for ph in phase_freeze phase_rows phase_split phase_train phase_leafcal phase_matrix phase_riskgate \
-              phase_meta phase_measure phase_adopt phase_skipcal; do
+              phase_meta phase_emulcal phase_measure phase_adopt phase_skipcal; do
         check_freeze || exit 1
         check_decks  || exit 1
         check_leaf_keys || exit 1
@@ -1554,7 +1619,8 @@ status)
         A_split)   echo "A split       ";; B_train)  echo "B train       ";;
         C0_leafcal) echo "C0 leaf calib ";;
         C_matrix)  echo "C matrix      ";; C_riskgate) echo "C.5 risk gate ";;
-        D_meta)    echo "D metadata    ";; E_measure)  echo "E measure     ";;
+        D_meta)    echo "D metadata    ";; E0_emulcal) echo "E0 emul R     ";;
+        E_measure)  echo "E measure     ";;
         E_adopt)   echo "E.5 adopt     ";;
         E6_skipcal) echo "E.6 skip allow";; esac; }
     echo "queue dir  : $VLQ"
@@ -1572,7 +1638,7 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E_measure E_adopt E6_skipcal; do
+    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E0_emulcal E_measure E_adopt E6_skipcal; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done
@@ -1682,11 +1748,12 @@ ab)
             echo "no staged model for $key (logs/eval/$stem.value.STAGED.json) -- run phases A..B first"; exit 2; }
     done
     E_MARK=E_ab_nomatrix
+    E0_MARK=E0_emulcal_nomatrix   # R at pre-matrix play settings; a later full run recalibrates under its own marker
     log "=== NO-MATRIX ADOPTION A/B: staged (as-is, presence-only) vs live, + play sweep ==="
     check_freeze || exit 1
     check_decks  || exit 1
     check_leaf_keys || exit 1
-    phase_freeze && phase_measure || { log "STOPPED in ab"; exit 1; }
+    phase_freeze && phase_emulcal && phase_measure || { log "STOPPED in ab"; exit 1; }
     log "=== AB COMPLETE -- nothing adopted; review the report above ==="
     ;;
 skipcal)

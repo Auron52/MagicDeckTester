@@ -320,6 +320,40 @@ staged b10 1.05x -0.047, b15 1.30x -0.0525 (about level with live + root hint's 
 leafless FIT (strict gate) b20 0.96x **+0.049**; leafless escalation b10 0.81x +0.050, b20 1.23x +0.004 -- still well
 behind: a leafless tree has no incumbent to prune against, and the hint cannot give it one.
 
+### 8. The emulated ladder on the rest of the fleet (USER 2026-10-21: "Let's give it a try"), and in the pipeline
+
+**Per-deck R.** `MTG_ROLLOUT_STATS` now also prints `emul R by depth, deck=<profile>` per deck, so one pooled batch
+calibrates a whole fleet (`logs/tgt/fleet/calib*`; the Landfall control reproduced its earlier R exactly). R at
+depth 1 runs from ~7 (Melira Pod) and ~11 (Landfall) to ~540 (KittyEquipment) and ~950 (Hinata2) units per leaf;
+with the move-order hint on or off it barely moves on any other deck (Landfall's d3/d4 were the exception).
+
+**Screen** (28 decks with a learned model, play settings, 500 held-out paired games per arm, seeds 870000/871000,
+`logs/tgt/fleet/screen.*`): the emulated ladder costs **1.2-3.2x the units on most decks for no gain**. 19 decks ship
+the model hybrid, whose trusted model line ends a d5 decision cheaply -- the emulated ladder swaps that for a
+rollout committing pass at the rollout ladder's depth; 9 ship leafless shapes that were adopted because they
+undercut the full rollout ladder, which is what the emulated ladder emulates. Landfall was the special case: its
+default WAS the full rollout ladder.
+
+**Equal-cost curves** for the decks the screen left open (1,000 paired games, seeds 872000-875000; Hinata2 500;
+`logs/tgt/fleet/curve*`):
+
+| deck | emulated (units, turns) | shipped (units, turns) | reading |
+|---|---|---|---|
+| KittyEquipment | 0.89x -0.019; 1.15x -0.024 | 1.19x -0.010; 1.38x -0.013 | emulated better at lower cost |
+| Melira Pod | 0.57x +0.008; 0.72x -0.004 | 0.80x +0.016; 1.00x 0 | emulated ~28% cheaper at equal quality |
+| FiveColour | 0.71x +0.009; 0.88x +0.006 | 0.84x +0.008; 1.00x 0 | level within noise |
+| Hinata2 | 1.44x -0.042; 1.87x -0.046 | 1.25x -0.042; 1.48x -0.050 | shipped better at equal cost |
+| Prevent Damage | 0.81x +0.018; 0.97x +0.014 | 0.93x +0.007 | shipped better |
+
+Real cost (callgrind) for Kitty / Melira / FiveColour, and the top of the FiveColour / Melira curves plus Creature
+Giving's curve, were still running when this was written. Adoption per deck is the USER's call.
+
+**In the pipeline** (USER: *"Let's add this mode to the check in the value-leaf."*): `valueleaf.sh` phase E0
+calibrates R on the staged model at its final play settings, phase E plays an `emul` arm beside live / staged /
+nlesc / nlfit, and E.5 can adopt it by the same rule (`.claude/skills/value-leaf.md`). E.5 prices cost in units,
+which under-price the emulated ladder's tree work by ~5-10% in instructions, so a marginal `emul` adoption is
+worth a callgrind check before it is committed.
+
 ## USER decisions
 
 **Decided 2026-10-21** (USER: *"Okay, let's give it a try with the new setting."*):
@@ -335,6 +369,6 @@ behind: a leafless tree has no incumbent to prune against, and the hint cannot g
 
 **Still open:**
 
-3. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point,
-   and add the emulated shape (with R measured in-pipeline) to its arms.
+3. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point.
+   (The emulated shape with R measured in-pipeline is now one of its arms -- section 8.)
 4. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.

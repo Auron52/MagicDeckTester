@@ -1806,6 +1806,10 @@ static std::atomic<long long> g_emul_decisions{0}, g_emul_vpasses{0}, g_emul_hpa
                               g_emul_calib_passes{0};
 static std::array<std::atomic<long long>, 16> g_emul_rd_milli{}, g_emul_rd_n{}, g_emul_bias_milli{}, g_emul_bias_n{};
 static std::array<std::atomic<long long>, 16> g_emul_commit_hist{};
+// Per-DECK R by depth (MTG_ROLLOUT_STATS): the totals above pool every deck of a batch, so a fleet calibration (one
+// pooled batch, many decks) splits them by the deck's profile identity (valuearm::t_deck_key). Diagnostic only.
+static std::mutex g_emul_rdeck_mu;
+static std::map<std::string, std::array<std::pair<long long, long long>, 16>> g_emul_rdeck;   // key -> d -> (milli, n)
 // LADDER ACCOUNTING (MTG_ROLLOUT_STATS), keyed by the depth the decision COMMITTED at: units of the
 // committing pass vs everything before it. The heuristic ladder's "warm" bucket is the saving the
 // emulated ladder is after; the emulated ladder's "commit" bucket vs the heuristic's at the same depth
@@ -2806,6 +2810,15 @@ namespace
                           << "\n[rollout-stats]   emul R by depth (units/leaf, n): ";
                 for (int d = 0; d < 16; ++d)
                 { if (g_emul_rd_n[d].load() > 0) { std::cerr << "d" << d << "=" << static_cast<double>(g_emul_rd_milli[d].load()) / (1000.0 * static_cast<double>(g_emul_rd_n[d].load())) << "(" << g_emul_rd_n[d].load() << ") "; } }
+                for (const auto& kv : g_emul_rdeck)
+                {
+                    std::cerr << "\n[rollout-stats]   emul R by depth, deck=" << kv.first << ": ";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const std::pair<long long, long long>& a = kv.second[static_cast<std::size_t>(d)];
+                        if (a.second > 0) { std::cerr << "d" << d << "=" << static_cast<double>(a.first) / (1000.0 * static_cast<double>(a.second)) << "(" << a.second << ") "; }
+                    }
+                }
                 std::cerr << "\n[rollout-stats]   emul bias actual/reconstructed by depth: ";
                 for (int d = 0; d < 16; ++d)
                 { if (g_emul_bias_n[d].load() > 0) { std::cerr << "d" << d << "=" << static_cast<double>(g_emul_bias_milli[d].load()) / (1000.0 * static_cast<double>(g_emul_bias_n[d].load())) << "(" << g_emul_bias_n[d].load() << ") "; } }
@@ -75719,6 +75732,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     ++g_emul_Rn[k];
                     g_emul_rd_milli[k].fetch_add(static_cast<long long>(sample * 1000.0), std::memory_order_relaxed);
                     g_emul_rd_n[k].fetch_add(1, std::memory_order_relaxed);
+                    if (s_rollout_stats)
+                    {
+                        std::lock_guard<std::mutex> lk(g_emul_rdeck_mu);
+                        std::pair<long long, long long>& a = g_emul_rdeck[valuearm::t_deck_key][static_cast<std::size_t>(k)];
+                        a.first += static_cast<long long>(sample * 1000.0);
+                        ++a.second;
+                    }
                     if (ch[k] > 0.0)   // bias of the reconstruction this pass would have used
                     {
                         g_emul_bias_milli[k].fetch_add(static_cast<long long>(1000.0 * static_cast<double>(hcost) / ch[k]), std::memory_order_relaxed);
