@@ -39391,6 +39391,50 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     PushWithMadnessFan(actions, std::move(a), MadnessFanFor(state, pin, ManaCost{}, src.card.m_name.str()));
                 }
             }
+            // THE LOOP-FUNDED TEAM PUMP (mode 5 -- mode 4 is Stromkirk Condemned; AccomplishedAlchemist, USER 2026-10-20: "No ability to activate
+            // Ezuri for the win ... you should just be able to pay it as needed"). The same stacking P/T team pump,
+            // offered when the board's mana + float CANNOT pay the lethal count but an Accomplished Alchemist untap
+            // loop is reachable (FindFundingUntapLoop -- the hand's lifegain projected onto X autonomously, none
+            // in human play, the UntapLoopWorthOffering rule): the apply runs the loop to fund exactly this cost
+            // (FundTeamPumpByLoop) and pays from the float. Priced at ZERO plan mana, like the loop itself (its
+            // mana is made by the loop). Autonomous: the LETHAL count only (a win this turn dominates every smaller
+            // count, which the converter still prices at combat); human play: every count 1..lethal. A deck with
+            // no mana_per_life_gained creature never finds a loop, so nothing changes elsewhere.
+            if (sd->params.team_pump_cost.has_value() && sd->params.team_pump_power > 0
+                && !sd->params.team_pump_taps_source && sd->params.team_pump_cost->hybrid_count == 0)
+            {
+                static const bool s_loop_pump = EnvOn("MTG_AA_LOOP_FUNDED_PUMP", true);   // DEFAULT ON; =0 disables
+                const int k_lethal = heurarm::Flag(heurarm::AA_LOOP_FUNDED_PUMP, s_loop_pump)
+                                   ? TeamPumpLethalCount(state, state.active_player_index, *sd) : 0;
+                if (k_lethal > 0)
+                {
+                    const ManaCost full = TeamPumpCostTimes(state, state.active_player_index, src, *sd, k_lethal);
+                    ManaPool have = turn_pool();
+                    have.AddPool(state.floating_mana);
+                    if (!have.CanPay(full)
+                        && FindFundingUntapLoop(state, state.active_player_index,
+                                                HumanPlayActive() ? 0 : UntapLoopHandLifegain(state, state.active_player_index),
+                                                nullptr, nullptr, nullptr))
+                    {
+                        const int k_from = HumanPlayActive() ? 1 : k_lethal;
+                        for (int k = k_from; k <= k_lethal && k <= 8; ++k)
+                        {
+                            Action a;
+                            a.kind           = Action::Kind::ActivatePump;
+                            a.card_name      = src.card.m_name;
+                            a.def            = sd;
+                            a.hand_index     = -1;
+                            a.sac_source_id  = src.card.m_number;
+                            a.chosen_x       = k;
+                            a.gy_exile_mode  = 5;               // team pump, the untap loop pays (FundTeamPumpByLoop)
+                            a.cost           = ManaCost{};      // zero plan mana: the loop makes it
+                            a.eval           = (k == k_lethal) ? 5000 : k;
+                            a.is_noncreature = true;
+                            actions.push_back(std::move(a));
+                        }
+                    }
+                }
+            }
         }
 
         // Costed VALUE outlets (Siege-Gang "{1}{R}, Sac a Goblin: 2 damage"; Pashalik "{3}{R}, Sac a
@@ -41683,7 +41727,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     keep = q.cast_lifegain > 0 || q.untap_enchanted_cost.has_value() || q.untap_pump_cost.has_value()
                         || (q.untap_target_creature_cost.has_value() && q.self_untap_cost.has_value())
                         || (q.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
-                        || (q.tutor_to_hand && q.wish_from_sideboard);
+                        || (q.tutor_to_hand && q.wish_from_sideboard)
+                        || (AlchemistComboCombatOn() && d->card.IsCreature() && q.team_pump_cost.has_value()
+                            && q.team_pump_power > 0);
                 }
             }
             if (keep) { kept.push_back(std::move(a)); }
@@ -57771,11 +57817,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
                                          a.discard_name.str())) { ++g_trailing_act_skips; continue; }
             }
-            if (TapForCostDirect(state, OutletOwnCost(a), /*for_creature=*/false))
+            // Mode 5: the loop-funded team pump (AccomplishedAlchemist) -- fund the real cost with the untap
+            // loop, then pay it here. Applies as mode 2 (+P/+T to the subtype).
+            ManaCost pump_cost = OutletOwnCost(a);
+            bool     pump_ok   = true;
+            if (a.gy_exile_mode == 5)
+            {
+                pump_ok = LoopFundedPumpCost(state, state.active_player_index, a.sac_source_id, a.chosen_x, pump_cost)
+                       && FundTeamPumpByLoop(state, state.active_player_index, pump_cost, a.chosen_x);
+            }
+            if (pump_ok && TapForCostDirect(state, pump_cost, /*for_creature=*/false))
             {
                 const MadnessHostScope _mh(&RolloutMadnessPayer(), MadnessPinOf(a));   // A1 (executor twin)
                 ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
-                                  a.gy_exile_mode, a.chosen_x, a.discard_name.str());
+                                  a.gy_exile_mode == 5 ? 2 : a.gy_exile_mode, a.chosen_x, a.discard_name.str());
             }
             else { ++g_trailing_act_skips; }
         }
@@ -89915,7 +89970,9 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                                      OpponentHasLost(copy) ? "WIN" : "no");
                     }
                 }
-                if (OpponentHasLost(copy)) { best = cand; verified = true; break; }
+                // AlchemistComboOffWon == OpponentHasLost for every deck but AccomplishedAlchemist, where a
+                // combat-lethal board after the go-off is a win too (MTG_AA_COMBO_COMBAT: Ezuri's pump).
+                if (AlchemistComboOffWon(copy, state.active_player_index)) { best = cand; verified = true; break; }
                 best = cand;               // remember it only to skip re-verifying the same index
             }
             // KEEP THE BIGGEST STANDALONE BANKING COUNT even when it does not win (USER,
@@ -92554,6 +92611,15 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // iteration of a go-off (USER, EDF seed 5: seventeen history rows all saying "cast:
         // Eldrazi Displacer"). Same defect the loyalty/equip labels above fixed; this summary is
         // what the viewer writes into its history on an accepted line (matched_summary).
+        // The LOOP-FUNDED team pump (mode 5, AccomplishedAlchemist 2026-10-20): name the count and who pays, so a
+        // CheckLine variant list (the viewer's choose dialog) tells the counts apart. Other pump modes unchanged.
+        else if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 5)
+        {
+            const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const int tp = pd ? pd->params.team_pump_power : 0, tt = pd ? pd->params.team_pump_tough : 0;
+            cast_names.push_back(a.card_name + ": +" + std::to_string(tp) + "/+" + std::to_string(tt) + " x"
+                                 + std::to_string(std::max(1, a.chosen_x)) + " (the untap loop pays)");
+        }
         else if (a.kind == Action::Kind::ComboRoute)
         { cast_names.push_back(a.chosen_x > 3 ? "COMBO OFF route" : "loop: bank and deploy"); }
         else if (a.kind == Action::Kind::ActivateBlink)

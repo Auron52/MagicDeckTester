@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "THE USER'S SEED-2 TURN 7, AUTONOMOUS (reference claude_s2_gi1): the board of aa_co_13 resumed at main 1.",
+    "The search must kill THIS turn: Ezuri + Nourish + the Galvanic loop paying Ezuri's +3/+3 x2 (the loop-funded",
+    "pump, MTG_AA_LOOP_FUNDED_PUMP, or the COMBO OFF route), then the attack (23 >= 17)."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 26,
+  "opponent_life": 17,
+  "opponent_library_size": 47,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Arbor Elf",
+      "sick": false
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Galvanic Alchemist",
+      "sick": false,
+      "paired_with": "Accomplished Alchemist"
+    },
+    {
+      "name": "Elvish Harbinger",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Ezuri, Renegade Leader",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Nourish",
+    "Utopia Sprawl"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "resume_at": "main1",
+  "max_turns": 7,
+  "expect_win_turn": 7
+}

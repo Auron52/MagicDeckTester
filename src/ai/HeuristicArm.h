@@ -619,6 +619,8 @@ enum Slot : int
     AA_HARB_ALCH_DEFAULT,     // MTG_AA_HARB_ALCH_DEFAULT  PROPOSED amendment of the AA Harbinger rule (default OFF, the USER's call): no Alchemist held -> the Alchemist FIRST (the default pick), then Witch / Ezuri / Arbor Elf, all searched, instead of the Alchemist alone
     AA_COMBO_ROUTE,           // MTG_AA_COMBO_ROUTE  AccomplishedAlchemist COMBO OFF (USER 2026-10-20): the mechanical untap-loop go-off (lifegain -> Alchemist untap/tap loop -> Stroke / Living Wish -> Scholar), emitted as ONE ComboRoute action only when its trial on a copy WINS this turn (AlchemistComboRouteOffer); the viewer's Combo Off button rides it. Default ON (the USER asked for it); =0 -> no route action
     UNTAP_LOOP_SURPLUS_GENERIC, // MTG_UNTAP_LOOP_SURPLUS_GENERIC  the closed-form untap loop pays GENERIC pips out of the colour most in SURPLUS over what the loop still owes (g_untap_loop_owed), not WUBRG -- the Staff's {3}+{1} no longer eats the {W} / {B} a chained Scholar kill is banking (AccomplishedAlchemist COMBO OFF sweep, 2026-10-20). A mana-payment choice; default ON; =0 -> WUBRG
+    AA_LOOP_FUNDED_PUMP,      // MTG_AA_LOOP_FUNDED_PUMP  AccomplishedAlchemist (USER 2026-10-20, "you should just be able to pay it as needed"): a stacking team pump (Ezuri's {2}{G}{G}{G}: Elves +3/+3) is also offered when only an Accomplished Alchemist untap loop can fund it -- ActivatePump mode 5 (mode 4 is Stromkirk Condemned), whose apply runs the loop to fund exactly that cost (FundTeamPumpByLoop) and pays from the float. Default ON; =0 -> only the float-funded / combat-converter pumps
+    AA_COMBO_COMBAT,          // MTG_AA_COMBO_COMBAT  AccomplishedAlchemist COMBO OFF (USER 2026-10-20, "Combo Off also never showed up there"): the PUMP finishers -- FIN-EZURI / FIN-EZURI-HAND / FIN-WITCH -- in the rule table, and a COMBAT-LETHAL board as the route's verdict (the kill lands in the combat after main 1; a goldfish never blocks). Default ON; =0 -> main-phase kills only (Stroke / drain), as first shipped
     COUNT
 };
 
@@ -1188,6 +1190,8 @@ inline const char* Name(int slot)
         "MTG_AA_HARB_ALCH_DEFAULT",
         "MTG_AA_COMBO_ROUTE",
         "MTG_UNTAP_LOOP_SURPLUS_GENERIC",
+        "MTG_AA_LOOP_FUNDED_PUMP",
+        "MTG_AA_COMBO_COMBAT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

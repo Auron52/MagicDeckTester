@@ -1,0 +1,73 @@
+{
+  "_comment": [
+    "THE USER'S SEED-2 TURN 7 (reference claude_s2_gi1, decision 27; USER 2026-10-20: 'Combo Off also never",
+    "showed up there'). Six Forests, Arbor Elf, a non-sick Accomplished Alchemist soulbonded to Galvanic Alchemist",
+    "({2}{U}: untap this creature), Elvish Harbinger; hand Ezuri, Renegade Leader, Nourish, Utopia Sprawl, three",
+    "Forests; opponent at 17. Rule LIFE-HAND+LOOP-GALVANIC+FIN-EZURI-HAND: cast Ezuri, Nourish (X = 6), loop the",
+    "Galvanic grant, Ezuri +3/+3 x2 -> Alchemist 8, Arbor Elf 7, Harbinger 7, Galvanic 1 = 23 >= 17 in the attack.",
+    "The verdict is a COMBAT-LETHAL board (MTG_AA_COMBO_COMBAT): the kill lands in the combat after main 1."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 26,
+  "opponent_life": 17,
+  "opponent_library_size": 47,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Arbor Elf",
+      "sick": false
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Galvanic Alchemist",
+      "sick": false,
+      "paired_with": "Accomplished Alchemist"
+    },
+    {
+      "name": "Elvish Harbinger",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Ezuri, Renegade Leader",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Nourish",
+    "Utopia Sprawl"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true,
+  "expect_history_contains": [
+    "Ezuri"
+  ]
+}

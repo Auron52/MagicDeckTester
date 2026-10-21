@@ -30928,6 +30928,11 @@ inline thread_local InternedName g_untap_loop_kill_card{};   // chained payoffs:
 // in every world that runs it (trial, rollout apply, executor apply), so the worlds stay in lockstep.
 // Zero everywhere else: byte-identical.
 inline thread_local int g_untap_loop_no_pump = 0;
+// A FORCED need (AccomplishedAlchemist, USER 2026-10-20: "you should just be able to pay it as needed"): while
+// non-null, ApplyUntapLoop funds THIS need instead of the cheapest kill -- set only by FundTeamPumpByLoop around
+// the loop that pays a loop-funded team pump (Ezuri's {2}{G}{G}{G} x k), in both worlds.
+struct UntapLoopNeed;
+inline thread_local const UntapLoopNeed* g_untap_loop_force_need = nullptr;
 // THE ROUTE'S MENU (the same COMBO OFF route, 2026-10-20): while non-zero, CollectActions keeps only what the
 // walk can use -- the land drop, lifegain / untapper / Living Wish casts, the closed-form loop
 // (ActivateUntap kUntapLoopToNeed) and the Staff's gain. The walk enumerated the WHOLE menu at every link and
@@ -31466,8 +31471,10 @@ inline bool UntapLoopNeedFunded(const GameState& s, int ctrl, int* need_mv, Unta
 // Run the loop to its need. Returns the number of UNTAP activations performed (0 = nothing happened).
 inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, int target_id)
 {
-    UntapLoopNeed need = ComputeUntapLoopNeed(state, ctrl);
-    const int k_pump = g_untap_loop_no_pump != 0 ? 0 : UntapLoopPumpIterations(state, ctrl, shape, source_id, target_id);
+    UntapLoopNeed need = g_untap_loop_force_need != nullptr ? *g_untap_loop_force_need
+                                                            : ComputeUntapLoopNeed(state, ctrl);
+    const int k_pump = (g_untap_loop_no_pump != 0 || g_untap_loop_force_need != nullptr)
+                     ? 0 : UntapLoopPumpIterations(state, ctrl, shape, source_id, target_id);
     if (need.payoff == kLoopPayNone && k_pump <= 0) { return 0; }
     const bool staff_shape = shape == kUntapStaffTarget;
     ManaCost goal = need.cost;
@@ -31648,6 +31655,110 @@ inline int ApplyUntapAction(GameState& state, int ctrl, int shape, int source_id
 {
     if (chosen_x >= kUntapLoopToNeed) { return ApplyUntapLoop(state, ctrl, shape, source_id, target_id); }
     return ApplyActivatedUntap(state, ctrl, shape, source_id, target_id, std::max(1, chosen_x));
+}
+
+// ==== THE LOOP-FUNDED TEAM PUMP (AccomplishedAlchemist, USER 2026-10-20) ==========================================
+// USER, hand-playing seed 2 T7 (Ezuri, Renegade Leader + Nourish, Accomplished Alchemist soulbonded to Galvanic
+// Alchemist, opponent at 17): *"No ability to activate Ezuri for the win"* -- the line existed only as "run the
+// untap loop, THEN pump off the float" -- *"you should just be able to pay it as needed."* So a team pump
+// ({2}{G}{G}{G}: Elves +3/+3) is also offered as ONE action whose payment, when the board cannot cover it, first
+// runs the closed-form untap loop on an Accomplished Alchemist to fund exactly that cost (a forced need), then
+// pays from the float. Mode 5 of ActivatePump (applies as mode 2; mode 4 is Stromkirk Condemned). The loop is the C2b loop, unchanged; only WHAT
+// it funds is forced. A mana-payment mechanism: it decides how the cost is paid, never whether to pump.
+
+// The first (Alchemist, untapper) pair whose loop is reachable from here, in battlefield order (deterministic,
+// both worlds). `x_extra` = the hand's lifegain projected onto X (recognition only; 0 in human play and at apply).
+inline bool FindFundingUntapLoop(const GameState& s, int ctrl, int x_extra, int* shape, int* source_id,
+                                 int* target_id)
+{
+    std::vector<UntapAbilityRef> refs;
+    for (int ti = 0; ti < static_cast<int>(s.battlefield.size()); ++ti)
+    {
+        const Permanent& t = s.battlefield[static_cast<std::size_t>(ti)];
+        if (t.controller_index != ctrl || t.def_absent || t.card.m_number == 0) { continue; }
+        const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
+        if (td == nullptr || !td->params.mana_per_life_gained) { continue; }
+        refs.clear();
+        CollectCreatureUntapAbilities(s, ctrl, t, refs);
+        for (const UntapAbilityRef& r : refs)
+        {
+            const int si = UntapLoopFindNum(s, r.source_id, ctrl, true);
+            if (si < 0) { continue; }
+            if (UntapLoopNextOp(s, ctrl, r.shape, si, ti, nullptr, x_extra) < 0) { continue; }
+            if (shape)     { *shape = r.shape; }
+            if (source_id) { *source_id = r.source_id; }
+            if (target_id) { *target_id = t.card.m_number; }
+            return true;
+        }
+    }
+    return false;
+}
+
+// K activations of a team pump's cost (flat pips; the cards that reach here carry no hybrid).
+inline ManaCost TeamPumpCostTimes(const GameState& s, int ctrl, const Permanent& src, const CardDefinition& sd, int k)
+{
+    return ScaleFlatManaCost(EffectiveActivationCost(s, ctrl, src.card, *sd.params.team_pump_cost), std::max(1, k));
+}
+
+// The REAL cost of a mode-4 (loop-funded) pump: K x the source's team pump cost on THIS state. false when the
+// source is gone (a stranded activation is a full no-op, both worlds).
+inline bool LoopFundedPumpCost(const GameState& s, int ctrl, int source_id, int k, ManaCost& out)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != ctrl || p.card.m_number != source_id || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.team_pump_cost.has_value()) { return false; }
+        out = TeamPumpCostTimes(s, ctrl, p, *d, k);
+        return true;
+    }
+    return false;
+}
+
+// Make `cost` payable: when the board (untapped sources + the float) cannot pay it, run the untap loop with the
+// need FORCED to that cost. Returns whether the cost is payable afterwards (the caller pays it with its own
+// world's payer). No loop reachable -> unchanged board, false.
+inline bool FundTeamPumpByLoop(GameState& s, int ctrl, const ManaCost& cost, int k)
+{
+    {
+        ManaPool have = AvailableManaPool(s, nullptr);
+        have.AddPool(s.floating_mana);
+        if (have.CanPay(cost)) { return true; }
+    }
+    int shape = 0, src = 0, tgt = 0;
+    if (!FindFundingUntapLoop(s, ctrl, 0, &shape, &src, &tgt)) { return false; }
+    UntapLoopNeed need;
+    need.payoff = kLoopPayPump;
+    need.cost   = cost;
+    need.count  = k;
+    struct ForceScope
+    {
+        const UntapLoopNeed* prev;
+        explicit ForceScope(const UntapLoopNeed* n) : prev(g_untap_loop_force_need) { g_untap_loop_force_need = n; }
+        ~ForceScope() { g_untap_loop_force_need = prev; }
+    } _force(&need);
+    ApplyUntapLoop(s, ctrl, shape, src, tgt);
+    ManaPool have = AvailableManaPool(s, nullptr);
+    have.AddPool(s.floating_mana);
+    return have.CanPay(cost);
+}
+
+// COMBAT-LETHAL NOW (a goldfish: the opponent has no creatures and never blocks): the total combat power of every
+// creature we control that can attack this turn reaches the opponent's life. The AccomplishedAlchemist COMBO OFF
+// route's verdict for a pump finisher (Ezuri's +3/+3 x k, the Seedcradle Witch loop's own +3/+3) -- the kill lands
+// in the combat that follows the main phase.
+inline bool CombatLethalNow(const GameState& s, int ctrl)
+{
+    const int opp = s.players[static_cast<std::size_t>(1 - ctrl)].life;
+    if (opp <= 0) { return true; }
+    long long power = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != ctrl || (!q.card.IsCreature() && !q.is_animated)) { continue; }
+        if (!CanAttackFull(q, s.battlefield, ctrl)) { continue; }
+        power += std::max(0, CombatPowerOf(q, s));
+    }
+    return power >= opp;
 }
 
 // Is the source of a battlefield ActivatePermAbility a CREATURE (Recruitment Officer's dig, King

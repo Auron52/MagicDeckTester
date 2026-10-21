@@ -3479,7 +3479,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
                 }
                 else { TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main); }
-                if (try_rollback && !OpponentHasLost(state))
+                if (try_rollback && !AlchemistComboOffWon(state, state.active_player_index))
                 {
                     state = std::move(co_before);
                     if (g_play_event_sink  && g_play_event_sink->size()  > sv_ev)
@@ -3495,7 +3495,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // kill -- and when that offer turns out to be wrong the player has to be told, in
                 // the history, on the turn it happened. A verified plan reaching here is a harder
                 // failure still (the verify and the apply disagreed), and says so.
-                if (!OpponentHasLost(state))
+                if (!AlchemistComboOffWon(state, state.active_player_index))
                 {
                     const std::string restored = try_rollback
                         ? std::string(" Your board, mana and hand are UNCHANGED -- the attempt was "
@@ -6474,12 +6474,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.gy_exile_mode == 4
                 && !DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
                                         a.discard_name.str())) { continue; }
+            // Mode 5: the loop-funded team pump (AccomplishedAlchemist; lockstep with ApplyPlanDirect's trailing
+            // pass): fund the real cost with the untap loop (FundTeamPumpByLoop, shared), then pay it with this
+            // world's payer.
+            ManaCost pump_cost = OutletOwnCost(a);
+            bool     pump_ok   = true;
+            if (a.gy_exile_mode == 5)
+            {
+                pump_ok = LoopFundedPumpCost(state, state.active_player_index, a.sac_source_id, a.chosen_x, pump_cost)
+                       && FundTeamPumpByLoop(state, state.active_player_index, pump_cost, a.chosen_x);
+            }
             ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, OutletOwnCost(a), avail, /*for_creature=*/false))
+            if (pump_ok && TapForCost(state, pump_cost, avail, /*for_creature=*/false))
             {
                 const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));   // A1 (rollout twin)
                 const int n = ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
-                                                a.gy_exile_mode, a.chosen_x, a.discard_name.str());
+                                                a.gy_exile_mode == 5 ? 2 : a.gy_exile_mode, a.chosen_x, a.discard_name.str());
                 // Label built from the PARAMS, not hardcoded. It used to read "team pump + haste"
                 // for every mode != 1, which was already wrong for mode 3 (Resplendent Angel's self
                 // pump + lifelink) and became wrong again for Valiant Knight's double-strike grant

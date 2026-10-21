@@ -43629,6 +43629,16 @@ std::vector<int> AccomplishedAlchemistProvider::MainPhaseTeamPumpCounts(const Ga
 // operations" (TurnSolver.cpp, `edfco`).
 // =================================================================================================
 
+// MTG_AA_COMBO_COMBAT (heurarm AA_COMBO_COMBAT), DEFAULT ON (USER 2026-10-20: "Combo Off also never showed up
+// there" -- seed 2 T7, Ezuri + Nourish + the Galvanic loop, opponent at 17). The PUMP finishers: rule rows
+// FIN-EZURI / FIN-EZURI-HAND / FIN-WITCH, and a COMBAT-LETHAL board (CombatLethalNow -- a goldfish never blocks) as
+// the route's verdict, the kill landing in the combat right after main 1. =0 restores main-phase kills only.
+bool AlchemistComboCombatOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_COMBO_COMBAT", true);
+    return heurarm::Flag(heurarm::AA_COMBO_COMBAT, s_env);
+}
+
 namespace aarule
 {
 // MTG_AA_CO_WHY=1 -- diagnosis only: one [aa-co-why] line per refused (alchemist, untapper) pair.
@@ -43744,6 +43754,38 @@ inline std::vector<FinOpt> Finishers(const GameState& s, int c, bool staff_on_bo
             }
         }
     }
+    // FIN-EZURI / FIN-EZURI-HAND (combat finishers, MTG_AA_COMBO_COMBAT): Ezuri, Renegade Leader's
+    // "{2}{G}{G}{G}: Elf creatures you control get +3/+3" to lethal -- K = TeamPumpLethalCount (every creature
+    // that can attack this turn, the loop's Alchemist counted untapped, the Elves pumped), K x {2}{G}{G}{G}, plus
+    // {1}{G}{G} when Ezuri is still in hand (its ability has no {T}: the turn it is cast is fine). The kill is the
+    // attack after main 1. 0 = combat is already lethal (no combo needed, no row).
+    if (AlchemistComboCombatOn())
+    {
+        bool done_bf = false, done_hand = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (done_bf || p.controller_index != c || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.team_pump_cost.has_value() || d->params.team_pump_power <= 0
+                || d->params.team_pump_taps_source) { continue; }
+            const int k = TeamPumpLethalCount(s, c, *d);
+            if (k <= 0) { continue; }
+            out.push_back(FinOpt{ "FIN-EZURI", k * std::max(1, d->params.team_pump_cost->ManaValue()), 0 });
+            done_bf = true;
+        }
+        for (const Card& h : me.hand)
+        {
+            if (done_bf || done_hand) { break; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (d == nullptr || !d->card.IsCreature() || !d->params.team_pump_cost.has_value()
+                || d->params.team_pump_power <= 0 || d->params.team_pump_taps_source) { continue; }
+            const int k = TeamPumpLethalCount(s, c, *d);
+            if (k <= 0) { continue; }
+            out.push_back(FinOpt{ "FIN-EZURI-HAND", k * std::max(1, d->params.team_pump_cost->ManaValue())
+                                                   + EffectiveSpellCost(*d, s, 1).ManaValue(), 0 });
+            done_hand = true;
+        }
+    }
     if (staff_on_board && lx > 0)
     {
         const auto& lib = me.library;
@@ -43850,7 +43892,17 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
     // FINISH first: it is the cheapest refusal (no finisher, no row).
     const bool staff_reach = staff_bf || staff_h != nullptr;
     const std::vector<FinOpt> fins = Finishers(s, c, staff_reach);
-    if (fins.empty())
+    bool witch_fin_possible = false;
+    if (AlchemistComboCombatOn())
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != c || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.untap_pump_cost.has_value() && d->params.untap_pump_power > 0) { witch_fin_possible = true; break; }
+        }
+    }
+    if (fins.empty() && !witch_fin_possible)
     {
         if (WhyOn()) { std::cout << "[aa-co-why] t" << s.turn_number << " no main-phase finisher reachable\n"; }
         return false;
@@ -44082,6 +44134,17 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
                     const long long net  = std::max(X, c_steady + 1) - c_steady;
                     const long long bank = can_gain ? (1LL << 40)
                                          : static_cast<long long>(kUntapLoopCeiling / 2 - 16) * net + st.P;
+                    // FIN-WITCH (combat finisher, MTG_AA_COMBO_COMBAT): the Seedcradle Witch loop's OWN "+3/+3" on
+                    // the Alchemist it untaps -- each iteration pumps the attacker, so the loop is the kill by itself
+                    // when the Alchemist can attack (UntapLoopPumpIterations, the C2b loop's own count).
+                    if (L.shape == kUntapPumpTarget && L.witch_num != 0 && AlchemistComboCombatOn()
+                        && UntapLoopPumpIterations(s, c, kUntapPumpTarget, L.witch_num, A.card.m_number) > 0)
+                    {
+                        const char* life_name = mask != 0 ? "LIFE-HAND"
+                                              : (X >= c_steady + 1 ? "LIFE-GAINED" : "LIFE-STAFF");
+                        if (rule) { *rule = std::string(life_name) + "+" + L.name + "+FIN-WITCH"; }
+                        return true;
+                    }
                     for (const FinOpt& F : fins)
                     {
                         if (F.wishes_used + L.wishes_used > wishes) { continue; }
@@ -44135,12 +44198,20 @@ namespace aaroute
 {
 inline thread_local int t_in_route = 0;
 struct Guard { Guard() { ++t_in_route; } ~Guard() { --t_in_route; } };
+// Main-phase kills only -- unless the combat finishers are on (MTG_AA_COMBO_COMBAT), in which case the loop funds
+// the cheapest kill including Ezuri's pump and the Witch's own +3/+3, and CombatLethalNow is a verdict.
 struct NoPumpScope
 {
     int prev;
-    NoPumpScope() : prev(g_untap_loop_no_pump) { g_untap_loop_no_pump = 1; }
+    NoPumpScope() : prev(g_untap_loop_no_pump) { g_untap_loop_no_pump = AlchemistComboCombatOn() ? prev : 1; }
     ~NoPumpScope() { g_untap_loop_no_pump = prev; }
 };
+// THE ROUTE'S VERDICT: the opponent is dead -- or, with the combat finishers on, the board is combat-lethal (the
+// attack after main 1 kills; a goldfish never blocks).
+inline bool RouteWon(const GameState& s, int me)
+{
+    return OpponentHasLost(s) || (AlchemistComboCombatOn() && CombatLethalNow(s, me));
+}
 inline bool TraceOn() { static const bool v = EnvOn("MTG_AA_ROUTE_TRACE"); return v; }
 // MTG_AA_ROUTE_STATS=1 (diagnostic, count-only): walks, their verdicts, applies inside walks, and the walk
 // wall time, printed once at exit -- the route's own cost, which the search budget does not meter.
@@ -44262,7 +44333,8 @@ inline bool IsComboPieceCast(const Action& a)
     return p.cast_lifegain > 0 || p.untap_enchanted_cost.has_value() || p.untap_pump_cost.has_value()
         || (p.untap_target_creature_cost.has_value() && p.self_untap_cost.has_value())
         || (p.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
-        || (p.tutor_to_hand && p.wish_from_sideboard);
+        || (p.tutor_to_hand && p.wish_from_sideboard)
+        || (AlchemistComboCombatOn() && d->card.IsCreature() && p.team_pump_cost.has_value() && p.team_pump_power > 0);
 }
 inline bool IsSetupPlan(const TurnSolver::Plan& p)
 {
@@ -44352,7 +44424,8 @@ inline std::uint64_t ChildKey(const GameState& s, int me)
 
 static int Dfs(GameState& s, int me, int links_left, Walk& w)
 {
-    if (OpponentHasLost(s)) { return 1; }
+    // A combat-lethal ROOT is not a route (nothing for the route to play): only a link can make the verdict.
+    if (OpponentHasLost(s) || (!w.path.empty() && RouteWon(s, me))) { return 1; }
     if (links_left <= 0 || w.nodes_left <= 0 || w.applies_left <= 0) { return 0; }
     std::vector<TurnSolver::Plan> kills = TurnSolver::UntapLoopKillPlans(s, /*is_pre_combat=*/true);
     if (!kills.empty())
@@ -44535,7 +44608,7 @@ static int Replay(GameState& s, int me, const std::vector<Link>& path)
         { EmitPlayEvent(s.turn_number, "cast", TurnSolver::PlanLineSummary(l.plan, s)); }
         TurnSolver::ApplyPlan(s, l.plan, /*is_pre_combat=*/true);
     }
-    return OpponentHasLost(s) ? 1 : 0;
+    return RouteWon(s, me) ? 1 : 0;
 }
 
 struct Verdict { int r = 0; std::vector<Link> path; };
@@ -44590,6 +44663,7 @@ static Verdict Walk1(const GameState& s, int me)
         GameState copy = s;
         Walk w;
         v.r = Dfs(copy, me, kLinks, w);
+        if (v.r == 1 && w.path.empty()) { v.r = 0; }   // already won / lethal before any link: not a route
         if (v.r == 1) { v.path = w.path; }
         if (StatsOn())
         {
@@ -44608,6 +44682,13 @@ static Verdict Walk1(const GameState& s, int me)
     return v;
 }
 }   // namespace aaroute
+
+bool AlchemistComboOffWon(const GameState& s, int me)
+{
+    if (OpponentHasLost(s)) { return true; }
+    const DecisionProvider& p = ResolveProvider(s);
+    return p.UntapLoopRouteEnabled() && AlchemistComboCombatOn() && CombatLethalNow(s, me);
+}
 
 bool AlchemistComboRouteOn()
 {

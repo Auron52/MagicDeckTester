@@ -3904,6 +3904,10 @@ int  AlchemistComboRouteApply(GameState& s, int controller);  // 1 WIN, 0 nothin
 void AlchemistComboRouteClearMemo();
 bool AlchemistComboRouteInProgress();
 bool AlchemistComboRouteOn();                                 // MTG_AA_COMBO_ROUTE (heurarm AA_COMBO_ROUTE)
+bool AlchemistComboCombatOn();                                // MTG_AA_COMBO_COMBAT (heurarm AA_COMBO_COMBAT)
+// The COMBO OFF button's "did it win": the opponent is dead, or -- on a deck whose go-off is the untap-loop route,
+// with the combat finishers on -- the board is combat-lethal (CombatLethalNow; the attack after main 1 kills).
+bool AlchemistComboOffWon(const GameState& s, int controller);
 
 // The ONE dispatch of Action::Kind::ComboRoute (rollout, executor main plan, executor continuation):
 // whichever route the provider owns. Three routes share the kind; they are mutually exclusive per deck.

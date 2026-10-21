@@ -1,0 +1,88 @@
+{
+  "_comment": [
+    "VIEWER (USER 2026-10-20, seed 2 T7: 'No ability to activate Ezuri for the win ... you should just be able",
+    "to pay it as needed'). Mid-turn: Ezuri and Nourish already cast (life gained 6, five Forests tapped), the",
+    "Alchemist untapped and soulbonded to Galvanic Alchemist, no mana floating. The menu must offer Ezuri's pump",
+    "directly -- ActivatePump mode 4, the untap loop pays -- once per count 1..lethal (2 here). Committing the x2",
+    "variant runs the Galvanic loop to fund {4}{G}{G}{G}{G}{G}{G} and pumps the Elves twice."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 32,
+  "opponent_life": 17,
+  "opponent_library_size": 47,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "life_gained_this_turn": 6,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Arbor Elf",
+      "sick": false
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Galvanic Alchemist",
+      "sick": false,
+      "paired_with": "Accomplished Alchemist"
+    },
+    {
+      "name": "Elvish Harbinger",
+      "sick": false
+    },
+    {
+      "name": "Ezuri, Renegade Leader",
+      "sick": true
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Forest",
+    "Utopia Sprawl"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 7,
+  "validate_line": "cast=Ezuri, Renegade Leader",
+  "expect_verdict": "choose",
+  "expect_variants": 2,
+  "expect_variants_all_contain": "untap loop",
+  "human_lines": [
+    "cast=Ezuri, Renegade Leader"
+  ],
+  "human_variants": [
+    "x2"
+  ],
+  "expect_human_summary_contains": "untap loop"
+}

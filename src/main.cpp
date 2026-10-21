@@ -965,8 +965,19 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                         (pd && !pd->params.team_pump_subtypes.empty())
                             ? pd->params.team_pump_subtypes.front() + "s"
                             : std::string("team");
+                    // (USER 2026-10-20 saw "Ezuri: Elfs +6/+0 x2" for two +3/+3 activations -- the power
+                    // scaled by K and multiplied again, the toughness dropped.)
+                    const int  tt = pd ? pd->params.team_pump_tough : 0;
                     std::string what;
-                    if (tp != 0) { what = "+" + std::to_string(tp * k) + "/+0"; }
+                    // Mode 5 (the loop-funded pump; mode 4 is Stromkirk Condemned) reads PER ACTIVATION with the toughness: "+3/+3 x2". Modes 2 keep their
+                    // historical "+K*P/+0 xK" text byte-for-byte (saved references match plans by summary --
+                    // claude_s2_gi1 recorded "Ezuri, Renegade Leader: Elfs +6/+0 x2"); a correction of that
+                    // older label is a reference-format change, not made here.
+                    if (tp != 0)
+                    {
+                        what = a.gy_exile_mode == 5 ? "+" + std::to_string(tp) + "/+" + std::to_string(tt)
+                                                    : "+" + std::to_string(tp * k) + "/+0";
+                    }
                     auto add = [&what](const char* kw)
                     { if (!what.empty()) { what += " and "; } what += kw; };
                     if (th) { add("haste"); }
@@ -975,6 +986,14 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     if (what.empty()) { what = "(no effect)"; }   // should be unreachable
                     tag = a.card_name + ": " + who + " " + what
                         + (k > 1 ? " \xC3\x97" + std::to_string(k) : std::string());
+                    // Mode 5: the untap loop pays (USER 2026-10-20: "you should just be able to pay it as
+                    // needed"). Name it, so the human knows the Alchemist loop runs first.
+                    if (a.gy_exile_mode == 5)
+                    {
+                        const int per = pd && pd->params.team_pump_cost ? pd->params.team_pump_cost->ManaValue() : 0;
+                        tag += " -- paid by the Accomplished Alchemist untap loop ("
+                             + std::to_string(per * k) + " mana)";
+                    }
                 }
                 break;
             }
@@ -8165,6 +8184,20 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 if (ed && ed->params.is_aura) { state.battlefield[i].aura_attached_to = host_num; }
                 else                          { state.battlefield[i].equipped_to      = host_num; }
             }
+            // Optional SOULBOND pair ("paired_with": "<partner card name>" on the soulbond creature's entry --
+            // Galvanic Alchemist, AccomplishedAlchemist 2026-10-20): stored on the holder exactly as the ETB
+            // pairing stores it (Permanent::paired_with); an unmatched name is a hard scenario error.
+            for (std::size_t i = 0; i < bf_spec.size() && i < state.battlefield.size(); ++i)
+            {
+                const std::string partner = bf_spec[i].value("paired_with", std::string());
+                if (partner.empty()) { continue; }
+                int pn = 0;
+                for (const Permanent& h : state.battlefield)
+                { if (h.card.m_name.str() == partner && &h != &state.battlefield[i]) { pn = h.card.m_number; break; } }
+                if (pn == 0)
+                { std::cerr << "scenario: \"paired_with\" names no permanent: " << partner << "\n"; return 2; }
+                state.battlefield[i].paired_with = pn;
+            }
             // The fixture wrote equipped_to directly (not through ApplyEquip), so derive a reconfigure
             // piece's creature-ness from it here (Lizard Blades -- CR 702.151b).
             RefreshReconfigureCreatures(state);
@@ -8425,7 +8458,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                     return 1;
                 }
             }
-            if (!OpponentHasLost(c))
+            // A combat-lethal board counts for AccomplishedAlchemist's pump finishers (AlchemistComboOffWon;
+            // == OpponentHasLost for every other deck).
+            if (!AlchemistComboOffWon(c, c.active_player_index))
             {
                 std::cout << "scenario: FAIL combo_off plan applied but did NOT win"
                           << " (opponent life " << c.players[1 - c.active_player_index].life
@@ -8433,7 +8468,8 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                           << ")\n";
                 return 1;
             }
-            std::cout << "scenario: combo_off verified finish (opponent lost)\n";
+            std::cout << "scenario: combo_off verified finish ("
+                      << (OpponentHasLost(c) ? "opponent lost" : "combat-lethal board") << ")\n";
         }
         std::cout << "scenario: PASS (combo_off " << (want ? "offered" : "absent") << ")\n";
         return 0;   // a COMBO OFF fixture is a statement about THIS position, not about a played turn
