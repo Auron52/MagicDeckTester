@@ -168,6 +168,15 @@ if(MSVC)
     target_compile_options(mtg-core PUBLIC /bigobj /utf-8 /EHsc /permissive-)
 endif()
 
+# /MP: compile a target's sources in parallel. NOT required, but the Visual Studio generator
+# otherwise builds each project's files one at a time (`--build -j N` only parallelises across
+# projects), so mtg-test's ~150 test TUs compiled serially and the Windows CI build took 2-3x
+# Linux's. Under Ninja (cl is invoked per file) it is a no-op. PUBLIC, like the block above, so
+# every target that links mtg-core (the runner, the analyzer, mtg-test) gets it.
+if(MSVC AND CMAKE_GENERATOR MATCHES "Visual Studio")
+    target_compile_options(mtg-core PUBLIC /MP)
+endif()
+
 # zlib, so the runtime can read gzipped deck profiles (.json.gz). This is NOT optional in
 # practice: EVERY deck ships its exhaustive keep/bottom mulligan table as
 # decks/<name>/<name>.keepmodel.exhaustive.profile.json.gz (the raw table is ~13 MB; gzip -> ~1-2 MB).
