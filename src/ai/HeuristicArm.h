@@ -640,6 +640,7 @@ enum Slot : int
     AA_CAST_ORDER_WEATHER_LAST, // MTG_AA_CAST_ORDER_WEATHER_LAST amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): Weather the Storm moves AFTER the untappers, right before Stroke of Genius
     AA_CAST_ORDER_WISH_AFTER_LIFE, // MTG_AA_CAST_ORDER_WISH_AFTER_LIFE amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): Living Wish moves AFTER the lifegain block (Nourish, Feed the Clan, Trufflesnout, Brindle Boar)
     AA_CAST_ORDER_LIFE_FIRST,   // MTG_AA_CAST_ORDER_LIFE_FIRST  amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): the lifegain block moves right after the land Auras, then Living Wish, then Harbinger / Arbor Elf / the Alchemist / Ezuri / Scholar (an Alchemist in play taps for the life gained THIS turn, so a cast ahead of the first lifegain spends the lands it needs)
+    AA_ROUTE_KEY_GY_NAMES,    // MTG_AA_ROUTE_KEY_GY_NAMES  AccomplishedAlchemist COMBO OFF route memo key: the graveyard by card NAME, not card number -- a spell resolved inside the search reaches the graveyard numbered 0, so a route proven on a searched board missed the memo on the identical live board and the apply's own bounded walk could not re-find it (a committed proven route played as a no-op). DEFAULT ON (a key fix; the apply still verifies every path by replay); =0 -> the old key
     COUNT
 };
 
@@ -1230,6 +1231,7 @@ inline const char* Name(int slot)
         "MTG_AA_CAST_ORDER_WEATHER_LAST",
         "MTG_AA_CAST_ORDER_WISH_AFTER_LIFE",
         "MTG_AA_CAST_ORDER_LIFE_FIRST",
+        "MTG_AA_ROUTE_KEY_GY_NAMES",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

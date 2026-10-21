@@ -38570,12 +38570,17 @@ inline bool TransposeEnabled()
     static const bool v = EnvOn("MTG_EQUIP_ROUTE_TRANSPOSE", true);
     return v;
 }
-static std::uint64_t RouteStateKey(const GameState& s, int me)
+static std::uint64_t RouteStateKey(const GameState& s, int me, bool gy_by_name = false)
 {
     std::uint64_t h = comboroute::BoardKey(s, me);
     comboroute::Mix(h, 0xA5A5A5A5A5A5A5A5ULL);
     for (const Card& c : s.players[me].graveyard)
-    { comboroute::Mix(h, static_cast<std::uint64_t>(c.m_number) * 13 + 5); }
+    {
+        // gy_by_name: the AccomplishedAlchemist route memo's form (MTG_AA_ROUTE_KEY_GY_NAMES) -- a card resolved
+        // inside the search reaches the graveyard numbered 0, the live one keeps its number.
+        comboroute::Mix(h, gy_by_name ? static_cast<std::uint64_t>(c.m_name_hash) * 13 + 5
+                                      : static_cast<std::uint64_t>(c.m_number) * 13 + 5);
+    }
     comboroute::Mix(h, static_cast<std::uint64_t>(s.exile.size()));   // exile is a GameState zone
     // What BoardKey leaves out and the chain's verdict depends on: SUMMONING SICKNESS (the host cast
     // this turn cannot attack, so the same hand+battlefield is lethal on one board and not on the
@@ -39344,6 +39349,8 @@ int TrialPolicy(const GameState& s, int me)
 }   // namespace equiproute
 
 std::uint64_t EquipRouteStateKey(const GameState& s, int me) { return equiproute::RouteStateKey(s, me); }
+// ...with the graveyard keyed by card name (the AccomplishedAlchemist route memo; see MTG_AA_ROUTE_KEY_GY_NAMES).
+static std::uint64_t EquipRouteStateKeyGyByName(const GameState& s, int me) { return equiproute::RouteStateKey(s, me, true); }
 
 int EquipRouteApply(GameState& s, int me)
 {
@@ -45068,7 +45075,16 @@ inline std::uint64_t Fingerprint(const GameState& s, int me)
     comboroute::Mix(h, static_cast<std::uint64_t>(s.players[1 - me].library.size()) + 5);
     comboroute::Mix(h, s.opponent_decked ? 7ULL : 9ULL);
     for (const Card& c : s.players[me].library) { comboroute::Mix(h, static_cast<std::uint64_t>(c.m_number) * 13 + 1); }
-    comboroute::Mix(h, EquipRouteStateKey(s, me));
+    // THE GRAVEYARD BY NAME (MTG_AA_ROUTE_KEY_GY_NAMES, DEFAULT ON; =0 -> by card number, the old key). A spell
+    // resolved inside the search reaches the graveyard as a card numbered 0; the live game keeps its number. So the
+    // T(n-1) search's lookahead proves a route on its simulated T(n) board, the T(n) decision is served that plan by a
+    // cache whose key reads the graveyard by name (BuildSimKey), and the executor's apply on the IDENTICAL live board
+    // missed this memo -- its own bounded walk then failed and the committed proven route was a no-op ("no proven
+    // route on this board": seed 99151 gi150 d5 b20 gy[0,0] vs gy[16,51]; seed 99202 gi201 d3 b10 gy[0] vs gy[59]).
+    // Soundness does not rest on the key: every apply replays the memoised path on a copy and plays it only if it kills.
+    static const bool s_gy_names = EnvOn("MTG_AA_ROUTE_KEY_GY_NAMES", true);   // DEFAULT ON; =0 disables
+    comboroute::Mix(h, heurarm::Flag(heurarm::AA_ROUTE_KEY_GY_NAMES, s_gy_names) ? EquipRouteStateKeyGyByName(s, me)
+                                                                               : EquipRouteStateKey(s, me));
     return h;
 }
 // Did the link change anything? (A no-op apply -- a dropped cast, a loop that found nothing to buy -- is
