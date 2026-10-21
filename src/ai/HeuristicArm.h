@@ -583,6 +583,9 @@ enum Slot : int
     VAMP_MADNESS_COLOR_FOLD,  // MTG_VAMP_MADNESS_COLOR_FOLD  Vampires perf (2026-10-18, docs/design/vampires-search-cost.md): a madness CAST variant whose cost (with the outlet's own) the turn's OPTIMISTIC pool (AvailableManaPool + the ceiling's extra as wild) cannot pay in ANY colour is not emitted -- it would resolve as the decline it duplicates. Identity fold. DEFAULT ON; =0 -> the total-mana gate only
     VAMP_OUTLET_NOT_GROWTH,   // MTG_VAMP_OUTLET_NOT_GROWTH   Vampires perf (same doc): a DISCARD-cost sac outlet (Falkenrath Pit Fighter: draw two) no longer disarms OptimisticTurnMana's ceiling -- it adds no mana to the enumeration it is in (its draws reach only a breakpoint continuation, a new enumeration). Sound (the ceiling only prunes the never-payable). DEFAULT ON; =0 -> every sac outlet is growth
     VAMP_M2_PUMP_DISCARD_FOLD,// MTG_VAMP_M2_PUMP_DISCARD_FOLD Vampires perf (same doc): in the SECOND main a Stromkirk Condemned activation ("Discard a card: Vampires get +1/+1 until end of turn") whose discard is not cast for madness is DOMINATED by the same selection without it (combat is over; the card stays in hand) -- the subset walk rejects it unless the discard can empty the hand under a hellbent upkeep reader (Asylum Visitor), the hand can exceed seven at cleanup, the selection draws, or the card is a graveyard-landfall watcher (Bloodghast). Provider opt-in (PostCombatPumpDiscardFoldOptIn). DEFAULT ON; =0 -> every pin searched
+    BP_PO_W0_FOLD,            // MTG_BP_PO_W0_FOLD  the PLAYOUT wave-0 identity (Vampires search-cost round 2, docs/design/vampires-search-cost-2.md): inside a playout (g_rollout_nest > 0) a BASE plan resolves every breakpoint to EMPTY (both canon defaults stand down there), so its EMPTY arm, its rank variants past the first list's length and its chain arm with no chainable continuation (one class-on breakpoint) re-apply the base plan's own line onto the same state. Declined BEFORE the unit charge and the apply when the base apply showed none of the three control-flow asymmetries a bp_choice carries (node partition, site 9, site 8's return-value branch). DEFAULT ON (sound identity fold); =0 restores the applies
+    BP_PO_W0_BASE_LEN,        // MTG_BP_PO_W0_BASE_LEN  the playout wave-0 identity's BASE-SIDE list read (same doc): the measured base reads the continuation list at its first class-on occurrence (the one rank 0 targets; memoized on state), and when it is EMPTY rank 0 is a twin of the base too (0 >= n0 = 0), so the whole family collapses without rank 0's apply. DEFAULT ON (sound identity fold, under MTG_BP_PO_W0_FOLD); =0 leaves rank 0 as the measurer
+    CAND_DEDUP,               // MTG_CAND_DEDUP  SolveWithLookahead skips a candidate's ROLLOUT when its post-apply state an earlier sibling of the same pass already reached (identical state, identical future; the first copy was scored first). Pre-existing env lever (default OFF since 2026-09-09, "a quality lever, not a speed one"); a slot so its A/B pools into one batch
     COUNT
 };
 
@@ -1116,6 +1119,9 @@ inline const char* Name(int slot)
         "MTG_VAMP_MADNESS_COLOR_FOLD",
         "MTG_VAMP_OUTLET_NOT_GROWTH",
         "MTG_VAMP_M2_PUMP_DISCARD_FOLD",
+        "MTG_BP_PO_W0_FOLD",
+        "MTG_BP_PO_W0_BASE_LEN",
+        "MTG_CAND_DEDUP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

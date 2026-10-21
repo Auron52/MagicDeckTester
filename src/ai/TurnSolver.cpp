@@ -429,6 +429,17 @@ static std::atomic<long long> g_w0_nobp_skipped{0};
 // previously ZERO while being 94.6% of the work. See the w0collapse namespace.
 static std::atomic<long long> g_fsw_nobp_skipped{0};
 static std::atomic<long long> g_fsw_unif_collapsed{0};
+// MTG_BP_PO_W0_FOLD's firing counters (the playout wave-0 identity; see the pofold namespace far
+// below). Counted unconditionally, printed with MTG_ROLLOUT_STATS: a byte-identical A/B on a fold just
+// added must be able to say it did nothing.
+namespace pofold
+{
+    inline std::atomic<long long> g_skip_empty{0}, g_skip_rank{0}, g_skip_chain_empty{0},
+                                  g_skip_chain_rank{0};
+    inline std::atomic<long long> g_bases{0}, g_bases_asym{0};
+    inline std::atomic<long long> g_verify_ok{0}, g_verify_bad{0};
+    inline std::atomic<long long> g_base_len_empty{0};   // families collapsed by the base-side list read
+}
 static std::atomic<long long> g_w0_chain_collapsed{0};   // both hosts
 static std::atomic<long long> g_w0_chain_prescans{0};    // rank-0 walks that published a ci
 // WHY A COLLAPSE MISSED (MTG_ROLLOUT_STATS). This is the coverage question, and it is the only
@@ -813,7 +824,7 @@ static bool CostReframeEnabled();   // defined below; the legacy carrier of this
 static bool CandDedupOn()
 {
     static const bool on = EnvOn("MTG_CAND_DEDUP");
-    return on;
+    return heurarm::Flag(heurarm::CAND_DEDUP, on);   // per-job slot: its A/B pools into one batch
 }
 // SCOPING THE SKIP TO UNBOUNDED SEARCH WAS TRIED AND MEASURED. IT DOES NOT PAY. (2026-09-15)
 //
@@ -2045,6 +2056,20 @@ namespace
                                                          : 0.0)
                           << "  (MISMATCH > 0 REFUTES the NOBP identity: the declined variant does"
                              " NOT reach its base plan's state)\n";
+            }
+            if (pofold::g_bases.load() > 0 || pofold::g_verify_ok.load() + pofold::g_verify_bad.load() > 0)
+            {
+                std::cerr << "[rollout-stats] po_w0_fold bases=" << pofold::g_bases.load()
+                          << " bases_asym=" << pofold::g_bases_asym.load()
+                          << " skipped empty=" << pofold::g_skip_empty.load()
+                          << " rank=" << pofold::g_skip_rank.load()
+                          << " chain_empty=" << pofold::g_skip_chain_empty.load()
+                          << " chain_rank=" << pofold::g_skip_chain_rank.load()
+                          << " base_len_empty=" << pofold::g_base_len_empty.load()
+                          << " verify ok=" << pofold::g_verify_ok.load()
+                          << " MISMATCH=" << pofold::g_verify_bad.load()
+                          << "  (playout wave-0 twins of their base / rank sibling, declined before the"
+                             " apply; MISMATCH > 0 refutes the identity)\n";
             }
             if (g_w0_chain_collapsed.load() > 0 || g_w0_chain_prescans.load() > 0)
             {
@@ -23911,6 +23936,199 @@ namespace w0collapse
             if (ir != m.rank_nbp.end() && ir->second <= 1) { return kChain; }
             g_w0_chain_miss_nbp.fetch_add(1, std::memory_order_relaxed);
         }
+        return kNone;
+    }
+}
+
+// ---- THE PLAYOUT WAVE-0 IDENTITY (MTG_BP_PO_W0_FOLD, DEFAULT ON; =0 restores the applies) --------
+//
+// Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent B). WHERE THE WASTE IS:
+// on the 2HG d5 s2002 regression row (50 games, 12.4M units) MTG_DEDUP_CENSUS reads every wave-0 arm
+// at SolveWithLookahead's la_cand site as IN-PLAYOUT (dedup_why_k0: rank 0 in-playout 444,500,
+// searched 87), and the arms land on a state a sibling already reached at EMPTY 444,587 / 444,587
+// (100%), CHAIN 438,374 / 444,587 (98.6%; ci < 0 376,131 of them), RANK 657,927 / 889,174 (74%). Each
+// is a unit, a GameState copy and an ApplyPlanDirect that the post-apply dedup then throws away.
+//
+// THE MECHANISM, which the w0collapse note above says "has not been named yet" for the chain arm's
+// ci < 0 half: both canon defaults STAND DOWN INSIDE A PLAYOUT. TurnSolver::BpUnbranchedCanon's
+// base-plan branch requires g_rollout_nest == 0, and its nested branch requires it too unless
+// MTG_BP_NESTED_CANON_PLAYOUT. So in a playout a BASE plan resolves EVERY breakpoint it reaches to
+// the unconditional EMPTY fallback, and so does every variant at every breakpoint it does not carry.
+// Outside a playout the base takes cands.front() instead, which is why the identity was refuted
+// there (rank 0's 58.7% on Snow, the chain note's "the two are different candidates") and holds here.
+//
+// A variant is `Plan v = p` with only bp_choice / bp_at / bp_all / bp_wave0 / bp_base / bp_sched
+// rewritten. ApplyPlanDirect reads those at exactly these places (every `plan.bp_*` in its body,
+// enumerated 2026-10-21): the bp_seen numbering (no state), bp_searched_plan's resolution, the site-9
+// snapshot and gate, the node partition (node_owns_site / note_trunc_asym), the node capture / pend
+// (bp_capture only -- SolveWithLookahead passes none), the site-8 look continuation's `searched`
+// branch, and two dig-loop counters. So, in a playout, for a base plan whose apply showed NONE of the
+// three control-flow asymmetries below:
+//   * the EMPTY arm resolves its targeted occurrence by the sentinel to the very Plan{land_decided}
+//     the base's fallback builds, and every other occurrence by that same fallback -- same statements,
+//     same state, at any number of breakpoints;
+//   * rank k at bp_at 0 with k >= n0 (n0 = the continuation list's length at the first class-on
+//     occurrence, measured by rank 0's own apply) overruns and falls to that fallback (the FIRST
+//     overrun included: the base's line is EMPTY here, not cands.front());
+//   * chain slot j, when the apply reaches exactly ONE class-on occurrence and its list holds fewer
+//     than j+1 chainable continuations, finds nothing and falls to the fallback (bp_all keeps it out
+//     of the nested canon); and when the j-th lands at ci < W on a rank whose own apply reached one
+//     class-on occurrence, it IS that rank (the w0collapse chain identity, applied here).
+// THE THREE ASYMMETRIES, each MEASURED on the base apply, any of which disqualifies the family:
+//   1. the node partition: node_owns_site holds for a variant (bp_choice >= 0) and not for a base
+//      without a capture, so a variant truncates the tail at a hosted deferred site (3/5/6) and the
+//      base does not (note_trunc_asym's condition, here at every nesting depth);
+//   2. site 9: its gate short-circuits on bp_choice >= 0, so only the variant enters, and it numbers
+//      an occurrence the base cannot see (g_bp_latent9_last's condition, here inside a playout);
+//   3. site 8: the narrow look continuation branches on bp_searched_plan's RETURN value -- the
+//      fallback plays a found land, the EMPTY sentinel (resolved_by_plan) does not;
+// plus, defensively, any base occurrence resolved by something other than the fallback.
+//
+// WHAT THE SKIP LEAVES BEHIND is what the post-apply dedup's skip left: the candidate counted for the
+// overrun guard, and -- for a rank variant -- the two records its apply wrote for later readers
+// (BpWaveWalker::W0Len, and the uniform collapse's class-on count, which for a twin of the base is
+// the base's own). The EMPTY and chain arms write neither.
+//
+// MTG_BP_PO_W0_VERIFY=1 applies every candidate the fold would decline and compares its post-apply
+// dedup key against the twin's (ok / MISMATCH counted, the first mismatches printed); play is then
+// the fold-off play. Searched applies (g_rollout_nest == 0) are untouched.
+namespace pofold
+{
+    // A base plan's playout apply, measured (armed by the host for exactly that Plan object).
+    struct BaseMeas
+    {
+        const TurnSolver::Plan* plan = nullptr;
+        std::uint64_t asym = 0;   // count of asymmetry events (1-3 above, plus a non-fallback resolution)
+        // THE BASE-SIDE LIST READ (MTG_BP_PO_W0_BASE_LEN): the continuation list's length at the base's
+        // FIRST class-on occurrence -- the occurrence rank 0 targets -- and its demoted twin's. -1 = not
+        // read. See BaseLenOn for why only an EMPTY list is used.
+        int seen    = 0;
+        int first_n = -1;
+        int first_d = -1;
+    };
+    inline thread_local BaseMeas t_base;
+    // Rank 0's playout apply, measured at its targeted (first class-on) occurrence.
+    struct RankMeas
+    {
+        const TurnSolver::Plan* plan = nullptr;
+        int n0 = -1;                  // continuation list length (-1 = never reached an eligible list)
+        int d0 = -1;                  // its demoted twin (MTG_BP_NEW_ONLY_DEMOTE), for W0Len::m
+        int want_ci = 0;              // chainable indices to collect (<= kBpChainMemoSlots)
+        int ci[kBpChainMemoSlots] = { -1, -1, -1, -1 };   // j-th chainable index, -1 = none
+    };
+    inline thread_local RankMeas t_rank0;
+
+    inline bool On()
+    {
+        static const bool env = EnvOn("MTG_BP_PO_W0_FOLD", true);   // DEFAULT ON; =0 disables
+        return heurarm::Flag(heurarm::BP_PO_W0_FOLD, env);
+    }
+    inline bool VerifyOn()
+    {
+        static const bool on = EnvOn("MTG_BP_PO_W0_VERIFY");   // diagnostic: apply + compare, never skip
+        return on;
+    }
+    // THE BASE-SIDE LIST READ (MTG_BP_PO_W0_BASE_LEN, DEFAULT ON; =0 leaves rank 0 as the only measurer).
+    // Rank 0 is applied to MEASURE its targeted list, and on the 2HG d5 row it landed on its own base's
+    // state 72% of the time (dedup_why_k0: 87,644 of 121,016 in-playout rank-0 applies) -- the list was
+    // EMPTY, so rank 0 overran onto the fallback, which is the base's own line. The measured base reaches
+    // that same occurrence first (identical statements up to it -- what a clean family means), so it reads
+    // the list there: by REFERENCE, sizes only, nothing re-entered (EnumerateBreakpointPlansRef's
+    // contract). The enumeration is memoized on state, so when the list is NOT empty rank 0's own read
+    // is the memo hit this one paid for; when it IS empty the read replaces rank 0's whole apply. Only the
+    // empty case is used: then every chainable index is -1 too, so the family needs nothing rank 0's walk
+    // would have added, and rank 0 itself is a kRank twin (0 >= n0 = 0). A non-empty list is left to
+    // rank 0, whose chainable-index walk the chain arm still needs.
+    inline bool BaseLenOn()
+    {
+        static const bool env = EnvOn("MTG_BP_PO_W0_BASE_LEN", true);   // DEFAULT ON; =0 disables
+        return heurarm::Flag(heurarm::BP_PO_W0_BASE_LEN, env);
+    }
+
+    // (The firing counters live with the other wave-0 counters near the top of this file.)
+
+    enum : int { kNone = 0, kEmpty = 1, kRank = 2, kChainEmpty = 3, kChainRank = 4 };
+
+    // Run one apply with `base` / `r0` armed for measurement, and hand back what it measured. The two
+    // channels are SAVED and RESTORED around the call, so an apply nested inside it (a search a
+    // resolution re-enters) can neither clobber the outer measurement nor inherit it -- every hook
+    // in ApplyPlanDirect matches its own Plan object by address. Both null = a plain apply.
+    struct Harvest { BaseMeas base; RankMeas r0; };
+    template <class F>
+    inline Harvest ApplyMeasured(const TurnSolver::Plan* base, const TurnSolver::Plan* r0, int want_ci,
+                                 F&& apply)
+    {
+        const BaseMeas saved_b = t_base;
+        const RankMeas saved_r = t_rank0;
+        t_base  = BaseMeas{};
+        t_rank0 = RankMeas{};
+        t_base.plan     = base;
+        t_rank0.plan    = r0;
+        t_rank0.want_ci = want_ci < 0 ? 0 : (want_ci > kBpChainMemoSlots ? kBpChainMemoSlots : want_ci);
+        apply();
+        const Harvest h{ t_base, t_rank0 };
+        t_base  = saved_b;
+        t_rank0 = saved_r;
+        return h;
+    }
+
+    // One base plan's family memo, per candidate loop.
+    struct Family
+    {
+        bool clean      = false;   // the base apply ran with no asymmetry
+        int  classon    = -1;      // class-on occurrences the base apply reached
+        int  n0         = -1;      // rank 0's measured first-list length (-1 = not measured)
+        int  d0         = -1;
+        int  ci[kBpChainMemoSlots] = { -1, -1, -1, -1 };
+        int  n_ci       = 0;       // how many ci[] entries rank 0 was asked for
+        TranspositionTable::Key base_key{};   // VERIFY only
+    };
+    struct Memo
+    {
+        std::unordered_map<int, Family> fam;                    // base index -> family
+        std::unordered_map<std::uint64_t, int> rank_nbp;        // (base << 24 | k) -> class-on count
+        std::unordered_map<std::uint64_t, TranspositionTable::Key> rank_key;   // VERIFY only
+    };
+
+    // The base-side list read, adopted (BaseLenOn): a CLEAN base whose first targeted list was EMPTY has
+    // n0 = 0 and no chainable index -- exactly what rank 0's apply would have measured there (same
+    // occurrence, same state, same memo entry). A non-empty list, an unclean family, or no read at all
+    // leaves the family to rank 0 as before.
+    inline void AdoptBaseLen(Family& f, const BaseMeas& b)
+    {
+        if (!f.clean || b.first_n != 0) { return; }
+        f.n0 = 0;
+        f.d0 = b.first_d;
+        for (int j = 0; j < kBpChainMemoSlots; ++j) { f.ci[j] = -1; }
+        g_base_len_empty.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // Which twin (if any) this variant provably re-applies. Pure: reads the memo only, so a family
+    // the memo knows nothing about is never declined ("no evidence, no skip"). `w` = BpSearchWidth().
+    inline int SkipReason(const Memo& m, const TurnSolver::Plan& p, int w, int* twin_rank = nullptr)
+    {
+        if (p.bp_choice < 0 || p.bp_base < 0) { return kNone; }
+        const auto it = m.fam.find(p.bp_base);
+        if (it == m.fam.end() || !it->second.clean) { return kNone; }
+        const Family& f = it->second;
+        if (p.bp_choice == TurnSolver::kBpEmptyChoice) { return kEmpty; }
+        if (p.bp_choice >= TurnSolver::kBpChainChoice)
+        {
+            const int j = p.bp_choice - TurnSolver::kBpChainChoice;
+            if (f.classon != 1 || f.n0 < 0 || j < 0 || j >= f.n_ci) { return kNone; }
+            const int ci = f.ci[j];
+            if (ci < 0) { return kChainEmpty; }
+            if (ci >= w) { return kNone; }   // past W: the line the slot exists for
+            const auto ir = m.rank_nbp.find((static_cast<std::uint64_t>(p.bp_base) << 24)
+                                            | static_cast<std::uint64_t>(ci));
+            if (ir == m.rank_nbp.end() || ir->second != 1) { return kNone; }
+            if (twin_rank != nullptr) { *twin_rank = ci; }
+            return kChainRank;
+        }
+        // A plain rank at the first class-on occurrence, past the measured list.
+        if (!p.bp_all && p.bp_at == 0 && p.bp_choice < TurnSolver::kBpEmptyChoice
+            && !TurnSolver::IsBpDemotedChoice(p.bp_choice) && f.n0 >= 0 && p.bp_choice >= f.n0)
+        { return kRank; }
         return kNone;
     }
 }
@@ -47560,7 +47778,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // soundness, and HumanPlayActive is not obviously frame-constant).
     const bool site9_keys_read = plan.bp_choice >= 0 || bp_capture != nullptr
                               || w0collapse::NobpSite9Watch()
-                              || (!plan.bp_all && g_bp_enum_depth == 0 && g_rollout_nest == 0);
+                              || (!plan.bp_all && g_bp_enum_depth == 0 && g_rollout_nest == 0)
+                              || pofold::t_base.plan == &plan;   // the playout fold's site-9 test
     const std::vector<uint64_t> pre_plan_keys = site9_keys_read
         ? TurnSolver::SnapshotActivatableAbilities(state) : std::vector<uint64_t>{};
 
@@ -47872,6 +48091,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             && g_bp_enum_depth == 0 && g_rollout_nest == 0
             && BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0)
         { ++g_bp_truncasym_last; }
+        // ...and the playout fold's twin of the same asymmetry (asymmetry 1, pofold): the measured
+        // base did not truncate where every variant of it would.
+        if (!truncated && pofold::t_base.plan == &plan
+            && BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0)
+        { ++pofold::t_base.asym; }
     };
 
     // PARTITION TRUNCATION (MTG_EQUIP_DRAW_BP_INLINE). USER 2026-08-20/21: "we should only be
@@ -48433,9 +48657,27 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
+        // THE PLAYOUT FOLD's base-side list read (pofold::BaseLenOn): the measured base's FIRST class-on
+        // occurrence is the one its rank-0 variant targets (bp_at 0), at the same state. Sizes only, by
+        // reference, nothing re-entered. If the read itself moved the class-on counter (an apply nested in
+        // the derivation reached a breakpoint -- base play never does), the family's counts are no longer
+        // this apply's own, so it is marked asymmetric: no evidence, no skip.
+        if (class_on && plan.bp_choice < 0 && pofold::t_base.plan == &plan && pofold::t_base.seen++ == 0
+            && pofold::BaseLenOn())
+        {
+            const std::uint64_t co_before = g_bp_classon_last;
+            BpEnumEntry* const be = BpEnumEntryFor(state, is_pre_combat);
+            pofold::t_base.first_n = static_cast<int>(be->plans.size());
+            pofold::t_base.first_d = static_cast<int>(be->demoted.size());
+            if (g_bp_classon_last != co_before) { ++pofold::t_base.asym; }
+        }
         bool resolved = false;
         // Set by either canon branch below, read by the unchallengeable-canon audit at the end.
         bool canon_used = false;
+        // THE PLAYOUT FOLD's asymmetry 3 (pofold): a class-on SITE 8 occurrence in the measured base.
+        // Its look continuation branches on this function's RETURN value, so the EMPTY sentinel
+        // (resolved_by_plan) and the base's fallback EMPTY take different paths there.
+        if (class_on && site == 8 && pofold::t_base.plan == &plan) { ++pofold::t_base.asym; }
         if (eligible && plan.bp_choice == kBpEmptyChoice)
         {
             // MTG_BP_NODE's explicit EMPTY continuation: cast nothing more, play no land (the
@@ -48457,6 +48699,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // beside it. Same lookup EnumerateBreakpointPlansRef makes, same lifetime contract.
             BpEnumEntry* const bp_ent = BpEnumEntryFor(state, is_pre_combat);
             const std::vector<TurnSolver::Plan>& cands = bp_ent->plans;
+            // THE PLAYOUT FOLD's rank-0 measurement (pofold::RankMeas): the targeted list's length,
+            // its demoted twin's, and the first chainable indices -- BpChainCandIndex's walk, on the
+            // same state and the same list the family's chain arm would scan. Read only.
+            if (pofold::t_rank0.plan == &plan && pofold::t_rank0.n0 < 0)
+            {
+                pofold::RankMeas& rm = pofold::t_rank0;
+                rm.n0 = static_cast<int>(cands.size());
+                rm.d0 = static_cast<int>(bp_ent->demoted.size());
+                int seen = 0;
+                for (int ci = 0; ci < rm.n0 && seen < rm.want_ci; ++ci)
+                {
+                    if (PlanOpensBreakpoint(state, cands[static_cast<std::size_t>(ci)]) == 0) { continue; }
+                    rm.ci[seen++] = ci;
+                }
+                for (int j = seen; j < kBpChainMemoSlots; ++j) { rm.ci[j] = -1; }
+            }
             // How LONG is the ranked list? The caller can only emit bp_choice = 0..W-1 blind, so
             // report the real length back for the deferred-wave loop (and MTG_BP_CANDS_PROBE).
             // See g_bp_cands_last -- write-only for now, hence byte-identical.
@@ -48670,6 +48928,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!resolved && !EquipRouteDfsActive()
             && TurnSolver::BpUnbranchedCanon(state, is_pre_combat, plan, seen_before, class_on, out))
         { resolved = true; canon_used = true; }
+        // The playout fold's premise, checked rather than assumed: the measured base resolved this
+        // occurrence by the unconditional EMPTY fallback below and nothing else (pofold).
+        if (resolved && pofold::t_base.plan == &plan) { ++pofold::t_base.asym; }
         // THE ENFORCEMENT (MTG_BP_CANON_AUDIT; see the canonaudit namespace). A canon default is
         // only legitimate while the ALTERNATIVES are reachable.
         //
@@ -53134,6 +53395,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         && g_bp_enum_depth == 0 && g_rollout_nest == 0
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     { ++g_bp_latent9_last; }
+    // ...and the playout fold's asymmetry 2 (pofold): a site-9 occurrence a variant would open here.
+    // Conservative in the safe direction -- the variant's own gate also needs bp_seen == 0, which
+    // this does not ask.
+    if (pofold::t_base.plan == &plan && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
+    { ++pofold::t_base.asym; }
     // The base plan's half of site 9's NUMBERING (bp_seen_shadow): a variant of this plan would
     // count this occurrence (the block below, under bp_seen == 0), so the shadow does too -- under
     // the same class bit bp_searched_plan tests.
@@ -62372,6 +62638,78 @@ bool TurnSolver::BpResumeLineHoldForTest(const GameState& state, const Plan& pla
 }
 
 // See the declaration in TurnSolver.h. A host's loop with the apply replaced by a fixed report.
+int TurnSolver::PoW0SkipReasonForTest(const Plan& p, bool clean, int classon, int n0, int ci0,
+                                      int n_ci, int rank_ci_classon, int w)
+{
+    pofold::Memo m;
+    pofold::Family& f = m.fam[0];
+    f.clean   = clean;
+    f.classon = classon;
+    f.n0      = n0;
+    f.n_ci    = n_ci;
+    f.ci[0]   = ci0;
+    if (ci0 >= 0 && rank_ci_classon >= 0)
+    { m.rank_nbp[static_cast<std::uint64_t>(ci0)] = rank_ci_classon; }
+    return pofold::SkipReason(m, p, w);
+}
+
+TurnSolver::PoW0Probe TurnSolver::PoW0ProbeForTest(const GameState& state, const Plan& base,
+                                                   const std::vector<Plan>& variants, bool is_pre_combat)
+{
+    PoW0Probe out;
+    RolloutNestGuard _playout;   // the scope the fold is armed in
+    const int want = std::min(BpChainSlots(state), static_cast<int>(kBpChainMemoSlots));
+    pofold::Memo m;
+    // The base, measured.
+    GameState b = state;
+    const std::uint64_t c0 = g_bp_classon_last;
+    const pofold::Harvest hb = pofold::ApplyMeasured(&base, nullptr, want,
+                                                     [&] { ApplyPlanDirect(b, base, is_pre_combat); });
+    pofold::Family& f = m.fam[0];
+    f.clean    = hb.base.asym == 0;
+    f.classon  = static_cast<int>(g_bp_classon_last - c0);
+    f.n_ci     = want;
+    pofold::AdoptBaseLen(f, hb.base);   // the host's po_record does the same
+    f.base_key = BuildDedupKey(b);
+    out.clean   = f.clean;
+    out.classon = f.classon;
+    out.base_n  = hb.base.first_n;
+    if (f.n0 >= 0) { out.n0 = f.n0; out.ci0 = f.ci[0]; }
+    for (const Plan& v : variants)
+    {
+        int twin = -1;
+        const int why = pofold::SkipReason(m, v, BpSearchWidth(), &twin);
+        out.reason.push_back(why);
+        GameState g = state;
+        const bool r0 = v.bp_choice == 0 && !v.bp_all && v.bp_at == 0;
+        const std::uint64_t cv = g_bp_classon_last;
+        const pofold::Harvest hv = pofold::ApplyMeasured(nullptr, r0 ? &v : nullptr, want,
+                                                         [&] { ApplyPlanDirect(g, v, is_pre_combat); });
+        const TranspositionTable::Key k = BuildDedupKey(g);
+        if (v.bp_choice >= 0 && !v.bp_all && v.bp_at == 0 && v.bp_choice < kBpEmptyChoice)
+        {
+            m.rank_nbp[static_cast<std::uint64_t>(v.bp_choice)] = static_cast<int>(g_bp_classon_last - cv);
+            m.rank_key[static_cast<std::uint64_t>(v.bp_choice)] = k;
+            if (r0)
+            {
+                f.n0 = hv.r0.n0;
+                f.d0 = hv.r0.d0;
+                for (int j = 0; j < kBpChainMemoSlots; ++j) { f.ci[j] = hv.r0.ci[j]; }
+                out.n0  = f.n0;
+                out.ci0 = f.ci[0];
+            }
+        }
+        const TranspositionTable::Key* twin_key = &f.base_key;
+        if (why == pofold::kChainRank)
+        {
+            const auto it = m.rank_key.find(static_cast<std::uint64_t>(twin));
+            twin_key = it != m.rank_key.end() ? &it->second : nullptr;
+        }
+        out.same.push_back(twin_key != nullptr && k == *twin_key);
+    }
+    return out;
+}
+
 std::vector<TurnSolver::WalkerStep> TurnSolver::WaveWalkerTraceForTest(const GameState& state,
                                                                        const std::vector<Plan>& plans,
                                                                        int list_len, int seen,
@@ -80110,6 +80448,72 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         std::uint64_t any_before = 0;
         std::uint64_t classon_before = 0;
         std::uint64_t latent9_before = 0;
+        // THE PLAYOUT WAVE-0 IDENTITY (MTG_BP_PO_W0_FOLD; see the pofold namespace for the identity and
+        // its three measured asymmetries). PLAYOUTS ONLY -- that is where both canon defaults stand down,
+        // so a base plan's line is EMPTY at every breakpoint. The order premise is the NOBP skip's:
+        // base plans precede their variants and ranks precede the EMPTY / uniform / chain arms, and
+        // nothing reorders this list after AppendBreakpointVariants (see bp_w0_lens above).
+        const bool po_here = bp_variants_here && g_rollout_nest > 0 && g_bp_enum_depth == 0
+                          && !HumanPlayActive() && !BpNestedCanonPlayout() && pofold::On();
+        const bool po_verify = po_here && pofold::VerifyOn();
+        const int  po_ci     = po_here ? std::min(BpChainSlots(state), static_cast<int>(kBpChainMemoSlots)) : 0;
+        pofold::Memo po_memo;
+        // Which apply the fold MEASURES: a wave-0 base plan (its asymmetries), or the rank-0 variant
+        // of a family whose base is on file (its targeted list's length and chainable indices).
+        auto po_arm_base = [&](const Plan& pl) -> const Plan*
+        { return (po_here && pl.bp_choice < 0 && pl.bp_wave0 && !pl.bp_all) ? &pl : nullptr; };
+        auto po_arm_r0 = [&](const Plan& pl) -> const Plan*
+        {
+            return (po_here && pl.bp_choice == 0 && !pl.bp_all && pl.bp_at == 0 && pl.bp_base >= 0
+                    && po_memo.fam.count(pl.bp_base) != 0) ? &pl : nullptr;
+        };
+        // ...and what it learned, recorded right after the apply (cand_index / classon_before are
+        // this candidate's, set just before it).
+        auto po_record = [&](const Plan& pl, const pofold::Harvest& h, const GameState& after)
+        {
+            if (!po_here) { return; }
+            if (h.base.plan == &pl)
+            {
+                pofold::Family& f = po_memo.fam[static_cast<int>(cand_index)];
+                f.clean   = h.base.asym == 0;
+                f.classon = static_cast<int>(g_bp_classon_last - classon_before);
+                f.n_ci    = po_ci;
+                pofold::AdoptBaseLen(f, h.base);
+                if (po_verify) { f.base_key = BuildDedupKey(after); }
+                pofold::g_bases.fetch_add(1, std::memory_order_relaxed);
+                if (!f.clean) { pofold::g_bases_asym.fetch_add(1, std::memory_order_relaxed); }
+                return;
+            }
+            if (pl.bp_choice < 0 || pl.bp_base < 0 || pl.bp_all || pl.bp_at != 0
+                || pl.bp_choice >= kBpEmptyChoice) { return; }
+            const std::uint64_t rk = (static_cast<std::uint64_t>(pl.bp_base) << 24)
+                                   | static_cast<std::uint64_t>(pl.bp_choice);
+            po_memo.rank_nbp[rk] = static_cast<int>(g_bp_classon_last - classon_before);
+            if (po_verify) { po_memo.rank_key[rk] = BuildDedupKey(after); }
+            if (h.r0.plan == &pl)
+            {
+                const auto it = po_memo.fam.find(pl.bp_base);
+                if (it != po_memo.fam.end())
+                {
+                    it->second.n0 = h.r0.n0;
+                    it->second.d0 = h.r0.d0;
+                    for (int j = 0; j < kBpChainMemoSlots; ++j) { it->second.ci[j] = h.r0.ci[j]; }
+                }
+            }
+        };
+        // VERIFY: the would-be-declined candidate's post-apply key against its twin's.
+        auto po_verify_check = [&](const Plan& pl, const TranspositionTable::Key* expect, const GameState& after)
+        {
+            if (expect == nullptr) { return; }
+            const bool same = BuildDedupKey(after) == *expect;
+            (same ? pofold::g_verify_ok : pofold::g_verify_bad).fetch_add(1, std::memory_order_relaxed);
+            if (!same && pofold::g_verify_bad.load(std::memory_order_relaxed) <= 8)
+            {
+                std::fprintf(stderr, "[po-w0-verify] MISMATCH T%d %s bp=%d at=%d all=%d base=%d acts=%zu\n",
+                             state.turn_number, is_pre_combat ? "m1" : "m2", pl.bp_choice, pl.bp_at,
+                             pl.bp_all ? 1 : 0, pl.bp_base, pl.actions.size());
+            }
+        };
         auto w0len_record = [&](const Plan& pl)
         {
             if (w0chain_here)
@@ -80261,6 +80665,58 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 g_w0_chain_collapsed.fetch_add(1, std::memory_order_relaxed);
                 ++candidates_done;
                 continue;
+            }
+
+            // THE PLAYOUT WAVE-0 IDENTITY (MTG_BP_PO_W0_FOLD; see the pofold namespace). Same place and
+            // same reason as the three collapses above: before the unit charge and the GameState copy.
+            // Leaves behind what the post-apply dedup's skip left: the candidate counted for the
+            // overrun guard, and a rank twin's two records (W0Len for the wave walker, the per-rank
+            // class-on count for the uniform and chain collapses), which for a twin of the base are
+            // the rank-0 measurement and the base's own count.
+            const TranspositionTable::Key* po_expect = nullptr;
+            if (po_here)
+            {
+                int po_twin = -1;
+                const int po_why = pofold::SkipReason(po_memo, plan, BpSearchWidth(), &po_twin);
+                if (po_why != pofold::kNone)
+                {
+                    const pofold::Family& pf = po_memo.fam.at(plan.bp_base);
+                    if (po_verify)
+                    {
+                        if (po_why == pofold::kChainRank)
+                        {
+                            const auto ik = po_memo.rank_key.find((static_cast<std::uint64_t>(plan.bp_base) << 24)
+                                                                  | static_cast<std::uint64_t>(po_twin));
+                            if (ik != po_memo.rank_key.end()) { po_expect = &ik->second; }
+                        }
+                        else { po_expect = &pf.base_key; }
+                    }
+                    else
+                    {
+                        (po_why == pofold::kEmpty ? pofold::g_skip_empty
+                         : po_why == pofold::kRank ? pofold::g_skip_rank
+                         : po_why == pofold::kChainEmpty ? pofold::g_skip_chain_empty
+                         : pofold::g_skip_chain_rank).fetch_add(1, std::memory_order_relaxed);
+                        if (po_why == pofold::kRank)
+                        {
+                            const std::uint64_t rk = (static_cast<std::uint64_t>(plan.bp_base) << 24)
+                                                   | static_cast<std::uint64_t>(plan.bp_choice);
+                            po_memo.rank_nbp[rk] = pf.classon;
+                            if (unifcollapse_here) { w0_unif_nbp[rk] = pf.classon; }
+                            if (w0chain_here)      { w0_chain.rank_nbp[rk] = pf.classon; }
+                            if (w0len_here)
+                            {
+                                BpWaveWalker::W0Len& e = bp_w0_lens[(static_cast<uint64_t>(plan.bp_base) << 8)
+                                                                    | static_cast<uint64_t>(plan.bp_at & 0xFF)];
+                                e.n     = pf.n0;
+                                e.max_k = std::max(e.max_k, plan.bp_choice);
+                                e.m     = pf.d0;
+                            }
+                        }
+                        ++candidates_done;
+                        continue;
+                    }
+                }
             }
 
             // THE BOUNCE FOLD (MTG_BOUNCE_FOLD; see BounceFoldMemo). Before the unit charge and the
@@ -80436,6 +80892,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (plan.combat_landfall_target_choice >= 0)
                     { copy.scripted_combat_landfall_target = plan.combat_landfall_target_choice; }
                     g_cpshare_used.fetch_add(1, std::memory_order_relaxed);
+                    po_verify_check(plan, po_expect, copy);   // MTG_BP_PO_W0_VERIFY (pofold)
                 }
                 else
                 {
@@ -80443,7 +80900,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     const unsigned long long cp_reads0 = combatpin::t_reads;
                     const long long cp_units0 = budget != nullptr ? budget->Used() : 0;
                     etb_fold.ArmApply(cp_i, &copy);
-                    ApplyPlanDirect(copy, plan, true);
+                    const pofold::Harvest po_h = pofold::ApplyMeasured(
+                        po_arm_base(plan), po_arm_r0(plan), po_ci, [&] { ApplyPlanDirect(copy, plan, true); });
+                    po_record(plan, po_h, copy);
+                    po_verify_check(plan, po_expect, copy);
                     // The in-plan probe records only an apply that spent no unit (see BuildInPlan), with
                     // what the walker's records read from it.
                     if (etb_fold.armed == static_cast<int>(cp_i))
@@ -80720,7 +81180,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 bounce_fold.Arm(plan);
-                ApplyPlanDirect(copy, plan, false);
+                {
+                    const pofold::Harvest po_h = pofold::ApplyMeasured(
+                        po_arm_base(plan), po_arm_r0(plan), po_ci, [&] { ApplyPlanDirect(copy, plan, false); });
+                    po_record(plan, po_h, copy);
+                    po_verify_check(plan, po_expect, copy);
+                }
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 pb_fold.Record(plan, true, static_cast<int>(cand_index));
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,

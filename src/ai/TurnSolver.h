@@ -2273,6 +2273,31 @@ public:
     // unpaid-cost hold where the full apply stopped; `at_resume` the hold the resumed apply ran under.
     static bool BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
                                         ManaCost& at_capture, ManaCost& at_resume);
+    // MTG_BP_PO_W0_FOLD test hook (the playout wave-0 identity; see the pofold namespace in
+    // TurnSolver.cpp). Applies `base` and then each of `variants` (all carrying bp_base = 0) INSIDE A
+    // PLAYOUT, exactly as SolveWithLookahead's candidate loop does: the base apply is measured (its
+    // asymmetries, its class-on occurrence count), a rank-0 variant's apply measures the targeted list,
+    // and before each variant's apply the fold's decision is taken from what was learned so far. Per
+    // variant: `reason` (the fold's verdict, 0 = would apply) and `same` (whether its post-apply dedup
+    // key equals its twin's -- the base's, or rank ci's for a chain twin). `clean` / `classon` / `n0`
+    // describe the measurements; `base_n` is the base's own read of the first list (an EMPTY one is
+    // adopted as n0 = 0 before rank 0 runs, exactly as the host does).
+    struct PoW0Probe
+    {
+        bool clean = false;
+        int  classon = -1;
+        int  n0 = -1;
+        int  ci0 = -1;
+        int  base_n = -1;   // the base-side list read (MTG_BP_PO_W0_BASE_LEN): -1 = not read
+        std::vector<int>  reason;
+        std::vector<bool> same;
+    };
+    static PoW0Probe PoW0ProbeForTest(const GameState& state, const Plan& base,
+                                      const std::vector<Plan>& variants, bool is_pre_combat);
+    // The fold's decision table alone, on a hand-built family memo (rank_nbp: class-on count of the
+    // rank `ci` twin, or -1 = not on file).
+    static int PoW0SkipReasonForTest(const Plan& p, bool clean, int classon, int n0, int ci0,
+                                     int n_ci, int rank_ci_classon, int w);
     struct WalkerStep { int base; int bp_choice; int bp_at; bool scored; };
     static std::vector<WalkerStep> WaveWalkerTraceForTest(const GameState& state,
                                                           const std::vector<Plan>& plans,
