@@ -183,11 +183,96 @@ cost, on two independent seed sets -- the first alternative that beats the defau
 because warm-ups are only 22% of live's ladder; 28% of decisions still mispredict the committing depth (the frozen R
 cannot reproduce the heuristic tree exactly, the two leaves prune differently).
 
+**But not in instructions.** Callgrind, the same 12 games per arm (s840000, b20): live 99.2k Ir per unit, emulated
+(value warm-ups) 106.4k (1.07x), emulated (leafless warm-ups) 106.0k, staged 109.8k (1.11x). The per-function diff
+(`logs/tgt/ir/fdiff.py`) finds no unmetered sink -- the model's feature extraction + score is 0.3% of instructions --
+the gap is that a unit of TREE work (state keys, enumeration, activation keys) costs more instructions than a unit of
+ROLLOUT work, and the emulated ladder trades rollouts for tree. At ~1.10x real cost it is level with live, not ahead.
+(Ir per unit also swings by game: one 202k-unit game took a 24-game live sample to 144k Ir/unit.)
+
+### 7. Move ORDER: `MTG_ID_ORDER_HINT` (DEFAULT ON below the pass root) -- and the root tie-break (USER's call)
+
+`MTG_ORDER_ORACLE=1` (diagnostic) replays every completed ladder pass from snapshots of its TT and budget on fresh
+memos: as recorded (reproduces the pass exactly: 0 unit and 0 win-turn mismatches in 2,215 passes), best-first by the
+recording (the oracle), and in the static order with no hint. Landfall b20, 200 games: the oracle order costs
+**0.888x** the units at the same win turn and root plan in every pass, although only 2,907 of 99,476 nodes (3%) were
+mis-ordered -- MoveOrderPlans is usually right, and where it is wrong the subtrees are big.
+
+**The hint.** The ladder searches the same positions again one pass deeper, so each completed FSLineWin node records
+which plan proved best (its static index, the plan count as a guard, and its win turn) and the same position one pass
+deeper -- the node's key at depth - 1, two Folds away now that `BuildSimKey` folds the depth LAST (byte-identical:
+every key's value moved, no key's equality) -- tries it first. One map per decision, capped (`MTG_ID_HINT_CAP`).
+Every hinted pass returns the static order's win turn (0 mismatches in 2,203 live and 2,369 emulated passes).
+
+**But at a node the saving IS a tie-break.** Under the strict cut the plan tried first wins every tie, and the plans
+the static order puts ahead of the hinted one mostly TIE it: a strict cut refutes a tie for free, and proving one
+costs the inclusive search the static order already paid. `MTG_ID_HINT_STATIC_TIE=1` keeps the static choice (the
+plans moved behind the hinted one are searched with the INCLUSIVE cut and take a tie; an early end the hinted plan
+earns is held until they have been tried): **0 root-plan differences in ~4,900 replayed passes (Landfall, Melira,
+Melira 2HG, Dragonstorm) -- and 0.99-1.006x the static order's units.** Kept to record that; default OFF.
+
+**So the default runs it BELOW THE PASS ROOT only** (`MTG_ID_HINT_ROOT=0`). A tie under the root picks only which line
+a node returns, never its win turn, so the root -- the committed decision -- commits the static order's plan, and play
+moves only through the budget it frees (and through which of several equally VERIFIED winning lines the executor
+then follows: digests move, outcomes do not). Landfall b20, 200 games, exact replays of 2,211 passes: 0 root-plan and
+0 win-turn differences, **0.928x the pass units** (0.947x the game). Held-out, all 35 shipping decks at their own play
+settings (seeds 880000/881000, 400 paired games; 200 for the six heaviest; `logs/tgt/oo/int/`): **0 games moved**.
+Landfall's held-out curve (seeds 860000-867000, 4,000 paired games per arm, vs live b20 without the hint):
+
+| arm | units | win turn | faster / slower |
+|---|---|---|---|
+| live b25, no hint | 1.122x | -0.015 | -- |
+| live + interior hint b20 / b25 / b30 | 0.937x / 1.049x / 1.154x | -0.0015 / -0.0155 / -0.024 | 8/2, 65/3, 99/3 |
+| emulated + interior hint b15 / b20 / b25 | 0.806x / 0.954x / 1.061x | +0.007 / -0.0095 / -0.0235 | 21/49, 47/9, 95/1 |
+
+The interior hint makes budget cheaper (b25's -0.015 now costs 1.05x, not 1.12x) without changing what a pass commits.
+With it, the emulated ladder is ~0.006 turns ahead of live at equal units -- level at equal instructions.
+
+**Why the hint stays off the root by default: Bruna.** With the root hinted, Bruna s880019 played NOTHING on turn 1
+(Forest + Avacyn's Pilgrim without it) and won a turn later; s880084 lost two. Pass 3's best at the root was the empty
+turn because a greedy rollout found a T4 win from it; pass 4 refuted that and read T5 for both plans, and the hint
+handed the tie to the refuted plan.
+
+**The root tie-break is the USER's call, and it is where the big gains are.** With the root hinted (`=1`), the tie at
+the committed decision goes to the plan that was best one pass shallower -- and in the emulated ladder that shallower
+pass runs on the learned model, so the MODEL breaks the ties the rollout cannot separate. Landfall held-out
+(`logs/tgt/oo/ab2.*`, same seeds/arms as above):
+
+| arm (root hinted) | units | win turn | faster / slower |
+|---|---|---|---|
+| live b20 / b25 / b30 | 0.840x / 0.932x / 1.018x | **-0.0250** / -0.0343 / -0.0405 | 134/34, 166/29, 186/24 |
+| emulated b15 / b20 / b25 | 0.738x / 0.869x / 0.964x | -0.0375 / **-0.0450** / **-0.0535** | 207/57, 218/38, 236/22 |
+
+In instructions (callgrind, 200 held-out games, `logs/tgt/oo/cg3/`): live + root hint b20 **0.785x** live's, b25
+0.897x, emulated + root hint b20 0.945x (the emulated ladder pays ~9% more instructions per unit -- tree is
+under-priced against rollout; the model's features + score are 0.4%), so at equal instructions the emulated ladder
+with the root hint leads live + root hint by ~0.007-0.013 turns and the old default by ~0.04. All decks with the
+root hinted (seeds 880000/881000, 26 decks completed before two VM reboots, `build/scratch/lf-target/alldeck/`):
+Landfall -0.030 (8/2), Melira -0.025 (5/0), Kitty -0.0175 (6/0), FiveColour -0.005 (3/1), Creature Giving -0.0025,
+Niv-Mizzet -0.005 (partial), Hinata 1/1, **Bruna +0.015 (0/2)**, the rest 0/0; pooled -0.0020 (se 0.0006).
+
+**The amended root rule, `MTG_ID_HINT_ROOT=2` ("stable"):** the hinted plan keeps the root tie only while its win turn
+HELD at this depth; if it got worse than one pass shallower (Bruna's T4 -> T5), the root keeps the static tie-break
+(the static-tie machinery, armed for that node). Bruna s880019 / s880084: back to T5 / T6.
+Held-out, same 26 decks (`logs/tgt/oo/stab/`): Landfall -0.030 (8/2), Melira -0.020 (4/0), **Bruna 0/0**,
+Kitty 0/0 (its always-root gain is lost), and **FiveColour +0.0025 (0/1)**: s881103 T1, Steam Vents (static) and
+Windswept Heath (hinted, T5 at passes 3 and 4) tie on an ESTIMATED T5 -- a rollout past the horizon -- and the Heath
+line is refuted the next turn (T6) while the Steam Vents line wins T5. So neither root rule meets the every-deck bar,
+for the same reason: between plans tied on an ESTIMATED win turn, any tie-break is a guess, and the static order is
+just another guess. The principled form would break root ties on a finer estimate than the integer win turn -- the
+learned model's milliturns, which is presumably why the emulated ladder's root tie-break is the strongest arm.
+
+**The other shapes with the root hint** (2,000 paired games, seeds 860000-863000, vs live b20; `logs/tgt/oo/alt.*`):
+staged b10 1.05x -0.047, b15 1.30x -0.0525 (about level with live + root hint's curve, behind the emulated ladder);
+leafless FIT (strict gate) b20 0.96x **+0.049**; leafless escalation b10 0.81x +0.050, b20 1.23x +0.004 -- still well
+behind: a leafless tree has no incumbent to prune against, and the hint cannot give it one.
+
 ## Open USER decisions
 
 1. Landfall: adopt the emulated-ladder sidecar (model + `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6,
-   2.6]}`) -- ~0.006 turns ahead of live's curve at ~1.0x cost; or no leaf. Separately, the budget: live b30 is
-   -0.023 for 1.22x.
+   2.6]}`) -- with the ID hint, -0.045 at b20 against live + hint's -0.025 (~0.007-0.013 turns ahead at equal
+   instructions); or no leaf. Separately, the budget: with the hint, b25 is a further -0.009 for 1.14x instructions.
+   (emul_r was measured WITHOUT the hint; re-measuring it is cheap and may sharpen the committing-depth replay.)
 2. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point,
    and add the emulated shape (with R measured in-pipeline) to its arms.
 3. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.
