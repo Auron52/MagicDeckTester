@@ -3099,3 +3099,71 @@ TEST_CASE("Harbinger rule: the Witch for a lacking wincon (USER 2026-10-21, defa
     { Arm2 a(1, 1); ExpectHarbAa(nu, { "Accomplished Alchemist", "Ezuri, Renegade Leader", "Seedcradle Witch", "Arbor Elf" }); }
     { Arm2 a(0, 1); ExpectHarbAa(nu, { "Accomplished Alchemist", "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }); }
 }
+
+// ---- The Combo Off route's replay lands on the board it was proven on (2026-10-21) ----------------------------
+
+TEST_CASE("sim key: a permanent's chosen colour is part of the state (MTG_KEY_CHOSEN_COLOR)")
+{
+    // Two boards differing ONLY in Utopia Sprawl's colour used to share every key built on BuildSimKey -- the
+    // TT, the plan caches, the Combo Off route's memo -- and one colour's ComboRoute replayed as a no-op on the
+    // other (seed 96046 gi45). Equal colours must still share the key.
+    GameState a = FreshAa();
+    const int forest = PutAa(a, "Forest");
+    const int sprawl = PutAa(a, "Utopia Sprawl");
+    for (Permanent& p : a.battlefield)
+    { if (p.card.m_number == sprawl) { p.aura_attached_to = forest; p.chosen_color = static_cast<int8_t>(Color::Blue); } }
+    GameState b = a;
+    for (Permanent& p : b.battlefield)
+    { if (p.card.m_number == sprawl) { p.chosen_color = static_cast<int8_t>(Color::Green); } }
+    GameState c = a;
+    CHECK(TurnSolver::MidTurnStateKeyOf(a) != TurnSolver::MidTurnStateKeyOf(b));
+    CHECK(TurnSolver::MidTurnStateKeyOf(a) == TurnSolver::MidTurnStateKeyOf(c));
+}
+
+TEST_CASE("route tape: a recorded tutor resolution is played back by NAME, not re-ranked (MTG_AA_ROUTE_TAPE)")
+{
+    // RECORD: whatever PerformTutor fetches is appended to the link's tape. PLAY: the tape's name is fetched
+    // even when the live ranking would pick something else -- the replay lands where the proof did.
+    const CardDefinition& wish = DefAa("Living Wish");
+    GameState s = FreshAa();
+    s.players[0].sideboard.push_back(DefAa("Brindle Boar").card);
+    s.players[0].sideboard.push_back(DefAa("Galvanic Alchemist").card);
+
+    std::vector<std::string> tape;
+    TurnSolver::RouteBpTape bps;
+    GameState rec = s;
+    {
+        TurnSolver::RouteTapeScope scope(1, &bps, &tape);
+        PerformTutor(rec, 0, wish.params, "", "Living Wish");
+    }
+    REQUIRE(tape.size() == 1);
+    const std::string fetched = tape.front();
+    REQUIRE((fetched == "Brindle Boar" || fetched == "Galvanic Alchemist"));
+
+    // Play back the OTHER card: the replay must fetch the taped name, consume the whole tape, and stay clean.
+    const std::string other = fetched == "Brindle Boar" ? "Galvanic Alchemist" : "Brindle Boar";
+    std::vector<std::string> forced{ other };
+    GameState play = s;
+    {
+        TurnSolver::RouteTapeScope scope(2, &bps, &forced);
+        PerformTutor(play, 0, wish.params, "", "Living Wish");
+        CHECK(scope.Clean());
+    }
+    bool has_other = false, has_fetched = false;
+    for (const Card& c : play.players[0].hand)
+    {
+        if (c.m_name.str() == other)   { has_other = true; }
+        if (c.m_name.str() == fetched) { has_fetched = true; }
+    }
+    CHECK(has_other);
+    CHECK_FALSE(has_fetched);
+
+    // Mode 0 (the tape off) records nothing and plays nothing: the live ranking decides, as before.
+    std::vector<std::string> none;
+    GameState off = s;
+    {
+        TurnSolver::RouteTapeScope scope(0, &bps, &none);
+        PerformTutor(off, 0, wish.params, "", "Living Wish");
+    }
+    CHECK(none.empty());
+}

@@ -2246,6 +2246,39 @@ public:
     static void              ChargeAaRouteUnits(SearchBudget* budget, int n);
     // The turn number of the decision frame DecisionBudget() belongs to (-1 when no frame is open).
     static int               DecisionRootTurn();
+    // THE COMBO OFF ROUTE'S RESOLUTION TAPE (core/RouteTape.h; MTG_AA_ROUTE_TAPE): one route link's breakpoint
+    // resolutions, in the order its apply reached them.
+    struct RouteBpTape
+    {
+        std::vector<Plan>        outs;      // each breakpoint's resolved continuation (EMPTY included)
+        std::vector<signed char> by_plan;   // ...whether the plan itself carried it (bp_searched_plan's return)
+        std::vector<signed char> site;      // ...its site: a replay reaching a different site is a miss
+    };
+    // RAII around ONE route link's ApplyPlan. mode 1 RECORDS the link's tutor names and breakpoint
+    // continuations into the given tapes, mode 2 PLAYS them back at the same resolution points, mode 0 runs the
+    // apply with no tape at all. Restores the enclosing tape state on exit. Clean() (call before the scope
+    // ends): a play consumed every recorded event and never missed one.
+    class RouteTapeScope
+    {
+    public:
+        RouteTapeScope(int mode, RouteBpTape* bp, std::vector<std::string>* tutors);
+        ~RouteTapeScope();
+        RouteTapeScope(const RouteTapeScope&) = delete;
+        RouteTapeScope& operator=(const RouteTapeScope&) = delete;
+        bool Clean() const;
+    private:
+        int                             mode_;
+        RouteBpTape*                    bp_;
+        std::vector<std::string>*       tut_;
+        int                             prev_mode_, prev_suspend_;
+        bool                            prev_miss_;
+        RouteBpTape*                    prev_bp_rec_;
+        const RouteBpTape*              prev_bp_play_;
+        std::size_t                     prev_bp_pos_;
+        std::vector<std::string>*       prev_tut_rec_;
+        const std::vector<std::string>* prev_tut_play_;
+        std::size_t                     prev_tut_pos_;
+    };
     // Work units the Brainstorm put-back price (MTG_PUTBACK_PRICE) has charged on THIS thread so far --
     // a running total, so a caller diffs it around a game to report that game's units net of the price.
     static long long         PutBackPriceCharged();

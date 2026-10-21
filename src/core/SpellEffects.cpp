@@ -24,6 +24,7 @@
 // by name at all -- only the total Ir moves.
 #include "SpellEffects.h"
 #include "MemBudget.h"
+#include "RouteTape.h"
 #include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 
 // The live scry-watcher chain (Galadriel; see the SCRY WATCHERS block in SpellEffects.h).
@@ -195,22 +196,45 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // replay, whiff, scripted), mirroring g_scripted_etbdig_choice's consumed-once semantics.
     const int scripted_pick = g_scripted_tutor_choice;
     g_scripted_tutor_choice = -1;
+    // THE ROUTE TAPE (core/RouteTape.h; MTG_AA_ROUTE_TAPE). RECORD: whatever this resolution fetches -- its
+    // final name, or NoneName() on any return that fetches nothing -- is appended by the destructor. PLAY: the
+    // recorded name is taken HERE, before anything can return, so a replay consumes exactly the events the
+    // recording produced, and the ranking below (the context-sensitive part) is not consulted at all.
+    struct TapeRec
+    {
+        bool on = routetape::Recording();
+        std::string name = routetape::NoneName();
+        ~TapeRec() { if (on && routetape::t_tutor_rec != nullptr) { routetape::t_tutor_rec->push_back(name); } }
+    } tape_rec;
+    bool taped = false;
+    std::string taped_name;
+    if (routetape::Playing())
+    {
+        if (routetape::t_tutor_play != nullptr && routetape::t_tutor_pos < routetape::t_tutor_play->size())
+        {
+            taped_name = (*routetape::t_tutor_play)[routetape::t_tutor_pos++];
+            if (taped_name == routetape::NoneName()) { return; }
+            taped = true;
+        }
+        else { routetape::t_miss = true; }
+    }
     // The human menu's named decline (kTutorDeclineTarget). After the read-and-reset above, so the
     // scripted pin is still consumed exactly once. Gated on tutor_optional like the index decline.
-    if (pp.tutor_optional && target_name == kTutorDeclineTarget) { return; }
-    std::string want = target_name;
+    if (!taped && pp.tutor_optional && target_name == kTutorDeclineTarget) { return; }
+    std::string want = taped ? taped_name : target_name;
     // Beseech the Queen (tutor_max_mv_is_lands): the land-count cap is read HERE, at resolution.
     // A plan-baked target the board cannot reach now (enumeration offered it one land higher, for
     // the plan that plays a land first) is re-picked from the LIVE legal list below -- the real
     // player chooses on resolution, so a whiff would be the less faithful disposition.
-    if (pp.tutor_max_mv_is_lands && !want.empty())
+    if (!taped && pp.tutor_max_mv_is_lands && !want.empty())
     {
         const CardDefinition* wd = CardDatabase::Instance().Lookup(want);
         if (wd == nullptr || !TutorLandCapOk(state, controller_index, wd->card, pp)) { want.clear(); }
     }
-    if (want.empty())
+    if (!taped && want.empty())
     {
-        std::vector<std::string> cands = LiveTutorCandidates(state, controller_index, pp);
+        std::vector<std::string> cands;
+        { routetape::Suspend _rts; cands = LiveTutorCandidates(state, controller_index, pp); }   // not the link's own
         if (cands.empty()) { return; }
         want = cands.front();
         // "You MAY search" declined by the SEARCH (kTutorDeclineChoice). Checked BEFORE the clamp
@@ -275,7 +299,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // DEFAULT, which is what keeps every predating reference replaying its recorded line (see
     // AskHumanTutorPick). Chooser-gated, so search / rollout / autonomous play never reach it and
     // stay byte-identical.
-    else if (human_repick && g_play_tutor_chooser)
+    else if (!taped && human_repick && g_play_tutor_chooser)
     {
         std::string chosen;
         const TutorAskResult r = AskHumanTutorPick(state, controller_index, pp, source_name,
@@ -301,6 +325,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         const CardDefinition* wd = CardDatabase::Instance().Lookup(want);
         if (wd == nullptr || !wd->card.IsMulticolored()) { return; }
     }
+    tape_rec.name = want;   // the route tape's record of this resolution (see TapeRec above)
     // DIAGNOSTIC (MTG_TUTOR_CHOSEN_RANK, default off): where in the ranking did the SEARCH actually
     // land? Gated on g_real_resolution, so it reports only the target the engine commits to, never
     // the thousands of hypothetical tutors inside rollouts.

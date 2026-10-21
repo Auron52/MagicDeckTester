@@ -31543,10 +31543,23 @@ inline bool UntapLoopNeedFunded(const GameState& s, int ctrl, int* need_mv, Unta
 }
 
 // Run the loop to its need. Returns the number of UNTAP activations performed (0 = nothing happened).
+// MTG_AA_LOOP_TRACE=1 (DIAGNOSTIC, print-only): the closed-form loop's need, every op it takes, the pool it
+// sees and the float -- for diffing a route's proving apply against its replay on the same board.
+inline bool UntapLoopTraceOn() { static const bool v = EnvOn("MTG_AA_LOOP_TRACE"); return v; }
 inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, int target_id)
 {
     UntapLoopNeed need = g_untap_loop_force_need != nullptr ? *g_untap_loop_force_need
                                                             : ComputeUntapLoopNeed(state, ctrl);
+    if (UntapLoopTraceOn())
+    {
+        std::fprintf(stderr, "[loop] t%d enter shape=%d src=%d tgt=%d payoff=%d cost=%dg/W%d U%d B%d R%d G%d count=%d "
+                     "nopump=%d forced=%d float=%d (W%d U%d G%d) life_gained=%d\n", state.turn_number, shape,
+                     source_id, target_id, need.payoff, need.cost.generic, need.cost.white, need.cost.blue,
+                     need.cost.black, need.cost.red, need.cost.green, need.count, g_untap_loop_no_pump,
+                     g_untap_loop_force_need != nullptr ? 1 : 0, (int)state.floating_mana.Total(),
+                     state.floating_mana.white, state.floating_mana.blue, state.floating_mana.green,
+                     state.players[static_cast<std::size_t>(ctrl)].life_gained_this_turn);
+    }
     const int k_pump = (g_untap_loop_no_pump != 0 || g_untap_loop_force_need != nullptr)
                      ? 0 : UntapLoopPumpIterations(state, ctrl, shape, source_id, target_id);
     if (need.payoff == kLoopPayNone && k_pump <= 0) { return 0; }
@@ -31645,10 +31658,22 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
         if (si < 0 || ti < 0) { break; }
         int gain_staff = -1;
         const int op = UntapLoopNextOp(state, ctrl, shape, si, ti, &gain_staff);
+        if (UntapLoopTraceOn())
+        {
+            const Permanent& tg = state.battlefield[static_cast<std::size_t>(ti)];
+            std::fprintf(stderr, "[loop]   step %d op=%d P=%d tgt_tapped=%d float=%d (W%d U%d G%d)\n", step, op,
+                         static_cast<int>(AvailableManaPool(state, &tg).Total()), tg.tapped ? 1 : 0,
+                         (int)state.floating_mana.Total(), state.floating_mana.white, state.floating_mana.blue,
+                         state.floating_mana.green);
+        }
         if (op < 0) { break; }
         if (op == 0 || op == 3)
         {
-            if (ApplyActivatedUntap(state, ctrl, shape, source_id, target_id, 1) != 1) { break; }
+            if (ApplyActivatedUntap(state, ctrl, shape, source_id, target_id, 1) != 1)
+            {
+                if (UntapLoopTraceOn()) { std::fprintf(stderr, "[loop]   untap activation FAILED (payment)\n"); }
+                break;
+            }
             ++done;
         }
         else if (op == 1)

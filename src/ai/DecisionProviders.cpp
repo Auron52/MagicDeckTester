@@ -44537,6 +44537,10 @@ inline std::atomic<std::uint64_t> g_walks{0}, g_wins{0}, g_applies{0}, g_walk_us
 // Walks by their board's turn relative to the decision frame's (TurnSolver::DecisionRootTurn): [0] no frame
 // open (the executor, the viewer), [1] the decision's own turn, [2] the next turn, [3] two or more later.
 inline std::atomic<std::uint64_t> g_walks_dt[4]{}, g_walk_us_dt[4]{};
+// Apply-side outcome counters (MTG_AA_ROUTE_STATS): the plan-vs-real record of the route.
+// Indexed by the tape's setting ([0] off, [1] on) so one pooled A/B batch reports both arms.
+inline std::atomic<std::uint64_t> g_ap_calls[2]{}, g_ap_noroute[2]{}, g_ap_probe_fail[2]{}, g_ap_rewalk_fail[2]{},
+                                  g_ap_live_fail[2]{}, g_ap_proven_used[2]{}, g_ap_tape_unclean[2]{};
 struct StatsDumper
 {
     ~StatsDumper()
@@ -44556,6 +44560,17 @@ struct StatsDumper
                      (unsigned long long)g_walks_dt[2].load(), g_walk_us_dt[2].load() / 1000.0,
                      (unsigned long long)g_walks_dt[3].load(), g_walk_us_dt[3].load() / 1000.0,
                      (unsigned long long)g_cut_walks.load());
+        for (int a = 0; a < 2; ++a)
+        {
+            if (g_ap_calls[a].load() == 0) { continue; }
+            std::fprintf(stderr, "[aa-route-stats] apply (tape %s): calls %llu | no-op: no route here %llu, re-walk failed"
+                         " %llu | memoised path did not kill %llu | live replay failed %llu (proven board played %llu) |"
+                         " tape replays unclean %llu\n", a ? "on" : "off",
+                         (unsigned long long)g_ap_calls[a].load(), (unsigned long long)g_ap_noroute[a].load(),
+                         (unsigned long long)g_ap_rewalk_fail[a].load(), (unsigned long long)g_ap_probe_fail[a].load(),
+                         (unsigned long long)g_ap_live_fail[a].load(), (unsigned long long)g_ap_proven_used[a].load(),
+                         (unsigned long long)g_ap_tape_unclean[a].load());
+        }
     }
 };
 inline StatsDumper g_stats_dumper;
@@ -44574,7 +44589,23 @@ struct Link
     TurnSolver::Plan plan;
     int tap_num = 0;    // m_number of the creature tapped first (0 = none)
     int tap_col = -1;   // static_cast<int>(Color)
+    // THE RESOLUTION TAPE (core/RouteTape.h; MTG_AA_ROUTE_TAPE): what this link's proving apply RESOLVED -- each
+    // tutor's fetched card, each breakpoint's continuation -- so a replay lands on the same board instead of
+    // re-resolving ranks against whatever list and context the replay happens to run in. `taped` false = the
+    // link was proven with the tape off; its replay re-resolves, as before.
+    bool taped = false;
+    std::vector<std::string>  tutors;
+    TurnSolver::RouteBpTape   bps;
+    std::string proof_board;   // MTG_AA_ROUTE_TRACE only: the board this link's proving apply reached
 };
+// MTG_AA_ROUTE_TAPE (heurarm AA_ROUTE_TAPE): DEFAULT ON; =0 is exactly the untaped route (nothing recorded,
+// nothing played back). See core/RouteTape.h. Its sibling is MTG_KEY_CHOSEN_COLOR (TurnSolver.cpp, the sim
+// key): the route memo and every plan cache keyed a board without its permanents' chosen colours.
+inline bool TapeOn()
+{
+    static const bool env = EnvOn("MTG_AA_ROUTE_TAPE", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::AA_ROUTE_TAPE, env);
+}
 struct Walk
 {
     int nodes_left   = kNodes;
@@ -44853,6 +44884,33 @@ inline std::uint64_t ChildKey(const GameState& s, int me)
     return h;
 }
 
+// MTG_AA_ROUTE_TRACE only: a readable board for diffing a proof against its replay.
+static std::string BoardText(const GameState& s, int me)
+{
+    std::string t = "hand[";
+    for (const Card& c : s.players[me].hand) { t += c.m_name.str(); t += ","; }
+    t += "] bf[";
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        t += p.card.m_name.str() + "#" + std::to_string(p.card.m_number);
+        if (p.tapped) { t += "(T)"; }
+        if (p.entered_this_turn) { t += "(new)"; }
+        if (p.chosen_color >= 0) { t += "(c" + std::to_string(p.chosen_color) + ")"; }
+        if (p.aura_attached_to != 0) { t += "@" + std::to_string(p.aura_attached_to); }
+        if (p.paired_with != 0) { t += "~" + std::to_string(p.paired_with); }
+        t += ",";
+    }
+    const ManaPool& f = s.floating_mana;
+    t += "] float W" + std::to_string(f.white) + " U" + std::to_string(f.blue) + " B" + std::to_string(f.black)
+       + " R" + std::to_string(f.red) + " G" + std::to_string(f.green) + " C" + std::to_string(f.colorless)
+       + " life_gained " + std::to_string(s.players[me].life_gained_this_turn)
+       + " lib " + std::to_string(s.players[me].library.size())
+       + " opp " + std::to_string(s.players[1 - me].life) + "/" + std::to_string(s.players[1 - me].library.size())
+       + " lands_played " + std::to_string(s.players[me].lands_played_this_turn);
+    return t;
+}
+
 static int Dfs(GameState& s, int me, int links_left, Walk& w)
 {
     // A combat-lethal ROOT is not a route (nothing for the route to play): only a link can make the verdict.
@@ -44886,7 +44944,12 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         {
             if (!PayApply(w)) { return 0; }
             GameState child = s;
-            TurnSolver::ApplyPlan(child, kills[static_cast<std::size_t>(i)], /*is_pre_combat=*/true);
+            Link rec_link{ kills[static_cast<std::size_t>(i)], 0, -1 };
+            {
+                rec_link.taped = TapeOn();
+                TurnSolver::RouteTapeScope _tape(rec_link.taped ? 1 : 0, &rec_link.bps, &rec_link.tutors);
+                TurnSolver::ApplyPlan(child, kills[static_cast<std::size_t>(i)], /*is_pre_combat=*/true);
+            }
             --w.nodes_left; --w.applies_left; ++w.applies;
             if (TraceOn())
             {
@@ -44897,7 +44960,8 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
                              OpponentHasLost(child) ? 1 : 0);
             }
             if (!Moved(s, child, me)) { continue; }
-            w.path.push_back(Link{ kills[static_cast<std::size_t>(i)], 0, -1 });
+            if (TraceOn()) { rec_link.proof_board = BoardText(child, me); }
+            w.path.push_back(std::move(rec_link));
             if (Dfs(child, me, links_left - 1, w) == 1) { s = std::move(child); return 1; }
             w.path.pop_back();
         }
@@ -45020,7 +45084,12 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             if (!PayApply(w)) { return 0; }
             GameState child = s;
             if (variant == 0 && !PreTap(child, me, pnum, pcol)) { continue; }
-            TurnSolver::ApplyPlan(child, plan, /*is_pre_combat=*/true);
+            Link rec_link{ plan, variant == 0 ? pnum : 0, variant == 0 ? pcol : -1 };
+            {
+                rec_link.taped = TapeOn();
+                TurnSolver::RouteTapeScope _tape(rec_link.taped ? 1 : 0, &rec_link.bps, &rec_link.tutors);
+                TurnSolver::ApplyPlan(child, plan, /*is_pre_combat=*/true);
+            }
             --w.applies_left; ++w.applies;
             if (StatsOn() && plan.bp_choice >= 0) { g_applies_var.fetch_add(1, std::memory_order_relaxed); }
             if (TraceOn())
@@ -45042,7 +45111,8 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             // route played as a no-op (T4 -> T7).
             --w.nodes_left;
             ++tried;
-            w.path.push_back(Link{ plan, variant == 0 ? pnum : 0, variant == 0 ? pcol : -1 });
+            if (TraceOn()) { rec_link.proof_board = BoardText(child, me); }
+            w.path.push_back(std::move(rec_link));
             if (Dfs(child, me, links_left - 1, w) == 1) { s = std::move(child); return 1; }
             w.path.pop_back();
         }
@@ -45065,14 +45135,29 @@ static int Replay(GameState& s, int me, const std::vector<Link>& path)
         if (l.tap_num != 0 && !PreTap(s, me, l.tap_num, l.tap_col)) { return 0; }
         if (g_play_event_sink != nullptr)
         { EmitPlayEvent(s.turn_number, "cast", TurnSolver::PlanLineSummary(l.plan, s)); }
+        // THE TAPE PLAYED BACK: the link's recorded tutor names and breakpoint continuations, not re-resolved
+        // ranks (core/RouteTape.h). The tapes are only READ in play mode (the const_casts are the scope's API).
+        TurnSolver::RouteTapeScope _tape(l.taped ? 2 : 0, const_cast<TurnSolver::RouteBpTape*>(&l.bps),
+                                         const_cast<std::vector<std::string>*>(&l.tutors));
         TurnSolver::ApplyPlan(s, l.plan, /*is_pre_combat=*/true);
+        if (l.taped && !_tape.Clean() && StatsOn()) { g_ap_tape_unclean[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
+        if (TraceOn() && !l.proof_board.empty())
+        {
+            const std::string now = BoardText(s, me);
+            if (now != l.proof_board)
+            {
+                std::fprintf(stderr, "[aa-route] t%d REPLAY DIFFERS at link %s\n   proof : %s\n   replay: %s\n",
+                             s.turn_number, TurnSolver::PlanLineSummary(l.plan, s).c_str(), l.proof_board.c_str(),
+                             now.c_str());
+            }
+        }
     }
     return RouteWon(s, me) ? 1 : 0;
 }
 
 // `main_pass`: the path was proven by the walk's MAIN-PHASE pass (see MainPassScope), so it is replayed in that
 // pass's scope -- the loop inside it funds the main-phase kill the pass proved, not a pump.
-struct Verdict { int r = 0; std::vector<Link> path; bool main_pass = false; bool cut = false; };
+struct Verdict { int r = 0; std::vector<Link> path; bool main_pass = false; bool cut = false; std::string root_board; };
 // PER GAME, keyed on the full board (Fingerprint): a verdict is a function of the board -- including the
 // library ORDER, which is fixed within a game -- so it is reused across decisions; cleared at every game
 // start (TurnSolver::ClearPerGameCaches) so a batch worker never carries one game's verdicts into the next.
@@ -45139,6 +45224,7 @@ static Verdict WalkPass(const GameState& s, int me, bool priced)
             w.budget = TurnSolver::DecisionBudget();
             w.cut_ok = w.budget != nullptr && s.turn_number > TurnSolver::DecisionRootTurn();
         }
+        if (TraceOn()) { v.root_board = BoardText(s, me); }
         v.r = Dfs(copy, me, kLinks, w);
         if (v.r == 1 && w.path.empty()) { v.r = 0; }   // already won / lethal before any link: not a route
         if (BaseOnlyVerifyOn() && !w.cut)
@@ -45306,9 +45392,11 @@ int AlchemistComboRouteApply(GameState& s, int me)
 {
     if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
     // ALL-OR-NOTHING: only a proven path is played on the live state.
+    if (aaroute::StatsOn()) { aaroute::g_ap_calls[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
     aaroute::Verdict v = aaroute::Trial(s, me, /*priced=*/false);   // a copy: the walk below may touch the memo
     if (v.r != 1)
     {
+        if (aaroute::StatsOn()) { aaroute::g_ap_noroute[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
         if (aaroute::TraceOn())
         {
             std::fprintf(stderr, "[aa-route] t%d APPLY: no proven route on this board (memo/walk here; root_open=%d"
@@ -45354,11 +45442,19 @@ int AlchemistComboRouteApply(GameState& s, int me)
                     std::fprintf(stderr, "[aa-route]     link%s bp=%d tutor=%d: %s\n", l.tap_num ? " (pre-tap)" : "",
                                  l.plan.bp_choice, l.plan.tutor_choice, TurnSolver::PlanLineSummary(l.plan, s).c_str());
                 }
+                const std::string now_root = aaroute::BoardText(s, me);
+                std::fprintf(stderr, "[aa-route]     root %s\n       proof root: %s\n       apply root: %s\n",
+                             now_root == v.root_board ? "SAME" : "DIFFERS", v.root_board.c_str(), now_root.c_str());
             }
-            if (aaroute::StatsOn()) { aaroute::g_rewalks.fetch_add(1, std::memory_order_relaxed); }
+            if (aaroute::StatsOn())
+            {
+                aaroute::g_rewalks.fetch_add(1, std::memory_order_relaxed);
+                aaroute::g_ap_probe_fail[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+            }
             v = aaroute::Walk1(s, me, /*priced=*/false);
             if (v.r != 1)
             {
+                if (aaroute::StatsOn()) { aaroute::g_ap_rewalk_fail[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
                 if (aaroute::TraceOn()) { std::fprintf(stderr, "[aa-route] t%d APPLY: re-walk found no route here -- no-op\n", s.turn_number); }
                 return 0;
             }
@@ -45391,6 +45487,11 @@ int AlchemistComboRouteApply(GameState& s, int me)
         std::fprintf(stderr, "[aa-route] !! t%d APPLY replay did not kill on a board the trial proved (%zu links,"
                      " %d of them breakpoint variants)%s\n", s.turn_number, v.path.size(), var_links,
                      proven.has_value() ? " -- played the proven board" : "");
+        if (aaroute::StatsOn())
+        {
+            aaroute::g_ap_live_fail[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+            if (proven.has_value()) { aaroute::g_ap_proven_used[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
+        }
         if (proven.has_value()) { s = std::move(*proven); r = 1; }
     }
     return r;

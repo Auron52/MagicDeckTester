@@ -2,6 +2,7 @@
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "../core/MemBudget.h"
+#include "../core/RouteTape.h"
 #include "TurnSolver.h"
 #include "EscStats.h"               // per-thread escalation taken/discarded tallies (diagnostic)
 #include "ContPinScope.h"
@@ -3802,6 +3803,70 @@ static thread_local int           g_d0_permit_nest     = 0;       // live Greedy
 // preference, CLAUDE.md "WHEN A BUDGET BINDS, FINISH THE TURN BEFORE REACHING THE NEXT").
 static thread_local int           g_decision_root_turn = -1;
 SearchBudget* TurnSolver::DecisionBudget()   { return g_decision_budget; }
+
+// ---- THE ROUTE TAPE's breakpoint half (core/RouteTape.h holds the mode and the tutor half) ----------------------
+namespace routebptape
+{
+inline thread_local TurnSolver::RouteBpTape*       t_rec  = nullptr;
+inline thread_local const TurnSolver::RouteBpTape* t_play = nullptr;
+inline thread_local std::size_t                    t_pos  = 0;
+}
+// Play: the next recorded continuation, if the tape has one for THIS site (else false -> a miss).
+static bool RouteBpTapeNext(int site, TurnSolver::Plan& out, int& by_plan)
+{
+    const TurnSolver::RouteBpTape* t = routebptape::t_play;
+    if (t == nullptr || routebptape::t_pos >= t->outs.size()) { return false; }
+    const std::size_t i = routebptape::t_pos++;
+    if (t->site[i] != static_cast<signed char>(site)) { return false; }
+    out     = t->outs[i];
+    by_plan = t->by_plan[i] != 0 ? 1 : 0;
+    return true;
+}
+static void RouteBpTapePush(int site, const TurnSolver::Plan& out, bool by_plan)
+{
+    TurnSolver::RouteBpTape* t = routebptape::t_rec;
+    if (t == nullptr) { return; }
+    t->outs.push_back(out);
+    t->by_plan.push_back(by_plan ? 1 : 0);
+    t->site.push_back(static_cast<signed char>(site));
+}
+TurnSolver::RouteTapeScope::RouteTapeScope(int mode, RouteBpTape* bp, std::vector<std::string>* tutors)
+    : mode_(mode), bp_(bp), tut_(tutors),
+      prev_mode_(routetape::t_mode), prev_suspend_(routetape::t_suspend), prev_miss_(routetape::t_miss),
+      prev_bp_rec_(routebptape::t_rec), prev_bp_play_(routebptape::t_play), prev_bp_pos_(routebptape::t_pos),
+      prev_tut_rec_(routetape::t_tutor_rec), prev_tut_play_(routetape::t_tutor_play),
+      prev_tut_pos_(routetape::t_tutor_pos)
+{
+    const bool rec = (mode_ == routetape::kRecord), play = (mode_ == routetape::kPlay);
+    routetape::t_mode        = rec ? routetape::kRecord : play ? routetape::kPlay : routetape::kOff;
+    routetape::t_suspend     = 0;
+    routetape::t_miss        = false;
+    routetape::t_tutor_rec   = rec ? tut_ : nullptr;
+    routetape::t_tutor_play  = play ? tut_ : nullptr;
+    routetape::t_tutor_pos   = 0;
+    routebptape::t_rec       = rec ? bp_ : nullptr;
+    routebptape::t_play      = play ? bp_ : nullptr;
+    routebptape::t_pos       = 0;
+}
+TurnSolver::RouteTapeScope::~RouteTapeScope()
+{
+    routetape::t_mode       = prev_mode_;
+    routetape::t_suspend    = prev_suspend_;
+    routetape::t_miss       = prev_miss_;
+    routetape::t_tutor_rec  = prev_tut_rec_;
+    routetape::t_tutor_play = prev_tut_play_;
+    routetape::t_tutor_pos  = prev_tut_pos_;
+    routebptape::t_rec      = prev_bp_rec_;
+    routebptape::t_play     = prev_bp_play_;
+    routebptape::t_pos      = prev_bp_pos_;
+}
+bool TurnSolver::RouteTapeScope::Clean() const
+{
+    if (mode_ != routetape::kPlay) { return true; }
+    return !routetape::t_miss
+        && routebptape::t_pos == (bp_ != nullptr ? bp_->outs.size() : 0)
+        && routetape::t_tutor_pos == (tut_ != nullptr ? tut_->size() : 0);
+}
 int           TurnSolver::DecisionRootTurn() { return g_decision_root_turn; }
 bool          TurnSolver::DecisionRootOpen() { return g_decision_root_open; }
 bool          TurnSolver::InD0Runner()       { return g_d0_permit_nest > 0; }
@@ -46169,6 +46234,7 @@ inline Dumper g_dumper;
 }
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
+    routetape::Suspend _rts;   // a solve inside a route link's apply is not the link's own resolution
     // THE TRIPWIRE ran when the caller built `permit` (GreedyPermit's constructor checks both the
     // claimed depth and the innermost search frame -- see greedywindow in TurnSolver.h). There is
     // no way in here without one, so there is nothing further to check.
@@ -53665,7 +53731,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Its look continuation branches on this function's RETURN value, so the EMPTY sentinel
         // (resolved_by_plan) and the base's fallback EMPTY take different paths there.
         if (class_on && site == 8 && pofold::t_base.plan == &plan) { ++pofold::t_base.asym; }
-        if (eligible && plan.bp_choice == kBpEmptyChoice)
+        // THE ROUTE TAPE (core/RouteTape.h; MTG_AA_ROUTE_TAPE): a route link's replay takes the continuation the
+        // proving apply resolved at this breakpoint -- the PLAN, not its rank in a list re-served from cache --
+        // and skips the list entirely. -1 = not taped (every path below as before).
+        int tape_by_plan = -1;
+        if (routetape::Playing())
+        {
+            if (RouteBpTapeNext(site, out, tape_by_plan)) { resolved = true; }
+            else { routetape::t_miss = true; }
+        }
+        if (tape_by_plan < 0 && eligible && plan.bp_choice == kBpEmptyChoice)
         {
             // MTG_BP_NODE's explicit EMPTY continuation: cast nothing more, play no land (the
             // land-carrying continuations are their own cands entries), let the trailing passes
@@ -53674,7 +53749,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             out.land_decided = true;
             resolved         = true;
         }
-        else if (eligible)
+        else if (tape_by_plan < 0 && eligible)
         {
             // Shared with the executor (AIEngine::resolve_draw_breakpoint): both index the SAME list.
             // BY REFERENCE (see EnumerateBreakpointPlansRef's lifetime contract): this block only
@@ -53892,7 +53967,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         // Whether the PLAN itself carried this continuation (rank / chain / EMPTY arm / node child).
         // Only the probe reads it: everything below resolves to a Plan regardless.
-        const bool resolved_by_plan = resolved;
+        const bool resolved_by_plan = tape_by_plan >= 0 ? (tape_by_plan != 0) : resolved;
         // NO GREEDY CONTINUATION EXISTS. A continuation the plan did not carry is EMPTY: "I am
         // done acting in this phase" -- cast nothing more, play no land (land-carrying
         // continuations are their own entries in the enumerated list), let the trailing passes
@@ -54056,6 +54131,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               && !plan.bp_all && plan.bp_choice > g_bp_cands_last;
         BpHit(site, out_breakpoint != nullptr, resolved_by_plan, nested_blocked, eligible,
               overrun_dup);
+        if (routetape::Recording()) { RouteBpTapePush(site, out, resolved_by_plan); }   // the route tape (above)
         return resolved_by_plan;
     };
     // Play a continuation's SEARCHED land drop and record it for commit-the-line replay. Inert for
@@ -61797,6 +61873,7 @@ static bool BindAuraLateHosts(const GameState& state, bool is_pre_combat, const 
 
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
+    routetape::Suspend _rts;       // an enumeration's trial applies are not a route link's own resolutions
     EnumChargeScope enum_charge;   // MTG_ENUM_CHARGE (default off): bills this walk at exit
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
     // scry/dig/cantrips), which is hypothetical, not real resolution. Pause the human-play choosers
@@ -74772,6 +74849,7 @@ namespace
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
+    routetape::Suspend _rts;   // see EnumeratePlans
     const bool memo_ok = enummemo::Enabled() && !HumanPlayActive()
                       && !g_bp_root_enum
                       && g_bp_enum_depth == 0
@@ -75138,6 +75216,12 @@ inline std::uint64_t FsOrderSig(const GameState& state)
 // 2 = drop damage + temp pump only.
 static thread_local int g_simkey_m2coarse = 0;
 
+// MTG_KEY_CHOSEN_COLOR (heurarm KEY_CHOSEN_COLOR): fold Permanent::chosen_color into the sim key -- see the fold.
+static bool KeyChosenColorOn()
+{
+    static const bool env = EnvOn("MTG_KEY_CHOSEN_COLOR", true);   // DEFAULT ON; =0 restores the key hole
+    return heurarm::Flag(heurarm::KEY_CHOSEN_COLOR, env);
+}
 // THE KEY WITHOUT ITS DEPTH. Remaining depth is folded LAST (SimKeyAtDepth), so one walk of the state
 // yields the key at every depth: MTG_ID_ORDER_HINT reads the same position one pass shallower,
 // (state, depth - 1), for the price of two Folds instead of a second walk. Moving the fold changes
@@ -75756,6 +75840,17 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.fade_counters != 0)  { Fold(tk, 0xFADEC); Fold(tk, static_cast<uint64_t>(perm.fade_counters)); }
         if (perm.verse_counters != 0) { Fold(tk, 0x7E55E); Fold(tk, static_cast<uint64_t>(perm.verse_counters)); }
         if (perm.ice_counters != 0)   { Fold(tk, 0x1CE0C); Fold(tk, static_cast<uint64_t>(perm.ice_counters)); }
+        // THE CHOSEN COLOUR (MTG_KEY_CHOSEN_COLOR, DEFAULT ON; =0 restores the hole). Utopia Sprawl's colour, a
+        // locked mana rock's: future-determining (which pip the permanent makes), and the one per-permanent
+        // choice this key did not fold -- every cache keyed here (the TT, the solve / enum memos, the breakpoint
+        // continuation cache, the Combo Off route's memo) served one colour's answer to the other colour's
+        // board. AccomplishedAlchemist seed 96046 gi45: a continuation list derived with the Sprawl making {U}
+        // carried a ComboRoute proven on that board into the same board with the Sprawl making {G}, where the
+        // loop cannot start -- a scored win played as a no-op, 9 times in the game (analysis-
+        // AccomplishedAlchemist.md, "Route tape"). Splits entries, never merges; nonzero-gated, so a board
+        // without a chosen colour keeps the EXACT prior key.
+        if (perm.chosen_color >= 0 && KeyChosenColorOn())
+        { Fold(tk, 0xC0102C); Fold(tk, static_cast<uint64_t>(perm.chosen_color)); }
         if (bf_has_fade)
         {
             // Fade wiring (see bf_has_fade): the source's copy id and each token's link + live P/T, so
@@ -76402,6 +76497,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt)
 {
+    routetape::Suspend _rts;   // a rollout inside a route link's apply is not the link's own resolution
     // TRUNCATED ROLLOUT (MTG_ROLLOUT_HORIZON=K, default -1 = unlimited/off): after K simulated turns with
     // no win yet, cap the tail with the O(1) value-leaf estimate instead of playing greedily to game end.
     // Bridges the pure value leaf (K=0) and the full rollout (K=inf), cutting the dominant per-leaf cost --
@@ -87420,6 +87516,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                   int* out_committed_sub_depth)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    routetape::Suspend _rts;   // see TurnSolver::Solve
     // ORDER-CONDEMNATION root-turn authority: the OUTERMOST solve entry owns the marker (inner
     // recursive solves -- line walks, continuation turns -- see it already set and do not
     // re-own), so only applies at THIS turn stamp. See CondemnRootTurnGuard.
@@ -91681,6 +91778,7 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
 // g_bp_enum_depth (both callers are already inside a derivation scope).
 static std::vector<TurnSolver::Plan> UntapLoopKillPlansFor(const GameState& state, bool is_pre_combat)
 {
+    routetape::Suspend _rts;   // see EnumeratePlans
     std::vector<TurnSolver::Plan> plans;
     UntapLoopNeed kn;
     if (state.floating_mana.Total() > 0
@@ -91745,6 +91843,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                                                               bool* interrupted_out = nullptr)
 {
     if (interrupted_out != nullptr) { *interrupted_out = false; }
+    routetape::Suspend _rts;   // a continuation DERIVATION is not a route link's own resolution
     const int  mode   = BpCondemnDropMode();
     const bool demote = (mode == 2);   // condemned lines ranked LAST (list keeps every entry)
     const bool skip   = (mode == 3);   // condemned ENTRIES emptied in place (ranks preserved)

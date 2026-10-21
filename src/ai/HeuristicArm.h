@@ -633,6 +633,8 @@ enum Slot : int
     GREEDY_PUMP_LETHAL,       // MTG_GREEDY_PUMP_LETHAL  the same verified attack-only cut in the greedy policy, counting the combat converter's pumps (ApplyFirebreathing: Ezuri's team pump, firebreathing) paid from the untouched pool -- the win projection never credits them, so the greedy spent that pool on casts (smoke d0 s1001 gi990: Forests pay one Ezuri pump for lethal). Default ON; =0 -> as before
     AA_ROUTE_BASE_ONLY,       // MTG_AA_ROUTE_BASE_ONLY  AccomplishedAlchemist COMBO OFF route walk: try BASE plans only, not their breakpoint variants (bp_choice >= 0) -- the walk re-enumerates after every link, so it reaches a continuation as its own next link instead of deriving the whole continuation list per variant apply (74% of a slow keep-rollout's walk applies, 83% of its wall; analysis-AccomplishedAlchemist.md "Slow rollouts at the gen setting"). PROPOSED, default OFF (a narrowing of the walk's menu: the USER's call)
     AA_ROUTE_BASE_ONLY_PLAYOUT, // MTG_AA_ROUTE_BASE_ONLY_PLAYOUT  ...the same narrowing ONLY in walks run BEYOND the search window (greedywindow::t_depth == 0: the horizon playout's greedy Solve, where the doctrine permits a playout heuristic); every walk inside the window keeps the full menu. PROPOSED, default OFF (the USER's call)
+    AA_ROUTE_TAPE,            // MTG_AA_ROUTE_TAPE  AccomplishedAlchemist COMBO OFF route: each link records what its proving apply RESOLVED (a tutor's fetched card, a breakpoint's continuation plan) and a replay plays that back instead of re-resolving ranks (core/RouteTape.h) -- a proven route lands on the board it was proven on. DEFAULT ON (a plan-vs-real defect fix); =0 -> exactly the untaped route
+    KEY_CHOSEN_COLOR,         // MTG_KEY_CHOSEN_COLOR  BuildSimKey folds Permanent::chosen_color (Utopia Sprawl's colour, a locked mana rock's): every cache keyed on it served one colour's answer to the other colour's board (AccomplishedAlchemist: a ComboRoute proven with the Sprawl making {U} replayed as a no-op with it making {G}). DEFAULT ON (a key-hole fix); =0 -> the old key
     COUNT
 };
 
@@ -1216,6 +1218,8 @@ inline const char* Name(int slot)
         "MTG_GREEDY_PUMP_LETHAL",
         "MTG_AA_ROUTE_BASE_ONLY",
         "MTG_AA_ROUTE_BASE_ONLY_PLAYOUT",
+        "MTG_AA_ROUTE_TAPE",
+        "MTG_KEY_CHOSEN_COLOR",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
