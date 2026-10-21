@@ -30,8 +30,12 @@ cell -- see "USER Elvish Harbinger rule (2026-10-20)".
 cuts -- d5 b20 0.931x instructions / ~0.94x core time, the costliest game 0.885x; see "Chunk P4 (2026-10-20)".
 2026-10-20: COMBO OFF for this deck (branch `aa-combooff`) -- the rule table, the mechanical untap-loop route
 and the search's query, all DEFAULT ON as the USER asked; -0.40..-0.48 turns and 0.81-0.87x ms on every cell; see
-"Combo Off for AccomplishedAlchemist (2026-10-20)". Open USER items are
-listed under "Open questions surfaced to USER".
+"Combo Off for AccomplishedAlchemist (2026-10-20)". 2026-10-21 (branch `aa-witchwin`, off `aa-land` @ c49997f1, NOT
+pushed): the USER's decision that Seedcradle Witch counts as a win condition (Harbinger, wish and discard rules; the
+4 life rule retired) landed DEFAULT ON -- -0.005 / +0.005 / -0.010 on the three cells, smoke d0 +0.024 from one
+clause (the Harbinger fallback order); a PROPOSED amendment (`MTG_AA_HARB_WITCH_FALLBACK_FIRST`, OFF) makes it
+-0.005 / -0.005 / -0.012 with zero slower games -- see "USER: Seedcradle Witch as a win condition (2026-10-21)".
+Open USER items are listed under "Open questions surfaced to USER".
 
 ## The deck
 
@@ -77,6 +81,121 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Utopia Sprawl | main | implemented (chunk C1) | 2/3 | NEW land_aura_host_subtype "Forest" (LandAuraHostOk at every host site) + etb_choose_color on a land aura (menu = land_aura_produces; locked colour credited per permanent via LandAuraProducesFor); colour = SEARCHED cast axis restricted by the provider to G/U/W/B; viewer: choose_color (full list) |
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
+
+## USER: Seedcradle Witch as a win condition (2026-10-21)
+
+Branch `aa-witchwin` (worktree `.claude/worktrees/aa-witchwin`, forked from `aa-land` @ c49997f1), NOT pushed.
+Commits fd7aeaf6 (the three rules + unit cases), d714f5f1 (the PROPOSED fallback lever below). Scratch:
+`/workspaces/MagicDeckTester/build/scratch/aa-witchwin/` (`ab/` the pooled A/B, `x10/` the 10x reruns, `tr/` the
+single-game traces + `diff.py` / `cls.py`, `fbf/` the amendment arm, `smoke_on/` this branch's smoke run).
+
+**The USER, verbatim** (2026-10-21, after playing a seed where the Witch's untap pumped the Alchemist for lethal):
+"Technically the Seedcradle Witch is still workable as a win-con here because it pumps the alchemist for lethal."
+Asked whether the Witch should count as a win condition in the Harbinger, Living Wish and discard bucket rules:
+"Sure, let's do that." "This also makes the 4 life rule unnecessary." "Though, in a real game this combo is much
+worse than the actual win-cons." And: "Fortunately, it can fit in both buckets, so there is more opportunity to fit
+it in."
+
+**What changed** (all keyed on params through the shared `AaIs*` / wish census; each lever's `=0` is the aa-land
+behaviour):
+
+| rule | lever (heurarm slot) | 2026-10-21 reading, DEFAULT ON |
+|---|---|---|
+| Elvish Harbinger | `MTG_AA_HARB_WITCH_WIN` (AA_HARB_WITCH_WIN) -- the 2026-10-20 PROPOSED amendment, now the USER's decision | a held Witch fills Untap AND Wincon; the Witch is offered for a lacking Wincon too. Untap lacking -> the Witch FIRST (with Wincon lacking as well, one fetch fills both, ahead of Ezuri); only Wincon lacking -> Ezuri, then the Witch; the fallback (nothing lacking) -> Ezuri, Witch, Arbor Elf. `MTG_AA_HARB_ALCH_DEFAULT` stays OFF (still the USER's open call) |
+| Living Wish | `MTG_AA_WISH_WITCH_WIN` (AA_WISH_WITCH_WIN), new | a held Witch fills Untap WHATEVER the held lifegain -- the "4 life rule" is retired (the 2026-10-20 reading counted the Witch as an untapper only while the held lifegain summed to >= 5, so Galvanic Alchemist could still be wished beside a Witch on a Boar's 4; at X = 4 the Witch's untap is mana-neutral but each one pumps +3/+3, which is the kill) -- and fills Wincon/Draw beside Stroke / Staff / Scholar. The Witch is a main-deck Elf, not in the sideboard, so only the census changes |
+| cleanup discard | `MTG_AA_DISCARD_WITCH_WIN` (AA_DISCARD_WITCH_WIN), new | the Witch is a member of BOTH Untap and Wincon/Draw, like Staff: kept as either bucket's best it fills both (so a lone Witch leaves a Living Wish free for another gap); in play it fills both. Wincon order: Stroke > Staff > Scholar > Ezuri > **Witch** |
+
+**The real-game caveat (the USER's, recorded in the code too):** the Witch's pump wins only in COMBAT, through
+blockers and removal a goldfish never has, so it is much worse than the deck's real win-cons; it fills the bucket
+as the weakest filler, which is why every Wincon ranking puts it last.
+
+**Validation.** Unit (mtg-test) 1617 / 1617 -- 5 new cases (wish: 4 life rule gone, Wincon from hand / play, one
+Witch fills both; Harbinger: first when it fills both, last among wincons, a held Witch fills both; discard: both
+buckets, last in Wincon, Ezuri before the Witch among the kept) + 6 updated; the AA cases also green under
+`MTG_UNPRUNE=tutor` and `MTG_UNPRUNED=1`. Scenarios 241 / 241. **Smoke** (`MTG_PGO=0`, 8 threads, NOT accepted):
+124 / 132 PASS -- the four known moves at their known digests (selesnya d3 a1937cded0ab6f58, d5 9bd0e14ec876faa9,
+critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11) and the four alchemist rows:
+
+| row | GT (aa-land) | this branch |
+|---|---|---|
+| alchemist_smoke_d0_s1001 | 7.2220 / aaf70d40edc6eb07 | **7.2460** / 2b7f2c1a10f642de (19 games: 14 slower, 5 faster -- see below) |
+| alchemist_smoke_d3_s1001 | 5.4333 / 353a32b5029685e0 | **5.4467** / fb0dadaad0b5f192 (gi75 5->6, gi99 5->7, gi110 5->6; gi101 7->6, gi113 6->5) |
+| alchemist_smoke_d5_s1001 | 5.2667 / 89402437aa2efb07 | 5.2667 / bb76bcdf8d97884b (play only) |
+| alchemist2hg_smoke_d3_s1001 | 5.5600 / dd447dd3be18f545 | 5.5600 / 027382fce7fbb153 (play only) |
+
+With all three levers `=0` the four alchemist rows reproduce the aa-land GT byte-identically (same digests).
+
+**A/B** (one pooled batch, 2,000 games, both arms via heurarm, 25-game chunks interleaved; binary d1e9af99; win
+turn with an unwon game = 9; 8 threads on a box shared with the running mulligan generation and a sibling build,
+so ms is noisy -- units are contention-free). The `old` arm reproduces aa-land's cells exactly (5.3000 / 5.2700 /
+5.2133, the Combo Off port's numbers):
+
+| cell | aa-land (old) | USER rule (new) | delta | faster / slower | units mean old -> new | units p90 | ms mean old -> new |
+|---|---|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.3000 | 5.2950 | **-0.005** | 2 / 1 | 85.3k -> 83.4k | 239k -> 223k | 7,006 -> 6,787 |
+| s70001 d5 b20 (200) | 5.2700 | 5.2750 | +0.005 | 1 / 2 | 157.5k -> 154.0k | 462k -> 457k | 22,112 -> 21,319 |
+| s90001 d5 b20 (600 held-out) | 5.2133 | 5.2033 | **-0.010** | 7 / 1 | 142.8k -> 140.5k | 357k -> 339k | 14,412 -> 13,749 |
+
+Net over the 1,000 paired games: -6 turns (-0.006 / game); unwon unchanged (9 / 6 / 30 in both arms); total units
+0.978x / 0.978x / 0.984x. The play digest moved in 5 / 5 / 20 of the 8 / 8 / 24 chunks (the rules reach the rollouts
+everywhere), the win turn in 14 of 1,000 games.
+
+**Where the faster games come from** (shipped-budget traces, `MTG_TUTOR_CHOSEN_RANK=1 MTG_TRACE=aaharbproof`):
+9 of the 10 faster game-cells (s70001 g63 d3 + d5; s90001 g44, g279, g337, g443, g514, g585, g586) are the
+Witch-for-a-lacking-Wincon clause -- Crab Umbra held, no wincon, the old rule offered Ezuri alone; the search takes
+the Witch from **rank 2 of {Ezuri, Witch}** (in g337 / g443 / g514 / g585 the line already bends toward that fetch a
+turn or two earlier). The tenth (s70001 g195 d3) is search re-valuation at T1.
+
+**The slower games, both arms at 10x budget (d3 b100 / d5 b200):** 4 slower game-cells -> **3 recover, 1 persists**.
+* s70001 **g192** (d3 and d5, 5 -> 6): the T3 Harbinger with NOTHING lacking (Staff fills Untap + Wincon) -- the
+  fallback now lists Ezuri before the Witch, the search takes rank 1 in both arms, and the Witch line (old) wins T5
+  where Ezuri wins T6. **Recovers** at 10x (both T5).
+* s70001 **g195** d5 (6 -> 7): first divergence T1 (Utopia Sprawl cast vs held) -- search re-valuation through the
+  rollouts. **Recovers** at 10x (both T5).
+* s90001 **g136** d5 (5 -> 6): first divergence is the mulligan BOTTOM (old bottoms Crab Umbra + Wild Growth, new
+  Accomplished Alchemist + Crab Umbra -- the clairvoyant bottom trials play each candidate out under the rules).
+  **Persists** at 10x (new T6, old T5).
+
+**Root cause of the d0 move, and a PROPOSED amendment (default OFF -- the USER's call).** All 19 changed smoke d0
+games trace to ONE clause: the Harbinger FALLBACK (nothing lacking; a Staff of Domination is held in every one).
+Ranking the Witch last there moved the greedy pick from the Witch to Ezuri: 14 slower (6 of them now unwon) vs 5
+faster. It is also the clause behind the one rule-driven searched slower game (g192). The fallback is not a lacking
+bucket being filled -- both Untap and Wincon are already held -- so "the weakest wincon" may not be the right
+reading there. `MTG_AA_HARB_WITCH_FALLBACK_FIRST=1` (env-only) keeps the Witch first in the fallback (the 2026-10-20
+order) and changes nothing else:
+
+One pooled batch (2,325 games; binary 2 = the same tree + this env-only lever; the env is inert with the Witch levers
+off -- two `old` chunks rode along and reproduced their digests e9b313dcd1f55289 / bbf4685550c81442 -- and with the
+lever unset the smoke d0 row reproduces 7.2460 / 2b7f2c1a10f642de):
+
+| cell | aa-land (old) | USER rule (new) | + FALLBACK_FIRST | f / s vs old | f / s vs new | units mean (vs old) |
+|---|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.3000 | 5.2950 | **5.2950** | 1 / 0 | 1 / 1 | 84.7k (0.99x) |
+| s70001 d5 b20 (200) | 5.2700 | 5.2750 | **5.2650** | 1 / 0 | 2 / 0 | 155.4k (0.99x) |
+| s90001 d5 b20 (600 held-out) | 5.2133 | 5.2033 | **5.2017** | 7 / 0 | 1 / 0 | 141.3k (0.99x) |
+| smoke d0 s1001 (1000) | 7.2220 | 7.2460 | **7.2210** / 6ebd8a25b74427cd | 0 / 0 of 616 timed | 14 / 4 of 616 timed | -- |
+| smoke d3 s1001 (150) | 5.4333 | 5.4467 | **5.4267** / 2be74cd5a9615962 | 2 / 1 | 2 / 0 | 92.3k |
+| smoke d5 s1001 (75) | 5.2667 | 5.2667 | 5.2667 / 28b064a71c4d701e | 0 / 0 | 0 / 0 | 217.2k |
+| smoke 2HG d3 s1001 (50) | 5.5600 | 5.5600 | 5.5600 / 027382fce7fbb153 | 0 / 0 | 0 / 0 | 187.3k |
+
+(The d0 per-game pairing covers the 616 games slow enough to print a timing line; the aggregates cover all 1,000.)
+With the amendment the rule is **better than aa-land on every searched cell with ZERO slower games in 1,000**
+(-0.005 / -0.005 / -0.012), and the d0 canary returns to aa-land (-0.001). All three slower games of the USER rule
+come back: g192 (T5, the fallback itself), g195 d5 (T6 = old) and the persistent s90001 g136 (T5 = old). The
+9 Witch-from-rank-2 faster game-cells are all kept (they live in the "only Wincon lacking" clause, which the
+amendment does not touch); only s70001 g195 d3 (the T1 re-valuation) goes back to its old T6. **Recommended: adopt `MTG_AA_HARB_WITCH_FALLBACK_FIRST`** (it narrows "Witch last among
+wincons" to the case where a Wincon is actually being looked for) -- the USER's call; it ships OFF until then.
+Wall ms in the amendment batch is not comparable to the A/B's (the box's load changed between the two runs).
+
+**Readings taken (the USER's to correct):** (1) a HELD Witch fills both buckets in all three rules -- so the Harbinger
+no longer fetches Ezuri for Wincon while a Witch is held, and the wish no longer offers Scholar for Wincon; (2)
+"last among wincons" applies to every Harbinger order including the fallback (the amendment above narrows that);
+(3) a Witch on the BATTLEFIELD fills Wincon in the discard rule, so a Stroke / Scholar / Ezuri in hand becomes a
+spare and is shed before lands, exactly as with a Staff in play -- although the Witch is the weakest wincon; (4) the
+wish rule still does NOT count Ezuri as a held wincon (the 2026-10-20 reading) while it now counts the weaker
+Witch; (5) Combo Off's Witch rows (X >= 5 for the unbounded loop) are untouched -- loop arithmetic, not a bucket
+rule, and pump kills are not combo-off rows (the sibling `aa-ezuri` branch owns Combo Off).
+
 
 ## Suite entry (2026-10-20) -- ADDED to all three tiers; suite_gate PASS at 1.58x
 
@@ -1713,7 +1832,16 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   gi286 class is not a cache problem: its continuation lists are GB-scale (an unbounded cache hit 33 GB in
   68 s), i.e. the Living Wish variant width inside continuation derivations.
 
-* **Elvish Harbinger rule (2026-10-20): it measures WORSE; adopt the two amendments?** The USER's rule is +0.005 ..
+* **Seedcradle Witch as a win condition (2026-10-21) -- landed DEFAULT ON (the USER's decision).** Adopt
+  `MTG_AA_HARB_WITCH_FALLBACK_FIRST` (PROPOSED, OFF: the Witch stays first in the Harbinger FALLBACK, where nothing is
+  lacking)? With it the rule is -0.005 / -0.005 / -0.012 vs aa-land with zero slower games in 1,000 and the d0 canary
+  back at 7.2210; without it, -0.005 / +0.005 / -0.010 and d0 +0.024. Five readings taken (listed in the section):
+  a held Witch fills both buckets; "last among wincons" includes the fallback; a Witch in play makes a Stroke /
+  Scholar / Ezuri in hand a discard spare; the wish rule counts the Witch but still not Ezuri as a held wincon;
+  Combo Off untouched.
+* **Elvish Harbinger rule (2026-10-20): it measures WORSE; adopt the two amendments?** (2026-10-21: the USER adopted
+  `MTG_AA_HARB_WITCH_WIN` -- now DEFAULT ON, the Witch ranked after Ezuri for a lacking Wincon; `MTG_AA_HARB_ALCH_DEFAULT`
+  is still open.) The USER's rule is +0.005 ..
   +0.035 turns worse on all four cells (11-17% cheaper). Root cause: the Alchemist auto-pick (74 slower vs 52 faster
   games) and the Witch-as-wincon (12 vs 3); never-Harbinger is neutral. `MTG_AA_HARB_ALCH_DEFAULT` (Alchemist first
   but not alone) + `MTG_AA_HARB_WITCH_WIN` (Witch offered for a lacking wincon) together measure -0.015 / -0.035 /
@@ -1723,7 +1851,7 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
 * **Living Wish buckets (2026-10-20), the readings taken (defaults; say if any is wrong):** (1) mana threshold 4
   of the USER's "4-5", counting lands + dorks + land-Aura bonuses in play and EVERY land in hand (not dorks /
   Auras in hand); (2) the Staff's gain-1 is not lifegain; (3) the Witch counts as an untapper when the held
-  lifegain SUMS to >= 5; (4) Scholar also counts as a held wincon (so a second is not wished), Ezuri does NOT
+  lifegain SUMS to >= 5 (RETIRED 2026-10-21 by the USER: the Witch fills Untap at any gain, and Wincon too); (4) Scholar also counts as a held wincon (so a second is not wished), Ezuri does NOT
   count as a wincon; (5) the Alchemist is not a blue source for the Island test; (6) order = the USER's bucket
   order (Mana first), which moved the rollout's default pick off the Alchemist. Measured better on every cell.
   Two amendments measured and left OFF: `MTG_AA_WISH_TRUFFLE` (mixed: -0.017 / -0.038 held-out, +0.100 on the
