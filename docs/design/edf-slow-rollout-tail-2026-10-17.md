@@ -350,3 +350,101 @@ instructions), key strings/allocation, and the compaction itself; the identity b
 byte-identical (identity batch, slice); `MTG_ENUM_DEDUP_STREAM_VERIFY` 0 of 5,183,531 kept plans marked;
 `MTG_PLAN_SIG_FAST_VERIFY` 14,435,736 signatures, 0 mismatches; smoke 132/132, scenarios 217/217, unit
 1,428/1,428.
+
+## 7. Round 2 (2026-10-21, after the real generation): a fast repro, two byte-identical levers, what is left
+
+The generation finished (61.5 h) with the levers of sections 3 and 6 on, and its slow log still held 3,959
+keep-rollouts over 30 s (p50 43 s, p90 120 s, max 14,213 s). A turn census of the 12 slowest replays put
+**97% of their 28,700 s in 11 single decisions**, each a pre-combat main of a TRIAL game (`site` 1,
+`probe` 1, host `FullSearchLineHybrid`) that emitted 1.3-1.8 billion plans and ~1.8e10 payment calls while
+charging 1,000-3,000 units. The mechanism is section 1's, reached from a smaller hand.
+
+### 7a. The repro, in seconds instead of a 50-minute rollout
+
+`docs/design/edf-slow-rollout-tail/` holds three `mtg --scenario` files:
+
+| file | what | Release wall |
+|---|---|---|
+| `keepgen-worst-t2.json` | the worst rollout's turn-2 board (Kitchen; Wild Growth, Training Grounds, Living Wish, Displacer, 2 Cloud of Faeries; Brushland on top of the dumped 52-card library), d1 b1, **`max_turns` 4** | 277 s |
+| `keepgen-worst-t4-frame.json` | the frame that decision's playouts reach: turn 4, Dimensional Infiltrator has drawn the library (51 cards in hand), 52 floating {G}, mid-turn (`resume_at`) | 7 s |
+| `play-d3-g319-t4-frame.json` | the slowest EDF game at d3 b10 with the keep table on (seed 4323, game-index 319, 17.9 s for 4,418 units): one canon derivation on a 27-card hand | 7 s |
+
+`max_turns` is not cosmetic: at 2 or 3 the playouts stop before turn 4 and the decision costs 0.1 s. The
+turn-2 decision derives 116 continuation lists over 99 distinct full keys and 81 distinct boards
+(`MTG_BP_USE_CENSUS`). Each derivation on the turn-4 frame walks the capped odometer once per land choice:
+10 land names x ~126k positions, 12 option groups of which 7 are land-Aura copies over the two land hosts
+(3 Traces + 3 Overgrowths + a Fertile Ground: 3^7 of a 139,968-position walk), ~362k plans emitted, 9,583
+kept by the dedup.
+
+### 7b. Landed: `MTG_LAND_AURA_COPY_FOLD` (default ON, identity fold, search enumerator only)
+
+The branch-shape census priced the copy fold at 7.3x on that walk. That price assumes a copy permutation is a
+copy, and for a land Aura it is not, twice over:
+
+1. **It is a cast order.** Copies of one card tie on cast rank and `CastOrderLessRanked` keeps plan (= hand)
+   order on a tie, so {copy0 -> Kitchen, copy1 -> Brushland} enchants Kitchen first and its swap Brushland
+   first; a land Aura adds mana, so the first can pay for the second. The multiset form (the creature-Aura
+   fold's) cut the frame's survivors 9,583 -> 9,383.
+2. **Selection order is read by payers.** The PREFIX form ("the selected copies are the first ones", each
+   keeping its host, in order) kept every survivor and measured 1.42x on the turn-2 decision, but moved d0
+   play (smoke 1 game, regression 3, one faster): Solve's `SubsetPayableAsExecuted` and EnumeratePlans'
+   filter fallback `SubsetPayableWithFilters` (armed by any pending land Aura) pay in SELECTION order, so
+   moving a copy across another card's cast changes the verdict (EDF d0 seed 1911 game 910: {Trace, -, Trace}
+   payable with Overgrowth / Displacer / Fertile Ground between, its twin {Trace, Trace, -} not).
+
+What shipped is the prefix form with the condition that makes it exact: a gapped copy folds into an earlier
+unused one only when **no other group is selected between them**, so the twin selects the same casts in the
+same selection order and only same-name copies trade places. It is applied in the search enumerator only
+(its dedup keeps the earliest-emitted member of a tie, which is the twin; Solve breaks ties on the smallest
+candidate mask). Class identity is the creature fold's plus the breakpoint snapshot side
+(`g_bp_hand_before`), because `MTG_BP_NEW_ONLY` reads hand cards by number.
+
+| measurement (Release) | off | on |
+|---|---|---|
+| turn-4 frame | 6.87 s | 6.29 s (plans emitted 362k -> 291k, kept 9,583 both, game log identical) |
+| turn-2 decision | 277 s | 250 s (game log and per-decision units identical) |
+| 1,000 EDF games, d3 b10 x400 + d5 b20 x300 x2 | 936 s user | 912 s user (-2.6%); digests, unit totals, per-game win turns identical |
+| smoke / regression tiers | | unchanged (every config) |
+
+### 7c. Landed: the continuation list is trimmed before it is cached
+
+A cached list leaves the derivation with the capacity of its pre-dedup peak: 45,385 plans in a buffer of
+83,050, 18 MB of the entry's 186 MB. `BpEnumEntryFor` now `shrink_to_fit`s the list (and its demoted twin)
+before pricing it for the pool. Contents unchanged, so byte-identical.
+
+### 7d. Found, not changed
+
+1. **The plan-cache pool refuses these lists, and a refusal is a re-derivation.** A plan costs ~4 KB here
+   (`sizeof(Plan)` 472 B + 6.3 `Action`s x 488 B), so one turn-4 list is 186 MB. The scenario's pool (1 GB)
+   refused 17 of the turn-2 decision's 116 stores; with `MTG_PLAN_CACHE_KB=6000000` it derived 99 lists and
+   ran **250 -> 187 s**, game log and units identical. A 32-worker generation shares one pool sized
+   min(workers x 100 MB, cache/4), so the heavy rollouts there refuse at least as often. Raising the pool is a
+   memory-policy change (RSS cap); the byte-identical fix is a compact entry: the 286,866 `Action`s of that
+   list are copies of a few dozen candidates, so a per-list action table plus per-plan index vectors would cut
+   it by roughly two orders of magnitude. Not attempted: `EnumerateBreakpointPlansRef` hands out a
+   `const std::vector<Plan>&` and its consumers copy one plan out, so the entry needs an accessor rewrite.
+2. **The snapshot split** (99 full keys over 81 boards) is real content, not churn: the lists differ by the
+   new-only filter (45,385 vs 45,381 plans), and the raw enumeration reads the snapshot too (condemnation,
+   `EnumeratePlansWithLandUncached`), so it cannot be shared below the filter without care.
+3. **The land-Aura HOST axis is where the walk's work goes, and the dedup throws it away.** On the play frame
+   9 of 11 groups are land Auras over two hosts: 157,464 positions, 48,510 plans emitted, **402 kept**
+   (99.2% folded by the dedup's land-Aura host fold, which keeps a class's first member, plus the range-hosts
+   tier's extra members). Every discarded host assignment was priced by the payment walks first. Skipping
+   them soundly needs (wins, value) to be host-invariant within a class, or the host chosen after the cast
+   set; both are designs inside the USER's EDF cast-order package (Q30, part 2c), so this is a proposal, not
+   a lever.
+4. **Solve's payer check pays in selection order, the executor in cast order.** `SubsetPayableAsExecuted`
+   hands `BatchPrepayMainCasts` / `SubsetPayableWithFilters` the casts as selected; the apply worlds arrange
+   them (`ArrangeCastOrder`) first. Section 7b's seed 1911 game 910 is a case where the two disagree (the
+   same casts, payable or not depending on where in the selection a Trace sits). Possibly an
+   executor-agreement gap; not investigated further.
+5. **With the keep table on, EDF's play tail is small.** 1,000 games at d3 b10 / d5 b20: 4 over 10 s, worst
+   39 s, ~9% of CPU, the same uncharged-derivation shape (game 319: one 15.8 s canon derivation, 4,418 units).
+
+### 7e. What is next, ranked
+
+1. **Compact continuation-list entries** (7d.1): byte-identical; removes the refusals (~25% of the heavy
+   decision) and most of the generation's transient RSS.
+2. **A host-late land-Aura enumeration** (7d.3): the largest remaining waste; needs a design and the USER.
+3. **`MTG_BP_DERIVE_METER` with an exchange weight above 1** (section 4a): the only lever that BOUNDS the
+   tail; play-changing, the USER's call.

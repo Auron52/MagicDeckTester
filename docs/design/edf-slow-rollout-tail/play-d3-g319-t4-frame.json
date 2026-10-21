@@ -1,0 +1,91 @@
+{
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 20,
+ "library_size": 20,
+ "library_filler": "Forest",
+ "depth": 1,
+ "budget_ms": 1,
+ "max_turns": 4,
+ "battlefield": [
+  {
+   "name": "Conservatory",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mariposa Military Base",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Fertile Ground",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Conservatory"
+  },
+  {
+   "name": "Kitchen",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Trace of Abundance",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Mariposa Military Base"
+  },
+  {
+   "name": "Emiel the Blessed",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Cloud of Faeries",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Essence Depleter",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Peregrine Drake",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Emiel the Blessed",
+  "Fertile Ground",
+  "Trace of Abundance",
+  "Aether Hub",
+  "Conservatory",
+  "Conservatory",
+  "Emiel the Blessed",
+  "Wild Growth",
+  "Brushland",
+  "Cloud of Faeries",
+  "Overgrowth",
+  "Adarkar Wastes",
+  "Wild Growth",
+  "Fertile Ground",
+  "Overgrowth",
+  "Wild Growth",
+  "Peregrine Drake",
+  "Overgrowth",
+  "Brushland",
+  "Aether Hub",
+  "Conservatory",
+  "Peregrine Drake",
+  "Brushland",
+  "Yavimaya Coast",
+  "Cloud of Faeries",
+  "Kitchen",
+  "Eldrazi Displacer"
+ ]
+}

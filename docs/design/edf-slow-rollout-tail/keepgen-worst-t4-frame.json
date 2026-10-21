@@ -1,0 +1,111 @@
+{
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 20,
+ "library_size": 0,
+ "depth": 1,
+ "budget_ms": 1,
+ "max_turns": 4,
+ "floating_mana": {
+  "G": 52
+ },
+ "battlefield": [
+  {
+   "name": "Kitchen",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Wild Growth",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Kitchen"
+  },
+  {
+   "name": "Cloud of Faeries",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Training Grounds",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Eldrazi Displacer",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Dimensional Infiltrator",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Cloud of Faeries",
+   "controller": 0,
+   "tapped": true
+  }
+ ],
+ "hand": [
+  "Trace of Abundance",
+  "Training Grounds",
+  "Living Wish",
+  "Trace of Abundance",
+  "Eldrazi Displacer",
+  "Overgrowth",
+  "Brushland",
+  "Trace of Abundance",
+  "Fertile Ground",
+  "Adarkar Wastes",
+  "Overgrowth",
+  "Aether Hub",
+  "Cloud of Faeries",
+  "Conservatory",
+  "Overgrowth",
+  "Emiel the Blessed",
+  "Brushland",
+  "Wild Growth",
+  "Wild Growth",
+  "Peregrine Drake",
+  "Yavimaya Coast",
+  "Living Wish",
+  "Yavimaya Coast",
+  "Living Wish",
+  "Conservatory",
+  "Shivan Gorge",
+  "Conservatory",
+  "Mariposa Military Base",
+  "Peregrine Drake",
+  "Aether Hub",
+  "Fertile Ground",
+  "Yavimaya Coast",
+  "Trace of Abundance",
+  "Overgrowth",
+  "Yavimaya Coast",
+  "Adarkar Wastes",
+  "Wild Growth",
+  "Emiel the Blessed",
+  "Peregrine Drake",
+  "Kitchen",
+  "Emiel the Blessed",
+  "Peregrine Drake",
+  "Mariposa Military Base",
+  "Aether Hub",
+  "Fertile Ground",
+  "Emiel the Blessed",
+  "Brushland",
+  "Fertile Ground",
+  "Eladamri's Call",
+  "Conservatory",
+  "Mariposa Military Base"
+ ]
+}

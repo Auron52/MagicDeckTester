@@ -18621,11 +18621,15 @@ struct FungibleEquipClasses
     std::vector<int> class_of;       // group -> class id, -1 = in no multi-group class
     std::vector<int> members;        // ascending group indices with class_of[g] >= 0
     int              nclass = 0;
+    // PREFIX classes (land-Aura copies, MTG_LAND_AURA_COPY_FOLD): bit c set = class c canonicalises by
+    // "the selected copies are the first ones" instead of "digits non-increasing" -- see
+    // AppendFungibleAuraClasses for why a land Aura cannot take the multiset form.
+    std::uint32_t    prefix_mask = 0;
 
     // `empty()` deliberately answers "can either predicate ever fire?", which is what every caller
     // is asking -- a map that is all -1 is as inert as no map at all.
     bool empty() const { return members.empty(); }
-    void clear() { class_of.clear(); members.clear(); nclass = 0; }
+    void clear() { class_of.clear(); members.clear(); nclass = 0; prefix_mask = 0; }
 };
 
 // Depends only on cands/groups/state, all fixed across one enumeration, so it runs ONCE per plan
@@ -18795,16 +18799,71 @@ static bool AuraCopyFoldEnabled()
     return heurarm::Flag(heurarm::AURA_COPY_FOLD, env);
 }
 
+// MTG_LAND_AURA_COPY_FOLD -- a copy fold for LAND Auras (Wild Growth, Fertile Ground, Overgrowth, Trace of
+// Abundance). DEFAULT ON (=0 restores the unfolded walk); adopted as an identity fold, measurements at the end
+// of this note. EDF's slow-rollout tail (docs/design/edf-slow-rollout-tail-
+// 2026-10-17.md): once a playout draws the library, every breakpoint derivation walks a capped odometer whose 12
+// groups are mostly land-Aura copies over the same two or three land hosts (3 Traces + 3 Overgrowths + a Fertile
+// Ground: 3^7 of the 139,968 positions).
+//
+// NOT THE MULTISET FORM THE CREATURE HALF USES, because for a land Aura the copy permutation is not a copy:
+// it is a CAST ORDER. Two copies of one card tie on cast rank, CastOrderLessRanked keeps PLAN order on a tie,
+// and plan order is hand order -- so {copy0 -> Kitchen, copy1 -> Brushland} casts the Kitchen Aura first and
+// its swap casts the Brushland one first. A land Aura adds mana, so the first one can pay for the second, and
+// the EDF range-hosts tier (MTG_EDF_AURA_RANGE_HOSTS) keeps both when the arrangement moves one of them.
+// Measured: the non-increasing form cut that frame's surviving plans 9,583 -> 9,383.
+//
+// THE PREFIX FORM IS EXACT, under one condition. A position whose selected copies are not the first k of the
+// class (a gap: copy i unselected, a later copy selected) has a twin that shifts the selected copies down,
+// keeping each one's host in the same order: the same cards, the same hosts, the same cast sequence, a
+// different physical copy -- PROVIDED no other group is selected between the gap and the copy that moves
+// (PrefixClassViolation: payers read the selection order, so a copy may not cross another card's cast). The
+// twin uses only lower (faster) digits, so the odometer emits it FIRST, and every tie-break downstream (the
+// dedup's earliest-emission survivor, the range-hosts tier's first member) therefore keeps the twin in both
+// worlds. Per class of k copies over s hosts this walks sum_j s^j positions instead of (1+s)^k (15 of 27 for
+// three copies over two hosts).
+//
+// The class identity is the creature half's (identical content, the m1_hand side, the option lists equal
+// member-for-member under ActionFoldSig) plus ONE term for the breakpoint frames this exists for: the
+// pre-draw hand snapshot (g_bp_hand_before). MTG_BP_NEW_ONLY keeps a continuation only if it USES a card
+// that arrived at the breakpoint, BY NUMBER, so a copy drawn there and a copy held before are not
+// interchangeable -- folding them would drop exactly the plan the new-only filter keeps.
+//
+// MEASURED (2026-10-21, Release): the EDF turn-4 frame of the worst keep-gen rollout 6.87 -> 6.29 s and its
+// whole turn-2 decision 277 -> 250 s, game log and per-decision units identical; a 1,000-game EDF batch at
+// d3 b10 / d5 b20 identical in every digest, unit total and per-game win turn (user CPU -2.6%); smoke and
+// regression tiers unchanged with it on. The unblocked first cut (no foreign-cast condition) measured 1.42x
+// on the same decision but moved d0 play: Solve's payer check (SubsetPayableAsExecuted) pays in selection
+// order, and so does EnumeratePlans' filter fallback (SubsetPayableWithFilters), which a pending land Aura
+// arms -- so the condition is what makes the fold exact, and it is applied in the search enumerator only.
+static bool LandAuraCopyFoldEnabled()
+{
+    static const bool env = EnvOn("MTG_LAND_AURA_COPY_FOLD", true);   // DEFAULT ON; =0 disables
+    return env;
+}
+
+static bool IsLandAuraCastForCopyFold(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { return false; }
+    if (!a.remand_by.empty()) { return false; }   // see IsCreatureAuraCast: a remanded Aura never attaches
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.is_aura && d->params.is_land_aura;
+}
+
 // Appends the Aura-copy classes to `out` (after any Equipment classes; ids stay dense). Returns the total
 // class count. Choice-independent, built once per enumeration like the Equipment half.
 static int AppendFungibleAuraClasses(const GameState& state, const std::vector<Action>& cands,
-                                     const std::vector<std::vector<int>>& groups, FungibleEquipClasses& out)
+                                     const std::vector<std::vector<int>>& groups, FungibleEquipClasses& out,
+                                     bool land_prefix)
 {
     if (out.class_of.size() != groups.size()) { out.class_of.assign(groups.size(), -1); out.members.clear(); out.nclass = 0; }
     if (!AuraCopyFoldEnabled() || HumanPlayActive() || DecisionUnpruned()) { return out.nclass; }
     const Player& ap = state.ActivePlayer();
     const int hand_n = static_cast<int>(ap.hand.size());
     const bool m1_live = state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number;
+    const bool land_on = land_prefix && LandAuraCopyFoldEnabled();
+    auto foldable = [land_on](const Action& a)
+    { return IsCreatureAuraCast(a) || (land_on && IsLandAuraCastForCopyFold(a)); };
     // Cheap pre-pass: a class needs two Aura groups of the SAME card with the same option count, so most
     // enumerations (no Aura, one copy, different Auras) return without hashing anything. The name is
     // interned (pointer equality == string equality), so the pair test is two loads.
@@ -18812,7 +18871,7 @@ static int AppendFungibleAuraClasses(const GameState& state, const std::vector<A
     aura_g.clear();
     for (std::size_t g = 0; g < groups.size(); ++g)
     {
-        if (!groups[g].empty() && out.class_of[g] < 0 && IsCreatureAuraCast(cands[groups[g][0]]))
+        if (!groups[g].empty() && out.class_of[g] < 0 && foldable(cands[groups[g][0]]))
         { aura_g.push_back(static_cast<int>(g)); }
     }
     if (aura_g.size() < 2) { return out.nclass; }
@@ -18850,11 +18909,15 @@ static int AppendFungibleAuraClasses(const GameState& state, const std::vector<A
             for (int i = 0; i < state.m1_hand_n; ++i) { if (state.m1_hand[i] == c.m_number) { in_m1 = true; break; } }
             FoldMix(h, in_m1 ? 0x9d1u : 0x2f7u);
         }
+        // The breakpoint snapshot side (land Auras only -- see MTG_LAND_AURA_COPY_FOLD; the creature half
+        // keeps its shipped key byte for byte).
+        if (land_on && g_bp_hand_before != nullptr && IsLandAuraCastForCopyFold(a0))
+        { FoldMix(h, BpCardWasInHandBefore(c.m_number) ? 0x5b1u : 0x3e9u); }
         FoldMix(h, static_cast<std::uint64_t>(mem.size()));
         for (int j : mem)
         {
             const Action& a = cands[j];
-            if (!IsCreatureAuraCast(a) || a.hand_index != a0.hand_index) { ok = false; break; }
+            if (!foldable(a) || a.hand_index != a0.hand_index) { ok = false; break; }
             FoldMix(h, ActionFoldSig(a));
         }
         if (ok) { sig[g] = (h == 0 ? 1ull : h); }
@@ -18867,7 +18930,13 @@ static int AppendFungibleAuraClasses(const GameState& state, const std::vector<A
         for (std::size_t h = g + 1; h < groups.size(); ++h)
         {
             if (sig[h] != sig[g] || out.class_of[h] >= 0) { continue; }
-            if (id < 0) { id = nclass++; out.class_of[g] = id; }
+            if (id < 0)
+            {
+                id = nclass++;
+                out.class_of[g] = id;
+                // A land-Aura class takes the PREFIX form (see MTG_LAND_AURA_COPY_FOLD above).
+                if (land_on && IsLandAuraCastForCopyFold(cands[groups[g][0]])) { out.prefix_mask |= 1u << id; }
+            }
             out.class_of[h] = id;
         }
     }
@@ -18887,12 +18956,17 @@ static int AppendFungibleAuraClasses(const GameState& state, const std::vector<A
 // The two fungible-copy halves together, as the enumerators consume them: the Equipment classes (when
 // MTG_EQUIP_COPY_COLLAPSE is on) and then the Aura classes (MTG_AURA_COPY_FOLD). Empty when neither finds
 // a class -- so a board with nothing to fold costs the walk nothing.
+// `land_prefix`: also fold land-Aura copies (MTG_LAND_AURA_COPY_FOLD). The SEARCH enumerator only: its
+// dedup keeps the earliest-emitted member of a tie, which is the twin. Solve's greedy walk breaks a tie
+// on the smallest CANDIDATE mask instead, and candidate order need not follow group order, so there the
+// surviving physical copy could differ.
 static void BuildFungibleCopyClasses(const GameState& state, const std::vector<Action>& cands,
-                                     const std::vector<std::vector<int>>& groups, FungibleEquipClasses& out)
+                                     const std::vector<std::vector<int>>& groups, FungibleEquipClasses& out,
+                                     bool land_prefix = false)
 {
     out.clear();
     if (EquipCopyCollapseEnabled() && BuildFungibleEquipClasses(state, cands, groups, out) == 0) { out.clear(); }
-    if (AppendFungibleAuraClasses(state, cands, groups, out) == 0) { out.clear(); }
+    if (AppendFungibleAuraClasses(state, cands, groups, out, land_prefix) == 0) { out.clear(); }
 }
 
 // ---- Identical creature-Aura HOSTS (MTG_AURA_HOST_FOLD) -- the other half of the duplicate-copy fold ----
@@ -18998,9 +19072,78 @@ static void FoldInterchangeableCreatureAuraHosts(const GameState& state, std::ve
 // Per-CHOICE check (a cheap walk of the precomputed class map): reject any position whose class
 // digits are not NON-INCREASING in group order. Exactly one position per (class, digit multiset)
 // survives, and it selects the same attachments as every position it displaces.
+// PREFIX-class test (land Auras, MTG_LAND_AURA_COPY_FOLD; see AppendFungibleAuraClasses). A position
+// violates when a class member z is unselected, a LATER member b is selected, and no group outside the
+// class is selected between them. Then the twin that moves b's cast into z selects the same casts in the
+// same SELECTION ORDER -- which matters, because the payers read it (BatchPrepayMainCasts pays a plan's
+// casts in the order given, and CastOrderLessRanked keeps that order on a tie) -- so only same-name copies
+// change places, and only among themselves. A selected foreign group in between blocks the move: there
+// the copy's position relative to that cast is part of the line. `z_out` = the violating pair's zero
+// member (the LATEST unblocked zero before b, which is the furthest safe jump).
+static inline bool PrefixClassViolation(const FungibleEquipClasses& fc, const std::vector<int>& choice,
+                                        int& z_out)
+{
+    int  zero_g[kMaxFungibleClasses];
+    bool blocked[kMaxFungibleClasses];
+    for (int c = 0; c < fc.nclass; ++c) { zero_g[c] = -1; blocked[c] = false; }
+    const int n = static_cast<int>(fc.class_of.size());
+    for (int g = 0; g < n; ++g)
+    {
+        const int  c    = fc.class_of[g];
+        const bool pcls = c >= 0 && ((fc.prefix_mask >> c) & 1u);
+        if (pcls && choice[g] == 0) { zero_g[c] = g; blocked[c] = false; continue; }
+        if (pcls && zero_g[c] >= 0 && !blocked[c]) { z_out = zero_g[c]; return true; }
+        if (choice[g] > 0)
+        {
+            // A selected group blocks every OTHER prefix class's open gap.
+            for (int k = 0; k < fc.nclass; ++k) { if (k != c && zero_g[k] >= 0) { blocked[k] = true; } }
+        }
+    }
+    return false;
+}
+
+// The non-increasing scan over the NON-prefix classes only (a board holding both kinds).
+static inline bool FungibleEquipCopyViolatedNonPrefix(const FungibleEquipClasses& fc,
+                                                      const std::vector<int>& choice)
+{
+    int last[kMaxFungibleClasses];
+    for (int c = 0; c < fc.nclass; ++c) { last[c] = std::numeric_limits<int>::max(); }
+    for (const int g : fc.members)
+    {
+        const int c = fc.class_of[g];
+        if ((fc.prefix_mask >> c) & 1u) { continue; }
+        if (choice[g] > last[c]) { return true; }
+        last[c] = choice[g];
+    }
+    return false;
+}
+
+static inline bool FungibleEquipCopyAdvanceNonPrefix(const FungibleEquipClasses& fc,
+                                                     const std::vector<int>& choice,
+                                                     int& fix_digit, int& fix_value)
+{
+    int last[kMaxFungibleClasses];
+    int last_g[kMaxFungibleClasses];
+    for (int c = 0; c < fc.nclass; ++c) { last[c] = std::numeric_limits<int>::max(); last_g[c] = -1; }
+    for (const int g : fc.members)
+    {
+        const int c = fc.class_of[g];
+        if ((fc.prefix_mask >> c) & 1u) { continue; }
+        if (choice[g] > last[c]) { fix_digit = last_g[c]; fix_value = choice[g]; return true; }
+        last[c] = choice[g];
+        last_g[c] = g;
+    }
+    return false;
+}
+
 static inline bool FungibleEquipCopyViolated(const FungibleEquipClasses& fc,
                                              const std::vector<int>& choice)
 {
+    if (fc.prefix_mask != 0)
+    {
+        int z = -1;
+        return PrefixClassViolation(fc, choice, z) || FungibleEquipCopyViolatedNonPrefix(fc, choice);
+    }
     int last[kMaxFungibleClasses];
     for (int c = 0; c < fc.nclass; ++c) { last[c] = std::numeric_limits<int>::max(); }
     for (const int g : fc.members)
@@ -19069,6 +19212,17 @@ static inline bool FungibleEquipCopyAdvance(const FungibleEquipClasses& fc,
                                             const std::vector<int>& choice,
                                             int& fix_digit, int& fix_value)
 {
+    if (fc.prefix_mask != 0)
+    {
+        // PREFIX class jump: the violation is (z, b) -- z a class member whose digit is 0, b a later
+        // member whose digit is not, no selected foreign group between them. Every position until digit
+        // z next changes keeps z at 0 and every digit above it where it is (b and the groups between
+        // are all above z), so all of them violate the same pair; raising z to 1 (always legal -- a
+        // group has at least one option) and zeroing below it skips exactly those.
+        int z = -1;
+        if (PrefixClassViolation(fc, choice, z)) { fix_digit = z; fix_value = 1; return true; }
+        return FungibleEquipCopyAdvanceNonPrefix(fc, choice, fix_digit, fix_value);
+    }
     int last[kMaxFungibleClasses];
     int last_g[kMaxFungibleClasses];
     for (int c = 0; c < fc.nclass; ++c)
@@ -56843,7 +56997,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
     // Fungible identical-Equipment copies (mirrors Solve). See BuildFungibleEquipClasses.
     FungibleEquipClasses copy_class;
-    BuildFungibleCopyClasses(state, cands, groups, copy_class);   // Equipment + Aura copies
+    BuildFungibleCopyClasses(state, cands, groups, copy_class, /*land_prefix=*/true);   // Equipment + Aura copies
     // Equip piece dependencies (mirrors Solve). See BuildEquipPieceDeps.
     EquipPieceDeps equip_deps;
     if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, auto_sel, equip_deps); }
@@ -82426,6 +82580,17 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 if (p.controller_index != state.active_player_index) { continue; }
                 board += p.card.m_name.str() + (p.tapped ? "(T)" : "") + (p.aura_attached_to > 0 ? "(@)" : "") + "; ";
             }
+            // The attach targets and the floating pool by colour, so the frame can be staged as a scenario.
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.aura_attached_to <= 0) { continue; }
+                for (const Permanent& h : state.battlefield)
+                { if (h.card.m_number == p.aura_attached_to) { board += " [" + p.card.m_name.str() + "->" + h.card.m_name.str() + "]"; break; } }
+            }
+            const ManaPool& fm = state.floating_mana;
+            board += " float{W" + std::to_string(fm.white) + " U" + std::to_string(fm.blue) + " B" + std::to_string(fm.black)
+                   + " R" + std::to_string(fm.red) + " G" + std::to_string(fm.green) + " C" + std::to_string(fm.colorless)
+                   + " *" + std::to_string(fm.wild) + "}";
             std::fprintf(stderr,
                 "[bp-derive-slow] t%d pre=%d ms=%.0f plans=%zu reason=%d enum_depth=%d rollout_nest=%d"
                 " subsets_entered=%llu emitted=%llu lands_played=%d spells_cast=%d float=%d\n"
@@ -83055,6 +83220,33 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     }
     plancache::ReportHiwater("bp", state, plans);
 
+    // MTG_BP_DERIVE_SLOW_MS companion (print-only): for a derivation that produced a big list, say
+    // whether this exact FULL key was derived before on this thread (a re-derivation: eviction or a
+    // refused store), or only its UNFOLDED board key (the folds split it), and how full the cache is.
+    {
+        static const int s_bp_slow_ms_k = EnvInt("MTG_BP_DERIVE_SLOW_MS", 0);
+        if (s_bp_slow_ms_k > 0 && plans.size() >= 1000)
+        {
+            static thread_local std::unordered_map<TranspositionTable::Key, int,
+                                                   TranspositionTable::KeyHash> s_full_seen, s_raw_seen;
+            const TranspositionTable::Key raw = BuildBreakpointKey(state, is_pre_combat);
+            const int nf = keyed ? s_full_seen[key]++ : -1;
+            const int nr = s_raw_seen[raw]++;
+            std::size_t acts = 0, acts_cap = 0;
+            for (const TurnSolver::Plan& p : plans) { acts += p.actions.size(); acts_cap += p.actions.capacity(); }
+            std::fprintf(stderr,
+                "[bp-derive-key] plans=%zu cap=%zu actions=%zu actions_cap=%zu approx_bytes=%zu sizeof(Plan)=%zu"
+                " sizeof(Action)=%zu keyed=%d full=%016llx seen_full=%d raw=%016llx seen_raw=%d"
+                " cache=%zu/%zu pool_used=%lld budget=%lld epoch=%llu\n",
+                plans.size(), plans.capacity(), acts, acts_cap, plancache::ApproxPlansBytes(plans),
+                sizeof(TurnSolver::Plan), sizeof(Action),
+                keyed ? 1 : 0, static_cast<unsigned long long>(key.h1), nf,
+                static_cast<unsigned long long>(raw.h1), nr, cache.size(), s_bp_enum_cap,
+                plancache::PoolUsed().load(), plancache::BudgetBytes(),
+                static_cast<unsigned long long>(g_decision_epoch));
+        }
+    }
+
     if (keyed && !bp_interrupted)
     {
         if (BpEnumProbeOn())
@@ -83070,6 +83262,12 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         // ClearPerGameCaches), so it was byte-unbounded.
         // Over budget => clear (same reclaim as clear-on-full, so the cache stays useful); an entry
         // that alone exceeds the whole budget is served uncached via the scratch path below.
+        // The list leaves the derivation with the capacity of its PRE-dedup peak (EDF's library-drawn
+        // board: 45,385 plans in a buffer of 83,050, 18 MB of the entry's 186 MB), and that slack is
+        // both resident and billed to the shared pool, where a refused store means a re-derivation
+        // (docs/design/edf-slow-rollout-tail-2026-10-17.md section 7). Trimmed before it is priced.
+        plans.shrink_to_fit();
+        demoted.shrink_to_fit();
         const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans))
                             + (demoted.empty() ? 0LL
                                                : static_cast<long long>(plancache::ApproxPlansBytes(demoted)));
