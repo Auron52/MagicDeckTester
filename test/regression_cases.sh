@@ -1438,22 +1438,24 @@ OVERNIGHT_CASES=(
   "colossus 5 5005  500 40"
   "colossus 5 6006  500 40"
   "colossus 5 7007  500 40"
-  # vampires: see the SMOKE block. The ENTRY set; it expands to the FULL set just before a keep table
-  # is adopted.
+  # vampires: see the SMOKE block. The FULL set (2026-10-21, just before the keep table's adoption; resized
+  # rows accepted with the table ABSENT first): the standard shape, 2HG at 150 x b40 (pirates / minotaur).
+  # With the table a game costs ~0.1x Hinata's (regression d5 b20: 121 ms/game, 2HG 348), so the set is
+  # ~0.5 worker-h, ~2% of a full overnight tier.
   "vampires 0 4004 2000 0"
   "vampires 0 6006 2000 0"
   "vampires 0 8008 2000 0"
   "vampires 0 10010 2000 0"
-  "vampires 3 4004  400 10"
-  "vampires 3 5005  400 10"
-  "vampires 3 6006  400 10"
-  "vampires 3 7007  400 10"
-  "vampires 5 4004  300 20"
-  "vampires 5 5005  300 20"
-  "vampires 5 6006  300 20"
-  "vampires 5 7007  300 20"
-  "vampires2hg 5 4004 100 20"
-  "vampires2hg 5 5005 100 20"
-  "vampires2hg 5 6006 100 20"
-  "vampires2hg 5 7007 100 20"
+  "vampires 3 4004 1000 20"
+  "vampires 3 5005 1000 20"
+  "vampires 3 6006 1000 20"
+  "vampires 3 7007 1000 20"
+  "vampires 5 4004  500 40"
+  "vampires 5 5005  500 40"
+  "vampires 5 6006  500 40"
+  "vampires 5 7007  500 40"
+  "vampires2hg 5 4004 150 40"
+  "vampires2hg 5 5005 150 40"
+  "vampires2hg 5 6006 150 40"
+  "vampires2hg 5 7007 150 40"
 )
