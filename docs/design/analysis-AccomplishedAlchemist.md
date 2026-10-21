@@ -35,6 +35,9 @@ pushed): the USER's decision that Seedcradle Witch counts as a win condition (Ha
 4 life rule retired) landed DEFAULT ON -- -0.005 / +0.005 / -0.010 on the three cells, smoke d0 +0.024 from one
 clause (the Harbinger fallback order); a PROPOSED amendment (`MTG_AA_HARB_WITCH_FALLBACK_FIRST`, OFF) makes it
 -0.005 / -0.005 / -0.012 with zero slower games -- see "USER: Seedcradle Witch as a win condition (2026-10-21)".
+2026-10-21 (branch `aa-discardmana`, at 846135c7, NOT pushed): the USER's discard MANA CAP (mana useful up to 6, then a
+second real wincon / untapper, land Auras ahead of Arbor Elf) landed DEFAULT ON -- -0.005 / -0.005 / -0.002 with zero
+slower games; see "USER: the discard mana cap (2026-10-21)".
 Open USER items are listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -209,11 +212,87 @@ Wall ms in the amendment batch is not comparable to the A/B's (the box's load ch
 no longer fetches Ezuri for Wincon while a Witch is held, and the wish no longer offers Scholar for Wincon; (2)
 "last among wincons" applies to every Harbinger order including the fallback (the amendment above narrows that);
 (3) a Witch on the BATTLEFIELD fills Wincon in the discard rule, so a Stroke / Scholar / Ezuri in hand becomes a
-spare and is shed before lands, exactly as with a Staff in play -- although the Witch is the weakest wincon; (4) the
+spare and is shed before lands, exactly as with a Staff in play -- although the Witch is the weakest wincon
+(ANSWERED by the USER the same day -- the mana cap below); (4) the
 wish rule still does NOT count Ezuri as a held wincon (the 2026-10-20 reading) while it now counts the weaker
 Witch; (5) Combo Off's Witch rows (X >= 5 for the unbounded loop) are untouched -- loop arithmetic, not a bucket
 rule, and pump kills are not combo-off rows (the sibling `aa-ezuri` branch owns Combo Off).
 
+
+### USER: the discard mana cap (2026-10-21) -- landed DEFAULT ON
+
+Branch `aa-discardmana` (worktree `.claude/worktrees/aa-discardmana`, at phase-1-2-deck-analyzer 846135c7), NOT
+pushed. Commit 791a3f21. Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-discardmana/` (`ab/` the pooled A/B +
+the `=0` smoke rows, `base/` the 846135c7 binary on the smoke rows, `smoke_on/`, `ev_on/` + `ev_off/` the label
+evidence, `labels.py`).
+
+**The USER, verbatim**, answering reading (3) above (a Stroke made spare by a Witch in play shed before lands): "I
+wouldn't do that unless the lands and such are actually useful. You don't need more than 5-6 mana in any
+situation." Then: "Let's cap it at 6. So, the "filled buckets", but using Witch would next fill lands up to 6 and
+then it would fill in another win-con and/or untapper." On the mana order: "the land enchantments are better than
+Arbor Elf in a lot of cases. The only cases the elf is better are where you already have an enchantment in play or
+hand and can afford the tempo loss." And: "Wild Growth and Utopia Sprawl can effectively be played for free by
+casting them from one land to another."
+
+**The rule** (`AccomplishedAlchemistProvider::CleanupDiscardShedOrder`; `MTG_AA_DISCARD_MANA_CAP`, heurarm
+AA_DISCARD_MANA_CAP, DEFAULT ON; `=0` = 846135c7 exactly). KEEP priority:
+1. the filled buckets, best of each (the Witch for Untap + Wincon, Staff for both), + a Living Wish per gap -- unchanged;
+2. MANA up to **6** total (the USER's number, a constant): the battlefield's projected mana (the wish census: a land 1,
+   a land Aura's bonus, a dork 1, an Arbor Elf's enchanted-Forest bonus) + the hand's sources in keep order -- a
+   land 1, Utopia Sprawl / Wild Growth +1 (with a land to enchant), Arbor Elf +2 on a Forest with a land Aura (board,
+   or one kept before it) else +1, Elvish Harbinger 1; a source is useful while the running total is below 6, every
+   source after that is SURPLUS;
+3. a SECOND wincon and/or untapper -- the REAL ones (Stroke > Staff > Scholar > Ezuri; Crab Umbra > Staff > Galvanic;
+   never the Witch): the best spare of each, one Staff may be both;
+4. everything else, shed first: SURPLUS mana, then the other spare bucket cards (worst rank first), then spare Wishes.
+
+Mana keep order: lands, then Utopia Sprawl > Wild Growth > Arbor Elf > Elvish Harbinger (an Aura is +1 mana at no
+tempo cost with 2+ Forests -- the USER's "played for free" -- and +1 off the next land otherwise). EXCEPTION: a land
+Aura on our battlefield, or the best one kept in hand, AND the tempo affordable -> Arbor Elf ahead of any ADDITIONAL
+Aura. **"Can afford the tempo loss" is the coordinator's reading** (the Elf is cast next turn at the earliest, an
+Aura makes its mana the turn it lands): board mana >= `kAaElfTempoMana` = **4**; below that the Auras stay ahead.
+Prefix-stable (a source's value reads only the board and the sources before it in the keep order).
+
+**Wish / Harbinger Mana buckets: no change needed.** Both offer mana only while projected mana is below 4, under the
+cap; the wish cannot reach Utopia Sprawl / Wild Growth (not in the sideboard) and the Harbinger fetches Elves only, so
+the Aura-vs-Elf order has nothing to act on there. Only their fallbacks (the wish's whole list when nothing is
+admitted; the Harbinger's {Ezuri, Witch, Arbor Elf} when nothing is lacking) can add a source past 6, as a searched
+last-ranked option -- not changed.
+
+**Validation.** Unit 1622 / 1622 (5 new cases: a Witch in play + a spare Stroke under / at / over 6; valued sources;
+the Aura-vs-Elf order in both branches incl. the tempo threshold; Arbor Elf +2 / +1; the second tier, one Staff for
+both, the Witch never second-tier; 4 updated, each with its `=0` expectation); AA cases green under
+`MTG_UNPRUNE=tutor`; scenarios 245 / 245. **Smoke** (`MTG_PGO=0`, 8 threads, NOT accepted): only the four known moves
+at their digests + the alchemist rows. GT predates the aa-ezuri merge, so the alchemist rows are compared with the
+846135c7 binary run on the same rows (and `=0` reproduces that binary byte-identically on all four):
+
+| row | GT (aa-land) | 846135c7 | mana cap ON |
+|---|---|---|---|
+| alchemist_smoke_d0_s1001 | 7.2220 | 7.0760 / 87fe2d52050de8af | **7.0740** / 349c5d0b037bbe1b (7 faster / 5 slower of 722 timed) |
+| alchemist_smoke_d3_s1001 | 5.4333 | 5.3933 / b9bae1a6cfc0a5b6 | 5.3933 / 6a8caa1f3e0e1077 (play only) |
+| alchemist_smoke_d5_s1001 | 5.2667 | 5.2000 / 6301cee5a8a3b7e7 | 5.2000 / 7b6a437ec0938e7d (play only) |
+| alchemist2hg_smoke_d3_s1001 | 5.5600 | 5.4600 / e9c1958b6ee17d84 | 5.4600 / 548890b3a7121b8d (play only) |
+
+**A/B** (one pooled batch, 2,000 games + the `=0` smoke rows, heurarm arms in interleaved 25-game chunks; binary =
+commit 791a3f21; 8 threads on an oversubscribed box, so ms is noise -- units are contention-free):
+
+| cell | 846135c7 (old) | mana cap (new) | delta | faster / slower | units mean old -> new |
+|---|---|---|---|---|---|
+| s70001 d3 b10 (200) | 5.2600 | 5.2550 | **-0.005** | 1 / 0 (g117 5 -> 4) | 78.4k -> 77.5k |
+| s70001 d5 b20 (200) | 5.2250 | 5.2200 | **-0.005** | 1 / 0 (g117 5 -> 4) | 146.5k -> 145.9k |
+| s90001 d5 b20 (600 held-out) | 5.1383 | 5.1367 | **-0.002** | 1 / 0 (g452 6 -> 5) | 127.6k -> 127.6k |
+
+**Zero slower games in 1,000** (so no 10x reruns were needed); unwon unchanged (9 / 6 / 27). The play digest moved in
+3 / 2 / 10 of the 8 / 8 / 24 chunks: the rule bites rarely (a real cleanup shed is ~0.05 / game) but reaches the
+rollouts' cleanups. Units 0.989x / 0.996x / 1.000x.
+
+**Discard-only evidence** (analyze_deck.py's labelling stage by hand: 400 games d3 b10 seed 930000 per arm,
+`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`, the rule fanned with `MTG_AA_DISCARD_FAN` so the searched cleanup trials
+every card and labels the rule's pick; one batch per arm, 6 threads, because the trace lines carry the seed and not
+the job): the mana cap **16 decisions, 16 optimal, mean regret 0.000**; 846135c7's rule **26 / 26, 0.000**. On the 13
+decisions both arms reached, the picks differ in 5 and tie on the label every time (e.g. seed 930069 T4: the cap
+sheds a Forest, the old rule an Elvish Harbinger, both T5). At ~0.05 real sheds per game the labels cannot separate
+the two rules; the paired A/B above (3 faster, 0 slower) is the evidence that does.
 
 ## Suite entry (2026-10-20) -- ADDED to all three tiers; suite_gate PASS at 1.58x
 
@@ -1855,8 +1934,13 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   lacking)? With it the rule is -0.005 / -0.005 / -0.012 vs aa-land with zero slower games in 1,000 and the d0 canary
   back at 7.2210; without it, -0.005 / +0.005 / -0.010 and d0 +0.024. Five readings taken (listed in the section):
   a held Witch fills both buckets; "last among wincons" includes the fallback; a Witch in play makes a Stroke /
-  Scholar / Ezuri in hand a discard spare; the wish rule counts the Witch but still not Ezuri as a held wincon;
-  Combo Off untouched.
+  Scholar / Ezuri in hand a discard spare (ANSWERED: the mana cap, next bullet); the wish rule counts the Witch but
+  still not Ezuri as a held wincon; Combo Off untouched.
+* **Discard mana cap (2026-10-21) -- landed DEFAULT ON (the USER's rule).** One reading is the coordinator's, stated to
+  the USER: "can afford the tempo loss" = board mana >= 4 (`kAaElfTempoMana`) before Arbor Elf moves ahead of an extra
+  land Aura. Also taken: the second tier is one card per role (a third Stroke is "everything else"); spare Wishes
+  are "everything else" too (after the other spares, before the second tier); the cap counts the board's projected
+  mana as the wish census does (dorks 1, the Alchemist's X not counted).
 * **Elvish Harbinger rule (2026-10-20): it measures WORSE; adopt the two amendments?** (2026-10-21: the USER adopted
   `MTG_AA_HARB_WITCH_WIN` -- now DEFAULT ON, the Witch ranked after Ezuri for a lacking Wincon; `MTG_AA_HARB_ALCH_DEFAULT`
   is still open.) The USER's rule is +0.005 ..
