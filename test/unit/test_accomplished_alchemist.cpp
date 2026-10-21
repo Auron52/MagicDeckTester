@@ -3166,6 +3166,8 @@ TEST_CASE("route tape: a recorded tutor resolution is played back by NAME, not r
         PerformTutor(off, 0, wish.params, "", "Living Wish");
     }
     CHECK(none.empty());
+}
+
 // ---- THE PROPOSED DECK CAST ORDER (2026-10-21, MTG_AA_CAST_ORDER, DEFAULT OFF pending the USER's review) --------
 // ON: one position per card of the 75, strictly increasing in the proposed order, the land drop before all of them,
 // an unlisted card after all of them in its generic tier order, ties by name. OFF (and unset): the generic tiers,
