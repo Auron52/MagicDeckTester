@@ -70976,20 +70976,29 @@ inline bool FsStrictCutOn()
     static const bool v = EnvOn("MTG_FS_STRICT_CUT", true);
     return v;
 }
-// MTG_FS_STRICT_CUT_O1 (heurarm FS_STRICT_CUT_O1) -- DEFAULT OFF (2026-10-17): a search whose horizon leaf is
-// O(1) keeps the INCLUSIVE child cut; =1 restores the strict cut there too (the 2026-10-15..17 behaviour). The
+// MTG_FS_STRICT_CUT_O1 (heurarm FS_STRICT_CUT_O1) -- DEFAULT ON (2026-10-21; OFF 2026-10-17..20): the strict child
+// cut also where the horizon leaf is O(1); =0 keeps the INCLUSIVE cut there. The
 // strict cut's saving is the tie turn a ROLLOUT leaf plays out in full; an O(1) leaf (the learned value model,
 // or the no-leaf constant) costs the same at any cutoff, so there it removes nothing at the leaf -- and
 // measured, the value-leaf ladder's deep passes cost MORE with it (Landfall d5 7.5k -> 11.9k units/pass,
 // Prevent Damage d5 3.6k -> 8.3k, at an unchanged admission rate), while rollout passes cost less (Landfall
 // live d5 5.7k -> 4.1k). Both cuts return the same answer at every node, so this re-prices work only.
 // 2026-10-20: that "costs MORE" was the dead-end memo defect (see PROVISIONAL DEAD ENDS): with the fix on, =1 is
-// NEUTRAL -- held-out A/B over every shipped value leaf plus Landfall's staged leaf (31 decks x 400 paired
-// games): 3 of 12,800 games moved, pooled units 1.003x (0.92-1.28x per deck). The cut simply has nothing to
-// save at an O(1) leaf, so the default stays the inclusive cut there.
+// play-NEUTRAL at play budgets -- held-out A/B over every shipped value leaf plus Landfall's staged leaf (31 decks x
+// 400 paired games): 3 of 12,800 games moved, pooled units 1.003x (0.92-1.28x per deck).
+// DEFAULT ON since 2026-10-21. "Nothing to save at an O(1) leaf" was wrong: the saving is not the leaf, it is the
+// MEMO. Under the inclusive cut a subtree beneath an estimated incumbent at turn T searches for wins <= T, and the
+// O(1) leaf hands back an ESTIMATED win at T, which is stored as a WIN on the ORDER-EXACT key -- so every zone-order
+// twin (the same lands played in another order) re-searches it. Under the strict cut that subtree asks for wins
+// < T, the leaf at T is refused, and the answer is a bounded NO-WIN on the canonical key that every twin shares --
+// which is exactly what a rollout search already gets. Landfall d5 UNBUDGETED, 200 games (logs/tgt/blind on
+// lf-integrate): value leaf 21.2M units with 23% of re-searches finding a permuted twin's win, vs 17.6M with this
+// cut, play byte-identical (and the rollout search with the INCLUSIVE cut grows 1.29x the same way). At b20 it is
+// play-identical on staged / pure value / both no-leaf shapes (0.995x). A sound collapse, so ON (USER 2026-10-01:
+// "Wasted work is wasted work regardless of the situation"); =0 restores the inclusive cut.
 static inline bool FsStrictCutO1On()
 {
-    static const bool env = EnvOn("MTG_FS_STRICT_CUT_O1");
+    static const bool env = EnvOn("MTG_FS_STRICT_CUT_O1", true);
     return heurarm::Flag(heurarm::FS_STRICT_CUT_O1, env);
 }
 // The horizon leaf below this node is O(1): mirrors the leaf selection in FSLineWin's horizon (the no-leaf
