@@ -39431,7 +39431,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (k_lethal > 0)
                 {
                     const ManaCost full = TeamPumpCostTimes(state, state.active_player_index, src, *sd, k_lethal);
-                    ManaPool have = turn_pool();
+                    // "The board pays it" counts only mana that is not one of the pump's attackers
+                    // (MTG_PUMP_PAY_NO_ATTACKERS, TeamPumpPayersPool); =0 the whole board pool, as before.
+                    ManaPool have = PumpPayNoAttackersOn() ? AvailableManaPoolNoAttackers(state) : turn_pool();
                     have.AddPool(state.floating_mana);
                     if (!have.CanPay(full)
                         && FindFundingUntapLoop(state, state.active_player_index,

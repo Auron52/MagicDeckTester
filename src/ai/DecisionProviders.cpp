@@ -44484,6 +44484,16 @@ inline bool RouteMainFirstOn()
     static const bool s_env = EnvOn("MTG_AA_ROUTE_MAIN_FIRST", true);
     return heurarm::Flag(heurarm::AA_ROUTE_MAIN_FIRST, s_env);
 }
+// MTG_AA_ROUTE_PUMP_SETUP_LAST (heurarm AA_ROUTE_PUMP_SETUP_LAST): a team-pump creature cast (Ezuri) is a FINISH-stage
+// piece, so the walk tries it where it tries a Stroke or a Scholar cast -- after the lifegain / untapper setups and
+// the loops that carry no finisher -- instead of beside them. An ORDER over the same plans (nothing is dropped): with
+// Ezuri in hand its payment variants and their subtrees took the walk's whole bound before the six-link Stroke dig
+// (s70001 gi111, 128 applies). =0 -> ranked as any setup cast.
+inline bool RoutePumpSetupLastOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_ROUTE_PUMP_SETUP_LAST", true);
+    return heurarm::Flag(heurarm::AA_ROUTE_PUMP_SETUP_LAST, s_env);
+}
 // The combat finishers are live for THIS pass (the lever on, and not inside the main-phase pass).
 inline bool CombatPass() { return t_main_pass == 0 && AlchemistComboCombatOn(); }
 struct MainPassScope
@@ -44813,7 +44823,9 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             if (d->params.cast_lifegain > 0) { r.neg_life -= std::max(d->params.cast_lifegain, d->params.cast_lifegain_ferocious); }
             if (d->card.IsCreature()) { r.neg_life -= std::max(d->params.sac_outlet_lifegain, d->params.etb_modal_lifegain); }
             if ((d->params.draw_target_player && d->tmpl == CardTemplate::DrawX)
-                || (d->card.IsCreature() && UntapLoopDrainCard(d->params))) { r.finisher = 1; }
+                || (d->card.IsCreature() && UntapLoopDrainCard(d->params))
+                || (RoutePumpSetupLastOn() && d->card.IsCreature() && d->params.team_pump_cost.has_value()
+                    && d->params.team_pump_power > 0)) { r.finisher = 1; }
             const CardParams& q = d->params;
             if (q.untap_enchanted_cost.has_value() || q.untap_pump_cost.has_value()
                 || (q.untap_target_creature_cost.has_value() && q.self_untap_cost.has_value())

@@ -626,6 +626,8 @@ enum Slot : int
     AA_DISCARD_WITCH_WIN,     // MTG_AA_DISCARD_WITCH_WIN  AA discard buckets: Seedcradle Witch is a member of BOTH Untap and Wincon/Draw, like Staff (USER 2026-10-21), ranked LAST in each (Wincon: Stroke > Staff > Scholar > Ezuri > Witch); a Witch on the battlefield fills both. Default ON (the USER's decision); =0 -> the 2026-10-20 rule (Witch = Untap only)
     AA_DISCARD_MANA_CAP,      // MTG_AA_DISCARD_MANA_CAP  AA discard buckets, the USER's mana cap (2026-10-21: "You don't need more than 5-6 mana in any situation", "Let's cap it at 6"): mana sources count only up to 6 total mana (board + hand); the KEEP priority is the filled buckets, then mana up to 6, then a second REAL wincon and/or untapper (Stroke / Staff / Scholar / Ezuri, Crab Umbra / Staff / Galvanic), then everything else (mana beyond 6 first, then the other spares). Default ON (the USER's rule); =0 -> every spare sheds before any mana, as before
     AA_ROUTE_MAIN_FIRST,      // MTG_AA_ROUTE_MAIN_FIRST  AccomplishedAlchemist COMBO OFF walk: with the combat finishers on (MTG_AA_COMBO_COMBAT) the walk runs its MAIN-PHASE pass first -- exactly the walk MTG_AA_COMBO_COMBAT=0 runs (no pump need, no Ezuri cast as a setup, OpponentHasLost as the verdict) -- and only when that pass proves nothing, the combat pass. The route set is then the UNION of both walks: a cheaper-by-mana Ezuri pump the board "already funds" (with the very Elves it counts as attackers) can no longer displace the Stroke kill (s70001 gi179 / gi111, 2026-10-21). Default ON; =0 -> the combat walk alone (as first shipped)
+    PUMP_PAY_NO_ATTACKERS,    // MTG_PUMP_PAY_NO_ATTACKERS  a team pump's own ATTACKERS are not its PAYERS: the gates that ask "does the board already pay the pump?" (UntapLoopWorthOffering for a pump need, the mode-4 loop-funded pump's emission, FundTeamPumpByLoop) use the pool without attack-capable creature sources (AvailableManaPoolNoAttackers) -- TeamPumpLethalCount sized the pump on those creatures attacking (s70001 gi179, 2026-10-21: need Ezuri x1 'paid' by three of its four attackers, so no loop was offered). Default ON; =0 -> the whole board pool
+    AA_ROUTE_PUMP_SETUP_LAST, // MTG_AA_ROUTE_PUMP_SETUP_LAST  AccomplishedAlchemist COMBO OFF walk: a team-pump creature cast (Ezuri) is ordered in the FINISH stage (after the lifegain / untapper setups), like a Stroke or Scholar cast -- an order, nothing dropped (s70001 gi111: Ezuri payment variants took the walk's whole 128-apply bound). Default ON; =0 -> ranked as any setup
     COUNT
 };
 
@@ -1202,6 +1204,8 @@ inline const char* Name(int slot)
         "MTG_AA_DISCARD_WITCH_WIN",
         "MTG_AA_DISCARD_MANA_CAP",
         "MTG_AA_ROUTE_MAIN_FIRST",
+        "MTG_PUMP_PAY_NO_ATTACKERS",
+        "MTG_AA_ROUTE_PUMP_SETUP_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

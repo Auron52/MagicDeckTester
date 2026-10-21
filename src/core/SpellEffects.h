@@ -31002,6 +31002,31 @@ inline int TeamPumpLethalCount(const GameState& s, int ctrl, const CardDefinitio
     return (deficit + per - 1) / per;
 }
 
+// THE PUMP'S OWN ATTACKERS ARE NOT ITS PAYERS (MTG_PUMP_PAY_NO_ATTACKERS, heurarm PUMP_PAY_NO_ATTACKERS, DEFAULT ON).
+// TeamPumpLethalCount sizes the pump on every creature that can attack -- Arbor Elf, Elvish Harbinger, the Accomplished
+// Alchemist itself -- so a pump paid by TAPPING one of them for mana is no longer the kill it was sized as. Three gates
+// asked "does the board already pay the pump?" of the whole board pool (AvailableManaPool), i.e. counted the same Elves
+// once as attackers and once as mana: UntapLoopWorthOffering (no loop offered for a pump need the board "funds"),
+// the mode-4 loop-funded pump's emission (not offered when the board "pays" it) and FundTeamPumpByLoop (no loop run).
+// s70001 gi179 T7: need = Ezuri x1 (MV 5, four attackers), the board "paid" it with three of those attackers, so no
+// loop was offered at all and neither the pump kill nor the Stroke kill was reachable. With the lever on those gates
+// ask the pool WITHOUT attack-capable creature sources (AvailableManaPoolNoAttackers: untapped, CanAttackFull, power
+// > 0 -- every creature this deck can pump has power >= 1; a 0-power Elf would still count as a payer [PARTIAL]).
+// Only pump payoffs are affected; =0 is the whole-board pool, exactly as before.
+ManaPool AvailableManaPoolNoAttackers(const GameState& state);   // ManaPayment.cpp
+inline bool PumpPayNoAttackersOn()
+{
+    static const bool s_env = EnvOn("MTG_PUMP_PAY_NO_ATTACKERS", true);
+    return heurarm::Flag(heurarm::PUMP_PAY_NO_ATTACKERS, s_env);
+}
+// The pool that can pay a team pump without spending one of its attackers (+ the float, as every such gate adds it).
+inline ManaPool TeamPumpPayersPool(const GameState& s)
+{
+    ManaPool have = PumpPayNoAttackersOn() ? AvailableManaPoolNoAttackers(s) : AvailableManaPool(s, nullptr);
+    have.AddPool(s.floating_mana);
+    return have;
+}
+
 // Is library card `d` something an unbounded loop can turn into a kill THIS main once drawn? First pass
 // (`chained` false): only a card the loop's continuation can CAST and that kills on resolution -- Stroke of
 // Genius at the opponent. Second pass (chunk E1, taken only when the library holds no Stroke): a drawn
@@ -31464,8 +31489,10 @@ inline bool UntapLoopWorthOffering(const GameState& s, int ctrl, int shape, int 
     bool buys = UntapLoopPumpIterations(s, ctrl, shape, source_id, target_id) > 0;
     if (!buys && need.payoff != kLoopPayNone)
     {
-        ManaPool have = AvailableManaPool(s, nullptr);
-        have.AddPool(s.floating_mana);
+        // A pump payoff is "already funded" only by mana that is not one of its own attackers (PumpPayNoAttackersOn).
+        const bool pump = need.payoff == kLoopPayPump || need.payoff == kLoopPayCastPump;
+        ManaPool have = pump ? TeamPumpPayersPool(s) : AvailableManaPool(s, nullptr);
+        if (!pump) { have.AddPool(s.floating_mana); }
         buys = !have.CanPay(need.cost);   // the board already funds it: no loop needed
     }
     if (!buys) { return false; }
@@ -31761,11 +31788,8 @@ inline bool LoopFundedPumpCost(const GameState& s, int ctrl, int source_id, int 
 // world's payer). No loop reachable -> unchanged board, false.
 inline bool FundTeamPumpByLoop(GameState& s, int ctrl, const ManaCost& cost, int k)
 {
-    {
-        ManaPool have = AvailableManaPool(s, nullptr);
-        have.AddPool(s.floating_mana);
-        if (have.CanPay(cost)) { return true; }
-    }
+    // Paid without the loop only by mana that is not one of the pump's attackers (PumpPayNoAttackersOn).
+    if (TeamPumpPayersPool(s).CanPay(cost)) { return true; }
     int shape = 0, src = 0, tgt = 0;
     if (!FindFundingUntapLoop(s, ctrl, 0, &shape, &src, &tgt)) { return false; }
     UntapLoopNeed need;
