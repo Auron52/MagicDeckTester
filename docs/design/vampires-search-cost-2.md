@@ -68,8 +68,78 @@ All in `src/ai/TurnSolver.cpp` unless named; the soundness argument is in the co
 | 10 | `PushWithMadnessFan` builds the LAST variant in place and moves it | -- | The same actions in the same order, one copy fewer per fan. |
 | 11 | **The pre-plan facts share**: ApplyPlanDirect's two pre-plan activation snapshots computed once per sibling loop (lookahead pre/post-combat, FSLineTail main 2, FSLineWin) | `MTG_PREPLAN_SHARE`, `MTG_PREPLAN_SHARE_VERIFY` | The siblings are fresh copies of one root board; a loop arms the share only for the copy it is about to apply, the apply takes it at entry, and each fact is computed by the first sibling at the point it always was. VERIFY recomputes and aborts on a difference. |
 | 12 | **MoveOrderPlans sorts (keys, index)**, then moves each Plan once (not at all when already in order) | `MTG_MOVE_ORDER_KEYS` | The comparator reads five scalars, so the stable sort of keys is the stable sort's permutation. |
-| 13 | small: `enumstats::Enabled()` read once per walk; `MTG_EQUIP_ALL_HOSTS` cached; CreatureConvokeArms' vectors reserved | -- | Process-constant reads; capacity only. |
+| 13 | small: `enumstats::Enabled()` read once per walk; `MTG_EQUIP_ALL_HOSTS` cached; CreatureConvokeArms' vectors reserved; Action-name lookups (`Lookup(x.card_name)`, 149 sites) on the interned index; VampiresProvider's discard tiers computed once per name before its stable sort (`src/ai/DecisionProviders.cpp`) | -- | Process-constant reads; capacity only; `LookupInterned` == `Lookup` (row 6); the same stable permutation. |
+| 14 | **The walkers' Vampires prefilter**: once an enumeration's VampRulePre is built, both DFS walks ask SubsetVampOutletInvalid themselves and do not hand a refused selection on | `MTG_VAMP_PREFILTER` | The receivers' chains are pure rejection predicates (an order-free OR) that this rule belongs to; what consider() does before reaching a refusal is replayed (its abandon-poll cadence; the greedy walker sorts first exactly as consider() does) or fenced off (walk budget charge, per-decision meter, every census / trace / funnel instrument, the payoff prune, human play, the VERIFY mode). |
 
 ### P.3 Evidence
 
-(filled in below)
+**Byte identity.** Every round re-ran, on the round's own binary: `mtg-test` (1,660 cases, including the new
+`test/unit/test_vampires_perf_p.cpp`: 400 random walks DFS == carry walk; 24k random selections over real
+CollectActions lists, fast rules == original rules); the `quick.json` manifest (110 games) with
+`MTG_VAMP_RULE_PRE_VERIFY=1 MTG_PREPLAN_SHARE_VERIFY=1 MTG_COLLECT_MEMO_VERIFY=1` (every selection / sibling
+apply / memo hit checked against a recompute -- no abort); the seven `regression_rows.json` rows (digests,
+units AND the per-game `.wins` files identical to the brief's baseline); and `test/regression.sh --smoke`
+against the committed GT with the binary pinned (`MTG_BIN`): **128 passed, 0 failed** -- the smoke tier is
+the check that the generic changes (the DFS walk, the dup-source path, the arm hash, the pre-plan share,
+MoveOrderPlans, the interned lookups) leave every other deck byte-identical too.
+
+**Instructions per game (callgrind Ir, Profile build, single thread; units identical in every column).**
+
+| game (row shape) | units | base `1a1cf9b9e` | v3b `b1eccb0d9` | v4 `77f338450` | v5 `a70065613` | v6 `dcb857488` |
+|---|---|---|---|---|---|---|
+| std d3 b10 s3003 gi48 | 63,081 | 10.54 G | 8.61 G (-18.3%) | 8.39 G (-20.4%) | 8.19 G (-22.3%) | **8.12 G (-23.0%)** |
+| 2HG d5 b20 s2002 gi10 | 234,051 | 25.35 G | 22.15 G (-12.6%) | 22.10 G (-12.8%) | 21.98 G (-13.3%) | **21.92 G (-13.5%)** |
+| std d5 b20 s3003 gi23 | 247,604 | 55.77 G | 41.54 G (-25.5%) | 38.60 G (-30.8%) | 37.52 G (-32.7%) | **36.88 G (-33.9%)** |
+
+Where the d5 game's instructions went (self Ir, base -> v5): the greedy walk 7.48 G -> 0.38 G (+ the DFS and its leaf
+4.6 G, which now also carries the prefilter); SubsetVampOutletInvalid and its helpers ~16.2 G inclusive -> 4.2 G (SubsetVampOutletInvalidPre);
+SubsetHasDuplicateSacSource 2.95 G -> 0.29 G (the compact path, and the prefilter now refuses most selections before it);
+consider() 10.4M calls -> 1.6M (the prefilter). The 2HG game moved least because its cost is the generic
+engine: BuildSimKey (7.5% of it), CollectActions' own body, the simulation -- see P.4.
+
+**Per row** (units/game are unchanged by construction; the Ir change is the reference game of the row's
+shape -- one game per shape, so read it as an estimate for the row; expected wall change ~ the Ir change,
+since nothing here trades instructions for memory traffic):
+
+| row | units/game | digest (unchanged) | Ir, reference game | est. speedup |
+|---|---|---|---|---|
+| vampires2hg_regression_d5_s2002 (the worst) | 248,047 | 45ce2008fa2885e3 | -13.5% (2HG d5 gi10) | ~1.16x |
+| vampires2hg_regression_d3_s2002 | 140,298 | 81b004286de687c8 | ~-13% (2HG shape) | ~1.15x |
+| vampires_regression_d5_s3003 | 124,147 | da10a7163b53fc9a | -33.9% (std d5 gi23) | ~1.5x |
+| vampires_regression_d5_s2002 | 82,078 | 2cdc42ec48de0ce6 | ~-30% (std d5 shape) | ~1.4x |
+| vampires_regression_d3_s3003 | 71,370 | 20c06430dede6629 | -23.0% (std d3 gi48) | ~1.3x |
+| vampires_regression_d3_s2002 | 57,609 | c1dcca8497cb0507 | ~-23% (std d3 shape) | ~1.3x |
+
+A paired WALL A/B (base and v6 binaries running the seven rows concurrently, 10 threads each, the box shared
+with another container) gave per-row core-ms ratios from 0.85 to 1.17 with no consistent sign -- the
+brief's warning, measured: wall is not a measurement on this box, Ir is.
+
+### P.4 What remains, and what was not done
+
+- **2HG is now generic-engine bound.** After the changes the 2HG d5 game's top items are BuildSimKey (7.5%,
+  the TT / memo / dedup keys -- a 128-bit fold chain whose key values must not change), CollectActions' own
+  body (3.6%), FinalizeFoldTags + ActionFoldSig (2.3%), CreatureConvokeArms (1.3%), the simulation itself.
+  No Vampires-shaped cost above 1.6% is left there.
+- **The provider's discard-pin ORDER costs ~2.7% of a 2HG game.** ActivationDiscardClasses asks
+  VampiresProvider::ActivationDiscardCandidates, which starts from VialProvider's cleanup ranking -- the
+  Slivers bucket policy (`vialcurve::Fill`, a three-turn curve fill) inherited through VialProvider -- once
+  per discard-cost source per CollectActions call. It only ORDERS the pins (every pin is still branched), so
+  a cheaper order is a provider decision (USER-owned) and was not touched; see the question below.
+- **The greedy walk's refused leaves (d5).** A d5 game's rollout walk still builds ~10M selections, 86% of
+  which the Vampires rules refuse (the prefilter refuses them before consider(), but each still costs the
+  selection build, a sort and the rule pass, ~1,000 instructions). The next step would be to not generate
+  them: rule 1 (over-pinned discards) is monotone in the selection -- a high part of the odometer that
+  already over-pins a card refuses every completion -- so the DFS could skip that subtree, with the same
+  fencing as the prefilter. Not built (time; it is the one change here that alters the walk's shape).
+- `MTG_VAMP_RULE_PRE_LAZY` (K = 8) was set from the call-per-enumeration counts (2HG greedy ~3, d5 greedy
+  ~125, search walks 10-85), not swept.
+
+### P.5 Commits (branch `vampires-perf-p`, backup `backup/2026-10-21/vampires-perf-p`)
+
+Checkpoint commits on top of `1a1cf9b9e`, each built and verified as a round (P.3): `bbb5574ee` + `46a26262d`
++ `cc3418dcb` (round v2: DFS walk, VampRulePre, dup skip, arm hash, collect memo, steal recursion, fan
+moves, pre-plan share), `fa13b35e1` .. `b1eccb0d9` (v3b: MoveOrderPlans keys, fan memo, lazy pre, interned
+lookups, tier keys, memo verify), `77f338450` (v4: compact dup path, single-pass fast rules, lazy rule 4,
+DFS leaf by index), `a70065613` (v5: the walkers' prefilter, high digits cached), `dcb857488` (v6: put-name
+filter, high part by index), then this document. Every round: digests, units and per-game `.wins` identical on all seven rows,
+`quick.json` identical with every VERIFY mode on, `mtg-test` 1,660/1,660, smoke 128/128 PASS.
