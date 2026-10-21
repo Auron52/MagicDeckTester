@@ -127,9 +127,16 @@ int Threshold(const std::function<GameState(int)>& board,
     return seen ? best : -1;
 }
 
+// These cases read the PROJECTION inside Solve's subset walk, which MTG_GREEDY_LETHAL_STOP bypasses on a board
+// already lethal in combat (it returns the verified attack-only plan). So the helper runs with the stop OFF
+// unless a case sets the slot itself; the stop has its own case at the end of this file.
 TurnSolver::Plan GreedySolve(const GameState& s)
 {
-    return TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+    const std::int8_t prev = heurarm::t_arm[heurarm::GREEDY_LETHAL_STOP];
+    if (prev < 0) { heurarm::t_arm[heurarm::GREEDY_LETHAL_STOP] = 0; }
+    TurnSolver::Plan p = TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
+    heurarm::t_arm[heurarm::GREEDY_LETHAL_STOP] = prev;
+    return p;
 }
 
 struct ArmScope
@@ -253,6 +260,26 @@ TEST_CASE("Solve attack-only win: a lethal board attacks instead of casting into
     CHECK((g5.wins_this_turn && Casts(g5, "Lightning Greaves")));
     // Not lethal at all: nothing to seed.
     const TurnSolver::Plan g11 = GreedySolve(FaeBoard(11, 2));
+    CHECK_FALSE(g11.wins_this_turn);
+}
+
+// ---- MTG_GREEDY_LETHAL_STOP: the greedy policy stops casting on a verified combat-lethal board ---------------
+// FaeBoard at 5: the board swings for 10 and Greaves (which taps Faeburrow) still wins on 5 -- the walk keeps the
+// cast (the seed loses every tie). With the stop on, the greedy policy takes the VERIFIED attack-only plan instead:
+// a cast that taps an attacker can only undo a kill the projection prices off lands (AccomplishedAlchemist d0
+// s1001 gi976: the pumped Alchemist tapped for a post-route Scholar).
+TEST_CASE("Greedy lethal stop: a combat-lethal board attacks without casting")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::GREEDY_LETHAL_STOP, 1 } });
+    const TurnSolver::Plan g5 = GreedySolve(FaeBoard(5, 4));
+    CHECK(g5.wins_this_turn);
+    CHECK_FALSE(Casts(g5, "Lightning Greaves"));
+    const TurnSolver::Plan g10 = GreedySolve(FaeBoard(10, 4));
+    CHECK(g10.wins_this_turn);
+    CHECK_FALSE(Casts(g10, "Lightning Greaves"));
+    // Not lethal: the stop does not fire, the walk runs as before.
+    const TurnSolver::Plan g11 = GreedySolve(FaeBoard(11, 4));
     CHECK_FALSE(g11.wins_this_turn);
 }
 

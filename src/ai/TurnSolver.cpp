@@ -48689,11 +48689,25 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // combat-swap term can spend main-phase floating mana (LethalCutKillIsReal) -- so the plan is
     // applied and its combat simulated before the powerset is skipped; a refused trial restores the
     // frame (the sibling cuts' snapshot) so the walk below is exactly the no-cut walk.
-    if (!s_no_lethal_cut && ResolveProvider(state).UseLethalShortCircuit()
+    // MTG_GREEDY_LETHAL_STOP (heurarm GREEDY_LETHAL_STOP, DEFAULT ON): THIS host is the greedy policy only (the
+    // depth-0 runner and every playout beyond the search horizon -- Solve needs a GreedyPermit), so here the
+    // verified cut runs for EVERY provider, not only the UseLethalShortCircuit opt-ins (whose gate exists to keep
+    // the SEARCH host's plan lists, and so other decks' digests, unchanged). The policy's alternative on a board
+    // that already kills in combat is to keep casting -- and a cast paid by tapping an attacker undoes the kill
+    // the projection still credits (it prices the payment off lands; the real payer taps the creature). Smoke d0
+    // s1001 gi976 T6 (AccomplishedAlchemist): the Combo Off route left a combat-lethal board, the breakpoint
+    // re-solve on it cast the Living-Wished Scholar of Athreos by tapping the pumped Alchemist, and the attack no
+    // longer killed. Generic on purpose -- any post-route (or any) action that taps or removes a counted attacker.
+    // The win is VERIFIED (LethalCutKillIsReal: the attack-only plan applied, its combat simulated) before it is
+    // taken, so it cannot cost the win turn. =0 -> the provider opt-in alone, as before.
+    static const bool s_greedy_lethal_stop_env = EnvOn("MTG_GREEDY_LETHAL_STOP", true);
+    const bool greedy_lethal_stop = heurarm::Flag(heurarm::GREEDY_LETHAL_STOP, s_greedy_lethal_stop_env);
+    if (!s_no_lethal_cut && (ResolveProvider(state).UseLethalShortCircuit() || greedy_lethal_stop)
         && !DecisionUnpruned(UnprunedGate::ComboLine)
         && pending_atk >= state.Opponent().life)
     {
-        const bool verify = LethalCutVerifyEnabled();
+        // A deck reached only through MTG_GREEDY_LETHAL_STOP is always verified (its kill is never taken on trust).
+        const bool verify = LethalCutVerifyEnabled() || !ResolveProvider(state).UseLethalShortCircuit();
         const Plan saved_best = best;                 // actions deliberately unmaterialized -> cheap copy
         const int  saved_mask = best_mask;
         const std::vector<int> saved_sel = best_sel;
@@ -48713,6 +48727,83 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
         // consider()'s exact projection did not confirm the win (should not happen given the guard) ->
         // fall through; `best` is merely pre-seeded (harmless move-ordering).
+    }
+
+    // MTG_GREEDY_PUMP_LETHAL (heurarm GREEDY_PUMP_LETHAL, DEFAULT ON): the same verified attack-only cut, counting
+    // the COMBAT CONVERTER's pumps. A firebreathing / stacking team pump with no {T} (Ezuri, Renegade Leader's
+    // {2}{G}{G}{G}: Elves +3/+3) is spent from LEFTOVER mana at combat (ApplyFirebreathing, SimulateCombat /
+    // AIEngine::Firebreathe), so it is never a main-phase action -- and consider()'s win projection never credits
+    // it either. On a board where the attack plus the pumps the untouched pool buys is lethal, every subset reads
+    // as a non-win and the greedy ranks the casts that SPEND that pool: smoke d0 s1001 gi990 T6, 6 power on board
+    // against 17, Forests paying one Ezuri pump (+12) for lethal; the policy cast Weather the Storm and spent the
+    // Staffs untapping Arbor Elf, attacked for 3 and won T8. Pre-filter: the attack plus an UPPER BOUND on the
+    // converter (pool x the best damage-per-mana of any pump that can reach an attacker); the cut fires only on a
+    // verified kill (the attack-only plan applied and its combat -- converter included -- simulated). Greedy host
+    // only. =0 -> as before.
+    static const bool s_greedy_pump_lethal_env = EnvOn("MTG_GREEDY_PUMP_LETHAL", true);
+    if (is_pre_combat && !s_no_lethal_cut && heurarm::Flag(heurarm::GREEDY_PUMP_LETHAL, s_greedy_pump_lethal_env)
+        && !DecisionUnpruned(UnprunedGate::ComboLine)
+        && pending_atk < state.Opponent().life
+        && ControlsFirebreathingSource(state, state.active_player_index))
+    {
+        const int me = state.active_player_index;
+        double best_ratio = 0.0;
+        for (const Permanent& src : state.battlefield)
+        {
+            if (src.controller_index != me || src.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+            if (d == nullptr) { continue; }
+            if (d->params.team_pump_cost.has_value() && d->params.team_pump_power > 0
+                && !d->params.team_pump_taps_source)
+            {
+                int matching = 0;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != me || (!q.card.IsCreature() && !q.is_animated)) { continue; }
+                    if (!CanAttackFull(q, state.battlefield, me)) { continue; }
+                    bool m = d->params.team_pump_subtypes.empty();
+                    for (const std::string& sub : d->params.team_pump_subtypes)
+                    { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
+                    if (m) { ++matching; }
+                }
+                const double r = static_cast<double>(d->params.team_pump_power * matching)
+                               / std::max(1, d->params.team_pump_cost->ManaValue());
+                best_ratio = std::max(best_ratio, r);
+            }
+            if (d->params.firebreathing_cost.has_value() && d->params.firebreathing_power > 0
+                && !d->params.firebreathing_discard && !d->params.firebreathing_grants_lifelink
+                && CanAttackFull(src, state.battlefield, me))
+            {
+                const double r = static_cast<double>(d->params.firebreathing_power)
+                               / std::max(1, d->params.firebreathing_cost->ManaValue());
+                best_ratio = std::max(best_ratio, r);
+            }
+        }
+        const int pump_bound = static_cast<int>(std::ceil(best_ratio * static_cast<double>(pool.Total())));
+        if (pump_bound > 0 && pending_atk + pump_bound >= state.Opponent().life)
+        {
+            const Plan saved_best = best;
+            const int  saved_mask = best_mask;
+            const std::vector<int> saved_sel = best_sel;
+            const int    saved_fj = best_fill_j;
+            const Action saved_fa = best_fill_action;
+            { std::vector<int> empty_sel; consider(empty_sel); }   // the attack-only subset
+            if (best_sel.empty())
+            {
+                Plan p = materialize_best();
+                if (LethalCutKillIsReal(state, p, is_pre_combat, /*land_played=*/false,
+                                        pending_atk + pump_bound, "solve-pump"))
+                {
+                    p.wins_this_turn = true;   // verified: the attack + the converter's pumps kill this turn
+                    return p;
+                }
+            }
+            best      = saved_best;
+            best_mask = saved_mask;
+            best_sel  = saved_sel;
+            best_fill_j = saved_fj;
+            best_fill_action = saved_fa;
+        }
     }
 
     // ---- EQUIP-CHAIN GO-OFF SHORT-CIRCUIT (lockstep twin of the EnumeratePlans host) ---------------

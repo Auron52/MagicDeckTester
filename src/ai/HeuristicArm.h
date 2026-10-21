@@ -629,6 +629,8 @@ enum Slot : int
     PUMP_PAY_NO_ATTACKERS,    // MTG_PUMP_PAY_NO_ATTACKERS  a team pump's own ATTACKERS are not its PAYERS: the gates that ask "does the board already pay the pump?" (UntapLoopWorthOffering for a pump need, the mode-4 loop-funded pump's emission, FundTeamPumpByLoop) use the pool without attack-capable creature sources (AvailableManaPoolNoAttackers) -- TeamPumpLethalCount sized the pump on those creatures attacking (s70001 gi179, 2026-10-21: need Ezuri x1 'paid' by three of its four attackers, so no loop was offered). Default ON; =0 -> the whole board pool
     AA_ROUTE_PUMP_SETUP_LAST, // MTG_AA_ROUTE_PUMP_SETUP_LAST  AccomplishedAlchemist COMBO OFF walk: a team-pump creature cast (Ezuri) is ordered in the FINISH stage (after the lifegain / untapper setups), like a Stroke or Scholar cast -- an order, nothing dropped (s70001 gi111: Ezuri payment variants took the walk's whole 128-apply bound). Default ON; =0 -> ranked as any setup
     UNTAP_PUMP_PROVE_LETHAL,  // MTG_UNTAP_PUMP_PROVE_LETHAL  the pump-untapper (Seedcradle Witch) loop sized on attackers that may pay its {G}/{W}: the net-zero pump loop is offered only when its k activations, run on a copy, leave a COMBAT-LETHAL board, and a banking loop stops at k_pump only once combat really is lethal (smoke d0 s1001 gi976, 2026-10-21). Default ON; =0 -> as before
+    GREEDY_LETHAL_STOP,       // MTG_GREEDY_LETHAL_STOP  the GREEDY policy (depth-0 runner + every playout beyond the horizon; Solve's host only) takes the VERIFIED board-lethal attack-only cut for every provider, not only the UseLethalShortCircuit opt-ins: on a board that already kills in combat it stops casting (a cast paid by tapping an attacker undoes the kill -- smoke d0 s1001 gi976, the post-route Scholar cast off the pumped Alchemist). Default ON; =0 -> the opt-ins alone
+    GREEDY_PUMP_LETHAL,       // MTG_GREEDY_PUMP_LETHAL  the same verified attack-only cut in the greedy policy, counting the combat converter's pumps (ApplyFirebreathing: Ezuri's team pump, firebreathing) paid from the untouched pool -- the win projection never credits them, so the greedy spent that pool on casts (smoke d0 s1001 gi990: Forests pay one Ezuri pump for lethal). Default ON; =0 -> as before
     COUNT
 };
 
@@ -1208,6 +1210,8 @@ inline const char* Name(int slot)
         "MTG_PUMP_PAY_NO_ATTACKERS",
         "MTG_AA_ROUTE_PUMP_SETUP_LAST",
         "MTG_UNTAP_PUMP_PROVE_LETHAL",
+        "MTG_GREEDY_LETHAL_STOP",
+        "MTG_GREEDY_PUMP_LETHAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

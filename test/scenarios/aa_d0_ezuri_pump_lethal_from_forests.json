@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "THE GREEDY POLICY TAKES AN AFFORDABLE LETHAL TEAM PUMP (MTG_GREEDY_PUMP_LETHAL, 2026-10-21). Smoke d0 s1001 gi990",
+    "T6: Arbor Elf, Accomplished Alchemist, Elvish Harbinger and Ezuri, Renegade Leader can attack (6 power) into 17;",
+    "four Forests + Utopia Sprawl pay one Ezuri pump ({2}{G}{G}{G}: the four Elves +3/+3 = 18). The pump is spent at",
+    "combat by the converter (ApplyFirebreathing), never a main-phase action, and the greedy's win projection never",
+    "credited it -- so the depth-0 runner cast Weather the Storm and spent the two Staffs untapping Arbor Elf,",
+    "attacked for 3 and won T8. Depth 0 (the runner IS the greedy policy, the same Solve every playout runs). With",
+    "MTG_GREEDY_PUMP_LETHAL=0 there is no T6 win."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 17,
+  "opponent_library_size": 47,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {"name": "Forest"},
+    {"name": "Utopia Sprawl", "equips": "Forest", "color": "G"},
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Arbor Elf", "sick": false},
+    {"name": "Accomplished Alchemist", "sick": false},
+    {"name": "Elvish Harbinger", "sick": false},
+    {"name": "Ezuri, Renegade Leader", "sick": false},
+    {"name": "Staff of Domination"},
+    {"name": "Staff of Domination"}
+  ],
+  "hand": ["Weather the Storm"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "expect_win_turn": 6
+}
