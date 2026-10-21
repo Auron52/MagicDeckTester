@@ -23,6 +23,7 @@
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
 #include "core/EffectHandler.h"
+#include "core/EnvFlags.h"
 #include "core/GameState.h"
 #include "core/OpponentDeck.h"
 #include "core/HeuristicDefaults.h"
@@ -2885,6 +2886,26 @@ TEST_CASE("Discard buckets, PROPOSED amendment (default OFF): Staff of Dominatio
                                  "Stroke of Genius", "Forest", "Forest", "Forest" });
     { StaffArm a(0); CHECK(ShedOneAa(s) == "Staff of Domination"); }
     { StaffArm a(1); CHECK(ShedOneAa(s) == "Crab Umbra"); }
+}
+
+TEST_CASE("Harbinger rule, PROPOSED (default OFF, env-only): MTG_AA_HARB_WITCH_FALLBACK_FIRST keeps the Witch first in the fallback")
+{
+    // Nothing lacking (a Staff fills Untap and Wincon): the USER's 2026-10-21 rule lists Ezuri first; the proposed
+    // amendment keeps the 2026-10-20 order there. Env-only and process-static, so this asserts whichever arm the
+    // process runs (run it once with MTG_AA_HARB_WITCH_FALLBACK_FIRST=1 to exercise the ON branch).
+    HarbArmAa on(1);
+    GameState s = HarbAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Staff of Domination");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    if (EnvOn("MTG_AA_HARB_WITCH_FALLBACK_FIRST"))
+    { ExpectHarbAa(s, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }); }
+    else { ExpectHarbAa(s, { "Ezuri, Renegade Leader", "Seedcradle Witch", "Arbor Elf" }); }
+    { HarbWitchArmAa off(0); ExpectHarbAa(s, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }); }
+    // Only the fallback moves: a lacking Wincon still ranks the Witch after Ezuri.
+    GameState w = HarbAa();
+    HandAa(w, "Accomplished Alchemist"); HandAa(w, "Crab Umbra");
+    for (int k = 0; k < 4; ++k) { PutAa(w, "Forest"); }
+    ExpectHarbAa(w, { "Ezuri, Renegade Leader", "Seedcradle Witch" });
 }
 
 TEST_CASE("Harbinger rule: the Witch for a lacking wincon (USER 2026-10-21, default ON); the Alchemist as the default (PROPOSED, OFF)")

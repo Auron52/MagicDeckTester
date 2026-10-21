@@ -43320,7 +43320,15 @@ static std::vector<std::string> AaHarbingerSet(const GameState& s, int controlle
     const bool want[4] = { false, untap_lacking || (witch_win && win_lacking), win_lacking, c.mana < 4 };
     for (int k = 0; k < 3; ++k) { if (want[ord[k]] && !by_role[ord[k]].empty()) { out.push_back(by_role[ord[k]]); } }
     if (!out.empty()) { return out; }
-    for (int k = 0; k < 3; ++k) { if (!by_role[ord[k]].empty()) { out.push_back(by_role[ord[k]]); } }
+    // PROPOSED amendment (default OFF, the USER's call -- see the ledger, "USER: Seedcradle Witch as a win condition
+    // (2026-10-21)"): MTG_AA_HARB_WITCH_FALLBACK_FIRST keeps the Witch FIRST in the fallback (nothing lacking: a
+    // Staff of Domination held fills Untap and Wincon in every measured case), i.e. the 2026-10-20 order there.
+    // Measured: every one of the 19 smoke d0 games the 2026-10-21 rule changed is this fallback's default pick
+    // (14 slower / 5 faster with Ezuri first), as is the one rule-driven searched slower game (s70001 g192).
+    // Env-only (a single-arm proposal; give it a heurarm slot if it is ever A/B'd beside other arms).
+    static const bool s_fb_first = EnvOn("MTG_AA_HARB_WITCH_FALLBACK_FIRST", false);
+    const int* fb = s_fb_first ? kOrdUntap : ord;
+    for (int k = 0; k < 3; ++k) { if (!by_role[fb[k]].empty()) { out.push_back(by_role[fb[k]]); } }
     return out;
 }
 
