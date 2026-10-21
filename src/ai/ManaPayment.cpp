@@ -1789,6 +1789,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                             pain = has_c ? 0 : 1;
                         }
                     }
+                    // MTG_PAY_ENERGY_LAST: an energy-paid colour (Aether Hub) is banded with pain; its {C}
+                    // mode (a generic pip) costs nothing and is not.
+                    if (pay_pain_last && def->params.energy_per_colored_tap > 0 && PayEnergyLastOn()
+                        && !any && needed != Color::Colorless) { pain = 1; }
                     if (pay_narrow_first && def->params.colored_creature_only
                         && def->params.colored_creature_ability_ok) { broad = 1; }
                 }
@@ -2109,7 +2113,9 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (!m) { continue; }
                     int r = ResolveProvider(state).ManaSourceRank(state, *sd);
                     // MTG_PAY_PAIN_LAST: a feed is a coloured tap, so a pain source feeds last.
-                    if (pay_pain_last && sd->params.tap_self_damage > 0) { r += kPainBand; }
+                    if (pay_pain_last && (sd->params.tap_self_damage > 0
+                                          || (sd->params.energy_per_colored_tap > 0 && PayEnergyLastOn())))
+                    { r += kPainBand; }   // ...and an energy-paid colour likewise (MTG_PAY_ENERGY_LAST)
                     // Sac-fodder-first, same bias as the direct-source loop above.
                     if (g_pay_sac_victim != 0 && s.card.m_number == g_pay_sac_victim) { r = -1000; }
                     // Same depletion tiebreak as the direct-source loop above.

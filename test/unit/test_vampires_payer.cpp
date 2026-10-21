@@ -759,3 +759,99 @@ TEST_CASE("payer A/B gi1565: the promoted victim is the LEAST flexible best-band
         check(exec, "executor");
     }
 }
+
+// ---- MTG_PAY_ENERGY_LAST: an energy-paid colour is a costly mode too (EDF smoke d0 s1001 gi712) ----------
+// Pain-last alone ranked Aether Hub's energy colour as "painless" and spent the deck's single Hub energy
+// on Cloud of Faeries' {U} to save Yavimaya Coast's one life; on T3 there was no {W}{W} for Emiel and a
+// T4 win became a loss. Energy is banded / withheld with pain, so the historical order decides again.
+
+namespace
+{
+GameState FreshEdf()
+{
+    EnsureCardsVp();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 2;
+    s.players[0].life     = gamesetup::StartingLife();
+    s.players[1].life     = gamesetup::StartingLife();
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].energy_counters        = 1;   // Aether Hub's ETB energy
+    s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
+        ResolveHeuristicDefaultsPath("decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod")));
+    for (int k = 0; k < 20; ++k)
+    {
+        Card c = DefVp("Brushland").card;
+        c.m_number = 900 + k;
+        s.players[0].library.push_back(c);
+    }
+    return s;
+}
+ManaCost Blue1() { ManaCost c; c.blue = 1; return c; }
+ManaCost White1() { ManaCost c; c.white = 1; return c; }
+struct EnergyArm
+{
+    explicit EnergyArm(int v) { heurarm::t_arm[heurarm::PAY_ENERGY_LAST] = static_cast<std::int8_t>(v); }
+    ~EnergyArm() { heurarm::t_arm[heurarm::PAY_ENERGY_LAST] = -1; }
+};
+}   // namespace
+
+TEST_CASE("payer energy (greedy): a {U} off Aether Hub + Yavimaya Coast is the painland's, either order -- the Hub keeps its energy")
+{
+    for (int hub_first = 0; hub_first < 2; ++hub_first)
+    {
+        GameState s = FreshEdf();
+        int hub, coast;
+        if (hub_first) { hub = PutVp(s, "Aether Hub", 1); coast = PutVp(s, "Yavimaya Coast", 2); }
+        else           { coast = PutVp(s, "Yavimaya Coast", 2); hub = PutVp(s, "Aether Hub", 1); }
+        INFO("hub_first=" << hub_first);
+        REQUIRE(TapForCostDirect(s, Blue1(), /*for_creature=*/true));
+        CHECK(s.players[0].energy_counters == 1);
+        CHECK(s.players[0].life == gamesetup::StartingLife() - 1);
+        CHECK(TappedVp(s, coast));
+        CHECK_FALSE(TappedVp(s, hub));
+    }
+}
+
+TEST_CASE("payer energy (backtracker): the {U} solve keeps the Hub's energy")
+{
+    GameState s = FreshEdf();
+    PutVp(s, "Aether Hub", 1);
+    PutVp(s, "Yavimaya Coast", 2);
+    ManaPool produced;
+    REQUIRE(TapForCostBacktrack(s, Blue1(), /*for_creature=*/true, ManaPool{}, nullptr, nullptr,
+                                nullptr, 0, -1, 0, &produced));
+    CHECK(s.players[0].energy_counters == 1);
+}
+
+TEST_CASE("payer energy (greedy): lever off (MTG_PAY_ENERGY_LAST=0) is pain-last as it was -- the Hub's energy pays")
+{
+    EnergyArm arm(0);
+    GameState s = FreshEdf();
+    PutVp(s, "Yavimaya Coast", 2);
+    const int hub = PutVp(s, "Aether Hub", 1);
+    REQUIRE(TapForCostDirect(s, Blue1(), /*for_creature=*/true));
+    CHECK_MESSAGE(s.players[0].energy_counters == 0, "precondition: the =0 arm reproduces gi712's T2 payment");
+    CHECK(s.players[0].life == gamesetup::StartingLife());
+    CHECK(TappedVp(s, hub));
+}
+
+TEST_CASE("payer energy (lossless): when the Hub's energy is the ONLY {W}, every payer still spends it")
+{
+    {
+        GameState s = FreshEdf();
+        PutVp(s, "Aether Hub", 1);
+        PutVp(s, "Yavimaya Coast", 2);
+        CHECK(TapForCostDirect(s, White1(), /*for_creature=*/true));
+        CHECK(s.players[0].energy_counters == 0);
+    }
+    {
+        GameState s = FreshEdf();
+        PutVp(s, "Aether Hub", 1);
+        PutVp(s, "Yavimaya Coast", 2);
+        ManaPool produced;
+        CHECK(TapForCostBacktrack(s, White1(), /*for_creature=*/true, ManaPool{}, nullptr, nullptr,
+                                  nullptr, 0, -1, 0, &produced));
+        CHECK(s.players[0].energy_counters == 0);
+    }
+}

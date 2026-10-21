@@ -342,6 +342,22 @@ inline bool PayPainLastOn()
     return heurarm::Flag(heurarm::PAY_PAIN_LAST, env_on);
 }
 
+// MTG_PAY_ENERGY_LAST (2026-10-21; DEFAULT ON, =0 -> energy counts as painless) -- the amendment pain-last
+// needed once EldraziDisplacerFlicker met it: a coloured tap that spends ENERGY (Aether Hub,
+// energy_per_colored_tap) is a costly mode exactly like a damaging one. Life is nearly free against the
+// passive opponent while a Hub's energy is one coloured mana for the whole game, so "painless first"
+// spent it to save a life point: smoke edf d0 s1001 gi712 paid Cloud of Faeries' {U} with the Hub instead
+// of Yavimaya Coast, had no {W}{W} for Emiel on T3, and lost a T4 win. Every site that bands, withholds or
+// guards a damaging coloured mode for pain-last does the same for an energy-paid one (ManaPayment.cpp's
+// greedy key and filter feed, SpellEffects.cpp's painless-first pass and its trigger, the prepay
+// give-back guard); between the two, the historical ladder decides, as it did before pain-last. Only a
+// card with energy_per_colored_tap is touched (Aether Hub; EDF is the only deck running it).
+inline bool PayEnergyLastOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_ENERGY_LAST", true);
+    return PayPainLastOn() && heurarm::Flag(heurarm::PAY_ENERGY_LAST, env_on);
+}
+
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
 // Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's

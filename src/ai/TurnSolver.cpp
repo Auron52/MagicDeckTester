@@ -49783,7 +49783,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                                     /*tapped_mask=*/0, /*untapped_max=*/-1,
                                                     /*reserved_mask=*/trial, /*out_full_pool=*/&p2)
                                  && p2.wild == 0;
-                if (o2 && !(pain_guard && state.players[active].life < best_la))
+                if (o2 && !(pain_guard && state.players[active].life < best_la)
+                       && !(pain_guard && PayEnergyLastOn() && state.players[active].energy_counters < best_ea))
                 {
                     hold          = trial;
                     best_bf       = state.battlefield;

@@ -2852,7 +2852,15 @@ static thread_local bool g_bt_painless_pass = false;
 // the unrestricted pass behind it is complete.
 static int BtPainlessMode(const CardDefinition& d)
 {
-    if (!g_bt_painless_pass || d.params.tap_self_damage <= 0) { return 0; }
+    if (!g_bt_painless_pass) { return 0; }
+    // MTG_PAY_ENERGY_LAST: an energy-paid colour (Aether Hub) is withheld like a damaging one; the source
+    // keeps its free {C} mode (or is skipped when it has none).
+    if (d.params.tap_self_damage <= 0 && d.params.energy_per_colored_tap > 0 && PayEnergyLastOn())
+    {
+        for (Color c : d.params.produces) { if (c == Color::Colorless) { return 1; } }
+        return 2;
+    }
+    if (d.params.tap_self_damage <= 0) { return 0; }
     bool has_colour = false, has_c = false;
     for (Color c : d.params.produces)
     { if (c == Color::Colorless) { has_c = true; } else { has_colour = true; } }
@@ -2878,7 +2886,9 @@ static bool BoardHasPainfulColourSource(const GameState& state, std::uint64_t re
         if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
         if (i < 64 && (reserved_mask & (1ull << i))) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr || d->params.tap_self_damage <= 0) { continue; }
+        if (d == nullptr) { continue; }
+        if (d->params.tap_self_damage <= 0
+            && !(d->params.energy_per_colored_tap > 0 && PayEnergyLastOn())) { continue; }   // MTG_PAY_ENERGY_LAST
         for (Color c : d->params.produces) { if (c != Color::Colorless) { return true; } }
     }
     return false;
