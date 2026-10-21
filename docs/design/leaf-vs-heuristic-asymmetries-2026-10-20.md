@@ -190,7 +190,7 @@ the gap is that a unit of TREE work (state keys, enumeration, activation keys) c
 ROLLOUT work, and the emulated ladder trades rollouts for tree. At ~1.10x real cost it is level with live, not ahead.
 (Ir per unit also swings by game: one 202k-unit game took a 24-game live sample to 144k Ir/unit.)
 
-### 7. Move ORDER: `MTG_ID_ORDER_HINT` (DEFAULT ON below the pass root) -- and the root tie-break (USER's call)
+### 7. Move ORDER: `MTG_ID_ORDER_HINT` (DEFAULT ON) -- and the root tie-break (`MTG_ID_HINT_ROOT=3`, DEFAULT since 2026-10-21)
 
 `MTG_ORDER_ORACLE=1` (diagnostic) replays every completed ladder pass from snapshots of its TT and budget on fresh
 memos: as recorded (reproduces the pass exactly: 0 unit and 0 win-turn mismatches in 2,215 passes), best-first by the
@@ -293,21 +293,48 @@ emulated + model root b15 / b20 / b25 = 0.842x -0.0063 / 1.004x -0.0215 / 1.133x
 gate commits deeper rollout passes that cost more and play worse than the cheaper depth the low R picks. The frozen
 R stays.
 
+**The model is what wins -- not cheaper warm-ups (USER question 2026-10-21: "Is this decidedly better than using no
+leaf for the earlier rollouts?").** Same held-out games (seeds 860000-867000 x 500, `logs/tgt/warm/`), vs live b20
+without the hint; leafless warm-ups at the default root rule (=3: a leafless hint is not the model's, so only the
+interior hint acts) and with the root always hinted (=1, its own best root tie-break):
+
+| emulated ladder, warm-ups on | b15 | b20 | b25 |
+|---|---|---|---|
+| **value model** (adopted) | 0.785x **-0.0227** | 0.929x **-0.0355** | 1.040x **-0.0465** |
+| no leaf, root =3 | 0.811x +0.0105 | 0.964x -0.0043 | 1.074x -0.0177 |
+| no leaf, root =1 | 0.771x +0.0083 | 0.911x -0.0045 | 1.014x -0.0180 |
+
+Paired at b20, model vs leafless warm-ups: -0.031 turns (140 faster / 15 slower, t -10). A leafless warm-up scores
+every line without an in-horizon win the same, so its "best plan" is just the static order's first and its hint
+carries nothing to the root; the model's ranking of those lines is the whole tie-break.
+
+**Mode 3 also moves the hybrid's ESCALATION** (a rollout pass after the value probe, in the same decision) where it
+escalates -- rarely at play settings (0 of 12,800 games above), often at the suite's d3 coverage cells, whose
+`value_trust_depth` exceeds the search depth. Held-out d3 b10, all 35 decks x 400 games, =3 vs =0: Landfall -0.0225
+(16/7); every other deck 0 games moved except Creature Giving -0.0025 (1 faster) and FiveColour +0.0025 (s880033, T5 ->
+T6, churn: T5 at 4x and 16x). Tiers: smoke 3 slower (all churn) / 1 faster, regression Hinata d3 2 slower (1 churn)
+/ Creature Giving 1 faster -- accepted with the change.
+
 **The other shapes with the root hint** (2,000 paired games, seeds 860000-863000, vs live b20; `logs/tgt/oo/alt.*`):
 staged b10 1.05x -0.047, b15 1.30x -0.0525 (about level with live + root hint's curve, behind the emulated ladder);
 leafless FIT (strict gate) b20 0.96x **+0.049**; leafless escalation b10 0.81x +0.050, b20 1.23x +0.004 -- still well
 behind: a leafless tree has no incumbent to prune against, and the hint cannot give it one.
 
-## Open USER decisions
+## USER decisions
 
-1. **`MTG_ID_HINT_ROOT=3` as the default** (the learned model breaks the rollout's ties at the committed decision).
-   It moved 0 of 12,800 games across all 35 shipped decks, so it changes nothing that ships today; it is what makes
-   the emulated ladder the strongest shape on Landfall. The other root rules (`=1` always, `=2` stable) each fail the
-   every-deck bar on one deck (Bruna; FiveColour) -- rollout-on-rollout tie-breaks between ESTIMATED ties.
-2. **Landfall: adopt the emulated-ladder sidecar** (model + `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6,
-   2.6]}`) together with (1): -0.0355 at b20 for 0.93x the default's units (the default with the interior hint:
-   -0.0015 at 0.94x). Without (1) it is ~0.006 ahead in units and level in instructions. (emul_r re-measured with the hint
-   plays worse -- section 7 -- so the frozen one stays.)
+**Decided 2026-10-21** (USER: *"Okay, let's give it a try with the new setting."*):
+
+1. **`MTG_ID_HINT_ROOT=3` is the default** (the learned model breaks the rollout's ties at the committed decision).
+   It moved 0 of 12,800 games across all 35 shipped decks; it is what makes the emulated ladder the strongest shape
+   on Landfall. The other root rules (`=1` always, `=2` stable) each fail the every-deck bar on one deck (Bruna;
+   FiveColour) -- rollout-on-rollout tie-breaks between ESTIMATED ties. `=0` restores the interior-only hint.
+2. **Landfall ships the emulated-ladder sidecar** (`decks/Landfall/Landfall.value.json`: the model + `value_play
+   {ladder: "emulated", emul_r: [11.3, 6.6, 4.6, 2.6]}`, the measured file byte-for-byte apart from a provenance
+   note): -0.0355 at b20 for 0.93x the default's units and 0.996x its instructions (the default with the interior
+   hint: -0.0015 at 0.94x). The frozen `emul_r` stays (re-measured with the hint it plays worse -- section 7).
+
+**Still open:**
+
 3. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point,
    and add the emulated shape (with R measured in-pipeline) to its arms.
 4. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.

@@ -70649,6 +70649,8 @@ inline thread_local int            g_oo_mode = 0;   // 0 none, 1 record, 2 oracl
 // static order's plan and play moves only through the budget it frees. Measured 2026-10-21, Landfall b20, 200 games,
 // exact replays of 2,211 passes: 0 root-plan and 0 win-turn differences from the static order, 0.928x the units
 // (0.947x the whole game). With the root included it was 0.834x -- and a different committed plan in ~12% of passes.
+// The one exception (MTG_ID_HINT_ROOT default 3, USER 2026-10-21): a rollout pass's root takes a hint a LEARNED-MODEL
+// pass recorded, so the model breaks the rollout's ties (Landfall's emulated ladder; no other shipped deck moves).
 // One map per DECISION (IdHintScope at the decision roots), so a hint never crosses into another decision.
 // CAPPED (MTG_ID_HINT_CAP entries per decision, default 262144 -- ~25 MB a thread): an unbudgeted search can
 // complete millions of nodes, and only a pass's predecessor is ever read, so the shallow passes -- recorded
@@ -73220,8 +73222,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // goes first. Recorded indices are in the STATIC order, so a node whose `pre` something else re-sorted (the
     // value beam, the order oracle) neither reads nor writes a hint. bp_base is remapped through the rotation.
     const bool idh_static_order = !order_perturbed && g_oo_mode != 2 && g_oo_mode != 4;
-    // NOT AT A PASS ROOT (MTG_ID_HINT_ROOT, default OFF). The root is the committed decision, and the hint's tie-break
-    // is wrong there often enough to matter: Bruna s880019 T1, pass 3's best was to play NOTHING (a greedy rollout
+    // NOT AT A PASS ROOT unless a learned model recorded the hint (MTG_ID_HINT_ROOT, DEFAULT 3 = "model", USER
+    // 2026-10-21). The root is the committed decision, and a rollout-recorded hint's tie-break is wrong there often
+    // enough to matter: Bruna s880019 T1, pass 3's best was to play NOTHING (a greedy rollout
     // found a T4 win from it that pass 4 refutes -- both plans read T5 at depth 4), so the hinted root committed an
     // empty turn 1 and lost a turn (s880084: two). Below the root a tie only picks which line a node RETURNS: the
     // root's children keep their win turns, so the root still commits the static order's plan, and the search
@@ -73231,8 +73234,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // pass 4) the root keeps the static tie-break (the MTG_ID_HINT_STATIC_TIE machinery, armed for this node).
     // =3 ("model"): a ROLLOUT pass's root takes the hint only when a LEARNED-MODEL pass recorded it -- the model breaks
     // the ties the rollout cannot separate (the emulated ladder's value warm-ups, the hybrid's value probe); a
-    // rollout-recorded hint, and every deck without a model, keeps the static root.
-    static const int s_idh_root = EnvInt("MTG_ID_HINT_ROOT", 0);
+    // rollout-recorded hint, and every deck without a model, keeps the static root. Measured: 0 of 12,800 games moved
+    // across the 35 shipped decks; Landfall's emulated ladder -0.0355 turns at b20 for 0.996x the instructions of the
+    // pre-hint default. =0 restores the interior-only hint (the static root everywhere).
+    static const int s_idh_root = EnvInt("MTG_ID_HINT_ROOT", 3);   // DEFAULT 3 (model); 0 interior only, 1 always, 2 stable
     const bool idh_on = (g_idh_map != nullptr && lc != nullptr && g_rollout_nest == 0 && idh_static_order && !beam_here
                          && (!bp_root || s_idh_root >= 1));
     int idh_prev_win = max_turns + 1;   // the hinted plan's win turn one pass shallower

@@ -10,6 +10,10 @@ Branch/worktree: `landfall-analysis` @ `/workspaces/MagicDeckTester2/.claude/wor
 (cut from origin `8bdc9646`). The decklist was COPIED here; the user's original stays in the primary
 checkout untouched.
 
+**Status (2026-10-21):** the keep table shipped 2026-10-20; the value leaf shipped 2026-10-21 as the EMULATED ladder
+with the model's root tie-break (`MTG_ID_HINT_ROOT=3`) -- see "Value leaf ADOPTED" below. The 2026-10-17 status
+follows.
+
 **Status (2026-10-17):** Landfall is IN the regression suite, all three tiers with accepted GT
 (`6bed7c67`, 2026-10-16, smaller rows until the keep table; latest smoke + regression GT `2895f5a4`).
 The USER's cast order, land spots and 5i bucket discard landed default ON (`45640bdc`), then the Khalni
@@ -576,6 +580,30 @@ with a distinct number in case we choose to do condemnation later"*.
   b20 does not reach the T6 win that b30 finds.
 - **Owed after the value leaf:** re-bench all 10. If s5 still loses a turn, census the T3 decision on
   the search's own line (budget waste vs ordering) -- no probe could run alongside the generation.
+
+## Value leaf ADOPTED — the emulated ladder with the model's root tie-break (USER 2026-10-21)
+USER: *"Okay, let's give it a try with the new setting."* Two changes land together:
+- **`MTG_ID_HINT_ROOT` defaults to 3** (engine-wide): a rollout pass's root takes the iterative-deepening move-order
+  hint only when a learned-model pass recorded it, so the model breaks the rollout's ties at the committed decision.
+  It moved 0 of 12,800 held-out games across the 35 shipped decks; only a deck whose model passes feed a rollout
+  committing pass (Landfall's emulated ladder) is affected.
+- **`decks/Landfall/Landfall.value.json`**: the regenerated model (rows at commit 004e2dcab, 14,372 rows) with
+  `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6, 2.6]}`. Warm-up passes run on the model; the committing
+  pass runs on the greedy rollout leaf at the depth the all-rollout ladder would have reached (its start gate replayed
+  on reconstructed rollout costs: value-pass cost + R x leaves, R frozen per depth). The file is the measured
+  candidate (`logs/tgt/emulf/emulvf.value.json` in the lf-target worktree) apart from a `provenance.adopted` note.
+- **Measured** (held-out, play settings d5 b20, seeds 860000-867000, vs the default WITHOUT the move-order hint):
+  emulated + model root **-0.0355 turns** (161 faster / 19 slower) at 0.929x the units and **0.996x the callgrind
+  instructions**; the default with the interior hint is -0.0015 at b20 and -0.0155 at b25 (1.022x instructions). So
+  at equal real cost the adopted shape is ~0.02 turns faster. Full write-up:
+  `docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md` sections 6-7.
+- **Identity**: the shipped sibling sidecar with no env reproduces the measured arm byte-for-byte (seeds 860000 /
+  861000, 500 games each: digests f698d004bf5b40a2 / 263dc3cb1e072cfd, identical units).
+- **Reference re-bench** (owed above; `ref_bench.py --deck landfall`, forced opening hands): adopted **5.700**, 0/10
+  short, 3 faster than the human; the default it replaces (6ee07f660) 5.800 with s5 gi4 short (T7 vs the human's
+  T6). The adopted shape wins s5 gi4 on T6; the other nine are unchanged.
+- **Not measured**: the suite's d3 b10 cells (play settings are d5 b20). The keep table was generated before the
+  sidecar; regenerating it is the USER's call (mulligan-profile Rule 0).
 
 ## Screening input — stalls and running out of threats (USER 2026-10-16, DEFERRED to deck screening)
 After hand-playing 10 references (s1-s10): *"Surprisingly there were some really bad games in there
