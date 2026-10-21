@@ -1249,7 +1249,8 @@ OVERNIGHT_CASES=(
   "bruna 5 5005  300 20"
   "bruna 5 6006  300 20"
   "bruna 5 7007  300 20"
-  # edf: see the SMOKE block. ENTRY SET (Hinata's shape) until its keep table is adopted.
+  # edf: see the SMOKE block. Kept on the ENTRY SET (Hinata's shape) at its keep-table adoption (2026-10-21):
+  # at 6.2 s/game (d5 b20) it is the 2nd-costliest deck in the suite, and a heavy deck stays near Hinata's shape.
   "edf 0 4004 2000 0"
   "edf 0 6006 2000 0"
   "edf 0 8008 2000 0"
