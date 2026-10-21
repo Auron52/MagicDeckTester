@@ -82,6 +82,24 @@ Staff's draw. Elvish Harbinger tutors an Elf (Alchemist / Ezuri) to the top.
 | Brindle Boar | side | implemented (chunk A) | 2 | self-sac outlet + NEW sac_outlet_lifegain 4; gate = SelfSacOutletUseful (death payoff OR read lifegain); self-only victim now baked correctly (CanonicalSacVictim self_only) |
 | Stroke of Genius | main | implemented (chunk B) | 3 | NEW draw_target_player (+ targeting player): searched (target, X) cast variants via DrawXCandidates (opp = minimal lethal X only; self = cap/half/1..3 capped at library; human = all X); opponentdeck::ForcedDraw deck-out (decked at n >= library); shared PerformDrawX (executor ResolveDrawX + rollout); self = plain cantrip (site 3, IsSelfDrawXCast); DeckTouchesOpponentZones trait; fixtures aa_stroke_decks_opponent / aa_stroke_short_of_lethal. OPEN (user): the opponent prune drops non-lethal multi-turn deck-outs |
 
+## USER references (2026-10-20/21) -- 10 hand-played games; all replay, the search matches or beats every win turn
+
+The USER played `references/AccomplishedAlchemist/claude_s1..s9, s11` through the viewer (primary checkout, committed
+there: 810c8f37, a0c7bdf3, a8d0b374, c7651b23, 546c4135 with `test/ref_bench.json`). Two games drove engine changes:
+seed 2 (Ezuri on board, no way to pay its pump except the Alchemist "loop" option) -> "Pay as needed + combat
+finishers"; seed 10 (the Witch loop misused the mana) -> `MTG_UNTAP_PAY_SMART` + FIN-WITCH. One drove a viewer fix
+(9e9e9cb1): the X box silently clamped an over-max X (9 -> 8); it now refuses X above `max_x` and says why.
+
+* `test/viewer_protocol_check.py --only AccomplishedAlchemist` (primary 9e9e9cb1, Release): 10 / 10 ok. After the
+  pay-as-needed / combat-finisher / Witch-as-wincon changes: 7 ok + 3 repaired (decision points the references
+  predate), 0 play-drift / board-diverged / enum-gap.
+* `scripts/ref_bench.py --deck accomplishedalchemist`: 0 / 10 short; search mean win turn 4.80 vs the USER's 5.30.
+  The search is faster on s1 (-2), s4, s7, s8 (-1 each) and equal on the other six.
+* Max-X note (USER, s7 gi6): max_x 8 on T4 was right -- 13 mana (Sprawl Forest 2, Arbor Elf re-untaps it for 2 more,
+  3 Forests, Harbinger 1, the Alchemist 5 after Feed the Clan); Feed's 2 leaves 11 = X 8 + {2}{U}. The USER's typed 9
+  was silently clamped to 8 (recorded max 8 / chosen 8), which read as "9 accepted, max wrong" -- the viewer fix above.
+  Scratch: `build/scratch/aa/refcheck/`.
+
 ## USER: Seedcradle Witch as a win condition (2026-10-21)
 
 Branch `aa-witchwin` (worktree `.claude/worktrees/aa-witchwin`, forked from `aa-land` @ c49997f1), NOT pushed.
