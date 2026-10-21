@@ -70644,7 +70644,8 @@ inline thread_local int            g_oo_mode = 0;   // 0 none, 1 record, 2 oracl
 // CAPPED (MTG_ID_HINT_CAP entries per decision, default 262144 -- ~25 MB a thread): an unbudgeted search can
 // complete millions of nodes, and only a pass's predecessor is ever read, so the shallow passes -- recorded
 // first, and the ones a deep pass reads -- are the ones worth keeping. A full map stops admitting new keys.
-struct IdHint { int idx; int n; int win; };   // static index of the best plan, the plan count, its win turn
+struct IdHint { int idx; int n; int win; bool model; };   // static index of the best plan, the plan count, its win
+                                                         // turn, and whether the recording pass ran the learned model
 using IdHintMap = std::unordered_map<TranspositionTable::Key, IdHint, TranspositionTable::KeyHash>;
 inline thread_local IdHintMap* g_idh_map = nullptr;
 static inline bool IdOrderHintOn()
@@ -70652,13 +70653,13 @@ static inline bool IdOrderHintOn()
     static const bool env = EnvOn("MTG_ID_ORDER_HINT", true);   // DEFAULT ON (interior nodes only); =0 -> the static order
     return heurarm::Flag(heurarm::ID_ORDER_HINT, env);
 }
-static inline void IdHintRecord(const TranspositionTable::Key& k, int idx, int n, int win)
+static inline void IdHintRecord(const TranspositionTable::Key& k, int idx, int n, int win, bool model)
 {
     static const std::size_t cap = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ID_HINT_CAP", 262144)));
     IdHintMap& m = *g_idh_map;
     IdHintMap::iterator it = m.find(k);
-    if (it != m.end()) { it->second = { idx, n, win }; return; }
-    if (m.size() < cap) { m.emplace(k, IdHint{ idx, n, win }); }
+    if (it != m.end()) { it->second = { idx, n, win, model }; return; }
+    if (m.size() < cap) { m.emplace(k, IdHint{ idx, n, win, model }); }
 }
 struct IdHintScope   // installs this decision's hint map unless an enclosing decision root already did
 {
@@ -73219,10 +73220,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // MTG_ID_HINT_ROOT=1 hints the root too (its tie-break goes to the shallower pass's best); =2 ("stable") does so
     // only while that plan's win turn HELD at this depth -- if it got worse (Bruna's empty T1: T4 at pass 3, T5 at
     // pass 4) the root keeps the static tie-break (the MTG_ID_HINT_STATIC_TIE machinery, armed for this node).
+    // =3 ("model"): a ROLLOUT pass's root takes the hint only when a LEARNED-MODEL pass recorded it -- the model breaks
+    // the ties the rollout cannot separate (the emulated ladder's value warm-ups, the hybrid's value probe); a
+    // rollout-recorded hint, and every deck without a model, keeps the static root.
     static const int s_idh_root = EnvInt("MTG_ID_HINT_ROOT", 0);
     const bool idh_on = (g_idh_map != nullptr && lc != nullptr && g_rollout_nest == 0 && idh_static_order && !beam_here
                          && (!bp_root || s_idh_root >= 1));
     int idh_prev_win = max_turns + 1;   // the hinted plan's win turn one pass shallower
+    const bool idh_model_pass = !g_force_constant_leaf && FsLeafIsO1(state);   // this pass's leaf is the model
     int idh_rot = 0;   // static index rotated to the front (0 = none)
     if (idh_on && depth >= 2 && pre.size() > 1)
     {
@@ -73232,7 +73237,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (g_oo_mode != 0) { ooprobe::h_found.fetch_add(1, std::memory_order_relaxed); }
             const int idx = hit->second.idx;
             idh_prev_win = hit->second.win;
-            if (hit->second.n != static_cast<int>(pre.size()))
+            const bool root_veto = bp_root && s_idh_root == 3 && !(hit->second.model && !idh_model_pass);
+            if (root_veto) { /* static root: the hint was not the model's, or this pass is not a rollout pass */ }
+            else if (hit->second.n != static_cast<int>(pre.size()))
             { if (g_oo_mode != 0) { ooprobe::h_size_mm.fetch_add(1, std::memory_order_relaxed); } }
             else if (idx > 0 && idx < static_cast<int>(pre.size()))
             {
@@ -74143,7 +74150,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                             }
                             if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                             FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-                            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+                            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn, idh_model_pass); }
                             if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: the winning slot is this one
                             {
                                 node_vals.push_back(tail.win_turn);
@@ -74540,7 +74547,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
                 if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                 FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-                if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+                if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn, idh_model_pass); }
                 if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: node_vals already ends at this win
                 {
                     (*rec_map)[key] = node_vals;
@@ -74559,7 +74566,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         else
         {
             FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn, idh_model_pass); }
             if (g_oo_mode == 1 && rec_vals) { (*rec_map)[key] = node_vals; ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }
             return best;
         }
@@ -74567,7 +74574,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Store the probe's per-plan value ranks for this fully-evaluated node (loop completed = every plan
     // scored), so the escalation's beam can reorder by them. Win-node early-returns above skip this (they
     // don't need reordering). Overwrites are harmless (depth is folded into the key, so no cross-pass clash).
-    if (idh_rec && oo_best_idx >= 0 && !deferred_win) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+    if (idh_rec && oo_best_idx >= 0 && !deferred_win) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn, idh_model_pass); }
     if (rec_vals && !node_vals.empty() && !deferred_win)
     {
         if (g_oo_mode == 1) { ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }

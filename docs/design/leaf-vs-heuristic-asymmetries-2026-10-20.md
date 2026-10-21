@@ -267,6 +267,26 @@ value warm-up) and the committing pass's is the rollout's, so "got worse" fires 
 held-out: emulated + stable root b15 / b20 / b25 = 0.741x +0.0025 / 0.865x -0.0120 / 0.957x -0.0245, against
 -0.0375 / -0.0450 / -0.0535 with the root always hinted. (Live + stable root b20 is identical to live + root b20.)
 
+**`MTG_ID_HINT_ROOT=3` ("model"): the model breaks the rollout's ties, and nothing else does.** A rollout pass's root
+takes the hint only when a LEARNED-MODEL pass recorded it (`IdHint.model`); a rollout-recorded hint -- Bruna's and
+FiveColour's failures -- and every deck without a model keep the static root. All 35 decks held-out at play settings
+(`logs/tgt/oo/mdl/`, 12,800 paired games): **0 games moved** -- the shipped hybrids commit their value probe's own line
+almost always, so a model hint rarely meets a rollout root. Landfall's default reproduces the interior-only arm
+exactly (no model). Landfall's emulated ladder, held-out (4,000 paired games per arm, vs live b20 without the hint):
+
+| arm | units | win turn | faster / slower |
+|---|---|---|---|
+| live + interior hint b20 / b25 / b30 | 0.937x / 1.049x / 1.154x | -0.0015 / -0.0155 / -0.024 | 8/2, 65/3, 99/3 |
+| **emulated + model root b15 / b20 / b25** | **0.785x / 0.929x / 1.040x** | **-0.0227 / -0.0355 / -0.0465** | 140/49, 161/19, 196/10 |
+
+At equal units the emulated ladder is ~0.031-0.034 turns ahead of the default; its b15 matches the default's b30
+at 32% fewer units. (Most of the always-root emulated gain, with half the slower games.)
+**In instructions** (callgrind, the same 200 held-out games as above, `logs/tgt/oo/cg4/`, vs live b20 without the
+hint): live + interior hint b20 **0.898x**, b25 **1.022x**; **emulated + model root b20 0.996x** (108.3k Ir per unit
+against live's 102k). So at 0.975x the instructions of live + interior hint b25, the emulated ladder with the model's
+root tie-break is **0.020 turns faster** (-0.0355 vs -0.0155); at 1.108x live + interior hint b20 it is 0.034 faster.
+The default no longer wins at equal real cost -- the learned-leaf alternative does.
+
 **The other shapes with the root hint** (2,000 paired games, seeds 860000-863000, vs live b20; `logs/tgt/oo/alt.*`):
 staged b10 1.05x -0.047, b15 1.30x -0.0525 (about level with live + root hint's curve, behind the emulated ladder);
 leafless FIT (strict gate) b20 0.96x **+0.049**; leafless escalation b10 0.81x +0.050, b20 1.23x +0.004 -- still well
@@ -274,16 +294,14 @@ behind: a leafless tree has no incumbent to prune against, and the hint cannot g
 
 ## Open USER decisions
 
-1. **The root tie-break** (`MTG_ID_HINT_ROOT`; default 0 = the static order breaks ties at the committed decision).
-   `=1`: ties go to the shallower pass's best -- pooled -0.0020 over 26 decks (Landfall -0.030, Melira -0.025, Kitty
-   -0.0175), Landfall's emulated ladder -0.045 at b20 (the model breaks the rollout's ties), but Bruna +0.015 (an empty
-   T1 from an over-optimistic shallow rollout). `=2` (stable): Bruna fixed, pooled -0.0008 over all 35, FiveColour
-   +0.0025 (one estimated tie), and the emulated ladder's root gain mostly lost. Neither clears the every-deck bar;
-   the principled form is a tie-break on a finer estimate (the model's milliturns) -- unbuilt.
-2. Landfall: adopt the emulated-ladder sidecar (model + `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6,
-   2.6]}`)? With the interior hint alone it is ~0.006 turns ahead of live at equal units (level in instructions);
-   with the root hinted it is the strongest arm measured (-0.045 at 0.87x units, b20). Separately, the budget: with
-   the interior hint, b25 is -0.015 for 1.05x units. (emul_r was measured without the hint.)
+1. **`MTG_ID_HINT_ROOT=3` as the default** (the learned model breaks the rollout's ties at the committed decision).
+   It moved 0 of 12,800 games across all 35 shipped decks, so it changes nothing that ships today; it is what makes
+   the emulated ladder the strongest shape on Landfall. The other root rules (`=1` always, `=2` stable) each fail the
+   every-deck bar on one deck (Bruna; FiveColour) -- rollout-on-rollout tie-breaks between ESTIMATED ties.
+2. **Landfall: adopt the emulated-ladder sidecar** (model + `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6,
+   2.6]}`) together with (1): -0.0355 at b20 for 0.93x the default's units (the default with the interior hint:
+   -0.0015 at 0.94x). Without (1) it is ~0.006 ahead in units and level in instructions. (emul_r was measured without
+   the hint; re-measuring it is cheap.)
 3. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point,
    and add the emulated shape (with R measured in-pipeline) to its arms.
 4. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.
