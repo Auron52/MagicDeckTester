@@ -739,6 +739,126 @@ Validation (binary 3ace089d; built pinned to cores 24-31 beside the running mull
   Net <= 0 on both cells and no dearer (ms is heavily contended: the generation owned the box). Three slower games
   (two distinct) -- a handful, so not 10x-classified. Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-ez/`.
 
+#### The two slower games (gi111, gi179) -- root-caused 2026-10-21, branch `aa-ezslow`; FIX `MTG_AA_ROUTE_MAIN_FIRST` (ON)
+
+Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-ezslow/` (`bisect.*`, `g179*` / `g111*` traces, `fx/`, `ab/`
+the pooled A/B + `an.py`, `d8/`). Binary 846135c7 for the diagnosis.
+
+**Bisect** (single games; "on - X" = all three levers on except X):
+
+| game / cell | off | on | on - PUMP | on - SMART | on - COMBAT | PUMP only | SMART only | COMBAT only |
+|---|---|---|---|---|---|---|---|---|
+| gi179 d3 b10 / d3 b100 | 6 / 5 | 7 / 7 | 7 / 7 | 7 / 7 | **6 / 5** | 6 / 5 | 6 / 5 | **7 / 7** |
+| gi111 d5 b20 / d5 b200 | 6 / 6 | 7 / 7 | 7 / 7 | 7 / 7 | 7 / **6** | **7** / 6 | 6 / 6 | 7 / **7** |
+
+`MTG_UNTAP_PAY_SMART` is inert on both. **gi179 is `MTG_AA_COMBO_COMBAT` alone** (its "on - COMBAT" is the off
+arm's digest byte-for-byte); **gi111 is `MTG_AA_COMBO_COMBAT` at b200** and, at b20, also `MTG_AA_LOOP_FUNDED_PUMP`
+alone (below). At `--depth 8 --budget-ms 0` both arms tie: gi179 off T5 / on T5, gi111 off T6 / on T6.
+
+**Where they diverge.** Both at TURN 2, through the search's valuation of a line whose deeper Combo Off route the
+combat lever made unprovable:
+* **gi179**: the T2 Elvish Harbinger tutor. Off DECLINES (keeps Weather the Storm on top; `[fs-root]` tails:
+  fetch-Alchemist T7, decline **T6**); on fetches Accomplished Alchemist to the top, because the decline line now
+  reads **T9**. In that line's turn-7 rollout board (Forests, Arbor Elf, Harbinger, Alchemist, Ezuri on the
+  battlefield; Staff x3, Feed the Clan, Stroke in hand; opponent 18) off plays Combo Off (Staff + Feed the Clan ->
+  the Staff loop -> Stroke at the opponent), on plays Stroke at itself and wins T8.
+* **gi111**: the T2 main. Off plays land-only (tail **T6**), on casts Weather the Storm for nothing (the land-only
+  tail reads T7, ties Weather's T7, and Weather is first). The land-only line's T6 board (Forests + Sprawl, the
+  Alchemist; Weather, Ezuri, Crab Umbra, Staff in hand; a Stroke 20 cards down) has a 6-link route off proves
+  (Weather, Umbra off the Alchemist's blue, the Staff, its gain, the Umbra loop drawing to the Stroke, Stroke: 60
+  applies) and on does not.
+
+**The mechanism: the combat walk is not a superset of the main-phase walk** (`MTG_AA_ROUTE_TRACE=2`, a new
+print-only NODE line: board, hand, float, the loop's need):
+* gi179 -- **a pump need that the board "already funds" with its own attackers.** With the combat finishers live
+  the walk's loop funds the cheapest kill, and Ezuri's pump x1 (MV 5: Arbor Elf, Harbinger, the Alchemist and Ezuri
+  counted as attackers by `TeamPumpLethalCount`) beats Stroke (MV 50). `UntapLoopWorthOffering` then sees the board
+  pay MV 5 -- with those same Elves' mana -- and offers NO loop; so after Staff + Feed the Clan there is no LOOP plan
+  at all and the Stroke kill is never tried (off: need = Stroke, LOOP #10, KILL, 3 applies).
+* gi111 -- **width.** The walk admits every Ezuri cast as a setup; with Ezuri in hand it spent its whole bound (128
+  applies) on Ezuri variants and never reached the 6-link Stroke dig.
+
+Neither is a plan-vs-real mismatch (no `!! APPLY replay` line in either game), a payment fault (`MTG_UNTAP_PAY_SMART`
+inert) or a scoring tie at the decision itself: the lever REMOVED routes the shipped-first walk proved.
+
+**The fix -- three commits.** (1) 606e50f1: the walk runs its **main-phase pass first** -- exactly the
+`MTG_AA_COMBO_COMBAT=0` walk: no pump need, no Ezuri setup, `OpponentHasLost` the verdict -- and only if that pass
+proves nothing, the combat pass; a verdict records its pass and every replay (probe, re-walk, apply) runs in that
+pass's scope. The route set is the UNION of both walks. Heurarm slot `AA_ROUTE_MAIN_FIRST` (`MTG_AA_ROUTE_MAIN_FIRST`,
+default ON; =0 the combat pass alone). (2) cf92fc8b: the main-phase pass runs only where the two passes can differ
+(`PassesCanDiffer`: a team pump or a pump untapper on our battlefield, in hand, behind a Living Wish in the sideboard,
+or in the library when no one-step payoff is there); elsewhere the combat pass already contains it -- an identity
+fold. (3) ebf30946: `g_untap_loop_no_pump` folded into the breakpoint continuation cache key (`BpEnumBuildKey`).
+Smoke found it: three d0 games (s1001 gi16 / gi780 / gi964) went T7 -> T8 / unwon / T8, because the main-phase pass
+filled continuation entries (its loop need, without the pump) that the combat pass on the same board was then SERVED
+-- gi16's combat pass proves a kill fresh (3 links, 48 applies) and failed after a main-phase pass (128 applies).
+The batch-pool rule applies: a scope that changes a memoised answer is hashed into the key. Folded only when set,
+so ordinary frames, the combat pass and every other deck key exactly as before; all three games are back to T7.
+New fixtures `aa_co_15` (gi179's T7 board) and `aa_co_16` (gi111's T6 board): PASS, FAIL with the lever =0.
+
+**A/B** (pooled, s70001 x 200, arms via heurarm: off = the three levers off; on = the three on, fix off; fix = all
+on; unwon = 9). The first batch (1,209 games, 8 threads, load ~70) ran all three arms at 606e50f1; the off and fix arms
+were re-run at ebf30946 (806 games, 6 threads) -- off byte-identical in every chunk, fix with the same win turn in
+every game (1 chunk play digest moved); the on arm cannot move (with the lever =0 the scope is never set):
+
+| cell | off | on | fix | fix vs off (faster / slower) | on vs fix | units mean off / on / fix |
+|---|---|---|---|---|---|---|
+| s70001 d3 b10 | 5.2850 | 5.2600 | **5.2500** (-0.035) | 7 / **0** | fix faster in 1 (gi179 7 -> 5), 199 same | 79.1k / 78.4k / 78.1k |
+| s70001 d5 b20 | 5.2450 | 5.2250 | **5.2150** (-0.030) | 7 / 1 (gi111 6 -> 7) | fix faster in 1 (gi179 7 -> 5), 199 same | 147.4k / 146.5k / 146.1k |
+
+The six faster games of the original A/B are kept in both cells (fix vs off: the six + gi179). The 10x jobs in the
+same batches: gi179 d3 b100 / d5 b200 off 5 / on 7 / **fix 5**; gi111 d5 b200 off 6 / on 7 / **fix 6** (the off
+arm's digest). Mean ms (contended; the route walk is not metered in units): first batch d3 13.0 / 13.1 / 14.6 s,
+d5 17.5 / 18.0 / 20.6 s (606e50f1, ungated); re-run d3 8.0 / - / 8.6 s, d5 15.3 / - / 15.6 s (ebf30946).
+
+**The gate, verified** (cf92fc8b replaying the fix arm's 400 games): every win turn identical (9 games moved by
+<= 460 units, 2 of 16 chunk play digests -- the skipped duplicate walks no longer warm shared caches). Walk cost on
+d3 b10 gi 0-49 (`MTG_AA_ROUTE_STATS`, before the key fold; applies are contention-free): on 660.7k applies, fix
+ungated 1,268.0k (1.92x), **fix gated 951.9k (1.44x)**; a probe running the COMBAT pass first and the main-phase pass
+only when it fails -- the same union -- 864.4k (1.31x), keeping the shipped line wherever the shipped walk won (its
+gi 25-49 play digest equals the on arm's). Not shipped: main-first is what the A/B measured, and it prefers the kill
+that has LANDED in main 1 over one that needs the combat to follow (USER question below).
+
+**The one game the fix does not recover -- gi111 at d5 b20 -- is `MTG_AA_LOOP_FUNDED_PUMP`, a budget trade-off,
+not a defect.** PUMP alone diverges at T4: off casts Stroke X=1 + Sprawl, PUMP casts Weather + Sprawl. At the T4 root
+the Stroke line's breakpoint child reads T7 off and **T9** with PUMP (mode-4 loop-funded pump candidates cost the
+child's subtree its budget), so Weather's T7 wins; it plays to T7 where off's line wins T6. It recovers at 10x
+(PUMP alone T6 at b200; fix T6 at b200) and at `--depth 8 --budget-ms 0` (T6). A budget may re-price work; nothing
+became unfindable.
+
+**Open (not fixed here; both arms): the pump need's double count lives outside the walk too.** On the gi179 T7
+board the ordinary search (`g_untap_loop_no_pump` = 0 in every arm) also has need = Ezuri x1 and no loop offered,
+so its own Stroke line is missing; the route is what covered it, in the off arm. The sound fix is in
+`UntapLoopWorthOffering`: for a pump payoff the board "already funds it" only from sources that are not the
+attackers `TeamPumpLethalCount` counted. It changes play with every lever off, so it needs its own A/B.
+
+**Validation.** Final build ebf30946: mtg-test 1617 / 1617; scenarios 245 / 245; combo-off fixtures 50 / 50
+(34 EDF + 16 AA; the two new ones fail with `MTG_AA_ROUTE_MAIN_FIRST=0`); no `!! APPLY replay` line in any of the
+~2,400 A/B, gate and smoke-row games. Smoke (cf92fc8b, `MTG_PGO=0`, 6 threads, NOT accepted): 124 / 132 -- the four known
+pre-existing moves at their known digests (selesnya d3 a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0
+ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11), every other deck byte-identical, and the four alchemist rows, whose GT
+predates the pay-as-needed levers and the Witch rule (never accepted). What the FIX moves on those rows -- the same
+binary with `MTG_AA_ROUTE_MAIN_FIRST` =0 vs =1, re-run on ebf30946 (the key fold cannot touch other decks: only the
+walk sets the scope):
+
+| row | lever =0 (as shipped) | fix (ebf30946) | per game |
+|---|---|---|---|
+| alchemist d0 | 7.0760 / 87fe2d52050de8af | **7.0640** / a8140e496846a0a6 | 9 faster / **0 slower** (cf92fc8b, before the key fold: 7.0660, 10 / 3) |
+| alchemist d3 | 5.3933 / b9bae1a6cfc0a5b6 | 5.3933 / 532b5f2be8bae56c | win turns identical (play only) |
+| alchemist d5 | 5.2000 / 6301cee5a8a3b7e7 | 5.2000 / 8208c839c4c4eb9a | win turns identical (play only) |
+| alchemist 2HG d3 | 5.4600 / e9c1958b6ee17d84 | 5.4600 / aabfb7930f7e42d1 | win turns identical (play only) |
+
+Cost at d0, where the walk is nearly all the work: 1,000 games 3.1 s -> 10.4 s of core time (the main-phase pass on
+boards with Ezuri / the Witch around); at the shipped cells the re-run's mean ms is +7% (d3 b10) and +2% (d5 b20)
+over off on a contended box, units unchanged. The combat-first order (the probe row above) is the cheaper shape.
+
+**For the USER** (defaults taken, nothing blocked): (1) `MTG_AA_ROUTE_MAIN_FIRST` ships ON as a defect fix -- the
+combat finishers must never remove a route the main-phase walk proves; =0 restores the shipped walk. (2) Pass order:
+main-phase first (measured, shipped) vs combat first (the probe row: same union, ~9% fewer walk applies at d3, the
+shipped line kept wherever the shipped walk won; re-measure needed after the key fold) -- kept main-first; switching
+is a few lines plus one A/B. (3) The pump need's attacker / mana double count outside the walk (above) is a play
+change with every lever off -- not touched; it wants its own A/B if the USER wants it pursued.
+
 ## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
 
 Branch `aa-opt-mull` (from accomplished-alchemist @ 39848afe). Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/mopt/`
