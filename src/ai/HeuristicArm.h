@@ -586,6 +586,10 @@ enum Slot : int
     VAMP_MADNESS_COLOR_FOLD,  // MTG_VAMP_MADNESS_COLOR_FOLD  Vampires perf (2026-10-18, docs/design/vampires-search-cost.md): a madness CAST variant whose cost (with the outlet's own) the turn's OPTIMISTIC pool (AvailableManaPool + the ceiling's extra as wild) cannot pay in ANY colour is not emitted -- it would resolve as the decline it duplicates. Identity fold. DEFAULT ON; =0 -> the total-mana gate only
     VAMP_OUTLET_NOT_GROWTH,   // MTG_VAMP_OUTLET_NOT_GROWTH   Vampires perf (same doc): a DISCARD-cost sac outlet (Falkenrath Pit Fighter: draw two) no longer disarms OptimisticTurnMana's ceiling -- it adds no mana to the enumeration it is in (its draws reach only a breakpoint continuation, a new enumeration). Sound (the ceiling only prunes the never-payable). DEFAULT ON; =0 -> every sac outlet is growth
     VAMP_M2_PUMP_DISCARD_FOLD,// MTG_VAMP_M2_PUMP_DISCARD_FOLD Vampires perf (same doc): in the SECOND main a Stromkirk Condemned activation ("Discard a card: Vampires get +1/+1 until end of turn") whose discard is not cast for madness is DOMINATED by the same selection without it (combat is over; the card stays in hand) -- the subset walk rejects it unless the discard can empty the hand under a hellbent upkeep reader (Asylum Visitor), the hand can exceed seven at cleanup, the selection draws, or the card is a graveyard-landfall watcher (Bloodghast). Provider opt-in (PostCombatPumpDiscardFoldOptIn). DEFAULT ON; =0 -> every pin searched
+    LEAF_KILL_ONLY,           // MTG_LEAF_KILL_ONLY  Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent R): on the turn a rollout's cutoff ends, only a THIS-TURN kill can change its answer, so the per-turn solves there skip every candidate's next-turn rollout (same answer, same leaf entry; see LeafKillOnlyOn). SOUND, DEFAULT ON; =0 restores the full per-turn ranking
+    EXH_LEAF_MEMO,            // MTG_EXH_LEAF_MEMO  Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent R): once a pass has spent its decision budget, the leaf table stops storing no-wins (every later Exhausted() test binds), so a horizon leaf the pass reaches again is rolled out again. This memo keeps those spent-budget no-wins for the rest of the pass under its own namespace, read only while the same budget is still spent (and not overrun) -- the conditions under which a recompute returns the identical answer. Inert at an unlimited budget. SOUND, DEFAULT ON; =0 restores the recompute
+    KO_M2_NO_REACH,           // MTG_KO_M2_NO_REACH  Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent R): inside a kill-only rollout turn (MTG_LEAF_KILL_ONLY) the searched second main exists only to find a kill; a deck whose provider vouches that its post-combat main can never make the opponent lose (DecisionProvider::PostCombatCannotKillOptIn -- Vampires) does not search it there. Exact under the deck's vouch. DEFAULT ON; =0 searches it
+    FSL_EDGE_NO_REACH,        // MTG_FSL_EDGE_NO_REACH  Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent R): at a full-line search node on its cutoff turn (an ancestor already holds a win, so only a kill THIS turn can matter, and the next turn is cut), the second-main branching exists only to find a post-combat kill; a deck whose provider vouches it has none (DecisionProvider::PostCombatCannotKillOptIn -- Vampires) skips it. Exact under the vouch. DEFAULT ON; =0 branches it
     COUNT
 };
 
@@ -1122,6 +1126,10 @@ inline const char* Name(int slot)
         "MTG_VAMP_MADNESS_COLOR_FOLD",
         "MTG_VAMP_OUTLET_NOT_GROWTH",
         "MTG_VAMP_M2_PUMP_DISCARD_FOLD",
+        "MTG_LEAF_KILL_ONLY",
+        "MTG_EXH_LEAF_MEMO",
+        "MTG_KO_M2_NO_REACH",
+        "MTG_FSL_EDGE_NO_REACH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

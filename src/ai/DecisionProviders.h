@@ -1125,6 +1125,15 @@ public:
     // cleanup's seven) are the engine's half. A card added to the list that reads the graveyard,
     // power after combat, or a discard must revisit this.
     bool PostCombatPumpDiscardFoldOptIn() const override { return true; }
+    // MTG_KO_M2_NO_REACH (Vampires search-cost round 2, docs/design/vampires-search-cost-2.md): the deck's
+    // vouch, checked card by card against Vampire.cod's MAINBOARD (2026-10-21): the opponent loses life only
+    // to combat damage. Lifelink (Vampire of the Dire Moon, Markov Baron, Mavren's tokens) gains OUR life;
+    // Asylum Visitor's upkeep loss and Voldaren Estate's pay-1-life are OURS; Pit Fighter / Blood / Anje-less
+    // loot draw; Captivating Vampire steals; Bloodline Keeper makes tokens; nothing mills or poisons the
+    // opponent and nothing grants an extra combat. The sideboard (Anje Falkenrath, Anje's Ravager,
+    // Worldfire) is not reachable in a game (no wish) -- and Worldfire would set life to 1, not 0. A card
+    // added to the list with any non-combat reach must revisit this.
+    bool PostCombatCannotKillOptIn() const override { return true; }
     // Vampires A1 (AGENT-DRAFTED, same lever): the madness default -- the base dominance rule (cast the
     // cheapest max-free option) except a graveyard-landfall card (Bloodghast) in a MAIN phase while this
     // turn's land drop is open and a land is in hand: DECLINE (it returns from the graveyard on that
