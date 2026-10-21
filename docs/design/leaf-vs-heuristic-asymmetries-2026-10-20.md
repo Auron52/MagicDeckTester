@@ -286,6 +286,12 @@ hint): live + interior hint b20 **0.898x**, b25 **1.022x**; **emulated + model r
 against live's 102k). So at 0.975x the instructions of live + interior hint b25, the emulated ladder with the model's
 root tie-break is **0.020 turns faster** (-0.0355 vs -0.0155); at 1.108x live + interior hint b20 it is 0.034 faster.
 The default no longer wins at equal real cost -- the learned-leaf alternative does.
+`emul_r` re-measured WITH the hint (per-game calibration, disjoint seeds 850000/851000, `logs/tgt/oo/emulr/`) reads
+[11.5, 6.9, 10.1, 30.1] -- the frozen [11.3, 6.6, 4.6, 2.6] under-states depths 3-4 by 2-10x -- yet it plays WORSE:
+emulated + model root b15 / b20 / b25 = 0.842x -0.0063 / 1.004x -0.0215 / 1.133x -0.0328, paired at b20 +0.014
+(23 faster / 79 slower) at 1.08x the units. The "accurate" R replays the heuristic gate more faithfully, and that
+gate commits deeper rollout passes that cost more and play worse than the cheaper depth the low R picks. The frozen
+R stays.
 
 **The other shapes with the root hint** (2,000 paired games, seeds 860000-863000, vs live b20; `logs/tgt/oo/alt.*`):
 staged b10 1.05x -0.047, b15 1.30x -0.0525 (about level with live + root hint's curve, behind the emulated ladder);
@@ -300,8 +306,8 @@ behind: a leafless tree has no incumbent to prune against, and the hint cannot g
    every-deck bar on one deck (Bruna; FiveColour) -- rollout-on-rollout tie-breaks between ESTIMATED ties.
 2. **Landfall: adopt the emulated-ladder sidecar** (model + `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6,
    2.6]}`) together with (1): -0.0355 at b20 for 0.93x the default's units (the default with the interior hint:
-   -0.0015 at 0.94x). Without (1) it is ~0.006 ahead in units and level in instructions. (emul_r was measured without
-   the hint; re-measuring it is cheap.)
+   -0.0015 at 0.94x). Without (1) it is ~0.006 ahead in units and level in instructions. (emul_r re-measured with the hint
+   plays worse -- section 7 -- so the frozen one stays.)
 3. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point,
    and add the emulated shape (with R measured in-pipeline) to its arms.
 4. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.
