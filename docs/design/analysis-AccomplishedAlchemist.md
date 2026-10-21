@@ -2689,3 +2689,45 @@ untappers) and makes question 1 moot; question 2 (Ezuri / Scholar before the lif
 LIFE_FIRST, which moves them behind it and is a near-tie; (c) g238, the one residual game that loses a turn even at
 10x budget in every arm (T2 Nourish instead of Staff of Domination off Sprawl + Wild Growth -- a valuation shift, no
 order mechanism found).
+
+## Mulligan profile (exhaustive keep table) -- ADOPTED (2026-10-21)
+
+**Generation.** `scripts/mullgen.sh run` (recipe `complete`, R=40) on worktree `aa-land`, play digest
+`0247ddf777fde4d8`, generation setting screened by the stage itself (`mull_gen_depth` 1, `mull_gen_budget_ms` 1,
+K=15, written into the profile's `value_play` block). Run 1 aborted at 5,700 s on the RSS cap (thread-local
+continuation scratch, fixed byte-identically in 326d9ee1 / c49997f1); run 2 resumed from the journal and finished
+2026-10-21 10:52 UTC after 56,400 s. Artifact: 71,620 entries, 78,358 sub cells, min rollouts 40, bottoming on.
+3,016 rollouts ran over 30 s (median 53 s, p90 161 s, max 2,084 s): the Combo Off route walk, which no budget
+meters -- see "Slow rollouts at the gen setting (2026-10-21)".
+
+**Validation (mullgen.sh's own gates, ACCEPTED).**
+
+| check | A | B | delta | seeds | mean/se |
+|---|---|---|---|---|---|
+| keep (static vs exhaustive), early stop | | | -0.428 t | 4/4 | -12.7 |
+| bottoming (lookahead vs blind exhaustive, confounded) | 5.2142 | 5.0545 | -0.160 t | 4/4 | -11.7 |
+
+**USER decisions (2026-10-21).** Leave the table as generated: later play changes do NOT trigger a regeneration.
+The value leaf comes only "after optimizing a bit"; it was launched overnight 2026-10-21 on the USER's
+instruction ("pull, optimize as needed and then launch the value-leaf").
+
+**Adoption** (primary, on the rebased + integrated branch: origin b08fa950 + the AA work + aa-ezslow / aa-slow /
+aa-castorder). The table and raw were COPIED from `aa-land` (gzipped; the originals stay in `aa-land`).
+`test/keep_adoption_attribution.py`: 0 unexplained changed games and both baselines reproduced, on every tier.
+
+| tier | different mulligan count | same count, different bottom | bottom order only | unchanged |
+|---|---|---|---|---|
+| smoke (alchemist + 2HG) | 657 | 103 | 2 | 463 |
+| regression | 699 | 108 | 4 | 639 |
+
+| key | before | with the table |
+|---|---|---|
+| smoke d0 / d3 / d5 | 6.905 / 5.340 / 5.160 | **6.331 / 4.993 / 4.973** |
+| smoke 2HG d3 | 5.420 | **5.220** |
+| regression d0 s2002 | 6.767 | **6.347** |
+| regression d3 s2002 / s3003 | 5.073 / 5.387 | **4.920 / 5.133** |
+| regression d5 s2002 / s3003 | 5.000 / 5.173 | **4.867 / 4.987** |
+
+Smoke + regression GT accepted deck-scoped with the attribution in the notes. **Overnight rows stay at the ENTRY
+shape** (as EDF, 04fabc8e2: a heavy deck), rather than being expanded to the FULL set at adoption. This was
+surfaced to the USER as their call; the alchemist overnight keys go stale until the next periodic overnight run.
