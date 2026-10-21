@@ -44533,18 +44533,29 @@ inline bool TraceBoardOn() { static const bool v = EnvInt("MTG_AA_ROUTE_TRACE", 
 // wall time, printed once at exit -- the route's own cost, which the search budget does not meter.
 inline bool StatsOn() { static const bool v = EnvOn("MTG_AA_ROUTE_STATS"); return v; }
 inline std::atomic<std::uint64_t> g_walks{0}, g_wins{0}, g_applies{0}, g_walk_us{0}, g_memo_hits{0},
-                                  g_rewalks{0}, g_offers{0}, g_rule_no{0};
+                                  g_rewalks{0}, g_offers{0}, g_rule_no{0}, g_applies_var{0}, g_cut_walks{0};
+// Walks by their board's turn relative to the decision frame's (TurnSolver::DecisionRootTurn): [0] no frame
+// open (the executor, the viewer), [1] the decision's own turn, [2] the next turn, [3] two or more later.
+inline std::atomic<std::uint64_t> g_walks_dt[4]{}, g_walk_us_dt[4]{};
 struct StatsDumper
 {
     ~StatsDumper()
     {
         if (!StatsOn()) { return; }
         std::fprintf(stderr, "[aa-route-stats] offers=%llu rule_no=%llu memo_hits=%llu walks=%llu wins=%llu "
-                     "applies=%llu walk_ms=%.1f rewalks=%llu\n",
+                     "applies=%llu (breakpoint variants %llu) walk_ms=%.1f rewalks=%llu\n",
                      (unsigned long long)g_offers.load(), (unsigned long long)g_rule_no.load(),
                      (unsigned long long)g_memo_hits.load(), (unsigned long long)g_walks.load(),
                      (unsigned long long)g_wins.load(), (unsigned long long)g_applies.load(),
+                     (unsigned long long)g_applies_var.load(),
                      g_walk_us.load() / 1000.0, (unsigned long long)g_rewalks.load());
+        std::fprintf(stderr, "[aa-route-stats] by turn vs the decision's: noroot %llu walks %.1f ms | same %llu / %.1f |"
+                     " +1 %llu / %.1f | +2.. %llu / %.1f | cut for budget %llu\n",
+                     (unsigned long long)g_walks_dt[0].load(), g_walk_us_dt[0].load() / 1000.0,
+                     (unsigned long long)g_walks_dt[1].load(), g_walk_us_dt[1].load() / 1000.0,
+                     (unsigned long long)g_walks_dt[2].load(), g_walk_us_dt[2].load() / 1000.0,
+                     (unsigned long long)g_walks_dt[3].load(), g_walk_us_dt[3].load() / 1000.0,
+                     (unsigned long long)g_cut_walks.load());
     }
 };
 inline StatsDumper g_stats_dumper;
@@ -44570,7 +44581,101 @@ struct Walk
     int applies_left = kApplies;
     std::vector<Link> path;   // the links, as the PLANS themselves (see Replay)
     int applies = 0;
+    // THE PER-APPLY PRICE (MTG_AA_ROUTE_NODE_UNITS; see NodeUnits). `budget` is the decision's
+    // (TurnSolver::DecisionBudget, nullptr = unlimited / no decision = nothing charged, nothing cut);
+    // `cut_ok` is false on the decision's own turn, where the walk is charged but always completes.
+    SearchBudget* budget = nullptr;
+    int  price  = 0;
+    bool cut_ok = false;
+    bool cut    = false;      // the walk STOPPED for budget: its "no route" is not a verdict
 };
+
+// THE ROUTE WALK'S PRICE (MTG_AA_ROUTE_NODE_UNITS=<units per apply>; per-job manifest "aa_route_units";
+// DEFAULT 0 = OFF, byte-identical). A PROPOSED budget-pricing lever (2026-10-21, "Slow rollouts at the
+// gen setting" in analysis-AccomplishedAlchemist.md); adopting it is the USER's call.
+//
+// WHY. The walk is a provider sub-search that the decision budget never saw: at the mulligan
+// generation's d1 b1 the costliest keep-rollouts spent 83-99.6% of their wall in walks (each apply of a
+// breakpoint variant derives the whole continuation list at the post-lifegain state, 6k-75k plans),
+// i.e. 2-11 ms per charged unit against a deck norm of ~0.04 -- so a "1 ms" decision ran for minutes.
+// This bills every apply `price` units to TurnSolver::DecisionBudget() and stops a walk, BEFORE an
+// apply, once that budget is spent -- the equip route's per-link shape (equiproute::NodeUnits).
+//
+// SOUND BY CONSTRUCTION AT LARGE BUDGET (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE
+// UNFINDABLE"): at an unlimited root DecisionBudget() is nullptr, so nothing is charged and nothing is
+// cut -- the walk is today's walk; below that, raising the budget only moves the cut later. A cut walk's
+// "no route" is never stored (not in this memo, and BpEnumEntryFor / BpCanonFront decline to cache a
+// list derived across a cut -- AlchemistComboRouteCuts), so a later decision with budget walks again.
+//
+// FINISH THE TURN FIRST (USER preference, same rule): a walk on the decision's OWN turn is charged but
+// never cut -- the cut stops only the walks of later turns (rollouts beyond the current turn), so a
+// binding budget completes the current turn's frames, breakpoint continuations included, before it
+// stops paying for the next turn's. The apply side (AlchemistComboRouteApply's trial and re-walk) is
+// never priced: it replays a verdict the offer already proved, and a cut there would un-play a line
+// the search scored as a win.
+inline int NodeUnits()
+{
+    const int job = valuearm::t_arm.aa_route_units;
+    if (job >= 0) { return job; }
+    static const int v = EnvInt("MTG_AA_ROUTE_NODE_UNITS", 0);
+    return v > 0 ? v : 0;
+}
+inline thread_local std::uint64_t t_cuts = 0;   // walks cut for budget on this thread (monotonic)
+
+// THE WALK'S MENU WITHOUT BREAKPOINT VARIANTS (MTG_AA_ROUTE_BASE_ONLY, heurarm AA_ROUTE_BASE_ONLY; DEFAULT
+// OFF -- PROPOSED 2026-10-21, the USER's call). EnumerateMainPlans fans every plan that opens a breakpoint
+// out into W rank variants (bp_choice 0..W-1: "this plan, then the k-th best continuation"), and the walk
+// tries them like any plan. Each such apply derives the WHOLE continuation list at the breakpoint to read
+// one entry of it -- after a lifegain cast or an untap loop that is every affordable subset of the hand
+// (17k plans on average, 287k at the worst, on the slowest keep-rollout), and 74% of the walk's applies
+// were variants. The walk re-enumerates after every link, so it is ITSELF the continuation search (the
+// reason the canon default already stands down inside it): with the lever on it tries base plans only
+// (EMPTY at the breakpoint, as the canon suppression already makes them) and reaches a continuation as
+// its next link. NOT an identity: the next link is enumerated after the base apply's trailing passes and
+// spends a link and a node of the walk's fixed bounds -- so it is measured, not assumed.
+inline thread_local int t_base_only_force = -1;   // the VERIFY's second walk only (-1 = follow the lever)
+inline bool BaseOnlyOn()
+{
+    if (t_base_only_force >= 0) { return t_base_only_force != 0; }
+    static const bool env = EnvOn("MTG_AA_ROUTE_BASE_ONLY");   // DEFAULT OFF
+    if (heurarm::Flag(heurarm::AA_ROUTE_BASE_ONLY, env)) { return true; }
+    // MTG_AA_ROUTE_BASE_ONLY_PLAYOUT (DEFAULT OFF; PROPOSED): the narrowing only BEYOND the search window --
+    // the innermost search frame has no depth left (greedywindow::t_depth == 0: the horizon playout's greedy
+    // Solve, the one place the doctrine permits a playout heuristic). Inside the window (t_depth > 0) and with
+    // no search frame at all (-1: the executor, the viewer) the walk keeps the full menu, so what the search
+    // can prove at any depth it actually searches is unchanged; only the playout's go-off detector is cheaper.
+    static const bool env_po = EnvOn("MTG_AA_ROUTE_BASE_ONLY_PLAYOUT");   // DEFAULT OFF
+    return greedywindow::t_depth == 0 && heurarm::Flag(heurarm::AA_ROUTE_BASE_ONLY_PLAYOUT, env_po);
+}
+// MTG_AA_ROUTE_BASE_ONLY_VERIFY=1 (DIAGNOSTIC; the extra walk warms caches, so play may move): every
+// trial walk is walked a SECOND time with the menu the lever's other setting would use, unpriced, and the
+// two verdicts are tallied -- the measurement of how often dropping the variants changes what the walk
+// can prove (win vs no win), which is the whole quality question for the lever.
+inline bool BaseOnlyVerifyOn() { static const bool v = EnvOn("MTG_AA_ROUTE_BASE_ONLY_VERIFY"); return v; }
+inline std::atomic<std::uint64_t> g_bov[4]{}, g_bov_applies[2]{}, g_bov_us[2]{};   // [full,base]
+struct BovDumper
+{
+    ~BovDumper()
+    {
+        if (!BaseOnlyVerifyOn()) { return; }
+        std::fprintf(stderr, "[aa-route-verify] base-only vs full menu: both win %llu | both no %llu | full only %llu |"
+                     " base only %llu ; applies full %llu base %llu ; ms full %.1f base %.1f\n",
+                     (unsigned long long)g_bov[0].load(), (unsigned long long)g_bov[1].load(),
+                     (unsigned long long)g_bov[2].load(), (unsigned long long)g_bov[3].load(),
+                     (unsigned long long)g_bov_applies[0].load(), (unsigned long long)g_bov_applies[1].load(),
+                     g_bov_us[0].load() / 1000.0, g_bov_us[1].load() / 1000.0);
+    }
+};
+inline BovDumper g_bov_dumper;
+// Pay for one apply; false = the walk is cut here (nothing applied).
+inline bool PayApply(Walk& w)
+{
+    if (w.cut) { return false; }
+    if (w.price <= 0 || w.budget == nullptr) { return true; }
+    if (w.cut_ok && (w.budget->Exhausted() || w.budget->Overrun())) { w.cut = true; return false; }
+    TurnSolver::ChargeAaRouteUnits(w.budget, w.price);
+    return true;
+}
 
 // THE UNTAPPER'S COLOUR, BANKED BEFORE IT IS CAST. A setup plan that casts an untapper whose activation needs
 // a coloured pip (Crab Umbra / Galvanic Alchemist {2}{U}, Seedcradle Witch {2}{G}{W}) is paid by the ordinary
@@ -44753,6 +44858,11 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
     // A combat-lethal ROOT is not a route (nothing for the route to play): only a link can make the verdict.
     if (OpponentHasLost(s) || (!w.path.empty() && RouteWon(s, me))) { return 1; }
     if (links_left <= 0 || w.nodes_left <= 0 || w.applies_left <= 0) { return 0; }
+    // THE PRICE'S CUT, before this node's enumerations too (they are most of a node's cost when nothing
+    // is cached): a spent budget stops the walk here. Inert with the price off or no budget.
+    if (w.cut) { return 0; }
+    if (w.price > 0 && w.budget != nullptr && w.cut_ok && (w.budget->Exhausted() || w.budget->Overrun()))
+    { w.cut = true; return 0; }
     std::vector<TurnSolver::Plan> kills = TurnSolver::UntapLoopKillPlans(s, /*is_pre_combat=*/true);
     if (TraceBoardOn())
     {
@@ -44774,6 +44884,7 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         const int n = std::min<int>(kKillWidth, static_cast<int>(kills.size()));
         for (int i = 0; i < n && w.nodes_left > 0 && w.applies_left > 0; ++i)
         {
+            if (!PayApply(w)) { return 0; }
             GameState child = s;
             TurnSolver::ApplyPlan(child, kills[static_cast<std::size_t>(i)], /*is_pre_combat=*/true);
             --w.nodes_left; --w.applies_left; ++w.applies;
@@ -44840,9 +44951,11 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         return r;
     };
     std::vector<Ranked> loops, setups;
+    const bool base_only = BaseOnlyOn();
     for (int i = 0; i < static_cast<int>(plans.size()); ++i)
     {
         const TurnSolver::Plan& p = plans[static_cast<std::size_t>(i)];
+        if (base_only && p.bp_choice >= 0) { continue; }   // MTG_AA_ROUTE_BASE_ONLY (see BaseOnlyOn)
         if (IsLoopPlan(p))       { loops.push_back(rank_of(p, i)); }
         else if (IsSetupPlan(p)) { setups.push_back(rank_of(p, i)); }
     }
@@ -44904,10 +45017,12 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         for (int variant = (pnum != 0 ? 0 : 1); variant < 2 && w.nodes_left > 0; ++variant)
         {
             if (w.applies_left <= 0) { break; }
+            if (!PayApply(w)) { return 0; }
             GameState child = s;
             if (variant == 0 && !PreTap(child, me, pnum, pcol)) { continue; }
             TurnSolver::ApplyPlan(child, plan, /*is_pre_combat=*/true);
             --w.applies_left; ++w.applies;
+            if (StatsOn() && plan.bp_choice >= 0) { g_applies_var.fetch_add(1, std::memory_order_relaxed); }
             if (TraceOn())
             {
                 const ManaPool& f = child.floating_mana;
@@ -44957,7 +45072,7 @@ static int Replay(GameState& s, int me, const std::vector<Link>& path)
 
 // `main_pass`: the path was proven by the walk's MAIN-PHASE pass (see MainPassScope), so it is replayed in that
 // pass's scope -- the loop inside it funds the main-phase kill the pass proved, not a pump.
-struct Verdict { int r = 0; std::vector<Link> path; bool main_pass = false; };
+struct Verdict { int r = 0; std::vector<Link> path; bool main_pass = false; bool cut = false; };
 // PER GAME, keyed on the full board (Fingerprint): a verdict is a function of the board -- including the
 // library ORDER, which is fixed within a game -- so it is reused across decisions; cleared at every game
 // start (TurnSolver::ClearPerGameCaches) so a batch worker never carries one game's verdicts into the next.
@@ -44968,21 +45083,30 @@ struct Memo
 };
 inline Memo& TheMemo() { static thread_local Memo memo; return memo; }
 
-static Verdict Walk1(const GameState& s, int me);
+static Verdict Walk1(const GameState& s, int me, bool priced);
 
-// The trial: the walk on a copy, memoised on the board fingerprint.
-static const Verdict& Trial(const GameState& s, int me)
+// The trial: the walk on a copy, memoised on the board fingerprint. `priced` (the offer only): the walk
+// pays MTG_AA_ROUTE_NODE_UNITS per apply and may be cut for budget -- a cut verdict is returned but
+// NEVER memoised (see NodeUnits).
+static const Verdict& Trial(const GameState& s, int me, bool priced)
 {
     Memo& memo = TheMemo();
     if (memo.m.size() > (1u << 16)) { memo.m.clear(); }
     const std::uint64_t key = Fingerprint(s, me);
     const auto it = memo.m.find(key);
     if (it != memo.m.end()) { if (StatsOn()) { g_memo_hits.fetch_add(1, std::memory_order_relaxed); } return it->second; }
-    return memo.m.emplace(key, Walk1(s, me)).first->second;
+    Verdict v = Walk1(s, me, priced);
+    if (v.cut)
+    {
+        static thread_local Verdict t_cut_verdict;
+        t_cut_verdict = std::move(v);
+        return t_cut_verdict;
+    }
+    return memo.m.emplace(key, std::move(v)).first->second;
 }
 
 // ONE PASS of the walk, in whatever pass scope the caller set (MainPassScope).
-static Verdict WalkPass(const GameState& s, int me)
+static Verdict WalkPass(const GameState& s, int me, bool priced)
 {
     Verdict v;
     v.main_pass = t_main_pass != 0;
@@ -45010,16 +45134,54 @@ static Verdict WalkPass(const GameState& s, int me)
         const auto t0 = std::chrono::steady_clock::now();
         GameState copy = s;
         Walk w;
+        if (priced && (w.price = NodeUnits()) > 0)
+        {
+            w.budget = TurnSolver::DecisionBudget();
+            w.cut_ok = w.budget != nullptr && s.turn_number > TurnSolver::DecisionRootTurn();
+        }
         v.r = Dfs(copy, me, kLinks, w);
         if (v.r == 1 && w.path.empty()) { v.r = 0; }   // already won / lethal before any link: not a route
+        if (BaseOnlyVerifyOn() && !w.cut)
+        {
+            const bool prim_base = BaseOnlyOn();
+            const std::uint64_t prim_us = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                              std::chrono::steady_clock::now() - t0).count());
+            const auto t1 = std::chrono::steady_clock::now();
+            t_base_only_force = prim_base ? 0 : 1;
+            GameState copy2 = s;
+            Walk w2;
+            int r2 = Dfs(copy2, me, kLinks, w2);
+            if (r2 == 1 && w2.path.empty()) { r2 = 0; }
+            t_base_only_force = -1;
+            const std::uint64_t alt_us = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                             std::chrono::steady_clock::now() - t1).count());
+            const int full_r = prim_base ? r2 : v.r, base_r = prim_base ? v.r : r2;
+            g_bov[(full_r == 1 && base_r == 1) ? 0 : (full_r != 1 && base_r != 1) ? 1 : (full_r == 1) ? 2 : 3]
+                .fetch_add(1, std::memory_order_relaxed);
+            g_bov_applies[prim_base ? 1 : 0].fetch_add(static_cast<std::uint64_t>(w.applies), std::memory_order_relaxed);
+            g_bov_applies[prim_base ? 0 : 1].fetch_add(static_cast<std::uint64_t>(w2.applies), std::memory_order_relaxed);
+            g_bov_us[prim_base ? 1 : 0].fetch_add(prim_us, std::memory_order_relaxed);
+            g_bov_us[prim_base ? 0 : 1].fetch_add(alt_us, std::memory_order_relaxed);
+        }
         if (v.r == 1) { v.path = w.path; }
+        else if (w.cut)
+        {
+            v.cut = true;
+            ++t_cuts;
+            if (StatsOn()) { g_cut_walks.fetch_add(1, std::memory_order_relaxed); }
+        }
         if (StatsOn())
         {
             g_walks.fetch_add(1, std::memory_order_relaxed);
             if (v.r == 1) { g_wins.fetch_add(1, std::memory_order_relaxed); }
             g_applies.fetch_add(static_cast<std::uint64_t>(w.applies), std::memory_order_relaxed);
-            g_walk_us.fetch_add(static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
-                                    std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
+            const std::uint64_t us = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                         std::chrono::steady_clock::now() - t0).count());
+            g_walk_us.fetch_add(us, std::memory_order_relaxed);
+            const int rt = TurnSolver::DecisionRootTurn();
+            const int b  = rt < 0 ? 0 : std::min(3, 1 + std::max(0, s.turn_number - rt));
+            g_walks_dt[b].fetch_add(1, std::memory_order_relaxed);
+            g_walk_us_dt[b].fetch_add(us, std::memory_order_relaxed);
         }
         if (TraceOn())
         {
@@ -45083,19 +45245,21 @@ static bool PassesCanDiffer(const GameState& s, int me)
 // THE WALK: the main-phase pass first, then -- only if it proved nothing -- the combat pass (see MainPassScope).
 // With the combat finishers off, MTG_AA_ROUTE_MAIN_FIRST=0, or no pump piece reachable (PassesCanDiffer), it is the
 // single pass it always was.
-static Verdict Walk1(const GameState& s, int me)
+// `priced` rides into each pass (MTG_AA_ROUTE_NODE_UNITS); a main-phase pass CUT for budget ends the walk with
+// that cut verdict (never memoised, see Trial) -- the combat pass would only meet the same spent budget.
+static Verdict Walk1(const GameState& s, int me, bool priced)
 {
     if (AlchemistComboCombatOn() && RouteMainFirstOn() && PassesCanDiffer(s, me))
     {
         Verdict v;
         {
             MainPassScope _main(true);
-            v = WalkPass(s, me);
+            v = WalkPass(s, me, priced);
         }
-        if (v.r == 1) { return v; }
+        if (v.r == 1 || v.cut) { return v; }
     }
     MainPassScope _combat(false);
-    return WalkPass(s, me);
+    return WalkPass(s, me, priced);
 }
 }   // namespace aaroute
 
@@ -45114,6 +45278,7 @@ bool AlchemistComboRouteOn()
     return heurarm::Flag(heurarm::AA_COMBO_ROUTE, s_env);
 }
 bool AlchemistComboRouteInProgress() { return aaroute::t_in_route > 0; }
+std::uint64_t AlchemistComboRouteCuts() { return aaroute::t_cuts; }
 void AlchemistComboRouteClearMemo() { aaroute::TheMemo().m.clear(); aaroute::TheMemo().epoch = ~0ULL; }
 
 bool AccomplishedAlchemistProvider::UntapLoopRouteEnabled() const { return AlchemistComboRouteOn(); }
@@ -45130,7 +45295,7 @@ int AlchemistComboRouteOffer(const GameState& s, int me)
         if (aaroute::StatsOn()) { aaroute::g_rule_no.fetch_add(1, std::memory_order_relaxed); }
         return 0;
     }
-    if (aaroute::Trial(s, me).r == 1) { return 1; }
+    if (aaroute::Trial(s, me, /*priced=*/true).r == 1) { return 1; }
     // DISPLAY AGGRESSIVE (human play only): the rule fired and the walk did not prove it -- still offer the
     // button ("not yet proven"); a click that does not win rolls back and says so (AIEngine's combo_off
     // branch). Never in autonomous play: there an unproven route would be a candidate that claims a win.
@@ -45141,7 +45306,7 @@ int AlchemistComboRouteApply(GameState& s, int me)
 {
     if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
     // ALL-OR-NOTHING: only a proven path is played on the live state.
-    aaroute::Verdict v = aaroute::Trial(s, me);   // a copy: the walk below may touch the memo
+    aaroute::Verdict v = aaroute::Trial(s, me, /*priced=*/false);   // a copy: the walk below may touch the memo
     if (v.r != 1) { return 0; }
     // ...AND PROVEN HERE. The memoised path was proven where the emission site ran (a rollout, a breakpoint
     // derivation); this apply may run in another context (the executor), and an ApplyPlan whose breakpoint
@@ -45161,10 +45326,18 @@ int AlchemistComboRouteApply(GameState& s, int me)
             if (aaroute::TraceOn())
             { std::fprintf(stderr, "[aa-route] t%d memoised path does not kill in this context: re-walking\n", s.turn_number); }
             if (aaroute::StatsOn()) { aaroute::g_rewalks.fetch_add(1, std::memory_order_relaxed); }
-            v = aaroute::Walk1(s, me);
+            v = aaroute::Walk1(s, me, /*priced=*/false);
             if (v.r != 1) { return 0; }
         }
     }
+    // MTG_AA_ROUTE_APPLY_CLEARBP=1 (DIAGNOSTIC; play may move): evict the breakpoint-continuation caches between the
+    // proving replay above and the live one below -- the eviction the plan pool's clear-all performs whenever it
+    // binds, placed where it would make the two replays read different lists. Built to test the 2026-10-21
+    // reading of the gen's "APPLY replay did not kill" lines: a link that is a breakpoint VARIANT resolves its
+    // continuation BY RANK in a list re-derived (or served) at apply time, so the path is plans-not-indices only
+    // one level deep.
+    static const bool s_clearbp = EnvOn("MTG_AA_ROUTE_APPLY_CLEARBP");
+    if (s_clearbp) { TurnSolver::ClearBreakpointCachesForDiagnostic(); }
     aaroute::Guard _g;
     aaroute::MainPassScope _pass(v.main_pass);
     aaroute::NoPumpScope _np;
@@ -45173,8 +45346,10 @@ int AlchemistComboRouteApply(GameState& s, int me)
     const int r = aaroute::Replay(s, me, v.path);
     if (r != 1)
     {
-        std::fprintf(stderr, "[aa-route] !! t%d APPLY replay did not kill on a board the trial proved (%zu links)\n",
-                     s.turn_number, v.path.size());
+        int var_links = 0;
+        for (const aaroute::Link& l : v.path) { if (l.plan.bp_choice >= 0) { ++var_links; } }
+        std::fprintf(stderr, "[aa-route] !! t%d APPLY replay did not kill on a board the trial proved (%zu links,"
+                     " %d of them breakpoint variants)\n", s.turn_number, v.path.size(), var_links);
     }
     return r;
 }

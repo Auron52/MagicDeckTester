@@ -2181,6 +2181,8 @@ public:
     // their content as well. After it, a game's play AND units are a pure function of the game, the
     // same as it gets alone in a fresh process. See docs/design/batch-run-to-run-nondeterminism.md.
     static void ClearPerGameCaches();
+    // Diagnostic: the breakpoint-continuation caches only (MTG_AA_ROUTE_APPLY_CLEARBP).
+    static void ClearBreakpointCachesForDiagnostic();
 
     // Committed-depth telemetry (MTG_ROLLOUT_STATS; counters only, no behaviour). Called once per
     // top-level main-phase decision with the depth iterative deepening actually COMMITTED. See the
@@ -2239,6 +2241,11 @@ public:
     // Charge `n` units of such sub-search work to `budget` (no-op on nullptr), attributed to the
     // census's `equip_route` bucket.
     static void              ChargeDecisionUnits(SearchBudget* budget, int n);
+    // The same for the AccomplishedAlchemist untap-loop route walk (MTG_AA_ROUTE_NODE_UNITS), attributed
+    // to the census's own `aa_route` bucket. No-op on nullptr or n <= 0.
+    static void              ChargeAaRouteUnits(SearchBudget* budget, int n);
+    // The turn number of the decision frame DecisionBudget() belongs to (-1 when no frame is open).
+    static int               DecisionRootTurn();
     // Work units the Brainstorm put-back price (MTG_PUTBACK_PRICE) has charged on THIS thread so far --
     // a running total, so a caller diffs it around a game to report that game's units net of the price.
     static long long         PutBackPriceCharged();

@@ -631,6 +631,8 @@ enum Slot : int
     UNTAP_PUMP_PROVE_LETHAL,  // MTG_UNTAP_PUMP_PROVE_LETHAL  the pump-untapper (Seedcradle Witch) loop sized on attackers that may pay its {G}/{W}: the net-zero pump loop is offered only when its k activations, run on a copy, leave a COMBAT-LETHAL board, and a banking loop stops at k_pump only once combat really is lethal (smoke d0 s1001 gi976, 2026-10-21). Default ON; =0 -> as before
     GREEDY_LETHAL_STOP,       // MTG_GREEDY_LETHAL_STOP  the GREEDY policy (depth-0 runner + every playout beyond the horizon; Solve's host only) takes the VERIFIED board-lethal attack-only cut for every provider, not only the UseLethalShortCircuit opt-ins: on a board that already kills in combat it stops casting (a cast paid by tapping an attacker undoes the kill -- smoke d0 s1001 gi976, the post-route Scholar cast off the pumped Alchemist). Default ON; =0 -> the opt-ins alone
     GREEDY_PUMP_LETHAL,       // MTG_GREEDY_PUMP_LETHAL  the same verified attack-only cut in the greedy policy, counting the combat converter's pumps (ApplyFirebreathing: Ezuri's team pump, firebreathing) paid from the untouched pool -- the win projection never credits them, so the greedy spent that pool on casts (smoke d0 s1001 gi990: Forests pay one Ezuri pump for lethal). Default ON; =0 -> as before
+    AA_ROUTE_BASE_ONLY,       // MTG_AA_ROUTE_BASE_ONLY  AccomplishedAlchemist COMBO OFF route walk: try BASE plans only, not their breakpoint variants (bp_choice >= 0) -- the walk re-enumerates after every link, so it reaches a continuation as its own next link instead of deriving the whole continuation list per variant apply (74% of a slow keep-rollout's walk applies, 83% of its wall; analysis-AccomplishedAlchemist.md "Slow rollouts at the gen setting"). PROPOSED, default OFF (a narrowing of the walk's menu: the USER's call)
+    AA_ROUTE_BASE_ONLY_PLAYOUT, // MTG_AA_ROUTE_BASE_ONLY_PLAYOUT  ...the same narrowing ONLY in walks run BEYOND the search window (greedywindow::t_depth == 0: the horizon playout's greedy Solve, where the doctrine permits a playout heuristic); every walk inside the window keeps the full menu. PROPOSED, default OFF (the USER's call)
     COUNT
 };
 
@@ -1212,6 +1214,8 @@ inline const char* Name(int slot)
         "MTG_UNTAP_PUMP_PROVE_LETHAL",
         "MTG_GREEDY_LETHAL_STOP",
         "MTG_GREEDY_PUMP_LETHAL",
+        "MTG_AA_ROUTE_BASE_ONLY",
+        "MTG_AA_ROUTE_BASE_ONLY_PLAYOUT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

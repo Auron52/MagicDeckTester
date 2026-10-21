@@ -793,6 +793,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     // and the sweep needs both varying inside one pool.
     if (jspec.contains("solve_charge_w")) { j.arm.solve_charge_w = jspec["solve_charge_w"].get<int>(); }
     if (jspec.contains("enum_charge_w"))  { j.arm.enum_charge_w  = jspec["enum_charge_w"].get<int>(); }
+    if (jspec.contains("aa_route_units")) { j.arm.aa_route_units = jspec["aa_route_units"].get<int>(); }
     if (jspec.contains("bp_chain_slot")) { j.arm.bp_chain_slot = jspec["bp_chain_slot"].get<int>(); }
     if (jspec.contains("leaf_greedy_from_depth")) { j.arm.leaf_greedy_from = jspec["leaf_greedy_from_depth"].get<int>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());

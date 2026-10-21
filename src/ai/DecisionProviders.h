@@ -3903,6 +3903,11 @@ int  AlchemistComboRouteOffer(const GameState& s, int controller);
 int  AlchemistComboRouteApply(GameState& s, int controller);  // 1 WIN, 0 nothing played
 void AlchemistComboRouteClearMemo();
 bool AlchemistComboRouteInProgress();
+// Walks this THREAD has CUT for budget (MTG_AA_ROUTE_NODE_UNITS; monotonic; always 0 with the price off).
+// A cache whose entry's content can include the route's verdict snapshots it around the work it stores
+// and declines the store when it moved: a "no route" that only meant "no budget left" must never be
+// served to a later decision that has budget (BpEnumEntryFor, BpCanonFront, the route's own memo).
+std::uint64_t AlchemistComboRouteCuts();
 bool AlchemistComboRouteOn();                                 // MTG_AA_COMBO_ROUTE (heurarm AA_COMBO_ROUTE)
 bool AlchemistComboCombatOn();                                // MTG_AA_COMBO_COMBAT (heurarm AA_COMBO_COMBAT)
 // Inside the route's walk: are the combat finishers live for THIS pass? (MTG_AA_COMBO_COMBAT, and not the walk's

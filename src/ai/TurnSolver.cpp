@@ -1399,12 +1399,14 @@ enum Site
     kPutBackPrice,         // Brainstorm put-back VARIANT price: MTG_PUTBACK_PRICE_UNITS per variant applied
                            // (MTG_PUTBACK_PRICE; see ChargePutBackVariant)
     kEnumCharge,           // EnumeratePlans' odometer visits, one unit per W (MTG_ENUM_CHARGE, default OFF)
+    kAaRoute,              // AccomplishedAlchemist untap-loop route walk: MTG_AA_ROUTE_NODE_UNITS per apply
+                           // (default 0 = OFF; TurnSolver::ChargeAaRouteUnits, aaroute::Walk)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
-    "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge"
+    "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge", "aa_route"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -3793,7 +3795,14 @@ static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahea
 static thread_local SearchBudget* g_decision_budget   = nullptr;
 static thread_local bool          g_decision_root_open = false;   // a scope below is live
 static thread_local int           g_d0_permit_nest     = 0;       // live GreedyPermit(D0Runner)s
+// The TURN of the outermost decision frame (-1 = no frame open), set and restored with the budget by
+// DecisionBudgetScope. Read by a provider sub-search that prices its work per turn: the AA route walk
+// (MTG_AA_ROUTE_NODE_UNITS) charges everywhere but CUTS only on a turn after the decision's own, so a
+// binding budget finishes the current turn's frames before it stops paying for later ones (USER
+// preference, CLAUDE.md "WHEN A BUDGET BINDS, FINISH THE TURN BEFORE REACHING THE NEXT").
+static thread_local int           g_decision_root_turn = -1;
 SearchBudget* TurnSolver::DecisionBudget()   { return g_decision_budget; }
+int           TurnSolver::DecisionRootTurn() { return g_decision_root_turn; }
 bool          TurnSolver::DecisionRootOpen() { return g_decision_root_open; }
 bool          TurnSolver::InD0Runner()       { return g_d0_permit_nest > 0; }
 // Owned by the OUTERMOST frame of a real decision -- SolveWithLookahead's budgeted root and
@@ -3805,15 +3814,19 @@ struct DecisionBudgetScope
 {
     SearchBudget* const prev;
     const bool          prev_open;
-    DecisionBudgetScope(bool set, SearchBudget* b) : prev(g_decision_budget), prev_open(g_decision_root_open)
+    const int           prev_turn;
+    DecisionBudgetScope(bool set, SearchBudget* b, int turn)
+        : prev(g_decision_budget), prev_open(g_decision_root_open), prev_turn(g_decision_root_turn)
     {
         if (set)
         {
             g_decision_budget    = (b != nullptr && !b->Unlimited()) ? b : nullptr;
             g_decision_root_open = true;
+            g_decision_root_turn = turn;
         }
     }
-    ~DecisionBudgetScope() { g_decision_budget = prev; g_decision_root_open = prev_open; }
+    ~DecisionBudgetScope()
+    { g_decision_budget = prev; g_decision_root_open = prev_open; g_decision_root_turn = prev_turn; }
 };
 // Charge `n` units of provider-side sub-search work to the decision's budget. Attributed to its own
 // census bucket so the u_* columns still sum to `units` (turn_census.py refuses a row otherwise).
@@ -3821,6 +3834,11 @@ void TurnSolver::ChargeDecisionUnits(SearchBudget* budget, int n)
 {
     if (budget == nullptr) { return; }
     for (int i = 0; i < n; ++i) { ConsumeAt(budget, unitsite::kEquipRoute); }
+}
+void TurnSolver::ChargeAaRouteUnits(SearchBudget* budget, int n)
+{
+    if (budget == nullptr || n <= 0) { return; }
+    ConsumeAtN(budget, unitsite::kAaRoute, n);
 }
 // True inside a horizon playout (SimulateToEnd's RolloutNestGuard), i.e. BEYOND the search window,
 // where the doctrine permits a greedy policy and a provider's sub-search is not owed completeness.
@@ -75011,6 +75029,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
 // live content is one decision's worth of entries.
 static void M1MemoClear();   // the rollout pre-combat memo (defined with it, below)
 static void HybridLearnedStateClear();   // the value-leaf hybrid's learned R/G (defined with them, below)
+// DIAGNOSTIC ONLY (MTG_AA_ROUTE_APPLY_CLEARBP; AlchemistComboRouteApply): drop the breakpoint-continuation
+// caches -- the plan cache BpEnumEntryFor serves from and the canon-front memo -- exactly as their own
+// clear-all eviction does when the plan pool or the entry cap binds, so a test can force that eviction to land
+// at a chosen moment instead of waiting for pool pressure to put it there.
+void TurnSolver::ClearBreakpointCachesForDiagnostic()
+{
+    bpcache::t_plans.clear();
+    plancache::Release(plancache::t_bp_bytes);
+    bpcanon::t_fronts.clear();
+}
+
 void TurnSolver::ClearPerGameCaches()
 {
     solvememo::t_cache.clear();
@@ -85176,7 +85205,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // SolveWithLookahead's). Same outermost-frame predicate as the work ceiling, minus the
     // finite-budget clause -- an unlimited budget is exactly the case this exists to announce.
     DecisionBudgetScope _dbs_fs(g_cs_solver_nest == 0 && g_rollout_nest == 0 && g_fsline_nest == 0,
-                                budget);
+                                budget, state.turn_number);
     static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
                                             return (e && *e) ? std::atof(e) : -1.0; }();
     SearchBudget  probe_cap_budget;
@@ -87419,7 +87448,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // TurnSolver::DecisionBudget(): this is one of the two decision roots (see the struct).
     DecisionBudgetScope _dbs(enforce_budget && g_cs_solver_nest == 1 && g_rollout_nest == 0
                                  && g_fsline_nest == 0,
-                             budget);
+                             budget, state.turn_number);
     // Per-decision TOTAL work ceiling (MTG_DECISION_WORK_X, default 0 = off; DecisionWorkMeter.h):
     // limit = base budget x multiplier, armed ONLY at the outermost real budgeted decision --
     // rollout / line-walk / measurement re-entries bill the root's meter, they never re-arm it.
@@ -92186,9 +92215,40 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     return plans;
 }
 
+// MTG_BP_DERIVE_STATS=1 (DIAGNOSTIC, count-only; play-neutral): every continuation-list DERIVATION
+// BpEnumEntryFor runs, split by context (0 = elsewhere, 1 = inside the AccomplishedAlchemist untap-loop
+// route's walk), with its plan count, its wall time, and whether the plan pool refused to cache it.
+// Printed once at exit. Built for the 2026-10-21 slow-rollout investigation (analysis-AccomplishedAlchemist.md,
+// "Slow rollouts at the gen setting"): the route walk's applies were the suspected owner of the
+// derivations, and nothing else separated them.
+namespace bpderive
+{
+inline bool On() { static const bool v = EnvOn("MTG_BP_DERIVE_STATS"); return v; }
+inline std::atomic<unsigned long long> g_n[2], g_plans[2], g_us[2], g_uncached[2], g_max[2], g_lookups[2],
+                                       g_big[2];
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!On()) { return; }
+        for (int c = 0; c < 2; ++c)
+        {
+            std::fprintf(stderr, "[bp-derive] ctx=%s lookups=%llu derivations=%llu plans=%llu (mean %.0f, max %llu,"
+                         " >=10k: %llu) derive_ms=%.1f uncached=%llu\n",
+                         c ? "route" : "other", g_lookups[c].load(), g_n[c].load(), g_plans[c].load(),
+                         g_n[c].load() ? double(g_plans[c].load()) / double(g_n[c].load()) : 0.0,
+                         g_max[c].load(), g_big[c].load(), g_us[c].load() / 1000.0, g_uncached[c].load());
+        }
+    }
+};
+inline Dumper g_dumper;
+}
+
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key)
 {
+    const int bpd_ctx = (bpderive::On() && AlchemistComboRouteInProgress()) ? 1 : 0;
+    if (bpderive::On()) { bpderive::g_lookups[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
     // static, not a per-call EnvOn: this runs millions of times per game and a getenv here is the
     // hot-path wart that has already had to be fixed twice in this file.
     static const bool s_bp_probe = EnvOn("MTG_BP_PROBE");
@@ -92432,13 +92492,31 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     const int use_reason = bpuse::t_reason;   // the derivation re-enters; read the consumer first
     const unsigned long long use_t0 = bpuse::On() ? __rdtsc() : 0;
     bool bp_interrupted = false;   // MTG_BP_DERIVE_METER=2: never cache an interrupted derivation
+    const auto bpd_t0 = bpderive::On() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    // A route walk CUT for budget inside this derivation (MTG_AA_ROUTE_NODE_UNITS) makes the list a
+    // function of the budget left, not of the state: such a list is served (scratch path) but never
+    // stored, so no later decision is handed a budget-truncated continuation. 0 moves with the price off.
+    const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted);
+    const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (bpuse::On())
     {
         bpuse::g_stats.cycles[use_reason].fetch_add(static_cast<long long>(__rdtsc() - use_t0),
                                                     std::memory_order_relaxed);
+    }
+    if (bpderive::On())
+    {
+        const unsigned long long n = plans.size();
+        bpderive::g_n[bpd_ctx].fetch_add(1, std::memory_order_relaxed);
+        bpderive::g_plans[bpd_ctx].fetch_add(n, std::memory_order_relaxed);
+        if (n >= 10000) { bpderive::g_big[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
+        bpderive::g_us[bpd_ctx].fetch_add(static_cast<unsigned long long>(
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - bpd_t0).count()),
+            std::memory_order_relaxed);
+        unsigned long long m = bpderive::g_max[bpd_ctx].load(std::memory_order_relaxed);
+        while (n > m && !bpderive::g_max[bpd_ctx].compare_exchange_weak(m, n, std::memory_order_relaxed)) {}
     }
     plancache::ReportHiwater("bp", state, plans);
 
@@ -92469,7 +92547,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
-    if (keyed && !bp_interrupted)
+    if (keyed && !bp_interrupted && !aa_cut_inside)
     {
         if (BpEnumProbeOn())
         {
@@ -92542,6 +92620,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // Cache disabled: hand back the thread_local scratch entry (fresh verdict slots each fill, so
     // nothing is reused across calls -- the no-cache world stays a true re-probe-every-time A/B).
     // Declared, and already emptied, above the derivation.
+    if (bpderive::On()) { bpderive::g_uncached[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
     scratch = BpEnumEntry{};
     scratch.plans   = std::move(plans);
     scratch.demoted = std::move(demoted);
@@ -92622,9 +92701,11 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             return true;
         }
     }
+    const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();   // see BpEnumEntryFor's twin
     std::vector<TurnSolver::Plan> plans =
         BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/true, /*demoted_out=*/nullptr,
                                  /*front_only=*/true);
+    const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (s_rollout_stats) { bpcanon::g_derives.fetch_add(1, std::memory_order_relaxed); }
     static const bool s_verify = EnvOn("MTG_BP_CANON_FRONT_VERIFY");
     if (s_verify)
@@ -92640,7 +92721,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
                          state.turn_number, is_pre_combat ? "m1" : "m2", full.size(), plans.size());
         }
     }
-    if (keyed)
+    if (keyed && !aa_cut_inside)
     {
         static const std::size_t s_cap = static_cast<std::size_t>(
             std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
@@ -96369,6 +96450,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_equip_route,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kEquipRoute]))           \
     X(u_putback_price,    MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kPutBackPrice]))         \
     X(u_enum_charge,      MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kEnumCharge]))           \
+    X(u_aa_route,         MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kAaRoute]))              \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
