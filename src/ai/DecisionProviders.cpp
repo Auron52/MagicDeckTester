@@ -45633,6 +45633,7 @@ int AlchemistComboRouteOffer(const GameState& s, int me)
     return HumanPlayActive() ? 3 : 0;
 }
 
+static std::string OriginExtText(const GameState& s, int me);   // MTG_AA_ROUTE_ORIGIN (defined below)
 int AlchemistComboRouteApply(GameState& s, int me)
 {
     if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
@@ -45653,7 +45654,7 @@ int AlchemistComboRouteApply(GameState& s, int me)
                     const auto it = aaroute::t_origin_board.find(aaroute::t_apply_origin);
                     std::fprintf(stderr, "[aa-route-origin] t%d no-route apply on a board != its offer's\n   offer: %s\n   apply: %s\n",
                                  s.turn_number, it != aaroute::t_origin_board.end() ? it->second.c_str() : "(evicted)",
-                                 aaroute::BoardText(s, me).c_str());
+                                 (aaroute::BoardText(s, me) + OriginExtText(s, me)).c_str());
                 }
             }
         }
@@ -45770,12 +45771,55 @@ void AlchemistComboRouteNoteApplyContext(int other_actions) { aaroute::t_apply_o
 // MTG_AA_ROUTE_ORIGIN=1 (DIAGNOSTIC; it stamps the action, so play may move): which board did an applied ComboRoute
 // come from? The emission site stamps the offer board's id into the action (sac_source_id, unused by the kind);
 // a no-route apply then reports whether its board is that board, and prints both (first 12).
+// ...and the fields the board text does not show but the route memo's key folds (MidTurnStateKeyOf: the sim key plus
+// the mid-turn scalars and the live scripted pins), so an "on another board" line names what differs.
+static std::string OriginExtText(const GameState& s, int me)
+{
+    char buf[900];
+    unsigned long long lib = 1469598103934665603ull;
+    for (const Card& c : s.players[me].library) { lib = (lib ^ static_cast<unsigned long long>(c.m_number)) * 1099511628211ull; }
+    std::snprintf(buf, sizeof buf,
+                  " | mid=%016llx lib#=%016llx turn=%d storm=%d casts_rem=%d mv=%d free=%d m1hand=%d/t%d life=%d"
+                  " pins top=%d etb=%d tut=%d reo=%d pb=%d tap=%d fresh=%d saga=%d sac=%s land=%s"
+                  " phase=%d gy=%zu exile=%zu opp_decked=%d gained=%d equipkey=%016llx",
+                  (unsigned long long)TurnSolver::MidTurnStateKeyOf(s), lib, s.turn_number, s.spells_cast_this_turn,
+                  s.casts_remaining_this_turn, s.mv_cast_this_turn, s.free_casts_available, (int)s.m1_hand_n,
+                  (int)s.m1_hand_turn, s.players[me].life, g_scripted_top_choice, g_scripted_etbdig_choice,
+                  g_scripted_tutor_choice, g_scripted_reorder_choice, g_scripted_putback_choice, (int)g_scripted_tapmode,
+                  (int)g_scripted_freshmode, g_scripted_saga_ch1,
+                  (g_scripted_sac_pins != nullptr && g_scripted_sac_cursor < static_cast<int>(g_scripted_sac_pins->size())) ? "live" : "-",
+                  (g_scripted_land_search_pins != nullptr) ? "live" : "-",
+                  static_cast<int>(s.phase), s.players[me].graveyard.size(), s.exile.size(), s.opponent_decked ? 1 : 0,
+                  s.players[me].life_gained_this_turn, (unsigned long long)EquipRouteStateKey(s, me));
+    std::string out(buf);
+    auto seq = [&](const char* tag, const auto& zone)
+    {
+        out += " "; out += tag; out += "[";
+        for (const Card& c : zone) { out += std::to_string(c.m_number); out += ","; }
+        out += "]";
+    };
+    seq("hand", s.players[me].hand);
+    seq("sb", s.players[me].sideboard);
+    seq("gy", s.players[me].graveyard);
+    out += " lib8[";
+    for (std::size_t i = 0; i < s.players[me].library.size() && i < 8; ++i)
+    { out += std::to_string(s.players[me].library[i].m_number); out += ","; }
+    out += "] bf";
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        char pb[96];
+        std::snprintf(pb, sizeof pb, " #%d%s%s", p.card.m_number, p.tapped ? "T" : "", p.entered_this_turn ? "N" : "");
+        out += pb;
+    }
+    return out;
+}
 int AlchemistComboRouteOriginId(const GameState& s, int me)
 {
     if (!aaroute::OriginOn()) { return 0; }
     const int id = static_cast<int>(aaroute::Fingerprint(s, me) & 0x3FFFFFFFULL) + 1;
     if (aaroute::t_origin_board.size() > 100000) { aaroute::t_origin_board.clear(); }
-    aaroute::t_origin_board.emplace(id, aaroute::BoardText(s, me));
+    aaroute::t_origin_board.emplace(id, aaroute::BoardText(s, me) + OriginExtText(s, me));
     return id;
 }
 void AlchemistComboRouteNoteApplyOrigin(int id) { aaroute::t_apply_origin = id; }
