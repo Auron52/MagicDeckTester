@@ -2731,3 +2731,97 @@ aa-castorder). The table and raw were COPIED from `aa-land` (gzipped; the origin
 Smoke + regression GT accepted deck-scoped with the attribution in the notes. **Overnight rows stay at the ENTRY
 shape** (as EDF, 04fabc8e2: a heavy deck), rather than being expanded to the FULL set at adoption. This was
 surfaced to the USER as their call; the alchemist overnight keys go stale until the next periodic overnight run.
+
+## The walk's breakpoint variants: no byte-identical speedup at this layer; BASE_ONLY_PLAYOUT on the fixed play (2026-10-21)
+
+The coordinator's (2) and (3) for the overnight value-leaf launch. Binary = HEAD 2b9ec453's play (tape + chosen-colour
+key on); scratch `build/scratch/aa-slow/` (`c1_*`, `c2_*`, `list_*`, `tapeab/po3*`, `tapeab/x10po3*`).
+
+**(2) A byte-identical speedup of the variant links: none found that is worth its risk.** Measured on c1 (the gen's
+`r=8 draw` repro, d1 b1, `MTG_DECISION_WORK_X=1000`): the route walk's continuation derivations are 44,639 lists /
+30.7 M plans / 143.6 s of a 161 s rollout.
+* **Memoising per (board, link) cannot help: the boards do not repeat.** `MTG_BP_KEY_CENSUS` over the whole replay:
+  58,955 distinct `BpEnumBuildKey` keys for 61,547 derivations, so at most ~4% are re-derivations (the cache already
+  serves the k = 1 variant of every k = 0). Each variant pair's breakpoint board is new.
+* **What a list is made of** (`MTG_BP_DERIVE_STATS`, extended in b0c29bdb): 13.0 M base plans, 30.7 M after the
+  sub-decision axes (**58% are axis clones**), the new-only filter drops 12.6 k; the axes take **51.7 s of 143.6 s
+  (36%)**. The rest is the base enumeration itself (the subset odometer, payability, plan construction, the stable
+  sort, clear-on-full destruction), spread with no single hot spot (perf).
+* **Why a lazy / front-only derivation is not a cheap identity.** (a) The list is a STABLE SORT of every base plan
+  (wins, value, land tie keys, develop tie-breaks), so even entry 0 needs every base plan: the most a front-only
+  derivation can skip is the clones, i.e. at most ~40% of derivation time, ~1.5x on c1. (b) The axes rewrite base
+  plans in place (Living Wish targets), drop plans (the forced-draw dominance pass) and stamp group ids from static
+  counters (`s_bounce_group`, the put-back group) that flow into downstream memo keys; skipping a clone shifts every
+  later id unless each of the ~40 append sites is made count-preserving (the canon front did this for two axes).
+  (c) The list's SIZE leaves the walk: `g_bp_cands_last` / `g_bp_demoted_last` are written at every eligible
+  breakpoint and read by the search's deferred-wave walker after its own apply, and the Combo Off offer runs inside
+  derivations inside applies (no derivation-depth gate), so a short list would have to report the full size anyway.
+  Deferred, sized: worth ~1.5x at best on the walk's tail.
+* **A measurement trap found on the way:** `MTG_TURN_CENSUS` arms `s_rollout_stats`, which fingerprints every
+  continuation list at its k = 0 apply -- 14.6% of c2's wall. Census runs are for units only, never wall.
+
+**(3) `MTG_AA_ROUTE_BASE_ONLY_PLAYOUT` on the fixed play (tape + key on).** Held-out A/B, seed 99001 (disjoint from
+96001 / 97001 / 98001), 400 games per cell, ONE pooled batch of 1,600 (5 threads, `tapeab/po3`); win turn, unwon = 9:
+
+| cell | off | `BASE_ONLY_PLAYOUT` | delta | faster / slower | wall | units / game |
+|---|---|---|---|---|---|---|
+| d3 b10 | 5.2525 | 5.2525 | **0.0000** | 3 / 2 | **0.78x** | 90.2k -> 86.9k |
+| d5 b20 | 5.2225 | 5.2275 | **+0.0050** | 2 / 3 | **0.76x** | 162.8k -> 155.1k |
+
+The earlier sample (seed 96001, pre-fix play): d3 -0.010 (7 / 2), d5 -0.0025 (5 / 3). Both samples pooled (800 per
+cell): **d3 -0.005 (10 / 4), d5 +0.00125 (7 / 6, net +1 turn in 800 games)**.
+
+**Slower games at 10x (d3 b100 / d5 b200, both arms, `tapeab/x10po3`):** d3 gi122 5 = 5 and d5 gi122 5 = 5 recover;
+d5 gi201 recovers past `off` (7 -> 6); **d3 gi201 (7 vs 8) and d5 gi150 (5 vs 6) persist.** Both persisting games end in
+a committed Combo Off that is a no-op at apply ("no proven route on this board"), i.e. the residual no-op class
+(below), which the lever's different playout valuations walk into at a costlier moment; `off` has one in gi201 too.
+
+**At the generation setting (d1 b1, work X 1000) -- where the time is:**
+
+| | off | `BASE_ONLY_PLAYOUT` |
+|---|---|---|
+| c1 (r=8 draw) | 153.6 s, T7, 308.9k units | **5.3 s, T7**, 396.8k units |
+| c2 (r=1 play) | 272.2 s, T5, 220.8k units | **1.4 s, T5**, 230.5k units |
+| the gen's 59 slowest (`MTG_KEEP_REPLAY_LIST`) | 615 s, max 308 s | **84 s (0.14x), max 8.4 s**; win turn 2 faster / 0 slower |
+| 300 ordinary size-7 rollouts | 124 s | **102 s (0.82x)**; 2 faster / 2 slower, net 0 |
+
+Units rise because the walk is not metered (the search spends what the walk no longer burns); the saving is per-unit.
+
+**The residual no-op class, root-caused and fixed: `MTG_AA_ROUTE_KEY_GY_NAMES` (DEFAULT ON; =0 restores).** After
+the tape and the chosen-colour key, "no proven route on this board" still fired ~5 times per 800 games, and BOTH of
+`BASE_ONLY_PLAYOUT`'s persisting 10x games end in one. The extended `MTG_AA_ROUTE_ORIGIN` diagnostic (afcc02fc)
+printed the offer board and the apply board field by field: the same mid-turn key, hand, library, battlefield, pins
+and phase, but a different GRAVEYARD -- `gy[0,0]` in the search's state vs `gy[16,51]` live (seed 99151 gi150), `gy[0]`
+vs `gy[59]` (seed 99202 gi201). A spell resolved inside the search reaches the graveyard as a card numbered 0; the live
+game keeps the number. The T(n-1) search proves a route on its simulated T(n) board, the T(n) decision is served that
+plan by a cache whose key reads the graveyard by NAME (BuildSimKey), and the executor's apply on the identical live
+board missed the route memo, whose key (`EquipRouteStateKey`) mixes the graveyard by card NUMBER. Its own bounded walk
+then found nothing, and the committed, proven Combo Off was a no-op. The fix keys the route memo's graveyard by name. It
+is sound regardless of the key: every apply replays the memoised path on a copy and plays it only if it kills. On the
+three games: gi150 d5 PO 6 -> 5; gi201 d3 PO 8 -> 5 and `off` 7 -> 5.
+
+**Held-out A/B of the key fix and of `BASE_ONLY_PLAYOUT` on top of it** (seed 100001, disjoint from every earlier
+sample; 400 games per cell; ONE pooled batch of 2,400, 6 threads; `tapeab/gy5`). `old` = HEAD play
+(`MTG_AA_ROUTE_KEY_GY_NAMES=0`):
+
+| cell | old key | key fix | vs old | `+ BASE_ONLY_PLAYOUT` | vs key fix | wall (fix / +PO vs old) |
+|---|---|---|---|---|---|---|
+| d3 b10 | 5.2100 | 5.2075 | **-0.0025** (1 / 0) | 5.2025 | **-0.0050** (4 / 2) | 0.97x / 0.78x |
+| d5 b20 | 5.2050 | 5.2025 | **-0.0025** (1 / 0) | 5.2050 | +0.0025 (0 / 1) | 0.96x / 0.86x |
+
+The key fix has no slower game in 800 (gi384 is 4 -> 3 in both cells) and leaves units unchanged (78.8k / 139.6k).
+
+**Smoke, alchemist rows, old key vs key fix** (the other decks never reach the route): d0 7.0760 / 87fe2d52050de8af
+both; d3 5.3667 both, digest 9e0e1ce48299b725 -> 3eceb67409f60c36 from one game's unit count (gi140 737,443 ->
+737,445 units, T4 both); d5 5.1733 / d53b1e3b390414c8 both; 2HG d3 5.4200 / 1f612b9e07b40c9a both. No win turn
+moves; the `old` arm reproduces HEAD 2b9ec453's four digests exactly. mtg-test 1619 / 1619; scenarios 245 / 245
+and combo-off fixtures 48 / 48 with the key fix on and with `=0` (commit 8f08670d).
+
+**`BASE_ONLY_PLAYOUT` -- the verdict for the USER (it stays DEFAULT OFF).** Three held-out samples, 1,200 games per
+cell (96001 pre-fix, 99001 tape + key, 100001 + the graveyard key): d3 -0.010 / 0.000 / -0.005, d5 -0.0025 /
++0.005 / +0.0025. Pooled: **d3 better (-0.005), d5 slightly worse (+0.0017, net +2 turns in 1,200 games)** -- not
+strictly not-worse. Its 10x reruns on the key-fixed play: gi25 recovers (6 = 6), **gi290 persists at d3 and d5**
+(4 vs 5). Its time: **0.78-0.86x wall** on the suite cells, and at the generation setting **c1 153.6 s -> 5.3 s,
+c2 272.2 s -> 1.4 s, the gen's 59 slowest rollouts 0.14x** (max 308 s -> 8.4 s), 300 ordinary rollouts 0.82x. A
+lossy narrowing of the walk's menu beyond the search window -- the doctrine's permitted region, so the trade is the
+USER's: about one turn per 600 d5 games against a 30-200x cut of the generation's worst rollouts.
