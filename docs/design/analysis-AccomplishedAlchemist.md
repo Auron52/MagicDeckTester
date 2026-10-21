@@ -513,10 +513,15 @@ Validation (binary 3ace089d; built pinned to cores 24-31 beside the running mull
   slower), d3 5.4333 -> 5.3867 (037cffa10ea37b72; 6 changed, all faster), d5 5.2667 -> 5.2000
   (338edf58a4ca95f8; 6 changed, 5 faster, gi35 7 -> 8), 2HG d3 5.5600 -> 5.4800 (776d4b5f7bbf7013; 4 changed, all
   faster).
-* A/B (one pooled batch, the three levers OFF vs ON, s70001 d3 b10 / d5 b20 x 200, 8 threads on cores 24-31 --
-  the generation owns the box, so it runs for hours). INTERIM at 123 paired d5 b20 games: 5.2205 -> 5.1452, 5 faster
-  / 1 slower (gi111 6 -> 7), units 136.2k -> 131.5k; the d3 cell had not started. Final numbers:
-  `python3 /workspaces/MagicDeckTester/build/scratch/aa-ez/an.py /workspaces/MagicDeckTester/build/scratch/aa-ez/ab/batch.err 8 off on`.
+* A/B (one pooled batch, the three levers OFF vs ON, s70001 x 200, 8 threads on cores 24-31 beside the generation):
+
+  | cell | off avg | on avg | delta | faster / slower | units mean off -> on | ms mean off -> on |
+  |---|---|---|---|---|---|---|
+  | s70001 d3 b10 | 5.2850 | 5.2600 | **-0.025** | 6 / 1 (gi179 6 -> 7) | 80.4k -> 79.5k | 12,653 -> 11,697 |
+  | s70001 d5 b20 | 5.2450 | 5.2250 | **-0.020** | 6 / 2 (gi111, gi179 6 -> 7) | 150.7k -> 149.7k | 25,985 -> 24,395 |
+
+  Net <= 0 on both cells and no dearer (ms is heavily contended: the generation owned the box). Three slower games
+  (two distinct) -- a handful, so not 10x-classified. Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-ez/`.
 
 ## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
 
