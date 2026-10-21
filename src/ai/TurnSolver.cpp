@@ -7564,25 +7564,38 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
     // Locals, not thread_local scratch: `emit` scores a subset and may re-enter a nested walk.
     std::vector<int> choice(static_cast<std::size_t>(G), 0);
     std::vector<int> part(static_cast<std::size_t>(G) + 1, 0);   // part[g] = sum over digits >= g
-    std::vector<int> base;
-    base.reserve(auto_sel.size() + static_cast<std::size_t>(G));
+    // The selection is written by index into reserved storage (no push_back calls per element): `base` holds
+    // the position's auto + group part, each independents mask copies it into `sel` and appends its bits.
+    const std::size_t na = auto_sel.size();
+    std::vector<int> base(na + static_cast<std::size_t>(G), 0);
+    std::copy(auto_sel.begin(), auto_sel.end(), base.begin());
+    std::vector<int> ind_cost(static_cast<std::size_t>(num_ind), 0);
+    for (int b = 0; b < num_ind; ++b)
+    { ind_cost[static_cast<std::size_t>(b)] = cand_mv[static_cast<std::size_t>(independent[static_cast<std::size_t>(b)])]; }
+    sel.reserve(na + static_cast<std::size_t>(G) + static_cast<std::size_t>(num_ind));
     auto leaf = [&](int mcost) -> bool
     {
-        base.assign(auto_sel.begin(), auto_sel.end());
+        std::size_t nb = na;
         for (int g = 0; g < G; ++g)
-        { if (choice[static_cast<std::size_t>(g)] > 0) { base.push_back(groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(choice[static_cast<std::size_t>(g)] - 1)]); } }
+        {
+            const int c = choice[static_cast<std::size_t>(g)];
+            if (c > 0) { base[nb++] = groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(c - 1)]; }
+        }
         for (int imask = 0; imask < (1 << num_ind); ++imask)
         {
             int pcost = 0;
-            sel.assign(base.begin(), base.end());
+            sel.resize(nb + static_cast<std::size_t>(num_ind));
+            int* sp = sel.data();
+            std::copy(base.data(), base.data() + nb, sp);
+            std::size_t n = nb;
             for (int b = 0; b < num_ind; ++b)
             {
                 if (!(imask & (1 << b))) { continue; }
-                const int j = independent[static_cast<std::size_t>(b)];
-                sel.push_back(j);
-                pcost += cand_mv[static_cast<std::size_t>(j)];
+                sp[n++] = independent[static_cast<std::size_t>(b)];
+                pcost += ind_cost[static_cast<std::size_t>(b)];
             }
-            if (sel.empty()) { continue; }
+            sel.resize(n);
+            if (n == 0) { continue; }
             if (!(mcost + pcost <= mana_bound)) { continue; }
             if (emit(sel)) { return true; }
         }
@@ -12807,33 +12820,37 @@ struct VampCandFacts
     const CardDefinition* def = nullptr;   // def_of(c) = c.def ? c.def : Lookup(c.card_name)
     const CardDefinition* r5_md = nullptr; // rule 5: the pin's definition, when it needs a same-plan granter
     const std::string* granter = nullptr;  // rule 5: castput && def grants madness to a subtype: that subtype
+    const std::string* name = nullptr;     // &c.card_name.str() (canonical: pointer equality == name equality)
+    const std::string* pin = nullptr;      // &c.discard_name.str(), null when there is no discard pin
+    const std::string* victim = nullptr;   // rule 2: SacCreatureOutlet && (needs_cast_mask & 2) && a victim name
     int  rank = 0;                         // TrailingRankOf(prov, state, c)
-    int  m4_bf = -1;                       // rule 4: the source's battlefield index
-    int  m4_pin = -1;                      // rule 4: index into the shared pin order
+    int  m4_bf = -1;                       // rule 4 (lazy): the source's battlefield index
+    int  m4_pin = -1;                      // rule 4 (lazy): index into the shared pin order
     std::uint64_t m4_key = 0;
-    bool castput = false;   // CastFromHand / ActivateVial (puts_name's population, rule 8's hand count)
-    bool cv = false;        // rule 7: Cast && (convoke_green > 0 || convoke_other > 0) && ConvokeTapsAtCast(def)
-    bool out = false;       // rule 8: a discard outlet (discard_draws true)
-    bool st6 = false;       // ActivatePermAbility && (TapSubtypeSteal || TransformSelf): `bands`, rule 6
-    bool same_sac = false;  // SacCreatureOutlet && sac_victim_id == kSameLineSacVictim
-    bool trailing = false;  // TurnSolver::IsTrailingActivation(c.kind)
-    bool r5_need = false;
-    bool r10 = false;       // rule 10's NECESSARY condition: a madness cast pin of a convoke creature
-    bool m4 = false;        // ActivatePump && gy_exile_mode == 4
-    bool m4_keyed = false;
+    std::uint32_t bits = 0;   // kVf* below: every per-candidate flag the rules branch on
     std::int8_t cv_pip = 0;     // rule 7: ConvokePipColor(*def) of a cv candidate
     std::int8_t arr = 0;        // rule 7: 0 none, 1 a non-convoke creature arrival, 2 a convoke-cast arrival
+    std::int8_t cvg = 0, cvo = 0, cpp = 0, cpo = 0;   // rule 7: convoke_green / _other / _plan_pip / _plan_other
     std::int8_t out_draws = 0;  // rule 8
     std::int8_t out_cost = 1;   // rule 8
     std::int8_t band = 0;       // TrailingBandOf(c)
     std::int8_t blood_sub = -1; // rule 3: TapBlood's subtype, index into subs (-1 none / empty)
     std::int8_t r6_sub = -1;    // rule 6b: index into subs6
+    std::int8_t vcn = 0;        // c.vamp_casts_needed
     std::int8_t pin_ns = 0;     // rule 1: non-staged hand copies of discard_name
     std::int8_t pin_st = 0;     // rule 1: staged hand copies
     std::int8_t cast_delta[2] = { 0, 0 };   // rule 3, per subtype: a cast / put arrival of a `sub` creature
     std::int8_t tr_delta[2]   = { 0, 0 };   // rule 3, per subtype: a trailing activation's net arrivals
     std::int8_t r6_a[2]       = { 0, 0 };   // rule 6b, per subtype: every selection member's contribution
     std::int8_t r6_b[2]       = { 0, 0 };   // rule 6b, per subtype: another steal that adds `sub` (transform)
+};
+enum : std::uint32_t
+{
+    kVfCastput = 1u << 0,  kVfCv = 1u << 1,      kVfOut = 1u << 2,     kVfSt6 = 1u << 3,
+    kVfSameSac = 1u << 4,  kVfTrailing = 1u << 5, kVfR5 = 1u << 6,     kVfR10 = 1u << 7,
+    kVfM4 = 1u << 8,       kVfM4Keyed = 1u << 9,  kVfBlood = 1u << 10, kVfSteal = 1u << 11,
+    kVfNeedsSrc = 1u << 12,   // rule 6a: needs_cast_mask & 1
+    kVfConvPlan = 1u << 13,   // rule 7: convoke_plan_pip > 0 || convoke_plan_other > 0
 };
 struct VampRulePre
 {
@@ -12842,6 +12859,7 @@ struct VampRulePre
     mutable bool armed = false;    // BuildSubsetFilterPre raised vamp_outlet and the lever is on
     mutable bool built = false;
     mutable bool tried = false;    // the build ran (built may still be false: too many subtypes)
+    mutable bool r4_ready = false; // rule 4's fold keys (built on rule 4's first use)
     mutable int  calls = 0;        // filter calls seen while unbuilt
     mutable std::vector<VampCandFacts> f;
     mutable int board_bp[6] = { 0, 0, 0, 0, 0, 0 };   // rule 7: untapped eligible bodies WITH colour c
@@ -12885,6 +12903,7 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
 {
     p.tried = true;
     p.built = false;
+    p.r4_ready = false;
     const std::size_t n = cands.size();
     const int me = state.active_player_index;
     const Player& ap = state.ActivePlayer();
@@ -12901,53 +12920,63 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
         v[nv] = s;
         return nv++;
     };
-    std::vector<const std::string*> m4_order;   // rule 4's shared pin order: distinct names, candidate order
-    bool any_mode4 = false;
-    for (const Action& c : cands)
-    {
-        if (c.kind != Action::Kind::ActivatePump || c.gy_exile_mode != 4 || c.discard_name.empty()) { continue; }
-        const std::string* key = &c.discard_name.str();
-        if (std::find(m4_order.begin(), m4_order.end(), key) == m4_order.end()) { m4_order.push_back(key); }
-    }
+    auto i8 = [](int v) { return static_cast<std::int8_t>(std::clamp(v, -128, 127)); };
     for (std::size_t j = 0; j < n; ++j)
     {
         const Action& c = cands[j];
         VampCandFacts& x = p.f[j];
         const CardDefinition* d = c.def != nullptr ? c.def : VampDefByName(c.card_name);
         x.def = d;
-        x.castput = c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::ActivateVial;
+        x.name = &c.card_name.str();
+        if (!c.discard_name.empty()) { x.pin = &c.discard_name.str(); }
+        x.vcn = c.vamp_casts_needed;
+        std::uint32_t b = 0;
+        if (c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::ActivateVial) { b |= kVfCastput; }
         // rule 7
+        x.cvg = i8(c.convoke_green); x.cvo = i8(c.convoke_other);
+        x.cpp = i8(c.convoke_plan_pip); x.cpo = i8(c.convoke_plan_other);
+        if (c.convoke_plan_pip > 0 || c.convoke_plan_other > 0) { b |= kVfConvPlan; }
         if (c.kind == Action::Kind::CastFromHand && (c.convoke_green > 0 || c.convoke_other > 0) && ConvokeTapsAtCast(d))
-        { x.cv = true; x.cv_pip = static_cast<std::int8_t>(ConvokePipColor(*d)); }
+        { b |= kVfCv; x.cv_pip = static_cast<std::int8_t>(ConvokePipColor(*d)); }
         {
             const bool cast = c.kind == Action::Kind::CastFromHand && !c.bestow && !c.adventure && !c.sacrifice_land;
             if ((cast || c.kind == Action::Kind::ActivateVial) && d != nullptr && d->card.IsCreature())
             { x.arr = (cast && (c.convoke_green > 0 || c.convoke_other > 0) && ConvokeTapsAtCast(d)) ? 2 : 1; }
         }
         // rule 8 (discard_draws, verbatim)
-        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { x.out = true; x.out_draws = 0; }
+        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { b |= kVfOut; x.out_draws = 0; }
         else if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::BloodDraw)
-        { x.out = true; x.out_draws = 1; }
+        { b |= kVfOut; x.out_draws = 1; }
         else if (c.kind == Action::Kind::SacCreatureOutlet && c.def != nullptr && c.def->params.sac_outlet_discard_cost > 0)
-        { x.out = true; x.out_draws = static_cast<std::int8_t>(c.def->params.sac_outlet_draw); }
+        { b |= kVfOut; x.out_draws = i8(c.def->params.sac_outlet_draw); }
         if (c.kind == Action::Kind::SacCreatureOutlet && c.def != nullptr)
-        { x.out_cost = static_cast<std::int8_t>(std::max(1, c.def->params.sac_outlet_discard_cost)); }
-        x.trailing = TurnSolver::IsTrailingActivation(c.kind);
-        x.rank = x.trailing ? TrailingRankOf(prov, state, c) : 0;   // TrailingRankOf is 0 off the trailing kinds
+        { x.out_cost = i8(std::max(1, c.def->params.sac_outlet_discard_cost)); }
+        const bool trailing = TurnSolver::IsTrailingActivation(c.kind);
+        if (trailing) { b |= kVfTrailing; }
+        x.rank = trailing ? TrailingRankOf(prov, state, c) : 0;   // TrailingRankOf is 0 off the trailing kinds
         x.band = static_cast<std::int8_t>(TrailingBandOf(c));
-        x.st6 = c.kind == Action::Kind::ActivatePermAbility
-             && (c.ability_mode == Action::AbilityMode::TapSubtypeSteal || c.ability_mode == Action::AbilityMode::TransformSelf);
-        x.same_sac = c.kind == Action::Kind::SacCreatureOutlet && c.sac_victim_id == kSameLineSacVictim;
+        const bool st6 = c.kind == Action::Kind::ActivatePermAbility
+            && (c.ability_mode == Action::AbilityMode::TapSubtypeSteal || c.ability_mode == Action::AbilityMode::TransformSelf);
+        if (st6) { b |= kVfSt6; }
+        if (st6 && c.ability_mode == Action::AbilityMode::TapSubtypeSteal) { b |= kVfSteal; }
+        if (st6 && (c.needs_cast_mask & 1) != 0) { b |= kVfNeedsSrc; }
+        if (c.kind == Action::Kind::SacCreatureOutlet && c.sac_victim_id == kSameLineSacVictim) { b |= kVfSameSac; }
+        // rule 2
+        if (c.kind == Action::Kind::SacCreatureOutlet && (c.needs_cast_mask & 2) != 0 && !c.victim_name.empty())
+        { x.victim = &c.victim_name.str(); }
         // rule 3: the Blood's subtype
-        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::TapBlood
-            && d != nullptr && !d->params.tap_blood_cost_less_per_subtype.empty())
+        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::TapBlood)
         {
-            const int k = sub_index(subs, nsubs, d->params.tap_blood_cost_less_per_subtype);
-            if (k < 0) { return; }
-            x.blood_sub = static_cast<std::int8_t>(k);
+            b |= kVfBlood;
+            if (d != nullptr && !d->params.tap_blood_cost_less_per_subtype.empty())
+            {
+                const int k = sub_index(subs, nsubs, d->params.tap_blood_cost_less_per_subtype);
+                if (k < 0) { return; }
+                x.blood_sub = static_cast<std::int8_t>(k);
+            }
         }
         // rule 6: the steal / transform subtype (6b)
-        if (x.st6 && c.vamp_casts_needed > 0 && d != nullptr)
+        if (st6 && c.vamp_casts_needed > 0 && d != nullptr)
         {
             const bool steal = c.ability_mode == Action::AbilityMode::TapSubtypeSteal;
             const int k = sub_index(subs6, nsubs6, steal ? d->params.steal_tap_subtype
@@ -12959,7 +12988,7 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
         if (c.madness_choice > 0 && !c.discard_name.empty())
         {
             const CardDefinition* md = VampDefByName(c.discard_name);
-            if (md != nullptr && md->params.convoke && md->card.IsCreature()) { x.r10 = true; }
+            if (md != nullptr && md->params.convoke && md->card.IsCreature()) { b |= kVfR10; }
             if (state.deck_has_madness && md != nullptr && !md->params.madness_cost.has_value() && md->card.IsCreature())
             {
                 bool granted_now = false;
@@ -12971,10 +13000,10 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
                         && CardHasSubtype(md->card, gd->params.grants_madness_creature_subtype))
                     { granted_now = true; break; }
                 }
-                if (!granted_now) { x.r5_need = true; x.r5_md = md; }
+                if (!granted_now) { b |= kVfR5; x.r5_md = md; }
             }
         }
-        if (x.castput && d != nullptr && !d->params.grants_madness_creature_subtype.empty())
+        if ((b & kVfCastput) != 0 && d != nullptr && !d->params.grants_madness_creature_subtype.empty())
         { x.granter = &d->params.grants_madness_creature_subtype; }
         // rule 1
         if (!c.discard_name.empty())
@@ -12985,31 +13014,12 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
                 if (hc.m_name != c.discard_name) { continue; }
                 if (hc.m_is_staged) { ++st; } else { ++ns; }
             }
-            x.pin_ns = static_cast<std::int8_t>(std::min(ns, 127));
-            x.pin_st = static_cast<std::int8_t>(std::min(st, 127));
+            x.pin_ns = i8(ns);
+            x.pin_st = i8(st);
         }
-        // rule 4
-        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4)
-        {
-            x.m4 = true;
-            any_mode4 = true;
-            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-            {
-                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-                if (q.card.m_number != c.sac_source_id || q.controller_index != state.active_player_index) { continue; }
-                x.m4_bf = i;
-                std::uint64_t k = 0;
-                x.m4_keyed = LandfallTargetFoldKey(state, q, k);
-                x.m4_key = k;
-                break;
-            }
-            if (!c.discard_name.empty())
-            {
-                const std::string* key = &c.discard_name.str();
-                for (int k = 0; k < static_cast<int>(m4_order.size()); ++k)
-                { if (m4_order[static_cast<std::size_t>(k)] == key) { x.m4_pin = k; break; } }
-            }
-        }
+        // rule 4 (its keys are built on first use: BuildVampRule4)
+        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { b |= kVfM4; }
+        x.bits = b;
     }
     // rule 7's board bodies, per pip colour
     for (int col = 0; col < 6; ++col) { p.board_bp[col] = 0; }
@@ -13033,12 +13043,12 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
             const Action& d = cands[j];
             VampCandFacts& x = p.f[j];
             const CardDefinition* dd = x.def;
-            if (x.castput)
+            if (x.bits & kVfCastput)
             {
                 if (!d.bestow && !d.adventure && sub_creature(dd)) { x.cast_delta[k] = 1; }
                 continue;
             }
-            if (!x.trailing) { continue; }   // never read (the rule skips a non-trailing kind)
+            if ((x.bits & kVfTrailing) == 0) { continue; }   // never read (the rule skips a non-trailing kind)
             int net = 0;
             if (d.kind == Action::Kind::TapForTokenPay && dd != nullptr)
             {
@@ -13073,7 +13083,7 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
                 }
                 if (victim_sub) { --net; }
             }
-            x.tr_delta[k] = static_cast<std::int8_t>(net);
+            x.tr_delta[k] = i8(net);
         }
     }
     // rule 6b's contributions, per steal / transform subtype (the adds loop, term by term)
@@ -13103,7 +13113,7 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
                 if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)
                     && (d.madness_choice > 0 || md->gy_landfall_watcher)) { ++a; }
             }
-            x.r6_a[k] = static_cast<std::int8_t>(a);
+            x.r6_a[k] = i8(a);
         }
         p.r6_gy[k] = 0;
         for (const Card& gc : ap.graveyard)
@@ -13113,183 +13123,201 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
                 && CardHasSubtype(gd->card, sub)) { ++p.r6_gy[k]; }
         }
     }
-    // rule 4's battlefield facts
-    p.bf_me.clear(); p.bf_keyed.clear(); p.bf_key.clear(); p.bf_offered.clear();
-    if (any_mode4)
-    {
-        const std::size_t nb = state.battlefield.size();
-        p.bf_me.assign(nb, 0); p.bf_keyed.assign(nb, 0); p.bf_key.assign(nb, 0); p.bf_offered.assign(nb, 0);
-        for (std::size_t i = 0; i < nb; ++i)
-        {
-            const Permanent& q = state.battlefield[i];
-            if (q.controller_index != state.active_player_index) { continue; }
-            p.bf_me[i] = 1;
-            std::uint64_t k2 = 0;
-            p.bf_keyed[i] = LandfallTargetFoldKey(state, q, k2) ? 1 : 0;
-            p.bf_key[i] = k2;
-            for (const Action& c : cands)
-            {
-                if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4
-                    && c.sac_source_id == q.card.m_number) { p.bf_offered[i] = 1; break; }
-            }
-        }
-    }
     p.built = true;
 }
 
-// The fast path: SubsetVampOutletInvalid's rules on VampRulePre's cached facts (see the struct).
+// Rule 4's facts, built on its first use (the pair fold needs two Condemned pumps in one selection, a
+// fraction of the walk): the pumps' source fold keys and pin indices, the battlefield's keys.
+static void BuildVampRule4(const GameState& state, const std::vector<Action>& cands, const VampRulePre& p)
+{
+    p.r4_ready = true;
+    std::vector<const std::string*> m4_order;   // the shared pin order: distinct names, candidate order
+    for (const Action& c : cands)
+    {
+        if (c.kind != Action::Kind::ActivatePump || c.gy_exile_mode != 4 || c.discard_name.empty()) { continue; }
+        const std::string* key = &c.discard_name.str();
+        if (std::find(m4_order.begin(), m4_order.end(), key) == m4_order.end()) { m4_order.push_back(key); }
+    }
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        VampCandFacts& x = p.f[j];
+        if ((x.bits & kVfM4) == 0) { continue; }
+        const Action& c = cands[j];
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != c.sac_source_id || q.controller_index != state.active_player_index) { continue; }
+            x.m4_bf = i;
+            std::uint64_t k = 0;
+            if (LandfallTargetFoldKey(state, q, k)) { x.bits |= kVfM4Keyed; }
+            x.m4_key = k;
+            break;
+        }
+        if (!c.discard_name.empty())
+        {
+            const std::string* key = &c.discard_name.str();
+            for (int k = 0; k < static_cast<int>(m4_order.size()); ++k)
+            { if (m4_order[static_cast<std::size_t>(k)] == key) { x.m4_pin = k; break; } }
+        }
+    }
+    const std::size_t nb = state.battlefield.size();
+    p.bf_me.assign(nb, 0); p.bf_keyed.assign(nb, 0); p.bf_key.assign(nb, 0); p.bf_offered.assign(nb, 0);
+    for (std::size_t i = 0; i < nb; ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != state.active_player_index) { continue; }
+        p.bf_me[i] = 1;
+        std::uint64_t k2 = 0;
+        p.bf_keyed[i] = LandfallTargetFoldKey(state, q, k2) ? 1 : 0;
+        p.bf_key[i] = k2;
+        for (const Action& c : cands)
+        {
+            if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4
+                && c.sac_source_id == q.card.m_number) { p.bf_offered[i] = 1; break; }
+        }
+    }
+}
+
+// The fast path: SubsetVampOutletInvalid's rules on VampRulePre's cached facts (see the struct). ONE pass
+// over the selection gathers what every rule reads (names, outlets, pins, the flagged positions); each rule
+// then runs only when the selection holds something it can fire on.
 static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector<Action>& cands,
                                        const std::vector<int>& sel, bool fold_from_odometer,
                                        const VampRulePre& p)
 {
     const std::size_t ns = sel.size();
     const VampCandFacts* F = p.f.data();
-    // puts_name's population: the selection's cast / put names, by their CANONICAL address
-    // (InternedName: pointer equality == string equality).
     constexpr std::size_t kSmall = 32;
-    const std::string* puts_small[kSmall];
-    std::vector<const std::string*> puts_big;
-    const std::string** puts = puts_small;
-    std::size_t nputs = 0;
-    if (ns > kSmall) { puts_big.resize(ns); puts = puts_big.data(); }
-    bool bands = false;
-    for (int idx : sel)
+    if (ns > kSmall) { return SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer); }   // never in practice
+    const std::string* puts[kSmall];
+    int outs[kSmall];
+    struct PinCount { const std::string* name; int count; int first; };
+    PinCount pins[kSmall];
+    int flagged[kSmall];   // positions with a rule-2 / 5 / 6 / 3 flag
+    std::size_t nputs = 0, no = 0, npins = 0, nflag = 0;
+    std::uint32_t any = 0;
+    int mode4 = 0, n_cv = 0, pip = static_cast<int>(Color::Black);
+    int dem_p = 0, dem_o = 0, plan_p = 0, plan_o = 0;
+    bool o_rank = false, o_bands = false;
+    for (std::size_t pi = 0; pi < ns; ++pi)
     {
+        const int idx = sel[pi];
         const VampCandFacts& x = F[idx];
-        if (x.castput) { puts[nputs++] = &cands[static_cast<std::size_t>(idx)].card_name.str(); }
-        if (x.st6) { bands = true; }
+        const std::uint32_t b = x.bits;
+        any |= b;
+        if (b & kVfCastput) { puts[nputs++] = x.name; }
+        if (b & kVfCv)
+        {
+            if (n_cv == 0) { pip = x.cv_pip; }
+            ++n_cv; dem_p += x.cvg; dem_o += x.cvo; plan_p += x.cpp; plan_o += x.cpo;
+        }
+        if (b & kVfOut)
+        {
+            outs[no++] = idx;
+            if (b & kVfSt6) { o_bands = true; }
+            if (x.rank != 0) { o_rank = true; }
+        }
+        if (x.pin != nullptr)
+        {
+            bool found = false;
+            for (std::size_t k = 0; k < npins; ++k) { if (pins[k].name == x.pin) { ++pins[k].count; found = true; break; } }
+            if (!found) { pins[npins++] = PinCount{ x.pin, 1, idx }; }
+        }
+        if (b & kVfM4) { ++mode4; }
+        if (x.victim != nullptr || (b & (kVfSt6 | kVfR5 | kVfBlood)) != 0) { flagged[nflag++] = static_cast<int>(pi); }
     }
+    const bool bands = (any & kVfSt6) != 0;
     auto puts_of = [&](const std::string* key) -> int
     {
         int c = 0;
         for (std::size_t k = 0; k < nputs; ++k) { if (puts[k] == key) { ++c; } }
         return c;
     };
-    // ---- rule 7 ----
-    {
-        int n_cv = 0, dem_p = 0, dem_o = 0, plan_p = 0, plan_o = 0;
-        int pip = static_cast<int>(Color::Black);
-        for (int idx : sel)
-        {
-            const VampCandFacts& x = F[idx];
-            if (!x.cv) { continue; }
-            const Action& c = cands[static_cast<std::size_t>(idx)];
-            if (n_cv == 0) { pip = x.cv_pip; }
-            ++n_cv; dem_p += c.convoke_green; dem_o += c.convoke_other;
-            plan_p += c.convoke_plan_pip; plan_o += c.convoke_plan_other;
-        }
-        if (n_cv > 0)
-        {
-            const Color pc = static_cast<Color>(pip);
-            const int bp = p.board_bp[pip], bo = p.board_n - p.board_bp[pip];
-            int ap = 0, ao = 0, cvp = 0, cvo = 0;
-            for (int idx : sel)
-            {
-                const VampCandFacts& x = F[idx];
-                if (x.arr == 0) { continue; }
-                const bool is_pip = x.def->card.HasColor(pc);
-                if (x.arr == 2) { (is_pip ? cvp : cvo) += 1; } else { (is_pip ? ap : ao) += 1; }
-            }
-            if (dem_p > bp + ap + cvp || dem_o > bo + ao + cvo) { return true; }
-            if (dem_p + dem_o > bp + bo + ap + ao + cvp + cvo - 1) { return true; }
-            if (plan_p > ap + cvp || plan_o > ao + cvo) { return true; }
-            if (plan_p + plan_o > ap + ao + std::max(0, cvp + cvo - 1)) { return true; }
-            for (int idx : sel)
-            {
-                const Action& c = cands[static_cast<std::size_t>(idx)];
-                if (c.convoke_plan_pip <= 0 && c.convoke_plan_other <= 0) { continue; }
-                const CardDefinition* cd = F[idx].def;
-                const bool self_pip = cd != nullptr && cd->card.HasColor(pc);
-                if (c.convoke_plan_pip > ap + cvp - (self_pip ? 1 : 0)) { return true; }
-                if (c.convoke_plan_other > ao + cvo - (self_pip ? 0 : 1)) { return true; }
-            }
-        }
-    }
     // ---- rule 8 ----
+    if (no > 0)
     {
-        int outs_small[kSmall];
-        std::vector<int> outs_big;
-        int* outs = outs_small;
-        if (ns > kSmall) { outs_big.resize(ns); outs = outs_big.data(); }
-        std::size_t no = 0;
-        bool o_bands = false, o_rank = false;
+        int h = p.hand_nonstaged - static_cast<int>(nputs);
+        // TurnSolver::OrderTrailingActivations on the outlets: no opinion -> emitted order; else a STABLE
+        // sort on (band when the pass holds a count band, rank). Insertion sort is stable.
+        if (no >= 2 && (o_bands || o_rank))
+        {
+            auto before = [&](int a, int c) -> bool
+            {
+                if (o_bands && F[a].band != F[c].band) { return F[a].band < F[c].band; }
+                return F[a].rank < F[c].rank;
+            };
+            for (std::size_t i = 1; i < no; ++i)
+            {
+                const int v = outs[i];
+                std::size_t k = i;
+                while (k > 0 && before(v, outs[k - 1])) { outs[k] = outs[k - 1]; --k; }
+                outs[k] = v;
+            }
+        }
+        for (std::size_t i = 0; i < no; ++i)
+        {
+            const VampCandFacts& x = F[outs[i]];
+            if (h < x.out_cost) { return true; }
+            h += x.out_draws - x.out_cost;
+        }
+    }
+    // ---- rule 1 ----
+    for (std::size_t k = 0; k < npins; ++k)
+    {
+        const int nonstaged = F[pins[k].first].pin_ns, staged = F[pins[k].first].pin_st;
+        const int uses_nonstaged = std::max(0, puts_of(pins[k].name) - staged);
+        if (pins[k].count + uses_nonstaged > nonstaged) { return true; }
+    }
+    // ---- rule 7 ----
+    if (n_cv > 0)
+    {
+        const Color pc = static_cast<Color>(pip);
+        const int bp = p.board_bp[pip], bo = p.board_n - p.board_bp[pip];
+        int ap = 0, ao = 0, cvp = 0, cvo = 0;
         for (int idx : sel)
         {
             const VampCandFacts& x = F[idx];
-            if (!x.out) { continue; }
-            outs[no++] = idx;
-            if (x.st6) { o_bands = true; }
-            if (x.rank != 0) { o_rank = true; }
+            if (x.arr == 0) { continue; }
+            const bool is_pip = x.def->card.HasColor(pc);
+            if (x.arr == 2) { (is_pip ? cvp : cvo) += 1; } else { (is_pip ? ap : ao) += 1; }
         }
-        if (no > 0)
+        if (dem_p > bp + ap + cvp || dem_o > bo + ao + cvo) { return true; }
+        if (dem_p + dem_o > bp + bo + ap + ao + cvp + cvo - 1) { return true; }
+        if (plan_p > ap + cvp || plan_o > ao + cvo) { return true; }
+        if (plan_p + plan_o > ap + ao + std::max(0, cvp + cvo - 1)) { return true; }
+        for (int idx : sel)
         {
-            int h = p.hand_nonstaged - static_cast<int>(nputs);
-            // TurnSolver::OrderTrailingActivations on the outlets: no opinion -> emitted order; else a STABLE
-            // sort on (band when the pass holds a count band, rank). Insertion sort is stable.
-            if (no >= 2 && (o_bands || o_rank))
-            {
-                auto before = [&](int a, int b) -> bool
-                {
-                    if (o_bands && F[a].band != F[b].band) { return F[a].band < F[b].band; }
-                    return F[a].rank < F[b].rank;
-                };
-                for (std::size_t i = 1; i < no; ++i)
-                {
-                    const int v = outs[i];
-                    std::size_t k = i;
-                    while (k > 0 && before(v, outs[k - 1])) { outs[k] = outs[k - 1]; --k; }
-                    outs[k] = v;
-                }
-            }
-            for (std::size_t i = 0; i < no; ++i)
-            {
-                const VampCandFacts& x = F[outs[i]];
-                if (h < x.out_cost) { return true; }
-                h += x.out_draws - x.out_cost;
-            }
+            const VampCandFacts& x = F[idx];
+            if ((x.bits & kVfConvPlan) == 0) { continue; }
+            const bool self_pip = x.def != nullptr && x.def->card.HasColor(pc);
+            if (x.cpp > ap + cvp - (self_pip ? 1 : 0)) { return true; }
+            if (x.cpo > ao + cvo - (self_pip ? 0 : 1)) { return true; }
         }
     }
-    // ---- rules 1, 2, 5, 6 (the original single pass) ----
-    struct PinCount { const std::string* name; int count; int first; };
-    PinCount pins_small[kSmall];
-    std::vector<PinCount> pins_big;
-    PinCount* pins = pins_small;
-    if (ns > kSmall) { pins_big.resize(ns); pins = pins_big.data(); }
-    std::size_t npins = 0;
-    int mode4 = 0;
-    for (std::size_t pi = 0; pi < ns; ++pi)
+    // ---- rules 2, 5, 6, 3 at the flagged positions ----
+    for (std::size_t fi = 0; fi < nflag; ++fi)
     {
+        const std::size_t pi = static_cast<std::size_t>(flagged[fi]);
         const int idx = sel[pi];
         const VampCandFacts& x = F[idx];
-        const Action& c = cands[static_cast<std::size_t>(idx)];
-        if (!c.discard_name.empty())
+        if (x.victim != nullptr && puts_of(x.victim) == 0) { return true; }   // rule 2
+        if (x.bits & kVfSt6)   // rule 6
         {
-            const std::string* key = &c.discard_name.str();
-            bool found = false;
-            for (std::size_t k = 0; k < npins; ++k) { if (pins[k].name == key) { ++pins[k].count; found = true; break; } }
-            if (!found) { pins[npins++] = PinCount{ key, 1, idx }; }
-        }
-        if (c.kind == Action::Kind::SacCreatureOutlet && (c.needs_cast_mask & 2) != 0
-            && !c.victim_name.empty() && puts_of(&c.victim_name.str()) == 0)
-        { return true; }   // rule 2
-        if (x.m4) { ++mode4; }
-        if (x.st6)   // rule 6
-        {
-            if ((c.needs_cast_mask & 1) != 0 && puts_of(&c.card_name.str()) == 0) { return true; }   // 6a
+            if ((x.bits & kVfNeedsSrc) != 0 && puts_of(x.name) == 0) { return true; }   // 6a
             const int k6 = x.r6_sub;
             if (k6 >= 0)
             {
-                const bool steal = c.ability_mode == Action::AbilityMode::TapSubtypeSteal;
+                const bool steal = (x.bits & kVfSteal) != 0;
                 int adds = p.r6_gy[k6];
                 for (int jdx : sel)
                 {
                     adds += F[jdx].r6_a[k6];
                     if (!steal && jdx != idx) { adds += F[jdx].r6_b[k6]; }
                 }
-                if (adds < c.vamp_casts_needed) { return true; }   // 6b
+                if (adds < x.vcn) { return true; }   // 6b
             }
         }
-        if (x.r5_need)   // rule 5
+        if (x.bits & kVfR5)   // rule 5
         {
             bool granter_cast = false;
             for (int jdx : sel)
@@ -13299,69 +13327,56 @@ static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector
             }
             if (!granter_cast) { return true; }
         }
-    }
-    // rule 1
-    for (std::size_t k = 0; k < npins; ++k)
-    {
-        const int nonstaged = F[pins[k].first].pin_ns, staged = F[pins[k].first].pin_st;
-        const int uses_nonstaged = std::max(0, puts_of(pins[k].name) - staged);
-        if (pins[k].count + uses_nonstaged > nonstaged) { return true; }
-    }
-    // rule 3 (BloodVariantMismatch at each TapBlood)
-    for (std::size_t pb = 0; pb < ns; ++pb)
-    {
-        const int b = sel[pb];
-        const Action& blood = cands[static_cast<std::size_t>(b)];
-        if (blood.kind != Action::Kind::ActivatePermAbility || blood.ability_mode != Action::AbilityMode::TapBlood) { continue; }
-        const VampCandFacts& xb = F[b];
-        int added = 0;
-        const int ks = xb.blood_sub;
-        if (ks >= 0)
+        if (x.bits & kVfBlood)   // rule 3 (BloodVariantMismatch)
         {
-            int net = 0;
-            for (std::size_t pj = 0; pj < ns; ++pj)
+            int added = 0;
+            const int ks = x.blood_sub;
+            if (ks >= 0)
             {
-                if (pj == pb) { continue; }
-                const VampCandFacts& x = F[sel[pj]];
-                if (x.castput) { net += x.cast_delta[ks]; continue; }
-                if (!x.trailing) { continue; }
-                // TurnSolver::TrailingRunsBefore(state, d, pj, blood, pb, bands), on the cached keys.
-                bool runs_before;
-                if (x.same_sac != xb.same_sac) { runs_before = xb.same_sac; }
-                else if (bands && x.band != xb.band) { runs_before = x.band < xb.band; }
-                else if (x.rank != xb.rank) { runs_before = x.rank < xb.rank; }
-                else { runs_before = pj < pb; }
-                if (!runs_before) { continue; }
-                net += x.tr_delta[ks];
+                int net = 0;
+                for (std::size_t pj = 0; pj < ns; ++pj)
+                {
+                    if (pj == pi) { continue; }
+                    const VampCandFacts& y = F[sel[pj]];
+                    if (y.bits & kVfCastput) { net += y.cast_delta[ks]; continue; }
+                    if ((y.bits & kVfTrailing) == 0) { continue; }
+                    // TurnSolver::TrailingRunsBefore(state, d, pj, blood, pi, bands), on the cached keys.
+                    const bool ys = (y.bits & kVfSameSac) != 0, xs = (x.bits & kVfSameSac) != 0;
+                    bool runs_before;
+                    if (ys != xs) { runs_before = xs; }
+                    else if (bands && y.band != x.band) { runs_before = y.band < x.band; }
+                    else if (y.rank != x.rank) { runs_before = y.rank < x.rank; }
+                    else { runs_before = pj < pi; }
+                    if (!runs_before) { continue; }
+                    net += y.tr_delta[ks];
+                }
+                added = std::max(0, net);
             }
-            added = std::max(0, net);
+            const int v = x.vcn;
+            if ((v >= 16) ? (added < v - 16) : (added != v)) { return true; }
         }
-        const int v = blood.vamp_casts_needed;
-        if ((v >= 16) ? (added < v - 16) : (added != v)) { return true; }
     }
     // ---- rule 10 ----
-    if (MadnessCoverGateOpen(state))
+    if ((any & kVfR10) != 0 && MadnessCoverGateOpen(state))
     {
         for (std::size_t po = 0; po < ns; ++po)
         {
-            if (!F[sel[po]].r10) { continue; }
+            if ((F[sel[po]].bits & kVfR10) == 0) { continue; }
             if (MadnessCoverInvalidAt(state, cands, sel, po)) { return true; }
         }
     }
     // ---- rule 4 ----
     if (mode4 >= 2 && fold_from_odometer)
     {
+        if (!p.r4_ready) { BuildVampRule4(state, cands, p); }
         struct Pick { std::uint64_t key; int bf; int pin; };
-        Pick picks_small[kSmall];
-        std::vector<Pick> picks_big;
-        Pick* picks = picks_small;
-        if (ns > kSmall) { picks_big.resize(ns); picks = picks_big.data(); }
+        Pick picks[kSmall];
         std::size_t np = 0;
         for (int idx : sel)
         {
             const VampCandFacts& x = F[idx];
-            if (!x.m4) { continue; }
-            if (x.m4_bf < 0 || !x.m4_keyed || x.m4_pin < 0) { continue; }   // unkeyable: never folded
+            if ((x.bits & kVfM4) == 0) { continue; }
+            if (x.m4_bf < 0 || (x.bits & kVfM4Keyed) == 0 || x.m4_pin < 0) { continue; }   // unkeyable: never folded
             picks[np++] = Pick{ x.m4_key, x.m4_bf, x.m4_pin };
         }
         for (std::size_t ai = 0; ai < np; ++ai)
@@ -15693,6 +15708,9 @@ enum : unsigned
 // dup_clause) and the canonical-prefix clause (equiv_tag != 0, gated on from_odometer).
 constexpr unsigned kDupPodEntry   = 1u << 8;
 constexpr unsigned kDupEquivEntry = 1u << 15;
+// SubsetHasDuplicateSacSource's per-candidate compact summary (SubsetFilterPre::DupM): entry bits (the
+// clause bits above + kDupPodEntry + kDupEquivEntry), the source id and the hand index.
+struct DupCompact { const std::uint16_t* m; const int* src; const int* hidx; };
 
 // WHICH CLAUSE of SubsetHasDuplicateSacSource actually rejected. The function's NAME is about sac
 // sources, but it is a nine-clause "one use per source per plan" rule and on a deck with no sacrifice
@@ -15720,7 +15738,7 @@ namespace dupclause
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer,
                                         unsigned dup_clause = kDupAll,
-                                        const std::uint16_t* dup_m = nullptr);
+                                        const DupCompact* dc = nullptr);
 
 // For a selection the canonical-prefix rule is about to reject, BUILD ITS TWIN and check the twin
 // is a legal selection: every class member replaced by the same-class member holding ord 0..k-1.
@@ -15822,9 +15840,149 @@ static void VerifyFoldRecoverable(const std::vector<Action>& cands, const std::v
     g_in_fold_verify = false;
 }
 
+// The canonical-prefix clause of SubsetHasDuplicateSacSource for sel position `a` (its entry test --
+// from_odometer, a nonzero tag, ord > 0 -- is the caller's). True = reject. Split out so the compact path
+// below runs the same body.
+static bool DupEquivReject(const std::vector<Action>& cands, const std::vector<int>& sel, std::size_t a, int site)
+{
+    if (BfCensusOn()) { bfcensus::g_fold_guard_seen.fetch_add(1, std::memory_order_relaxed); }
+    const int tag  = cands[sel[a]].equiv_tag;
+    const int want = cands[sel[a]].equiv_ord - 1;
+    bool have_pred = false;
+    for (size_t q = 0; q < sel.size(); ++q)
+    {
+        if (cands[sel[q]].equiv_tag == tag && cands[sel[q]].equiv_ord == want)
+        { have_pred = true; break; }
+    }
+    if (!have_pred)
+    {
+        // FoldVerifyOn() HOISTED (2026-09-19, perf). The verifier's own first line is this
+        // same test, so it used to return immediately -- but "immediately" still meant a
+        // call into a large, un-inlinable function plus a thread-local read, once per fold
+        // REJECTION. On Fungus (interchangeable spore sources -> every enumeration folds)
+        // the two constprop clones of that no-op were 1.29% of a slow game. Testing the
+        // flag here lets the call vanish entirely when the verifier is off, which is every
+        // run but an MTG_FOLD_VERIFY audit.
+        if (FoldVerifyOn()) { VerifyFoldRecoverable(cands, sel, a, tag, site); }
+        static const bool s_ftrace = EnvOn("MTG_FOLD_TRACE");
+        if (s_ftrace)
+        {
+            std::string so, members;
+            int csz = 0;
+            for (size_t q = 0; q < cands.size(); ++q)
+            {
+                if (cands[q].equiv_tag != tag) { continue; }
+                ++csz;
+                members += cands[q].card_name.str() + "#" + std::to_string(q)
+                         + "/hi" + std::to_string(cands[q].hand_index)
+                         + "/o" + std::to_string(cands[q].equiv_ord) + " ";
+            }
+            std::string selnames;
+            for (size_t q = 0; q < sel.size(); ++q)
+            { selnames += cands[sel[q]].card_name.str() + "#" + std::to_string(sel[q]) + " "; }
+            for (size_t q = 0; q < sel.size(); ++q)
+            {
+                if (cands[sel[q]].equiv_tag != tag) { continue; }
+                so += std::to_string(cands[sel[q]].equiv_ord) + ",";
+            }
+            std::cerr << "[fold-reject] " << cands[sel[a]].card_name.str()
+                      << " ord=" << cands[sel[a]].equiv_ord
+                      << " class_size=" << csz
+                      << " selected_ords=[" << so << "] sel=[" << selnames
+                      << "] class=[" << members << "]\n";
+        }
+        if (BfCensusOn())
+        {
+            bfcensus::g_fold_guard_reject.fetch_add(1, std::memory_order_relaxed);
+            bfcensus::g_fold_reject_site[site & 1].fetch_add(1, std::memory_order_relaxed);
+        }
+        dupclause::Hit(dupclause::kFoldPrefix);
+        return true;   // non-canonical arrangement
+    }
+    return false;
+}
+
+// The remand clause for sel position `a` (its entry test -- the clause bit, a remand variant -- is the
+// caller's). True = reject.
+static bool DupRemandReject(const std::vector<Action>& cands, const std::vector<int>& sel, std::size_t a)
+{
+    const Action& ra = cands[sel[a]];
+    for (size_t b = 0; b < sel.size(); ++b)
+    {
+        if (b == a) { continue; }
+        const Action& rb = cands[sel[b]];
+        if (rb.kind == Action::Kind::CastFromHand && rb.hand_index >= 0
+            && rb.hand_index == ra.hand_index)
+        { dupclause::Hit(dupclause::kRemand); return true; }
+        if (b > a && !rb.remand_by.empty() && rb.remand_by == ra.remand_by
+            && ((ra.remand_slot < rb.remand_slot) != (ra.hand_index < rb.hand_index)))
+        { dupclause::Hit(dupclause::kRemand); return true; }
+    }
+    return false;
+}
+
+// SubsetHasDuplicateSacSource on the per-candidate COMPACT summary (SubsetFilterPre::DupM): the same
+// clauses in the same order with the same Hit attribution, every Action field test answered from the
+// summary (entry bits by kind / free_cast / hand slot, the source id, the hand index); the
+// canonical-prefix and remand clauses, whose tests read equiv_ord / remand_slot, run their own bodies.
+static bool DupCompactReject(const std::vector<Action>& cands, const std::vector<int>& sel, int site,
+                             bool from_odometer, unsigned dup_clause, const DupCompact& dc)
+{
+    const std::uint16_t* m = dc.m;
+    const int* src = dc.src;
+    const int* hidx = dc.hidx;
+    const std::size_t n = sel.size();
+    for (std::size_t a = 0; a < n; ++a)
+    {
+        const std::size_t ja = static_cast<std::size_t>(sel[a]);
+        const unsigned ma = m[ja];
+        if ((ma & ((dup_clause & 0xFFu) | kDupPodEntry)) == 0 && !(from_odometer && (ma & kDupEquivEntry) != 0))
+        { continue; }
+        auto pair_with = [&](unsigned bit) -> bool
+        {
+            for (std::size_t b = a + 1; b < n; ++b)
+            {
+                const std::size_t jb = static_cast<std::size_t>(sel[b]);
+                if ((m[jb] & bit) != 0 && src[jb] == src[ja]) { return true; }
+            }
+            return false;
+        };
+        if ((dup_clause & kDupSacMana) != 0 && (ma & kDupSacMana) != 0 && pair_with(kDupSacMana))
+        { dupclause::Hit(dupclause::kSacForMana); return true; }
+        if ((dup_clause & kDupFreeCast) != 0 && (ma & kDupFreeCast) != 0 && pair_with(kDupFreeCast))
+        { dupclause::Hit(dupclause::kFreeSlot); return true; }
+        if ((dup_clause & kDupHandFree) != 0 && (ma & kDupHandFree) != 0)
+        {
+            const bool fa = (ma & kDupFreeCast) != 0;
+            for (std::size_t b = a + 1; b < n; ++b)
+            {
+                const std::size_t jb = static_cast<std::size_t>(sel[b]);
+                if ((m[jb] & kDupHandFree) != 0 && hidx[jb] == hidx[ja] && ((m[jb] & kDupFreeCast) != 0) != fa)
+                { dupclause::Hit(dupclause::kPaidFreePair); return true; }
+            }
+        }
+        if ((dup_clause & kDupLoyalty) != 0 && (ma & kDupLoyalty) != 0 && pair_with(kDupLoyalty))
+        { dupclause::Hit(dupclause::kLoyalty); return true; }
+        if ((dup_clause & kDupGarth) != 0 && (ma & kDupGarth) != 0 && pair_with(kDupGarth))
+        { dupclause::Hit(dupclause::kGarth); return true; }
+        if ((dup_clause & kDupBlink) != 0 && (ma & kDupBlink) != 0 && pair_with(kDupBlink))
+        { dupclause::Hit(dupclause::kBlink); return true; }
+        if ((dup_clause & kDupPermAbil) != 0 && (ma & kDupPermAbil) != 0 && pair_with(kDupPermAbil))
+        { dupclause::Hit(dupclause::kPermAbility); return true; }
+        if (from_odometer && (ma & kDupEquivEntry) != 0 && cands[ja].equiv_tag != 0 && cands[ja].equiv_ord > 0
+            && DupEquivReject(cands, sel, a, site))
+        { return true; }
+        if ((dup_clause & kDupRemand) != 0 && (ma & kDupRemand) != 0 && DupRemandReject(cands, sel, a))
+        { return true; }
+        if ((ma & kDupPodEntry) != 0 && pair_with(kDupPodEntry))
+        { dupclause::Hit(dupclause::kPod); return true; }
+    }
+    return false;
+}
+
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer,
-                                        unsigned dup_clause, const std::uint16_t* dup_m)
+                                        unsigned dup_clause, const DupCompact* dc)
 {
     if (BfCensusOn())
     {
@@ -15843,22 +16001,12 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
         }
     }
+    // THE COMPACT PATH (SubsetFilterPre::DupM, MTG_DUP_SRC_SKIP, DEFAULT ON; null -> the clauses below). 5.3% of
+    // a Vampires d5 game's instructions were these clause tests on scattered Action fields (callgrind
+    // 2026-10-21); DupCompactReject answers every one of them from a few bytes per candidate.
+    if (dc != nullptr) { return DupCompactReject(cands, sel, site, from_odometer, dup_clause, *dc); }
     for (size_t a = 0; a < sel.size(); ++a)
     {
-        // THE ENTRY SKIP (SubsetFilterPre::dup_m; empty -> null -> every clause is tested). Every
-        // clause below opens with a test on cands[sel[a]] alone; dup_m[j] is the OR of the clause bits whose
-        // opening test candidate j passes (kind / free_cast / hand_index / remand_by, frozen for the walk),
-        // its kDupEquivEntry bit the canonical-prefix clause's equiv_tag != 0 when the summary was built
-        // (RenumberFoldOrds only ever clears a tag, so a zero there is still zero). A candidate that opens
-        // no clause is skipped -- the clauses, their order and their Hit attribution are unchanged.
-        // (MTG_DUP_SRC_SKIP, DEFAULT ON; =0 -> no summary.) 5.3% of a Vampires d5 game's instructions
-        // were these opening tests on scattered Action fields (callgrind 2026-10-21).
-        if (dup_m != nullptr)
-        {
-            const std::size_t ja = static_cast<std::size_t>(sel[a]);
-            if ((dup_m[ja] & ((dup_clause & 0xFFu) | kDupPodEntry)) == 0
-                && !(from_odometer && (dup_m[ja] & kDupEquivEntry) != 0)) { continue; }
-        }
         if ((dup_clause & kDupSacMana) != 0 && cands[sel[a]].kind == Action::Kind::SacForMana)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
@@ -15944,63 +16092,9 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // axis fully expressible: k selected actions still mean k activations, so nothing changes
         // in the apply and no distinct line is lost. Inert when the tag is 0, which is every action
         // on every deck until a source proves itself plain.
-        if (from_odometer && cands[sel[a]].equiv_tag != 0 && cands[sel[a]].equiv_ord > 0)
-        {
-            if (BfCensusOn()) { bfcensus::g_fold_guard_seen.fetch_add(1, std::memory_order_relaxed); }
-            const int tag  = cands[sel[a]].equiv_tag;
-            const int want = cands[sel[a]].equiv_ord - 1;
-            bool have_pred = false;
-            for (size_t q = 0; q < sel.size(); ++q)
-            {
-                if (cands[sel[q]].equiv_tag == tag && cands[sel[q]].equiv_ord == want)
-                { have_pred = true; break; }
-            }
-            if (!have_pred)
-            {
-                // FoldVerifyOn() HOISTED (2026-09-19, perf). The verifier's own first line is this
-                // same test, so it used to return immediately -- but "immediately" still meant a
-                // call into a large, un-inlinable function plus a thread-local read, once per fold
-                // REJECTION. On Fungus (interchangeable spore sources -> every enumeration folds)
-                // the two constprop clones of that no-op were 1.29% of a slow game. Testing the
-                // flag here lets the call vanish entirely when the verifier is off, which is every
-                // run but an MTG_FOLD_VERIFY audit.
-                if (FoldVerifyOn()) { VerifyFoldRecoverable(cands, sel, a, tag, site); }
-                static const bool s_ftrace = EnvOn("MTG_FOLD_TRACE");
-                if (s_ftrace)
-                {
-                    std::string so, members;
-                    int csz = 0;
-                    for (size_t q = 0; q < cands.size(); ++q)
-                    {
-                        if (cands[q].equiv_tag != tag) { continue; }
-                        ++csz;
-                        members += cands[q].card_name.str() + "#" + std::to_string(q)
-                                 + "/hi" + std::to_string(cands[q].hand_index)
-                                 + "/o" + std::to_string(cands[q].equiv_ord) + " ";
-                    }
-                    std::string selnames;
-                    for (size_t q = 0; q < sel.size(); ++q)
-                    { selnames += cands[sel[q]].card_name.str() + "#" + std::to_string(sel[q]) + " "; }
-                    for (size_t q = 0; q < sel.size(); ++q)
-                    {
-                        if (cands[sel[q]].equiv_tag != tag) { continue; }
-                        so += std::to_string(cands[sel[q]].equiv_ord) + ",";
-                    }
-                    std::cerr << "[fold-reject] " << cands[sel[a]].card_name.str()
-                              << " ord=" << cands[sel[a]].equiv_ord
-                              << " class_size=" << csz
-                              << " selected_ords=[" << so << "] sel=[" << selnames
-                              << "] class=[" << members << "]\n";
-                }
-                if (BfCensusOn())
-                {
-                    bfcensus::g_fold_guard_reject.fetch_add(1, std::memory_order_relaxed);
-                    bfcensus::g_fold_reject_site[site & 1].fetch_add(1, std::memory_order_relaxed);
-                }
-                dupclause::Hit(dupclause::kFoldPrefix);
-                return true;   // non-canonical arrangement
-            }
-        }
+        if (from_odometer && cands[sel[a]].equiv_tag != 0 && cands[sel[a]].equiv_ord > 0
+            && DupEquivReject(cands, sel, a, site))
+        { return true; }
         // REMAND (Action::remand_by). Its variants live in the REMAND copy's group (PlanGroupKey), so
         // the odometer can pair one with a cast that uses the SAME hand slot X -- X cast plainly AND
         // remanded, or remanded by two Remand copies at once: the same physical card cast twice.
@@ -16010,21 +16104,9 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // target slot order follows Remand slot order -- because the apply worlds take the Remand BY
         // NAME, so "copy a answers X, copy b answers Y" and the swap are the same line (an identity
         // fold of interchangeable copies, never a pick). Inert unless a remand variant exists.
-        if ((dup_clause & kDupRemand) != 0 && !cands[sel[a]].remand_by.empty())
-        {
-            const Action& ra = cands[sel[a]];
-            for (size_t b = 0; b < sel.size(); ++b)
-            {
-                if (b == a) { continue; }
-                const Action& rb = cands[sel[b]];
-                if (rb.kind == Action::Kind::CastFromHand && rb.hand_index >= 0
-                    && rb.hand_index == ra.hand_index)
-                { dupclause::Hit(dupclause::kRemand); return true; }
-                if (b > a && !rb.remand_by.empty() && rb.remand_by == ra.remand_by
-                    && ((ra.remand_slot < rb.remand_slot) != (ra.hand_index < rb.hand_index)))
-                { dupclause::Hit(dupclause::kRemand); return true; }
-            }
-        }
+        if ((dup_clause & kDupRemand) != 0 && !cands[sel[a]].remand_by.empty()
+            && DupRemandReject(cands, sel, a))
+        { return true; }
         // Birthing Pod: one activation per Pod per plan (the {T} cost).
         if (cands[sel[a]].kind == Action::Kind::ActivatePod)
         {
@@ -17941,10 +18023,15 @@ struct SubsetFilterPre
     // selections, where the entry tests are cheaper than a pass over every candidate). Built during the walk
     // it also reads the tags AFTER RenumberFoldOrds -- the very values the clauses test.
     mutable std::vector<std::uint16_t> dup_m;
+    mutable std::vector<int>           dup_src;
+    mutable std::vector<int>           dup_hidx;
+    mutable DupCompact                 dup_c{ nullptr, nullptr, nullptr };
     mutable bool dup_armed = false;
     mutable bool dup_tried = false;
     mutable int  dup_calls = 0;
-    const std::uint16_t* DupM(const std::vector<Action>& cands) const;
+    const DupCompact* DupMBuild(const std::vector<Action>& cands) const;
+    const DupCompact* DupM(const std::vector<Action>& cands) const
+    { return dup_c.m != nullptr ? &dup_c : (dup_armed && !dup_tried ? DupMBuild(cands) : nullptr); }
     // SubsetHasStrandedAttachSpell (Magnetic Theft). Placed after the positional aggregate init on
     // purpose: it keeps its TRUE initialiser (unoptimised) on the instruments-armed path, and the
     // builder below lowers it explicitly before raising it per candidate.
@@ -18634,13 +18721,14 @@ static bool SubsetHasUngrantedReplicatePin(const std::vector<Action>& cands, con
 
 // Each clause's opening test on the candidate alone (SubsetHasDuplicateSacSource's entry skip), built on the
 // filter's VampRulePreLazyK()+1-th call of the enumeration.
-const std::uint16_t* SubsetFilterPre::DupM(const std::vector<Action>& cands) const
+const DupCompact* SubsetFilterPre::DupMBuild(const std::vector<Action>& cands) const
 {
-    if (!dup_m.empty()) { return dup_m.data(); }
-    if (!dup_armed || dup_tried || ++dup_calls <= VampRulePreLazyK()) { return nullptr; }
+    if (++dup_calls <= VampRulePreLazyK()) { return nullptr; }
     dup_tried = true;
     if (cands.empty()) { return nullptr; }
     dup_m.assign(cands.size(), 0);
+    dup_src.assign(cands.size(), 0);
+    dup_hidx.assign(cands.size(), 0);
     for (std::size_t j = 0; j < cands.size(); ++j)
     {
         const Action& a = cands[j];
@@ -18655,9 +18743,12 @@ const std::uint16_t* SubsetFilterPre::DupM(const std::vector<Action>& cands) con
         if (!a.remand_by.empty())                                      { m |= kDupRemand; }
         if (a.kind == Action::Kind::ActivatePod)                       { m |= kDupPodEntry; }
         if (a.equiv_tag != 0)                                          { m |= kDupEquivEntry; }
-        dup_m[j] = static_cast<std::uint16_t>(m);
+        dup_m[j]    = static_cast<std::uint16_t>(m);
+        dup_src[j]  = a.sac_source_id;
+        dup_hidx[j] = a.hand_index;
     }
-    return dup_m.data();
+    dup_c = DupCompact{ dup_m.data(), dup_src.data(), dup_hidx.data() };
+    return &dup_c;
 }
 
 static void BuildEquipReleaseOnly(const GameState& state, const std::vector<Action>& cands,
