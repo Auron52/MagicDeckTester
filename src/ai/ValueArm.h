@@ -192,6 +192,9 @@ inline thread_local double      t_deck_fit_alpha = 0.0;
 // Per-deck opt-in skip allowance, per depth (MulliganProfile::escalation_skip_r; the profile outlives the
 // decision that DeckShapeScope points this at). nullptr / empty => the fleet default (R = 0).
 inline thread_local const std::vector<double>* t_deck_esc_skip_r = nullptr;
+// value_play.emul_r: the emulated ladder's frozen per-depth rollout cost per leaf (the profile outlives the decision
+// that DeckShapeScope points this at). nullptr / empty => the per-game calibration (learned R).
+inline thread_local const std::vector<double>* t_deck_emul_r = nullptr;
 // value_play.fit_lazy_r: defer FIT's per-game R calibration to first use. -1 unset => env (default ON).
 // Per-deck because Melira is the one deck it HURTS (+0.0126 +/- 0.0025) while it is a 4-7 sigma gain on
 // hinata/fivecolour/cgiving/kitty and frees cost on ten more.

@@ -62,11 +62,16 @@ struct ValuePlay
     //                                stops it one depth short of the win on deep-win decks (finding 11, Melira /
     //                                Hinata) -- "relaxed" gives it the model ladder's gate (with the exhaustion stop).
     //   exhaust_mult: 0 (=1) | >0  -- how far past the budget a leafless pass may run before its exhaustion stop.
+    //   emul_r: [] | [R1, R2, ...] -- the emulated ladder's FROZEN rollout cost per leaf by pass depth (index 0 =
+    //                                depth 1; deeper passes use the last entry). Present => the replayed gate
+    //                                reconstructs every heuristic warm-up from it and the per-game calibration
+    //                                passes are skipped (see the emulated ladder in TurnSolver.cpp).
     std::string ladder;
     std::string leaf;
     std::string commit;
     std::string alpha;
     double exhaust_mult = 0.0;
+    std::vector<double> emul_r;
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
     // Budget renewal for the escalation, PER-DECK. Stays -1 (legacy shared remaining budget) by default.

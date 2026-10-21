@@ -70276,6 +70276,13 @@ inline bool LazyLeafOn()
 // FullSearchLine read-and-clears that at entry, so a nested call never sees it.
 inline thread_local int g_fsl_leafless_miss_depth = 0;
 inline thread_local int g_lazy_known_miss_depth   = 0;
+// THE EMULATED LADDER'S COMMITTED LINE IS ALREADY THE HEURISTIC'S (2026-10-21). With value_play.ladder "emulated" and
+// the rollout as the committing leaf, the line FullSearchLine returns was searched on the heuristic leaf at the depth
+// the heuristic ladder would commit -- yet the hybrid read it like a value line, and an unverified one below the
+// trust depth (every untrusted model) went straight into the heuristic ESCALATION: the same leaf, the same ladder,
+// run a second time on what was left of the budget. FullSearchLine sets this on exit when that is what it committed,
+// and the hybrid then has nothing to escalate.
+inline thread_local bool g_fsl_emul_heuristic_commit = false;
 // DEFAULT OFF -- the budgeted extension of the lever above, under measurement (2026-10-09).
 //
 // WHY IT IS WANTED. The lever's whole value is that a decision whose win is provable inside the
@@ -74852,6 +74859,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     g_lazy_known_miss_depth = 0;
     int leafless_miss_to = 0;
     struct LeaflessMissOut { const int& d; ~LeaflessMissOut() { g_fsl_leafless_miss_depth = d; } } _lmo{leafless_miss_to};
+    bool emul_heuristic_commit = false;   // see g_fsl_emul_heuristic_commit
+    struct EmulHeurOut { const bool& b; ~EmulHeurOut() { g_fsl_emul_heuristic_commit = b; } } _eho{emul_heuristic_commit};
     // ORDER-CONDEMNATION root-turn authority on the COMMIT-THE-LINE path. The guard was
     // originally owned only by SolveWithLookahead, so the FSLine machinery ran with
     // g_condemn_root_turn == -1, whose fallback stamps at EVERY projected turn -- a
@@ -75076,8 +75085,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         int  last_done = 0;                // deepest completed pass (either leaf)
         bool heur_mode = false;            // once a heuristic pass ran, every later pass is heuristic
         constexpr int kEmulCalibN = 2;     // per-GAME samples per depth before that depth is trusted (was 3 per thread)
+        // FROZEN R (sidecar value_play.emul_r). The per-game calibration above is what keeps R a pure function of
+        // the game, and it is paid in heuristic passes: until a depth has kEmulCalibN samples IN THIS GAME, every
+        // value warm-up at that depth is followed by the heuristic pass it was meant to replace. On a deck with few
+        // searched decisions per game the ladder never leaves calibration -- Landfall (2026-10-20, 300 games, b20):
+        // 1,873 calibration passes in 842 decisions, so the shape cost the heuristic ladder PLUS its value warm-ups
+        // (1.11x live at identical play). A per-deck constant measured once offline is just as deterministic and
+        // costs nothing per game; with it the calibration never runs and R_at reads the table.
+        const std::vector<double>* frozen_r = (valuearm::t_deck_emul_r != nullptr && !valuearm::t_deck_emul_r->empty())
+                                            ? valuearm::t_deck_emul_r : nullptr;
         auto R_at = [&](int d) -> double
         {
+            if (frozen_r != nullptr)
+            {
+                const std::size_t i = static_cast<std::size_t>(std::max(1, d) - 1);
+                return (*frozen_r)[std::min(i, frozen_r->size() - 1)];
+            }
             if (d >= 0 && d < 16 && g_emul_Rn[d] > 0) { return g_emul_Rd[d]; }
             for (int off = 1; off < 16; ++off)         // nearest learned depth
             {
@@ -75289,7 +75312,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // (No calibration when the committing leaf is the model: its units per leaf are ~0 by
             //  construction -- feature extraction is unmetered -- so a calibration pass would only replay
             //  the warm-up on the same leaf. Measured 2026-09-09: 1.4-1.9x ship in units with it.)
-            if (!heuristic && !commit_model && k < 16 && g_emul_Rn[k] < kEmulCalibN)
+            if (!heuristic && !commit_model && frozen_r == nullptr && k < 16 && g_emul_Rn[k] < kEmulCalibN)
             {
                 SearchLine hatt; long long hcost = 0, hleaves = 0;
                 FSLineCache calib_cache;
@@ -75366,6 +75389,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // deepest completed value line if any pass completed at all; count it.
             g_emul_no_heuristic.fetch_add(1, std::memory_order_relaxed);
         }
+        emul_heuristic_commit = !commit_model && committed_depth >= 1 && committed_depth < 17 && ran_h[committed_depth];
         {
             const int hd = (committed_depth >= 0 && committed_depth < 16) ? committed_depth : 15;
             g_emul_commit_hist[hd].fetch_add(1, std::memory_order_relaxed);
@@ -76381,6 +76405,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
     }
     const int value_leafless_miss = g_fsl_leafless_miss_depth;   // hand-off to the escalation (g_lazy_known_miss_depth)
+    const bool emul_heuristic_line = g_fsl_emul_heuristic_commit;  // the probe committed the heuristic's own line
     g_probe_recording = false;
     g_probe_val_recording = false;
 
@@ -76476,7 +76501,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     static const int s_vto_override = []{ const char* e = std::getenv("MTG_VALUE_TRUST_OFFSET");
                                           return (e && *e) ? std::atoi(e) : -1; }();
     bool single_failed = false;   // the reserved single pass overran with nothing rated: escalate instead
-    if (s_esc_at_committed && value_active && !verified)
+    if (s_esc_at_committed && value_active && !verified && !emul_heuristic_line)
     {
         ForceHeuristicLeafGuard _fh1(true);
         FSLineCache        single_cache1;
@@ -76676,7 +76701,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // table) alone, so it is true on masses of decisions that were never going to escalate anyway (on a
     // trust-5 deck whose probe reaches depth 5, every one of them) -- tallying it unconditionally reports
     // a saving the arm did not make, which is the exact trap of reading a counter instead of the units.
-    const bool esc_wanted = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified) || nl_force_escalate || single_failed;
+    const bool esc_wanted = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified && !emul_heuristic_line)
+                         || nl_force_escalate || single_failed;
     const bool escalate = esc_wanted && !xo_esc_dead && !exhaustive;
     if (esc_wanted && xo_esc_dead) { EscXoSkips().fetch_add(1, std::memory_order_relaxed); }
     if (g_hybrid_stats.enabled && value_active)

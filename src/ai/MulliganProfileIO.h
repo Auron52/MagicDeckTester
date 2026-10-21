@@ -1331,7 +1331,8 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                                    || vp.contains("expected_buckets")
                                    || vp.contains("ladder") || vp.contains("leaf") || vp.contains("commit")
                                    || vp.contains("alpha") || vp.contains("exhaust_mult")
-                                   || vp.contains("fit_alpha") || vp.contains("fit_lazy_r")))
+                                   || vp.contains("fit_alpha") || vp.contains("fit_lazy_r")
+                                   || vp.contains("emul_r")))
             {
                 profile.value_play.ladder       = vp.value("ladder", std::string(""));
                 profile.value_play.leaf         = vp.value("leaf", std::string(""));
@@ -1361,6 +1362,7 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 };
                 if (vp.contains("leaf_cost_ms")) { profile.value_play.leaf_cost_ms = parse_costs(vp["leaf_cost_ms"]); }
                 if (vp.contains("heur_cost_ms")) { profile.value_play.heur_cost_ms = parse_costs(vp["heur_cost_ms"]); }
+                if (vp.contains("emul_r"))       { profile.value_play.emul_r       = parse_costs(vp["emul_r"]); }
             }
         }
         catch (...) { std::cerr << "[profload] SWALLOWED: value sidecar parse failed\n";
