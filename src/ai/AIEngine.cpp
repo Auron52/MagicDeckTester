@@ -74,6 +74,11 @@ static std::atomic<unsigned long long> g_bottom_cards{0};
 static std::atomic<unsigned long long> g_bottom_ns{0};
 static std::atomic<unsigned long long> g_bottom_rolls{0};   // clairvoyant bottoming rollouts actually played
 static std::atomic<unsigned long long> g_bottom_dedup{0};   // ...and ones MTG_BOTTOM_NAME_DEDUPE reused instead
+static std::atomic<unsigned long long> g_bottom_refines{0}; // tie-refine re-rolls at play settings (bottom_eval_refine_slack)
+static std::atomic<unsigned long long> g_refine_decisions{0}; // decisions reaching the tie refine
+static std::atomic<unsigned long long> g_refine_flat{0};      // ...of which every candidate was in the refine set
+static std::atomic<unsigned long long> g_refine_probes{0};    // superset probes played (refine mode 2)
+static std::atomic<unsigned long long> g_refine_probe_hits{0};// ...that won before the cheap best (=> refine ran)
 
 static bool BottomCostStatsOn()
 {
@@ -119,8 +124,11 @@ struct BottomCostReport
                      "  -- compare against TOTAL USER cpu, this is summed over threads\n",
                      calls, g_bottom_cards.load(), secs,
                      calls ? 1000.0 * secs / static_cast<double>(calls) : 0.0);
-        std::fprintf(stderr, "[bottom-cost] rollouts=%llu name-dedupe-reused=%llu\n",
-                     g_bottom_rolls.load(), g_bottom_dedup.load());
+        std::fprintf(stderr, "[bottom-cost] rollouts=%llu name-dedupe-reused=%llu tie-refines=%llu"
+                             " refine-decisions=%llu flat=%llu probes=%llu probe-hits=%llu\n",
+                     g_bottom_rolls.load(), g_bottom_dedup.load(), g_bottom_refines.load(),
+                     g_refine_decisions.load(), g_refine_flat.load(), g_refine_probes.load(),
+                     g_refine_probe_hits.load());
     }
 };
 static BottomCostReport g_bottom_cost_report;
@@ -1790,6 +1798,51 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     static const bool s_turn_cut_env = EnvOn("MTG_BOTTOM_TURN_CUT", true);
     const bool turn_cut = heurarm::Flag(heurarm::BOTTOM_TURN_CUT, s_turn_cut_env)
                        && eff_beval_topk <= 0 && !m_external_bottom_chooser;
+    // TIE REFINE (profile `bottom_eval_refine_slack`, env twin MTG_BOTTOM_EVAL_REFINE_SLACK when
+    // explicitly set; -1 = off => byte-identical). PROTOTYPE, 2026-10-21 (Vampires bottom-eval root
+    // cause). With a cheap stage 1 (bottom_eval_depth / _budget_ms / _units), re-roll at the REAL play
+    // settings EVERY candidate whose cheap score is within `slack` turns of the cheap best -- an
+    // adaptive K instead of bottom_eval_topk's fixed one -- and decide among those only (the rest score
+    // max_turns+2, below every refined score). The turn cut stays sound in both stages: stage 1 needs
+    // exact scores only up to incumbent+slack, stage 2 only which refined candidates tie its minimum.
+    // Why: on Vampires the cheap trial cannot find a T4 line (Condemned-discard Bloodghast before the
+    // land drop, T4 Stromkirk Captain), so the T4 candidate ties the others at T5 and the heuristic
+    // tiebreak bottoms exactly the card the line needs; a fixed top-K then misses it among the ties.
+    static const int s_beval_slack_env = EnvInt("MTG_BOTTOM_EVAL_REFINE_SLACK", -1);
+    const int  eff_beval_slack = EnvSet("MTG_BOTTOM_EVAL_REFINE_SLACK") ? s_beval_slack_env
+                                                                        : m_profile.bottom_eval_refine_slack;
+    const bool beval_cheap = eff_beval_depth >= 0 || eff_beval_budget >= 0 || eff_beval_units > 0;
+    const bool tie_refine  = eff_beval_slack >= 0 && beval_cheap && eff_beval_topk <= 0
+                          && !m_external_bottom_chooser;
+    const int  cut_slack   = tie_refine ? eff_beval_slack : 0;
+    // REFINE MODE (profile `bottom_eval_refine_mode`, env twin MTG_BOTTOM_EVAL_REFINE_MODE; 0 = plain
+    // tie refine). 1 = FLAT-ONLY: refine only when the cheap stage CONSTRAINED NOTHING -- every card in
+    // hand is still `allowed` at the first bottom step (per-candidate path: every candidate ties; subset
+    // table: every card lies in some cheap-best subset), so the pick would be the heuristic tiebreak
+    // alone. (A promote-only cut at cheap_best-1 was tried and dropped: it saved no units, because a
+    // trial that wins on cheap_best replays the line its previous turn's search committed.)
+    static const int s_beval_mode_env = EnvInt("MTG_BOTTOM_EVAL_REFINE_MODE", 0);
+    const int  eff_refine_mode = EnvSet("MTG_BOTTOM_EVAL_REFINE_MODE") ? s_beval_mode_env
+                                                                       : m_profile.bottom_eval_refine_mode;
+    // 2 = FLAT + SUPERSET PROBE: on a flat decision, first play ONE trial at the real settings on the
+    // UNBOTTOMED hand (a superset of every candidate's keep, same draws), turn-cut at cheap_best-1. In a
+    // goldfish an extra card in hand is weakly dominant, so if even the superset cannot win before the
+    // cheap best, no candidate can, and the refine is skipped (the pick stays the cheap stage's).
+    const bool refine_flat_only = eff_refine_mode == 1 || eff_refine_mode == 2;
+    const bool refine_probe     = eff_refine_mode == 2;
+    // The probe: true iff the unbottomed hand wins by turn `by` at the real settings.
+    auto superset_probe = [&](int by) -> bool
+    {
+        if (by < 1) { return false; }
+        GameState trial = state;
+        m_bottom_turn_cap = turn_cut && by <= max_turns ? by : 0;
+        const int w = RolloutWinTurn(std::move(trial), max_turns);
+        m_bottom_turn_cap = 0;
+        if (BottomCostStatsOn()) { g_refine_probes.fetch_add(1, std::memory_order_relaxed);
+                                   if (w <= by) { g_refine_probe_hits.fetch_add(1, std::memory_order_relaxed); } }
+        return w <= by;
+    };
+    static const bool s_btrace = EnvOn("MTG_BOTTOM_TRACE");   // print-only, default off
     struct BottomEvalScope
     {
         AIEngine& eng; int save_d; int save_b; long long save_u;
@@ -1855,32 +1908,39 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 { if (m & (1u << idx)) { tp.hand.erase(tp.hand.begin() + idx); } }
                 return RolloutWinTurn(std::move(trial), max_turns);
             };
+            // NAME DEDUPE (MTG_BOTTOM_NAME_DEDUPE): two masks that bottom the same multiset of
+            // NAMES leave the same hand and the same library up to which physical copy sits where,
+            // so the second is scored from the first instead of playing another full game. The
+            // canonical mask takes the LOWEST-indexed copies of each name; moving a bit to a lower
+            // index only lowers the mask, so the canonical one is always scored before its twins.
+            std::vector<int> grp(static_cast<std::size_t>(h0));
+            for (int a = 0; a < h0; ++a)
+            {
+                grp[a] = a;
+                for (int b = 0; b < a; ++b)
+                { if (ap.hand[b].m_name.str() == ap.hand[a].m_name.str()) { grp[a] = b; break; } }
+            }
+            auto canon = [&](std::uint32_t m)
+            {
+                std::uint32_t c = 0;
+                for (int g = 0; g < h0; ++g)
+                {
+                    if (grp[g] != g) { continue; }
+                    int k = 0;
+                    for (int a = g; a < h0; ++a) { if (grp[a] == g && (m & (1u << a))) { ++k; } }
+                    for (int a = g; a < h0 && k > 0; ++a) { if (grp[a] == g) { c |= 1u << a; --k; } }
+                }
+                return c;
+            };
+            auto mask_names = [&](std::uint32_t m)
+            {
+                std::string out;
+                for (int idx = 0; idx < h0; ++idx)
+                { if (m & (1u << idx)) { out += (out.empty() ? "" : ", "); out += ap.hand[idx].m_name.str(); } }
+                return out;
+            };
             {
                 BottomEvalScope _beval(*this, eff_beval_depth, eff_beval_budget, eff_beval_units);   // cheap-eval override, subset rollouts only
-                // NAME DEDUPE (MTG_BOTTOM_NAME_DEDUPE): two masks that bottom the same multiset of
-                // NAMES leave the same hand and the same library up to which physical copy sits where,
-                // so the second is scored from the first instead of playing another full game. The
-                // canonical mask takes the LOWEST-indexed copies of each name; moving a bit to a lower
-                // index only lowers the mask, so the canonical one is always scored before its twins.
-                std::vector<int> grp(static_cast<std::size_t>(h0));
-                for (int a = 0; a < h0; ++a)
-                {
-                    grp[a] = a;
-                    for (int b = 0; b < a; ++b)
-                    { if (ap.hand[b].m_name.str() == ap.hand[a].m_name.str()) { grp[a] = b; break; } }
-                }
-                auto canon = [&](std::uint32_t m)
-                {
-                    std::uint32_t c = 0;
-                    for (int g = 0; g < h0; ++g)
-                    {
-                        if (grp[g] != g) { continue; }
-                        int k = 0;
-                        for (int a = g; a < h0; ++a) { if (grp[a] == g && (m & (1u << a))) { ++k; } }
-                        for (int a = g; a < h0 && k > 0; ++a) { if (grp[a] == g) { c |= 1u << a; --k; } }
-                    }
-                    return c;
-                };
                 int incumbent = max_turns + 1;   // best win over the masks rolled so far (MTG_BOTTOM_TURN_CUT)
                 for (std::uint32_t m = 0; m < (1u << h0); ++m)
                 {
@@ -1895,7 +1955,9 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                             continue;
                         }
                     }
-                    m_bottom_turn_cap = (turn_cut && incumbent <= max_turns) ? incumbent : 0;
+                    // cut_slack is 0 unless the tie refine is on, when stage 1 must score exactly up to
+                    // incumbent+slack (the refine set's edge).
+                    m_bottom_turn_cap = (turn_cut && incumbent + cut_slack <= max_turns) ? incumbent + cut_slack : 0;
                     subset_win[m] = roll_mask(m);
                     m_bottom_turn_cap = 0;
                     incumbent = std::min(incumbent, subset_win[m]);
@@ -1921,6 +1983,60 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 if (static_cast<int>(order.size()) > eff_beval_topk)
                 { order.resize(static_cast<std::size_t>(eff_beval_topk)); }
                 for (std::uint32_t m : order) { subset_win[m] = roll_mask(m); }
+            }
+            // MTG_BOTTOM_TRACE (print-only, default off): every legal removal subset's trial score.
+            if (s_btrace)
+            {
+                std::cerr << "[bottom-trace] subsets count=" << count << " depth=" << m_lookahead_depth
+                          << " budget_ms=" << m_budget_ms << " eval(d=" << eff_beval_depth << " b="
+                          << eff_beval_budget << " u=" << eff_beval_units << " k=" << eff_beval_topk
+                          << " slack=" << eff_beval_slack << ") cut=" << turn_cut << "\n";
+                for (std::uint32_t m = 0; m < static_cast<std::uint32_t>(subset_win.size()); ++m)
+                {
+                    if (subset_win[m] == 0) { continue; }
+                    std::cerr << "  mask " << m << " [" << mask_names(m) << "] -> " << subset_win[m] << "\n";
+                }
+            }
+            // TIE REFINE, subset table (see tie_refine above). Real play settings (the cheap scope has
+            // closed). Ascending mask order, so a canonical mask is refined before its name twins.
+            if (tie_refine)
+            {
+                int cheap_best = max_turns + 1;
+                for (std::uint32_t m = 0; m < static_cast<std::uint32_t>(subset_win.size()); ++m)
+                { if (subset_win[m] != 0) { cheap_best = std::min(cheap_best, subset_win[m]); } }
+                const int lim = cheap_best + eff_beval_slack;
+                // Flat = the first step's `allowed` would be all ones: every card lies in some subset
+                // inside the refine set.
+                std::uint32_t covered = 0;
+                for (std::uint32_t m = 0; m < static_cast<std::uint32_t>(subset_win.size()); ++m)
+                { if (subset_win[m] != 0 && subset_win[m] <= lim) { covered |= m; } }
+                const bool flat = covered == ((h0 >= 32) ? ~0u : ((1u << h0) - 1u));
+                if (BottomCostStatsOn()) { g_refine_decisions.fetch_add(1, std::memory_order_relaxed);
+                                           if (flat) { g_refine_flat.fetch_add(1, std::memory_order_relaxed); } }
+                std::vector<char> refined(subset_win.size(), 0);
+                int incumbent = max_turns + 1;
+                const bool go = !refine_flat_only || (flat && (!refine_probe || superset_probe(cheap_best - 1)));
+                for (std::uint32_t m = 0; m < static_cast<std::uint32_t>(subset_win.size()); ++m)
+                {
+                    if (!go) { break; }
+                    if (subset_win[m] == 0) { continue; }
+                    const int cheap = subset_win[m];
+                    if (cheap > lim) { subset_win[m] = max_turns + 2; continue; }
+                    if (s_name_dedupe)
+                    {
+                        const std::uint32_t c = canon(m);
+                        if (c != m && refined[c]) { subset_win[m] = subset_win[c]; refined[m] = 1; continue; }
+                    }
+                    m_bottom_turn_cap = (turn_cut && incumbent <= max_turns) ? incumbent : 0;
+                    subset_win[m] = roll_mask(m);
+                    m_bottom_turn_cap = 0;
+                    refined[m] = 1;
+                    incumbent = std::min(incumbent, subset_win[m]);
+                    if (BottomCostStatsOn()) { g_bottom_refines.fetch_add(1, std::memory_order_relaxed); }
+                    if (s_btrace)
+                    { std::cerr << "  refine mask " << m << " [" << mask_names(m) << "] cheap " << cheap
+                                << " -> full " << subset_win[m] << "\n"; }
+                }
             }
             subset_table = true;
         }
@@ -2042,7 +2158,8 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                         Player& trial_ap = trial.ActivePlayer();
                         trial_ap.library.push_back(trial_ap.hand[j]);
                         trial_ap.hand.erase(trial_ap.hand.begin() + j);
-                        m_bottom_turn_cap = (turn_cut && best_win <= max_turns) ? best_win : 0;   // MTG_BOTTOM_TURN_CUT
+                        m_bottom_turn_cap = (turn_cut && best_win <= max_turns && best_win + cut_slack <= max_turns)
+                                          ? best_win + cut_slack : 0;   // MTG_BOTTOM_TURN_CUT (+ tie-refine slack)
                         win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
                         m_bottom_turn_cap = 0;
                         if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
@@ -2077,9 +2194,65 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 for (int j = 0; j < hand_size; ++j)
                 { if (win_turn[j] < best_win) { best_win = win_turn[j]; } }
             }
+            // TIE REFINE, per-candidate twin of the subset-table one (see tie_refine). Only where the
+            // trials above were clairvoyant singles at the cheap settings (no table, not blind).
+            if (!subset_table && !s_blind_bottom && tie_refine)
+            {
+                if (s_btrace)
+                {
+                    std::cerr << "[bottom-trace] single step " << (i + 1) << " CHEAP (slack=" << eff_beval_slack << ")\n";
+                    for (int j = 0; j < hand_size; ++j)
+                    { std::cerr << "  bottom " << ap.hand[j].m_name << " -> " << win_turn[j] << "\n"; }
+                }
+                const int lim = best_win + eff_beval_slack;   // best_win is the cheap best here
+                bool flat = true;
+                for (int j = 0; j < hand_size; ++j) { if (win_turn[j] > lim) { flat = false; break; } }
+                if (BottomCostStatsOn()) { g_refine_decisions.fetch_add(1, std::memory_order_relaxed);
+                                           if (flat) { g_refine_flat.fetch_add(1, std::memory_order_relaxed); } }
+                std::vector<char> refined(static_cast<std::size_t>(hand_size), 0);
+                int incumbent = max_turns + 1;
+                const bool go = !refine_flat_only || (flat && (!refine_probe || superset_probe(best_win - 1)));
+                for (int j = 0; j < hand_size; ++j)
+                {
+                    if (!go) { break; }
+                    if (win_turn[j] > lim) { win_turn[j] = max_turns + 2; continue; }
+                    int twin = -1;
+                    if (s_name_dedupe)
+                    {
+                        for (int b = 0; b < j; ++b)
+                        { if (refined[b] && ap.hand[b].m_name.str() == ap.hand[j].m_name.str()) { twin = b; break; } }
+                    }
+                    if (twin >= 0) { win_turn[j] = win_turn[twin]; refined[j] = 1; continue; }
+                    GameState trial = state;
+                    Player& trial_ap = trial.ActivePlayer();
+                    trial_ap.library.push_back(trial_ap.hand[j]);
+                    trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                    m_bottom_turn_cap = (turn_cut && incumbent <= max_turns) ? incumbent : 0;
+                    win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                    m_bottom_turn_cap = 0;
+                    refined[j] = 1;
+                    incumbent = std::min(incumbent, win_turn[j]);
+                    if (BottomCostStatsOn()) { g_bottom_refines.fetch_add(1, std::memory_order_relaxed); }
+                }
+                best_win = std::numeric_limits<int>::max();
+                for (int j = 0; j < hand_size; ++j)
+                { if (win_turn[j] < best_win) { best_win = win_turn[j]; } }
+            }
             for (int j = 0; j < hand_size; ++j)
             {
                 allowed[j] = (win_turn[j] == best_win) ? 1 : 0;
+            }
+            if (s_btrace && !subset_table)
+            {
+                std::cerr << "[bottom-trace] single step " << (i + 1) << " depth=" << m_lookahead_depth
+                          << " budget_ms=" << m_budget_ms << " eval(d=" << eff_beval_depth << " b="
+                          << eff_beval_budget << " u=" << eff_beval_units << " k=" << eff_beval_topk
+                          << " slack=" << eff_beval_slack << ") cut=" << turn_cut << "\n";
+                for (int j = 0; j < hand_size; ++j)
+                {
+                    std::cerr << "  bottom " << ap.hand[j].m_name << " -> " << win_turn[j]
+                              << (allowed[j] ? " *" : "") << "\n";
+                }
             }
             if (TurnSolver::GetTraceSolve())
             {

@@ -332,6 +332,8 @@ inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
     if (profile.bottom_eval_budget_ms >= 0) { m["bottom_eval_budget_ms"] = profile.bottom_eval_budget_ms; }
     if (profile.bottom_eval_topk      >  0) { m["bottom_eval_topk"]      = profile.bottom_eval_topk; }
     if (profile.bottom_eval_units     >  0) { m["bottom_eval_units"]     = profile.bottom_eval_units; }
+    if (profile.bottom_eval_refine_slack >= 0) { m["bottom_eval_refine_slack"] = profile.bottom_eval_refine_slack; }
+    if (profile.bottom_eval_refine_mode  >  0) { m["bottom_eval_refine_mode"]  = profile.bottom_eval_refine_mode; }
     if (!profile.keep_table_alias.empty())
     {
         json al = json::array();
@@ -581,6 +583,8 @@ inline MulliganProfile ParseDeckProfileJson(const std::string& json_str, const E
     if (m.contains("bottom_eval_budget_ms")) { profile.bottom_eval_budget_ms = m["bottom_eval_budget_ms"].get<int>(); }
     if (m.contains("bottom_eval_topk"))      { profile.bottom_eval_topk      = m["bottom_eval_topk"].get<int>(); }
     if (m.contains("bottom_eval_units"))     { profile.bottom_eval_units     = m["bottom_eval_units"].get<int>(); }
+    if (m.contains("bottom_eval_refine_slack")) { profile.bottom_eval_refine_slack = m["bottom_eval_refine_slack"].get<int>(); }
+    if (m.contains("bottom_eval_refine_mode"))  { profile.bottom_eval_refine_mode  = m["bottom_eval_refine_mode"].get<int>(); }
     // Keep-table name aliases (see MulliganProfile::keep_table_alias). `why` is mandatory: an alias is a
     // lossy, temporary stand-in for a regeneration, and an unexplained one is how it outlives its reason.
     // An entry without one is SKIPPED, loudly -- not thrown: LoadDeckProfile swallows a parse exception

@@ -182,6 +182,13 @@ struct MulliganProfile
     // (Prevent Damage: b10 / b5 / b2 / b1 played identical games). -1 = unset. Env twin
     // MTG_BOTTOM_EVAL_UNITS overrides when explicitly set.
     int bottom_eval_units     = -1;
+    // TIE REFINE (PROTOTYPE 2026-10-21, Vampires): with a cheap stage 1, re-roll at the real play
+    // settings every candidate whose cheap score is within this many turns of the cheap best, and decide
+    // among those (an adaptive bottom_eval_topk). -1 = off. Env twin MTG_BOTTOM_EVAL_REFINE_SLACK.
+    int bottom_eval_refine_slack = -1;
+    // Tie-refine mode (see AIEngine BottomCards): 0 = refine every cheap-best tie; 1 = FLAT-ONLY (refine
+    // only when the cheap stage left every card allowed). Env twin MTG_BOTTOM_EVAL_REFINE_MODE.
+    int bottom_eval_refine_mode = 0;
 
     // KEEP-TABLE NAME ALIASES (mulligan.keep_table_alias = [{name, as, why}], per deck, explicit,
     // TEMPORARY). A hand card named `name` is looked up in the exhaustive keep/bottom table as `as` --
