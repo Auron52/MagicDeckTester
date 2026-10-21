@@ -2581,6 +2581,21 @@ public:
     // True = the selection is rejected.
     static bool VampSweepSubsetRuleRejects(const GameState& state, const std::vector<Action>& cands,
                                            const std::vector<int>& sel, int rule);
+    // MTG_VAMP_RULE_PRE test hook: SubsetVampOutletInvalid on `sel` both ways -- `slow` the per-subset
+    // rules, `fast` the per-enumeration VampRulePre path (built over `cands` on `state`). Equal by design.
+    // The raw candidate list CollectActions emits for `state` (test hook; what both subset walkers index).
+    static std::vector<Action> CollectActionsForTest(const GameState& state, bool is_pre_combat);
+    static void VampRulePreAgreeForTest(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel, bool fold_from_odometer,
+                                        bool& slow, bool& fast);
+    // MTG_WALK_DFS test hook: the selections the plain scalar subset walk emits, in order -- `dfs` = the
+    // pruned depth-first walk (PlainOdometerDfs), else a reference carry walk (the odometer with the
+    // per-position mana test). Equal by design.
+    static std::vector<std::vector<int>> PlainWalkSequenceForTest(const std::vector<std::vector<int>>& groups,
+                                                                  const std::vector<int>& independent,
+                                                                  const std::vector<int>& auto_sel,
+                                                                  const std::vector<int>& cand_mv,
+                                                                  int mana_bound, bool dfs);
     // VAMPIRES B: does the pass hold a count-READING activation (Captivating Vampire's steal, Bloodline
     // Keeper's transform)? Then OrderTrailingActivations applies the engine's COUNT BANDS (raisers ->
     // the steal -> the transform -> creature sacrifices) ahead of the provider rank, and both trailing

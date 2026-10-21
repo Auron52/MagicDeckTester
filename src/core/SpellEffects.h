@@ -23763,10 +23763,20 @@ inline int Intern(const StealTapSpec& s)
     std::array<int, 9> k{};
     k[0] = s.n;
     for (int i = 0; i < 8; ++i) { k[static_cast<std::size_t>(i + 1)] = s.slot[static_cast<std::size_t>(i)]; }
+    // PER-THREAD MEMO in front of the shared table (2026-10-21): every Captivating Vampire steal variant
+    // the search emits interned its spec under the global mutex -- contended across a batch's workers.
+    // A spec's id never changes once assigned, so a memoised id is exactly what the table would return.
+    // (Ids are first-seen order across threads either way; every key folds the spec's CONTENT,
+    // StealSpecFold, never the id.)
+    static thread_local std::map<std::array<int, 9>, int> t_memo;
+    {
+        auto mt = t_memo.find(k);
+        if (mt != t_memo.end()) { return mt->second; }
+    }
     Table& t = T();
     std::lock_guard<std::mutex> g(t.mu);
     auto it = t.index.find(k);
-    if (it != t.index.end()) { return it->second; }
+    if (it != t.index.end()) { t_memo.emplace(k, it->second); return it->second; }
     const int id = t.next;
     const int c  = id >> kChunkBits;
     if (c >= kMaxChunks) { return 0; }   // 16M distinct specs: unreachable; 0 = unpinned (a no-op)
@@ -23779,6 +23789,7 @@ inline int Intern(const StealTapSpec& s)
     chunk[id & (kChunk - 1)] = s;
     ++t.next;
     t.index.emplace(k, id);
+    t_memo.emplace(k, id);
     return id;
 }
 inline const StealTapSpec* Get(int id)

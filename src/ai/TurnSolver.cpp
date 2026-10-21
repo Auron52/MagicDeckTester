@@ -7585,6 +7585,53 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
     }
 }
 
+std::vector<std::vector<int>> TurnSolver::PlainWalkSequenceForTest(const std::vector<std::vector<int>>& groups,
+                                                                   const std::vector<int>& independent,
+                                                                   const std::vector<int>& auto_sel,
+                                                                   const std::vector<int>& cand_mv,
+                                                                   int mana_bound, bool dfs)
+{
+    std::vector<std::vector<int>> out;
+    std::vector<int> sel;
+    if (dfs)
+    {
+        PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel,
+                         [&](std::vector<int>& s) -> bool { out.push_back(s); return false; });
+        return out;
+    }
+    // The reference: the carry walk's plain path, one position at a time (no radix cut -- it only
+    // skips positions this test refuses anyway).
+    const int G = static_cast<int>(groups.size());
+    const int num_ind = static_cast<int>(independent.size());
+    std::vector<int> choice(static_cast<std::size_t>(G), 0);
+    bool done = false;
+    while (!done)
+    {
+        int mcost = 0;
+        for (int g = 0; g < G; ++g) { if (choice[g] > 0) { mcost += cand_mv[groups[g][choice[g] - 1]]; } }
+        for (int imask = 0; mcost <= mana_bound && imask < (1 << num_ind); ++imask)
+        {
+            int pcost = 0;
+            sel.clear();
+            sel.insert(sel.end(), auto_sel.begin(), auto_sel.end());
+            for (int g = 0; g < G; ++g) { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+            for (int b = 0; b < num_ind; ++b)
+            { if (imask & (1 << b)) { sel.push_back(independent[b]); pcost += cand_mv[independent[b]]; } }
+            if (sel.empty()) { continue; }
+            if (mcost + pcost <= mana_bound) { out.push_back(sel); }
+        }
+        int g = 0;
+        for (; g < G; ++g)
+        {
+            ++choice[g];
+            if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
+            choice[g] = 0;
+        }
+        if (g == G) { done = true; }
+    }
+    return out;
+}
+
 // The card number of the Equipment whose equip this plan's storied waiver pays for, or 0. Shared by
 // every PAYMENT site so the score computed by StoriedFirstEquipWaiverCredit above and the mana
 // actually spent cannot disagree -- and so the two worlds (executor and rollout) agree by
@@ -13320,6 +13367,16 @@ static bool SubsetVampOutletInvalidWith(const GameState& state, const std::vecto
         }
     }
     return fast;
+}
+
+void TurnSolver::VampRulePreAgreeForTest(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel, bool fold_from_odometer,
+                                         bool& slow, bool& fast)
+{
+    VampRulePre p;
+    BuildVampRulePre(state, cands, p);
+    slow = SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer);
+    fast = p.built ? SubsetVampOutletInvalidPre(state, cands, sel, fold_from_odometer, p) : slow;
 }
 
 static bool SubsetHasStrandedHandBlink(const std::vector<Action>& cands,
@@ -28160,7 +28217,73 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
 // engine never narrows). Two copies of one name are ONE class: same name => same definition => the
 // same card, so which copy goes is unobservable (a sound identity fold, design_A2 §0.1). A staged card
 // is in exile, never a legal discard.
+// ---- THE COLLECT MEMO: per-CollectActions-call caches for its emission helpers --------------------------
+// (MTG_COLLECT_MEMO, DEFAULT ON; =0 -> every helper recomputes.) CollectActions takes its state by const
+// reference and emits every candidate off that one unchanging board, but several Vampires emission helpers
+// recomputed board facts once PER SOURCE / PER PIN: ActivationDiscardClasses re-ran the provider's cleanup
+// ranking (VialProvider's curve fill) for every discard-cost source; MadnessFanFor copied the whole
+// GameState for its post-discard probe and re-derived the turn's optimistic mana per pin. Together ~6% of
+// a Vampires 2HG d5 game (callgrind 2026-10-21). The memo lives exactly as long as one CollectActions call
+// (CollectMemoScope; nested calls push their own), and a helper uses it only when it is handed THAT
+// call's state object -- any other state (a copy, a probe) misses and computes as before. Every cached
+// value is a pure function of (state, the helper's arguments), so a hit returns what a recompute would.
+struct CollectMemo
+{
+    const GameState* st = nullptr;
+    bool otm_ready = false;
+    int  otm = 0;                                    // OptimisticTurnMana(*st)
+    bool pool_ready = false;
+    ManaPool opt_pool;                               // AvailableManaPool(*st) + st->floating_mana
+    std::vector<std::pair<const CardDefinition*, std::vector<std::string>>> discard_classes;
+    std::unique_ptr<GameState> probe;                // MadnessFanFor's scratch: a copy of *st, hand restored
+    bool probe_busy = false;                         // the scratch is mid-use (a re-entrant fan copies)
+};
+inline thread_local CollectMemo* t_collect_memo = nullptr;
+static bool CollectMemoOn()
+{
+    static const bool v = EnvOn("MTG_COLLECT_MEMO", true);   // DEFAULT ON; =0 -> no per-call memo
+    return v;
+}
+struct CollectMemoScope
+{
+    CollectMemo  memo;
+    CollectMemo* prev;
+    bool         armed;
+    explicit CollectMemoScope(const GameState& s) : prev(t_collect_memo), armed(CollectMemoOn())
+    {
+        if (!armed) { return; }
+        memo.st = &s;
+        t_collect_memo = &memo;
+    }
+    ~CollectMemoScope() { if (armed) { t_collect_memo = prev; } }
+    CollectMemoScope(const CollectMemoScope&) = delete;
+    CollectMemoScope& operator=(const CollectMemoScope&) = delete;
+};
+static CollectMemo* CollectMemoFor(const GameState& s)
+{
+    CollectMemo* m = t_collect_memo;
+    return (m != nullptr && m->st == &s) ? m : nullptr;
+}
+static int CollectOptimisticTurnMana(const GameState& s)
+{
+    CollectMemo* m = CollectMemoFor(s);
+    if (m == nullptr) { return OptimisticTurnMana(s); }
+    if (!m->otm_ready) { m->otm = OptimisticTurnMana(s); m->otm_ready = true; }
+    return m->otm;
+}
+
+static std::vector<std::string> ActivationDiscardClassesUncached(const GameState& state,
+                                                                 const CardDefinition& src_def);
 static std::vector<std::string> ActivationDiscardClasses(const GameState& state, const CardDefinition& src_def)
+{
+    CollectMemo* m = CollectMemoFor(state);
+    if (m == nullptr) { return ActivationDiscardClassesUncached(state, src_def); }
+    for (const auto& e : m->discard_classes) { if (e.first == &src_def) { return e.second; } }
+    m->discard_classes.emplace_back(&src_def, ActivationDiscardClassesUncached(state, src_def));
+    return m->discard_classes.back().second;
+}
+static std::vector<std::string> ActivationDiscardClassesUncached(const GameState& state,
+                                                                 const CardDefinition& src_def)
 {
     std::vector<std::string> names;
     for (const Card& c : state.ActivePlayer().hand)
@@ -28379,8 +28502,17 @@ static void EmitStealVariants(const GameState& state, const Card& src_card, cons
     struct Var { StealTapSpec spec; int lost_pw; int arrivals; };
     std::vector<Var> vars;
     std::vector<int> cnt(cls.size(), 0);
-    std::function<void(std::size_t, int)> rec = [&](std::size_t i, int left)
+    // The count distributions, depth-first, class i's count from high to low. A direct recursive lambda
+    // (it was a std::function: an indirect call per node) that also skips a subtree whose remaining
+    // classes cannot absorb `left` bodies -- every leaf under it fails `left == 0` -- so the leaves, and
+    // their order, are exactly the full recursion's. MTG_STEAL_REC_PRUNE=0 restores the unpruned walk.
+    // (3.5% of a Vampires d3 game's instructions, callgrind 2026-10-21.)
+    static const bool s_rec_prune = EnvOn("MTG_STEAL_REC_PRUNE", true);   // DEFAULT ON
+    std::vector<int> cap_suf(cls.size() + 1, 0);
+    for (std::size_t i = cls.size(); i-- > 0;) { cap_suf[i] = cap_suf[i + 1] + cls[i].real + cls[i].arr; }
+    auto rec = [&](auto& self, std::size_t i, int left) -> void
     {
+        if (s_rec_prune && i < cls.size() && cap_suf[i] < left) { return; }
         if (i == cls.size())
         {
             if (left != 0) { return; }
@@ -28400,10 +28532,10 @@ static void EmitStealVariants(const GameState& state, const Card& src_card, cons
             return;
         }
         const int cap = std::min(left, cls[i].real + cls[i].arr);
-        for (int c = cap; c >= 0; --c) { cnt[i] = c; rec(i + 1, left - c); }
+        for (int c = cap; c >= 0; --c) { cnt[i] = c; self(self, i + 1, left - c); }
         cnt[i] = 0;
     };
-    rec(0, N);
+    rec(rec, 0, N);
     if (vars.empty()) { return; }
     // Order only: fewest given-up attack power, then fewest arrivals relied on.
     std::stable_sort(vars.begin(), vars.end(), [](const Var& x, const Var& y)
@@ -28652,12 +28784,35 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
     if (d == nullptr) { return fan; }
     const std::vector<ManaCost> costs = MadnessFanCosts(state, me, c);
     if (costs.empty()) { return fan; }
-    // The post-discard board (no payability probe -- see the block note).
-    GameState probe = state;
-    probe.players[me].hand.erase(probe.players[me].hand.begin() + hi);
+    // The post-discard board (no payability probe -- see the block note). Inside a CollectActions call
+    // (CollectMemo) the board is copied ONCE per call and each pin erases / re-inserts its card: the same
+    // board a fresh copy-and-erase gives, without a GameState copy per pin.
+    CollectMemo* cm = CollectMemoFor(state);
+    std::optional<GameState> own_probe;
+    GameState* probe_p = nullptr;
+    const bool use_scratch = cm != nullptr && !cm->probe_busy;
+    if (use_scratch)
+    {
+        if (!cm->probe) { cm->probe = std::make_unique<GameState>(state); }
+        probe_p = cm->probe.get();
+        cm->probe_busy = true;
+    }
+    else { own_probe.emplace(state); probe_p = &*own_probe; }
+    probe_p->players[me].hand.erase(probe_p->players[me].hand.begin() + hi);
+    struct ProbeRestore
+    {
+        CollectMemo* cm; GameState* p; int me; int hi; Card c;
+        ~ProbeRestore()
+        {
+            if (cm == nullptr) { return; }
+            p->players[me].hand.insert(p->players[me].hand.begin() + hi, c);
+            cm->probe_busy = false;
+        }
+    } probe_restore{ use_scratch ? cm : nullptr, probe_p, me, hi, c };
+    const GameState& probe = *probe_p;
     const MadnessPending pend{ c, me, costs, src_name };
     const MadnessWindow w = MadnessWindowNow(state);
-    const int budget = OptimisticTurnMana(state);
+    const int budget = CollectOptimisticTurnMana(state);
     auto over_budget = [&](const MadnessOption& o)
     { return budget != kNoManaCeiling && outlet_cost.ManaValue() + o.reduced.ManaValue() > budget; };
     // The provider's default is read off the PRE-PLAN options (this board's arms -- what it has always been
@@ -28742,8 +28897,22 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
         static const bool s_env = EnvOn("MTG_VAMP_MADNESS_COLOR_FOLD", true);
         if (budget != kNoManaCeiling && heurarm::Flag(heurarm::VAMP_MADNESS_COLOR_FOLD, s_env))
         {
-            ManaPool opt = AvailableManaPool(state);
-            opt.AddPool(state.floating_mana);   // may double-count (AvailableManaPool can hold it): optimistic
+            ManaPool opt;
+            if (cm != nullptr)
+            {
+                if (!cm->pool_ready)
+                {
+                    cm->opt_pool = AvailableManaPool(state);
+                    cm->opt_pool.AddPool(state.floating_mana);
+                    cm->pool_ready = true;
+                }
+                opt = cm->opt_pool;
+            }
+            else
+            {
+                opt = AvailableManaPool(state);
+                opt.AddPool(state.floating_mana);   // may double-count (AvailableManaPool can hold it): optimistic
+            }
             if (budget > opt.Total()) { opt.wild += budget - opt.Total(); }
             for (std::size_t k = 0; k < opts.size(); ++k)
             {
@@ -28964,19 +29133,27 @@ static bool SubsetMadnessCoverInvalid(const GameState& state, const std::vector<
 }
 
 // Push `a` once per madness variant of `fan` (or once, unchanged, when the fan is empty).
-static void PushWithMadnessFan(std::vector<Action>& actions, const Action& a,
+// Takes `a` by rvalue: the LAST variant is built in `a` itself and moved in, so a fan of k variants costs
+// k-1 copies, not k (and a fan-less push costs none) -- the same actions in the same order.
+static void PushWithMadnessFan(std::vector<Action>& actions, Action&& a,
                                const std::vector<MadnessVariant>& fan)
 {
-    if (fan.empty()) { actions.push_back(a); return; }
-    for (const MadnessVariant& v : fan)
+    if (fan.empty()) { actions.push_back(std::move(a)); return; }
+    auto stamp = [](Action& b, const MadnessVariant& v)
     {
-        Action b = a;
         b.madness_choice = v.choice;
         b.madness_arm    = v.arm;
         b.madness_mv     = v.mv;
         b.cost.generic  += v.mv;
+    };
+    for (std::size_t k = 0; k + 1 < fan.size(); ++k)
+    {
+        Action b = a;
+        stamp(b, fan[k]);
         actions.push_back(std::move(b));
     }
+    stamp(a, fan.back());
+    actions.push_back(std::move(a));
 }
 
 // The VICTIM CLASSES of a discard-cost sac outlet on the PRE-PLAN board: one battlefield index per
@@ -29023,15 +29200,22 @@ static bool HandCardIsSubtypeCreature(const Card& c, const std::string& sub)
 // there instead is a DEAD read: it silently disables whatever rule it guards (the free-cast bank's
 // CR 107.3b X = 0, MTG_FREECAST_X_ZERO; the one-host double-strike gate, MTG_EQUIP_DS_GATE_CASTS).
 // docs/design/precollect-def-dead-reads.md lists every such site.
+// The by-name branch keys on the INTERNED name (LookupInterned: a pointer-keyed index over the same
+// m_cards, rebuilt at every load / Register, so it returns exactly Lookup(name) -- every DB key is interned
+// there and interning is canonical) instead of hashing the string: ~1M string hashes per Vampires 2HG d5
+// game, 0.7% of its instructions (callgrind 2026-10-21). MTG_LOOKUP_INTERNED=0 restores the string lookup.
 static const CardDefinition* CollectedActionDef(const Player& ap, const Action& a)
 {
+    static const bool s_interned = EnvOn("MTG_LOOKUP_INTERNED", true);   // DEFAULT ON
     return (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
                ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
-               : CardDatabase::Instance().Lookup(a.card_name);
+               : (s_interned ? CardDatabase::Instance().LookupInterned(a.card_name)
+                             : CardDatabase::Instance().Lookup(a.card_name));
 }
 
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
+    CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
     const Player& ap = state.ActivePlayer();
     bool has_creature_target = HasLegalCreatureTarget(state);
     int  n = static_cast<int>(ap.hand.size());
@@ -32803,7 +32987,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // (conditional availability), an ETB tap rider (Skateboard), or hone counters on the
             // physical equipment -- EquipAttachDeltaFor structurally cannot see those (Dwalin), a
             // pre-existing emission gap this must not deepen.
-            const bool s_eqdom_open = EnvOn("MTG_EQUIP_ALL_HOSTS")
+            // The env read is cached (it was a getenv per CollectActions call: 0.2% of a Vampires 2HG
+            // game, callgrind 2026-10-21); the same flag is read through a static below.
+            static const bool s_all_hosts_env = EnvOn("MTG_EQUIP_ALL_HOSTS");
+            const bool s_eqdom_open = s_all_hosts_env
                                    || DecisionUnpruned(UnprunedGate::EquipHost)
                                    || HumanPlayActive();
             const bool s_eqdom = EquipEqcostDominanceEnabled() && !s_eqdom_open
@@ -35364,7 +35551,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.eval           = 0;   // card-neutral (discard one, draw one); the rollout scores it
                     a.is_noncreature = true;
                     // Vampires A1: crossed with the discard's madness answer (MadnessFanFor).
-                    PushWithMadnessFan(actions, a, MadnessFanFor(state, pin, bcost, src.card.m_name.str()));
+                    PushWithMadnessFan(actions, std::move(a), MadnessFanFor(state, pin, bcost, src.card.m_name.str()));
                 }
             }
 
@@ -36070,7 +36257,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.eval           = atk * sd->params.discard_team_pump_power * DMG - DMG;
                     a.is_noncreature = true;
                     // Vampires A1: crossed with the discard's madness answer (MadnessFanFor).
-                    PushWithMadnessFan(actions, a, MadnessFanFor(state, pin, ManaCost{}, src.card.m_name.str()));
+                    PushWithMadnessFan(actions, std::move(a), MadnessFanFor(state, pin, ManaCost{}, src.card.m_name.str()));
                 }
             }
         }
@@ -36174,6 +36361,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 fans.reserve(pins.size());
                 for (const std::string& pin : pins)
                 { fans.push_back(MadnessFanFor(state, pin, base.cost, src.card.m_name.str(), /*outlet_sacrifices=*/true)); }
+                // The pins interned ONCE: assigning a std::string to an InternedName interns it, and the
+                // loops below assign one per (victim class x pin) -- 1.4M interns per Vampires 2HG d5 game
+                // (callgrind 2026-10-21). Same canonical pointers.
+                std::vector<InternedName> pin_names;
+                pin_names.reserve(pins.size());
+                for (const std::string& pin : pins) { pin_names.emplace_back(pin); }
                 // Board victims.
                 for (const int vi : DiscardSacVictimClasses(state, src, op))
                 {
@@ -36187,9 +36380,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         Action a = base;
                         a.sac_victim_id = v.card.m_number;
-                        a.discard_name  = pins[pi];
+                        a.discard_name  = pin_names[pi];
                         a.eval          = (net_cards - loss) * DMG;
-                        PushWithMadnessFan(actions, a, fans[pi]);
+                        PushWithMadnessFan(actions, std::move(a), fans[pi]);
                     }
                 }
                 // Same-plan victims: one per distinct Vampire creature NAME in hand (staged castables too).
@@ -36202,6 +36395,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 for (const std::string& vn : hv)
                 {
+                    const InternedName vn_i(vn);
                     const CardDefinition* vd = CardDatabase::Instance().Lookup(vn);
                     const int pw   = (vd != nullptr) ? std::max(0, vd->card.m_power.value_or(0)) : 0;
                     const int loss = (vd != nullptr && vd->gy_landfall_watcher && land_in_hand) ? 0 : pw;
@@ -36209,11 +36403,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         Action a = base;
                         a.sac_victim_id   = 0;
-                        a.victim_name     = vn;
+                        a.victim_name     = vn_i;
                         a.needs_cast_mask = 2;   // the victim must be cast / put by this plan
-                        a.discard_name    = pins[pi];
+                        a.discard_name    = pin_names[pi];
                         a.eval            = (net_cards - loss) * DMG;
-                        PushWithMadnessFan(actions, a, fans[pi]);
+                        PushWithMadnessFan(actions, std::move(a), fans[pi]);
                     }
                 }
                 continue;
@@ -89098,4 +89292,9 @@ void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, 
           static_cast<unsigned long long>(state.game_seed), state.turn_number, is_pre_combat ? 1 : 0,
           worse ? "worse" : (ties > 0 ? "tie" : "heur"), took.c_str(), inc.lethal ? 1 : 0, inc.dmg,
           top.c_str(), best.lethal ? 1 : 0, best.dmg, combos);
+}
+
+std::vector<Action> TurnSolver::CollectActionsForTest(const GameState& state, bool is_pre_combat)
+{
+    return CollectActions(state, is_pre_combat);
 }
