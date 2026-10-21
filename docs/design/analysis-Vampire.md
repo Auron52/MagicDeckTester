@@ -214,6 +214,26 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   0 slower, net -11, worst row 0.273x, vs net 0 for the rules as written); and the agents' questions (R.8, P.4, B.8).
   The shared-branch landing still waits on question 27.
 
+## Landing (2026-10-21 night) -- rebased onto origin, two interactions found and fixed
+- USER: *"we need to work to land it properly, ideally with enough optimizations so it can go in the regression
+  test."* `vampires-int` rebased onto origin (84 new commits) in `.claude/worktrees/vampires-land2`. Conflicts: the
+  suite maps (union), the lever lists (union), TurnSolver: agent P's `MTG_MOVE_ORDER_KEYS` dropped for origin's
+  equivalent `MTG_PLAN_SORT_BY_INDEX`; agent B's playout wave-0 fold merged with origin's ETB-counter fold around
+  the same apply (both verify modes: 0 mismatches). GT and the cost table restored to origin's, then re-accepted.
+- **Question 27 resolved** without touching the reference: the recording-rule route (`combat_damage_steps` stamp,
+  `--legacy-single-damage-step` for older recordings). Reference gate: 630 refs, 0 play-drift, 0 enum-gap.
+- **Interaction 1 -- origin's fast plan signature** (`MTG_PLAN_SIG_FAST`) did not carry the Vampires pins (discard,
+  madness, steal, convoke cover), so it folded those variants: 9 unit tests failed. Ported;
+  `test/check_plan_sig_lockstep.py` now also compares the Action fields each builder reads (it flags the pre-fix
+  tree). Fast-signature verify over Vampires + Critter + Soldiers + Angels: 3.57M checks, 0 mismatches.
+- **Interaction 2 -- EDF (new on origin) vs the payer's pain-last lever:** Aether Hub's energy colour counted as
+  painless, so pain-last spent EDF's single Hub energy to save a life point (smoke d0 gi712: no {W}{W} for Emiel, a T4
+  win became a loss; smoke d0 13 slower / 6 faster, regression d0 19 / 5). Fixed by `MTG_PAY_ENERGY_LAST` (an
+  energy-paid colour is banded / withheld / guarded with pain; only Aether Hub moves). Held-out EDF A/B, 2,250
+  paired games: fixed vs origin's payer 0 / 0 net 0; unfixed +63.
+- Every other moved game reproduces its old-base verdict (three-way attribution: origin's base vs origin now vs
+  the old-base accept); every Vampires game in all three tiers keeps the old-base accept's kill turn.
+
 ## Mulligan profile -- buckets and generation setting (2026-10-21)
 - USER ruling (`Vampire.buckets.json`): *"we should at least make it K=18 with Secluded Courtyard and Unclaimed
   Territory merged ... the next best one to merge is probably Voldaren Estate. I will leave that up to what you find
