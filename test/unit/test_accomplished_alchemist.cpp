@@ -2183,6 +2183,14 @@ struct WishArmAa
     { heurarm::t_arm[heurarm::AA_WISH_BUCKETS] = static_cast<std::int8_t>(v); }
     ~WishArmAa() { heurarm::t_arm[heurarm::AA_WISH_BUCKETS] = saved; }
 };
+// MTG_AA_WISH_WITCH_WIN (USER 2026-10-21, default ON): a held Seedcradle Witch fills Untap AND Wincon/Draw.
+struct WishWitchArmAa
+{
+    std::int8_t saved;
+    explicit WishWitchArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_WISH_WITCH_WIN])
+    { heurarm::t_arm[heurarm::AA_WISH_WITCH_WIN] = static_cast<std::int8_t>(v); }
+    ~WishWitchArmAa() { heurarm::t_arm[heurarm::AA_WISH_WITCH_WIN] = saved; }
+};
 }   // namespace
 
 TEST_CASE("Wish buckets: nothing held -> every bucket, in the USER's order; never Trufflesnout / Eternal Witness")
@@ -2294,20 +2302,66 @@ TEST_CASE("Wish buckets: Staff of Domination fills BOTH Untap and Wincon/Draw")
     ExpectWishAa(sp, { "Scholar of Athreos" });
 }
 
-TEST_CASE("Wish buckets: Seedcradle Witch is an untapper unless the held lifegain totals < 5 (the Boar's 4)")
+TEST_CASE("Wish buckets: Seedcradle Witch fills Untap whatever the held lifegain -- the 4 life rule is gone (USER 2026-10-21)")
 {
     GameState s = WishAa();
     HandAa(s, "Accomplished Alchemist"); HandAa(s, "Stroke of Genius"); HandAa(s, "Seedcradle Witch");
     for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
     GameState big = s;
-    HandAa(big, "Nourish");                              // 6 >= 5: the Witch loops -> no Galvanic
-    ExpectWishAa(big, { "Scholar of Athreos" });
+    HandAa(big, "Nourish");                              // 6
     GameState boar = s;
-    HandAa(boar, "Brindle Boar");                        // 4 < 5: only a Boar -> Galvanic allowed
-    ExpectWishAa(boar, { "Galvanic Alchemist" });
+    HandAa(boar, "Brindle Boar");                        // 4: the Witch's untap is mana-neutral, but pumps +3/+3
     GameState two = boar;
-    HandAa(two, "Weather the Storm");                    // 4 + 3 = 7 >= 5 -> the Witch counts again
-    ExpectWishAa(two, { "Scholar of Athreos" });
+    HandAa(two, "Weather the Storm");                    // 4 + 3 = 7
+    {
+        WishWitchArmAa on(1);                            // the USER's reading: the Witch untaps at any gain
+        ExpectWishAa(big, { "Scholar of Athreos" });
+        ExpectWishAa(boar, { "Scholar of Athreos" });    // no Galvanic beside a Witch, even on a Boar's 4
+        ExpectWishAa(two, { "Scholar of Athreos" });
+    }
+    {
+        WishWitchArmAa off(0);                           // =0: the 2026-10-20 reading (the 4 life rule)
+        ExpectWishAa(big, { "Scholar of Athreos" });     // 6 >= 5: the Witch loops -> no Galvanic
+        ExpectWishAa(boar, { "Galvanic Alchemist" });    // 4 < 5: only a Boar -> Galvanic allowed
+        ExpectWishAa(two, { "Scholar of Athreos" });     // 7 >= 5 -> the Witch counts again
+    }
+    ExpectWishAa(boar, { "Scholar of Athreos" });        // the default is the USER's reading
+}
+
+TEST_CASE("Wish buckets: a held Seedcradle Witch (hand or battlefield) fills Wincon/Draw (USER 2026-10-21)")
+{
+    GameState s = WishAa();
+    HandAa(s, "Nourish"); HandAa(s, "Crab Umbra");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    ExpectWishAa(s, { "Accomplished Alchemist", "Scholar of Athreos" });
+    GameState h = s;
+    HandAa(h, "Seedcradle Witch");
+    GameState p = s;
+    PutAa(p, "Seedcradle Witch");
+    {
+        WishWitchArmAa on(1);
+        ExpectWishAa(h, { "Accomplished Alchemist" });   // Wincon held: no Scholar while a bucket is lacking
+        ExpectWishAa(p, { "Accomplished Alchemist" });
+        GameState n = h;
+        HandAa(n, "Accomplished Alchemist");
+        ExpectWishAa(n, { "Scholar of Athreos" });       // nothing lacking -> Scholar ("if we need nothing else")
+    }
+    {
+        WishWitchArmAa off(0);                           // =0: the Witch is not a wincon
+        ExpectWishAa(h, { "Accomplished Alchemist", "Scholar of Athreos" });
+        ExpectWishAa(p, { "Accomplished Alchemist", "Scholar of Athreos" });
+    }
+    ExpectWishAa(h, { "Accomplished Alchemist" });       // default ON
+}
+
+TEST_CASE("Wish buckets: ONE Seedcradle Witch fills BOTH Untap and Wincon/Draw (\"it can fit in both buckets\")")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Seedcradle Witch");
+    for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
+    { WishWitchArmAa on(1); ExpectWishAa(s, { "Brindle Boar" }); }   // only Lifegain is lacking
+    // =0: no lifegain held (0 < 5), so the Witch fills neither -> Untap and Wincon are lacking as well.
+    { WishWitchArmAa off(0); ExpectWishAa(s, { "Brindle Boar", "Galvanic Alchemist", "Scholar of Athreos" }); }
 }
 
 TEST_CASE("Wish buckets: WINCON -- Scholar only with no Stroke / Staff / Scholar held, or with nothing else lacking")
@@ -2436,6 +2490,14 @@ void ExpectHarbAa(const GameState& s, const std::vector<std::string>& want)
         AaProv().GenericProvider::TutorCandidates(s, 0, DefAa("Elvish Harbinger").params);
     CHECK(HarbCandsAa(s) == (DecisionUnpruned(UnprunedGate::Tutor) ? full : want));
 }
+// MTG_AA_HARB_WITCH_WIN (USER 2026-10-21, default ON): the Witch is a win condition too.
+struct HarbWitchArmAa
+{
+    std::int8_t saved;
+    explicit HarbWitchArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_HARB_WITCH_WIN])
+    { heurarm::t_arm[heurarm::AA_HARB_WITCH_WIN] = static_cast<std::int8_t>(v); }
+    ~HarbWitchArmAa() { heurarm::t_arm[heurarm::AA_HARB_WITCH_WIN] = saved; }
+};
 }   // namespace
 
 TEST_CASE("Harbinger rule: no Alchemist held and one in the library -> the Alchemist alone")
@@ -2472,22 +2534,66 @@ TEST_CASE("Harbinger rule: UNTAP -- Seedcradle only with no Crab Umbra / Staff /
     {
         GameState h = s;
         HandAa(h, u);
-        ExpectHarbAa(h, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });   // nothing lacking: fallback
+        // Nothing lacking: the fallback, the Witch after Ezuri (the weakest wincon, USER 2026-10-21).
+        ExpectHarbAa(h, { "Ezuri, Renegade Leader", "Seedcradle Witch", "Arbor Elf" });
+        HarbWitchArmAa off(0);                               // =0: the 2026-10-20 order
+        ExpectHarbAa(h, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });
     }
 }
 
-TEST_CASE("Harbinger rule: WINCON -- Ezuri only with no Stroke / Staff / Scholar / Ezuri held")
+TEST_CASE("Harbinger rule: WINCON -- Ezuri, then the Witch, only with no Stroke / Staff / Scholar / Ezuri / Witch held")
 {
     HarbArmAa on(1);
     GameState s = HarbAa();
     HandAa(s, "Accomplished Alchemist"); HandAa(s, "Crab Umbra");
     for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
-    ExpectHarbAa(s, { "Ezuri, Renegade Leader" });
-    for (const char* w : { "Stroke of Genius", "Staff of Domination", "Scholar of Athreos", "Ezuri, Renegade Leader" })
+    ExpectHarbAa(s, { "Ezuri, Renegade Leader", "Seedcradle Witch" });
+    { HarbWitchArmAa off(0); ExpectHarbAa(s, { "Ezuri, Renegade Leader" }); }   // =0: Ezuri alone
+    for (const char* w : { "Stroke of Genius", "Staff of Domination", "Scholar of Athreos", "Ezuri, Renegade Leader",
+                           "Seedcradle Witch" })
     {
         GameState h = s;
         PutAa(h, w);
-        ExpectHarbAa(h, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });
+        ExpectHarbAa(h, { "Ezuri, Renegade Leader", "Seedcradle Witch", "Arbor Elf" });   // nothing lacking: fallback
+    }
+}
+
+TEST_CASE("Harbinger rule: Seedcradle Witch is a win condition (USER 2026-10-21) -- FIRST when it fills both, LAST among wincons otherwise")
+{
+    HarbArmAa on(1);
+    // Untap AND Wincon lacking: one Witch fills both buckets -> first, ahead of Ezuri (the same under =0, where the
+    // Witch was first as the untapper).
+    GameState b = HarbAa();
+    PutAa(b, "Accomplished Alchemist");
+    for (int k = 0; k < 4; ++k) { PutAa(b, "Forest"); }
+    ExpectHarbAa(b, { "Seedcradle Witch", "Ezuri, Renegade Leader" });
+    { HarbWitchArmAa off(0); ExpectHarbAa(b, { "Seedcradle Witch", "Ezuri, Renegade Leader" }); }
+    // Only Wincon lacking (Crab Umbra held): Ezuri first, the Witch LAST ("much worse than the actual win-cons").
+    GameState w = b;
+    HandAa(w, "Crab Umbra");
+    ExpectHarbAa(w, { "Ezuri, Renegade Leader", "Seedcradle Witch" });
+    { HarbWitchArmAa off(0); ExpectHarbAa(w, { "Ezuri, Renegade Leader" }); }
+    // Only Untap lacking (Stroke held): the Witch, the only untapper an Elf tutor reaches.
+    GameState u = b;
+    HandAa(u, "Stroke of Genius");
+    ExpectHarbAa(u, { "Seedcradle Witch" });
+    // A HELD Witch fills both, so Ezuri is no longer wanted for Wincon. The deck plays one Witch, so none is left in
+    // the library here.
+    for (const bool in_play : { false, true })
+    {
+        GameState h = FreshAa();
+        LibAa(h, "Elvish Harbinger"); LibAa(h, "Ezuri, Renegade Leader"); LibAa(h, "Arbor Elf");
+        LibAa(h, "Accomplished Alchemist");
+        h.m_provider = &AaProv();
+        HandAa(h, "Accomplished Alchemist");
+        if (in_play) { PutAa(h, "Seedcradle Witch"); } else { HandAa(h, "Seedcradle Witch"); }
+        for (int k = 0; k < 3; ++k) { PutAa(h, "Forest"); }  // 3 mana (the Witch is no dork) -> Mana lacking
+        ExpectHarbAa(h, { "Arbor Elf" });
+        { HarbWitchArmAa off(0); ExpectHarbAa(h, { "Ezuri, Renegade Leader", "Arbor Elf" }); }
+        GameState h4 = h;
+        PutAa(h4, "Forest");                                 // 4 mana: nothing lacking -> the fallback, Ezuri first
+        ExpectHarbAa(h4, { "Ezuri, Renegade Leader", "Arbor Elf" });
+        { HarbWitchArmAa off(0); ExpectHarbAa(h4, { "Ezuri, Renegade Leader" }); }
     }
 }
 
@@ -2499,7 +2605,7 @@ TEST_CASE("Harbinger rule: MANA -- Arbor Elf only below 4 projected mana")
     for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
     ExpectHarbAa(s, { "Arbor Elf" });
     PutAa(s, "Elvish Harbinger");                            // the entering Harbinger itself is the 4th mana
-    ExpectHarbAa(s, { "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" });
+    ExpectHarbAa(s, { "Ezuri, Renegade Leader", "Seedcradle Witch", "Arbor Elf" });
 }
 
 TEST_CASE("Harbinger rule: fallback -- lacking pieces absent from the library; then the decline only")
@@ -2602,6 +2708,14 @@ std::string ShedOneAa(const GameState& s)
     REQUIRE(c.size() == 1);
     return s.players[0].hand[static_cast<std::size_t>(c[0])].m_name.str();
 }
+// MTG_AA_DISCARD_WITCH_WIN (USER 2026-10-21, default ON): the Witch is in Untap AND Wincon/Draw, last in Wincon.
+struct DiscWitchArmAa
+{
+    std::int8_t saved;
+    explicit DiscWitchArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_DISCARD_WITCH_WIN])
+    { heurarm::t_arm[heurarm::AA_DISCARD_WITCH_WIN] = static_cast<std::int8_t>(v); }
+    ~DiscWitchArmAa() { heurarm::t_arm[heurarm::AA_DISCARD_WITCH_WIN] = saved; }
+};
 }   // namespace
 
 TEST_CASE("Discard buckets: the best of each bucket is kept; the spare in a filled bucket sheds first, ONE index")
@@ -2667,16 +2781,56 @@ TEST_CASE("Discard buckets: net of board -- a bucket filled on the battlefield o
     PutAa(st, "Staff of Domination");
     std::vector<std::string> o = ShedNamesAa(st);
     CHECK(((o[0] == "Crab Umbra" && o[1] == "Stroke of Genius") || (o[0] == "Stroke of Genius" && o[1] == "Crab Umbra")));
-    // A Seedcradle Witch in play fills Untap; a Brindle Boar in play fills Lifegain.
+    // A Seedcradle Witch in play fills Untap AND Wincon/Draw (USER 2026-10-21, like a Staff); a Brindle Boar in play
+    // fills Lifegain. So the Stroke, the Umbra and the Nourish are all spares (equal rank 0: Wincon, Untap, Lifegain).
     GameState w = DiscAa({ "Accomplished Alchemist", "Nourish", "Crab Umbra", "Stroke of Genius", "Forest" });
     PutAa(w, "Seedcradle Witch"); PutAa(w, "Brindle Boar");
     o = ShedNamesAa(w);
-    CHECK(o[0] == "Crab Umbra");
-    CHECK(o[1] == "Nourish");
+    CHECK(o[0] == "Stroke of Genius");
+    CHECK(o[1] == "Crab Umbra");
+    CHECK(o[2] == "Nourish");
+    {
+        DiscWitchArmAa off(0);                                // =0: the Witch in play fills Untap only
+        o = ShedNamesAa(w);
+        CHECK(o[0] == "Crab Umbra");
+        CHECK(o[1] == "Nourish");
+    }
     // ... and with the Untap bucket filled by the board, a lone Wish has one fewer gap to fill.
     GameState g = DiscAa({ "Accomplished Alchemist", "Nourish", "Living Wish", "Forest", "Forest" });
     PutAa(g, "Crab Umbra");
     CHECK(ShedNamesAa(g).front() == "Forest");                // Wincon is still empty: the Wish fills it
+}
+
+TEST_CASE("Discard buckets: Seedcradle Witch fills BOTH Untap and Wincon/Draw, ranked LAST in Wincon (USER 2026-10-21)")
+{
+    // The only untapper AND the only wincon in hand: the Witch is both buckets' best, so it fills both with one
+    // card and the Living Wish has no gap left -- a spare, shed first. (=0: Wincon is a gap the Wish fills, so the
+    // shed is a land.)
+    const GameState both = DiscAa({ "Accomplished Alchemist", "Nourish", "Seedcradle Witch", "Living Wish",
+                                    "Forest", "Forest", "Forest" });
+    CHECK(ShedOneAa(both) == "Living Wish");
+    { DiscWitchArmAa off(0); CHECK(ShedOneAa(both) == "Forest"); }
+    // Crab Umbra fills Untap; the Witch is the only wincon, so it is KEPT for Wincon (=0: a spare Untap card).
+    const GameState win = DiscAa({ "Accomplished Alchemist", "Nourish", "Crab Umbra", "Seedcradle Witch",
+                                   "Forest", "Forest", "Forest" });
+    CHECK(ShedOneAa(win) == "Forest");
+    { DiscWitchArmAa off(0); CHECK(ShedOneAa(win) == "Seedcradle Witch"); }
+    // LAST in Wincon: any real wincon in hand is kept over it -- Stroke, Staff, Scholar and Ezuri.
+    for (const char* w : { "Stroke of Genius", "Staff of Domination", "Scholar of Athreos", "Ezuri, Renegade Leader" })
+    {
+        const GameState g = DiscAa({ "Accomplished Alchemist", "Nourish", "Crab Umbra", "Seedcradle Witch", w,
+                                     "Forest", "Forest", "Forest" });
+        CHECK(ShedOneAa(g) == "Seedcradle Witch");
+    }
+    // Untap AND Wincon both owed, Witch + Ezuri in hand: both kept (each a bucket's best), and among the kept cards
+    // Ezuri goes before the Witch, which alone still covers both buckets.
+    const GameState ez = DiscAa({ "Accomplished Alchemist", "Nourish", "Seedcradle Witch", "Ezuri, Renegade Leader",
+                                  "Forest", "Forest" });
+    const std::vector<std::string> o = ShedNamesAa(ez);
+    REQUIRE(o.size() == 6);
+    CHECK(o[0] == "Forest"); CHECK(o[1] == "Forest");
+    CHECK(o[2] == "Ezuri, Renegade Leader");
+    CHECK(o[3] == "Seedcradle Witch");
 }
 
 TEST_CASE("Discard buckets: mana keeps lands first, then Sprawl > Arbor Elf > Wild Growth > Harbinger; Island when {U} is owed")
@@ -2733,7 +2887,7 @@ TEST_CASE("Discard buckets, PROPOSED amendment (default OFF): Staff of Dominatio
     { StaffArm a(1); CHECK(ShedOneAa(s) == "Crab Umbra"); }
 }
 
-TEST_CASE("Harbinger rule, PROPOSED amendments (default OFF): the Witch for a lacking wincon; the Alchemist as the default")
+TEST_CASE("Harbinger rule: the Witch for a lacking wincon (USER 2026-10-21, default ON); the Alchemist as the default (PROPOSED, OFF)")
 {
     struct Arm2
     {
@@ -2744,14 +2898,22 @@ TEST_CASE("Harbinger rule, PROPOSED amendments (default OFF): the Witch for a la
         ~Arm2() { heurarm::t_arm[heurarm::AA_HARB_WITCH_WIN] = w; heurarm::t_arm[heurarm::AA_HARB_ALCH_DEFAULT] = a; }
     };
     HarbArmAa on(1);
-    // Untap held (Crab Umbra), wincon lacking: the USER's rule offers Ezuri; the amendment adds the Witch first.
+    // Untap held (Crab Umbra), wincon lacking: the 2026-10-20 rule offers Ezuri; WITCH_WIN adds the Witch AFTER it
+    // (the 2026-10-20 PROPOSED version put it first; the USER's 2026-10-21 decision ranks it the weakest wincon).
     GameState s = HarbAa();
     HandAa(s, "Accomplished Alchemist"); HandAa(s, "Crab Umbra");
     for (int k = 0; k < 4; ++k) { PutAa(s, "Forest"); }
     { Arm2 a(0, 0); ExpectHarbAa(s, { "Ezuri, Renegade Leader" }); }
-    { Arm2 a(1, 0); ExpectHarbAa(s, { "Seedcradle Witch", "Ezuri, Renegade Leader" }); }
-    // No Alchemist held: alone under the rule; first of every non-Harbinger Elf under the amendment.
+    { Arm2 a(1, 0); ExpectHarbAa(s, { "Ezuri, Renegade Leader", "Seedcradle Witch" }); }
+    // No Alchemist held: alone under the rule; first of every non-Harbinger Elf under the amendment (Untap lacking
+    // here, so the Witch leads the rest as the untapper in either WITCH_WIN arm).
     const GameState n = HarbAa();
     { Arm2 a(0, 0); ExpectHarbAa(n, { "Accomplished Alchemist" }); }
     { Arm2 a(0, 1); ExpectHarbAa(n, { "Accomplished Alchemist", "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }); }
+    { Arm2 a(1, 1); ExpectHarbAa(n, { "Accomplished Alchemist", "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }); }
+    // ... and with Untap held, Ezuri leads the rest under WITCH_WIN.
+    GameState nu = HarbAa();
+    HandAa(nu, "Crab Umbra");
+    { Arm2 a(1, 1); ExpectHarbAa(nu, { "Accomplished Alchemist", "Ezuri, Renegade Leader", "Seedcradle Witch", "Arbor Elf" }); }
+    { Arm2 a(0, 1); ExpectHarbAa(nu, { "Accomplished Alchemist", "Seedcradle Witch", "Ezuri, Renegade Leader", "Arbor Elf" }); }
 }

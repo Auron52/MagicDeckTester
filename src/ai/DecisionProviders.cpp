@@ -43010,25 +43010,43 @@ std::vector<int> AccomplishedAlchemistProvider::EtbChoiceCandidates(const GameSt
 //     Staff of Domination's {2},{T}: gain 1 is NOT counted (one life a turn does not fuel the engine).
 //     Offers: Brindle Boar (sac_outlet_lifegain). Trufflesnout is never offered (the USER: skip it).
 //   * UNTAP lacking      <=> no untapper held: Crab Umbra (untap_enchanted_cost), Staff of Domination
-//     (untap_target_creature_cost), Galvanic Alchemist (soulbond_grants_untap_self_cost) -- and Seedcradle
-//     Witch (untap_pump_cost) counts too UNLESS the held lifegain totals < 5 (its {2}{G}{W} untap nets mana
-//     only at X >= 5; "if you only have something that gains 4 like the Boar"). The total is the SUM of the
-//     held gains at their printed base (Nourish 6, Feed the Clan 5, Weather the Storm 3, Boar 4, Trufflesnout
-//     4) -- ferocious and storm are not projected. Offers: Galvanic Alchemist.
-//   * WINCON/DRAW lacking <=> no Stroke of Genius (draw_target_player), Staff of Domination (tap_draw_cost)
-//     or Scholar of Athreos (drain_cost) held. Offers: Scholar of Athreos -- ALSO when NO bucket is lacking
-//     ("if we need nothing else"). The loop's own Scholar kill ("fine to end the game with the Scholar once we
-//     have the infinite mana") is unaffected: the closed-form loop binds the wish's target by NAME
-//     (kLoopPayWishDrain), which PerformTutor fetches without consulting this list.
+//     (untap_target_creature_cost), Galvanic Alchemist (soulbond_grants_untap_self_cost) or Seedcradle Witch
+//     (untap_pump_cost) -- the Witch WHATEVER the held lifegain total (the USER's 2026-10-21 decision, below).
+//     Offers: Galvanic Alchemist.
+//   * WINCON/DRAW lacking <=> no Stroke of Genius (draw_target_player), Staff of Domination (tap_draw_cost),
+//     Scholar of Athreos (drain_cost) or Seedcradle Witch (2026-10-21) held. Offers: Scholar of Athreos --
+//     ALSO when NO bucket is lacking ("if we need nothing else"). The loop's own Scholar kill ("fine to end the
+//     game with the Scholar once we have the infinite mana") is unaffected: the closed-form loop binds the wish's
+//     target by NAME (kLoopPayWishDrain), which PerformTutor fetches without consulting this list.
 // The admitted names come out in the USER's bucket order (Mana: Elf, Forest, Island; Alchemist; Lifegain;
 // Untap; Wincon), which is the rollout's default pick. Nothing admitted (every bucket's card already
 // fetched) -> the whole legal list: a wish is never made unfetchable. One admitted name is the USER's
 // one-option prune.
+//
+// SEEDCRADLE WITCH AS A WIN CONDITION (USER 2026-10-21; MTG_AA_WISH_WITCH_WIN here, MTG_AA_HARB_WITCH_WIN in the
+// Harbinger rule, MTG_AA_DISCARD_WITCH_WIN in the discard rule -- all default ON). After playing a seed where the
+// Witch's untap pumped the Alchemist for lethal, the USER, verbatim: "Technically the Seedcradle Witch is still
+// workable as a win-con here because it pumps the alchemist for lethal." Asked whether it should count as a win
+// condition in the Harbinger, Living Wish and discard bucket rules: "Sure, let's do that." "This also makes the 4
+// life rule unnecessary." "Though, in a real game this combo is much worse than the actual win-cons." And:
+// "Fortunately, it can fit in both buckets, so there is more opportunity to fit it in."
+//   * The Witch fills BOTH Untap and Wincon/Draw, like Staff of Domination, in every rule.
+//   * It fills Untap WHATEVER the held lifegain: at X = 4 its {2}{G}{W} untap is mana-neutral, but each untap
+//     still pumps +3/+3, which is the kill. That retires the "4 life rule" (the 2026-10-20 wish reading: a Witch
+//     counted as an untapper only while the held lifegain summed to >= 5, so Galvanic Alchemist could still be
+//     wished beside it with only a Boar's 4 -- the USER's "maybe we can allow it when you have Seedcradle Witch if
+//     you only have something that gains 4 like the Boar").
+//   * Wherever a rule RANKS Wincon/Draw cards the Witch is LAST (after Stroke, Staff, Scholar and Ezuri). The
+//     REAL-GAME CAVEAT is the USER's own: the Witch's pump wins only in combat, through blockers and removal that
+//     a goldfish never has, so it is much worse than the deck's real win-cons; it fills the bucket, as the weakest
+//     filler. (The Witch is a main-deck Elf, not in the sideboard, so the wish rule never offers it -- only its
+//     census changes; the Harbinger can fetch it.)
 namespace
 {
 // THE BUCKET ROLES, keyed on PARAMS -- shared by the wish rule (below) and the cleanup-discard rule
 // (AccomplishedAlchemistProvider::CleanupDiscardShedOrder), so every USER bucket rule reads one card the same
-// way. Staff of Domination is BOTH an untapper and a wincon/draw card ("it can do the untap and the draw").
+// way. Staff of Domination is BOTH an untapper and a wincon/draw card ("it can do the untap and the draw"); so,
+// since 2026-10-21, is Seedcradle Witch (above).
 bool AaIsAlchemist(const CardParams& p) { return p.mana_per_life_gained; }
 bool AaIsUntapper(const CardParams& p)          // Crab Umbra, Staff of Domination, Galvanic Alchemist
 { return p.untap_enchanted_cost || p.untap_target_creature_cost || p.soulbond_grants_untap_self_cost; }
@@ -43038,11 +43056,13 @@ bool AaIsWinDraw(const CardParams& p)           // Stroke of Genius, Staff of Do
 
 struct AaWishCensus
 {
-    bool alchemist = false, untapper = false, witch = false, wincon = false, lifegain = false;
+    bool alchemist = false, untapper = false, wincon = false, lifegain = false;
+    bool witch = false;       // a Seedcradle Witch held: Untap AND Wincon/Draw under the *_WITCH_WIN rules (2026-10-21)
     bool blue = false, elf_multi = false;
     bool blue_firm = false;   // a blue source on the battlefield, or a land / land Aura in hand (no dork in hand)
     bool blue_need = false;   // a held card needs {U}: a {U} pip in hand, or a Crab Umbra-style {U} untap in play
-    int  mana = 0, gain_total = 0;
+    int  mana = 0;
+    int  gain_total = 0;      // read only by the wish rule's =0 path (MTG_AA_WISH_WITCH_WIN=0) and its trace
     bool ezuri = false;       // a team pump (Ezuri) held -- read ONLY by the Elvish Harbinger rule's Wincon bucket
 };
 
@@ -43127,6 +43147,14 @@ static bool AaWishBucketsOn()
     return heurarm::Flag(heurarm::AA_WISH_BUCKETS, s_env);
 }
 
+// The Witch as a win condition in the wish census (USER 2026-10-21, see above). DEFAULT ON (the USER's
+// decision); =0 -> the 2026-10-20 reading: not a wincon, and an untapper only while the held lifegain sums to >= 5.
+static bool AaWishWitchWinOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_WISH_WITCH_WIN", true);
+    return heurarm::Flag(heurarm::AA_WISH_WITCH_WIN, s_env);
+}
+
 int AccomplishedAlchemistProvider::TutorSearchWidth() const
 {
     return AaWishBucketsOn() ? 9 : GenericProvider::TutorSearchWidth();
@@ -43143,14 +43171,19 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     static const bool s_truf_env = EnvOn("MTG_AA_WISH_TRUFFLE", false);
     const bool amend_blue  = heurarm::Flag(heurarm::AA_WISH_BLUE, s_blue_env);
     const bool amend_truf  = heurarm::Flag(heurarm::AA_WISH_TRUFFLE, s_truf_env);
+    const bool witch_win     = AaWishWitchWinOn();
     const bool mana_lacking  = c.mana < 4;
-    const bool untap_lacking = !c.untapper && !(c.witch && c.gain_total >= 5);
-    const bool need_nothing  = c.alchemist && !mana_lacking && c.lifegain && !untap_lacking && c.wincon;
+    // A held Witch fills Untap and Wincon/Draw (2026-10-21). =0 only: the 4 life rule (Untap at a held gain >= 5)
+    // and no Wincon.
+    const bool witch_untaps  = c.witch && (witch_win || c.gain_total >= 5);
+    const bool untap_lacking = !c.untapper && !witch_untaps;
+    const bool win_held      = c.wincon || (witch_win && c.witch);
+    const bool need_nothing  = c.alchemist && !mana_lacking && c.lifegain && !untap_lacking && win_held;
     if (why != nullptr)
     {
         *why = std::string("mana=") + std::to_string(c.mana) + (mana_lacking ? "!" : "")
              + (c.alchemist ? "" : " ALCH") + (c.lifegain ? "" : " GAIN") + (untap_lacking ? " UNTAP" : "")
-             + (c.wincon ? "" : " WIN") + (c.elf_multi ? " elf2" : "") + (c.blue ? " blue" : "")
+             + (win_held ? "" : " WIN") + (c.elf_multi ? " elf2" : "") + (c.blue ? " blue" : "")
              + " gain=" + std::to_string(c.gain_total);
         // Where the held pieces sit (diagnostic only): hand names, then our nonland permanents.
         std::string h = " hand=[", b = "] bf=[";
@@ -43190,7 +43223,7 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         else if (p.sac_outlet_lifegain > 0)             { if (!c.lifegain) { r = kGain; } }
         else if (p.etb_modal_lifegain > 0)              { if (amend_truf && !c.lifegain) { r = kGain; } }
         else if (p.soulbond_grants_untap_self_cost)     { if (untap_lacking) { r = kUntap; } }
-        else if (p.drain_cost)                          { if (!c.wincon || need_nothing) { r = kWin; } }
+        else if (p.drain_cost)                          { if (!win_held || need_nothing) { r = kWin; } }
         // Trufflesnout (etb_modal_lifegain): never offered (MTG_AA_WISH_TRUFFLE, a PROPOSED amendment, admits it
         // beside the Boar). Eternal Witness (etb_return_gy_to_hand): never offered.
         if (r >= 0) { ranked.emplace_back(r, nm); }
@@ -43211,14 +43244,20 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
 //
 // THE READING (the wish rule's census, so the two rules agree on what is "held" = hand + battlefield):
 //   * No Accomplished Alchemist held and one is in the library -> { Accomplished Alchemist } alone.
-//   * Otherwise the union, in this order, of: Seedcradle Witch while UNTAP is lacking (no Crab Umbra / Staff
-//     of Domination / Galvanic Alchemist / Seedcradle Witch held -- a held Witch fills the bucket here
-//     whatever the lifegain total, since a second Witch adds nothing); Ezuri while WINCON is lacking (no
-//     Stroke / Staff / Scholar / Ezuri held); Arbor Elf while MANA is lacking (projected mana < 4, the wish
-//     rule's threshold).
+//   * Otherwise the union of the lacking buckets' Elves: UNTAP lacking (no Crab Umbra / Staff of Domination /
+//     Galvanic Alchemist / Seedcradle Witch held, whatever the lifegain total) -> Seedcradle Witch; WINCON
+//     lacking (no Stroke / Staff / Scholar / Ezuri / Seedcradle Witch held) -> Ezuri AND Seedcradle Witch; MANA
+//     lacking (projected mana < 4, the wish rule's threshold) -> Arbor Elf.
+//   * THE WITCH AS A WIN CONDITION (USER 2026-10-21, MTG_AA_HARB_WITCH_WIN, DEFAULT ON -- the USER's words are at
+//     the wish rule above). The Witch fills BOTH Untap and Wincon/Draw ("it can fit in both buckets"), so its
+//     rank depends on what is lacking: with UNTAP lacking it comes FIRST (with Wincon lacking too, one fetch
+//     fills both -- ahead of Ezuri); with only WINCON lacking it comes LAST, after Ezuri ("in a real game this
+//     combo is much worse than the actual win-cons": the pump wins only in combat). Order: Witch, Ezuri, Arbor
+//     Elf while Untap is lacking; else Ezuri, Witch, Arbor Elf. =0 -> the 2026-10-20 rule: the Witch fills
+//     Untap only and is offered only for it (always Witch, Ezuri, Arbor Elf).
 //   * Never Elvish Harbinger.
-//   * The union empty, or none of it in the library -> { Seedcradle, Ezuri, Arbor Elf } in the library; that
-//     empty too -> {} (PerformTutor fetches nothing: the decline).
+//   * The union empty, or none of it in the library -> every one of { Seedcradle, Ezuri, Arbor Elf } in the
+//     library, in the order above; that empty too -> {} (PerformTutor fetches nothing: the decline).
 // A RESTRICTION + ORDER of the searched tutor axis; the engine's tutor_optional decline variant is added on
 // top as before. Human play / MTG_UNPRUNED (the Tutor gate) keep the whole library list.
 static bool AaHarbingerBucketsOn()
@@ -43255,28 +43294,33 @@ static std::vector<std::string> AaHarbingerSet(const GameState& s, int controlle
         if (r != kNone && by_role[r].empty()) { by_role[r] = nm; }
     }
     const AaWishCensus c = AaTakeWishCensus(s, controller);
-    // Two PROPOSED amendments (default OFF; measured, the USER's call -- see the ledger):
-    //   MTG_AA_HARB_WITCH_WIN   -- the Witch's own +3/+3 pump is a loop kill (the untap loop's Witch payoff), so it
-    //                              is offered for a lacking WINCON too, beside Ezuri.
-    //   MTG_AA_HARB_ALCH_DEFAULT -- "pretty much an auto-pick" as the DEFAULT rather than the only option: no
-    //                              Alchemist held -> the Alchemist FIRST, then every other non-Harbinger Elf
-    //                              (Witch, Ezuri, Arbor Elf), all searched.
-    static const bool s_ww_env = EnvOn("MTG_AA_HARB_WITCH_WIN", false);
+    //   MTG_AA_HARB_WITCH_WIN   -- the Witch counts as a win condition (USER 2026-10-21, DEFAULT ON; see above).
+    //   MTG_AA_HARB_ALCH_DEFAULT -- PROPOSED amendment (default OFF; measured, still the USER's call -- see the
+    //                              ledger): "pretty much an auto-pick" as the DEFAULT rather than the only option: no
+    //                              Alchemist held -> the Alchemist FIRST, then every other non-Harbinger Elf (Witch,
+    //                              Ezuri, Arbor Elf in the order below), all searched.
+    static const bool s_ww_env = EnvOn("MTG_AA_HARB_WITCH_WIN", true);
     static const bool s_ad_env = EnvOn("MTG_AA_HARB_ALCH_DEFAULT", false);
     const bool witch_win = heurarm::Flag(heurarm::AA_HARB_WITCH_WIN, s_ww_env);
     const bool alch_dflt = heurarm::Flag(heurarm::AA_HARB_ALCH_DEFAULT, s_ad_env);
+    const bool untap_lacking = !c.untapper && !c.witch;
+    const bool win_lacking   = !c.wincon && !c.ezuri && !(witch_win && c.witch);
+    // The Witch ranks as the untapper (first) while Untap is lacking, otherwise as the weakest wincon (after Ezuri).
+    static const int kOrdUntap[3] = { kWitch, kEzuri, kElf };
+    static const int kOrdWin[3]   = { kEzuri, kWitch, kElf };
+    const int* ord = (witch_win && !untap_lacking) ? kOrdWin : kOrdUntap;
     std::vector<std::string> out;
     if (!c.alchemist && !by_role[kAlch].empty())
     {
         out.push_back(by_role[kAlch]);
-        if (alch_dflt) { for (int r = kWitch; r <= kElf; ++r) { if (!by_role[r].empty()) { out.push_back(by_role[r]); } } }
+        if (alch_dflt)
+        { for (int k = 0; k < 3; ++k) { if (!by_role[ord[k]].empty()) { out.push_back(by_role[ord[k]]); } } }
         return out;
     }
-    const bool win_lacking = !c.wincon && !c.ezuri;
-    const bool want[4] = { false, (!c.untapper && !c.witch) || (witch_win && win_lacking), win_lacking, c.mana < 4 };
-    for (int r = kWitch; r <= kElf; ++r) { if (want[r] && !by_role[r].empty()) { out.push_back(by_role[r]); } }
+    const bool want[4] = { false, untap_lacking || (witch_win && win_lacking), win_lacking, c.mana < 4 };
+    for (int k = 0; k < 3; ++k) { if (want[ord[k]] && !by_role[ord[k]].empty()) { out.push_back(by_role[ord[k]]); } }
     if (!out.empty()) { return out; }
-    for (int r = kWitch; r <= kElf; ++r) { if (!by_role[r].empty()) { out.push_back(by_role[r]); } }
+    for (int k = 0; k < 3; ++k) { if (!by_role[ord[k]].empty()) { out.push_back(by_role[ord[k]]); } }
     return out;
 }
 
@@ -43326,19 +43370,27 @@ std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const Ga
 // THE READING (every role keyed on PARAMS; the same buckets as the wish rule, AaIs* above):
 //   * Four non-mana buckets, each owed ONE card: ALCHEMIST (Accomplished Alchemist), LIFEGAIN (Nourish, Feed the
 //     Clan, Weather the Storm, Trufflesnout, Brindle Boar), UNTAP (Crab Umbra, Staff of Domination, Galvanic
-//     Alchemist, Seedcradle Witch), WINCON/DRAW (Stroke of Genius, Staff of Domination, Scholar of Athreos, Ezuri).
+//     Alchemist, Seedcradle Witch), WINCON/DRAW (Stroke of Genius, Staff of Domination, Scholar of Athreos, Ezuri,
+//     Seedcradle Witch -- the Witch since 2026-10-21, below).
 //   * NET OF BOARD: a bucket already filled on our battlefield owes nothing -- an Alchemist in play fills
-//     ALCHEMIST, an untapper (Witch included) fills UNTAP, a Staff fills UNTAP and WINCON/DRAW, a Scholar or Ezuri
-//     fills WINCON/DRAW, a Brindle Boar fills LIFEGAIN (its sacrifice is a gain still to come; the wish rule's
-//     reading). Lifegain spells are consumed, so only the Boar fills LIFEGAIN from the board.
+//     ALCHEMIST, an untapper (Witch included) fills UNTAP, a Staff or a Witch fills UNTAP and WINCON/DRAW, a
+//     Scholar or Ezuri fills WINCON/DRAW, a Brindle Boar fills LIFEGAIN (its sacrifice is a gain still to come; the
+//     wish rule's reading). Lifegain spells are consumed, so only the Boar fills LIFEGAIN from the board.
 //   * The best HAND card of each owed bucket is kept. Agent default orders (the USER's to correct):
 //       LIFEGAIN  Nourish > Feed the Clan > Weather the Storm (spells by printed gain, 6 > 5 > 3) > Trufflesnout >
 //                 Brindle Boar
 //       UNTAP     Crab Umbra > Staff of Domination > Galvanic Alchemist > Seedcradle Witch
-//       WINCON    Stroke of Genius > Staff of Domination > Scholar of Athreos > Ezuri
+//       WINCON    Stroke of Genius > Staff of Domination > Scholar of Athreos > Ezuri > Seedcradle Witch
 //     Copies of one card tie; the earlier hand index is kept. Staff is a member of BOTH UNTAP and WINCON: kept as
 //     either bucket's best, it fills both ("Staff can fill both"); with a Crab Umbra AND a Stroke in hand it is
 //     the best of neither, so it is a spare.
+//   * SEEDCRADLE WITCH AS A WIN CONDITION (USER 2026-10-21; the USER's words are at the wish rule above;
+//     MTG_AA_DISCARD_WITCH_WIN, heurarm AA_DISCARD_WITCH_WIN, DEFAULT ON): the Witch is a member of BOTH UNTAP and
+//     WINCON/DRAW, exactly as Staff is -- kept as either bucket's best it fills both, so a Witch that is the only
+//     untapper and the only wincon fills two buckets with one card and leaves a Living Wish free for another gap;
+//     in play it fills both. It ranks LAST in WINCON/DRAW, after Ezuri: "in a real game this combo is much worse
+//     than the actual win-cons" (the pump wins only in combat), so it is the weakest filler. =0 -> the 2026-10-20
+//     rule (the Witch is UNTAP only).
 //   * GAPS: a bucket with nothing on the board and nothing in hand. Each Living Wish fills ONE gap (hand order);
 //     a Wish beyond the gaps is a spare.
 //   * "lands etc. for the rest": every other kept slot is MANA -- lands first (an Island ahead of the Forests while
@@ -43392,8 +43444,11 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
     // PROPOSED amendment (default OFF, the USER's call): Staff of Domination ahead of Crab Umbra in UNTAP.
     static const bool s_staff_env = EnvOn("MTG_AA_DISCARD_STAFF_FIRST", false);
     const bool staff_first = heurarm::Flag(heurarm::AA_DISCARD_STAFF_FIRST, s_staff_env);
+    // The USER's 2026-10-21 decision (DEFAULT ON): Seedcradle Witch is also the LAST member of WINCON/DRAW.
+    static const bool s_witch_env = EnvOn("MTG_AA_DISCARD_WITCH_WIN", true);
+    const bool witch_win = heurarm::Flag(heurarm::AA_DISCARD_WITCH_WIN, s_witch_env);
     // Within-bucket rank (lower = better kept), -1 = not a member.
-    auto rank_in = [staff_first](const CardDefinition& d, int b) -> int
+    auto rank_in = [staff_first, witch_win](const CardDefinition& d, int b) -> int
     {
         const CardParams& p = d.params;
         switch (b)
@@ -43416,6 +43471,7 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
             if (p.tap_draw_cost) { return 1; }                      // Staff of Domination
             if (p.drain_cost) { return 2; }                         // Scholar of Athreos
             if (p.team_pump_cost && d.card.IsCreature()) { return 3; }   // Ezuri
+            if (witch_win && AaIsWitch(p)) { return 4; }            // Seedcradle Witch: the weakest wincon
             return -1;
         default: return -1;
         }
@@ -43432,7 +43488,8 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
         const CardParams& pp = d->params;
         if (AaIsAlchemist(pp)) { filled[kAlch] = true; }
         if (AaIsUntapper(pp) || AaIsWitch(pp)) { filled[kUntap] = true; }
-        if (pp.tap_draw_cost || pp.drain_cost || (pp.team_pump_cost && d->card.IsCreature())) { filled[kWin] = true; }
+        if (pp.tap_draw_cost || pp.drain_cost || (pp.team_pump_cost && d->card.IsCreature())
+            || (witch_win && AaIsWitch(pp))) { filled[kWin] = true; }
         if (pp.sac_outlet_lifegain > 0) { filled[kGain] = true; }
         if (d->card.IsLand() && AaHasColour(pp.produces, Color::Blue)) { board_blue = true; }
         if (pp.is_land_aura && AaHasColour(LandAuraProducesFor(*d, p), Color::Blue))
