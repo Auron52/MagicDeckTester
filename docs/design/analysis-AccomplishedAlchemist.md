@@ -2646,7 +2646,7 @@ cells share seed base 150001):
 | g80 | d3 | d3: 5 -> 6 | d3: 7 vs 6 (recovers) | 5 vs 5 (recovers) |
 | g163 | d3/d5 | d3: 4 -> 5; d5: 4 -> 5 | d3: 4 vs 5 (persists); d5: 4 vs 5 (persists) | 4 vs 5 (persists) |
 | g237 | d3 | d3: 4 -> 5 | d3: 4 vs 4 (recovers) | 4 vs 4 (recovers) |
-| g238 | d3/d5 | d3: 7 -> 8; d5: 7 -> 8 | d3: 7 vs 8 (persists); d5: 7 vs 8 (persists) | running vs running (running) |
+| g238 | d3/d5 | d3: 7 -> 8; d5: 7 -> 8 | d3: 7 vs 8 (persists); d5: 7 vs 8 (persists) | 7 vs 7 (recovers) |
 | g270 | d3 | d3: 5 -> 6 | d3: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
 | g289 | d3/d5 | d3: 5 -> 6; d5: 5 -> 6 | d3: 5 vs 5 (recovers); d5: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
 | g290 | d3 | d3: 6 -> 7 | d3: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
@@ -2661,13 +2661,13 @@ cells share seed base 150001):
 |---|---|---|---|---|
 | g80 | d3 | d3: 5 -> 6 | d3: 7 vs 6 (recovers) | 5 vs 5 (recovers) |
 | g233 | d3 | d3: 5 -> 6 | d3: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
-| g238 | d3/d5 | d3: 7 -> 8; d5: 7 -> 8 | d3: 7 vs 8 (persists); d5: 7 vs 8 (persists) | running vs running (running) |
+| g238 | d3/d5 | d3: 7 -> 8; d5: 7 -> 8 | d3: 7 vs 8 (persists); d5: 7 vs 8 (persists) | 7 vs 7 (recovers) |
 | g270 | d3 | d3: 5 -> 6 | d3: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
 | g290 | d3 | d3: 6 -> 7 | d3: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
 | g350 | d3 | d3: 6 -> 8 | d3: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
 | g457 | d3/d5 | d3: 6 -> unwon; d5: 6 -> 7 | d3: 6 vs 6 (recovers); d5: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
 
-Proposed order, 15 slower deals: **at d8 b0 12 recover, 2 persist -- g163 (mechanism 2: Weather before Crab Umbra / Staff, one storm copy, X = 3, no Umbra loop) and g460 (mechanism 1: Wish before Sprawl, the Aura stranded on T2)** -- both recover under the amended order (d8 b0 4 = generic in both, single-game reruns `tr/walwl_*_d8_b0_*`). Amended order, 7 slower deals: 6 recover at d8 b0 and at 10x. **g238 is still running at d8 b0 in every arm** (>1 h per game at report time; batch `x2/`, `python3 mktable.py` reads it); at 10x it persists in every arm (7 vs 8).
+Proposed order, 15 slower deals: **at d8 b0 13 recover, 2 persist -- g163 (mechanism 2: Weather before Crab Umbra / Staff, one storm copy, X = 3, no Umbra loop) and g460 (mechanism 1: Wish before Sprawl, the Aura stranded on T2)** -- both recover under the amended order (d8 b0 4 = generic in both, single-game reruns `tr/walwl_*_d8_b0_*`). Amended order, 7 slower deals: **all 7 recover at d8 b0**, 6 already at 10x. g238 persists at 10x in every arm (7 vs 8) and plays the identical game at d8 b0 in every arm (T7, one digest; ~34-36M units per game).
 
 **Amended order (the measurement's recommendation, still DEFAULT OFF -- the USER's call):** land drop > Utopia Sprawl
 > Wild Growth > Elvish Harbinger > Arbor Elf > Accomplished Alchemist > Ezuri > Scholar > Nourish > Feed the Clan >
@@ -2677,7 +2677,7 @@ MTG_AA_CAST_ORDER_WEATHER_LAST=1`). Two moves against the proposal: the Wish goe
 behind the land Auras, mechanisms 1 and 3; open question 1 is moot -- it is after the drop either way), and Weather goes
 behind the untappers (mechanism 2 -- open question 3 answered the other way). Measured: d0 **-0.015** (14 / 6), d3 b10
 +0.018 (1 / 7), d5 b20 **0.000** (2 / 2), units 0.97-0.99x; net over the 2,000 paired games **-6 turns**. Its seven d3
-slower games are the residual class 4: six recover at 10x budget and at d8 b0; g238 does not recover at 10x (d8 b0 still running).
+slower games are the residual class 4: all seven recover at d8 b0 (six already at 10x; g238 only at d8 b0) -- the amended order meets the slower-game bar.
 LIFE_FIRST (the lifegain also ahead of the creatures) is a near-tie (d3 +0.014, d5 0.000, d0 +0.001; net +8).
 **Recommendation: do not adopt the proposed order as written** (worse on every cell, two games lose a turn at unlimited
 budget). The amended order is the candidate if the USER wants a fixed order for this deck: neutral at the play depth,
@@ -2688,7 +2688,7 @@ nothing, everything ships OFF; (b) the four questions -- the amended order flips
 untappers) and makes question 1 moot; question 2 (Ezuri / Scholar before the lifegain) measured only inside
 LIFE_FIRST, which moves them behind it and is a near-tie; (c) g238, the one residual game that loses a turn even at
 10x budget in every arm (T2 Nourish instead of Staff of Domination off Sprawl + Wild Growth -- a valuation shift, no
-order mechanism found).
+order mechanism found); at d8 b0 every arm plays the generic game (T7).
 
 ## Mulligan profile (exhaustive keep table) -- ADOPTED (2026-10-21)
 
