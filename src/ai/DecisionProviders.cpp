@@ -45313,6 +45313,18 @@ int AlchemistComboRouteApply(GameState& s, int me)
     // continuations read that context could land differently. So the path is replayed on a COPY first, and
     // if it does not kill here the walk is re-run here (no memo) -- a click or a committed line never plays
     // a path this context has not itself proven.
+    //
+    // THE PROVEN BOARD IS KEPT (MTG_AA_ROUTE_APPLY_PROVEN, DEFAULT ON; =0 restores the old failure). Even "proven
+    // here" is not enough: a link that is a breakpoint VARIANT resolves its continuation BY RANK in the list
+    // BpEnumEntryFor serves at apply time, and that list is cache state -- the plan pool's clear-all eviction
+    // between the proving replay and the live one makes the live replay re-derive it, and a list derived in
+    // another context ranks differently (forced with MTG_AA_ROUTE_APPLY_CLEARBP; the generation's two "APPLY
+    // replay did not kill" lines, 2026-10-21). The live replay then stopped HALFWAY -- casts paid, the loop run,
+    // no kill -- on a line the search had scored as a win. So when the live replay fails, the board the proving
+    // replay reached (the same path, the same context, a copy of the same state) is played instead: a legal
+    // line the engine itself just played out. Only the failure case changes; a live kill is untouched.
+    static const bool s_keep_proven = EnvOn("MTG_AA_ROUTE_APPLY_PROVEN", true);   // DEFAULT ON; =0 disables
+    std::optional<GameState> proven;
     {
         aaroute::Guard _g;
         aaroute::MainPassScope _pass(v.main_pass);   // the replay runs in the scope of the pass that proved it
@@ -45328,7 +45340,13 @@ int AlchemistComboRouteApply(GameState& s, int me)
             if (aaroute::StatsOn()) { aaroute::g_rewalks.fetch_add(1, std::memory_order_relaxed); }
             v = aaroute::Walk1(s, me, /*priced=*/false);
             if (v.r != 1) { return 0; }
+            if (s_keep_proven)
+            {
+                GameState probe2 = s;
+                if (aaroute::Replay(probe2, me, v.path) == 1) { proven.emplace(std::move(probe2)); }
+            }
         }
+        else if (s_keep_proven) { proven.emplace(std::move(probe)); }
     }
     // MTG_AA_ROUTE_APPLY_CLEARBP=1 (DIAGNOSTIC; play may move): evict the breakpoint-continuation caches between the
     // proving replay above and the live one below -- the eviction the plan pool's clear-all performs whenever it
@@ -45343,13 +45361,15 @@ int AlchemistComboRouteApply(GameState& s, int me)
     aaroute::NoPumpScope _np;
     ExecutorMenuScope _exec;
     ComboOffApplyPause _nochoosers;
-    const int r = aaroute::Replay(s, me, v.path);
+    int r = aaroute::Replay(s, me, v.path);
     if (r != 1)
     {
         int var_links = 0;
         for (const aaroute::Link& l : v.path) { if (l.plan.bp_choice >= 0) { ++var_links; } }
         std::fprintf(stderr, "[aa-route] !! t%d APPLY replay did not kill on a board the trial proved (%zu links,"
-                     " %d of them breakpoint variants)\n", s.turn_number, v.path.size(), var_links);
+                     " %d of them breakpoint variants)%s\n", s.turn_number, v.path.size(), var_links,
+                     proven.has_value() ? " -- played the proven board" : "");
+        if (proven.has_value()) { s = std::move(*proven); r = 1; }
     }
     return r;
 }
