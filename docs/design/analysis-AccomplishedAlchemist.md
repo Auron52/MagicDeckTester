@@ -2336,3 +2336,151 @@ an output-only event sink, or the external-chooser segment loop).
 * Crab Umbra: Umbra armor inert (nothing destroys our creatures).
 * Seedcradle Witch: targeting an opponent's creature not offered autonomously (inert -- nothing reads their P/T or tapped state).
 * Instant-speed activity on the OPPONENT's turn (Crab Umbra untap, Nourish) not modelled -- engine acts in our phases; an end-step kill lands strictly later than the same line in our main.
+
+## Slow rollouts at the gen setting (2026-10-21) -- the Combo Off route walk; two levers PROPOSED (OFF)
+
+Branch `aa-slow` (worktree `.claude/worktrees/aa-slow`, off `phase-1-2-deck-analyzer`), NOT pushed. Scratch and the
+repro commands: `/workspaces/MagicDeckTester/build/scratch/aa-slow/` (`REPROS.md`).
+
+**Symptom.** The USER-requested mulligan generation (aa-land c49997f1, recipe complete, d1 b1, K=15,
+`MTG_DECISION_WORK_X=1000`) had logged 3,016 keep-rollouts over 30 s (median 53 s, p90 161 s, max 2,084 s; 73.5
+core-hours) by 04:00 UTC.
+
+**Repro.** `MTG_KEEP_REPLAY` replays one rollout exactly; the worst (`size6 draw r=37`, Alchemist / 2 Forest / 2
+Living Wish / Witch) reproduces on the generation's own PGO binary at **1,843 s, T7** (logged 2,084 s). The same seeds
+on the CURRENT play (846135c7) are fast (0.4 / 0.6 / 8.5 s for the worst three) -- the Ezuri / Combo-Off-combat /
+Witch changes moved play -- so the current tail was found by replaying the gen's 60 slowest on it: c1 = `r=8 draw`
+Crab Umbra / Forest / Staff / 3 Utopia Sprawl **452 s, T7**; c2 = `r=1 play` 2 Arbor Elf / Forest / Stroke / 2
+Sprawl **781 s, T5** (its T3 decision alone 687 s); plus a 227 s and a > 4 min one.
+
+**Where the time goes (census + perf + `MTG_BP_DERIVE_STATS`).**
+* **The route walk** (`AlchemistComboRouteOffer` -> `aaroute::Trial` -> `Walk1` -> `Dfs`), entered from
+  `CollectActions` on every board the Combo Off rule fires on: ~90% of the aa-land worst game (walk 1,698 s), 89% of
+  c1 (403 s of 452), 99.6% of c2 (778 s of 781). perf on the aa-land game: 92.6% under `aaroute::Trial`, called from
+  the horizon playout's greedy `Solve` (`RolloutPreCombatSolve` / `SimulateToEnd`).
+* **Inside the walk, the breakpoint VARIANTS.** `EnumerateMainPlans` fans every plan that opens a breakpoint out into
+  `bp_choice` 0..W-1 ("this plan, then the k-th best continuation"); after a lifegain cast or an untap loop (site 9,
+  the lifegain breakpoint) the continuation list is every affordable subset of the hand. c1: 74% of the walk's
+  applies are variants (33,997 of 46,026); they ran 1,284 derivations = **22.3 M plans (mean 17.4 k, max 287,140;
+  156 lists >= 10 k), 380 s = 83% of the game**. Derivations outside the walk: 515, 8.6 k plans, 1.5 s.
+* **Mostly beyond the decision.** c1: 7,424 of 7,772 walks (431 of 433 s) are on boards two or more turns after the
+  decision's -- the playout's per-turn greedy Solve, not the searched turn.
+* **Not charged to anything.** The walk never calls `SearchBudget::Consume` and is outside the decision-work meter,
+  so neither the 1 ms budget (900 units) nor `MTG_DECISION_WORK_X=1000` (900 k units) can see it. The units the
+  census does show are the mandatory first pass at d1 (15 k-136 k per decision, 17-150x the budget, mostly
+  `u_la_cand` / `u_rollout_step` / the greedy-walk meter), at 2-11 ms per unit against a deck norm of ~0.04.
+  Per decision, aa-land worst: T1 169 s, T2 122 s, T3 57 s, T4 286 s, T5 1,206 s (135,713 units).
+
+**What landed (commit a9405b9c; everything default OFF -- play byte-identical).**
+* Diagnostics: `MTG_BP_DERIVE_STATS` (derivations by context), `MTG_AA_ROUTE_STATS` + variant applies + walks by
+  turn vs the decision's (`TurnSolver::DecisionRootTurn`), `MTG_AA_ROUTE_BASE_ONLY_VERIFY` (walk twice, tally the
+  verdicts), `MTG_AA_ROUTE_APPLY_CLEARBP` (the divergence test below).
+* **Lever 1 (budget pricing): `MTG_AA_ROUTE_NODE_UNITS=<units per apply>`** (manifest `aa_route_units`). The equip
+  route's shape: each walk apply is charged to `TurnSolver::DecisionBudget()` (census `u_aa_route`) and the walk is
+  cut once that budget is spent. Inert at an unlimited root by construction. A walk on the decision's own turn is
+  charged but never cut (finish the turn first); the apply side is never priced; a cut verdict is never memoised and
+  a continuation list derived across a cut is never cached.
+* **Lever 2 (narrowing): `MTG_AA_ROUTE_BASE_ONLY`** -- the walk tries base plans only (not their breakpoint
+  variants) and reaches a continuation as its own next link (the argument the canon suppression inside the walk
+  already rests on) -- and **`MTG_AA_ROUTE_BASE_ONLY_PLAYOUT`**, the same only where `greedywindow::t_depth == 0`
+  (the horizon playout). Not an identity: the next link comes after the base apply's trailing passes and spends the
+  walk's fixed link / node bounds. Both heurarm slots.
+* Identity with everything off: the d1/b1 play-digest battery is dd1e27774a90d867 on both binaries, and the c1
+  repro replays with every route / derivation counter equal. scenarios 245/245 (also with each lever on); combo-off
+  fixtures 48/48 (also base-only).
+
+**Measured -- the repros (gen setting d1 b1, one thread each, contended box).**
+
+| repro | off | `NODE_UNITS=4` | `BASE_ONLY` |
+|---|---|---|---|
+| c1 (r=8 draw) | 452 s, T7 | 89 s, **T8** (33,876 walks cut) | **13.4 s, T7** (15 route derivations) |
+| c2 (r=1 play) | 781 s, T5 | -- | **7.0 s, T5** |
+
+**Measured -- the walk's verdicts (`MTG_AA_ROUTE_BASE_ONLY_VERIFY`, 120 games d3 b10 + d1 b1, 28,996 walks).** Both
+win 12,138; both no 14,304; **full menu only 441 (1.5%)**; **base-only only 2,113 (7.3%)**. Applies 1.23 M -> 0.49 M,
+walk time 217 s -> 88 s. Base-only proves MORE routes (its freed bounds reach boards the variants crowded out) but
+not a superset.
+
+**Measured -- the gen's own rollouts (`MTG_KEEP_REPLAY_LIST`, d1 b1, work ceiling 1000).** 300 ordinary size-7
+rollouts: base-only 0.53x wall (max 58 s -> 21 s), win turn 5 faster / 1 slower. The gen's 60 slowest: base-only's
+slowest is 28 s (off: 781 s, 455 s, 227 s, ...); 56 pairable: 0.37x, 2 faster / 1 slower.
+
+**Measured -- the held-out A/B (seed 96001, 400 games per cell, ONE pooled batch of 2,400, 10 threads, binary
+a9405b9c's play).** Win turn (unwon = 9), paired against `off`; ms is contended wall per game:
+
+| cell | off avg | `BASE_ONLY` | faster / slower | ms | `NODE_UNITS=4` | faster / slower | ms |
+|---|---|---|---|---|---|---|---|
+| d3 b10 | 5.4200 | 5.4100 (**-0.010**) | 8 / 4 | 0.83x | 5.4375 (+0.018) | 4 / 9 | 0.82x |
+| d5 b20 | 5.3850 | 5.3800 (**-0.005**) | 6 / 3 | 0.83x | 5.4200 (+0.035) | 0 / 13 | 0.80x |
+
+Units are unchanged by base-only (112.0k -> 111.8k, 194.9k -> 196.1k): the walk is not metered, so what it saves is
+pure per-unit cost. No `[aa-route] !!` line in the 2,400 games. The plan pool refused 225 stores (the box's
+3.2 GB pool is shared), so a handful of per-game unit counts are interleaving-dependent.
+
+* **`MTG_AA_ROUTE_NODE_UNITS` is a quality LOSS** at the price tried (+0.018 / +0.035, 13 of 13 d5 changes slower):
+  once the budget is spent it switches the route off for the rest of the decision's playouts, which is most of them
+  at these budgets, and the playout then misses kills the search was valuing. On the gen repro it is 5x cheaper
+  and a turn worse (T7 -> T8). Not recommended; it stays OFF.
+* **`MTG_AA_ROUTE_BASE_ONLY` is net better on both cells and ~0.83x the wall** (the route walk is ~20-35% of a suite
+  game's wall here; it is 83-99% of the slow keep-rollouts').
+
+**`MTG_AA_ROUTE_BASE_ONLY_PLAYOUT` (the narrowing beyond the search window only)**, the same 800 games in a second
+batch (binary c5808172), paired against the first batch's `off` (a 200-game `off` re-run in the second batch matched
+it 200 / 200 on win turn, 199 / 200 on units): d3 b10 **-0.010** (7 faster / 2 slower), d5 b20 **-0.0025** (5 / 3).
+It differs from base-only in 7 of 400 games per cell. At the gen setting it plays like base-only (same d1/b1 play
+digest 50bf42a271bb606d -- nearly every walk there is in the playout): c1 **7.8 s, T7**, c2 **2.6 s, T5**.
+
+**Slower games re-run at 10x budget (d3 b100 / d5 b200, both arms).** Base-only: 6 of 7 recover; **gi45 persists at
+both cells** (6 -> 8). Playout-only: 2 of 5 recover; **gi385 (both cells, 6 -> 7) and d5 gi332 (5 -> 6) persist**.
+gi45 under base-only: the executor's T6 apply missed the route memo and its own walk (no decision frame) found no
+route although the search's walk had proven one -> "combo route: no-op" (`REPROS.md`). The playout-only form keeps
+the full menu there and wins gi45 at T6. Neither lever is a superset of the full menu's walk, as the verdict tally
+already said (441 full-only boards of 28,996).
+
+**The gen's two `[aa-route] !! t7 APPLY replay did not kill` lines -- root cause and fix (commit d6926447).**
+`AlchemistComboRouteApply` replays the memoised path on a COPY ("proven here") and then again on the live state; the
+two lines are games where the copy killed and the live replay did not. The path is "plans, not indices" only one level
+deep: a link plan carries RANKS resolved at apply time -- `bp_choice` (the k-th entry of the continuation list
+`BpEnumEntryFor` serves, i.e. cache state) and, in resolve mode, `tutor_choice` (the k-th of the Living Wish ranking
+computed inside `PerformTutor`). Whatever those resolutions read beyond the board can differ between two replays of the
+same plans. Forced test (`MTG_AA_ROUTE_APPLY_CLEARBP=1`: evict the breakpoint caches between the two replays,
+200 games d3/d5, seed 97001): **1 divergence with the full menu (a 4-link path with 1 variant link), 0 with
+base-only**. Rare even when forced -- consistent with 2 lines in a ~10 h generation. When it fires, the live replay
+stopped halfway (casts paid, loop run, no kill) on a line the search had scored as a win. **Fix, DEFAULT ON
+(`MTG_AA_ROUTE_APPLY_PROVEN`, =0 restores): play the board the proving replay reached** (same path, same context, a
+copy of the same state); only the failure case moves. In the forced test the one divergence was played as the
+proven kill. No `!!` line in the 3,614 other games of this section.
+
+**A related, more frequent defect -- NOT fixed, for the USER.** "memoised path does not kill in this context:
+re-walking" fires ~1 per game (195 in 200 games), mostly inside rollouts, and the re-walk there often finds nothing,
+so the rollout plays a ComboRoute that does nothing (a scored win, played as a no-op): seed 96046 gi45 shows 9 per
+game in both arms, all failing. E.g. a path `[Nourish, Feed the Clan] -> [Living Wish, tutor rank 1] -> [Galvanic
+Alchemist] -> [loop] -> [Stroke]` proven at the offer does not kill when re-applied a moment later. Same class: the
+ranks resolve against a different list. The principled fix is to record the RESOLVED outcomes in the path (the fetched
+card's name, the continuation plan itself) and replay those, so a path is a pure function of the board -- a lockstep
+change in both worlds, not attempted here.
+
+**For the USER (nothing adopted; the levers ship OFF).**
+1. **Adopt a walk narrowing to end the generation's tail?** `MTG_AA_ROUTE_BASE_ONLY_PLAYOUT` (recommended: the
+   narrowing only in the horizon playout, the full menu everywhere the search actually searches) or
+   `MTG_AA_ROUTE_BASE_ONLY` (everywhere). Both are net better on both held-out cells (-0.010 / -0.0025 and -0.010 /
+   -0.005), ~0.83x the suite wall, and turn the gen's worst rollouts from 450-780 s into 3-13 s; but both are lossy
+   narrowings of the route walk (441 of 28,996 walks prove a route only with the variants) and each has games that
+   persist at 10x (playout-only: gi385, gi332; base-only: gi45). Adopting either moves AA play, so it moves the
+   generation's play digest: the running generation (aa-land play) would have to be restarted or finished as is --
+   your call, and it changes the order of nothing else in the pipeline.
+2. **`MTG_AA_ROUTE_NODE_UNITS` (the budget price):** measured a quality loss (+0.018 / +0.035, T7 -> T8 on the gen
+   repro). Recommendation: do not adopt; keep it as the documented pricing shape.
+3. **The no-op ComboRoute class** (above): approve the "record resolved outcomes in the path" fix as a follow-up?
+4. `MTG_AA_ROUTE_APPLY_PROVEN` landed DEFAULT ON as a correctness fix (it moves play only where the live replay
+   would have stopped halfway); say if you want it OFF.
+
+**Validation of the branch as committed (HEAD c5808172, levers at their defaults).** mtg-test 1617 / 1617;
+scenarios 245 / 245 (also with each lever on); combo-off fixtures 48 / 48 (also base-only). Smoke (6 threads, not
+accepted): 124 / 132 -- every non-alchemist case byte-identical to GT except the four known moves at their known
+digests (critter d0 ccb5b47d5ef529c9, melira d0 0f633c1012b4fb11, selesnya d3 a1937cded0ab6f58, d5 9bd0e14ec876faa9);
+the four alchemist rows differ from GT (GT is aa-land's play) and are **byte-identical to the 846135c7 binary** run
+on the same four jobs (d0 7.0760 / 87fe2d52050de8af, d3 5.3933 / b9bae1a6cfc0a5b6, d5 5.2000 / 6301cee5a8a3b7e7,
+2HG d3 5.4600 / e9c1958b6ee17d84; units equal). No `!!` line in the smoke, so `MTG_AA_ROUTE_APPLY_PROVEN` never fired
+there. Scratch: `build/scratch/aa-slow/` (`ab/` the batches + `an.py` / `cross.py`, `c1*` `c2*` `r1_aaland` the
+repros, `list_*` the gen-setting replays, `verify/` the verdict tally, `g45/` the gi45 traces).
