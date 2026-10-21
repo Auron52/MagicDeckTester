@@ -7564,30 +7564,42 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
     // Locals, not thread_local scratch: `emit` scores a subset and may re-enter a nested walk.
     std::vector<int> choice(static_cast<std::size_t>(G), 0);
     std::vector<int> part(static_cast<std::size_t>(G) + 1, 0);   // part[g] = sum over digits >= g
-    // The selection is written by index into reserved storage (no push_back calls per element): `base` holds
-    // the position's auto + group part, each independents mask copies it into `sel` and appends its bits.
+    // The selection is written by index into reserved storage (no push_back per element). Its layout is the
+    // carry walk's: auto_sel, then each digit's chosen option in digit order (digit 0 first), then the set
+    // independents. Digit 0 is the fastest, so the chosen options of digits 1..G-1 (`hi`) are rebuilt only
+    // when one of those digits has moved (`hi_dirty`), not at every position.
     const std::size_t na = auto_sel.size();
-    std::vector<int> base(na + static_cast<std::size_t>(G), 0);
-    std::copy(auto_sel.begin(), auto_sel.end(), base.begin());
+    std::vector<int> hi;
+    hi.reserve(static_cast<std::size_t>(G));
+    bool hi_dirty = true;
     std::vector<int> ind_cost(static_cast<std::size_t>(num_ind), 0);
     for (int b = 0; b < num_ind; ++b)
     { ind_cost[static_cast<std::size_t>(b)] = cand_mv[static_cast<std::size_t>(independent[static_cast<std::size_t>(b)])]; }
     sel.reserve(na + static_cast<std::size_t>(G) + static_cast<std::size_t>(num_ind));
     auto leaf = [&](int mcost) -> bool
     {
-        std::size_t nb = na;
-        for (int g = 0; g < G; ++g)
+        if (hi_dirty)
         {
-            const int c = choice[static_cast<std::size_t>(g)];
-            if (c > 0) { base[nb++] = groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(c - 1)]; }
+            hi.clear();
+            for (int g = 1; g < G; ++g)
+            {
+                const int c = choice[static_cast<std::size_t>(g)];
+                if (c > 0) { hi.push_back(groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(c - 1)]); }
+            }
+            hi_dirty = false;
         }
+        const int c0 = G > 0 ? choice[0] : 0;
+        const std::size_t nb = na + (c0 > 0 ? 1 : 0) + hi.size();
         for (int imask = 0; imask < (1 << num_ind); ++imask)
         {
             int pcost = 0;
             sel.resize(nb + static_cast<std::size_t>(num_ind));
             int* sp = sel.data();
-            std::copy(base.data(), base.data() + nb, sp);
-            std::size_t n = nb;
+            std::copy(auto_sel.begin(), auto_sel.end(), sp);
+            std::size_t n = na;
+            if (c0 > 0) { sp[n++] = groups[0][static_cast<std::size_t>(c0 - 1)]; }
+            std::copy(hi.begin(), hi.end(), sp + n);
+            n += hi.size();
             for (int b = 0; b < num_ind; ++b)
             {
                 if (!(imask & (1 << b))) { continue; }
@@ -7612,6 +7624,7 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
                 --g;
                 choice[static_cast<std::size_t>(g)] = 0;
                 part[static_cast<std::size_t>(g)] = part[static_cast<std::size_t>(g) + 1];
+                if (g >= 1) { hi_dirty = true; }
                 continue;
             }
             if (leaf(part[0])) { return; }
@@ -7619,6 +7632,7 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
         for (;;)   // advance digit g, carrying upward
         {
             const std::size_t gi = static_cast<std::size_t>(g);
+            if (gi >= 1) { hi_dirty = true; }
             if (choice[gi] < static_cast<int>(groups[gi].size()))
             {
                 ++choice[gi];
@@ -12878,6 +12892,22 @@ static bool VampRulePreOn()
 static bool VampRulePreVerifyOn()
 {
     static const bool v = EnvOn("MTG_VAMP_RULE_PRE_VERIFY");  // diagnostic: both paths, abort on mismatch
+    return v;
+}
+// THE WALKERS' PREFILTER (MTG_VAMP_PREFILTER, DEFAULT ON; =0 -> every selection goes to consider() /
+// eval_and_push()). Once an enumeration's VampRulePre is built, the subset walk asks SubsetVampOutletInvalid
+// itself BEFORE handing a selection on, and a selection the rules refuse is not handed on at all. That is
+// the answer the receiver would have reached: its chain is a sequence of pure rejection predicates (their
+// OR is order-free) that SubsetVampOutletInvalid belongs to, and everything it does before reaching a
+// refusal is bookkeeping the prefilter either replays (consider()'s abandon-poll cadence) or is fenced off
+// for (the walk's budget charge, the per-decision meter, every census / trace / funnel instrument, the
+// payoff prune, human play: any of them armed -> no prefilter). On a Vampires d5 game 86% of the greedy
+// walk's selections end at these rules (callgrind 2026-10-21), each having paid consider()'s entry, the
+// sort and the duplicate-source scan first. The walker sorts first exactly as consider() does (the rules
+// read positions); EnumeratePlans' receiver does not sort, so neither does its prefilter.
+static bool VampPrefilterOn()
+{
+    static const bool v = EnvOn("MTG_VAMP_PREFILTER", true);
     return v;
 }
 static int VampRulePreLazyK()
@@ -45558,10 +45588,31 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (WalkDfsOn() && !gate_on && !copy_pred_on && !dep_pred_on && !fold_pred_on && !mana_audit_on
             && PlainDfsCostsSound(groups, cand_mv))
         {
+            // MTG_VAMP_PREFILTER (see VampPrefilterOn): the visits consider() would end at the Vampires
+            // rules are refused here, after replaying its entry (the abandon-poll cadence).
+            const bool vamp_prefilter = VampPrefilterOn() && pre.vamp_outlet && !VampRulePreVerifyOn()
+                                     && g_greedy_charge_budget == nullptr && !decisionwork::Armed()
+                                     && !es_on_c && shape == nullptr && !dupclause::Enabled()
+                                     && !payoff_prune_on && !HumanPlayActive();
             PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel,
                              [&](std::vector<int>& s) -> bool
                              {
-                                 if (vial_ok(s)) { foldsel::g_from_odometer = true; consider(s); }
+                                 if (!vial_ok(s)) { return walk_exhausted; }
+                                 if (vamp_prefilter && pre.vamp.built && !walk_exhausted)
+                                 {
+                                     std::sort(s.begin(), s.end());   // consider()'s own first step
+                                     if (SubsetVampOutletInvalidPre(state, cands, s, /*fold_from_odometer=*/true, pre.vamp))
+                                     {
+                                         if (++g_walk_abandon_acc >= kWalkAbandonStride)
+                                         {
+                                             g_walk_abandon_acc = 0;
+                                             if (gamework::Abandoned()) { walk_exhausted = true; }
+                                         }
+                                         return walk_exhausted;
+                                     }
+                                 }
+                                 foldsel::g_from_odometer = true;
+                                 consider(s);
                                  return walk_exhausted;
                              });
             done = true;
@@ -59564,9 +59615,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && !s_walk_diag && PlainDfsCostsSound(groups, cand_mv))
         {
             const bool fso = FoldSearchOdometerOn(state);
+            // MTG_VAMP_PREFILTER (see VampPrefilterOn): eval_and_push's prefix before its Vampires rules
+            // is pure rejections plus instruments, fenced off here.
+            const bool vamp_prefilter = VampPrefilterOn() && pre.vamp_outlet && !VampRulePreVerifyOn()
+                                     && eshape == nullptr && !enumstats::Enabled() && !dupclause::Enabled()
+                                     && !payoff_prune_on && !sat_subset && !HumanPlayActive()
+                                     && !SeqChainTraceOn() && !mcstats::Enabled() && !decisionwork::Armed();
             PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel,
                              [&](std::vector<int>& s) -> bool
                              {
+                                 if (vamp_prefilter && pre.vamp.built
+                                     && SubsetVampOutletInvalidPre(state, cands, s, /*fold_from_odometer=*/true, pre.vamp))
+                                 { return false; }
                                  if (fso) { foldsel::g_from_odometer = true; }
                                  eval_and_push(s);
                                  return false;
