@@ -43335,6 +43335,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // parallelises across rollouts, never inside a walk), and the walk completes before the record
     // site below reads it.
     shapestats::CallFunnel callf;
+    // enumstats::Enabled() read once for the walk (a function-local static: a guard load + call per read,
+    // ~2 reads per visited subset -- 0.2% of a Vampires d5 game). The flag is process-constant.
+    const bool es_on_c = enumstats::Enabled();
     auto consider = [&](std::vector<int>& sel)
     {
         // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
@@ -43410,7 +43413,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             }
         }
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
-        if (enumstats::Enabled()) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
+        if (es_on_c) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
         // BRANCH SHAPE funnel: one visit. The three shared-resource predicates below each get a
         // counter; everything else is derived as (entered - passed - those three) at dump time.
         if (shape != nullptr) { shapestats::Bump(shape->entered); ++callf.entered; }
@@ -43509,7 +43512,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
-        if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
+        if (es_on_c) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
         if (shape != nullptr) { shapestats::Bump(shape->passed); ++callf.passed; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
@@ -43882,7 +43885,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             && !(eff_cg.CanPay(combined) && eff_nc_cg.CanPay(noncreature_combined)))
         { mc_store_reject(); return; }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
-        if (!mana_ok && any_filter && enumstats::Enabled())
+        if (!mana_ok && any_filter && es_on_c)
         {
             enumstats::g_c_resc_call.fetch_add(1, std::memory_order_relaxed);
             for (int j : sel)
@@ -43905,7 +43908,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                > static_cast<int>((credited ? eff_nc : pool_noncreature).Total());
         // The gate now rides the RAW-POOL clause alone -- the only one that can be a true bound.
         const bool resc_tot_short = rt_pool;
-        if (enumstats::Enabled())
+        if (es_on_c)
         {
             if (resc_tot_short) { enumstats::g_c_resc_tot.fetch_add(1, std::memory_order_relaxed); }
             if (rt_pool) { enumstats::g_c_rt_pool.fetch_add(1, std::memory_order_relaxed); }
@@ -43945,16 +43948,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         { mc_store_reject(); return; }
         // Reached here on a !mana_ok subset => the real payment RESCUED it. If that subset was also
         // total-short the shortcut's argument is false; say so loudly rather than silently shipping.
-        if (enumstats::Enabled())
+        if (es_on_c)
         {
             if (resc_tot_short) { enumstats::g_c_resc_tot_ok.fetch_add(1, std::memory_order_relaxed); }
             if (rt_pool) { enumstats::g_c_rt_pool_ok.fetch_add(1, std::memory_order_relaxed); }
             if (rt_eff)  { enumstats::g_c_rt_eff_ok.fetch_add(1, std::memory_order_relaxed); }
             if (rt_nc)   { enumstats::g_c_rt_nc_ok.fetch_add(1, std::memory_order_relaxed); }
         }
-        if (!mana_ok && enumstats::Enabled())
+        if (!mana_ok && es_on_c)
         { enumstats::g_c_resc_ok.fetch_add(1, std::memory_order_relaxed); }   // reached here => rescued
-        if (enumstats::Enabled()) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
+        if (es_on_c) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
         if (seq_on) { apply_seq(); }   // filter-rescued survivor: keep its credited pool honest too
         if (sacrifice_count > total_lands)                   { mc_store_reject(); return; }
         if (discard_lands_used > lands_in_hand)              { mc_store_reject(); return; }
@@ -43991,7 +43994,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                                               /*any_rock_cand=*/any_rock);
             if (!SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
         }
-        if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
+        if (es_on_c) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
         // judged by a real payment, and colour_feas is unusable on a filter board anyway.
@@ -44070,7 +44073,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             }
         }
         if (mana_cache_on && !mc_hit) { mc_last_gmask = gmask; mc_reject = false; mc_mana_ok = mana_ok; }
-        if (enumstats::Enabled()) { enumstats::g_c_feas.fetch_add(1, std::memory_order_relaxed); }   // passed colour feasibility
+        if (es_on_c) { enumstats::g_c_feas.fetch_add(1, std::memory_order_relaxed); }   // passed colour feasibility
 
         // Irencrag Feat "you can cast only one more spell this turn": reject any subset that casts
         // more than max_casts_after spells AFTER the restricting ritual (ordered by CastOrderRank).
@@ -44377,7 +44380,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             rank_value = LearnedPlanScore(state, psum, *ev);
         }
 
-        if (enumstats::Enabled()) { enumstats::g_c_surv.fetch_add(1, std::memory_order_relaxed); }   // fully scored
+        if (es_on_c) { enumstats::g_c_surv.fetch_add(1, std::memory_order_relaxed); }   // fully scored
         // DIAG (MTG_SOLVE_PROJ_TRACE=<turn>, default 0 = off, print-only): every fully-scored subset
         // of Solve (the d0 runner / playout policy) on that turn with its this-turn projection terms --
         // the read that showed gi1106's T4 had no plan projected lethal (MTG_ATTACK_FREECAST_DAMAGE).
@@ -48505,11 +48508,74 @@ struct ContPinFrame
     ContPinFrame& operator=(const ContPinFrame&) = delete;
 };
 
+// ---- THE PRE-PLAN FACTS SHARE (MTG_PREPLAN_SHARE, DEFAULT ON; =0 -> every apply recomputes) ----------
+// ApplyPlanDirect opens by reading two facts of the board it STARTS from: SnapshotActivatableAbilities
+// (site 9's pre-plan activation keys) and PrePlanAvailabilityKeys (MTG_BP_NEW_ONLY's). Both are pure
+// functions of that board -- a battlefield walk with an affordability probe per permanent -- and the
+// search's candidate loops apply EVERY candidate plan to a fresh copy of the SAME root board, so the
+// identical walk ran once per sibling: 3.5% of a Vampires 2HG d5 game (callgrind 2026-10-21). A loop
+// that copies its root and immediately applies arms the share for that copy (PrePlanShareArm); the
+// apply takes it at entry (only when handed exactly that object, so a nested apply never sees it),
+// computes each fact once at the point it always did, and every later sibling reads the cached value.
+// The siblings' boards are equal at that point (equal copies, the same deterministic preamble), so a
+// cached fact is the value a recompute returns. MTG_PREPLAN_SHARE_VERIFY=1 recomputes and aborts on any
+// difference.
+struct PrePlanShare
+{
+    bool keys_ready = false;
+    std::vector<std::uint64_t> keys;   // TurnSolver::SnapshotActivatableAbilities
+    bool acts_ready = false;
+    std::vector<std::uint64_t> acts;   // TurnSolver::PrePlanAvailabilityKeys
+};
+inline thread_local PrePlanShare*    t_pps_share  = nullptr;
+inline thread_local const GameState* t_pps_target = nullptr;
+static bool PrePlanShareOn()
+{
+    static const bool v = EnvOn("MTG_PREPLAN_SHARE", true);   // DEFAULT ON; =0 -> recompute per apply
+    return v;
+}
+static bool PrePlanShareVerifyOn()
+{
+    static const bool v = EnvOn("MTG_PREPLAN_SHARE_VERIFY");  // diagnostic: recompute and compare
+    return v;
+}
+// Arm right before ApplyPlanDirect(copy, ...) when `copy` was JUST copied from the loop's root board.
+static void PrePlanShareArm(PrePlanShare& sh, const GameState& copy)
+{
+    if (!PrePlanShareOn()) { return; }
+    t_pps_share  = &sh;
+    t_pps_target = &copy;
+}
+static PrePlanShare* PrePlanShareTake(const GameState& s)
+{
+    PrePlanShare* r = (t_pps_target == &s) ? t_pps_share : nullptr;
+    t_pps_share  = nullptr;
+    t_pps_target = nullptr;
+    return r;
+}
+static std::vector<std::uint64_t> PrePlanSnapshotKeys(PrePlanShare* sh, const GameState& state)
+{
+    if (sh == nullptr) { return TurnSolver::SnapshotActivatableAbilities(state); }
+    if (!sh->keys_ready) { sh->keys = TurnSolver::SnapshotActivatableAbilities(state); sh->keys_ready = true; }
+    else if (PrePlanShareVerifyOn() && sh->keys != TurnSolver::SnapshotActivatableAbilities(state))
+    { std::fprintf(stderr, "[preplan-share] MISMATCH keys t%d\n", state.turn_number); std::abort(); }
+    return sh->keys;
+}
+static std::vector<std::uint64_t> PrePlanAvailKeys(PrePlanShare* sh, const GameState& state)
+{
+    if (sh == nullptr) { return TurnSolver::PrePlanAvailabilityKeys(state); }
+    if (!sh->acts_ready) { sh->acts = TurnSolver::PrePlanAvailabilityKeys(state); sh->acts_ready = true; }
+    else if (PrePlanShareVerifyOn() && sh->acts != TurnSolver::PrePlanAvailabilityKeys(state))
+    { std::fprintf(stderr, "[preplan-share] MISMATCH acts t%d\n", state.turn_number); std::abort(); }
+    return sh->acts;
+}
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
                             int caller_line)
 {
+    PrePlanShare* const pps = PrePlanShareTake(state);   // armed by a sibling loop for exactly this board
     g_apply_caller_line = caller_line;
     // The Niv draw/damage loop: whatever this apply drew outside a flushed resolution (a land's ETB
     // draw) pings before the plan's outcome is read. Executor twin: AIEngine::TakeTurn's scope.
@@ -48561,7 +48627,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               || w0collapse::NobpSite9Watch()
                               || (!plan.bp_all && g_bp_enum_depth == 0 && g_rollout_nest == 0);
     const std::vector<uint64_t> pre_plan_keys = site9_keys_read
-        ? TurnSolver::SnapshotActivatableAbilities(state) : std::vector<uint64_t>{};
+        ? PrePlanSnapshotKeys(pps, state) : std::vector<uint64_t>{};
 
     // MTG_BP_CANON_AUDIT ONLY -- ASK THE FAN-OUT'S QUESTION AT THE FAN-OUT'S STATE.
     //
@@ -48589,7 +48655,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // MTG_BP_NEW_ONLY input, captured at the same point for the same reason: the activations the
     // base plan could have carried (empty when the lever is off). Bound on every breakpoint scope
     // this apply opens; AIEngine::TakeTurn captures the same set at its entry.
-    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanAvailabilityKeys(state);
+    const std::vector<std::uint64_t> pre_plan_acts = PrePlanAvailKeys(pps, state);
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
@@ -73475,6 +73541,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             return kM2FixNone;
         };
+        PrePlanShare m2_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -73555,6 +73622,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             const std::uint64_t any_before     = g_bp_any_last;
             const std::uint64_t latent9_before = g_bp_latent9_last;
             const std::uint64_t truncasym_before = g_bp_truncasym_last;
+            PrePlanShareArm(m2_pps, s2);
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
             m2_dig_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
             m2_pb_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
@@ -75077,6 +75145,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     GameState  s_buf;
     // Node children: resume-copy buffer (capacity reuse across children/pends) -- see the m2 host.
     GameState  s3_buf;
+    PrePlanShare fsw_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -75361,6 +75430,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const unsigned long long pf_reads0 = combatpin::t_reads;
         const long long pf_units0 = budget != nullptr ? budget->Used() : 0;
         etb_fold.ArmApply(static_cast<std::size_t>(&p - pre.data()), &s);
+        PrePlanShareArm(fsw_pps, s);
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
         // The in-plan probe records only an apply that spent no unit and stopped at no breakpoint node
         // (see BuildInPlan), with what the walker's records read from it.
@@ -81189,6 +81259,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         const int census_slot = (sub_depth >= 0 && sub_depth < 8) ? sub_depth : 7;
         if (candcensus::On())
         { candcensus::g_nodes[census_slot].fetch_add(1, std::memory_order_relaxed); }
+        PrePlanShare la_pps;   // every candidate below is applied to a fresh copy of `state`
         for (const Plan& plan : candidates)
         {
             // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
@@ -81458,6 +81529,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     const unsigned long long cp_reads0 = combatpin::t_reads;
                     const long long cp_units0 = budget != nullptr ? budget->Used() : 0;
                     etb_fold.ArmApply(cp_i, &copy);
+                    PrePlanShareArm(la_pps, copy);   // `copy` is a fresh copy of `state` (no cp_shared)
                     ApplyPlanDirect(copy, plan, true);
                     // The in-plan probe records only an apply that spent no unit (see BuildInPlan), with
                     // what the walker's records read from it.
@@ -81735,6 +81807,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 bounce_fold.Arm(plan);
+                PrePlanShareArm(la_pps, copy);   // `copy` is a fresh copy of `state`
                 ApplyPlanDirect(copy, plan, false);
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 pb_fold.Record(plan, true, static_cast<int>(cand_index));

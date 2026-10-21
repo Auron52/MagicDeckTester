@@ -15736,6 +15736,7 @@ inline std::vector<ConvokeArmSpec> CreatureConvokeArms(const GameState& s, int c
     const int maxO = std::min(Fo + Ho + Co, base.generic);
     struct Cand { ConvokeArmSpec a; int costly; int fam; };
     std::vector<Cand> cands;
+    cands.reserve(32);   // capacity only (the list grew 1-2-4-8-16-32 per call: ~1M allocations a Vampires game)
     for (int P = 0; P <= maxP; ++P)
     {
         for (int O = 0; O <= maxO; ++O)
@@ -15776,6 +15777,7 @@ inline std::vector<ConvokeArmSpec> CreatureConvokeArms(const GameState& s, int c
         return x.a.pip < y.a.pip;
     };
     std::vector<Cand> kept;
+    kept.reserve(cands.size());
     for (const Cand& c : cands)
     {
         bool merged = false;
