@@ -1747,6 +1747,14 @@ public:
     // -- and a madness CAST). A deck holding flashback / delve / threshold / a "whenever you discard"
     // trigger must not opt in. Default false -> the fold never engages (byte-identical).
     virtual bool PostCombatPumpDiscardFoldOptIn() const { return false; }
+    // PostCombatCannotKillOptIn -- opt IN to MTG_KO_M2_NO_REACH (TurnSolver.cpp, beside MTG_LEAF_KILL_ONLY).
+    // On the turn a horizon rollout's cutoff ends, only a THIS-TURN kill can change the rollout's answer
+    // (LeafKillOnlyOn), so the searched second main there -- under every candidate's evaluation and after the
+    // pick -- exists only to find a post-combat kill. The DECK vouches that it has none: no card it can cast,
+    // activate or trigger after combat makes an opponent lose (no damage, drain, life loss, "life total
+    // becomes 0", poison, opponent mill or alternate win; no extra combat). With the opt-in that m2 is not
+    // searched there at all (an empty plan, which kills nobody either). Default false -> never engages.
+    virtual bool PostCombatCannotKillOptIn() const { return false; }
 
     // ---- Vampires A1 (2026-10-18): MADNESS -------------------------------------------------------
     // MadnessCastDefault -- the madness cast-or-decline taken WITHOUT a searched pin. Reached only
