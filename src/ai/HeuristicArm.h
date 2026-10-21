@@ -583,6 +583,7 @@ enum Slot : int
     VAMP_MADNESS_COLOR_FOLD,  // MTG_VAMP_MADNESS_COLOR_FOLD  Vampires perf (2026-10-18, docs/design/vampires-search-cost.md): a madness CAST variant whose cost (with the outlet's own) the turn's OPTIMISTIC pool (AvailableManaPool + the ceiling's extra as wild) cannot pay in ANY colour is not emitted -- it would resolve as the decline it duplicates. Identity fold. DEFAULT ON; =0 -> the total-mana gate only
     VAMP_OUTLET_NOT_GROWTH,   // MTG_VAMP_OUTLET_NOT_GROWTH   Vampires perf (same doc): a DISCARD-cost sac outlet (Falkenrath Pit Fighter: draw two) no longer disarms OptimisticTurnMana's ceiling -- it adds no mana to the enumeration it is in (its draws reach only a breakpoint continuation, a new enumeration). Sound (the ceiling only prunes the never-payable). DEFAULT ON; =0 -> every sac outlet is growth
     VAMP_M2_PUMP_DISCARD_FOLD,// MTG_VAMP_M2_PUMP_DISCARD_FOLD Vampires perf (same doc): in the SECOND main a Stromkirk Condemned activation ("Discard a card: Vampires get +1/+1 until end of turn") whose discard is not cast for madness is DOMINATED by the same selection without it (combat is over; the card stays in hand) -- the subset walk rejects it unless the discard can empty the hand under a hellbent upkeep reader (Asylum Visitor), the hand can exceed seven at cleanup, the selection draws, or the card is a graveyard-landfall watcher (Bloodghast). Provider opt-in (PostCombatPumpDiscardFoldOptIn). DEFAULT ON; =0 -> every pin searched
+    VAMP_FREE_DISCARD,        // MTG_VAMP_FREE_DISCARD  the USER's discard rule (2026-10-21, PROTOTYPE): with a FREE discard in hand (a madness card payable now at a madness cost <= its mana cost, or Bloodghast) the outlet discard pins of Condemned / Pit Fighter / Blood are restricted to the free names. DEFAULT OFF; =1 enables (VampiresProvider::ActivationDiscardCandidates)
     COUNT
 };
 
@@ -1116,6 +1117,7 @@ inline const char* Name(int slot)
         "MTG_VAMP_MADNESS_COLOR_FOLD",
         "MTG_VAMP_OUTLET_NOT_GROWTH",
         "MTG_VAMP_M2_PUMP_DISCARD_FOLD",
+        "MTG_VAMP_FREE_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

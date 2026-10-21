@@ -19458,9 +19458,68 @@ static bool VampHandHasLand(const GameState& s)
 static bool VampiresBucketDiscardEnabled();                                           // defined below
 static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_mode);  // defined below
 
-std::vector<std::string> VampiresProvider::ActivationDiscardCandidates(
-    const GameState& s, const CardDefinition& src_def, const std::vector<std::string>& names) const
+
+// MTG_VAMP_FREE_DISCARD (heurarm VAMP_FREE_DISCARD; the USER's discard rule, 2026-10-21, PROTOTYPE, DEFAULT OFF):
+// *"when discarding the cards with madness that we can afford to cast for that cost are the ideal. If the cost
+// is the same or less than the casting cost there is no reason not to discard them"* and *"Bloodghast is another
+// very good choice for discards, since it comes back from the graveyard whenever a land drops."* So when the
+// hand holds a FREE discard -- a card with madness whose madness cost is no more than its mana cost and which the
+// untapped mana (plus a land drop still to come) can pay together with the outlet's own mana, or a graveyard-landfall card (Bloodghast)
+// -- the discard axis of Stromkirk Condemned / Falkenrath Pit Fighter / the Blood token is RESTRICTED to the free
+// discards (a provider restriction, the contract's "only with a measurement" case; every free name is still a
+// searched variant, and the engine's madness fan -- cast / decline -- is untouched). No free discard: every name.
+static bool VampFreeDiscardOn()
 {
+    static const bool env = EnvOn("MTG_VAMP_FREE_DISCARD");
+    return heurarm::Flag(heurarm::VAMP_FREE_DISCARD, env);
+}
+static std::vector<std::string> VampFreeDiscards(const GameState& s, const CardDefinition& src_def,
+                                                 const std::vector<std::string>& names)
+{
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    ManaPool have = AvailableManaPool(s);
+    have.AddPool(s.floating_mana);
+    // The land drop still to come counts as one wild source (the engine's OptimisticTurnMana is TurnSolver's).
+    const int extra = (ap.lands_played_this_turn < ap.LandDropsAvailable() && VampHandHasLand(s)) ? 1 : 0;
+    const int outlet_mv = src_def.params.sac_outlet_discard_cost > 0 && src_def.params.sac_creature_cost.has_value()
+                              ? src_def.params.sac_creature_cost->ManaValue()
+                              : src_def.params.blood_draw_cost.has_value() ? src_def.params.blood_draw_cost->ManaValue() : 0;
+    std::vector<std::string> out;
+    for (const std::string& nm : names)
+    {
+        const Card* hc = nullptr;
+        for (const Card& c : ap.hand) { if (!c.m_is_staged && c.m_name.str() == nm) { hc = &c; break; } }
+        if (hc == nullptr) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(*hc);
+        if (d == nullptr) { continue; }
+        bool free = d->gy_landfall_watcher;
+        if (!free)
+        {
+            for (const ManaCost& m : MadnessCostsFor(s, me, *hc))
+            {
+                if (m.ManaValue() > d->card.m_mana_cost.ManaValue()) { continue; }
+                if (m.ManaValue() + outlet_mv > static_cast<int>(have.Total()) + extra) { continue; }
+                ManaPool p = have;
+                for (int i = 0; i < extra; ++i) { p.wild += 1; }
+                if (!p.CanPay(m)) { continue; }
+                free = true;
+                break;
+            }
+        }
+        if (free) { out.push_back(nm); }
+    }
+    return out;
+}
+
+std::vector<std::string> VampiresProvider::ActivationDiscardCandidates(
+    const GameState& s, const CardDefinition& src_def, const std::vector<std::string>& names_in) const
+{
+    // MTG_VAMP_FREE_DISCARD (above): the free discards, when there are any, are the whole axis -- ordered by the
+    // rest of this function exactly as the full list would be.
+    std::vector<std::string> free_names;
+    if (VampFreeDiscardOn()) { free_names = VampFreeDiscards(s, src_def, names_in); }
+    const std::vector<std::string>& names = free_names.empty() ? names_in : free_names;
     // MTG_VAMPIRES_BUCKET_DISCARD (AI-DRAFTED 2026-10-18, DEFAULT OFF): the discard buckets ORDER the
     // searched pins too -- the bucket shed order in ACTIVATION mode (a Bloodghast a held land returns
     // leads; no madness promotion, see VampBucketShedOrder) mapped onto the names by first appearance. It
