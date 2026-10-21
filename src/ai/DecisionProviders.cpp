@@ -45307,7 +45307,16 @@ int AlchemistComboRouteApply(GameState& s, int me)
     if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
     // ALL-OR-NOTHING: only a proven path is played on the live state.
     aaroute::Verdict v = aaroute::Trial(s, me, /*priced=*/false);   // a copy: the walk below may touch the memo
-    if (v.r != 1) { return 0; }
+    if (v.r != 1)
+    {
+        if (aaroute::TraceOn())
+        {
+            std::fprintf(stderr, "[aa-route] t%d APPLY: no proven route on this board (memo/walk here; root_open=%d"
+                         " rollout=%d window=%d) -- no-op\n", s.turn_number, TurnSolver::DecisionRootOpen() ? 1 : 0,
+                         TurnSolver::InRolloutPlayout() ? 1 : 0, greedywindow::t_depth);
+        }
+        return 0;
+    }
     // ...AND PROVEN HERE. The memoised path was proven where the emission site ran (a rollout, a breakpoint
     // derivation); this apply may run in another context (the executor), and an ApplyPlan whose breakpoint
     // continuations read that context could land differently. So the path is replayed on a COPY first, and
@@ -45336,10 +45345,23 @@ int AlchemistComboRouteApply(GameState& s, int me)
         if (aaroute::Replay(probe, me, v.path) != 1)
         {
             if (aaroute::TraceOn())
-            { std::fprintf(stderr, "[aa-route] t%d memoised path does not kill in this context: re-walking\n", s.turn_number); }
+            {
+                std::fprintf(stderr, "[aa-route] t%d memoised path does not kill in this context: re-walking (root_open=%d"
+                             " rollout=%d window=%d)\n", s.turn_number, TurnSolver::DecisionRootOpen() ? 1 : 0,
+                             TurnSolver::InRolloutPlayout() ? 1 : 0, greedywindow::t_depth);
+                for (const aaroute::Link& l : v.path)
+                {
+                    std::fprintf(stderr, "[aa-route]     link%s bp=%d tutor=%d: %s\n", l.tap_num ? " (pre-tap)" : "",
+                                 l.plan.bp_choice, l.plan.tutor_choice, TurnSolver::PlanLineSummary(l.plan, s).c_str());
+                }
+            }
             if (aaroute::StatsOn()) { aaroute::g_rewalks.fetch_add(1, std::memory_order_relaxed); }
             v = aaroute::Walk1(s, me, /*priced=*/false);
-            if (v.r != 1) { return 0; }
+            if (v.r != 1)
+            {
+                if (aaroute::TraceOn()) { std::fprintf(stderr, "[aa-route] t%d APPLY: re-walk found no route here -- no-op\n", s.turn_number); }
+                return 0;
+            }
             if (s_keep_proven)
             {
                 GameState probe2 = s;
