@@ -8459,6 +8459,9 @@ static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Ac
             continue;
         }
         if (a.kind == Action::Kind::SacForMana) { return false; }
+        // An activated untapper (AccomplishedAlchemist's Crab Umbra / Staff / Witch / Galvanic, and the
+        // closed-form untap loop riding the same kind) re-taps a mana source inside the walk.
+        if (a.kind == Action::Kind::ActivateUntap) { return false; }
         if (a.cost.phyrexian_count > 0 || a.cost.twobrid_count > 0) { return false; }
         demand += a.cost.ManaValue();
         if (def == nullptr) { continue; }
@@ -8470,6 +8473,25 @@ static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Ac
         if (a.kind == Action::Kind::CastFromHand && def->params.etb_untap_lands > 0)
         { untap_lands += def->params.etb_untap_lands; }
     }
+    // SUPPLY THE BOUND CANNOT SEE ON THIS BOARD (AccomplishedAlchemist; found by the rebase onto this gate,
+    // 2026-10-21 -- the USER's reference claude_s9_gi8 T2 lost its recorded Sprawl + Alchemist line, and
+    // MTG_SPWF_SUPPLY_VERIFY reported the subset payable):
+    //   * a mana_per_life_gained source (Accomplished Alchemist) yields this turn's life gained, which a
+    //     subset lifegain cast raises in the middle of the walk; UntappedManaUpperBound reads it at the
+    //     board's current value, so with one untapped the bound is not a bound -> not provable;
+    //   * an untap-target-land source (Arbor Elf, UntapLandSourceDef) yields one more tap of the best
+    //     Forest, land-Aura bonus INCLUDED -- so a land Aura the subset attaches pays its bonus once per
+    //     such source on top of its host's own tap (the aura_extra term below counts only that one).
+    int untap_land_srcs = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd == nullptr) { continue; }
+        if (pd->params.mana_per_life_gained) { return false; }
+        if (aura_extra > 0 && UntapLandSourceDef(state, p) != nullptr) { ++untap_land_srcs; }
+    }
+    aura_extra += untap_land_srcs * aura_extra;
     // Every floating reserve the payer drains: the open pool, the creature-only reserve (Somberwald
     // Sage) and the big-spell-only reserve (Troyan) -- a bound must count all three.
     const int floating = static_cast<int>(state.floating_mana.Total())
