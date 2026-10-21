@@ -29,6 +29,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include "vamp_rules_off.h"
 
 namespace
 {
@@ -343,6 +344,7 @@ TEST_CASE("Vampires cast order: lever off is VialProvider's order, ties kept in 
 
 TEST_CASE("Vampires discard buckets: a creature madness can cast now is the free CLEANUP shed, best first")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     // Gorger out, three untapped Swamps (BBB). Madness-castable now: Markov Baron {2}{B} (own madness,
     // and Gorger's; convoke off the untapped Gorger) and Vampire of the Dire Moon {B} (Gorger's); NOT
     // Stromkirk Captain {1}{B}{R} (no red) nor Legion Lieutenant {W}{B} (no white) nor Bloodline Keeper
@@ -371,6 +373,7 @@ TEST_CASE("Vampires discard buckets: with no untapped mana nothing is free -- a 
 
 TEST_CASE("Vampires discard buckets: Bloodghast with a land in hand is a free shed")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     // No granter, no mana: Bloodghast comes back on the held land, ahead of a dead second Vial and the
     // surplus land.
     const GameState s = MakeVo({"Bloodghast", "Aether Vial", "Swamp", "Swamp", "Legion Lieutenant",
@@ -387,6 +390,7 @@ TEST_CASE("Vampires discard buckets: Bloodghast with a land in hand is a free sh
 
 TEST_CASE("Vampires discard buckets: an outlet discard leads with Bloodghast; a cleanup deploys the Baron")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     // Gorger out, three untapped Swamps, a Swamp in hand. OUTLET order (the land drop open or spent):
     // Bloodghast first -- the held land returns it (this turn while the drop is open, for no mana) --
     // then the threats by EV with the board's 3 Swamps + the kept Swamp and a library of 7 lands / 4
@@ -487,4 +491,154 @@ TEST_CASE("Vampires discard buckets: lever off is VialProvider's rule, byte for 
     }
     // The control arm must differ here: the bucket rule deploys the Baron, the inherited rule does not.
     CHECK(CleanupVo(s, true).front() != CleanupVo(s, false).front());
+}
+
+// ---- the USER's rules of 2026-10-21 ------------------------------------------------------------------
+
+namespace
+{
+std::vector<std::string> PinsUr(const GameState& s)
+{ return ProvVo().ActivationDiscardCandidates(s, DefVo("Stromkirk Condemned"), NamesVo(s)); }
+
+bool PlansCastUr(const std::vector<TurnSolver::Plan>& plans, const std::string& name)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial) && a.card_name == name)
+            { return true; }
+        }
+    }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("USER rule MTG_VAMP_FREE_DISCARD: an affordable madness card is the whole discard axis; =0 every name")
+{
+    // Markov Baron's own madness {2}{B} = its mana cost; three untapped Swamps pay it.
+    GameState s = MakeVo({"Markov Baron", "Swamp", "Aether Vial"}, {{"Swamp"}, {"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Markov Baron" });
+    {
+        VampRulesOff off;
+        CHECK(PinsUr(s).size() == 3);
+    }
+    // Two untapped Swamps cannot pay it, and no land drop is open: nothing is free -> every name.
+    GameState poor = MakeVo({"Markov Baron", "Swamp", "Aether Vial"}, {{"Swamp"}, {"Swamp"}, {"Swamp", true}});
+    poor.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(poor).size() == 3);
+    // ...unless the land drop is still open and a land is in hand: the drop pays the third mana.
+    GameState drop = poor;
+    drop.players[0].lands_played_this_turn = 0;
+    CHECK(PinsUr(drop) == std::vector<std::string>{ "Markov Baron" });
+}
+
+TEST_CASE("USER rule MTG_VAMP_FREE_DISCARD: Bloodghast is a free discard with no mana at all")
+{
+    GameState s = MakeVo({"Bloodghast", "Swamp", "Stromkirk Captain"}, {{"Swamp", true}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Bloodghast" });
+}
+
+TEST_CASE("USER rules: a pre-combat Vampire Socialite is not a free discard (its madness cast would be a main-1 cast)")
+{
+    // Gorger grants Socialite madness {B}{R}; Blackcleave Cliffs + a Swamp pay it.
+    GameState s = MakeVo({"Vampire Socialite", "Swamp", "Aether Vial"},
+                         {{"Falkenrath Gorger"}, {"Blackcleave Cliffs"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s).size() == 3);                                              // no free discard before combat
+    s.phase = Phase::PostCombatMain;
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Vampire Socialite" });       // after combat it is
+}
+
+TEST_CASE("USER rule MTG_VAMP_SOCIALITE_M2: Vampire Socialite is never cast or Vial-put before combat; =0 restores it")
+{
+    // "Vampire Socialite should always be cast in main 2, so it can benefit from the damage dealt."
+    GameState s = MakeVo({"Vampire Socialite", "Swamp"},
+                         {{"Blackcleave Cliffs"}, {"Swamp"}, {"Aether Vial", false, 2}});
+    s.phase = Phase::PreCombatMain;
+    CHECK_FALSE(PlansCastUr(TurnSolver::EnumerateMainPlans(s, true), "Vampire Socialite"));
+    GameState post = s;
+    post.phase = Phase::PostCombatMain;
+    CHECK(PlansCastUr(TurnSolver::EnumerateMainPlans(post, false), "Vampire Socialite"));
+    VampRulesOff off;
+    CHECK(PlansCastUr(TurnSolver::EnumerateMainPlans(s, true), "Vampire Socialite"));
+}
+
+TEST_CASE("PROPOSED amendment MTG_VAMP_FREE_DISCARD_V2: Bloodghast is free only with a land to return it this turn")
+{
+    ArmVo v2(heurarm::VAMP_FREE_DISCARD_V2, true);
+    GameState s = MakeVo({"Bloodghast", "Stromkirk Captain", "Bloodline Keeper"}, {{"Swamp", true}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s).size() == 3);                                              // no land: not free
+    GameState land = MakeVo({"Bloodghast", "Swamp", "Stromkirk Captain"}, {{"Swamp", true}});
+    land.phase = Phase::PreCombatMain;
+    land.players[0].lands_played_this_turn = 0;
+    CHECK(PinsUr(land) == std::vector<std::string>{ "Bloodghast" });           // the drop returns it
+}
+
+TEST_CASE("PROPOSED amendment MTG_VAMP_FREE_DISCARD_V2: two discard outlets and one free card -> every name")
+{
+    ArmVo v2(heurarm::VAMP_FREE_DISCARD_V2, true);
+    // Asylum Visitor ({1}{B} madness) is the one free card; two Condemneds both want a discard.
+    GameState s = MakeVo({"Asylum Visitor", "Vampire of the Dire Moon", "Swamp"},
+                         {{"Stromkirk Condemned"}, {"Stromkirk Condemned"}, {"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s).size() == 3);
+    ArmVo off(heurarm::VAMP_FREE_DISCARD_V2, false);
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Asylum Visitor" });         // the USER's rule as written
+}
+
+TEST_CASE("PROPOSED amendment MTG_VAMP_FREE_DISCARD_DEAD: a card no cost of which fits the turn is free too")
+{
+    ArmVo dead(heurarm::VAMP_FREE_DISCARD_DEAD, true);
+    // Two untapped Swamps: Asylum Visitor's madness {1}{B} fits (free); Bloodline Keeper (4) cannot be cast
+    // this turn (dead); Vampire of the Dire Moon ({B}) can be cast, so it is neither.
+    GameState s = MakeVo({"Asylum Visitor", "Bloodline Keeper", "Vampire of the Dire Moon"}, {{"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    std::vector<std::string> pins = PinsUr(s);
+    std::sort(pins.begin(), pins.end());
+    CHECK(pins == std::vector<std::string>{ "Asylum Visitor", "Bloodline Keeper" });
+}
+
+TEST_CASE("PROPOSED MTG_VAMP_ALWAYS_LAND: main 1 never holds the land drop -- unless a Bloodghast could use it later")
+{
+    ArmVo on(heurarm::VAMP_ALWAYS_LAND, true);
+    GameState s = MakeVo({"Swamp", "Vampire of the Dire Moon", "Legion Lieutenant"}, {{"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 0;
+    auto holds = [](const std::vector<TurnSolver::Plan>& plans)
+    {
+        int n = 0;
+        for (const TurnSolver::Plan& p : plans) { if (p.land_to_play.empty()) { ++n; } }
+        return n;
+    };
+    const std::vector<TurnSolver::Plan> pre = TurnSolver::EnumerateMainPlans(s, true);
+    CHECK_FALSE(pre.empty());
+    CHECK(holds(pre) == 0);
+    {
+        ArmVo off(heurarm::VAMP_ALWAYS_LAND, false);
+        CHECK(holds(TurnSolver::EnumerateMainPlans(s, true)) > 0);
+    }
+    GameState gh = MakeVo({"Swamp", "Bloodghast", "Legion Lieutenant"}, {{"Swamp"}});
+    gh.phase = Phase::PreCombatMain;
+    gh.players[0].lands_played_this_turn = 0;
+    CHECK(holds(TurnSolver::EnumerateMainPlans(gh, true)) > 0);              // Bloodghast: the hold stays
+}
+
+TEST_CASE("PROPOSED MTG_VAMP_ALWAYS_LAND_FODDER: two Condemneds and one spell in hand -- the held lands are fodder")
+{
+    ArmVo on(heurarm::VAMP_ALWAYS_LAND, true);
+    ArmVo fod(heurarm::VAMP_ALWAYS_LAND_FODDER, true);
+    GameState s = MakeVo({"Swamp", "Unclaimed Territory", "Legion Lieutenant"},
+                         {{"Stromkirk Condemned"}, {"Stromkirk Condemned"}, {"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 0;
+    CHECK(ProvVo().OffersLandDeferral(s));                    // 2 outlets >= 1 spell: the hold stays
+    GameState wide = MakeVo({"Swamp", "Legion Lieutenant", "Vampire of the Dire Moon", "Stromkirk Captain"},
+                            {{"Stromkirk Condemned"}, {"Swamp"}, {"Swamp"}});
+    wide.phase = Phase::PreCombatMain;
+    wide.players[0].lands_played_this_turn = 0;
+    CHECK_FALSE(ProvVo().OffersLandDeferral(wide));           // 1 outlet < 3 spells: always the land
 }

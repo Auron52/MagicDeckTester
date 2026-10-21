@@ -26,6 +26,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include "vamp_rules_off.h"
 
 namespace
 {
@@ -284,6 +285,7 @@ TEST_CASE("D1: 'cast Dire Moon; Condemned discards Baron, convoked by the Dire M
 
 TEST_CASE("D2: 'Condemned discards Baron, cast it with lands, then steal' -- the free body stays untapped for the steal")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     Put(s, "Captivating Vampire", 1);

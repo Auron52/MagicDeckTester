@@ -1127,13 +1127,27 @@ public:
     bool PostCombatPumpDiscardFoldOptIn() const override { return true; }
     // MTG_KO_M2_NO_REACH (Vampires search-cost round 2, docs/design/vampires-search-cost-2.md): the deck's
     // vouch, checked card by card against Vampire.cod's MAINBOARD (2026-10-21): the opponent loses life only
-    // to combat damage. Lifelink (Vampire of the Dire Moon, Markov Baron, Mavren's tokens) gains OUR life;
+    // to combat damage. Lifelink (Vampire of the Dire Moon, Markov Baron) gains OUR life (Mavren Fein left the list);
     // Asylum Visitor's upkeep loss and Voldaren Estate's pay-1-life are OURS; Pit Fighter / Blood / Anje-less
     // loot draw; Captivating Vampire steals; Bloodline Keeper makes tokens; nothing mills or poisons the
     // opponent and nothing grants an extra combat. The sideboard (Anje Falkenrath, Anje's Ravager,
     // Worldfire) is not reachable in a game (no wish) -- and Worldfire would set life to 1, not 0. A card
     // added to the list with any non-combat reach must revisit this.
     bool PostCombatCannotKillOptIn() const override { return true; }
+    // The USER's play rules (2026-10-21), restrictions of the collected options in every world but human
+    // play (DecisionProvider::RestrictsCollectedActions):
+    //   MTG_VAMP_NO_STEAL (heurarm VAMP_NO_STEAL, DEFAULT ON): *"Heuristically it isn't worthwhile to use
+    //     Captivating Vampire's ability."* -- the steal is never offered.
+    //   MTG_VAMP_SOCIALITE_M2 (heurarm VAMP_SOCIALITE_M2, DEFAULT ON): *"Vampire Socialite should always be
+    //     cast in main 2, so it can benefit from the damage dealt."* -- no pre-combat hand cast or Aether
+    //     Vial put of a card with Socialite's opp-lost-life clauses.
+    bool RestrictsCollectedActions() const override;
+    // MTG_VAMP_ALWAYS_LAND (heurarm VAMP_ALWAYS_LAND, PROPOSED 2026-10-21, DEFAULT OFF, for the USER): the census
+    // put 48% of the deck's units under plans that hold a land with the drop open. Always make the land drop in
+    // main 1 -- except while a Bloodghast is in hand or on the battlefield (a main-2 discard or Pit Fighter
+    // sacrifice puts it in the graveyard, and a land played after that returns it).
+    bool OffersLandDeferral(const GameState& s) const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
     // Vampires A1 (AGENT-DRAFTED, same lever): the madness default -- the base dominance rule (cast the
     // cheapest max-free option) except a graveyard-landfall card (Bloodghast) in a MAIN phase while this
     // turn's land drop is open and a land is in hand: DECLINE (it returns from the graveyard on that

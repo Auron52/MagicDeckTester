@@ -2329,6 +2329,20 @@ public:
     virtual bool Main2CastAllowed(const GameState& s, const Action& a) const
     { (void)s; (void)a; return true; }
 
+    // RestrictsCollectedActions / CollectedActionAllowed -- a provider RESTRICTION of EITHER main's
+    // collected options, casts AND activations (the main-2 hook above, widened): applied at the tail of
+    // TurnSolver::CollectActions, so the search, the rollout, the d0 runner and the executor all lose the
+    // same options (lockstep); human play keeps the full set. A restriction, never a pick: what survives
+    // is still searched. Defaults false / true -> byte-identical. VampiresProvider: the USER's rules of
+    // 2026-10-21 (no Captivating Vampire steal; Vampire Socialite only after combat).
+    virtual bool RestrictsCollectedActions() const { return false; }
+    // OffersLandDeferral -- may the PRE-combat enumeration offer the plans that play NO land while the drop is
+    // open and a land is in hand (defer to main 2 / hold it)? false drops them (EnumeratePlansWithLandUncached;
+    // a restriction, never a pick: every land plan stays searched). Default true -> byte-identical.
+    virtual bool OffersLandDeferral(const GameState& s) const { (void)s; return true; }
+    virtual bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+    { (void)s; (void)a; (void)is_pre_combat; return true; }
+
     // FetchSearchCandidates -- the fetch targets the SEARCH actually branches on. The provider
     // returns a list of VARYING SIZE and the engine fans over exactly what comes back -- no
     // engine-side cap (USER design 2026-08-21: "the return IS the candidate set", the doctrine

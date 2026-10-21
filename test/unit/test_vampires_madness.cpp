@@ -28,6 +28,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include "vamp_rules_off.h"
 
 namespace
 {
@@ -407,6 +408,7 @@ TEST_CASE("Convoke (enumeration): Baron is offered with arm 0 and the costly arm
 
 TEST_CASE("Madness fan: an outlet discard of a madness card is offered as decline AND cast, distinct plans")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     Put(s, "Stromkirk Condemned", 1);
