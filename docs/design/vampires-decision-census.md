@@ -38,8 +38,10 @@ card, madness answer) table. Digests and units equal the baseline with it on (ch
 - 64-71% of units are mulligan-bottoming trial games (no keep table), the rest the real game; the shape is the same
   in both. Most variants sit at SEARCHED nodes; their subtrees hold the playouts.
 - So Condemned's discard choice is a real but secondary cost (~10%). Pit Fighter's discard + victim choice is larger
-  in 2HG. The land drop is the dominant multiplier, and over half of it is play-vs-hold (or defer to main 2), not
-  which land. (A direct measurement of the hold class is pending; the split above is by subtraction.)
+  in 2HG. The land drop is the dominant multiplier.
+- **The HOLD class, measured directly** (plans that play no land while a land is in hand and the drop is open,
+  outermost inclusive units): **48.3% of all units (2HG), 48.8% (std)**. Half of the deck's search is spent on
+  holding the land drop (or deferring it to main 2).
 
 ## 3. The USER's rules (2026-10-21) and their A/B
 
@@ -87,4 +89,20 @@ Proposed amendments (DEFAULT OFF, for the USER), measured in A/B 2:
   restriction when the discard outlets on board and in hand outnumber the free discards.
 - `MTG_VAMP_FREE_DISCARD_DEAD`: a nonland card none of whose costs fits this turn's mana is a free discard too.
 
-A/B 2: pending.
+A/B 2 (one pooled batch, 13,560 games, scratch `ab2/`, same cells and seeds as A/B 1):
+
+| arm | held-out units | worst row (2HG d5 s2002) | faster / slower | net |
+|---|---|---|---|---|
+| discard rule + V2 | 0.941x | | 1 / 1 | 0 |
+| discard rule + V2 + DEAD | 0.924x | | 1 / 4 | +3 |
+| always-land (proposed, below) | 0.812x | 0.761x | 5 / 8 | +3 |
+| discard + V2, no steal, Socialite main 2 | 0.908x | 0.929x | 4 / 1 | -3 |
+| the same + always-land | 0.758x | 0.730x | 10 / 8 | -2 |
+
+- V2 repairs the discard rule (+7 -> 0) and keeps a 6% saving. DEAD adds nothing and loses three more games: dropped.
+- `MTG_VAMP_ALWAYS_LAND` (PROPOSED, `DecisionProvider::OffersLandDeferral`, DEFAULT OFF): main 1 always makes the land
+  drop unless a Bloodghast is in hand or on the battlefield. Its 8 slower games (5 deals, rc/) are one mechanism:
+  the kill line HOLDS lands as discard fodder -- two Condemned pumps (or a pump and a Pit Fighter draw) each
+  discard a land, sometimes with the drop deferred to main 2 after the discards.
+- Amendment `MTG_VAMP_ALWAYS_LAND_FODDER`: the hold stays while the discard outlets this turn (Condemned, Pit Fighter,
+  a Blood token, Voldaren Estate) are at least the hand's non-land cards. A/B 3: pending.
