@@ -22408,13 +22408,16 @@ static const char* kAxisNames[kN] = {
     "pitfighter-act(any)", "blood-act(any)", "land-slot(timing)", "land-name", "land-or-hold",
     "condemned-discard", "pitfighter-discard", "blood-discard" };
 inline bool On() { static const bool v = EnvOn("MTG_VAMP_AXIS_CENSUS"); return v; }
-inline std::atomic<long long> g_cands[2], g_root_units[2], g_roots[2];
-inline std::atomic<long long> g_var[kN][2], g_top[kN][2], g_units[kN][2];
+// Buckets: [real game | bottom trial] x [searched | inside a playout (g_rollout_nest > 0)].
+constexpr int kB = 4;
+static const char* kBucket[kB] = { "real/search", "real/playout", "trial/search", "trial/playout" };
+inline std::atomic<long long> g_cands[kB], g_root_units[kB], g_roots[kB];
+inline std::atomic<long long> g_var[kN][kB], g_top[kN][kB], g_units[kN][kB];
 inline thread_local int t_in[kN] = {};
 inline thread_local int t_in_root = 0;
 inline std::mutex g_mx;
 struct Cell { long long n = 0, top = 0, units = 0; };
-inline std::map<std::string, Cell> g_disc[2];   // "<outlet>|<card>|<madness>" -> pin variants
+inline std::map<std::string, Cell> g_disc[kB];   // "<outlet>|<card>|<madness>" -> pin variants
 
 inline std::uint64_t Mix(std::uint64_t h, std::uint64_t v)
 { return h ^ (v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2)); }
@@ -22522,7 +22525,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
 struct List { std::unordered_set<std::uint64_t> seen[kN]; };
 struct Scope
 {
-    bool on = false, root = false, probe = false;
+    bool on = false, root = false;
+    int pi = 0;
     bool top[kN] = {};
     long long u0 = 0;
     std::vector<std::string> disc_keys;
@@ -22530,8 +22534,7 @@ struct Scope
     {
         if (!On()) { return; }
         on = true;
-        probe = turncensus::t_probe > 0;
-        const int pi = probe ? 1 : 0;
+        pi = (turncensus::t_probe > 0 ? 2 : 0) + (g_rollout_nest > 0 ? 1 : 0);
         u0 = gamework::t_used;
         g_cands[pi].fetch_add(1, std::memory_order_relaxed);
         for (int ax = 0; ax < kN; ++ax)
@@ -22557,7 +22560,6 @@ struct Scope
     ~Scope()
     {
         if (!on) { return; }
-        const int pi = probe ? 1 : 0;
         const long long d = gamework::t_used - u0;
         for (int ax = 0; ax < kN; ++ax)
         {
@@ -22590,30 +22592,40 @@ struct Dumper
     ~Dumper()
     {
         if (!On()) { return; }
-        for (int pi = 0; pi < 2; ++pi)
+        long long grand = 0;
+        for (int b = 0; b < kB; ++b) { grand += g_root_units[b].load(); }
+        const double G = grand ? static_cast<double>(grand) : 1.0;
+        std::fprintf(stderr, "[vamp-axis] units under the outermost hooked candidates: %lld\n", grand);
+        for (int b = 0; b < kB; ++b)
         {
-            const long long ru = g_root_units[pi].load();
-            std::fprintf(stderr, "[vamp-axis] %s: candidates=%lld outermost=%lld units_under_outermost=%lld\n",
-                         pi ? "BOTTOM-TRIAL" : "REAL-GAME", g_cands[pi].load(), g_roots[pi].load(), ru);
-            for (int ax = 0; ax < kN; ++ax)
-            {
-                const long long u = g_units[ax][pi].load();
-                std::fprintf(stderr, "[vamp-axis] %s %-22s variants=%10lld outermost=%9lld units=%12lld  %5.1f%%\n",
-                             pi ? "trial" : "real ", kAxisNames[ax], g_var[ax][pi].load(), g_top[ax][pi].load(), u,
-                             ru ? 100.0 * static_cast<double>(u) / static_cast<double>(ru) : 0.0);
-            }
-            std::vector<std::pair<long long, std::string>> v;
-            for (const auto& e : g_disc[pi]) { v.push_back({ e.second.units, e.first }); }
-            std::sort(v.rbegin(), v.rend());
-            int shown = 0;
-            for (const auto& e : v)
-            {
-                if (shown++ >= 40) { break; }
-                const Cell& c = g_disc[pi][e.second];
-                std::fprintf(stderr, "[vamp-axis-disc] %s %10lld units %5.1f%%  n=%8lld  %s\n", pi ? "trial" : "real ",
-                             c.units, ru ? 100.0 * static_cast<double>(c.units) / static_cast<double>(ru) : 0.0, c.n,
-                             e.second.c_str());
-            }
+            std::fprintf(stderr, "[vamp-axis] bucket %-13s candidates=%11lld outermost=%8lld units=%11lld %5.1f%%\n",
+                         kBucket[b], g_cands[b].load(), g_roots[b].load(), g_root_units[b].load(),
+                         100.0 * static_cast<double>(g_root_units[b].load()) / G);
+        }
+        std::fprintf(stderr, "[vamp-axis] %-22s %7s | %s (%% of ALL units, by where the variant sits)\n", "axis", "total",
+                     "real/search real/playout trial/search trial/playout");
+        for (int ax = 0; ax < kN; ++ax)
+        {
+            long long tot = 0;
+            for (int b = 0; b < kB; ++b) { tot += g_units[ax][b].load(); }
+            std::fprintf(stderr, "[vamp-axis] %-22s %6.1f%% | %10.1f%% %11.1f%% %11.1f%% %12.1f%%   variants=%lld\n",
+                         kAxisNames[ax], 100.0 * static_cast<double>(tot) / G,
+                         100.0 * static_cast<double>(g_units[ax][0].load()) / G, 100.0 * static_cast<double>(g_units[ax][1].load()) / G,
+                         100.0 * static_cast<double>(g_units[ax][2].load()) / G, 100.0 * static_cast<double>(g_units[ax][3].load()) / G,
+                         g_var[ax][0].load() + g_var[ax][1].load() + g_var[ax][2].load() + g_var[ax][3].load());
+        }
+        std::map<std::string, Cell> all;
+        for (int b = 0; b < kB; ++b)
+        { for (const auto& e : g_disc[b]) { Cell& c = all[e.first]; c.n += e.second.n; c.units += e.second.units; } }
+        std::vector<std::pair<long long, std::string>> v;
+        for (const auto& e : all) { v.push_back({ e.second.units, e.first }); }
+        std::sort(v.rbegin(), v.rend());
+        int shown = 0;
+        for (const auto& e : v)
+        {
+            if (shown++ >= 30) { break; }
+            std::fprintf(stderr, "[vamp-axis-disc] %10lld units %5.1f%%  n=%8lld  %s\n", e.first,
+                         100.0 * static_cast<double>(e.first) / G, all[e.second].n, e.second.c_str());
         }
     }
 };
