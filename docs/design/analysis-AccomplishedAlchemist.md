@@ -739,7 +739,7 @@ Validation (binary 3ace089d; built pinned to cores 24-31 beside the running mull
   Net <= 0 on both cells and no dearer (ms is heavily contended: the generation owned the box). Three slower games
   (two distinct) -- a handful, so not 10x-classified. Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-ez/`.
 
-#### The two slower games (gi111, gi179) -- root-caused 2026-10-21, branch `aa-ezslow`; FIX `MTG_AA_ROUTE_MAIN_FIRST` (ON)
+#### The two slower games (gi111, gi179) -- root-caused 2026-10-21, branch `aa-ezslow`; FINAL: the roots fixed, single walk pass (see "Follow-up" below)
 
 Scratch: `/workspaces/MagicDeckTester/build/scratch/aa-ezslow/` (`bisect.*`, `g179*` / `g111*` traces, `fx/`, `ab/`
 the pooled A/B + `an.py`, `d8/`). Binary 846135c7 for the diagnosis.
@@ -826,7 +826,7 @@ child's subtree its budget), so Weather's T7 wins; it plays to T7 where off's li
 (PUMP alone T6 at b200; fix T6 at b200) and at `--depth 8 --budget-ms 0` (T6). A budget may re-price work; nothing
 became unfindable.
 
-**Open (not fixed here; both arms): the pump need's double count lives outside the walk too.** On the gi179 T7
+**The pump need's double count lives outside the walk too** (FIXED in the follow-up below: `MTG_PUMP_PAY_NO_ATTACKERS`). On the gi179 T7
 board the ordinary search (`g_untap_loop_no_pump` = 0 in every arm) also has need = Ezuri x1 and no loop offered,
 so its own Stroke line is missing; the route is what covered it, in the off arm. The sound fix is in
 `UntapLoopWorthOffering`: for a pump payoff the board "already funds it" only from sources that are not the
@@ -852,12 +852,79 @@ Cost at d0, where the walk is nearly all the work: 1,000 games 3.1 s -> 10.4 s o
 boards with Ezuri / the Witch around); at the shipped cells the re-run's mean ms is +7% (d3 b10) and +2% (d5 b20)
 over off on a contended box, units unchanged. The combat-first order (the probe row above) is the cheaper shape.
 
-**For the USER** (defaults taken, nothing blocked): (1) `MTG_AA_ROUTE_MAIN_FIRST` ships ON as a defect fix -- the
-combat finishers must never remove a route the main-phase walk proves; =0 restores the shipped walk. (2) Pass order:
-main-phase first (measured, shipped) vs combat first (the probe row: same union, ~9% fewer walk applies at d3, the
-shipped line kept wherever the shipped walk won; re-measure needed after the key fold) -- kept main-first; switching
-is a few lines plus one A/B. (3) The pump need's attacker / mana double count outside the walk (above) is a play
-change with every lever off -- not touched; it wants its own A/B if the USER wants it pursued.
+#### Follow-up (2026-10-21, coordinator): fix the roots, not a second walk pass -- FINAL CONFIGURATION
+
+The coordinator's concern: the route walk is never charged to the budget (aa-slow: ~90% of the generator's slowest
+games), and `MTG_AA_ROUTE_MAIN_FIRST` added a second uncharged pass (d0 canary 3.4x). So the two removals were fixed at
+their roots, each behind its own lever (heurarm slots; `=0` is exact prior behaviour):
+
+* **`MTG_PUMP_PAY_NO_ATTACKERS` (DEFAULT ON) -- gi179's root, generic engine code (the ordinary search and the walk
+  alike).** A team pump's attackers are not its payers: the three gates that asked "does the board already pay the
+  pump?" -- `UntapLoopWorthOffering` (a pump need), the mode-4 loop-funded pump's emission, `FundTeamPumpByLoop` -- ask
+  `AvailableManaPoolNoAttackers` + the float (`TeamPumpPayersPool`) instead of the whole board pool. gi179's T7 board:
+  the Staff loop is now offered for Ezuri x1 and the single combat pass proves the pump kill in 3 applies (fixture
+  `aa_co_15` passes with `MTG_AA_ROUTE_MAIN_FIRST=0`). In the ordinary search the double count did not cost a game on the
+  boards tried: the searched-K untaps (`UntapActivationCounts`) already reached the kill.
+* **`MTG_AA_ROUTE_PUMP_SETUP_LAST` (DEFAULT ON) -- gi111's root, a one-line ORDER change in the walk's `rank_of`.** A
+  team-pump creature cast (Ezuri) ranks in the finish stage beside a Stroke / Scholar cast instead of among the
+  lifegain / untapper setups; nothing is dropped. gi111's T6 board: the six-link Stroke dig is proven in 100 applies
+  (was: nothing in 128; fixture `aa_co_16`). Cheaper alternatives considered and rejected as unsound: not admitting an
+  Ezuri setup once Ezuri is reachable (here Ezuri is only in hand, and refusing the cast loses the FIN-EZURI-HAND routes,
+  seed-2 T7), and folding "identical" setup links before applying them (they are payment variants -- which Forest, which
+  colour floats -- and the walk's post-apply `ChildKey` is the only sound identity). Caveat: 100 of the 128-apply bound.
+* **`MTG_UNTAP_PUMP_PROVE_LETHAL` (DEFAULT ON) -- the same double count in Seedcradle Witch's shape.**
+  `UntapLoopPumpIterations` sizes the Witch's "+3/+3 and untap" loop on every attacker while each activation's {G}/{W}
+  can be paid by tapping one (Elvish Harbinger). The net-zero pump loop is offered only when its k activations leave a
+  COMBAT-LETHAL board on the copy (not merely a paid one), and a banking loop stops at k only once combat really is
+  lethal. Measured neutral below; found on smoke d0 gi976.
+* **`MTG_AA_ROUTE_MAIN_FIRST` -> DEFAULT OFF** (kept as a lever; =1 the union walk). The cache-key fold (ebf30946) and
+  the `PassesCanDiffer` gate stay: inert with the lever off, correct with it on.
+
+**Re-measure of the two games, single pass** (`MTG_AA_ROUTE_MAIN_FIRST=0`): double-count fix alone (v1): gi179 T5 at
+d3 b10 / d3 b100 / d5 b20 / d5 b200 (off: 6 / 5 / 6 / 5), gi111 still 7 / 7; + the setup order (v2): gi179 T5 x4,
+gi111 d5 b200 **T6** (the off arm's digest), d5 b20 T7 (the loop-funded pump's budget trade-off, as before).
+
+**A/B -- ONE pooled batch, 7,015 games** (s70001 x 200 at d3 b10 / d5 b20, d0 s1001 x 1000 as the wall canary, plus the
+10x two-game jobs; 6 threads, load ~40-60; every lever explicit per arm; per-game from `--game-log-dir`). Arms: **off**
+(every lever off), **shipped** (846135c7 defaults), **fix** (`MAIN_FIRST`, the union walk), **v2** (`NO_ATTACKERS` +
+`PUMP_SETUP_LAST`, single pass), **v3** (v2 + `PROVE_LETHAL` -- the FINAL defaults):
+
+| cell | off | shipped | fix | v2 | **v3** |
+|---|---|---|---|---|---|
+| d3 b10 avg (faster / slower vs off) | 5.2850 | 5.2600 (6 / 1) | 5.2500 (7 / 0) | 5.2500 (7 / 0) | **5.2500 (7 / 0)** |
+| d3 b10 units / mean ms | 79.1k / 6,621 | 78.4k / 6,033 | 78.1k / 6,380 | 78.0k / 5,793 | **77.9k / 5,941** |
+| d5 b20 avg (faster / slower vs off) | 5.2450 | 5.2250 (6 / 2) | 5.2150 (7 / 1) | 5.2150 (7 / 1) | **5.2150 (7 / 1)** |
+| d5 b20 units / mean ms | 147.4k / 15,384 | 146.5k / 14,487 | 146.1k / 16,309 | 146.1k / 15,088 | **146.1k / 15,921** |
+| d0 avg (faster / slower vs off) | 7.1620 | 7.0760 (51 / 9) | 7.0640 (51 / 0) | 7.0640 (53 / 2) | **7.0640 (53 / 2)** |
+| d0 core-ms per game | 1.51 | 0.93 | **3.13** | 0.90 | **0.97** |
+
+* v2 / v3 have **the fix arm's win turn in every one of the 400 searched games** and are faster than shipped in 1 / 1 /
+  10 (d3 / d5 / d0) with **0 slower anywhere**; v3 = v2 in every game. The d5 slower game in every lever-on arm is gi111
+  at b20 (the loop-funded pump's budget trade-off; T6 at 10x in fix / v2 / v3).
+* Cost: the single pass is at shipped cost (d0 0.90-0.97 vs 0.93 ms/game; searched cells within the batch's noise and
+  units 0.3-0.6% under shipped); the union walk is 3.4x on the d0 canary and the dearest searched arm at d5.
+* **v3 vs fix on d0: 2 faster / 2 slower** (gi976 6 -> 7, gi990 6 -> 8; shipped loses both too). Both are depth-0
+  runner effects, not walk misses: gi990 -- a board where Ezuri's pump paid by Forests is lethal (k = 1) and the greedy
+  runner never activates it; gi976 -- with `PROVE_LETHAL` the walk now proves the Witch kill (4 links), but the runner's
+  chosen plan is "Combo Off + cast Scholar of Athreos", and the Scholar is paid by tapping the pumped Alchemist after the
+  route, so the attack is no longer lethal. Open: a plan whose ComboRoute verdict was COMBAT-lethal should end main 1
+  there (a searched plan pays for the lost attack in its own evaluation; the depth-0 greedy does not).
+
+**FINAL recommendation (the defaults on aa-ezslow):** `MTG_PUMP_PAY_NO_ATTACKERS` ON, `MTG_AA_ROUTE_PUMP_SETUP_LAST` ON,
+`MTG_UNTAP_PUMP_PROVE_LETHAL` ON, `MTG_AA_ROUTE_MAIN_FIRST` OFF -- every slower game of the shipped levers recovered in
+the searched cells at single-pass cost, never worse than shipped. Smoke on the final defaults (the final build, 6 threads, NOT accepted): **124 / 132** -- the four known
+pre-existing moves at their known digests (selesnya d3 a1937cded0ab6f58 / d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9,
+melira d0 0f633c1012b4fb11: `MTG_PUMP_PAY_NO_ATTACKERS` is generic but moves no other deck), every other deck
+byte-identical, and the four alchemist rows (stale GT) at d0 7.0640 / e933dab4f6a0624c, d3 5.3933 / 918c501f2d0ef248, d5
+5.2000 / 689944f2fc28a503, 2HG 5.4600 / d82143b6ffcb6a50. Against the shipped levers on the same binary (all four new
+levers =0 -- which reproduces the 846135c7-equivalent digests of every alchemist row exactly, so `=0` is exact prior
+behaviour): d0 **10 faster / 0 slower**, d3 / d5 / 2HG the same win turn in every game (play only). Validation on the
+final defaults: mtg-test 1617 / 1617, scenarios 245 / 245, combo-off fixtures 50 / 50.
+
+**For the USER** (defaults taken, nothing blocked): (1) the three root fixes ship ON as defect fixes and the union walk
+ships OFF -- say if you want the union walk back (`MTG_AA_ROUTE_MAIN_FIRST=1`); it buys the two d0 games above at 3.4x the
+d0 walk time. (2) The post-route greedy hazard on d0 (gi976) is open -- worth a fix only if the depth-0 runner matters
+beyond the canary.
 
 ## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
 
