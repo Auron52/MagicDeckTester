@@ -38,11 +38,24 @@ def kinds(t):
     return set(re.findall(r"case Action::Kind::(\w+)", t))
 
 
+def fields(t):
+    return set(re.findall(r"\bact\.(\w+)", strip_comments(t)))
+
+
+# A tag built by a HELPER (MadnessSigTag, StealSpecText, ...) carries no literal "#XX" for markers() to see,
+# so the marker check alone missed the Vampires branch's discard / madness / steal / convoke-cover pins
+# (2026-10-21: nine unit tests failed after its rebase onto the fast builder). Every Action field the
+# legacy key reads must be read by the fast one too -- except the human-play-only sub-decision suffix,
+# which the fast builder never serves (sig_fast is off under human play).
+HUMAN_PLAY_ONLY = {"crackle_targets", "ponder_keep", "splice_count"}
+
 bad = False
-for name, a, b in (("markers", markers(fast), markers(legacy)), ("Action::Kind cases", kinds(fast), kinds(legacy))):
+for name, a, b in (("markers", markers(fast), markers(legacy)), ("Action::Kind cases", kinds(fast), kinds(legacy)),
+                   ("act.<field> reads", fields(fast), fields(legacy) - HUMAN_PLAY_ONLY)):
     if a != b:
         bad = True
         print(f"{name}: legacy-only {sorted(b - a)}  fast-only {sorted(a - b)}")
 if bad:
     sys.exit(1)
-print(f"plan-signature lock-step OK: {len(markers(fast))} markers, {len(kinds(fast))} action kinds")
+print(f"plan-signature lock-step OK: {len(markers(fast))} markers, {len(kinds(fast))} action kinds, "
+      f"{len(fields(fast))} action fields")

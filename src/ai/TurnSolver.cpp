@@ -58928,6 +58928,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 {
                     w.Put("#X"); w.Int(act.chosen_x); w.Put("#T"); w.Put(act.tutor_target);
                     w.Put("#C"); w.Int(act.convoke_green); w.Put('/'); w.Int(act.convoke_other);
+                    // A madness convoke COVER (Vampires D1): what the plan's bodies pay, realised at the trigger.
+                    if (act.convoke_plan_pip != 0 || act.convoke_plan_other != 0)
+                    { w.Put('+'); w.Int(act.convoke_plan_pip); w.Put('/'); w.Int(act.convoke_plan_other); }
                 }
                 if (d && d->params.etb_blink_permanent) { w.Put("#F"); w.Int(act.chosen_x); }
                 if (d && d->params.etb_treasurify_each_player) { w.Put("#L"); w.Int(act.chosen_x); }
@@ -58974,7 +58977,12 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.Begin(kSigU); w.Put("KRENKO#"); w.Int(act.sac_source_id); w.End(); break;
             case Action::Kind::SacCreatureOutlet:
                 w.Begin(kSigM); w.Put("SAC#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
-                w.Put('x'); w.Int(act.sac_count); w.End(); break;
+                w.Put('x'); w.Int(act.sac_count);
+                // Falkenrath Pit Fighter (Vampires A2): the same-plan victim's name, the discard, its madness pin.
+                if (!act.victim_name.empty()) { w.Put('~'); w.Put(act.victim_name); }
+                if (!act.discard_name.empty()) { w.Put("#D"); w.Put(act.discard_name); }
+                w.Put(MadnessSigTag(act));
+                w.End(); break;
             case Action::Kind::ActivatePod:
                 w.Begin(kSigM); w.Put("POD#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
                 w.Put(':'); w.Put(act.tutor_target);
@@ -59032,13 +59040,25 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.Begin(kSigM); w.Put("TTOK#"); w.Int(act.sac_source_id); w.End(); break;
             case Action::Kind::ActivatePump:
                 w.Begin(kSigM); w.Put("APUMP#"); w.Int(act.sac_source_id); w.Put('m'); w.Int(act.gy_exile_mode);
-                w.Put('x'); w.Int(act.chosen_x); w.End(); break;
+                w.Put('x'); w.Int(act.chosen_x);
+                // Stromkirk Condemned (mode 4, Vampires A2): the discarded card and its madness pin.
+                if (!act.discard_name.empty()) { w.Put("#D"); w.Put(act.discard_name); }
+                w.Put(MadnessSigTag(act));
+                w.End(); break;
             case Action::Kind::ActivateBlink:
                 w.Begin(kSigM); w.Put("BLINK#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
                 w.Put('x'); w.Int(act.chosen_x); w.End(); break;
             case Action::Kind::ActivatePermAbility:
                 w.Begin(kSigM); w.Put("PABIL#"); w.Int(act.sac_source_id); w.Put('m');
-                w.Int(static_cast<int>(act.ability_mode)); w.Put('x'); w.Int(act.chosen_x); w.End(); break;
+                w.Int(static_cast<int>(act.ability_mode)); w.Put('x'); w.Int(act.chosen_x);
+                // The Blood token's discard / Voldaren Estate's cost variant (Vampires A2) and Captivating
+                // Vampire's steal target + tap spec (Vampires B) -- empty / 0 for every other ability.
+                if (!act.discard_name.empty()) { w.Put("#D"); w.Put(act.discard_name); }
+                w.Put(MadnessSigTag(act));
+                if (act.vamp_casts_needed != 0) { w.Put("#V"); w.Int(static_cast<int>(act.vamp_casts_needed)); }
+                if (act.steal_spec != 0 || act.ability_mode == Action::AbilityMode::TapSubtypeSteal)
+                { w.Put("#T"); w.Int(act.enchant_target); w.Put("#S"); w.Put(StealSpecText(act.steal_spec)); }
+                w.End(); break;
         }
     }
     const char* base = w.arena.data();
