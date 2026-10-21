@@ -704,3 +704,57 @@ climbed pass costs 20x its billed budget because in-playout scoring is not bille
   Landfall / Melira Pod, which adopted it on held-out A/Bs. [default: NOT adopted; recommended next step: a
   held-out A/B at play settings, standard + 2HG]
 - **B-Q3. `MTG_CAND_DEDUP`** measured inert on Vampires (B.6). [default: unchanged, OFF]
+
+## Integration (branch `vampires-int`, 2026-10-21)
+
+From `1a1cf9b9e`: R `470a4b530` + `7bd2fc462`, P squashed `a3edf8293`, B `b3a6115c1` (SolveWithLookahead's two
+pre-plan apply sites merged as `PrePlanShareArm` then B's `pofold::ApplyMeasured`), the census + the USER's rules +
+the 60-card list `643335481`, the A/B 3 doc `b7317dbe9`, the Vampires suite rows `7c65b60c5`
+(`analysis-Vampire.suite-rows.patch` as-is). Build + `mtg-test` 1,683/1,683. Scratch `build/scratch/vampires/int/`.
+
+### Validation against the 60-card base (A/B 1's `off` arm = `1a1cf9b9e` play, the USER's rules off; same seeds, per game)
+
+The seven regression rows plus held-out blocks A = 16,100,001 and B = 16,400,001 (std d3 b10 x400, std d5 b20 x200,
+2HG d3 b10 x150, 2HG d5 b20 x80 per block). Net = sum of per-game win-turn differences (positive = slower).
+
+| arm | worst row (2HG d5 s2002) units | held-out units per cell | faster / slower | net |
+|---|---|---|---|---|
+| combined tree, the USER's rules OFF | 86,499 (0.355x) | 0.33-0.40x | 6 / 1 | -5 |
+| combined tree, the USER's rules ON (shipped default) | 83,218 (0.341x) | 0.29-0.36x | 8 / 8 | 0 |
+| ON + `_FREE_DISCARD_V2` + `_ALWAYS_LAND` + `_ALWAYS_LAND_FODDER` | **66,677 (0.273x)** | **0.24-0.32x** | **11 / 0** | **-11** |
+
+- P stays byte-identical on the combined tree: with its ten flags `=0` the seven rows' digests are unchanged.
+- The worst row's play is unchanged by R + P + B (its digest equals the matching pre-perf arm's); only the cost moved.
+- Rules OFF, the one slower game (std d3 A gi373, 4 -> 5) is budget churn: R's kill-only leaf `=0`, R's m2 no-reach
+  `=0` or B's changes off each restore T4, and the combined tree wins T4 at `--depth 3 --budget-ms 0`.
+- Rules ON as written, the eight slower games are A/B 1's discard-rule games (section 3.1 of the census doc). With the
+  two amendments none is slower.
+
+### Tiers (vs the committed GT, `1a1cf9b9e`), accepted on `vampires-int` only
+
+- **Smoke:** 122 of 128 other-deck configs byte-identical; 6 moved, searched 0 slower. antilife d3 gi213 5->4 and
+  bruna d5 gi21 7->6 (R), fivecolour2hg d3 same score (R), mirrorwing d3 faster (B), soldiers d3 same score (B),
+  bruna2hg d3 same score (R and B together: either one off restores the GT digest).
+- **Regression:** 166 of 179 byte-identical; 12 other-deck configs moved, searched 1 slower / 3 faster.
+  - Slower: hinata d3 s3003 gi26 8 -> loss. It is B's `MTG_BP_PO_W0_FOLD` (`=0` restores T8) and it is budget churn:
+    both arms win T7 at b20, b40 and b80, better than the GT's T8.
+  - Faster: fungusv2 d3 s3003 gi99 5->4 (R); mirrorwing d3 s2002 gi154 and s3003 gi62 5->4 (B).
+  - Same score, other line: antilife d3/d5 s2002, fivecolour d3 s2002/s3003, bruna d3 s2002/s3003 (R); dragonstorm
+    d5 s3003, stompy d3 s3003 (B). The attribution batch is `int/att1/` (each row with R off and with B off).
+  - Reference gate: 219 ok, 410 repaired, 1 play-drift = CritterLifegain/claude_s6_gi5 (the standing USER question 27).
+- **Overnight:** only the 16 Vampires ENTRY rows (`--deck=vampires,vampires2hg`, 4m23s); every other deck's overnight
+  GT is left for the periodic overnight run.
+
+### The 3x gate: PASS
+
+| measurement | Vampires (2HG d5 s2002) | Hinata (d5 s3003) | ratio |
+|---|---|---|---|
+| the regression tier above (`--measure-all --no-run`, one pooled run) | 3,190 ms/game | 6,497 ms/game | 0.49x |
+| `suite_cost.json` as committed (Vampires from that run, Hinata's older cached value) | 3,190 | 1,468 | **2.17x** |
+| head-to-head, the two rows twice each in one pooled batch (`int/att1/`) | 3,680 / 4,093 | 3,349 / 3,345 | 1.10x / 1.22x |
+
+The box was contended throughout (another container; load 27-35 on 24 cores), so wall-clock moves by up to 2x between
+runs (Hinata's units are identical in all of them: 6.41M for 100 games). Every reading passes; the committed entry
+is the most conservative one. Only the Vampires entry was added to `test/suite_cost.json`: the rest of that run's
+refill was contended and is not committed (saved as `int/suite_cost.refill_contended_2026-10-21.json`); a clean
+refill is still owed (question 46).
