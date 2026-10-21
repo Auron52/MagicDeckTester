@@ -992,7 +992,7 @@ knights, whiteknights, antilife, hinata, auras, creature_giving, breaching, crit
 soldiers, snow, landfall, galadriel. Unchanged: the selesnya d3 / d5 known moves (their known digests a1937cded0ab6f58 /
 9bd0e14ec876faa9). Everything else byte-identical. The four alchemist rows against v3 (the same binary, both levers
 =0 -- which reproduces v3's smoke digests exactly): d0 7.0640 -> **6.9100** (93 faster / 0 slower), d3 5.3933 ->
-**5.3733** (4 / 1: gi49 T8 -> unwon at b10, T8 in both arms at b100 -- a budget effect at the horizon edge), d5 5.2000
+**5.3733** (4 / 1: gi49 T8 -> unwon at b10; T8 in both arms at b100 and at `--depth 8 --budget-ms 0` -- a budget effect at the horizon edge, it recovers), d5 5.2000
 (0 / 0), 2HG 5.4600 (0 / 0, digest only). Validation: mtg-test 1618 / 1618 (a new "Greedy lethal stop" case; the
 attack-projection cases read the walk's projection, so their helper runs with the stop off), scenarios 246 / 246,
 combo-off fixtures 50 / 50.
