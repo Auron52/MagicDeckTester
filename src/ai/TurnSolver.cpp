@@ -61150,6 +61150,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                     { w.Put('+'); w.Int(act.convoke_plan_pip); w.Put('/'); w.Int(act.convoke_plan_other); }
                 }
                 if (d && d->params.etb_blink_permanent) { w.Put("#F"); w.Int(act.chosen_x); }
+                if (d && CastCarriesEtbChoice(*d)) { w.Put("#EC"); w.Int(act.chosen_x); }
                 if (d && d->params.etb_treasurify_each_player) { w.Put("#L"); w.Int(act.chosen_x); }
                 if (act.devour_count >= 0) { w.Put("#D"); w.Int(act.devour_count); }
                 if (act.attach_equip_id != 0)
@@ -61157,6 +61158,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                     w.Put("#MT"); w.Int(act.attach_equip_id); w.Put('>'); w.Int(act.enchant_target);
                     w.Put('/'); w.Put(act.attach_equip_hand); w.Put('/'); w.Put(act.trick_hand_target);
                 }
+                if (d && d->tmpl == CardTemplate::DrawX)
+                { w.Put("#DX"); w.Int(act.chosen_x); w.Put('/'); w.Int(act.draw_target); }
                 if (rep_sig && act.replicate_count >= 0) { w.Put("#R"); w.Int(act.replicate_count); }   // human play is legacy-only
                 if (act.enchant_target == kTrickBestOwnTarget) { w.Put("#B"); }
                 if (d && RemovalSearchesForController(*d)) { w.Put("#PX"); w.Int(act.enchant_target); }
@@ -61251,6 +61254,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.End(); break;
             case Action::Kind::UntapCreature:
                 w.Begin(kSigM); w.Put("WWL#"); w.Int(act.sac_source_id); w.End(); break;
+            case Action::Kind::ActivateUntap:
+                w.Begin(kSigM); w.Put("UNTAP#"); w.Int(act.sac_source_id); w.Put('>'); w.Int(act.sac_victim_id);
+                w.Put('m'); w.Int(act.gy_exile_mode); w.Put('x'); w.Int(act.chosen_x); w.End(); break;
             case Action::Kind::AnimateLand:
                 w.Begin(kSigM); w.Put("ANIM#"); w.Int(act.sac_source_id); w.End(); break;
             case Action::Kind::TapForTokenPay:
