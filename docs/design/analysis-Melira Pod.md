@@ -3743,6 +3743,6 @@ model. Held-out vs the shipped hybrid at b20, 3,000 paired games (seeds 872000-8
 -0.019 turns** (78 faster / 26 slower, t -5.2) at 0.86x the units; b45 -0.014 at 0.76x; b33 -0.007 at 0.67x. The
 adopted sidecar reproduces the measured arm's digests exactly. Suite d5 cells pin budget 20, so ground truth
 exercises the shape at b20, not the play budget 60. Evidence: `docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md` s8.
-OPEN at commit: callgrind instructions per unit for this shape (Kitty's are equal; Landfall's emulated ladder costs
-6-8% more per unit). Above ~16% more the b60 margin is gone, and the budget drops to b45 (-0.014 at 0.76x units);
-the suite pins b20, so that change moves no ground truth.
+Real cost (callgrind, 200 of those games in 8 chunks, matched vs shipped b20): the emulated shape costs 1.03x (b33)
+to 1.05x (b20) instructions per unit, so b60 runs at ~0.90x the shipped hybrid's real cost. The b45 fallback
+(needed only above ~1.16x per unit) is not taken.

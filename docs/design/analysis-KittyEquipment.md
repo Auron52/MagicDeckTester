@@ -1356,7 +1356,8 @@ call**. Full write-up: `docs/design/equipment-etb-draw-breakpoint.md`. The short
 the committing pass on the rollout leaf at the depth the rollout ladder would reach, the model breaking the
 rollout's root ties (`MTG_ID_HINT_ROOT=3`). Held-out vs the shipped hybrid at b20, 3,000 paired games (seeds
 872000-875000 + 884000-891000): **-0.019 turns** (65 faster / 22 slower) at ~0.93x the units; callgrind
-instructions per unit are equal for both shapes (154.6k vs 155.5k), so units are the real cost. At b20 the same
+instructions per unit are equal for both shapes (228.8k vs 229.7k over 8 chunks = 200 games; 0.926x instructions
+in total), so units are the real cost. At b20 the same
 shape is -0.024 at 1.15x (a trade, not taken). The adopted sidecar reproduces the measured arm's digests exactly.
 Suite d5 cells pin budget 20, so ground truth exercises the shape at b20, not the play budget 14. Evidence:
 `docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md` s8.

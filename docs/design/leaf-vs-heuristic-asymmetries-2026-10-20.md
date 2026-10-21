@@ -350,8 +350,8 @@ it is noticeably better on a large set we should"*; fresh seeds 884000-891000 ad
 
 | deck | verdict | evidence (vs shipped b20) |
 |---|---|---|
-| **KittyEquipment** | **ADOPTED at b14** | 3,000 games -0.019 (65/22) at ~0.93x units; instructions per unit equal for both shapes (callgrind 154.6k vs 155.5k) |
-| **Melira Pod** | **ADOPTED at b60** | 3,000 games: b60 -0.019 (78/26, t -5.2) at 0.86x; b45 -0.014 at 0.76x; b33 -0.007 at 0.67x. Instructions per unit were still being measured (callgrind) at commit: a penalty above ~16% would erase b60's cost margin, and the fallback is b45 (24% margin) |
+| **KittyEquipment** | **ADOPTED at b14** | 3,000 games -0.019 (65/22) at ~0.93x units; callgrind on 200 of those games (8 chunks): 0.929x units, **0.926x instructions** (Ir/unit 228.8k vs 229.7k) |
+| **Melira Pod** | **ADOPTED at b60** | 3,000 games: b60 -0.019 (78/26, t -5.2) at 0.86x; b45 -0.014 at 0.76x; b33 -0.007 at 0.67x. Callgrind on 200 of those games (8 chunks, matched vs shipped b20): the emulated shape costs 1.03x (b33) / 1.05x (b20) instructions per unit, so b60 is ~0.90x real cost (the b45 fallback, needed above ~1.16x, is not) |
 | FiveColour | not adopted | the emulated curve flattens at +0.002-0.003 (b40 1.04x, b50 1.12x) while shipped improves to -0.007 at 1.16x |
 | Creature Giving | not adopted | emulated b8 -0.005 at 1.17x vs shipped b30 -0.008 at 1.19x; its larger gains cost 1.75x+ |
 | Hinata2, Prevent Damage | not adopted | shipped better at equal cost (table above) |
