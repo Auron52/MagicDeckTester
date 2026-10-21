@@ -2561,3 +2561,131 @@ Kept ON as a guard (it costs the probe state it already computed); turning it OF
 
 Validation (HEAD 2b9ec453): mtg-test 1619 / 1619 (2 new: the key splits on colour; a taped tutor fetches the taped
 name); scenarios 245 / 245 and combo-off fixtures 48 / 48 with both levers on and with both =0.
+## Proposed cast order (2026-10-21) -- PROPOSED, default OFF pending USER review
+
+Branch `aa-castorder` (worktree `.claude/worktrees/aa-castorder`, off `phase-1-2-deck-analyzer` @ 846135c7), NOT
+pushed. Code + tests e708dfc8. Scratch `build/scratch/aa-castorder/` (`ab/` batch 1, `ab2/` batch 2, `abc/` the two
+joined, `x_part1/` + `x2/` the slower-game reruns (`mktable.py`), `tr/` single-game traces + `diff.py` / `show.py`, `smoke_base/` + `smoke_mine/`).
+
+**What landed.** `MTG_AA_CAST_ORDER` (heurarm `AA_CAST_ORDER`), **DEFAULT OFF** -- the analysis' proposal, not
+approved: `AccomplishedAlchemistProvider::CastOrderRank` (+ `CastOrderTierName`, `CastOrderTotalByName`,
+`LandDropCastOrderRank`), the PiratesProvider / Colossus shape: one position per card, rank = position x 64.
+Order: land drop > Living Wish > Utopia Sprawl > Wild Growth > Elvish Harbinger > Arbor Elf > Accomplished Alchemist
+> Ezuri > Scholar of Athreos > Nourish > Feed the Clan > Trufflesnout > Brindle Boar > Eternal Witness > Weather the
+Storm > Crab Umbra > Galvanic Alchemist > Seedcradle Witch > Staff of Domination > Stroke of Genius. `=0` / unset is
+the generic tiering (land Auras 5, creatures 10, other noncreatures 20, plan order within a tier) byte for byte.
+Four **measurement arms**, DEFAULT OFF, inert unless the order is on: `MTG_AA_CAST_ORDER_AURAS_FIRST` (Wish after
+the land Auras), `_WISH_AFTER_LIFE` (Wish after the lifegain block), `_LIFE_FIRST` (the lifegain right after the land
+Auras, then the Wish, then Harbinger ...), `_WEATHER_LAST` (Weather after the untappers, before Stroke).
+
+**Readings taken (the USER's to correct).** (1) Every position is a PARAMS test through the deck's own bucket roles
+(`AaIsAlchemist`, `AaIsHarbingerTutor`, `AaIsUntapper`, `AaIsWitch`) plus the param separating two members of a role:
+`wish_from_sideboard`; `is_land_aura` (+ `etb_choose_color` = Sprawl); `mana_requires_land_subtype` (Arbor Elf);
+`team_pump_cost` (Ezuri); `drain_cost` (Scholar); `cast_lifegain` -- plain = Nourish, `cast_lifegain_ferocious` =
+Feed the Clan, `storm` = Weather; `etb_modal_lifegain` (Trufflesnout); `sac_outlet_lifegain` (Brindle Boar);
+`etb_return_gy_to_hand` (Witness); `draw_target_player` (Stroke). (2) An unlisted card goes after every listed one,
+in its generic tier order, ties by NAME (`CastOrderTotalByName`, the 2026-10-14 cross-deck ruling); no card of the 75
+is unlisted. (3) The land drop is slot 0 (`LandDropCastOrderRank`); that hook is read only by `MTG_BP_CONDEMN_LAND`
+condemnation, which this deck does not run, so it is the order's statement and changes nothing. (4) The analysis'
+four open questions took the given defaults: Wish after the land drop even with no land in hand; Ezuri / Scholar
+before the lifegain unconditionally; untappers after the lifegain and after Weather; Feed the Clan's ferocious via a
+Witch pump is an activation, outside the cast order. (5) `--cast-order-report` lists the main deck only.
+
+**Validation.** Unit 1623 / 1623 (6 new cases: one position per card; `=0` and unset = generic; every arm's order
+through the shared comparator `CastOrderLess`; two mechanism probes). Scenarios 245 / 245. **Smoke, flag unset:
+132 / 132 keys and 132 / 132 per-game `.wins` files byte-identical** to the HEAD binary (846135c7 Release) on the same
+tier (both 124 pass / 8 fail against the committed GT -- the known pre-existing moves). The second binary (the two
+later arms) reproduced 16 / 16 canary chunks of batch 1 (off and afwl) byte for byte.
+
+**A/B** -- two pooled batches, every arm by heurarm in one manifest each, 25-game chunks, held-out seed base 150001
+(disjoint from the tiers and from the 70001 / 90001 / 930000 / 1000000+ A/Bs; pairing `seed = base + off`,
+`game_index = off`), unwon = 9; 8 then 6 threads on a box shared with the mulligan generation (ms not comparable;
+units are). Delta = arm - off, faster / slower = paired games:
+
+| arm | d0 (1000) | d3 b10 (500) | d5 b20 (500) | units d3 / d5 |
+|---|---|---|---|---|
+| off (generic) | 7.0150 (607 won) | 5.2080 | 5.1820 | 31.2M / 57.2M |
+| **on (proposed)** | 7.1000 **+0.085** 13/42 | 5.2400 **+0.032** 2/15 | 5.2020 **+0.020** 2/10 | 1.009x / 1.009x |
+| on + AURAS_FIRST | 7.0430 +0.028 10/23 | 5.2320 +0.024 3/12 | 5.1940 +0.012 3/7 | 0.997x / 0.986x |
+| on + WEATHER_LAST | 7.0700 +0.055 19/36 | 5.2320 +0.024 2/11 | 5.1900 +0.008 2/6 | 1.005x / 0.995x |
+| on + AURAS_FIRST + WEATHER_LAST | 7.0120 -0.003 16/16 | 5.2240 +0.016 3/8 | 5.1840 +0.002 3/4 | 0.994x / 0.972x |
+| on + LIFE_FIRST + WEATHER_LAST | 7.0160 +0.001 17/15 | 5.2220 +0.014 2/7 | 5.1820 0.000 2/2 | 0.997x / 0.969x |
+| **on + WISH_AFTER_LIFE + WEATHER_LAST** | 7.0000 **-0.015** 14/6 | 5.2260 +0.018 1/7 | 5.1820 **0.000** 2/2 | 0.991x / 0.965x |
+
+**The proposed order measures WORSE on every cell.** Root causes, from the slower games (traces `tr/`):
+1. **Living Wish ahead of the land Auras strands the Aura.** Two Forests, Wild Growth / Sprawl {G} + Wish {1}{G}:
+   three mana, the third being the Aura's own -- payable only Aura first. The proposed order ranks the Wish first;
+   the plan is still enumerated (the land-Aura bound credit), but BOTH worlds pay the Wish off both Forests and drop
+   the Aura (unit probe: realised in 0 / 2 worlds; generic and AURAS_FIRST 2 / 2). g460 at d8 b0: generic T2 Forest,
+   Sprawl, Wish -> T4; proposed T2 Forest, Wish -> T5 (persists at unlimited budget). g34 d5: the T4 line of the
+   search's T3 choice realises badly, so it picks another T3.
+2. **Weather the Storm ahead of the untappers loses storm copies.** Storm counts the spells cast before it, and the
+   proposed order puts every untapper after Weather. g163 at d8 b0: T4 hand Stroke, Crab Umbra, Weather, Staff on an
+   Alchemist board -- generic plays Umbra / Staff before Weather (three copies, X = 9, the Umbra loop runs, Combo Off
+   T4); proposed: Weather first, one copy, X = 3, no loop -- the search sees it and takes a different T2 (Harbinger
+   for Ezuri), T5 (persists at unlimited budget). WEATHER_LAST alone takes d0 from 42 to 36 slower games.
+3. **Living Wish ahead of the lifegain on an Alchemist turn.** An Alchemist in play taps for the life gained THIS
+   turn, so a cast ranked ahead of the first lifegain is paid from the lands that lifegain needs. The two-card case
+   is safe (unit probe: Nourish -> Wish off the Alchemist is realised in every arm, because the gain opens site 9 and
+   the Wish lands in that continuation), so the effect is in longer cast lists and in how they re-price the search's
+   earlier choices: g36 (T2 Nourish instead of the Wish for Galvanic Alchemist) and g289 (T3 Arbor Elf instead of
+   Harbinger) at d5 are fixed by WISH_AFTER_LIFE / LIFE_FIRST and by nothing else.
+4. **Residual, d3 b10 only:** with all three fixed, 7 d3 games stay slower in both new arms (g80, 233, 238, 270, 290,
+   350, 457) -- single-action decisions re-valued through the rollouts at the tight budget (g238 T3 Nourish instead of
+   land + Staff draw; g457 T3 Stroke instead of the Alchemist; g80 T5 a plan without Nourish where generic casts
+   Nourish, Wish, Galvanic, Weather and goes off) and one mulligan BOTTOM (g350: the clairvoyant bottom trials play
+   each candidate out under the order). See the reruns below for which recover with budget.
+
+**Slower games at 10x budget and at `--depth 8 --budget-ms 0`** (both arms; one d8 rerun per deal -- the d3 and d5
+cells share seed base 150001):
+
+| deal | on slower at | off -> on (A/B budget) | at 10x | at d8 b0 |
+|---|---|---|---|---|
+| g34 | d3/d5 | d3: 5 -> 6; d5: 5 -> 6 | d3: 5 vs 5 (recovers); d5: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
+| g36 | d3/d5 | d3: 5 -> 7; d5: 5 -> 6 | d3: 5 vs 6 (persists); d5: 5 vs 6 (persists) | 5 vs 5 (recovers) |
+| g80 | d3 | d3: 5 -> 6 | d3: 7 vs 6 (recovers) | 5 vs 5 (recovers) |
+| g163 | d3/d5 | d3: 4 -> 5; d5: 4 -> 5 | d3: 4 vs 5 (persists); d5: 4 vs 5 (persists) | 4 vs 5 (persists) |
+| g237 | d3 | d3: 4 -> 5 | d3: 4 vs 4 (recovers) | 4 vs 4 (recovers) |
+| g238 | d3/d5 | d3: 7 -> 8; d5: 7 -> 8 | d3: 7 vs 8 (persists); d5: 7 vs 8 (persists) | running vs running (running) |
+| g270 | d3 | d3: 5 -> 6 | d3: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
+| g289 | d3/d5 | d3: 5 -> 6; d5: 5 -> 6 | d3: 5 vs 5 (recovers); d5: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
+| g290 | d3 | d3: 6 -> 7 | d3: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
+| g308 | d3/d5 | d3: 5 -> 6; d5: 5 -> 6 | d3: 5 vs 6 (persists); d5: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
+| g344 | d3/d5 | d3: 4 -> 5; d5: 4 -> 5 | d3: 4 vs 5 (persists); d5: 4 vs 4 (recovers) | 4 vs 4 (recovers) |
+| g350 | d3 | d3: 6 -> 8 | d3: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
+| g365 | d3/d5 | d3: 5 -> 6; d5: 5 -> 6 | d3: 5 vs 6 (persists); d5: 5 vs 6 (persists) | 5 vs 5 (recovers) |
+| g457 | d3/d5 | d3: 6 -> unwon; d5: 6 -> unwon | d3: 6 vs unwon (persists); d5: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
+| g460 | d3/d5 | d3: 4 -> 5; d5: 4 -> 5 | d3: 4 vs 5 (persists); d5: 4 vs 5 (persists) | 4 vs 5 (persists) |
+
+| deal | walwl slower at | off -> walwl (A/B budget) | at 10x | at d8 b0 |
+|---|---|---|---|---|
+| g80 | d3 | d3: 5 -> 6 | d3: 7 vs 6 (recovers) | 5 vs 5 (recovers) |
+| g233 | d3 | d3: 5 -> 6 | d3: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
+| g238 | d3/d5 | d3: 7 -> 8; d5: 7 -> 8 | d3: 7 vs 8 (persists); d5: 7 vs 8 (persists) | running vs running (running) |
+| g270 | d3 | d3: 5 -> 6 | d3: 5 vs 5 (recovers) | 5 vs 5 (recovers) |
+| g290 | d3 | d3: 6 -> 7 | d3: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
+| g350 | d3 | d3: 6 -> 8 | d3: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
+| g457 | d3/d5 | d3: 6 -> unwon; d5: 6 -> 7 | d3: 6 vs 6 (recovers); d5: 6 vs 6 (recovers) | 6 vs 6 (recovers) |
+
+Proposed order, 15 slower deals: **at d8 b0 12 recover, 2 persist -- g163 (mechanism 2: Weather before Crab Umbra / Staff, one storm copy, X = 3, no Umbra loop) and g460 (mechanism 1: Wish before Sprawl, the Aura stranded on T2)** -- both recover under the amended order (d8 b0 4 = generic in both, single-game reruns `tr/walwl_*_d8_b0_*`). Amended order, 7 slower deals: 6 recover at d8 b0 and at 10x. **g238 is still running at d8 b0 in every arm** (>1 h per game at report time; batch `x2/`, `python3 mktable.py` reads it); at 10x it persists in every arm (7 vs 8).
+
+**Amended order (the measurement's recommendation, still DEFAULT OFF -- the USER's call):** land drop > Utopia Sprawl
+> Wild Growth > Elvish Harbinger > Arbor Elf > Accomplished Alchemist > Ezuri > Scholar > Nourish > Feed the Clan >
+Trufflesnout > Brindle Boar > **Living Wish** > Eternal Witness > Crab Umbra > Galvanic Alchemist > Seedcradle Witch
+> Staff of Domination > **Weather the Storm** > Stroke of Genius (`MTG_AA_CAST_ORDER=1 MTG_AA_CAST_ORDER_WISH_AFTER_LIFE=1
+MTG_AA_CAST_ORDER_WEATHER_LAST=1`). Two moves against the proposal: the Wish goes behind the lifegain (which also puts it
+behind the land Auras, mechanisms 1 and 3; open question 1 is moot -- it is after the drop either way), and Weather goes
+behind the untappers (mechanism 2 -- open question 3 answered the other way). Measured: d0 **-0.015** (14 / 6), d3 b10
++0.018 (1 / 7), d5 b20 **0.000** (2 / 2), units 0.97-0.99x; net over the 2,000 paired games **-6 turns**. Its seven d3
+slower games are the residual class 4: six recover at 10x budget and at d8 b0; g238 does not recover at 10x (d8 b0 still running).
+LIFE_FIRST (the lifegain also ahead of the creatures) is a near-tie (d3 +0.014, d5 0.000, d0 +0.001; net +8).
+**Recommendation: do not adopt the proposed order as written** (worse on every cell, two games lose a turn at unlimited
+budget). The amended order is the candidate if the USER wants a fixed order for this deck: neutral at the play depth,
+better greedy, a d3-b10 cost that is mostly budget. Adoption, and which of the two amendments, is the USER's decision.
+
+**Open for the USER (defaults taken, nothing adopted):** (a) adopt nothing / the amended order / LIFE_FIRST -- default:
+nothing, everything ships OFF; (b) the four questions -- the amended order flips question 3 (Weather after the
+untappers) and makes question 1 moot; question 2 (Ezuri / Scholar before the lifegain) measured only inside
+LIFE_FIRST, which moves them behind it and is a near-tie; (c) g238, the one residual game that loses a turn even at
+10x budget in every arm (T2 Nourish instead of Staff of Domination off Sprawl + Wild Growth -- a valuation shift, no
+order mechanism found).
