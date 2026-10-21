@@ -7569,8 +7569,8 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
     // independents. Digit 0 is the fastest, so the chosen options of digits 1..G-1 (`hi`) are rebuilt only
     // when one of those digits has moved (`hi_dirty`), not at every position.
     const std::size_t na = auto_sel.size();
-    std::vector<int> hi;
-    hi.reserve(static_cast<std::size_t>(G));
+    std::vector<int> hi(static_cast<std::size_t>(G), 0);
+    std::size_t nhi = 0;
     bool hi_dirty = true;
     std::vector<int> ind_cost(static_cast<std::size_t>(num_ind), 0);
     for (int b = 0; b < num_ind; ++b)
@@ -7580,16 +7580,16 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
     {
         if (hi_dirty)
         {
-            hi.clear();
+            nhi = 0;
             for (int g = 1; g < G; ++g)
             {
                 const int c = choice[static_cast<std::size_t>(g)];
-                if (c > 0) { hi.push_back(groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(c - 1)]); }
+                if (c > 0) { hi[nhi++] = groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(c - 1)]; }
             }
             hi_dirty = false;
         }
         const int c0 = G > 0 ? choice[0] : 0;
-        const std::size_t nb = na + (c0 > 0 ? 1 : 0) + hi.size();
+        const std::size_t nb = na + (c0 > 0 ? 1 : 0) + nhi;
         for (int imask = 0; imask < (1 << num_ind); ++imask)
         {
             int pcost = 0;
@@ -7598,8 +7598,8 @@ static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const 
             std::copy(auto_sel.begin(), auto_sel.end(), sp);
             std::size_t n = na;
             if (c0 > 0) { sp[n++] = groups[0][static_cast<std::size_t>(c0 - 1)]; }
-            std::copy(hi.begin(), hi.end(), sp + n);
-            n += hi.size();
+            std::copy(hi.begin(), hi.begin() + static_cast<std::ptrdiff_t>(nhi), sp + n);
+            n += nhi;
             for (int b = 0; b < num_ind; ++b)
             {
                 if (!(imask & (1 << b))) { continue; }
@@ -13226,6 +13226,12 @@ static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector
     int flagged[kSmall];   // positions with a rule-2 / 5 / 6 / 3 flag
     std::size_t nputs = 0, no = 0, npins = 0, nflag = 0;
     std::uint32_t any = 0;
+    // A one-word filter over the cast / put names (a bit per name address): most pins, victims and
+    // hand-source steals name a card no cast of the selection carries, and the filter answers those 0
+    // without the scan; a set bit falls through to the exact count.
+    std::uint64_t putmask = 0;
+    auto NameBit = [](const std::string* p) -> std::uint64_t
+    { return 1ull << ((reinterpret_cast<std::uintptr_t>(p) >> 4) & 63u); };
     int mode4 = 0, n_cv = 0, pip = static_cast<int>(Color::Black);
     int dem_p = 0, dem_o = 0, plan_p = 0, plan_o = 0;
     bool o_rank = false, o_bands = false;
@@ -13235,7 +13241,7 @@ static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector
         const VampCandFacts& x = F[idx];
         const std::uint32_t b = x.bits;
         any |= b;
-        if (b & kVfCastput) { puts[nputs++] = x.name; }
+        if (b & kVfCastput) { puts[nputs++] = x.name; putmask |= NameBit(x.name); }
         if (b & kVfCv)
         {
             if (n_cv == 0) { pip = x.cv_pip; }
@@ -13259,6 +13265,7 @@ static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector
     const bool bands = (any & kVfSt6) != 0;
     auto puts_of = [&](const std::string* key) -> int
     {
+        if ((putmask & NameBit(key)) == 0) { return 0; }
         int c = 0;
         for (std::size_t k = 0; k < nputs; ++k) { if (puts[k] == key) { ++c; } }
         return c;
