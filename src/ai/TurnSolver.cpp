@@ -67210,8 +67210,11 @@ inline std::uint64_t FsOrderSig(const GameState& state)
 // 2 = drop damage + temp pump only.
 static thread_local int g_simkey_m2coarse = 0;
 
-static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
-                                           bool second_main)
+// THE KEY WITHOUT ITS DEPTH. Remaining depth is folded LAST (SimKeyAtDepth), so one walk of the state
+// yields the key at every depth: MTG_ID_ORDER_HINT reads the same position one pass shallower,
+// (state, depth - 1), for the price of two Folds instead of a second walk. Moving the fold changes
+// every key's VALUE and no key's EQUALITY -- the same states share a key exactly as before.
+static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_turns, bool second_main)
 {
     ++combatpin::t_reads;   // folds the combat pins (GameState.h, COMBAT-PIN READ WITNESS)
     TranspositionTable::Key k;
@@ -67245,7 +67248,6 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     };
 
     Fold(k, 0x5117); // section tag: scalars
-    Fold(k, static_cast<uint64_t>(depth));
     Fold(k, static_cast<uint64_t>(max_turns));
     Fold(k, second_main ? 1u : 0u);
     Fold(k, static_cast<uint64_t>(state.turn_number));
@@ -67955,6 +67957,19 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     if (canon) { canon_flush(); }
 
     return k;
+}
+
+static inline TranspositionTable::Key SimKeyAtDepth(TranspositionTable::Key k, int depth)
+{
+    Fold(k, 0xDE97);   // section tag: remaining depth
+    Fold(k, static_cast<uint64_t>(depth));
+    return k;
+}
+
+static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
+                                           bool second_main)
+{
+    return SimKeyAtDepth(BuildSimKeyBase(state, max_turns, second_main), depth);
 }
 
 // Simulate from the current state (at the START of a pre-combat main phase,
@@ -70600,6 +70615,95 @@ struct ProbeValsGuard   // point g_probe_plan_vals at a per-decision map for the
     explicit ProbeValsGuard(ProbePlanVals* m) : prev(g_probe_plan_vals) { g_probe_plan_vals = m; }
     ~ProbeValsGuard() { g_probe_plan_vals = prev; }
 };
+// ORDER ORACLE (MTG_ORDER_ORACLE=1; DIAGNOSTIC, default off, never play). How much of a heuristic-ladder
+// pass is the price of MoveOrderPlans' order? The real pass RECORDS every node's per-plan win turns
+// (mode 1, under the shipped strict cut -- unlike the beam probe, which turns the cut off); after it
+// completes, the pass is replayed from snapshots of its TT and budget, on fresh memos (OrderOracleProbe): as
+// recorded (mode 0, the sanity arm: must cost what the real pass cost), with each node's plans re-sorted so the
+// plan that proved best comes first (mode 2, the oracle), and in the static order with no ID hint (mode 4: the
+// hint's own saving, and the check that it never moves a win turn). Counters print at exit as [order-oracle].
+// Measured 2026-10-21, Landfall b20: the oracle 0.888x of a static-order pass; the ID hint 0.834x of it, with
+// 0 win-turn mismatches in 2,203 live and 2,369 emulated-ladder passes.
+inline thread_local ProbePlanVals* g_oo_vals = nullptr;
+inline thread_local int            g_oo_mode = 0;   // 0 none, 1 record, 2 oracle order, 4 static order (no hint)
+// ITERATIVE-DEEPENING MOVE ORDER (MTG_ID_ORDER_HINT; see heurarm::ID_ORDER_HINT). The ladder searches the same
+// positions again one pass deeper, and MoveOrderPlans' static order puts the plan that proves best first at ~97%
+// of nodes -- but the other ~3% are where the work is: an oracle best-first order costs 0.888x the units of a
+// Landfall b20 ladder pass, at the same win turn in every pass (MTG_ORDER_ORACLE). So every completed node records
+// its best plan (index in the static order, and the plan count, as a guard against a different enumeration) under
+// its key, and a node one pass deeper -- the same state at remaining depth + 1 -- looks itself up under
+// (state, depth - 1) and tries that plan first. Every plan is still searched and the node's win turn cannot change.
+// BUT AT A NODE IT IS A TIE-BREAK CHANGE, and the tie-break is the saving: under the strict cut the plan tried first
+// wins every tie, a tie is refuted for free, and the plans ahead of the hinted one mostly tie it (MTG_ID_HINT_STATIC_TIE
+// keeps the static tie-break and saves nothing). So it runs BELOW THE PASS ROOT only (MTG_ID_HINT_ROOT): a tie there
+// picks only which line a node returns, never its win turn, so the root -- the committed decision -- still commits the
+// static order's plan and play moves only through the budget it frees. Measured 2026-10-21, Landfall b20, 200 games,
+// exact replays of 2,211 passes: 0 root-plan and 0 win-turn differences from the static order, 0.928x the units
+// (0.947x the whole game). With the root included it was 0.834x -- and a different committed plan in ~12% of passes.
+// One map per DECISION (IdHintScope at the decision roots), so a hint never crosses into another decision.
+// CAPPED (MTG_ID_HINT_CAP entries per decision, default 262144 -- ~25 MB a thread): an unbudgeted search can
+// complete millions of nodes, and only a pass's predecessor is ever read, so the shallow passes -- recorded
+// first, and the ones a deep pass reads -- are the ones worth keeping. A full map stops admitting new keys.
+struct IdHint { int idx; int n; int win; };   // static index of the best plan, the plan count, its win turn
+using IdHintMap = std::unordered_map<TranspositionTable::Key, IdHint, TranspositionTable::KeyHash>;
+inline thread_local IdHintMap* g_idh_map = nullptr;
+static inline bool IdOrderHintOn()
+{
+    static const bool env = EnvOn("MTG_ID_ORDER_HINT");   // DEFAULT OFF until its GT is accepted; =1 -> on (interior nodes)
+    return heurarm::Flag(heurarm::ID_ORDER_HINT, env);
+}
+static inline void IdHintRecord(const TranspositionTable::Key& k, int idx, int n, int win)
+{
+    static const std::size_t cap = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ID_HINT_CAP", 262144)));
+    IdHintMap& m = *g_idh_map;
+    IdHintMap::iterator it = m.find(k);
+    if (it != m.end()) { it->second = { idx, n, win }; return; }
+    if (m.size() < cap) { m.emplace(k, IdHint{ idx, n, win }); }
+}
+struct IdHintScope   // installs this decision's hint map unless an enclosing decision root already did
+{
+    IdHintMap  map;
+    IdHintMap* prev;
+    bool       own;
+    IdHintScope() : prev(g_idh_map), own(g_idh_map == nullptr && g_rollout_nest == 0 && IdOrderHintOn())
+    { if (own) { g_idh_map = &map; } }
+    ~IdHintScope() { if (own) { g_idh_map = prev; } }
+    IdHintScope(const IdHintScope&) = delete;
+    IdHintScope& operator=(const IdHintScope&) = delete;
+};
+namespace ooprobe
+{
+inline std::atomic<long long> passes{0}, real_u{0}, a_u{0}, b_u{0}, a_mm{0}, b_mm{0}, b_plan_mm{0}, a_unit_mm{0};
+inline std::atomic<long long> d_n[16], d_real[16], d_b[16], reordered{0}, recorded{0};
+inline std::atomic<long long> h_found{0}, h_size_mm{0}, h_rotated{0};   // ID-hint lookups (either mode)
+inline std::atomic<long long> s_u{0}, s_mm{0}, s_plan_mm{0}, d_s[16];      // mode 4: static order, no hint
+struct Printer
+{
+    ~Printer()
+    {
+        std::fprintf(stderr, "[order-oracle] passes=%lld real=%lld replay=%lld oracle=%lld (oracle/real %.4f) "
+                     "replay_unit_mismatch=%lld win_mismatch replay=%lld oracle=%lld root_plan_mismatch=%lld "
+                     "nodes_recorded=%lld nodes_reordered=%lld\n",
+                     passes.load(), real_u.load(), a_u.load(), b_u.load(),
+                     real_u.load() > 0 ? static_cast<double>(b_u.load()) / static_cast<double>(real_u.load()) : 0.0,
+                     a_unit_mm.load(), a_mm.load(), b_mm.load(), b_plan_mm.load(), recorded.load(), reordered.load());
+        std::fprintf(stderr, "[order-oracle] ID hint (MTG_ID_ORDER_HINT, real passes): found=%lld size_mismatch=%lld rotated=%lld\n",
+                     h_found.load(), h_size_mm.load(), h_rotated.load());
+        std::fprintf(stderr, "[order-oracle] static order, no hint: units=%lld (static/real %.4f) win_mismatch=%lld root_plan_mismatch=%lld\n",
+                     s_u.load(), real_u.load() > 0 ? static_cast<double>(s_u.load()) / static_cast<double>(real_u.load()) : 0.0,
+                     s_mm.load(), s_plan_mm.load());
+        std::fprintf(stderr, "[order-oracle] by pass depth (n, real, oracle/real):");
+        for (int d = 0; d < 16; ++d)
+        {
+            if (d_n[d].load() == 0) { continue; }
+            std::fprintf(stderr, " d%d:%lld,%lld,%.4f,static %.4f", d, d_n[d].load(), d_real[d].load(),
+                         d_real[d].load() > 0 ? static_cast<double>(d_b[d].load()) / static_cast<double>(d_real[d].load()) : 0.0,
+                         d_real[d].load() > 0 ? static_cast<double>(d_s[d].load()) / static_cast<double>(d_real[d].load()) : 0.0);
+        }
+        std::fprintf(stderr, "\n");
+    }
+};
+}
 inline thread_local long long g_probe_leaves[16] = {0};   // probe leaf count at each pass depth (0 = unmeasured)
 inline thread_local long long g_probe_cost[16]   = {0};   // probe budget-work at each pass depth
 inline thread_local bool       g_probe_recording = false; // set while the probe's FullSearchLine ladders
@@ -72476,10 +72580,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const double s_of_wave_share = (valuearm::t_arm.of_wave_share >= 0.0)
                                  ? valuearm::t_arm.of_wave_share : OfWaveShare();
     int of_hint_win = 0;             // a twin's win turn (probe only -- NEVER consulted by search)
-    TranspositionTable::Key key, key_win;
+    TranspositionTable::Key key, key_win, key_base;
     if (lc != nullptr)
     {
-        key     = BuildSimKey(state, depth, max_turns, second_main);
+        key_base = BuildSimKeyBase(state, max_turns, second_main);
+        key      = SimKeyAtDepth(key_base, depth);
         key_win = key;
         if (s_split_keys && CanonSimKeyOn()) { Fold(key_win, FsOrderSig(state)); }
         if (s_split_keys)
@@ -73066,6 +73171,90 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             pre.swap(ranked);
         }
     }
+    // ORDER ORACLE, mode 2 (see g_oo_vals): the recorded best plan first, the rest in their static order.
+    // bp_base addresses post-sort positions, so it is remapped through the permutation.
+    if (g_oo_mode == 2 && g_oo_vals != nullptr && lc != nullptr)
+    {
+        ProbePlanVals::const_iterator pit = g_oo_vals->find(key);
+        if (pit != g_oo_vals->end() && !pit->second.empty())
+        {
+            const std::vector<int>& vals = pit->second;
+            const int nv = static_cast<int>(vals.size());
+            std::vector<int> order(pre.size());
+            for (int i = 0; i < static_cast<int>(pre.size()); ++i) { order[i] = i; }
+            std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+                const int va = (a < nv) ? vals[a] : (max_turns + 1);
+                const int vb = (b < nv) ? vals[b] : (max_turns + 1);
+                return va < vb;
+            });
+            bool moved = false;
+            for (int i = 0; i < static_cast<int>(order.size()); ++i) { if (order[i] != i) { moved = true; break; } }
+            if (moved)
+            {
+                order_perturbed = true;
+                ooprobe::reordered.fetch_add(1, std::memory_order_relaxed);
+                std::vector<int> inv(pre.size(), -1);
+                for (int j = 0; j < static_cast<int>(order.size()); ++j) { inv[order[j]] = j; }
+                std::vector<TurnSolver::Plan> ranked;
+                ranked.reserve(pre.size());
+                for (int j : order) { ranked.push_back(std::move(pre[j])); }
+                pre.swap(ranked);
+                for (TurnSolver::Plan& p : pre)
+                {
+                    p.bp_base = (p.bp_base >= 0 && p.bp_base < static_cast<int>(inv.size())) ? inv[p.bp_base] : -1;
+                }
+            }
+        }
+    }
+    // ITERATIVE-DEEPENING HINT (MTG_ID_ORDER_HINT; see g_idh_map): this position's best plan one pass shallower
+    // goes first. Recorded indices are in the STATIC order, so a node whose `pre` something else re-sorted (the
+    // value beam, the order oracle) neither reads nor writes a hint. bp_base is remapped through the rotation.
+    const bool idh_static_order = !order_perturbed && g_oo_mode != 2 && g_oo_mode != 4;
+    // NOT AT A PASS ROOT (MTG_ID_HINT_ROOT, default OFF). The root is the committed decision, and the hint's tie-break
+    // is wrong there often enough to matter: Bruna s880019 T1, pass 3's best was to play NOTHING (a greedy rollout
+    // found a T4 win from it that pass 4 refutes -- both plans read T5 at depth 4), so the hinted root committed an
+    // empty turn 1 and lost a turn (s880084: two). Below the root a tie only picks which line a node RETURNS: the
+    // root's children keep their win turns, so the root still commits the static order's plan, and the search
+    // keeps the saving where the tree is (every interior node).
+    // MTG_ID_HINT_ROOT=1 hints the root too (its tie-break goes to the shallower pass's best); =2 ("stable") does so
+    // only while that plan's win turn HELD at this depth -- if it got worse (Bruna's empty T1: T4 at pass 3, T5 at
+    // pass 4) the root keeps the static tie-break (the MTG_ID_HINT_STATIC_TIE machinery, armed for this node).
+    static const int s_idh_root = EnvInt("MTG_ID_HINT_ROOT", 0);
+    const bool idh_on = (g_idh_map != nullptr && lc != nullptr && g_rollout_nest == 0 && idh_static_order && !beam_here
+                         && (!bp_root || s_idh_root >= 1));
+    int idh_prev_win = max_turns + 1;   // the hinted plan's win turn one pass shallower
+    int idh_rot = 0;   // static index rotated to the front (0 = none)
+    if (idh_on && depth >= 2 && pre.size() > 1)
+    {
+        IdHintMap::const_iterator hit = g_idh_map->find(SimKeyAtDepth(key_base, depth - 1));
+        if (hit != g_idh_map->end())
+        {
+            if (g_oo_mode != 0) { ooprobe::h_found.fetch_add(1, std::memory_order_relaxed); }
+            const int idx = hit->second.idx;
+            idh_prev_win = hit->second.win;
+            if (hit->second.n != static_cast<int>(pre.size()))
+            { if (g_oo_mode != 0) { ooprobe::h_size_mm.fetch_add(1, std::memory_order_relaxed); } }
+            else if (idx > 0 && idx < static_cast<int>(pre.size()))
+            {
+                order_perturbed = true;
+                idh_rot = idx;
+                if (g_oo_mode != 0) { ooprobe::h_rotated.fetch_add(1, std::memory_order_relaxed); }
+                std::rotate(pre.begin(), pre.begin() + idx, pre.begin() + idx + 1);
+                for (TurnSolver::Plan& p : pre)
+                {
+                    if (p.bp_base == idx) { p.bp_base = 0; }
+                    else if (p.bp_base >= 0 && p.bp_base < idx) { ++p.bp_base; }
+                }
+            }
+        }
+    }
+    auto idh_static_idx = [idh_rot](int pos) -> int
+    {
+        if (idh_rot <= 0 || pos < 0) { return pos; }
+        if (pos == 0)       { return idh_rot; }
+        if (pos <= idh_rot) { return pos - 1; }
+        return pos;
+    };
     // MOVE-ORDER HINT: MEASURED WORTHLESS, DO NOT RE-TRY (2026-09-10, 40 Hinata games at d5/b20).
     // The first shape tried for reusing a permuted twin's win was the safest one imaginable -- take
     // only WHICH PLAY opened the twin's win and rotate it to the front of this node's candidate
@@ -73074,7 +73263,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // (91%), for 6 actual rotations. MoveOrderPlans is already picking it. The value in a twin's
     // answer is the WORK IT SAVES, not the order it suggests -- which is why the mechanism below
     // reuses the ANSWER under a budget gate instead.
-    const bool rec_vals = (g_probe_val_recording && g_probe_plan_vals != nullptr && lc != nullptr);
+    ProbePlanVals* const rec_map = (g_oo_mode == 1) ? g_oo_vals : g_probe_plan_vals;
+    const bool rec_vals = ((g_oo_mode == 1) || g_probe_val_recording) && rec_map != nullptr && lc != nullptr;
     std::vector<int> node_vals;
     if (rec_vals) { node_vals.reserve(pre.size()); }
 
@@ -73196,6 +73386,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
+    int oo_best_idx = -1;   // index in `pre` of the plan that set `best` (the ID hint's record)
+    const bool idh_rec = idh_on;
     int _beam_i = 0;
     std::size_t scanned = 0;   // how far the loop actually got (the beam can cut it short) -- the
                                // deferred wave phase below stays inside it
@@ -73272,8 +73464,38 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     GameState  s_buf;
     // Node children: resume-copy buffer (capacity reuse across children/pends) -- see the m2 host.
     GameState  s3_buf;
+    // THE STATIC TIE-BREAK UNDER THE ID HINT (MTG_ID_HINT_STATIC_TIE; MEASURED USELESS, DEFAULT OFF). Under the strict
+    // cut the plan tried first also wins every tie, so the hint changes WHICH plan of the best win turn a node commits.
+    // This keeps the static choice: the plans the rotation moved behind the hinted one (static index below it) are
+    // searched with the INCLUSIVE cut, one that ties takes the incumbent, and an early end the hinted plan earns (a
+    // this-turn kill, an in-horizon win) is HELD until they have been tried. It works -- 0 root-plan differences from
+    // the static order in ~4,900 replayed passes (Landfall, Melira, Melira 2HG, Dragonstorm) -- and it saves NOTHING
+    // (0.99-1.006x the static order's units): the plans ahead of the hinted one mostly TIE it, a strict cut refutes a
+    // tie for free, and proving one needs the inclusive search the static order already paid. The hint's whole saving
+    // IS its tie-break. Kept to record that; =1 -> on.
+    static const bool s_idh_static_tie = EnvOn("MTG_ID_HINT_STATIC_TIE");
+    bool idh_tie = (idh_rot > 0 && s_idh_static_tie);
+    const bool idh_root_stable = (bp_root && s_idh_root == 2 && idh_rot > 0 && !idh_tie);
+    // The hinted plan's early end is held for the lower-index plans when the static tie-break applies to it: always
+    // under MTG_ID_HINT_STATIC_TIE, and under the stable root rule when its win turn `w` is worse than one pass ago.
+    auto idh_hold_for = [&](int pos, int w) -> bool
+    { return idh_rot > 0 && pos == 0 && (idh_tie || (idh_root_stable && w > idh_prev_win)); };
+    int  best_sidx = std::numeric_limits<int>::max();   // static index of the plan holding `best`
+    bool idh_pending = false;         // the hinted plan ended the node early; the lower-index plans are still owed
+    bool idh_pending_break = false;   // ...and that end was the COMPLETE-NODES break, not a return
     for (const TurnSolver::Plan& p : pre)
     {
+        const int p_pos  = static_cast<int>(&p - pre.data());
+        if (idh_pending && p_pos > idh_rot) { break; }   // every lower-index plan was tried: the held end stands
+        const int p_sidx = idh_static_idx(p_pos);
+        // Stable root rule: once the hinted plan (position 0) is scored, the lower-index plans keep the static
+        // tie-break iff its win turn got worse than one pass ago (or it found none).
+        if (idh_root_stable && p_pos == 1 && best.win_turn > idh_prev_win) { idh_tie = true; }
+        // The incumbent as this plan's children see it: inclusive when this plan would win a tie (see above).
+        auto cut_best = [&]() -> int
+        { return (idh_tie && p_sidx < best_sidx && best.win_turn <= max_turns) ? best.win_turn + 1 : best.win_turn; };
+        auto idh_tie_wins = [&](int w) -> bool
+        { return idh_tie && p_sidx < best_sidx && w == best.win_turn && w <= max_turns; };
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
         // near-leaf nodes (beam_here); the top plies keep full exploration so the committed play is never pruned.
         // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
@@ -73872,18 +74094,27 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         TurnSolver::Plan p_rec = std::move(v);
                         p_rec.breakpoint_actions = std::move(bp3);
                         TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                        if (idh_hold_for(p_pos, state.turn_number))   // held: a lower-index plan may kill this turn too (static tie-break)
+                        {
+                            best = std::move(win); best_sidx = p_sidx; oo_best_idx = p_pos;
+                            idh_pending = true; idh_pending_break = false;
+                            node_best_val = state.turn_number;
+                            break;
+                        }
                         FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                         return win;
                     }
                     TurnSolver::SearchLine tail =
-                        FSLineTail(s3, depth - 1, max_turns, FsChildCut(s3, cutoff, best.win_turn, max_turns, budget),
+                        FSLineTail(s3, depth - 1, max_turns, FsChildCut(s3, cutoff, cut_best(), max_turns, budget),
                                    second_main, tt, lc, budget, nullptr, eot_ptr);
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
                     FswDeclinedTrace(state, depth, v, "node-child", bp3, s3, tail.win_turn, best.win_turn);
                     if (tail.win_turn < node_best_val) { node_best_val = tail.win_turn; }
-                    if (tail.win_turn < best.win_turn)
+                    if (tail.win_turn < best.win_turn || idh_tie_wins(tail.win_turn))
                     {
+                        if (p_pos > 0) { idh_pending = false; }   // a lower-index plan takes the held end over
+                        best_sidx = p_sidx;
                         if (s_rollout_stats)
                         {
                             bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
@@ -73895,6 +74126,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                             { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
                         }
                         best.win_turn = tail.win_turn;
+                        oo_best_idx = static_cast<int>(&p - pre.data());
                         best.phases.clear();
                         TurnSolver::Plan p_rec = std::move(v);
                         p_rec.breakpoint_actions = std::move(bp3);
@@ -73904,8 +74136,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         if (FsHorizonExitOn() && tail.win_turn <= state.turn_number + depth - 1)
                         {
                             ++g_fs_hexits;
+                            if (idh_hold_for(p_pos, tail.win_turn))   // held for the lower-index plans (static tie-break)
+                            {
+                                idh_pending = true; idh_pending_break = BpWaveCompleteNodes() && BpWavesHere(budget);
+                                break;
+                            }
                             if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                             FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
+                            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+                            if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: the winning slot is this one
+                            {
+                                node_vals.push_back(tail.win_turn);
+                                (*rec_map)[key] = node_vals;
+                                ooprobe::recorded.fetch_add(1, std::memory_order_relaxed);
+                            }
                             return best;
                         }
                     }
@@ -74064,6 +74308,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (dork_contested) { p_rec.atk_dork_release = 0; }
             p_rec.breakpoint_actions = std::move(bp);
             TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+            if (idh_hold_for(p_pos, state.turn_number))   // held: a lower-index plan may kill this turn too (static tie-break)
+            {
+                best = std::move(win); best_sidx = p_sidx; oo_best_idx = p_pos;
+                idh_pending = true; idh_pending_break = false;
+                if (rec_vals) { node_vals.push_back(state.turn_number); }
+                continue;
+            }
             // A this-turn win is the earliest possible from here, so it is the final
             // optimal line for this node -- cache it (cutoff-independent).
             FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
@@ -74108,7 +74359,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 for (const Action& a : p.actions) { g_fsw_path += a.card_name; g_fsw_path += ","; }
                 g_fsw_path += "|";
             }
-            tail = FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget), second_main,
+            tail = FSLineTail(s, depth - 1, max_turns, FsChildCut(s, cutoff, cut_best(), max_turns, budget), second_main,
                               tt, lc, budget, &dom_arch, eot_ptr);
             if (s_fsw_path) { g_fsw_path.resize(path_len); }
         }
@@ -74124,12 +74375,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 p_rec.atk_dork_release = alt_rec;
                 p_rec.breakpoint_actions = std::move(bp);
                 TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                if (idh_hold_for(p_pos, state.turn_number))   // held (static tie-break), as above
+                {
+                    best = std::move(win); best_sidx = p_sidx; oo_best_idx = p_pos;
+                    idh_pending = true; idh_pending_break = false;
+                    if (rec_vals) { node_vals.push_back(state.turn_number); }
+                    continue;
+                }
                 FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                 return win;
             }
             TurnSolver::SearchLine tail_rel =
                 FSLineTail(s_rel, depth - 1, max_turns,
-                           std::min(FsChildCut(s_rel, cutoff, best.win_turn, max_turns, budget), tail.win_turn),
+                           std::min(FsChildCut(s_rel, cutoff, cut_best(), max_turns, budget), tail.win_turn),
                            second_main, tt, lc, budget, &dom_arch, eot_ptr);
             // RELEASE WINS TIES (<=, not <): the hold's only possible payoff is within THIS
             // turn -- every source untaps next turn (the hold rule's own premise) -- so a tail
@@ -74244,9 +74502,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (rec_vals) { node_vals.push_back(tail.win_turn); }   // value-rank for the beam reorder
         if (tie_scan_here) { tie_scan.emplace_back(tail.win_turn, PlanActionKeys(p)); }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("tail", p, tail.win_turn); }
-        if (tail.win_turn < best.win_turn)
+        if (tail.win_turn < best.win_turn || idh_tie_wins(tail.win_turn))
         {
+            if (p_pos > 0) { idh_pending = false; }   // a lower-index plan takes the held end over
+            best_sidx = p_sidx;
             best.win_turn = tail.win_turn;
+            oo_best_idx = static_cast<int>(&p - pre.data());
             best.phases.clear();
             TurnSolver::Plan p_rec = p;
             p_rec.atk_dork_release = chose_release;   // searched combat variant -> executor pin
@@ -74269,20 +74530,49 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (FsHorizonExitOn() && tail.win_turn <= state.turn_number + depth - 1)
             {
                 ++g_fs_hexits;
+                if (idh_hold_for(p_pos, tail.win_turn))   // held for the lower-index plans (static tie-break)
+                {
+                    idh_pending = true; idh_pending_break = BpWaveCompleteNodes() && BpWavesHere(budget);
+                    continue;
+                }
                 // COMPLETE NODES: this win is only known-optimal if every shallower pass was a
                 // complete refutation, which a budget-truncated wave phase cannot promise. Break
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
                 if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                 FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
+                if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+                if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: node_vals already ends at this win
+                {
+                    (*rec_map)[key] = node_vals;
+                    ooprobe::recorded.fetch_add(1, std::memory_order_relaxed);
+                }
                 return best;
             }
         }
     }
 
+    // A HELD early end (MTG_ID_HINT_STATIC_TIE): no lower-index plan tied it, so it ends the node exactly as the
+    // hinted plan would have -- the store and return of a this-turn kill / in-horizon win, or the COMPLETE-NODES break.
+    if (idh_pending)
+    {
+        if (idh_pending_break) { deferred_win = true; }
+        else
+        {
+            FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
+            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+            if (g_oo_mode == 1 && rec_vals) { (*rec_map)[key] = node_vals; ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }
+            return best;
+        }
+    }
     // Store the probe's per-plan value ranks for this fully-evaluated node (loop completed = every plan
     // scored), so the escalation's beam can reorder by them. Win-node early-returns above skip this (they
     // don't need reordering). Overwrites are harmless (depth is folded into the key, so no cross-pass clash).
-    if (rec_vals && !node_vals.empty() && !deferred_win) { (*g_probe_plan_vals)[key] = std::move(node_vals); }
+    if (idh_rec && oo_best_idx >= 0 && !deferred_win) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre.size()), best.win_turn); }
+    if (rec_vals && !node_vals.empty() && !deferred_win)
+    {
+        if (g_oo_mode == 1) { ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }
+        (*rec_map)[key] = std::move(node_vals);
+    }
 
     // ---- DEFERRED CONTINUATION WAVES (see BpWaveWalker) ------------------------------------------
     // Wave 0 above reached only ranks 0..W-1 of each breakpoint's RANKED continuation list; walk the
@@ -75009,6 +75299,90 @@ namespace
     static const bool s_id_anytime = EnvOn("MTG_ID_ANYTIME", true);
 }
 
+// ORDER ORACLE (MTG_ORDER_ORACLE; diagnostic, see g_oo_vals): wraps one ladder pass. Begin snapshots the TT and the
+// budget and makes the pass RECORD its per-node plan values; End replays the completed pass from the snapshots on
+// fresh memos -- as recorded (mode 0: must reproduce it exactly), best-first by the recording (mode 2, the oracle),
+// and in the static MoveOrderPlans order with no ID hint (mode 4) -- and books units and win-turn agreement.
+// The replays restore the decision/game work meters, so the real search never sees them.
+struct OrderOracleProbe
+{
+    bool on = false;
+    ProbePlanVals map;
+    std::unique_ptr<TranspositionTable> tt0;
+    SearchBudget b0;
+    void Begin(TranspositionTable* tt, SearchBudget* budget)
+    {
+        static const bool s_order_oracle = EnvOn("MTG_ORDER_ORACLE");
+        on = s_order_oracle && tt != nullptr && budget != nullptr && g_fsline_nest == 0 && g_rollout_nest == 0
+          && g_oo_mode == 0;
+        if (!on) { return; }
+        tt0 = std::make_unique<TranspositionTable>(*tt); b0 = *budget; g_oo_vals = &map; g_oo_mode = 1;
+    }
+    void End(const GameState& state, int pass_depth, int max_turns, bool second_main,
+             const TurnSolver::SearchLine& attempt, SearchBudget* budget)
+    {
+        if (!on) { return; }
+        g_oo_mode = 0; g_oo_vals = nullptr;
+        if (budget->Overrun() || attempt.truncated) { return; }
+        static ooprobe::Printer s_oo_printer;
+        const long long real = budget->Used() - b0.Used();
+        auto replay = [&](int mode, long long& units) -> TurnSolver::SearchLine
+        {
+            TranspositionTable tcopy(*tt0);
+            SearchBudget bcopy = b0;
+            FSLineCache fc;
+            const long long dw = decisionwork::t_used, gw = gamework::t_used;
+            const bool ga = gamework::t_abandoned;
+            // ...and the running pass counters the ladders read as per-pass deltas (the K-predictor's leaf
+            // counts, the emulated ladder's reconstructed cost), so a replay never moves the real play.
+            const long long le = g_fs_leaf_evals, cp = g_fs_cut_prunes, hx = g_fs_hexits, ws = g_fs_leaf_wt_sum;
+            const long long mw = g_fs_memo_win_hits, mn = g_fs_memo_nowin_hits, mo = g_fs_memo_order_miss, ms = g_fs_memo_stale;
+            const long long tl = g_tt_look_n, th = g_tt_hit_n;
+            const unsigned long long te = g_fs_trunc_events;
+            g_oo_vals = &map; g_oo_mode = mode;
+            TurnSolver::SearchLine r = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, &tcopy, &fc, &bcopy);
+            g_oo_mode = 0; g_oo_vals = nullptr;
+            units = bcopy.Used() - b0.Used();
+            decisionwork::t_used = dw; gamework::t_used = gw; gamework::t_abandoned = ga;
+            g_fs_leaf_evals = le; g_fs_cut_prunes = cp; g_fs_hexits = hx; g_fs_leaf_wt_sum = ws;
+            g_fs_memo_win_hits = mw; g_fs_memo_nowin_hits = mn; g_fs_memo_order_miss = mo; g_fs_memo_stale = ms;
+            g_tt_look_n = tl; g_tt_hit_n = th; g_fs_trunc_events = te;
+            return r;
+        };
+        auto root_sig = [](const TurnSolver::SearchLine& l) -> std::string
+        {
+            std::string sg;
+            if (l.phases.empty()) { return sg; }
+            const TurnSolver::Plan& p = l.phases.front().plan;
+            sg += p.land_to_play + ";";
+            for (const Action& a : p.actions) { sg += a.card_name + ","; }
+            return sg;
+        };
+        long long ua = 0, ub = 0, us = 0;
+        const TurnSolver::SearchLine ra = replay(0, ua);
+        const TurnSolver::SearchLine rb = replay(2, ub);
+        const TurnSolver::SearchLine rs = replay(4, us);
+        ooprobe::passes.fetch_add(1, std::memory_order_relaxed);
+        ooprobe::real_u.fetch_add(real, std::memory_order_relaxed);
+        ooprobe::a_u.fetch_add(ua, std::memory_order_relaxed);
+        ooprobe::b_u.fetch_add(ub, std::memory_order_relaxed);
+        ooprobe::s_u.fetch_add(us, std::memory_order_relaxed);
+        if (ua != real) { ooprobe::a_unit_mm.fetch_add(1, std::memory_order_relaxed); }
+        if (ra.win_turn != attempt.win_turn) { ooprobe::a_mm.fetch_add(1, std::memory_order_relaxed); }
+        if (rb.win_turn != attempt.win_turn) { ooprobe::b_mm.fetch_add(1, std::memory_order_relaxed); }
+        if (rs.win_turn != attempt.win_turn) { ooprobe::s_mm.fetch_add(1, std::memory_order_relaxed); }
+        if (root_sig(rb) != root_sig(attempt)) { ooprobe::b_plan_mm.fetch_add(1, std::memory_order_relaxed); }
+        if (root_sig(rs) != root_sig(attempt)) { ooprobe::s_plan_mm.fetch_add(1, std::memory_order_relaxed); }
+        if (pass_depth >= 0 && pass_depth < 16)
+        {
+            ooprobe::d_n[pass_depth].fetch_add(1, std::memory_order_relaxed);
+            ooprobe::d_real[pass_depth].fetch_add(real, std::memory_order_relaxed);
+            ooprobe::d_b[pass_depth].fetch_add(ub, std::memory_order_relaxed);
+            ooprobe::d_s[pass_depth].fetch_add(us, std::memory_order_relaxed);
+        }
+    }
+};
+
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
                                                   int max_turns, bool second_main,
                                                   TranspositionTable* tt, SearchBudget* budget,
@@ -75063,6 +75437,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // table): it caches draw-dependent lines, valid only under THIS call's single
     // fixed root library (library size => remaining content). See FSLineCache.
     FSLineCache line_cache;
+    IdHintScope _idh;     // MTG_ID_ORDER_HINT: this decision's hint map (unless the hybrid above owns one)
     // SEPARATE memo for the lazy-leaf probes (see LazyLeafOn). It must not be `line_cache`: the
     // probe searches the SAME (state, remaining-depth) keys with a different leaf, so its entries
     // would answer a leafed pass with leafless win turns. That is the rule the emulated ladder and
@@ -75360,7 +75735,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             }
             if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
             (heuristic ? g_emul_hpasses : g_emul_vpasses).fetch_add(1, std::memory_order_relaxed);
+            OrderOracleProbe _oop;   // MTG_ORDER_ORACLE (diagnostic)
+            _oop.Begin(tt, budget);
             out = FSLineWin(state, d, max_turns, max_turns + 1, second_main, tt, cache, budget);
+            _oop.End(state, d, max_turns, second_main, out, budget);
             if (heuristic && out.truncated && !(bounded && budget->Overrun()))
             {
                 // A heuristic pass's line may be committed: fill it in (see the ladder's fill-in).
@@ -75735,8 +76113,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             budget->SetOverrunLimit(used_before + std::max(beta_ceiling, kOverrunFloor));
         }
         if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
+        OrderOracleProbe _oop;   // MTG_ORDER_ORACLE (diagnostic; see g_oo_vals)
+        _oop.Begin(tt, budget);
         SearchLine attempt = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
                                        &line_cache, budget);
+        _oop.End(state, pass_depth, max_turns, second_main, attempt, budget);
         bool aborted = (budget != nullptr && budget->Overrun());
         if (budget != nullptr) { budget->SetOverrunLimit(0); }   // disarm
 
@@ -76290,6 +76671,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // which exist precisely to report the COMMITTED choice and "never the thousands of hypothetical
     // tutors inside rollouts" -- which is what this function's resolutions are.
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    IdHintScope _idh;     // MTG_ID_ORDER_HINT: one hint map for the probe, its escalation and every pass between
     // --- Escalation budget shaping (all opt-in; ALL unset => byte-identical to the shared-budget hybrid) ---
     // MTG_ESC_SPLIT=c   : CAP the value-leaf probe to c*budget_ms so the probe cannot eat the whole decision
     //                     budget; the remaining (1-c) is RESERVED for the heuristic escalation. No total

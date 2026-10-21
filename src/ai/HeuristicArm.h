@@ -578,6 +578,7 @@ enum Slot : int
     SELESNYA_PAYOFF_DISTINCT, // MTG_SELESNYA_PAYOFF_DISTINCT PROPOSED clause for the SelesnyaLifegain payoff quota, NOT adopted: a SECOND copy of an effective payoff ranks after every other effective payoff, so the 2 hard + soft 3rd slots take different payoffs before a duplicate. Default OFF; =1 -> on
     SELESNYA_WAVE_HARD_SLOT,  // MTG_SELESNYA_WAVE_HARD_SLOT PROPOSED clause for the SelesnyaLifegain payoff quota, NOT adopted: an EFFECTIVE Genesis Wave (its mana rule holds) takes a HARD payoff slot, the way "keep one Paragon when reachable soon and enabled" does, instead of falling to the soft 3rd behind more castable payoffs. Default OFF; =1 -> on
     LANDFALL_TITAN_MIXED,     // MTG_LANDFALL_TITAN_MIXED  PROPOSED amendment to the USER's Primeval Titan pick rule (2026-10-20, DEFAULT OFF -- the USER's call): besides the rule's picks holding the MOST Wilds / Myriad, also SEARCH every pick holding at least one (the other land any nonbasic: Radiant Fountain, Haunted Fengraf, Gruul Turf), listed after the rule's picks. Overnight landfall s7007 g31: the only T6 line is T4 Titan -> Myriad + Fountain (the CRN reshuffle would put Fountain on top; taking it draws Avenger), unfindable at any budget under the rule. LandfallTitanAllowed; =1 searches the mixed picks
+    ID_ORDER_HINT,            // MTG_ID_ORDER_HINT  ITERATIVE-DEEPENING MOVE ORDER: each full-line node records which plan proved best; the next, deeper pass of the same decision tries that plan first at the same position (the node's key one depth shallower). Every node still searches every plan and returns the same win turn (0 mismatches in exact static-order replays). Measured 2026-10-21 (Landfall b20, 200 games, exact replays of 2,215 ladder passes): 0.852x the units at identical win turns (an oracle best-first order: 0.888x). NOT a pure reorder: under the strict cut the plan tried first wins ties, and that IS the saving -- keeping the static tie-break (MTG_ID_HINT_STATIC_TIE) saves nothing. So at the PASS ROOT it is a tie-break change (MTG_ID_HINT_ROOT=1, default OFF, the USER's call: Landfall b20 4,000 paired games -0.025 at 0.840x units, but Bruna lost turns to an empty T1). MTG_ID_HINT_ROOT=2 (STABLE) keeps the root tie only while the hinted plan's win turn held. Below the root (the default) the committed decision is the static order's by construction: Landfall 0 root-plan differences in 2,211 replayed passes at 0.928x the units; all 35 decks held-out at play settings, 0 games moved. DEFAULT OFF until its GT is accepted; =1 -> on
     COUNT
 };
 
@@ -1106,6 +1107,7 @@ inline const char* Name(int slot)
         "MTG_SELESNYA_PAYOFF_DISTINCT",
         "MTG_SELESNYA_WAVE_HARD_SLOT",
         "MTG_LANDFALL_TITAN_MIXED",
+        "MTG_ID_ORDER_HINT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
