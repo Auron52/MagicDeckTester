@@ -518,7 +518,9 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   **Do NOT wait on CI (USER 2026-10-21: *"we could also not wait on CI, but still check the result when it
   finishes. It rarely fails after all."*).** Start the watch in the background and carry on: never hold a
   landing, a report or the next step for it. Report the per-OS outcome when it lands; if it has not landed
-  by your closing message, say it is still running and report it when it does. Do NOT rely on email: pushes
+  by your closing message, say it is still running and report it when it does. **A red run is the exception:
+  pivot to it at once** and fix it before going on (*"if it does fail then we should pivot and fix it, but most
+  of the time not waiting should save us time."*). Do NOT rely on email: pushes
   authenticate as `dtippett-bot`, so GitHub's failure mail goes to the bot's mailbox, not the
   user's. The job that matters most is **determinism parity** — it asserts Linux and Windows
   produce the same result for the same seed, which is what `src/core/Library.h`'s open-coded
