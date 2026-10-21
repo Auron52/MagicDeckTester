@@ -44459,7 +44459,7 @@ namespace aaroute
 inline thread_local int t_in_route = 0;
 struct Guard { Guard() { ++t_in_route; } ~Guard() { --t_in_route; } };
 
-// THE WALK'S TWO PASSES (MTG_AA_ROUTE_MAIN_FIRST, heurarm AA_ROUTE_MAIN_FIRST, DEFAULT ON). With the combat
+// THE WALK'S TWO PASSES (MTG_AA_ROUTE_MAIN_FIRST, heurarm AA_ROUTE_MAIN_FIRST, DEFAULT OFF -- see the end). With the combat
 // finishers on, the walk first runs its MAIN-PHASE pass -- the walk MTG_AA_COMBO_COMBAT=0 runs, exactly: no pump
 // need (g_untap_loop_no_pump), no Ezuri cast admitted as a setup, OpponentHasLost as the verdict -- and only when
 // that pass proves nothing does it run the COMBAT pass (the pump finishers, CombatLethalNow as the verdict). A
@@ -44478,10 +44478,15 @@ struct Guard { Guard() { ++t_in_route; } ~Guard() { --t_in_route; } };
 // either -- which is the invariant MTG_AA_COMBO_COMBAT must keep (a finisher row may add routes, never remove one).
 // The main-phase pass runs only on a board where the passes CAN differ (PassesCanDiffer: a pump piece reachable);
 // everywhere else the combat pass already contains it. =0 -> the combat pass alone (as first shipped).
+// DEFAULT OFF (2026-10-21): the two removals it was built for are fixed at their roots instead -- the pump need's
+// attacker / mana double count (MTG_PUMP_PAY_NO_ATTACKERS, gi179) and the Ezuri setups' width (MTG_AA_ROUTE_PUMP_
+// SETUP_LAST, gi111) -- and with those on the single combat pass matches the two-pass walk on every s70001 x 200
+// game at d3 b10 and d5 b20 while the second pass cost 3.4x the walk time on the d0 canary (pooled A/B in
+// docs/design/analysis-AccomplishedAlchemist.md). Kept as a lever: =1 runs the union walk.
 inline thread_local int t_main_pass = 0;
 inline bool RouteMainFirstOn()
 {
-    static const bool s_env = EnvOn("MTG_AA_ROUTE_MAIN_FIRST", true);
+    static const bool s_env = EnvOn("MTG_AA_ROUTE_MAIN_FIRST", false);   // DEFAULT OFF since 2026-10-21 (below)
     return heurarm::Flag(heurarm::AA_ROUTE_MAIN_FIRST, s_env);
 }
 // MTG_AA_ROUTE_PUMP_SETUP_LAST (heurarm AA_ROUTE_PUMP_SETUP_LAST): a team-pump creature cast (Ezuri) is a FINISH-stage
