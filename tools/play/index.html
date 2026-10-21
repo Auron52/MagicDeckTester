@@ -4999,9 +4999,14 @@ function wireDecisionPanel(d, dec){
     const inp=panel.querySelector('#xvinput');
     panel.querySelectorAll('[data-xv]').forEach(b=>b.onclick=()=>{ if (inp) { inp.value=b.dataset.xv; inp.dispatchEvent(new Event('input')); } });
     const lab=panel.querySelector('#xvlabel');
-    if (inp && lab) inp.oninput=()=>{ lab.innerHTML=xValueConsequence(d, +inp.value); };
+    // An X above max_x is NOT silently clamped (USER 2026-10-21: typed 9 against "max 8"; the old clamp cast
+    // X=8 without a word, so the 9 read as accepted and the max as wrong). Say so and refuse the confirm.
     const cb=panel.querySelector('#decconfirm');
-    if (cb) cb.onclick=()=>{ let n=parseInt(inp&&inp.value,10); if (!(n>=0)) n=d.heuristic_default|0; n=Math.max(0,Math.min(d.max_x|0,n)); commitXValue(d,n); };
+    const over=n=>n>(d.max_x|0);
+    if (inp && lab) inp.oninput=()=>{ const n=+inp.value;
+      lab.innerHTML = over(n) ? `<b style="color:var(--bad,#e66)">X=${n} is more than you can pay -- the most your mana allows is X=${d.max_x|0}</b>` : xValueConsequence(d, n);
+      if (cb) cb.disabled = over(n); };
+    if (cb) cb.onclick=()=>{ let n=parseInt(inp&&inp.value,10); if (!(n>=0)) n=d.heuristic_default|0; if (over(n)) return; commitXValue(d,n); };
   }
   else if (dec==='firebreathe')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFirebreathe(d, +b.dataset.opt));
