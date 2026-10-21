@@ -465,6 +465,59 @@ units). It does not by itself bring the deck under suite_gate's 8,907 ms/game li
 held-out d5 b20 mean is 8.4 s ON vs 9.8 s OFF, s70001 d5 b20 13.2 s vs 15.2 s -- the line needs a dedicated
 uncontended `suite_gate.py --cost` measurement before any suite-entry claim.
 
+### Pay as needed + combat finishers (2026-10-20/21, branch `aa-ezuri` off `aa-land`)
+
+Two USER viewer games, both "this should win and the menu would not let me":
+* **Seed 2 T7** (reference `claude_s2_gi1`): Ezuri cast, Nourish for 6, the Alchemist soulbonded to Galvanic
+  Alchemist, opponent at 17. *"No ability to activate Ezuri for the win"* -- the line existed only as "run the
+  untap loop, THEN pump off the float" -- *"you should just be able to pay it as needed"*; and *"Combo Off also never
+  showed up there"* (the table had no combat finisher).
+* **Seed 10 T6** (no reference saved yet): 4 Forests, Elvish Harbinger, Accomplished Alchemist, Seedcradle Witch,
+  Brindle Boar cast and sacrificed for 4; opponent at 16. *"This should be possible to win, but it misuses the
+  mana."* X = 4 against the Witch's {2}{G}{W} is mana-NEUTRAL, yet five untaps pump the Alchemist to 17. Verified on
+  the reconstructed board: the old engine plays "Witch: untap Elvish Harbinger" and does not win; the USER's own
+  clicks stall because every Alchemist tap floated white (C2a's fixed colour) and the WUBRG payer spent the green.
+
+What changed (three levers, all heurarm slots, all DEFAULT ON):
+* `MTG_AA_LOOP_FUNDED_PUMP` -- ActivatePump **mode 4**: a stacking team pump (Ezuri's +3/+3) offered when only an
+  Accomplished Alchemist untap loop can fund it (FindFundingUntapLoop); zero plan mana; the apply forces the C2b
+  loop's need to exactly that cost (FundTeamPumpByLoop) and pays from the float, both worlds. Autonomous: the
+  lethal count; human: every count 1..lethal ("Ezuri: +3/+3 x2 (the untap loop pays)").
+* `MTG_UNTAP_PAY_SMART` -- an activated untapper OUTSIDE the closed-form loop (a human's single "Witch: untap
+  Alchemist", a searched K) runs under an empty owed set: the Alchemist's pre-tap floats a pip THIS untap lacks,
+  generic comes out of the colour most in surplus. And the closed-form loop with a pump payoff whose banking goal is
+  unreachable (net zero) now runs exactly k_pump activations instead of stopping before its first op; it is offered
+  when those k activations really pay (proved on a copy).
+* `MTG_AA_COMBO_COMBAT` -- the rule table's combat finishers **FIN-EZURI** (Ezuri on the battlefield: K x
+  {2}{G}{G}{G}, K = TeamPumpLethalCount), **FIN-EZURI-HAND** (+{1}{G}{G}), **FIN-WITCH** (the Witch loop's own
+  +3/+3 on the attacking Alchemist, at net zero when K taps of X + the other mana pay K x {2}{G}{W}); LIFE now also
+  counts a lifegain creature (Brindle Boar's self-sac, Trufflesnout's ETB life). The route funds pump kills and
+  accepts a COMBAT-LETHAL board (CombatLethalNow; a goldfish never blocks) as its verdict; the button's verify, the
+  click's rollback test and the fixture harness use AlchemistComboOffWon (== OpponentHasLost for every other deck).
+  The walk admits Ezuri / Brindle Boar casts and the Boar's sac.
+* Viewer: mode 4 has its own label (the old mode-2 "Elfs +6/+0 x2" text is kept byte-for-byte: saved references
+  match plans by summary). New scenario key `paired_with` (a soulbond pair).
+
+Validation (binary 3ace089d; built pinned to cores 24-31 beside the running mulligan generation):
+* mtg-test 1612 / 1612; scenarios 245 / 245; combo-off fixtures 48 / 48 (34 EDF + 14 AA). New fixtures, each also run
+  with its lever OFF as the control: `aa_co_13` (seed-2 T7, Combo Off offered + verified,
+  LIFE-HAND+LOOP-GALVANIC+FIN-EZURI-HAND, a combat-lethal board), `aa_ezuri_loop_pump_seed2_t7` (autonomous T7),
+  `aa_human_ezuri_loop_funded_pump` (the menu offers Ezuri x1 / x2 with the loop paying; the x2 click wins T7),
+  `aa_co_14` (seed-10 T6, LIFE-HAND+LOOP-WITCH+FIN-WITCH), `aa_witch_netzero_pump_seed10_t6` (autonomous T6; no win
+  with MTG_AA_COMBO_COMBAT=0), `aa_human_witch_pay_smart_seed10_t6` (the USER's own five Witch clicks now pay and
+  win T6; no win with MTG_UNTAP_PAY_SMART=0).
+* AA references (all 10, `viewer_protocol_check --strict --only AccomplishedAlchemist`): 7 ok, 3 repaired, 0
+  play-drift; claude_s2_gi1 replays to its T7 win.
+* Smoke (MTG_PGO=0, not accepted): the four known moves at their known digests, every other deck byte-identical,
+  and the four alchemist rows move -- d0 7.2220 -> 7.0520 (6915209f0ff5787b; 95 games changed, 90 faster / 5
+  slower), d3 5.4333 -> 5.3867 (037cffa10ea37b72; 6 changed, all faster), d5 5.2667 -> 5.2000
+  (338edf58a4ca95f8; 6 changed, 5 faster, gi35 7 -> 8), 2HG d3 5.5600 -> 5.4800 (776d4b5f7bbf7013; 4 changed, all
+  faster).
+* A/B (one pooled batch, the three levers OFF vs ON, s70001 d3 b10 / d5 b20 x 200, 8 threads on cores 24-31 --
+  the generation owns the box, so it runs for hours). INTERIM at 123 paired d5 b20 games: 5.2205 -> 5.1452, 5 faster
+  / 1 slower (gi111 6 -> 7), units 136.2k -> 131.5k; the d3 cell had not started. Final numbers:
+  `python3 /workspaces/MagicDeckTester/build/scratch/aa-ez/an.py /workspaces/MagicDeckTester/build/scratch/aa-ez/ab/batch.err 8 off on`.
+
 ## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
 
 Branch `aa-opt-mull` (from accomplished-alchemist @ 39848afe). Scratch: `/workspaces/MagicDeckTester/build/scratch/aa/mopt/`
