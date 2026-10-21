@@ -131,8 +131,22 @@ if [ "$ACCEPT" = 1 ]; then
   [ -n "$ACCEPT_ACK" ] && echo "Accepting with recorded note: $ACCEPT_ACK"
   # shellcheck disable=SC1090
   [ -f "$GT" ] && source "$GT" 2>/dev/null || true   # existing values for all modes
-  # shellcheck disable=SC1090
-  source "$RESULTS"                                   # override the accepted mode
+  if [ -n "$DECK_ONLY" ]; then
+    # A FILTERED accept overrides ONLY the filtered decks' keys. $RESULTS can come from a FULL run
+    # (it then holds every key of the mode); sourcing it whole promoted every deck's aggregate while
+    # the .wins loop below promoted only the filtered decks' logs, splitting the two GT halves
+    # (2026-10-20, `--accept --deck=alchemist` after a full regression run: 17 stale keys).
+    for spec in "${CASES[@]}"; do
+      # shellcheck disable=SC2086
+      set -- $spec
+      _key="${1}_${MODE}_d${2}_s${3}"
+      _line="$(grep -E "^${_key}=" "$RESULTS" | tail -1)"
+      [ -n "$_line" ] && printf -v "$_key" '%s' "${_line#*=}"
+    done
+  else
+    # shellcheck disable=SC1090
+    source "$RESULTS"                                 # override the accepted mode
+  fi
   emit_mode() {
     local mode=$1; local -n arr=$2
     echo ""
