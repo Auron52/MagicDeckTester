@@ -198,6 +198,22 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   (a few % each) cannot get there alone; the lever that can is the one NivMizzetCombo's question 15 names --
   the deck's bottom-evaluation setting -- which changes play and is therefore the USER's call.
 
+## Round 2 + integration (2026-10-21) -- under the 3x gate without the mulligan route
+- USER 2026-10-21: *"No, I want solutions that speed it up without doing mulligan stuff. Look for proper
+  optimizations or branch cuts."* The bottom-evaluation proposal (`vampires-opt` 5bc28feeb) is rejected. Three
+  agents from `1a1cf9b9e` (R pass / overrun reuse, P per-node CPU, B branch cuts) plus the decision census and the
+  USER's play rules: `docs/design/vampires-search-cost-2.md`, `docs/design/vampires-decision-census.md`.
+- The list is 60 cards (USER: *"is this list 61 cards? If so, let's drop Mavren Fein."*).
+- Integrated on `vampires-int` (last section of `vampires-search-cost-2.md`). The worst row (2HG d5 s2002) went
+  from 243,803 to 83,218 units per game (0.341x) with the USER's rules on, with no slower game from the perf work
+  itself beyond budget churn.
+- **The gate PASSES:** 2.17x as committed in `test/suite_cost.json` (Vampires from this run, Hinata's cached value),
+  0.49x within the same tier run, 1.1-1.2x head-to-head on a contended box. The suite rows are re-admitted on
+  `vampires-int` with GT accepted in all three tiers (overnight: the 16 Vampires ENTRY rows only).
+- Open for the USER: the two amendments to their rules (`_FREE_DISCARD_V2`, `_ALWAYS_LAND` + `_FODDER`: 11 faster /
+  0 slower, net -11, worst row 0.273x, vs net 0 for the rules as written); and the agents' questions (R.8, P.4, B.8).
+  The shared-branch landing still waits on question 27.
+
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
 pre-fix engine (every new test failed there), then fixed:
