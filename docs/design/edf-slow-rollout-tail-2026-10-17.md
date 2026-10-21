@@ -483,6 +483,12 @@ re-run of the probe peaks at 112 MB of the 1.6 GB pool. Inert while the pool doe
 regression byte-identical on every non-EDF key. Game 157 alone was also mildly starved (4 GB pool under
 the old accounting: 44.8M -> 40.1M units).
 
+Over the population, pooled on 30 threads with the pushed binary: the wide probe's 53 slowest games went
+**23,561 s -> 6,313 s (3.7x) and 485M -> 197M units (2.5x)**, 51 of 52 comparable win turns identical (one
+5 -> 4, the EDF rule change); the worst monster went 3,823 s -> 1,125 s, seed 901016 gi16 3,680 s / 118.9M
+units -> 348 s / 10.6M. The first 160 games re-run pooled: no pool refusals at all; game 157 4,160 s /
+40.1M units -- the one genuine outlier left (section 8d).
+
 Not the cause, measured: the bp continuation cache's 8,192-entry clear-on-full (cap 1M: identical units on
 157) and the plan-cache pool (20 MB: identical units on 900411).
 
@@ -498,10 +504,23 @@ longer offers the attacker branch. Restore: `MTG_EDF_FLICKER_COUNTER=1`, `MTG_ED
 Play: smoke d0 5.3170 -> 5.3160, regression d0 5.3420 -> 5.3410 (gi738 7->6, gi785 7->6, gi91 7->8), d3/d5
 same scores; regression d3 s2002 gi37 still wins T7 by combat, at opponent life 0 instead of -1.
 
+### 8c'. A fresh sample on the pushed engine (games 1,120-2,119, pooled on 30 threads)
+
+999 of the 1,000 games finished in ~25 min of wall; worst completed 1,229 s (seed 901565, 34.1M units, a
+deep refutation), then 821 s (seed 902003) and 763 s. One straggler (seed 901675) was still running past
+30 min -- the game-157 class. Seed 902003 is the same ladder shape with a different per-node cost: its t2
+sample's turn-5 refutation pass took 755 s for 2.0M applies, and 345 breakpoint continuation derivations
+of >= 0.5 s inside it account for 541 s (lists of 1,000-9,600 plans on land-Aura-heavy combo boards,
+453 of 581 large derivations on never-seen keys -- distinct work, not cache churn). That is section 7d.3's
+host axis showing up in phase A; 762 s alone vs 821 s pooled, so the pool is not involved.
+
 ### 8d. What is left
 
 1. **The bricked-future refutation itself.** Exact routes: a certificate that refutes one turn EARLIER
    (bound end-of-next-turn damage from a node, so a whole turn of plans need not be enumerated) -- a
    design job in the EDF provider's `ProvenWinlessThisTurn` family; or per-node cost.
-2. **`MTG_LABEL_HORIZON`** (built, default OFF): stop the ladder at pass H and label deeper samples by a
+2. **Derivation-heavy refutations** (seed 902003): compact continuation lists (7e.1, exact), or the
+   host-late land-Aura enumeration (7e.2, USER design), or `MTG_BP_DERIVE_METER` (7e.3, USER's call --
+   note it would not act here: the label search is effectively unbudgeted).
+3. **`MTG_LABEL_HORIZON`** (built, default OFF): stop the ladder at pass H and label deeper samples by a
    searched playout. It changes which labels exist -- the label ceiling is a USER decision.
