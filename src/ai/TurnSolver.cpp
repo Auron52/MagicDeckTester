@@ -1596,7 +1596,7 @@ inline void PinClass(const GameState& s, const TurnSolver::Plan& plan, bool dup)
         bool adds = false;
         for (const Action& a : plan.actions)
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d && (d->params.wish_from_sideboard || d->params.tutor_to_hand || a.kind == Action::Kind::ActivatePermAbility))
             { adds = true; }
         }
@@ -1614,7 +1614,7 @@ inline void PinClass(const GameState& s, const TurnSolver::Plan& plan, bool dup)
         }
         for (const Action& a : plan.actions)
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (a.kind == Action::Kind::CastFromHand && d && d->params.is_equipment) { ++eq_cast; }
         }
         k = std::string("AATTACH k=") + std::to_string(plan.attack_attach_choice)
@@ -3068,9 +3068,43 @@ static const bool s_move_order = !EnvOn("MTG_NO_MOVE_ORDER");
 // second reader).
 static const bool s_legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
 
+// THE SORT RUNS ON THE KEYS, NOT THE PLANS (MTG_MOVE_ORDER_KEYS, DEFAULT ON; =0 -> stable_sort the Plans).
+// The comparator reads five scalar fields, so a stable sort of (fields, index) yields exactly the stable
+// sort's permutation of the plans; the plans are then moved once (or not at all when already in order)
+// instead of being shuffled through the merge sort's buffer -- Plan moves were ~1.5% of a Vampires 2HG
+// game (callgrind 2026-10-21).
 static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
 {
     if (!s_move_order || plans.size() < 2) { return; }
+    static const bool s_keys = EnvOn("MTG_MOVE_ORDER_KEYS", true);
+    if (s_keys)
+    {
+        struct K { bool wins; bool pump_waste; bool atk_forfeit; int value; int bp_sched; std::uint32_t idx; };
+        std::vector<K> keys;
+        keys.reserve(plans.size());
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            const TurnSolver::Plan& p = plans[i];
+            keys.push_back(K{ p.wins_this_turn, p.pump_waste, p.atk_forfeit, p.value,
+                              static_cast<int>(p.bp_sched), static_cast<std::uint32_t>(i) });
+        }
+        std::stable_sort(keys.begin(), keys.end(), [](const K& a, const K& b)
+        {
+            if (a.wins != b.wins) { return a.wins; }
+            if (a.pump_waste != b.pump_waste) { return b.pump_waste; }
+            if (a.atk_forfeit != b.atk_forfeit) { return b.atk_forfeit; }
+            if (a.value != b.value) { return a.value > b.value; }
+            return a.bp_sched > b.bp_sched;
+        });
+        bool identity = true;
+        for (std::size_t i = 0; i < keys.size(); ++i) { if (keys[i].idx != i) { identity = false; break; } }
+        if (identity) { return; }
+        std::vector<TurnSolver::Plan> out;
+        out.reserve(plans.size());
+        for (const K& k : keys) { out.push_back(std::move(plans[k.idx])); }
+        plans.swap(out);
+        return;
+    }
     std::stable_sort(plans.begin(), plans.end(),
         [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
@@ -6928,7 +6962,7 @@ static const CardDefinition* ActionColoredReducerDef(const Action& a)
 {
     const CardDefinition* d = a.def;
     if (d == nullptr && a.kind == Action::Kind::ActivateVial)
-    { d = CardDatabase::Instance().Lookup(a.card_name); }
+    { d = CardDatabase::Instance().LookupInterned(a.card_name); }
     if (d == nullptr || d->params.reduces_subtype_colored_subtype.empty()
                      || !d->params.reduces_subtype_colored_cost.has_value()) { return nullptr; }
     return d;
@@ -7151,7 +7185,7 @@ static int StoriedFirstEquipWaiverCredit(const GameState& state, const std::vect
         // one that spends it. Its baked cost is > 0 only when metalcraft is OFF -- under metalcraft
         // the attach is Puresteel's granted equip {0}, which is free and already skipped here.
         const CardDefinition* ed = cands[j].def ? cands[j].def
-                                 : CardDatabase::Instance().Lookup(cands[j].card_name);
+                                 : CardDatabase::Instance().LookupInterned(cands[j].card_name);
         if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }
         best = cands[j].cost.generic;
     }
@@ -7512,6 +7546,173 @@ static inline int PlainWalkCutDigit(int bound, const std::vector<std::vector<int
     return -1;
 }
 
+// ---- THE PLAIN WALK AS A PRUNED DEPTH-FIRST WALK (MTG_WALK_DFS, DEFAULT ON; =0 -> the carry walk) ----
+// Both subset walkers (Solve's and EnumeratePlans', the `!(any_ritual || any_rock)` branch) step a mixed-
+// radix odometer over `groups` -- digit 0 fastest -- and, at each position, sum the selected options' mana
+// values (an O(groups) loop), test `mcost <= mana_bound`, and on a refusal scan the digits again for the
+// radix cut. On the Vampires profile (callgrind 2026-10-21) that per-position bookkeeping was 7-13% of a
+// game's instructions -- Falkenrath Pit Fighter's ~100-member activation group multiplies every other
+// digit -- while the subsets it actually hands on are a fraction of the positions it touches.
+//
+// THE SAME WALK, ENUMERATED DEPTH-FIRST. The carry walk visits positions in lexicographic order with the
+// LAST digit most significant; a DFS that fixes digit G-1 first and digit 0 last visits them in exactly
+// that order. Keeping the high part's running sum per depth makes each step O(1), and a high part whose
+// sum already exceeds the bound is refused at every completion (every option costs >= 0 -- checked), so
+// its subtree is skipped: precisely the positions the radix cut jumps over or refuses one at a time.
+// At each surviving position the independents' bitmask loop is the carry walk's verbatim (same `sel`
+// layout: auto_sel, then the chosen option of each digit in digit order, then the set bits), so `emit`
+// sees the same selections in the same order -- byte-identical by construction. Only for the plain
+// scalar walk: any per-position predicate (equip copy / piece dependency / fold prefix / metalcraft
+// bound / a verify or diagnostic mode) keeps the carry walk. `emit` returns true to stop (a spent walk).
+static bool WalkDfsOn()
+{
+    static const bool v = EnvOn("MTG_WALK_DFS", true);   // DEFAULT ON; =0 -> the carry walk
+    return v;
+}
+static bool PlainDfsCostsSound(const std::vector<std::vector<int>>& groups, const std::vector<int>& cand_mv)
+{
+    for (const std::vector<int>& gr : groups) { for (int j : gr) { if (cand_mv[static_cast<std::size_t>(j)] < 0) { return false; } } }
+    return true;
+}
+template <class Emit>
+static void PlainOdometerDfs(const std::vector<std::vector<int>>& groups, const std::vector<int>& independent,
+                             const std::vector<int>& auto_sel, const std::vector<int>& cand_mv, int mana_bound,
+                             std::vector<int>& sel, Emit&& emit)
+{
+    const int G = static_cast<int>(groups.size());
+    const int num_ind = static_cast<int>(independent.size());
+    // Locals, not thread_local scratch: `emit` scores a subset and may re-enter a nested walk.
+    std::vector<int> choice(static_cast<std::size_t>(G), 0);
+    std::vector<int> part(static_cast<std::size_t>(G) + 1, 0);   // part[g] = sum over digits >= g
+    // The selection is written by index into reserved storage (no push_back per element). Its layout is the
+    // carry walk's: auto_sel, then each digit's chosen option in digit order (digit 0 first), then the set
+    // independents. Digit 0 is the fastest, so the chosen options of digits 1..G-1 (`hi`) are rebuilt only
+    // when one of those digits has moved (`hi_dirty`), not at every position.
+    const std::size_t na = auto_sel.size();
+    std::vector<int> hi(static_cast<std::size_t>(G), 0);
+    std::size_t nhi = 0;
+    bool hi_dirty = true;
+    std::vector<int> ind_cost(static_cast<std::size_t>(num_ind), 0);
+    for (int b = 0; b < num_ind; ++b)
+    { ind_cost[static_cast<std::size_t>(b)] = cand_mv[static_cast<std::size_t>(independent[static_cast<std::size_t>(b)])]; }
+    sel.reserve(na + static_cast<std::size_t>(G) + static_cast<std::size_t>(num_ind));
+    auto leaf = [&](int mcost) -> bool
+    {
+        if (hi_dirty)
+        {
+            nhi = 0;
+            for (int g = 1; g < G; ++g)
+            {
+                const int c = choice[static_cast<std::size_t>(g)];
+                if (c > 0) { hi[nhi++] = groups[static_cast<std::size_t>(g)][static_cast<std::size_t>(c - 1)]; }
+            }
+            hi_dirty = false;
+        }
+        const int c0 = G > 0 ? choice[0] : 0;
+        const std::size_t nb = na + (c0 > 0 ? 1 : 0) + nhi;
+        for (int imask = 0; imask < (1 << num_ind); ++imask)
+        {
+            int pcost = 0;
+            sel.resize(nb + static_cast<std::size_t>(num_ind));
+            int* sp = sel.data();
+            std::copy(auto_sel.begin(), auto_sel.end(), sp);
+            std::size_t n = na;
+            if (c0 > 0) { sp[n++] = groups[0][static_cast<std::size_t>(c0 - 1)]; }
+            std::copy(hi.begin(), hi.begin() + static_cast<std::ptrdiff_t>(nhi), sp + n);
+            n += nhi;
+            for (int b = 0; b < num_ind; ++b)
+            {
+                if (!(imask & (1 << b))) { continue; }
+                sp[n++] = independent[static_cast<std::size_t>(b)];
+                pcost += ind_cost[static_cast<std::size_t>(b)];
+            }
+            sel.resize(n);
+            if (n == 0) { continue; }
+            if (!(mcost + pcost <= mana_bound)) { continue; }
+            if (emit(sel)) { return true; }
+        }
+        return false;
+    };
+    if (G == 0) { leaf(0); return; }
+    int g = G - 1;
+    for (;;)
+    {
+        if (part[static_cast<std::size_t>(g)] <= mana_bound)
+        {
+            if (g > 0)
+            {
+                --g;
+                choice[static_cast<std::size_t>(g)] = 0;
+                part[static_cast<std::size_t>(g)] = part[static_cast<std::size_t>(g) + 1];
+                if (g >= 1) { hi_dirty = true; }
+                continue;
+            }
+            if (leaf(part[0])) { return; }
+        }
+        for (;;)   // advance digit g, carrying upward
+        {
+            const std::size_t gi = static_cast<std::size_t>(g);
+            if (gi >= 1) { hi_dirty = true; }
+            if (choice[gi] < static_cast<int>(groups[gi].size()))
+            {
+                ++choice[gi];
+                part[gi] = part[gi + 1] + cand_mv[static_cast<std::size_t>(groups[gi][static_cast<std::size_t>(choice[gi] - 1)])];
+                break;
+            }
+            choice[gi] = 0;
+            ++g;
+            if (g == G) { return; }
+        }
+    }
+}
+
+std::vector<std::vector<int>> TurnSolver::PlainWalkSequenceForTest(const std::vector<std::vector<int>>& groups,
+                                                                   const std::vector<int>& independent,
+                                                                   const std::vector<int>& auto_sel,
+                                                                   const std::vector<int>& cand_mv,
+                                                                   int mana_bound, bool dfs)
+{
+    std::vector<std::vector<int>> out;
+    std::vector<int> sel;
+    if (dfs)
+    {
+        PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel,
+                         [&](std::vector<int>& s) -> bool { out.push_back(s); return false; });
+        return out;
+    }
+    // The reference: the carry walk's plain path, one position at a time (no radix cut -- it only
+    // skips positions this test refuses anyway).
+    const int G = static_cast<int>(groups.size());
+    const int num_ind = static_cast<int>(independent.size());
+    std::vector<int> choice(static_cast<std::size_t>(G), 0);
+    bool done = false;
+    while (!done)
+    {
+        int mcost = 0;
+        for (int g = 0; g < G; ++g) { if (choice[g] > 0) { mcost += cand_mv[groups[g][choice[g] - 1]]; } }
+        for (int imask = 0; mcost <= mana_bound && imask < (1 << num_ind); ++imask)
+        {
+            int pcost = 0;
+            sel.clear();
+            sel.insert(sel.end(), auto_sel.begin(), auto_sel.end());
+            for (int g = 0; g < G; ++g) { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+            for (int b = 0; b < num_ind; ++b)
+            { if (imask & (1 << b)) { sel.push_back(independent[b]); pcost += cand_mv[independent[b]]; } }
+            if (sel.empty()) { continue; }
+            if (mcost + pcost <= mana_bound) { out.push_back(sel); }
+        }
+        int g = 0;
+        for (; g < G; ++g)
+        {
+            ++choice[g];
+            if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
+            choice[g] = 0;
+        }
+        if (g == G) { done = true; }
+    }
+    return out;
+}
+
 // The card number of the Equipment whose equip this plan's storied waiver pays for, or 0. Shared by
 // every PAYMENT site so the score computed by StoriedFirstEquipWaiverCredit above and the mana
 // actually spent cannot disagree -- and so the two worlds (executor and rollout) agree by
@@ -7611,7 +7812,7 @@ static const CardDefinition* CastCandidateDef(const GameState& state, const Acti
     const Player& ap = state.players[state.active_player_index];
     return (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
                ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
-               : CardDatabase::Instance().Lookup(a.card_name);
+               : CardDatabase::Instance().LookupInterned(a.card_name);
 }
 
 static bool MetalcraftWillFreeEquips(const GameState& state, const std::vector<Action>& cands)
@@ -9035,7 +9236,7 @@ bool TurnSolver::OrderPaysSequentially(const GameState& state, const std::vector
     if (use == &filled)
     {
         filled = acts;
-        for (Action& a : filled) { if (a.def == nullptr) { a.def = CardDatabase::Instance().Lookup(a.card_name); } }
+        for (Action& a : filled) { if (a.def == nullptr) { a.def = CardDatabase::Instance().LookupInterned(a.card_name); } }
     }
     std::vector<int> ord;
     ord.reserve(order.size());
@@ -10087,7 +10288,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
     for (int j : order)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (life) { ApplyCastLifegain(t, active, *d); }   // instants / sorceries only (inside)
         if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
@@ -10325,7 +10526,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             {
                 const Action& a = cands[j];
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr || !d->card.IsCreature()) { continue; }
                 for (const std::string* sub : scaler_subs)
                 {
@@ -10343,7 +10544,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         {
             const Action& a = cands[j];
             if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !d->params.is_aura || !d->params.aura_etb_tap_host) { continue; }
             if (!attacker(own_perm(a.enchant_target))) { continue; }
             set_bit(j, a.enchant_target);
@@ -10360,7 +10561,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         {
             const Action& a = cands[j];
             if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !RemovalSearchesForController(*d)) { continue; }
             if (!attacker(own_perm(a.enchant_target))) { continue; }
             set_bit(j, a.enchant_target);
@@ -10384,7 +10585,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         for (const Action& a : cands)
         {
             if (a.kind != Action::Kind::CastFromHand) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             // A watcher CAST this turn is sick, so only a team-wide one turns gains into attack.
             if (d->params.lifegain_each_own_creature_counters > 0
@@ -10401,7 +10602,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         unsigned char f = 0;
         if (a.kind == Action::Kind::CastFromHand)
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             if (pump && d->params.etb_team_pump_per_creature && d->card.IsCreature()) { f |= kWalkPump; }
             if (life && d->params.cast_lifegain > 0 && !d->params.solo_target_trick
@@ -10608,7 +10809,7 @@ static CannonsCtx BuildCannonsCtx(const GameState& state, const std::vector<Acti
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (d->params.multicolor_cast_damage_per_color) { cast_cannons = true; }
         if (d->card.IsMulticolored()) { multi = true; }
@@ -10628,7 +10829,7 @@ static int CannonsTriggerDamage(const GameState& state, const CannonsCtx& c,
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (d->params.multicolor_cast_damage_per_color) { casts_cannons = true; }
         if (d->card.IsMulticolored()) { colours += d->card.ColorCount(); }
@@ -10641,7 +10842,7 @@ static int CannonsTriggerDamage(const GameState& state, const CannonsCtx& c,
     for (int j : order)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (on > 0 && d->card.IsMulticolored()) { dmg += on * d->card.ColorCount(); }
         if (d->params.multicolor_cast_damage_per_color) { ++on; }
@@ -10741,7 +10942,7 @@ static FreeCastCtx BuildFreeCastCtx(const GameState& state, bool is_pre_combat,
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::CastFromHand || a.free_cast || a.alt_cost || a.hand_index < 0) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         const bool has_x = d != nullptr && d->card.m_mana_cost.has_x;
         c.casts.push_back({ a.hand_index, a.card_mv, has_x ? 0 : std::max(0, a.direct_damage) });
     }
@@ -12088,7 +12289,7 @@ static bool SubsetConvokeBodiesInvalid(const GameState& state, const std::vector
     {
         const Action& c = cands[static_cast<std::size_t>(idx)];
         if (c.kind != Action::Kind::CastFromHand || (c.convoke_green <= 0 && c.convoke_other <= 0)) { continue; }
-        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         if (!ConvokeTapsAtCast(cd)) { continue; }
         if (n_cv == 0) { pip = ConvokePipColor(*cd); }
         ++n_cv; dem_p += c.convoke_green; dem_o += c.convoke_other;
@@ -12109,7 +12310,7 @@ static bool SubsetConvokeBodiesInvalid(const GameState& state, const std::vector
         const Action& d = cands[static_cast<std::size_t>(idx)];
         const bool cast = d.kind == Action::Kind::CastFromHand && !d.bestow && !d.adventure && !d.sacrifice_land;
         if (!cast && d.kind != Action::Kind::ActivateVial) { continue; }
-        const CardDefinition* dd = d.def != nullptr ? d.def : CardDatabase::Instance().Lookup(d.card_name);
+        const CardDefinition* dd = d.def != nullptr ? d.def : CardDatabase::Instance().LookupInterned(d.card_name);
         if (dd == nullptr || !dd->card.IsCreature()) { continue; }
         const bool is_pip = dd->card.HasColor(pip);
         const bool is_cv  = cast && (d.convoke_green > 0 || d.convoke_other > 0) && ConvokeTapsAtCast(dd);
@@ -12123,7 +12324,7 @@ static bool SubsetConvokeBodiesInvalid(const GameState& state, const std::vector
     {
         const Action& c = cands[static_cast<std::size_t>(idx)];
         if (c.convoke_plan_pip <= 0 && c.convoke_plan_other <= 0) { continue; }
-        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         const bool self_pip = cd != nullptr && cd->card.HasColor(pip);
         if (c.convoke_plan_pip > ap + cvp - (self_pip ? 1 : 0)) { return true; }
         if (c.convoke_plan_other > ao + cvo - (self_pip ? 0 : 1)) { return true; }
@@ -12232,7 +12433,7 @@ static bool SubsetPostCombatPumpDiscardDominated(const GameState& state, const s
         if (c.discard_name.empty() || c.madness_choice > 0) { continue; }   // unpinned (human) / a madness CAST
         if (c.def != nullptr && c.def->params.discard_team_pump_power <= 0
             && c.def->params.discard_team_pump_toughness <= 0) { continue; }
-        const CardDefinition* xd = CardDatabase::Instance().Lookup(c.discard_name.str());
+        const CardDefinition* xd = CardDatabase::Instance().LookupInterned(c.discard_name);
         if (xd == nullptr || xd->gy_landfall_watcher) { continue; }        // Bloodghast comes back
         candidate = true;
         break;
@@ -12338,7 +12539,7 @@ static int VampArrivalsBeforeBlood(const GameState& state, const std::vector<Act
 {
     if (sub.empty()) { return 0; }
     auto def_of = [](const Action& c) -> const CardDefinition*
-    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
     auto sub_creature = [&](const CardDefinition* d)
     { return d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, sub); };
     bool bands = false;
@@ -12382,12 +12583,12 @@ static int VampArrivalsBeforeBlood(const GameState& state, const std::vector<Act
             if (becomes) { ++net; }
         }
         if (!d.discard_name.empty() && d.madness_choice > 0
-            && sub_creature(CardDatabase::Instance().Lookup(d.discard_name.str()))) { ++net; }   // a madness CAST
+            && sub_creature(CardDatabase::Instance().LookupInterned(d.discard_name))) { ++net; }   // a madness CAST
         if (d.kind == Action::Kind::SacCreatureOutlet && dd != nullptr)
         {
             bool victim_sub = dd->params.sac_creature_requires_subtype == sub;
             if (!victim_sub && !d.victim_name.empty())
-            { victim_sub = sub_creature(CardDatabase::Instance().Lookup(d.victim_name.str())); }
+            { victim_sub = sub_creature(CardDatabase::Instance().LookupInterned(d.victim_name)); }
             if (!victim_sub && d.sac_victim_id > 0 && d.sac_victim_id != kSameLineSacVictim)
             {
                 for (const Permanent& q : state.battlefield)
@@ -12410,7 +12611,7 @@ static bool BloodVariantMismatch(const GameState& state, const std::vector<Actio
 {
     const Action& c = cands[static_cast<std::size_t>(sel[pi])];
     if (c.kind != Action::Kind::ActivatePermAbility || c.ability_mode != Action::AbilityMode::TapBlood) { return false; }
-    const CardDefinition* bd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+    const CardDefinition* bd = c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
     const int added = VampArrivalsBeforeBlood(state, cands, sel, pi,
         bd != nullptr ? bd->params.tap_blood_cost_less_per_subtype : std::string());
     const int v = c.vamp_casts_needed;
@@ -12425,7 +12626,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
     if (SubsetMadnessCoverInvalid(state, cands, sel)) { return true; }   // rule 10
     const Player& ap = state.ActivePlayer();
     auto def_of = [](const Action& c) -> const CardDefinition*
-    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
     auto puts_name = [&](const std::string& nm) -> int
     {
         int n = 0;
@@ -12495,7 +12696,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
                     { ++adds; }
                     if (!d.discard_name.empty())
                     {
-                        const CardDefinition* md = CardDatabase::Instance().Lookup(d.discard_name.str());
+                        const CardDefinition* md = CardDatabase::Instance().LookupInterned(d.discard_name);
                         if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)
                             && (d.madness_choice > 0 || md->gy_landfall_watcher)) { ++adds; }
                     }
@@ -12515,7 +12716,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
         // meets a plain discard and the variant is the decline twice over.
         if (c.madness_choice > 0 && !c.discard_name.empty() && state.deck_has_madness)
         {
-            const CardDefinition* md = CardDatabase::Instance().Lookup(c.discard_name.str());
+            const CardDefinition* md = CardDatabase::Instance().LookupInterned(c.discard_name);
             if (md != nullptr && !md->params.madness_cost.has_value() && md->card.IsCreature())
             {
                 bool granted_now = false;
@@ -12615,6 +12816,684 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
     return false;
 }
 
+// ---- VAMP RULE PRE: SubsetVampOutletInvalid's FROZEN-BOARD HALF, once per enumeration ---------------
+// (MTG_VAMP_RULE_PRE, DEFAULT ON; =0 -> every rule re-derives its facts per subset, the code above.)
+//
+// THE COST. Both subset walkers hand EVERY enumerated selection to SubsetVampOutletInvalid, and on the
+// Vampires profile (callgrind, std d5 b20 seed 3026 gi23, 2026-10-21) that one filter was **29% of the
+// game's instructions** -- 10.9M calls, 10.4M of them from the greedy rollout's walk. Almost none of it
+// was the rules' arithmetic. It was the rules REDISCOVERING, per subset, facts that cannot change while an
+// enumeration runs (the board is frozen and `cands` is fixed):
+//   * rule 8 copied every selected discard outlet into a vector<Action> (~1 KB each) and stable-sorted the
+//     copies (a temporary buffer, merges, a virtual ActivationOrderRankFor per comparison): 12.5%;
+//   * rule 3 walked the selection per TapBlood with TurnSolver::TrailingRunsBefore, which resolves the
+//     provider and both actions' ranks (a by-name Lookup each) per PAIR, and copied the subtype string per
+//     call: 7.0%;
+//   * rule 1 built a vector<pair<std::string,int>> of the pinned discard names (a heap string per pin);
+//   * rules 7 and 10 re-walked the battlefield / re-looked-up every madness pin by name.
+// Every one of those facts is a function of (state, candidate) -- or of (state) alone -- so it is computed
+// here ONCE, and the fast path below evaluates exactly the same predicates on the cached values.
+//
+// WHY IT IS BYTE-IDENTICAL. Each rule is a PURE predicate of (state, cands, sel) and the filter returns
+// their OR, so neither the evaluation order nor where the inputs come from can change the answer -- only
+// whether every cached fact equals what the rule would have computed. Each field below names the exact
+// expression it caches. The two walkers' scope globals the rules read (rule 10's searched / root scope) are
+// still read per call. MTG_VAMP_RULE_PRE_VERIFY=1 runs BOTH paths on every selection and aborts on the
+// first disagreement (the check this optimisation was validated with).
+//
+// BUILT LAZILY, ONCE AN ENUMERATION HAS SHOWN IT IS WORTH IT (MTG_VAMP_RULE_PRE_LAZY=K, default 8): the
+// build walks every candidate, and most enumerations hand the filter only a handful of selections (a 2HG
+// rollout's greedy Solve averages ~3), where the per-subset rules are cheaper than the build. So the first
+// K calls of an enumeration run the original rules and the K+1-th builds the cache. Either path gives the
+// same answer, so where the switch happens is invisible to play.
+//
+// EMPTY MEANS NOT BUILT (`built` false): the filter runs the original per-subset code, as for every other
+// SubsetFilterPre member. Two or more distinct Blood / steal subtypes (no deck has them) also stay unbuilt.
+struct VampCandFacts
+{
+    const CardDefinition* def = nullptr;   // def_of(c) = c.def ? c.def : Lookup(c.card_name)
+    const CardDefinition* r5_md = nullptr; // rule 5: the pin's definition, when it needs a same-plan granter
+    const std::string* granter = nullptr;  // rule 5: castput && def grants madness to a subtype: that subtype
+    const std::string* name = nullptr;     // &c.card_name.str() (canonical: pointer equality == name equality)
+    const std::string* pin = nullptr;      // &c.discard_name.str(), null when there is no discard pin
+    const std::string* victim = nullptr;   // rule 2: SacCreatureOutlet && (needs_cast_mask & 2) && a victim name
+    int  rank = 0;                         // TrailingRankOf(prov, state, c)
+    int  m4_bf = -1;                       // rule 4 (lazy): the source's battlefield index
+    int  m4_pin = -1;                      // rule 4 (lazy): index into the shared pin order
+    std::uint64_t m4_key = 0;
+    std::uint32_t bits = 0;   // kVf* below: every per-candidate flag the rules branch on
+    std::int8_t cv_pip = 0;     // rule 7: ConvokePipColor(*def) of a cv candidate
+    std::int8_t arr = 0;        // rule 7: 0 none, 1 a non-convoke creature arrival, 2 a convoke-cast arrival
+    std::int8_t cvg = 0, cvo = 0, cpp = 0, cpo = 0;   // rule 7: convoke_green / _other / _plan_pip / _plan_other
+    std::int8_t out_draws = 0;  // rule 8
+    std::int8_t out_cost = 1;   // rule 8
+    std::int8_t band = 0;       // TrailingBandOf(c)
+    std::int8_t blood_sub = -1; // rule 3: TapBlood's subtype, index into subs (-1 none / empty)
+    std::int8_t r6_sub = -1;    // rule 6b: index into subs6
+    std::int8_t vcn = 0;        // c.vamp_casts_needed
+    std::int8_t pin_ns = 0;     // rule 1: non-staged hand copies of discard_name
+    std::int8_t pin_st = 0;     // rule 1: staged hand copies
+    std::int8_t cast_delta[2] = { 0, 0 };   // rule 3, per subtype: a cast / put arrival of a `sub` creature
+    std::int8_t tr_delta[2]   = { 0, 0 };   // rule 3, per subtype: a trailing activation's net arrivals
+    std::int8_t r6_a[2]       = { 0, 0 };   // rule 6b, per subtype: every selection member's contribution
+    std::int8_t r6_b[2]       = { 0, 0 };   // rule 6b, per subtype: another steal that adds `sub` (transform)
+};
+enum : std::uint32_t
+{
+    kVfCastput = 1u << 0,  kVfCv = 1u << 1,      kVfOut = 1u << 2,     kVfSt6 = 1u << 3,
+    kVfSameSac = 1u << 4,  kVfTrailing = 1u << 5, kVfR5 = 1u << 6,     kVfR10 = 1u << 7,
+    kVfM4 = 1u << 8,       kVfM4Keyed = 1u << 9,  kVfBlood = 1u << 10, kVfSteal = 1u << 11,
+    kVfNeedsSrc = 1u << 12,   // rule 6a: needs_cast_mask & 1
+    kVfConvPlan = 1u << 13,   // rule 7: convoke_plan_pip > 0 || convoke_plan_other > 0
+};
+struct VampRulePre
+{
+    // Mutable: the walkers hold their SubsetFilterPre const, and the build is lazy (see above). One walk
+    // owns one summary, on one thread.
+    mutable bool armed = false;    // BuildSubsetFilterPre raised vamp_outlet and the lever is on
+    mutable bool built = false;
+    mutable bool tried = false;    // the build ran (built may still be false: too many subtypes)
+    mutable bool r4_ready = false; // rule 4's fold keys (built on rule 4's first use)
+    mutable int  calls = 0;        // filter calls seen while unbuilt
+    mutable std::vector<VampCandFacts> f;
+    mutable int board_bp[6] = { 0, 0, 0, 0, 0, 0 };   // rule 7: untapped eligible bodies WITH colour c
+    mutable int board_n = 0;                          // ...in total
+    mutable int hand_nonstaged = 0;                   // rule 8
+    mutable int r6_gy[2] = { 0, 0 };                  // rule 6b, per subtype: graveyard-landfall `sub` creatures
+    mutable std::vector<std::uint8_t>  bf_me, bf_keyed, bf_offered;   // rule 4, per battlefield index
+    mutable std::vector<std::uint64_t> bf_key;
+};
+
+static bool VampRulePreOn()
+{
+    static const bool v = EnvOn("MTG_VAMP_RULE_PRE", true);   // DEFAULT ON; =0 -> the per-subset rules
+    return v;
+}
+static bool VampRulePreVerifyOn()
+{
+    static const bool v = EnvOn("MTG_VAMP_RULE_PRE_VERIFY");  // diagnostic: both paths, abort on mismatch
+    return v;
+}
+// THE WALKERS' PREFILTER (MTG_VAMP_PREFILTER, DEFAULT ON; =0 -> every selection goes to consider() /
+// eval_and_push()). Once an enumeration's VampRulePre is built, the subset walk asks SubsetVampOutletInvalid
+// itself BEFORE handing a selection on, and a selection the rules refuse is not handed on at all. That is
+// the answer the receiver would have reached: its chain is a sequence of pure rejection predicates (their
+// OR is order-free) that SubsetVampOutletInvalid belongs to, and everything it does before reaching a
+// refusal is bookkeeping the prefilter either replays (consider()'s abandon-poll cadence) or is fenced off
+// for (the walk's budget charge, the per-decision meter, every census / trace / funnel instrument, the
+// payoff prune, human play: any of them armed -> no prefilter). On a Vampires d5 game 86% of the greedy
+// walk's selections end at these rules (callgrind 2026-10-21), each having paid consider()'s entry, the
+// sort and the duplicate-source scan first. The walker sorts first exactly as consider() does (the rules
+// read positions); EnumeratePlans' receiver does not sort, so neither does its prefilter.
+static bool VampPrefilterOn()
+{
+    static const bool v = EnvOn("MTG_VAMP_PREFILTER", true);
+    return v;
+}
+static int VampRulePreLazyK()
+{
+    static const int v = EnvInt("MTG_VAMP_RULE_PRE_LAZY", 8);   // filter calls before the build (0 = eager)
+    return v;
+}
+
+static int TrailingRankOf(const DecisionProvider& prov, const GameState& state, const Action& a);   // below
+static int TrailingBandOf(const Action& a);                                                          // below
+static bool MadnessCoverInvalidAt(const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel, std::size_t po);                      // rule 10
+static bool MadnessCoverGateOpen(const GameState& state);
+
+// By-name definition lookups key on the INTERNED name (LookupInterned: the pointer-keyed index over the same
+// m_cards, rebuilt at every load / Register, so it returns exactly Lookup(name.str())).
+static const CardDefinition* VampDefByName(const InternedName& n)
+{
+    return CardDatabase::Instance().LookupInterned(n);
+}
+
+static void BuildVampRulePre(const GameState& state, const std::vector<Action>& cands, const VampRulePre& p)
+{
+    p.tried = true;
+    p.built = false;
+    p.r4_ready = false;
+    const std::size_t n = cands.size();
+    const int me = state.active_player_index;
+    const Player& ap = state.ActivePlayer();
+    const DecisionProvider& prov = ResolveProvider(state);
+    p.f.assign(n, VampCandFacts{});
+    p.hand_nonstaged = 0;
+    for (const Card& hc : ap.hand) { if (!hc.m_is_staged) { ++p.hand_nonstaged; } }
+    std::string subs[2], subs6[2];
+    int nsubs = 0, nsubs6 = 0;
+    auto sub_index = [](std::string* v, int& nv, const std::string& s) -> int
+    {
+        for (int k = 0; k < nv; ++k) { if (v[k] == s) { return k; } }
+        if (nv >= 2) { return -2; }   // a third distinct subtype: leave the summary unbuilt
+        v[nv] = s;
+        return nv++;
+    };
+    auto i8 = [](int v) { return static_cast<std::int8_t>(std::clamp(v, -128, 127)); };
+    for (std::size_t j = 0; j < n; ++j)
+    {
+        const Action& c = cands[j];
+        VampCandFacts& x = p.f[j];
+        const CardDefinition* d = c.def != nullptr ? c.def : VampDefByName(c.card_name);
+        x.def = d;
+        x.name = &c.card_name.str();
+        if (!c.discard_name.empty()) { x.pin = &c.discard_name.str(); }
+        x.vcn = c.vamp_casts_needed;
+        std::uint32_t b = 0;
+        if (c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::ActivateVial) { b |= kVfCastput; }
+        // rule 7
+        x.cvg = i8(c.convoke_green); x.cvo = i8(c.convoke_other);
+        x.cpp = i8(c.convoke_plan_pip); x.cpo = i8(c.convoke_plan_other);
+        if (c.convoke_plan_pip > 0 || c.convoke_plan_other > 0) { b |= kVfConvPlan; }
+        if (c.kind == Action::Kind::CastFromHand && (c.convoke_green > 0 || c.convoke_other > 0) && ConvokeTapsAtCast(d))
+        { b |= kVfCv; x.cv_pip = static_cast<std::int8_t>(ConvokePipColor(*d)); }
+        {
+            const bool cast = c.kind == Action::Kind::CastFromHand && !c.bestow && !c.adventure && !c.sacrifice_land;
+            if ((cast || c.kind == Action::Kind::ActivateVial) && d != nullptr && d->card.IsCreature())
+            { x.arr = (cast && (c.convoke_green > 0 || c.convoke_other > 0) && ConvokeTapsAtCast(d)) ? 2 : 1; }
+        }
+        // rule 8 (discard_draws, verbatim)
+        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { b |= kVfOut; x.out_draws = 0; }
+        else if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::BloodDraw)
+        { b |= kVfOut; x.out_draws = 1; }
+        else if (c.kind == Action::Kind::SacCreatureOutlet && c.def != nullptr && c.def->params.sac_outlet_discard_cost > 0)
+        { b |= kVfOut; x.out_draws = i8(c.def->params.sac_outlet_draw); }
+        if (c.kind == Action::Kind::SacCreatureOutlet && c.def != nullptr)
+        { x.out_cost = i8(std::max(1, c.def->params.sac_outlet_discard_cost)); }
+        const bool trailing = TurnSolver::IsTrailingActivation(c.kind);
+        if (trailing) { b |= kVfTrailing; }
+        x.rank = trailing ? TrailingRankOf(prov, state, c) : 0;   // TrailingRankOf is 0 off the trailing kinds
+        x.band = static_cast<std::int8_t>(TrailingBandOf(c));
+        const bool st6 = c.kind == Action::Kind::ActivatePermAbility
+            && (c.ability_mode == Action::AbilityMode::TapSubtypeSteal || c.ability_mode == Action::AbilityMode::TransformSelf);
+        if (st6) { b |= kVfSt6; }
+        if (st6 && c.ability_mode == Action::AbilityMode::TapSubtypeSteal) { b |= kVfSteal; }
+        if (st6 && (c.needs_cast_mask & 1) != 0) { b |= kVfNeedsSrc; }
+        if (c.kind == Action::Kind::SacCreatureOutlet && c.sac_victim_id == kSameLineSacVictim) { b |= kVfSameSac; }
+        // rule 2
+        if (c.kind == Action::Kind::SacCreatureOutlet && (c.needs_cast_mask & 2) != 0 && !c.victim_name.empty())
+        { x.victim = &c.victim_name.str(); }
+        // rule 3: the Blood's subtype
+        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::TapBlood)
+        {
+            b |= kVfBlood;
+            if (d != nullptr && !d->params.tap_blood_cost_less_per_subtype.empty())
+            {
+                const int k = sub_index(subs, nsubs, d->params.tap_blood_cost_less_per_subtype);
+                if (k < 0) { return; }
+                x.blood_sub = static_cast<std::int8_t>(k);
+            }
+        }
+        // rule 6: the steal / transform subtype (6b)
+        if (st6 && c.vamp_casts_needed > 0 && d != nullptr)
+        {
+            const bool steal = c.ability_mode == Action::AbilityMode::TapSubtypeSteal;
+            const int k = sub_index(subs6, nsubs6, steal ? d->params.steal_tap_subtype
+                                                        : d->params.transform_min_controlled_subtype);
+            if (k < 0) { return; }
+            x.r6_sub = static_cast<std::int8_t>(k);
+        }
+        // rule 5 + rule 10 (one by-name lookup of the pin, only for a madness CAST pin)
+        if (c.madness_choice > 0 && !c.discard_name.empty())
+        {
+            const CardDefinition* md = VampDefByName(c.discard_name);
+            if (md != nullptr && md->params.convoke && md->card.IsCreature()) { b |= kVfR10; }
+            if (state.deck_has_madness && md != nullptr && !md->params.madness_cost.has_value() && md->card.IsCreature())
+            {
+                bool granted_now = false;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* gd = CardDatabase::Instance().LookupCached(q.card);
+                    if (gd != nullptr && !gd->params.grants_madness_creature_subtype.empty()
+                        && CardHasSubtype(md->card, gd->params.grants_madness_creature_subtype))
+                    { granted_now = true; break; }
+                }
+                if (!granted_now) { b |= kVfR5; x.r5_md = md; }
+            }
+        }
+        if ((b & kVfCastput) != 0 && d != nullptr && !d->params.grants_madness_creature_subtype.empty())
+        { x.granter = &d->params.grants_madness_creature_subtype; }
+        // rule 1
+        if (!c.discard_name.empty())
+        {
+            int ns = 0, st = 0;
+            for (const Card& hc : ap.hand)
+            {
+                if (hc.m_name != c.discard_name) { continue; }
+                if (hc.m_is_staged) { ++st; } else { ++ns; }
+            }
+            x.pin_ns = i8(ns);
+            x.pin_st = i8(st);
+        }
+        // rule 4 (its keys are built on first use: BuildVampRule4)
+        if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4) { b |= kVfM4; }
+        x.bits = b;
+    }
+    // rule 7's board bodies, per pip colour
+    for (int col = 0; col < 6; ++col) { p.board_bp[col] = 0; }
+    p.board_n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.tapped || !q.card.IsCreature()) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd != nullptr && qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield, nullptr)) { continue; }
+        ++p.board_n;
+        for (int col = 0; col < 6; ++col) { if (q.card.HasColor(static_cast<Color>(col))) { ++p.board_bp[col]; } }
+    }
+    // rule 3's per-candidate arrival deltas, per Blood subtype (VampArrivalsBeforeBlood, term by term)
+    for (int k = 0; k < nsubs; ++k)
+    {
+        const std::string& sub = subs[k];
+        auto sub_creature = [&](const CardDefinition* dd)
+        { return dd != nullptr && dd->card.IsCreature() && CardHasSubtype(dd->card, sub); };
+        for (std::size_t j = 0; j < n; ++j)
+        {
+            const Action& d = cands[j];
+            VampCandFacts& x = p.f[j];
+            const CardDefinition* dd = x.def;
+            if (x.bits & kVfCastput)
+            {
+                if (!d.bestow && !d.adventure && sub_creature(dd)) { x.cast_delta[k] = 1; }
+                continue;
+            }
+            if ((x.bits & kVfTrailing) == 0) { continue; }   // never read (the rule skips a non-trailing kind)
+            int net = 0;
+            if (d.kind == Action::Kind::TapForTokenPay && dd != nullptr)
+            {
+                const auto& ts = dd->params.tap_token_subtypes;
+                if (std::find(ts.begin(), ts.end(), sub) != ts.end()) { ++net; }
+            }
+            if (d.kind == Action::Kind::ActivatePermAbility && d.ability_mode == Action::AbilityMode::TapSubtypeSteal
+                && dd != nullptr)
+            {
+                bool becomes = dd->params.steal_adds_subtype == sub;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (becomes) { break; }
+                    if (q.card.m_number == d.enchant_target && q.controller_index != me
+                        && q.card.IsCreature() && CardHasSubtype(q.card, sub)) { becomes = true; }
+                }
+                if (becomes) { ++net; }
+            }
+            if (!d.discard_name.empty() && d.madness_choice > 0 && sub_creature(VampDefByName(d.discard_name))) { ++net; }
+            if (d.kind == Action::Kind::SacCreatureOutlet && dd != nullptr)
+            {
+                bool victim_sub = dd->params.sac_creature_requires_subtype == sub;
+                if (!victim_sub && !d.victim_name.empty()) { victim_sub = sub_creature(VampDefByName(d.victim_name)); }
+                if (!victim_sub && d.sac_victim_id > 0 && d.sac_victim_id != kSameLineSacVictim)
+                {
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.card.m_number != d.sac_victim_id || q.controller_index != me) { continue; }
+                        victim_sub = q.card.IsCreature() && CardHasSubtype(q.card, sub);
+                        break;
+                    }
+                }
+                if (victim_sub) { --net; }
+            }
+            x.tr_delta[k] = i8(net);
+        }
+    }
+    // rule 6b's contributions, per steal / transform subtype (the adds loop, term by term)
+    for (int k = 0; k < nsubs6; ++k)
+    {
+        const std::string& sub = subs6[k];
+        for (std::size_t j = 0; j < n; ++j)
+        {
+            const Action& d = cands[j];
+            VampCandFacts& x = p.f[j];
+            const CardDefinition* dd = x.def;
+            int a = 0;
+            if ((d.kind == Action::Kind::CastFromHand || d.kind == Action::Kind::ActivateVial) && !d.bestow && !d.adventure)
+            { if (dd != nullptr && dd->card.IsCreature() && CardHasSubtype(dd->card, sub)) { ++a; } }
+            else if (d.kind == Action::Kind::TapForTokenPay && dd != nullptr)
+            {
+                const auto& ts = dd->params.tap_token_subtypes;
+                if (std::find(ts.begin(), ts.end(), sub) != ts.end()) { ++a; }
+            }
+            else if (d.kind == Action::Kind::ActivatePermAbility
+                     && d.ability_mode == Action::AbilityMode::TapSubtypeSteal && dd != nullptr
+                     && dd->params.steal_adds_subtype == sub)
+            { x.r6_b[k] = 1; }
+            if (!d.discard_name.empty())
+            {
+                const CardDefinition* md = VampDefByName(d.discard_name);
+                if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)
+                    && (d.madness_choice > 0 || md->gy_landfall_watcher)) { ++a; }
+            }
+            x.r6_a[k] = i8(a);
+        }
+        p.r6_gy[k] = 0;
+        for (const Card& gc : ap.graveyard)
+        {
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+            if (gd != nullptr && gd->gy_landfall_watcher && gd->card.IsCreature()
+                && CardHasSubtype(gd->card, sub)) { ++p.r6_gy[k]; }
+        }
+    }
+    p.built = true;
+}
+
+// Rule 4's facts, built on its first use (the pair fold needs two Condemned pumps in one selection, a
+// fraction of the walk): the pumps' source fold keys and pin indices, the battlefield's keys.
+static void BuildVampRule4(const GameState& state, const std::vector<Action>& cands, const VampRulePre& p)
+{
+    p.r4_ready = true;
+    std::vector<const std::string*> m4_order;   // the shared pin order: distinct names, candidate order
+    for (const Action& c : cands)
+    {
+        if (c.kind != Action::Kind::ActivatePump || c.gy_exile_mode != 4 || c.discard_name.empty()) { continue; }
+        const std::string* key = &c.discard_name.str();
+        if (std::find(m4_order.begin(), m4_order.end(), key) == m4_order.end()) { m4_order.push_back(key); }
+    }
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        VampCandFacts& x = p.f[j];
+        if ((x.bits & kVfM4) == 0) { continue; }
+        const Action& c = cands[j];
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != c.sac_source_id || q.controller_index != state.active_player_index) { continue; }
+            x.m4_bf = i;
+            std::uint64_t k = 0;
+            if (LandfallTargetFoldKey(state, q, k)) { x.bits |= kVfM4Keyed; }
+            x.m4_key = k;
+            break;
+        }
+        if (!c.discard_name.empty())
+        {
+            const std::string* key = &c.discard_name.str();
+            for (int k = 0; k < static_cast<int>(m4_order.size()); ++k)
+            { if (m4_order[static_cast<std::size_t>(k)] == key) { x.m4_pin = k; break; } }
+        }
+    }
+    const std::size_t nb = state.battlefield.size();
+    p.bf_me.assign(nb, 0); p.bf_keyed.assign(nb, 0); p.bf_key.assign(nb, 0); p.bf_offered.assign(nb, 0);
+    for (std::size_t i = 0; i < nb; ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != state.active_player_index) { continue; }
+        p.bf_me[i] = 1;
+        std::uint64_t k2 = 0;
+        p.bf_keyed[i] = LandfallTargetFoldKey(state, q, k2) ? 1 : 0;
+        p.bf_key[i] = k2;
+        for (const Action& c : cands)
+        {
+            if (c.kind == Action::Kind::ActivatePump && c.gy_exile_mode == 4
+                && c.sac_source_id == q.card.m_number) { p.bf_offered[i] = 1; break; }
+        }
+    }
+}
+
+// The fast path: SubsetVampOutletInvalid's rules on VampRulePre's cached facts (see the struct). ONE pass
+// over the selection gathers what every rule reads (names, outlets, pins, the flagged positions); each rule
+// then runs only when the selection holds something it can fire on.
+static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector<Action>& cands,
+                                       const std::vector<int>& sel, bool fold_from_odometer,
+                                       const VampRulePre& p)
+{
+    const std::size_t ns = sel.size();
+    const VampCandFacts* F = p.f.data();
+    constexpr std::size_t kSmall = 32;
+    if (ns > kSmall) { return SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer); }   // never in practice
+    const std::string* puts[kSmall];
+    int outs[kSmall];
+    struct PinCount { const std::string* name; int count; int first; };
+    PinCount pins[kSmall];
+    int flagged[kSmall];   // positions with a rule-2 / 5 / 6 / 3 flag
+    std::size_t nputs = 0, no = 0, npins = 0, nflag = 0;
+    std::uint32_t any = 0;
+    // A one-word filter over the cast / put names (a bit per name address): most pins, victims and
+    // hand-source steals name a card no cast of the selection carries, and the filter answers those 0
+    // without the scan; a set bit falls through to the exact count.
+    std::uint64_t putmask = 0;
+    auto NameBit = [](const std::string* p) -> std::uint64_t
+    { return 1ull << ((reinterpret_cast<std::uintptr_t>(p) >> 4) & 63u); };
+    int mode4 = 0, n_cv = 0, pip = static_cast<int>(Color::Black);
+    int dem_p = 0, dem_o = 0, plan_p = 0, plan_o = 0;
+    bool o_rank = false, o_bands = false;
+    for (std::size_t pi = 0; pi < ns; ++pi)
+    {
+        const int idx = sel[pi];
+        const VampCandFacts& x = F[idx];
+        const std::uint32_t b = x.bits;
+        any |= b;
+        if (b & kVfCastput) { puts[nputs++] = x.name; putmask |= NameBit(x.name); }
+        if (b & kVfCv)
+        {
+            if (n_cv == 0) { pip = x.cv_pip; }
+            ++n_cv; dem_p += x.cvg; dem_o += x.cvo; plan_p += x.cpp; plan_o += x.cpo;
+        }
+        if (b & kVfOut)
+        {
+            outs[no++] = idx;
+            if (b & kVfSt6) { o_bands = true; }
+            if (x.rank != 0) { o_rank = true; }
+        }
+        if (x.pin != nullptr)
+        {
+            bool found = false;
+            for (std::size_t k = 0; k < npins; ++k) { if (pins[k].name == x.pin) { ++pins[k].count; found = true; break; } }
+            if (!found) { pins[npins++] = PinCount{ x.pin, 1, idx }; }
+        }
+        if (b & kVfM4) { ++mode4; }
+        if (x.victim != nullptr || (b & (kVfSt6 | kVfR5 | kVfBlood)) != 0) { flagged[nflag++] = static_cast<int>(pi); }
+    }
+    const bool bands = (any & kVfSt6) != 0;
+    auto puts_of = [&](const std::string* key) -> int
+    {
+        if ((putmask & NameBit(key)) == 0) { return 0; }
+        int c = 0;
+        for (std::size_t k = 0; k < nputs; ++k) { if (puts[k] == key) { ++c; } }
+        return c;
+    };
+    // ---- rule 8 ----
+    if (no > 0)
+    {
+        int h = p.hand_nonstaged - static_cast<int>(nputs);
+        // TurnSolver::OrderTrailingActivations on the outlets: no opinion -> emitted order; else a STABLE
+        // sort on (band when the pass holds a count band, rank). Insertion sort is stable.
+        if (no >= 2 && (o_bands || o_rank))
+        {
+            auto before = [&](int a, int c) -> bool
+            {
+                if (o_bands && F[a].band != F[c].band) { return F[a].band < F[c].band; }
+                return F[a].rank < F[c].rank;
+            };
+            for (std::size_t i = 1; i < no; ++i)
+            {
+                const int v = outs[i];
+                std::size_t k = i;
+                while (k > 0 && before(v, outs[k - 1])) { outs[k] = outs[k - 1]; --k; }
+                outs[k] = v;
+            }
+        }
+        for (std::size_t i = 0; i < no; ++i)
+        {
+            const VampCandFacts& x = F[outs[i]];
+            if (h < x.out_cost) { return true; }
+            h += x.out_draws - x.out_cost;
+        }
+    }
+    // ---- rule 1 ----
+    for (std::size_t k = 0; k < npins; ++k)
+    {
+        const int nonstaged = F[pins[k].first].pin_ns, staged = F[pins[k].first].pin_st;
+        const int uses_nonstaged = std::max(0, puts_of(pins[k].name) - staged);
+        if (pins[k].count + uses_nonstaged > nonstaged) { return true; }
+    }
+    // ---- rule 7 ----
+    if (n_cv > 0)
+    {
+        const Color pc = static_cast<Color>(pip);
+        const int bp = p.board_bp[pip], bo = p.board_n - p.board_bp[pip];
+        int ap = 0, ao = 0, cvp = 0, cvo = 0;
+        for (int idx : sel)
+        {
+            const VampCandFacts& x = F[idx];
+            if (x.arr == 0) { continue; }
+            const bool is_pip = x.def->card.HasColor(pc);
+            if (x.arr == 2) { (is_pip ? cvp : cvo) += 1; } else { (is_pip ? ap : ao) += 1; }
+        }
+        if (dem_p > bp + ap + cvp || dem_o > bo + ao + cvo) { return true; }
+        if (dem_p + dem_o > bp + bo + ap + ao + cvp + cvo - 1) { return true; }
+        if (plan_p > ap + cvp || plan_o > ao + cvo) { return true; }
+        if (plan_p + plan_o > ap + ao + std::max(0, cvp + cvo - 1)) { return true; }
+        for (int idx : sel)
+        {
+            const VampCandFacts& x = F[idx];
+            if ((x.bits & kVfConvPlan) == 0) { continue; }
+            const bool self_pip = x.def != nullptr && x.def->card.HasColor(pc);
+            if (x.cpp > ap + cvp - (self_pip ? 1 : 0)) { return true; }
+            if (x.cpo > ao + cvo - (self_pip ? 0 : 1)) { return true; }
+        }
+    }
+    // ---- rules 2, 5, 6, 3 at the flagged positions ----
+    for (std::size_t fi = 0; fi < nflag; ++fi)
+    {
+        const std::size_t pi = static_cast<std::size_t>(flagged[fi]);
+        const int idx = sel[pi];
+        const VampCandFacts& x = F[idx];
+        if (x.victim != nullptr && puts_of(x.victim) == 0) { return true; }   // rule 2
+        if (x.bits & kVfSt6)   // rule 6
+        {
+            if ((x.bits & kVfNeedsSrc) != 0 && puts_of(x.name) == 0) { return true; }   // 6a
+            const int k6 = x.r6_sub;
+            if (k6 >= 0)
+            {
+                const bool steal = (x.bits & kVfSteal) != 0;
+                int adds = p.r6_gy[k6];
+                for (int jdx : sel)
+                {
+                    adds += F[jdx].r6_a[k6];
+                    if (!steal && jdx != idx) { adds += F[jdx].r6_b[k6]; }
+                }
+                if (adds < x.vcn) { return true; }   // 6b
+            }
+        }
+        if (x.bits & kVfR5)   // rule 5
+        {
+            bool granter_cast = false;
+            for (int jdx : sel)
+            {
+                const std::string* g = F[jdx].granter;
+                if (g != nullptr && CardHasSubtype(x.r5_md->card, *g)) { granter_cast = true; break; }
+            }
+            if (!granter_cast) { return true; }
+        }
+        if (x.bits & kVfBlood)   // rule 3 (BloodVariantMismatch)
+        {
+            int added = 0;
+            const int ks = x.blood_sub;
+            if (ks >= 0)
+            {
+                int net = 0;
+                for (std::size_t pj = 0; pj < ns; ++pj)
+                {
+                    if (pj == pi) { continue; }
+                    const VampCandFacts& y = F[sel[pj]];
+                    if (y.bits & kVfCastput) { net += y.cast_delta[ks]; continue; }
+                    if ((y.bits & kVfTrailing) == 0) { continue; }
+                    // TurnSolver::TrailingRunsBefore(state, d, pj, blood, pi, bands), on the cached keys.
+                    const bool ys = (y.bits & kVfSameSac) != 0, xs = (x.bits & kVfSameSac) != 0;
+                    bool runs_before;
+                    if (ys != xs) { runs_before = xs; }
+                    else if (bands && y.band != x.band) { runs_before = y.band < x.band; }
+                    else if (y.rank != x.rank) { runs_before = y.rank < x.rank; }
+                    else { runs_before = pj < pi; }
+                    if (!runs_before) { continue; }
+                    net += y.tr_delta[ks];
+                }
+                added = std::max(0, net);
+            }
+            const int v = x.vcn;
+            if ((v >= 16) ? (added < v - 16) : (added != v)) { return true; }
+        }
+    }
+    // ---- rule 10 ----
+    if ((any & kVfR10) != 0 && MadnessCoverGateOpen(state))
+    {
+        for (std::size_t po = 0; po < ns; ++po)
+        {
+            if ((F[sel[po]].bits & kVfR10) == 0) { continue; }
+            if (MadnessCoverInvalidAt(state, cands, sel, po)) { return true; }
+        }
+    }
+    // ---- rule 4 ----
+    if (mode4 >= 2 && fold_from_odometer)
+    {
+        if (!p.r4_ready) { BuildVampRule4(state, cands, p); }
+        struct Pick { std::uint64_t key; int bf; int pin; };
+        Pick picks[kSmall];
+        std::size_t np = 0;
+        for (int idx : sel)
+        {
+            const VampCandFacts& x = F[idx];
+            if ((x.bits & kVfM4) == 0) { continue; }
+            if (x.m4_bf < 0 || (x.bits & kVfM4Keyed) == 0 || x.m4_pin < 0) { continue; }   // unkeyable: never folded
+            picks[np++] = Pick{ x.m4_key, x.m4_bf, x.m4_pin };
+        }
+        for (std::size_t ai = 0; ai < np; ++ai)
+        {
+            const Pick& a = picks[ai];
+            for (int i = 0; i < a.bf; ++i)
+            {
+                const std::size_t bi = static_cast<std::size_t>(i);
+                if (!p.bf_me[bi]) { continue; }
+                if (!p.bf_keyed[bi] || p.bf_key[bi] != a.key) { continue; }
+                if (!p.bf_offered[bi]) { continue; }
+                const Pick* earlier = nullptr;
+                for (std::size_t bk = 0; bk < np; ++bk) { if (picks[bk].bf == i) { earlier = &picks[bk]; break; } }
+                if (earlier == nullptr) { return true; }        // not a prefix of the class
+                if (earlier->pin > a.pin) { return true; }      // discard indices decrease
+            }
+        }
+    }
+    return false;
+}
+
+// The walkers' entry: the original rules until the enumeration has made VampRulePreLazyK() calls, then the
+// fast path on a summary built from that same (state, cands).
+static bool SubsetVampOutletInvalidWith(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel, bool fold_from_odometer,
+                                        const VampRulePre& p)
+{
+    if (!p.built)
+    {
+        if (!p.armed || p.tried || ++p.calls <= VampRulePreLazyK())
+        { return SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer); }
+        BuildVampRulePre(state, cands, p);
+        if (!p.built) { return SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer); }
+    }
+    const bool fast = SubsetVampOutletInvalidPre(state, cands, sel, fold_from_odometer, p);
+    if (VampRulePreVerifyOn())
+    {
+        const bool slow = SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer);
+        if (slow != fast)
+        {
+            std::string nm;
+            for (int j : sel) { nm += cands[static_cast<std::size_t>(j)].card_name.str() + "#" + std::to_string(j) + ","; }
+            std::fprintf(stderr, "[vamp-rule-pre] MISMATCH t%d fast=%d slow=%d fold=%d sel=[%s]\n",
+                         state.turn_number, fast ? 1 : 0, slow ? 1 : 0, fold_from_odometer ? 1 : 0, nm.c_str());
+            std::abort();
+        }
+    }
+    return fast;
+}
+
+void TurnSolver::VampRulePreAgreeForTest(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel, bool fold_from_odometer,
+                                         bool& slow, bool& fast)
+{
+    VampRulePre p;
+    BuildVampRulePre(state, cands, p);
+    slow = SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer);
+    fast = p.built ? SubsetVampOutletInvalidPre(state, cands, sel, fold_from_odometer, p) : slow;
+}
+
 static bool SubsetHasStrandedHandBlink(const std::vector<Action>& cands,
                                        const std::vector<int>& sel)
 {
@@ -12689,7 +13568,7 @@ static bool SubsetHasUnclosedPersistLoop(const GameState& state,
         const Action& d = cands[jdx];
         if (d.kind != Action::Kind::CastFromHand) { continue; }
         const CardDefinition* dd = d.def != nullptr
-            ? d.def : CardDatabase::Instance().Lookup(d.card_name);
+            ? d.def : CardDatabase::Instance().LookupInterned(d.card_name);
         if (dd && (dd->params.prevents_minus_counters
                    || dd->params.reduces_minus_counters_by_one
                    || dd->params.other_creature_gy_enter_team_counters > 0)) { return false; }
@@ -12768,7 +13647,7 @@ static bool SubsetHasShroudBlockedEquip(const GameState& state,
 static bool AuraOrPairTargetsCand(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     if (d == nullptr) { return false; }
     // enchant_target is reused by other axes (copy source, trick target): only an Aura spell's host
     // and a soulbond creature's partner are the "host" this rule is about.
@@ -12869,7 +13748,7 @@ static bool AuraHostBranchOn()
 static bool IsCreatureAuraCast(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     // A REMANDED Aura (Action::remand_by) is countered back to hand and never attaches, so its host
     // is a cast-legality detail, not a host choice -- none of the host machinery (the host fold, the
     // host ranking) may drop or reorder it. A can't-be-countered one would attach; none exists.
@@ -12934,7 +13813,7 @@ static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>&
         {
             if (a.kind == Action::Kind::Equip) { equip = true; }
             if (a.kind != Action::Kind::CastFromHand) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && d->card.IsCreature() && d->tmpl == CardTemplate::ManaDork) { fresh_dork = true; }
         }
         any_dork = equip && fresh_dork;
@@ -12944,14 +13823,14 @@ static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>&
     for (const Action& a : acts)
     {
         const CardDefinition* d = (a.kind == Action::Kind::CastFromHand)
-                                ? (a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name)) : nullptr;
+                                ? (a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name)) : nullptr;
         const bool cre = d != nullptr && d->card.IsCreature() && !a.bestow;
         (cre ? cost_cre : cost_other) += a.cost.ManaValue();
     }
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->card.IsCreature()) { continue; }
         const int num = hand_number(a);
         if (num <= 0) { continue; }
@@ -13095,7 +13974,7 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
     for (const Action& a : acts)
     {
         if (!IsCreatureAuraCast(a)) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         Permanent p;
         p.card              = d->card;
         p.card.m_number     = hand_number(a);
@@ -13188,7 +14067,7 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
             if (h.card.m_number != a.enchant_target) { continue; }
             const bool dork = AuraHostIsManaCreature(h);
             key.dork_hosts += dork ? 1 : 0;
-            const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (swap_order && ad != nullptr && ad->params.aura_swap_cost.has_value())
             { key.swap_rank += WingsHostRank(t, me, h, is_pre_combat); }
             break;
@@ -13260,7 +14139,7 @@ static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !d->card.IsCreature()) { continue; }
             const Card* hc = nullptr;
             if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size())
@@ -13285,7 +14164,7 @@ static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
             if (c.alt_cost != c0.alt_cost || c.cost.ManaValue() != c0.cost.ManaValue()) { continue; }
             add(c.enchant_target);
         }
-        const CardDefinition* ad = a0.def ? a0.def : CardDatabase::Instance().Lookup(a0.card_name);
+        const CardDefinition* ad = a0.def ? a0.def : CardDatabase::Instance().LookupInterned(a0.card_name);
         if (ad != nullptr && ad->params.aura_enchant_requires.empty() && AuraOnNewCreatureEnabled())
         { for (int n : cast_nums) { add(n); } }
         if (al.size() < 2) { continue; }
@@ -13542,7 +14421,7 @@ static bool BigOnlySubsetPayable(const BigOnlyCtx& bc, const std::vector<Action>
         const Action& c = cands[static_cast<std::size_t>(j)];
         if (c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::CastFromGraveyard)
         {
-            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
             if (d != nullptr && SpellQualifiesForBigMana(d->card, *bc.pp)) { continue; }
         }
         AddCostCarryingHybrids(small, c.cost);
@@ -13600,7 +14479,7 @@ static bool PlanHasPendingAuraOn(const GameState& state, const std::vector<Actio
     for (const Action& c : acts)
     {
         if (c.kind != Action::Kind::CastFromHand || c.enchant_target != num) { continue; }
-        const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         if (!cd || !cd->params.is_aura || cd->params.is_land_aura) { continue; }
         for (const Card& h : ap.hand) { if (h.m_name == c.card_name) { return true; } }
     }
@@ -13624,7 +14503,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::Equip) { continue; }
-            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (!ed || !ed->params.equip_grants_shroud) { continue; }
             int from = -1; bool have_dest = false;
             for (const Permanent& p : state.battlefield)
@@ -13650,7 +14529,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::Equip) { continue; }
-        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (!ed || !ed->params.equip_grants_haste) { continue; }
         if (EquipmentAttachedTo(state, active, a.sac_source_id, a.sac_victim_id)) { continue; }
         // A shroud-granting unlock onto a creature a pending Aura of this plan targets would make
@@ -13859,7 +14738,7 @@ std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::Equip) { continue; }
-        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (!ed || !ed->params.equip_grants_haste) { continue; }
         ManaPool add, add_nc;
         HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
@@ -14882,6 +15761,13 @@ enum : unsigned
     kDupRemand   = 1u << 7,   // a remand variant paired with its own X slot / another remand
     kDupAll      = ~0u
 };
+// SubsetFilterPre::dup_m's entry bits beyond the clause mask: the Birthing Pod clause (not gated on
+// dup_clause) and the canonical-prefix clause (equiv_tag != 0, gated on from_odometer).
+constexpr unsigned kDupPodEntry   = 1u << 8;
+constexpr unsigned kDupEquivEntry = 1u << 15;
+// SubsetHasDuplicateSacSource's per-candidate compact summary (SubsetFilterPre::DupM): entry bits (the
+// clause bits above + kDupPodEntry + kDupEquivEntry), the source id and the hand index.
+struct DupCompact { const std::uint16_t* m; const int* src; const int* hidx; };
 
 // WHICH CLAUSE of SubsetHasDuplicateSacSource actually rejected. The function's NAME is about sac
 // sources, but it is a nine-clause "one use per source per plan" rule and on a deck with no sacrifice
@@ -14908,7 +15794,8 @@ namespace dupclause
 
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer,
-                                        unsigned dup_clause = kDupAll);
+                                        unsigned dup_clause = kDupAll,
+                                        const DupCompact* dc = nullptr);
 
 // For a selection the canonical-prefix rule is about to reject, BUILD ITS TWIN and check the twin
 // is a legal selection: every class member replaced by the same-class member holding ord 0..k-1.
@@ -15010,9 +15897,149 @@ static void VerifyFoldRecoverable(const std::vector<Action>& cands, const std::v
     g_in_fold_verify = false;
 }
 
+// The canonical-prefix clause of SubsetHasDuplicateSacSource for sel position `a` (its entry test --
+// from_odometer, a nonzero tag, ord > 0 -- is the caller's). True = reject. Split out so the compact path
+// below runs the same body.
+static bool DupEquivReject(const std::vector<Action>& cands, const std::vector<int>& sel, std::size_t a, int site)
+{
+    if (BfCensusOn()) { bfcensus::g_fold_guard_seen.fetch_add(1, std::memory_order_relaxed); }
+    const int tag  = cands[sel[a]].equiv_tag;
+    const int want = cands[sel[a]].equiv_ord - 1;
+    bool have_pred = false;
+    for (size_t q = 0; q < sel.size(); ++q)
+    {
+        if (cands[sel[q]].equiv_tag == tag && cands[sel[q]].equiv_ord == want)
+        { have_pred = true; break; }
+    }
+    if (!have_pred)
+    {
+        // FoldVerifyOn() HOISTED (2026-09-19, perf). The verifier's own first line is this
+        // same test, so it used to return immediately -- but "immediately" still meant a
+        // call into a large, un-inlinable function plus a thread-local read, once per fold
+        // REJECTION. On Fungus (interchangeable spore sources -> every enumeration folds)
+        // the two constprop clones of that no-op were 1.29% of a slow game. Testing the
+        // flag here lets the call vanish entirely when the verifier is off, which is every
+        // run but an MTG_FOLD_VERIFY audit.
+        if (FoldVerifyOn()) { VerifyFoldRecoverable(cands, sel, a, tag, site); }
+        static const bool s_ftrace = EnvOn("MTG_FOLD_TRACE");
+        if (s_ftrace)
+        {
+            std::string so, members;
+            int csz = 0;
+            for (size_t q = 0; q < cands.size(); ++q)
+            {
+                if (cands[q].equiv_tag != tag) { continue; }
+                ++csz;
+                members += cands[q].card_name.str() + "#" + std::to_string(q)
+                         + "/hi" + std::to_string(cands[q].hand_index)
+                         + "/o" + std::to_string(cands[q].equiv_ord) + " ";
+            }
+            std::string selnames;
+            for (size_t q = 0; q < sel.size(); ++q)
+            { selnames += cands[sel[q]].card_name.str() + "#" + std::to_string(sel[q]) + " "; }
+            for (size_t q = 0; q < sel.size(); ++q)
+            {
+                if (cands[sel[q]].equiv_tag != tag) { continue; }
+                so += std::to_string(cands[sel[q]].equiv_ord) + ",";
+            }
+            std::cerr << "[fold-reject] " << cands[sel[a]].card_name.str()
+                      << " ord=" << cands[sel[a]].equiv_ord
+                      << " class_size=" << csz
+                      << " selected_ords=[" << so << "] sel=[" << selnames
+                      << "] class=[" << members << "]\n";
+        }
+        if (BfCensusOn())
+        {
+            bfcensus::g_fold_guard_reject.fetch_add(1, std::memory_order_relaxed);
+            bfcensus::g_fold_reject_site[site & 1].fetch_add(1, std::memory_order_relaxed);
+        }
+        dupclause::Hit(dupclause::kFoldPrefix);
+        return true;   // non-canonical arrangement
+    }
+    return false;
+}
+
+// The remand clause for sel position `a` (its entry test -- the clause bit, a remand variant -- is the
+// caller's). True = reject.
+static bool DupRemandReject(const std::vector<Action>& cands, const std::vector<int>& sel, std::size_t a)
+{
+    const Action& ra = cands[sel[a]];
+    for (size_t b = 0; b < sel.size(); ++b)
+    {
+        if (b == a) { continue; }
+        const Action& rb = cands[sel[b]];
+        if (rb.kind == Action::Kind::CastFromHand && rb.hand_index >= 0
+            && rb.hand_index == ra.hand_index)
+        { dupclause::Hit(dupclause::kRemand); return true; }
+        if (b > a && !rb.remand_by.empty() && rb.remand_by == ra.remand_by
+            && ((ra.remand_slot < rb.remand_slot) != (ra.hand_index < rb.hand_index)))
+        { dupclause::Hit(dupclause::kRemand); return true; }
+    }
+    return false;
+}
+
+// SubsetHasDuplicateSacSource on the per-candidate COMPACT summary (SubsetFilterPre::DupM): the same
+// clauses in the same order with the same Hit attribution, every Action field test answered from the
+// summary (entry bits by kind / free_cast / hand slot, the source id, the hand index); the
+// canonical-prefix and remand clauses, whose tests read equiv_ord / remand_slot, run their own bodies.
+static bool DupCompactReject(const std::vector<Action>& cands, const std::vector<int>& sel, int site,
+                             bool from_odometer, unsigned dup_clause, const DupCompact& dc)
+{
+    const std::uint16_t* m = dc.m;
+    const int* src = dc.src;
+    const int* hidx = dc.hidx;
+    const std::size_t n = sel.size();
+    for (std::size_t a = 0; a < n; ++a)
+    {
+        const std::size_t ja = static_cast<std::size_t>(sel[a]);
+        const unsigned ma = m[ja];
+        if ((ma & ((dup_clause & 0xFFu) | kDupPodEntry)) == 0 && !(from_odometer && (ma & kDupEquivEntry) != 0))
+        { continue; }
+        auto pair_with = [&](unsigned bit) -> bool
+        {
+            for (std::size_t b = a + 1; b < n; ++b)
+            {
+                const std::size_t jb = static_cast<std::size_t>(sel[b]);
+                if ((m[jb] & bit) != 0 && src[jb] == src[ja]) { return true; }
+            }
+            return false;
+        };
+        if ((dup_clause & kDupSacMana) != 0 && (ma & kDupSacMana) != 0 && pair_with(kDupSacMana))
+        { dupclause::Hit(dupclause::kSacForMana); return true; }
+        if ((dup_clause & kDupFreeCast) != 0 && (ma & kDupFreeCast) != 0 && pair_with(kDupFreeCast))
+        { dupclause::Hit(dupclause::kFreeSlot); return true; }
+        if ((dup_clause & kDupHandFree) != 0 && (ma & kDupHandFree) != 0)
+        {
+            const bool fa = (ma & kDupFreeCast) != 0;
+            for (std::size_t b = a + 1; b < n; ++b)
+            {
+                const std::size_t jb = static_cast<std::size_t>(sel[b]);
+                if ((m[jb] & kDupHandFree) != 0 && hidx[jb] == hidx[ja] && ((m[jb] & kDupFreeCast) != 0) != fa)
+                { dupclause::Hit(dupclause::kPaidFreePair); return true; }
+            }
+        }
+        if ((dup_clause & kDupLoyalty) != 0 && (ma & kDupLoyalty) != 0 && pair_with(kDupLoyalty))
+        { dupclause::Hit(dupclause::kLoyalty); return true; }
+        if ((dup_clause & kDupGarth) != 0 && (ma & kDupGarth) != 0 && pair_with(kDupGarth))
+        { dupclause::Hit(dupclause::kGarth); return true; }
+        if ((dup_clause & kDupBlink) != 0 && (ma & kDupBlink) != 0 && pair_with(kDupBlink))
+        { dupclause::Hit(dupclause::kBlink); return true; }
+        if ((dup_clause & kDupPermAbil) != 0 && (ma & kDupPermAbil) != 0 && pair_with(kDupPermAbil))
+        { dupclause::Hit(dupclause::kPermAbility); return true; }
+        if (from_odometer && (ma & kDupEquivEntry) != 0 && cands[ja].equiv_tag != 0 && cands[ja].equiv_ord > 0
+            && DupEquivReject(cands, sel, a, site))
+        { return true; }
+        if ((dup_clause & kDupRemand) != 0 && (ma & kDupRemand) != 0 && DupRemandReject(cands, sel, a))
+        { return true; }
+        if ((ma & kDupPodEntry) != 0 && pair_with(kDupPodEntry))
+        { dupclause::Hit(dupclause::kPod); return true; }
+    }
+    return false;
+}
+
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer,
-                                        unsigned dup_clause)
+                                        unsigned dup_clause, const DupCompact* dc)
 {
     if (BfCensusOn())
     {
@@ -15031,6 +16058,10 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
         }
     }
+    // THE COMPACT PATH (SubsetFilterPre::DupM, MTG_DUP_SRC_SKIP, DEFAULT ON; null -> the clauses below). 5.3% of
+    // a Vampires d5 game's instructions were these clause tests on scattered Action fields (callgrind
+    // 2026-10-21); DupCompactReject answers every one of them from a few bytes per candidate.
+    if (dc != nullptr) { return DupCompactReject(cands, sel, site, from_odometer, dup_clause, *dc); }
     for (size_t a = 0; a < sel.size(); ++a)
     {
         if ((dup_clause & kDupSacMana) != 0 && cands[sel[a]].kind == Action::Kind::SacForMana)
@@ -15118,63 +16149,9 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // axis fully expressible: k selected actions still mean k activations, so nothing changes
         // in the apply and no distinct line is lost. Inert when the tag is 0, which is every action
         // on every deck until a source proves itself plain.
-        if (from_odometer && cands[sel[a]].equiv_tag != 0 && cands[sel[a]].equiv_ord > 0)
-        {
-            if (BfCensusOn()) { bfcensus::g_fold_guard_seen.fetch_add(1, std::memory_order_relaxed); }
-            const int tag  = cands[sel[a]].equiv_tag;
-            const int want = cands[sel[a]].equiv_ord - 1;
-            bool have_pred = false;
-            for (size_t q = 0; q < sel.size(); ++q)
-            {
-                if (cands[sel[q]].equiv_tag == tag && cands[sel[q]].equiv_ord == want)
-                { have_pred = true; break; }
-            }
-            if (!have_pred)
-            {
-                // FoldVerifyOn() HOISTED (2026-09-19, perf). The verifier's own first line is this
-                // same test, so it used to return immediately -- but "immediately" still meant a
-                // call into a large, un-inlinable function plus a thread-local read, once per fold
-                // REJECTION. On Fungus (interchangeable spore sources -> every enumeration folds)
-                // the two constprop clones of that no-op were 1.29% of a slow game. Testing the
-                // flag here lets the call vanish entirely when the verifier is off, which is every
-                // run but an MTG_FOLD_VERIFY audit.
-                if (FoldVerifyOn()) { VerifyFoldRecoverable(cands, sel, a, tag, site); }
-                static const bool s_ftrace = EnvOn("MTG_FOLD_TRACE");
-                if (s_ftrace)
-                {
-                    std::string so, members;
-                    int csz = 0;
-                    for (size_t q = 0; q < cands.size(); ++q)
-                    {
-                        if (cands[q].equiv_tag != tag) { continue; }
-                        ++csz;
-                        members += cands[q].card_name.str() + "#" + std::to_string(q)
-                                 + "/hi" + std::to_string(cands[q].hand_index)
-                                 + "/o" + std::to_string(cands[q].equiv_ord) + " ";
-                    }
-                    std::string selnames;
-                    for (size_t q = 0; q < sel.size(); ++q)
-                    { selnames += cands[sel[q]].card_name.str() + "#" + std::to_string(sel[q]) + " "; }
-                    for (size_t q = 0; q < sel.size(); ++q)
-                    {
-                        if (cands[sel[q]].equiv_tag != tag) { continue; }
-                        so += std::to_string(cands[sel[q]].equiv_ord) + ",";
-                    }
-                    std::cerr << "[fold-reject] " << cands[sel[a]].card_name.str()
-                              << " ord=" << cands[sel[a]].equiv_ord
-                              << " class_size=" << csz
-                              << " selected_ords=[" << so << "] sel=[" << selnames
-                              << "] class=[" << members << "]\n";
-                }
-                if (BfCensusOn())
-                {
-                    bfcensus::g_fold_guard_reject.fetch_add(1, std::memory_order_relaxed);
-                    bfcensus::g_fold_reject_site[site & 1].fetch_add(1, std::memory_order_relaxed);
-                }
-                dupclause::Hit(dupclause::kFoldPrefix);
-                return true;   // non-canonical arrangement
-            }
-        }
+        if (from_odometer && cands[sel[a]].equiv_tag != 0 && cands[sel[a]].equiv_ord > 0
+            && DupEquivReject(cands, sel, a, site))
+        { return true; }
         // REMAND (Action::remand_by). Its variants live in the REMAND copy's group (PlanGroupKey), so
         // the odometer can pair one with a cast that uses the SAME hand slot X -- X cast plainly AND
         // remanded, or remanded by two Remand copies at once: the same physical card cast twice.
@@ -15184,21 +16161,9 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // target slot order follows Remand slot order -- because the apply worlds take the Remand BY
         // NAME, so "copy a answers X, copy b answers Y" and the swap are the same line (an identity
         // fold of interchangeable copies, never a pick). Inert unless a remand variant exists.
-        if ((dup_clause & kDupRemand) != 0 && !cands[sel[a]].remand_by.empty())
-        {
-            const Action& ra = cands[sel[a]];
-            for (size_t b = 0; b < sel.size(); ++b)
-            {
-                if (b == a) { continue; }
-                const Action& rb = cands[sel[b]];
-                if (rb.kind == Action::Kind::CastFromHand && rb.hand_index >= 0
-                    && rb.hand_index == ra.hand_index)
-                { dupclause::Hit(dupclause::kRemand); return true; }
-                if (b > a && !rb.remand_by.empty() && rb.remand_by == ra.remand_by
-                    && ((ra.remand_slot < rb.remand_slot) != (ra.hand_index < rb.hand_index)))
-                { dupclause::Hit(dupclause::kRemand); return true; }
-            }
-        }
+        if ((dup_clause & kDupRemand) != 0 && !cands[sel[a]].remand_by.empty()
+            && DupRemandReject(cands, sel, a))
+        { return true; }
         // Birthing Pod: one activation per Pod per plan (the {T} cost).
         if (cands[sel[a]].kind == Action::Kind::ActivatePod)
         {
@@ -16541,7 +17506,7 @@ static bool EtbAttachLive(const GameState& state, const std::vector<Action>& can
     {
         const Action& c = cands[k];
         if (c.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         if (d != nullptr && d->params.attach_equipment_on_etb) { return true; }
     }
     return false;
@@ -16588,7 +17553,7 @@ static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vecto
         const Action& c = cands[k];
         if (c.kind == Action::Kind::CastFromHand)
         {
-            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
             if (d == nullptr) { return true; }
             const bool after_attach = cast_rank == nullptr || after < 0
                 || (*cast_rank)[static_cast<std::size_t>(k)] > (*cast_rank)[static_cast<std::size_t>(after)];
@@ -16818,7 +17783,7 @@ static bool PlanHasTheftAndOpenRemoval(const std::vector<Action>& acts)
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         if (a.attach_equip_id != 0) { theft = true; continue; }
         if (a.enchant_target > 0) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d != nullptr && d->tmpl == CardTemplate::Removal) { open_removal = true; }
     }
     return theft && open_removal;
@@ -16868,7 +17833,7 @@ static bool TrailingRunsFirst(const GameState& state, const std::vector<Action>&
     const DecisionProvider& prov = ResolveProvider(state);
     auto rank_of = [&](const Action& a) -> int
     {
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
     };
     const int rx = rank_of(cands[static_cast<std::size_t>(sel[px])]);
@@ -16914,9 +17879,9 @@ static bool SubsetHasEquipOntoAttachedPiece(const GameState& state, const std::v
             if (pk == pj) { continue; }
             const Action& r = cands[static_cast<std::size_t>(sel[pk])];
             if (r.kind != Action::Kind::Equip || r.sac_source_id != e.sac_victim_id) { continue; }
-            const CardDefinition* hd = r.def ? r.def : CardDatabase::Instance().Lookup(r.card_name);
+            const CardDefinition* hd = r.def ? r.def : CardDatabase::Instance().LookupInterned(r.card_name);
             if (hd == nullptr || !hd->params.reconfigure_cost.has_value()) { continue; }
-            const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().Lookup(e.card_name);
+            const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().LookupInterned(e.card_name);
             if (AttachIntermediateObservable(state, ed, /*any_haste_shroud=*/true)) { continue; }
             if (TrailingRunsFirst(state, cands, sel, pk, pj))
             {
@@ -17109,6 +18074,21 @@ struct SubsetFilterPre
     // bools; a member added here keeps its initialiser (kDupAll = every clause live = unoptimised),
     // which is the same "forgetting one costs speed, never correctness" contract as the bits.
     unsigned dup_clause = kDupAll;
+    // ...and that filter's per-candidate ENTRY bits (see the skip at the top of its loop). EMPTY = not
+    // built (the instruments-armed path, MTG_DUP_SRC_SKIP=0): every clause is tested, as before.
+    // BUILT LAZILY, after a few calls (as VampRulePre: most enumerations hand the filter a handful of
+    // selections, where the entry tests are cheaper than a pass over every candidate). Built during the walk
+    // it also reads the tags AFTER RenumberFoldOrds -- the very values the clauses test.
+    mutable std::vector<std::uint16_t> dup_m;
+    mutable std::vector<int>           dup_src;
+    mutable std::vector<int>           dup_hidx;
+    mutable DupCompact                 dup_c{ nullptr, nullptr, nullptr };
+    mutable bool dup_armed = false;
+    mutable bool dup_tried = false;
+    mutable int  dup_calls = 0;
+    const DupCompact* DupMBuild(const std::vector<Action>& cands) const;
+    const DupCompact* DupM(const std::vector<Action>& cands) const
+    { return dup_c.m != nullptr ? &dup_c : (dup_armed && !dup_tried ? DupMBuild(cands) : nullptr); }
     // SubsetHasStrandedAttachSpell (Magnetic Theft). Placed after the positional aggregate init on
     // purpose: it keeps its TRUE initialiser (unoptimised) on the instruments-armed path, and the
     // builder below lowers it explicitly before raising it per candidate.
@@ -17121,6 +18101,9 @@ struct SubsetFilterPre
     // Blood cost variant or Stromkirk Condemned's mode 4 -- the filter's exact necessary condition.
     // Same placement / lowering contract as attach_spell.
     bool vamp_outlet = true;
+    // ...and that filter's frozen-board facts (VampRulePre; built only when vamp_outlet is raised on the
+    // unarmed path -- EMPTY MEANS NOT BUILT, the original per-subset rules run).
+    VampRulePre vamp;
     // MTG_EQUIP_HOST_FOLD (SubsetHasNonCanonicalEquipHost): per candidate, the interchangeable-host CLASS
     // of an Equip's host (-1 = none) and its member RANK, plus a BLOCK bit for a candidate whose presence
     // makes a subset unfoldable. EMPTY = not built -> the filter never runs. Exact (the fold's own inputs,
@@ -17417,12 +18400,12 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
     // candidate (the copy fold's territory) -- never relabelled here.
     auto copy_prone = [&](const Action& e) -> bool
     {
-        const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().Lookup(e.card_name);
+        const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().LookupInterned(e.card_name);
         for (const Action& o : cands)
         {
             if (o.kind != Action::Kind::Equip || o.sac_source_id == e.sac_source_id) { continue; }
             if (o.card_name == e.card_name) { return true; }
-            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().LookupInterned(o.card_name);
             if (ed != nullptr && od != nullptr && ed->behaviour_identity != 0
                 && ed->behaviour_identity == od->behaviour_identity) { return true; }
         }
@@ -17461,7 +18444,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
         }
         if (is_theft(a))
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !d->params.attach_target_equipment || a.hand_index < 0
                 || a.hand_index >= static_cast<int>(ap.hand.size()) || host_of(a.attach_equip_id) != nullptr)
             { block[j] = 1; continue; }
@@ -17510,7 +18493,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
         if (a.kind == Action::Kind::ActivatePermAbility
             && a.ability_mode == Action::AbilityMode::ReconfigureUnattach) { continue; }
         if (a.kind != Action::Kind::CastFromHand) { block[j] = 1; continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || a.convoke_green > 0 || a.convoke_other > 0 || a.sac_victim_id != 0
             || a.enchant_target == kTrickBestOwnTarget)
         { block[j] = 1; continue; }
@@ -17669,7 +18652,7 @@ static void BuildEquipUnlandedCopy(const GameState& state, const std::vector<Act
                 break;
             case Action::Kind::CastFromHand:
             {
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 safe[j] = (d != nullptr && (d->params.is_equipment || a.attach_equip_id != 0)
                            && a.breakpoint_casts.empty()) ? 1 : 0;
                 break;
@@ -17736,7 +18719,7 @@ static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>
                 if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
                 // enchant_target is reused by non-Aura axes (copy source, soulbond, trick target);
                 // only an Aura SPELL's target is the host this rule is about.
-                const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (!ad || !ad->params.is_aura || ad->params.is_land_aura || a.bestow) { continue; }
                 for (const std::pair<int, int>& g : grant)
                 { if (g.first == a.enchant_target) { out[j] = g.second; break; } }
@@ -17756,7 +18739,7 @@ static void BuildReplicatePending(const GameState& state, const std::vector<Acti
     {
         const Action& a = cands[j];
         if (a.kind != Action::Kind::CastFromHand || a.replicate_count < 0) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || CanReplicate(*d, state.battlefield, state.active_player_index)) { continue; }
         if (out.empty()) { out.assign(cands.size(), 0); }
         out[j] = 1;
@@ -17778,19 +18761,51 @@ static bool SubsetHasUngrantedReplicatePin(const std::vector<Action>& cands, con
     {
         if (!rep_pending[static_cast<std::size_t>(j)]) { continue; }
         const Action& a = cands[j];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         bool granted = false;
         for (int k : sel)
         {
             if (k == j) { continue; }
             const Action& g = cands[k];
             if (g.kind != Action::Kind::CastFromHand && g.kind != Action::Kind::ActivateVial) { continue; }
-            const CardDefinition* gd = g.def ? g.def : CardDatabase::Instance().Lookup(g.card_name);
+            const CardDefinition* gd = g.def ? g.def : CardDatabase::Instance().LookupInterned(g.card_name);
             if (gd != nullptr && d != nullptr && GrantsReplicateTo(*gd, *d)) { granted = true; break; }
         }
         if (!granted) { return true; }
     }
     return false;
+}
+
+// Each clause's opening test on the candidate alone (SubsetHasDuplicateSacSource's entry skip), built on the
+// filter's VampRulePreLazyK()+1-th call of the enumeration.
+const DupCompact* SubsetFilterPre::DupMBuild(const std::vector<Action>& cands) const
+{
+    if (++dup_calls <= VampRulePreLazyK()) { return nullptr; }
+    dup_tried = true;
+    if (cands.empty()) { return nullptr; }
+    dup_m.assign(cands.size(), 0);
+    dup_src.assign(cands.size(), 0);
+    dup_hidx.assign(cands.size(), 0);
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const Action& a = cands[j];
+        unsigned m = 0;
+        if (a.kind == Action::Kind::SacForMana)                        { m |= kDupSacMana; }
+        if (a.free_cast)                                               { m |= kDupFreeCast; }
+        if (a.kind == Action::Kind::CastFromHand && a.hand_index >= 0) { m |= kDupHandFree; }
+        if (a.kind == Action::Kind::ActivateLoyalty)                   { m |= kDupLoyalty; }
+        if (a.kind == Action::Kind::GarthActivate)                     { m |= kDupGarth; }
+        if (a.kind == Action::Kind::ActivateBlink)                     { m |= kDupBlink; }
+        if (a.kind == Action::Kind::ActivatePermAbility)               { m |= kDupPermAbil; }
+        if (!a.remand_by.empty())                                      { m |= kDupRemand; }
+        if (a.kind == Action::Kind::ActivatePod)                       { m |= kDupPodEntry; }
+        if (a.equiv_tag != 0)                                          { m |= kDupEquivEntry; }
+        dup_m[j]    = static_cast<std::uint16_t>(m);
+        dup_src[j]  = a.sac_source_id;
+        dup_hidx[j] = a.hand_index;
+    }
+    dup_c = DupCompact{ dup_m.data(), dup_src.data(), dup_hidx.data() };
+    return &dup_c;
 }
 
 static void BuildEquipReleaseOnly(const GameState& state, const std::vector<Action>& cands,
@@ -17889,6 +18904,15 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         { p.gift_damage = true; }
     }
     p.sac_fodder = (sac_actions >= 2);
+    // Armed, not built: the summary is built lazily by the filter itself (see VampRulePre).
+    if (p.vamp_outlet && VampRulePreOn())
+    {
+        p.vamp.armed = true;
+        if (VampRulePreLazyK() <= 0) { BuildVampRulePre(state, cands, p.vamp); }
+    }
+    // SubsetHasDuplicateSacSource's entry bits (built lazily by DupM, see the member note).
+    static const bool s_dup_skip = EnvOn("MTG_DUP_SRC_SKIP", true);   // DEFAULT ON; =0 -> no entry skip
+    if (p.dup_source && s_dup_skip) { p.dup_armed = true; }
     // An Equip onto a reconfigure piece that another Equip candidate attaches (Lizard Blades' own
     // reconfigure). Only a deck with such a piece can raise it; the pair scan runs only when it could.
     if (p.equip && state.deck_has_reconfigure)
@@ -17896,7 +18920,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         for (const Action& r : cands)
         {
             if (r.kind != Action::Kind::Equip) { continue; }
-            const CardDefinition* rd = r.def ? r.def : CardDatabase::Instance().Lookup(r.card_name);
+            const CardDefinition* rd = r.def ? r.def : CardDatabase::Instance().LookupInterned(r.card_name);
             if (rd == nullptr || !rd->params.reconfigure_cost.has_value()) { continue; }
             for (const Action& e : cands)
             {
@@ -18166,7 +19190,7 @@ static int FillScaledXTrick(const GameState& state, Action& a, int surplus_gener
 {
     if (a.kind != Action::Kind::CastFromHand || surplus_generic <= 0) { return 0; }
     if (RemandCountersCast(a)) { return 0; }   // a countered pump trick pumps nothing (see FillScaledCastFace)
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     if (!d || !d->params.solo_target_trick || d->params.pump_per_x_power <= 0) { return 0; }
     if (!d->card.m_mana_cost.has_x) { return 0; }
     const int pips = std::max(1, d->card.m_mana_cost.x_pips);
@@ -20684,7 +21708,7 @@ static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, s
         const Action& a = p.actions[j];
         window += 1;                                  // trigger slack (see above)
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { unsafe = true; continue; }
         if (d->tmpl == CardTemplate::DrawSpell)
         { window += std::max(0, d->params.draw) + std::max(0, d->params.cast_scry) + std::max(0, d->params.cast_reorder); }
@@ -25003,7 +26027,7 @@ bool TurnSolver::PutsLandfallWatcher(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
         && a.kind != Action::Kind::ActivateVial) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     // A SCRY WATCHER (Galadriel) counts too: the land's own ETB scry is what fires it, so a land
     // played after the watcher is cast starts a reveal chain and one played before it does not.
     return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents
@@ -25028,7 +26052,7 @@ bool TurnSolver::PutsGyLandfallFeeder(const GameState& state, const Action& a)
     {
         if (!a.discard_name.empty())
         {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(a.discard_name.str());
+            const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.discard_name);
             // Vampires A1: a discard whose madness pin CASTS the card never reaches the graveyard.
             if (d != nullptr && d->gy_landfall_watcher && a.madness_choice <= 0) { return true; }
         }
@@ -25041,7 +26065,7 @@ bool TurnSolver::PutsGyLandfallFeeder(const GameState& state, const Action& a)
     {
         if (!a.victim_name.empty())
         {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(a.victim_name.str());
+            const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.victim_name);
             if (d != nullptr && d->gy_landfall_watcher) { return true; }
         }
         for (const Permanent& q : state.battlefield)
@@ -25465,7 +26489,7 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                     {
                         if (pa.free_cast || pa.alt_cost || pa.sacrifice_land) { continue; }
                         const CardDefinition* pd =
-                            pa.def ? pa.def : CardDatabase::Instance().Lookup(pa.card_name);
+                            pa.def ? pa.def : CardDatabase::Instance().LookupInterned(pa.card_name);
                         // KICKER: the summed cost lives on the "(Kicked)" face, so swap the def
                         // before EffectiveCost rather than overriding the cost after it.
                         pd = KickedFaceOr(pd, pa.kicked);
@@ -27065,7 +28089,7 @@ static int InertHasteShroudMoveOldHost(const GameState& state, const Action& a)
         if (p.card.m_number == a.sac_source_id) { eq = &p; }
     }
     if (host == nullptr || host->entered_this_turn) { return -1; }   // a HAND host is cast this plan
-    const CardDefinition* ed = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* ed = CardDatabase::Instance().LookupInterned(a.card_name);
     if (ed == nullptr || !PureHasteShroudEquipment(ed->params)) { return -1; }
     if (eq != nullptr && (eq->hone_counters != 0 || eq->charge_counters != 0)) { return -1; }
     const CardDefinition* hd = CardDatabase::Instance().LookupCached(host->card);
@@ -27402,7 +28426,92 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
 // engine never narrows). Two copies of one name are ONE class: same name => same definition => the
 // same card, so which copy goes is unobservable (a sound identity fold, design_A2 §0.1). A staged card
 // is in exile, never a legal discard.
+// ---- THE COLLECT MEMO: per-CollectActions-call caches for its emission helpers --------------------------
+// (MTG_COLLECT_MEMO, DEFAULT ON; =0 -> every helper recomputes.) CollectActions takes its state by const
+// reference and emits every candidate off that one unchanging board, but several Vampires emission helpers
+// recomputed board facts once PER SOURCE / PER PIN: ActivationDiscardClasses re-ran the provider's cleanup
+// ranking (VialProvider's curve fill) for every discard-cost source; MadnessFanFor copied the whole
+// GameState for its post-discard probe and re-derived the turn's optimistic mana per pin. Together ~6% of
+// a Vampires 2HG d5 game (callgrind 2026-10-21). The memo lives exactly as long as one CollectActions call
+// (CollectMemoScope; nested calls push their own), and a helper uses it only when it is handed THAT
+// call's state object -- any other state (a copy, a probe) misses and computes as before. Every cached
+// value is a pure function of (state, the helper's arguments), so a hit returns what a recompute would.
+// One madness answer of a pinned discard (see MadnessFanFor below). Defined here: CollectMemo caches fans.
+struct MadnessVariant { std::int8_t choice = 0; std::int8_t arm = 0; std::int8_t mv = 0; };
+struct CollectMemo
+{
+    const GameState* st = nullptr;
+    bool otm_ready = false;
+    int  otm = 0;                                    // OptimisticTurnMana(*st)
+    bool pool_ready = false;
+    ManaPool opt_pool;                               // AvailableManaPool(*st) + st->floating_mana
+    std::vector<std::pair<const CardDefinition*, std::vector<std::string>>> discard_classes;
+    std::unique_ptr<GameState> probe;                // MadnessFanFor's scratch: a copy of *st, hand restored
+    bool probe_busy = false;                         // the scratch is mid-use (a re-entrant fan copies)
+    struct Fan                                       // MadnessFanFor's answers, by every input
+    {
+        std::string pin; ManaCost outlet_cost; std::string src_name; bool outlet_sacrifices;
+        bool scope_search; int scope_root; bool full; std::vector<MadnessVariant> fan;
+    };
+    std::vector<Fan> fans;
+};
+inline thread_local CollectMemo* t_collect_memo = nullptr;
+static bool CollectMemoOn()
+{
+    static const bool v = EnvOn("MTG_COLLECT_MEMO", true);   // DEFAULT ON; =0 -> no per-call memo
+    return v;
+}
+static bool CollectMemoVerifyOn()
+{
+    static const bool v = EnvOn("MTG_COLLECT_MEMO_VERIFY");   // diagnostic: recompute every hit, abort on a difference
+    return v;
+}
+struct CollectMemoScope
+{
+    CollectMemo  memo;
+    CollectMemo* prev;
+    bool         armed;
+    explicit CollectMemoScope(const GameState& s) : prev(t_collect_memo), armed(CollectMemoOn())
+    {
+        if (!armed) { return; }
+        memo.st = &s;
+        t_collect_memo = &memo;
+    }
+    ~CollectMemoScope() { if (armed) { t_collect_memo = prev; } }
+    CollectMemoScope(const CollectMemoScope&) = delete;
+    CollectMemoScope& operator=(const CollectMemoScope&) = delete;
+};
+static CollectMemo* CollectMemoFor(const GameState& s)
+{
+    CollectMemo* m = t_collect_memo;
+    return (m != nullptr && m->st == &s) ? m : nullptr;
+}
+static int CollectOptimisticTurnMana(const GameState& s)
+{
+    CollectMemo* m = CollectMemoFor(s);
+    if (m == nullptr) { return OptimisticTurnMana(s); }
+    if (!m->otm_ready) { m->otm = OptimisticTurnMana(s); m->otm_ready = true; }
+    return m->otm;
+}
+
+static std::vector<std::string> ActivationDiscardClassesUncached(const GameState& state,
+                                                                 const CardDefinition& src_def);
 static std::vector<std::string> ActivationDiscardClasses(const GameState& state, const CardDefinition& src_def)
+{
+    CollectMemo* m = CollectMemoFor(state);
+    if (m == nullptr) { return ActivationDiscardClassesUncached(state, src_def); }
+    for (const auto& e : m->discard_classes)
+    {
+        if (e.first != &src_def) { continue; }
+        if (CollectMemoVerifyOn() && e.second != ActivationDiscardClassesUncached(state, src_def))
+        { std::fprintf(stderr, "[collect-memo] MISMATCH discard classes t%d\n", state.turn_number); std::abort(); }
+        return e.second;
+    }
+    m->discard_classes.emplace_back(&src_def, ActivationDiscardClassesUncached(state, src_def));
+    return m->discard_classes.back().second;
+}
+static std::vector<std::string> ActivationDiscardClassesUncached(const GameState& state,
+                                                                 const CardDefinition& src_def)
 {
     std::vector<std::string> names;
     for (const Card& c : state.ActivePlayer().hand)
@@ -27621,8 +28730,17 @@ static void EmitStealVariants(const GameState& state, const Card& src_card, cons
     struct Var { StealTapSpec spec; int lost_pw; int arrivals; };
     std::vector<Var> vars;
     std::vector<int> cnt(cls.size(), 0);
-    std::function<void(std::size_t, int)> rec = [&](std::size_t i, int left)
+    // The count distributions, depth-first, class i's count from high to low. A direct recursive lambda
+    // (it was a std::function: an indirect call per node) that also skips a subtree whose remaining
+    // classes cannot absorb `left` bodies -- every leaf under it fails `left == 0` -- so the leaves, and
+    // their order, are exactly the full recursion's. MTG_STEAL_REC_PRUNE=0 restores the unpruned walk.
+    // (3.5% of a Vampires d3 game's instructions, callgrind 2026-10-21.)
+    static const bool s_rec_prune = EnvOn("MTG_STEAL_REC_PRUNE", true);   // DEFAULT ON
+    std::vector<int> cap_suf(cls.size() + 1, 0);
+    for (std::size_t i = cls.size(); i-- > 0;) { cap_suf[i] = cap_suf[i + 1] + cls[i].real + cls[i].arr; }
+    auto rec = [&](auto& self, std::size_t i, int left) -> void
     {
+        if (s_rec_prune && i < cls.size() && cap_suf[i] < left) { return; }
         if (i == cls.size())
         {
             if (left != 0) { return; }
@@ -27642,10 +28760,10 @@ static void EmitStealVariants(const GameState& state, const Card& src_card, cons
             return;
         }
         const int cap = std::min(left, cls[i].real + cls[i].arr);
-        for (int c = cap; c >= 0; --c) { cnt[i] = c; rec(i + 1, left - c); }
+        for (int c = cap; c >= 0; --c) { cnt[i] = c; self(self, i + 1, left - c); }
         cnt[i] = 0;
     };
-    rec(0, N);
+    rec(rec, 0, N);
     if (vars.empty()) { return; }
     // Order only: fewest given-up attack power, then fewest arrivals relied on.
     std::stable_sort(vars.begin(), vars.end(), [](const Var& x, const Var& y)
@@ -27746,7 +28864,7 @@ static void EmitTransformAction(const GameState& state, const Card& src_card, co
 //     want that body untapped, so "pay with lands, keep the body for the steal" is a real line). Each
 //     selection's own books (subset rule 10, SubsetMadnessCoverInvalid) then keep exactly the covers its
 //     trigger can pay and that its own free arrivals do not dominate -- one variant per distinct line.
-struct MadnessVariant { std::int8_t choice = 0; std::int8_t arm = 0; std::int8_t mv = 0; };
+// (struct MadnessVariant is defined above, with CollectMemo, which caches fans of them.)
 
 // The distinct madness costs of hand card `c` for an outlet of THIS plan (cheapest first): its own and
 // a battlefield granter's (MadnessCostsFor), plus the printed cost when a granter in hand the plan can cast
@@ -27879,10 +28997,11 @@ static MadnessBodyBooks MadnessFanBooks(const GameState& probe, int me, const Co
     return b;
 }
 
-static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const std::string& pin,
-                                                 const ManaCost& outlet_cost, const std::string& src_name,
-                                                 bool outlet_sacrifices = false)
+static std::vector<MadnessVariant> MadnessFanForUncached(const GameState& state, const std::string& pin,
+                                                         const ManaCost& outlet_cost, const std::string& src_name,
+                                                         bool outlet_sacrifices, bool& full)
 {
+    full = false;
     std::vector<MadnessVariant> fan;
     if (!state.deck_has_madness || pin.empty() || HumanPlayActive()) { return fan; }
     const int me = state.active_player_index;
@@ -27894,12 +29013,35 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
     if (d == nullptr) { return fan; }
     const std::vector<ManaCost> costs = MadnessFanCosts(state, me, c);
     if (costs.empty()) { return fan; }
-    // The post-discard board (no payability probe -- see the block note).
-    GameState probe = state;
-    probe.players[me].hand.erase(probe.players[me].hand.begin() + hi);
+    // The post-discard board (no payability probe -- see the block note). Inside a CollectActions call
+    // (CollectMemo) the board is copied ONCE per call and each pin erases / re-inserts its card: the same
+    // board a fresh copy-and-erase gives, without a GameState copy per pin.
+    CollectMemo* cm = CollectMemoFor(state);
+    std::optional<GameState> own_probe;
+    GameState* probe_p = nullptr;
+    const bool use_scratch = cm != nullptr && !cm->probe_busy;
+    if (use_scratch)
+    {
+        if (!cm->probe) { cm->probe = std::make_unique<GameState>(state); }
+        probe_p = cm->probe.get();
+        cm->probe_busy = true;
+    }
+    else { own_probe.emplace(state); probe_p = &*own_probe; }
+    probe_p->players[me].hand.erase(probe_p->players[me].hand.begin() + hi);
+    struct ProbeRestore
+    {
+        CollectMemo* cm; GameState* p; int me; int hi; Card c;
+        ~ProbeRestore()
+        {
+            if (cm == nullptr) { return; }
+            p->players[me].hand.insert(p->players[me].hand.begin() + hi, c);
+            cm->probe_busy = false;
+        }
+    } probe_restore{ use_scratch ? cm : nullptr, probe_p, me, hi, c };
+    const GameState& probe = *probe_p;
     const MadnessPending pend{ c, me, costs, src_name };
     const MadnessWindow w = MadnessWindowNow(state);
-    const int budget = OptimisticTurnMana(state);
+    const int budget = CollectOptimisticTurnMana(state);
     auto over_budget = [&](const MadnessOption& o)
     { return budget != kNoManaCeiling && outlet_cost.ManaValue() + o.reduced.ManaValue() > budget; };
     // The provider's default is read off the PRE-PLAN options (this board's arms -- what it has always been
@@ -27984,8 +29126,22 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
         static const bool s_env = EnvOn("MTG_VAMP_MADNESS_COLOR_FOLD", true);
         if (budget != kNoManaCeiling && heurarm::Flag(heurarm::VAMP_MADNESS_COLOR_FOLD, s_env))
         {
-            ManaPool opt = AvailableManaPool(state);
-            opt.AddPool(state.floating_mana);   // may double-count (AvailableManaPool can hold it): optimistic
+            ManaPool opt;
+            if (cm != nullptr)
+            {
+                if (!cm->pool_ready)
+                {
+                    cm->opt_pool = AvailableManaPool(state);
+                    cm->opt_pool.AddPool(state.floating_mana);
+                    cm->pool_ready = true;
+                }
+                opt = cm->opt_pool;
+            }
+            else
+            {
+                opt = AvailableManaPool(state);
+                opt.AddPool(state.floating_mana);   // may double-count (AvailableManaPool can hold it): optimistic
+            }
             if (budget > opt.Total()) { opt.wild += budget - opt.Total(); }
             for (std::size_t k = 0; k < opts.size(); ++k)
             {
@@ -28007,7 +29163,49 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
     if (!(g_search_candidate_enum || g_condemn_root_turn < 0)) { fan.resize(1); return fan; }
     for (int k = 0; k < static_cast<int>(opts.size()); ++k)
     { if (k != dflt && !colour_dead[static_cast<std::size_t>(k)]) { fan.push_back(var_of(opts[static_cast<std::size_t>(k)])); } }
-    g_axis_madness_vars.fetch_add(static_cast<long long>(fan.size()), std::memory_order_relaxed);
+    full = true;   // the caller bumps g_axis_madness_vars (MadnessFanFor), exactly as this did here
+    return fan;
+}
+
+// MadnessFanFor = MadnessFanForUncached, memoised per CollectActions call (CollectMemo) on every argument
+// and the two scope globals the fan reads. Two copies of one outlet (two Stromkirk Condemned) ask the same
+// question of the same board; the second reads the first's fan. g_axis_madness_vars (a census counter) is
+// bumped exactly as the uncached path bumps it, hit or miss.
+static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const std::string& pin,
+                                                 const ManaCost& outlet_cost, const std::string& src_name,
+                                                 bool outlet_sacrifices = false)
+{
+    CollectMemo* cm = CollectMemoFor(state);
+    const bool scope_search = g_search_candidate_enum;
+    const int  scope_root   = g_condemn_root_turn;
+    if (cm != nullptr)
+    {
+        for (const CollectMemo::Fan& e : cm->fans)
+        {
+            if (e.outlet_sacrifices == outlet_sacrifices && e.scope_search == scope_search
+                && e.scope_root == scope_root && e.outlet_cost == outlet_cost && e.pin == pin
+                && e.src_name == src_name)
+            {
+                if (e.full) { g_axis_madness_vars.fetch_add(static_cast<long long>(e.fan.size()), std::memory_order_relaxed); }
+                if (CollectMemoVerifyOn())
+                {
+                    bool full2 = false;
+                    const std::vector<MadnessVariant> f2 =
+                        MadnessFanForUncached(state, pin, outlet_cost, src_name, outlet_sacrifices, full2);
+                    bool same = full2 == e.full && f2.size() == e.fan.size();
+                    for (std::size_t k = 0; same && k < f2.size(); ++k)
+                    { same = f2[k].choice == e.fan[k].choice && f2[k].arm == e.fan[k].arm && f2[k].mv == e.fan[k].mv; }
+                    if (!same) { std::fprintf(stderr, "[collect-memo] MISMATCH madness fan t%d\n", state.turn_number); std::abort(); }
+                }
+                return e.fan;
+            }
+        }
+    }
+    bool full = false;
+    std::vector<MadnessVariant> fan = MadnessFanForUncached(state, pin, outlet_cost, src_name, outlet_sacrifices, full);
+    if (full) { g_axis_madness_vars.fetch_add(static_cast<long long>(fan.size()), std::memory_order_relaxed); }
+    if (cm != nullptr)
+    { cm->fans.push_back(CollectMemo::Fan{ pin, outlet_cost, src_name, outlet_sacrifices, scope_search, scope_root, full, fan }); }
     return fan;
 }
 // RULE 10 -- THE MADNESS CONVOKE COVER BOOKS (Stage 6a defects D1 / D2, 2026-10-19). A madness CAST pin of a
@@ -28046,7 +29244,7 @@ static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::v
     MadnessBooksBoard(state, me, r, haste_in_reach, b);
     b.ub_t = b.ub_p + b.ub_o;
     auto def_of = [](const Action& c) -> const CardDefinition*
-    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
     auto add = [&](bool pip, bool free)
     {
         (pip ? b.ub_p : b.ub_o) += 1; b.ub_t += 1;
@@ -28077,7 +29275,7 @@ static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::v
         }
         if (!sac.victim_name.empty())
         {
-            const CardDefinition* vd = CardDatabase::Instance().Lookup(sac.victim_name.str());
+            const CardDefinition* vd = CardDatabase::Instance().LookupInterned(sac.victim_name);
             const bool pip = vd != nullptr && vd->card.HasColor(r.pip);
             (pip ? b.ub_p : b.ub_o) -= 1; b.ub_t -= 1;
             int& lb = pip ? b.lb_p : b.lb_o;
@@ -28128,7 +29326,7 @@ static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::v
         }
         if (!d.discard_name.empty() && d.madness_choice > 0)
         {
-            const CardDefinition* md = CardDatabase::Instance().Lookup(d.discard_name.str());
+            const CardDefinition* md = CardDatabase::Instance().LookupInterned(d.discard_name);
             if (md != nullptr && md->card.IsCreature())
             {
                 add(md->card.HasColor(r.pip), ArrivalCertainlyFree(state, me, md, r, haste_in_reach));
@@ -28163,49 +29361,70 @@ static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::v
     return b;
 }
 
+// Rule 10 for the action at `sel` position `po` (its gate -- deck_has_madness and the searched / root
+// scope -- is the caller's). Split out of SubsetMadnessCoverInvalid so the VampRulePre fast path can call
+// it only at the positions its per-candidate filter marks; the body is unchanged.
+static bool MadnessCoverInvalidAt(const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel, std::size_t po)
+{
+    const int me = state.active_player_index;
+    const Action& c = cands[static_cast<std::size_t>(sel[po])];
+    if (c.madness_choice <= 0 || c.discard_name.empty()) { return false; }
+    const CardDefinition* md = CardDatabase::Instance().LookupInterned(c.discard_name);
+    if (md == nullptr || !md->params.convoke || !md->card.IsCreature()) { return false; }
+    const int hi = PinnedDiscardIndex(state, me, c.discard_name.str());
+    if (hi < 0) { return false; }
+    const Card& card = state.players[static_cast<std::size_t>(me)].hand[static_cast<std::size_t>(hi)];
+    const std::vector<ManaCost> costs = MadnessFanCosts(state, me, card);
+    const int k = c.madness_choice - 1;
+    if (k < 0 || k >= static_cast<int>(costs.size())) { return false; }
+    ManaCost base = costs[static_cast<std::size_t>(k)];
+    const ConvokeRules r = ConvokeRulesFor(*md, state.phase == Phase::PostCombatMain);
+    const int pn  = *ConvokePipField(base, r.pip);
+    const int gen = base.generic;
+    const int cp  = MadnessCoverPip(c.madness_arm), cg = MadnessCoverGeneric(c.madness_arm);
+    const MadnessBodyBooks bk = MadnessTriggerBooks(state, cands, sel, po, r, card.m_number);
+    if (!ConvokeCoverPayable(cp, cg, pn, bk.ub_p, bk.ub_o, bk.ub_t)) { return true; }                // 10a
+    if (!bk.contention && ConvokeCoverDominated(cp, cg, pn, gen, bk.lb_p, bk.lb_o)) { return true; } // 10b
+    return false;
+}
+static bool MadnessCoverGateOpen(const GameState& state)
+{
+    return state.deck_has_madness && (g_search_candidate_enum || g_condemn_root_turn < 0);
+}
 static bool SubsetMadnessCoverInvalid(const GameState& state, const std::vector<Action>& cands,
                                       const std::vector<int>& sel)
 {
-    if (!state.deck_has_madness || !(g_search_candidate_enum || g_condemn_root_turn < 0)) { return false; }
-    const int me = state.active_player_index;
+    if (!MadnessCoverGateOpen(state)) { return false; }
     for (std::size_t po = 0; po < sel.size(); ++po)
     {
-        const Action& c = cands[static_cast<std::size_t>(sel[po])];
-        if (c.madness_choice <= 0 || c.discard_name.empty()) { continue; }
-        const CardDefinition* md = CardDatabase::Instance().Lookup(c.discard_name.str());
-        if (md == nullptr || !md->params.convoke || !md->card.IsCreature()) { continue; }
-        const int hi = PinnedDiscardIndex(state, me, c.discard_name.str());
-        if (hi < 0) { continue; }
-        const Card& card = state.players[static_cast<std::size_t>(me)].hand[static_cast<std::size_t>(hi)];
-        const std::vector<ManaCost> costs = MadnessFanCosts(state, me, card);
-        const int k = c.madness_choice - 1;
-        if (k < 0 || k >= static_cast<int>(costs.size())) { continue; }
-        ManaCost base = costs[static_cast<std::size_t>(k)];
-        const ConvokeRules r = ConvokeRulesFor(*md, state.phase == Phase::PostCombatMain);
-        const int pn  = *ConvokePipField(base, r.pip);
-        const int gen = base.generic;
-        const int cp  = MadnessCoverPip(c.madness_arm), cg = MadnessCoverGeneric(c.madness_arm);
-        const MadnessBodyBooks bk = MadnessTriggerBooks(state, cands, sel, po, r, card.m_number);
-        if (!ConvokeCoverPayable(cp, cg, pn, bk.ub_p, bk.ub_o, bk.ub_t)) { return true; }                // 10a
-        if (!bk.contention && ConvokeCoverDominated(cp, cg, pn, gen, bk.lb_p, bk.lb_o)) { return true; } // 10b
+        if (MadnessCoverInvalidAt(state, cands, sel, po)) { return true; }
     }
     return false;
 }
 
 // Push `a` once per madness variant of `fan` (or once, unchanged, when the fan is empty).
-static void PushWithMadnessFan(std::vector<Action>& actions, const Action& a,
+// Takes `a` by rvalue: the LAST variant is built in `a` itself and moved in, so a fan of k variants costs
+// k-1 copies, not k (and a fan-less push costs none) -- the same actions in the same order.
+static void PushWithMadnessFan(std::vector<Action>& actions, Action&& a,
                                const std::vector<MadnessVariant>& fan)
 {
-    if (fan.empty()) { actions.push_back(a); return; }
-    for (const MadnessVariant& v : fan)
+    if (fan.empty()) { actions.push_back(std::move(a)); return; }
+    auto stamp = [](Action& b, const MadnessVariant& v)
     {
-        Action b = a;
         b.madness_choice = v.choice;
         b.madness_arm    = v.arm;
         b.madness_mv     = v.mv;
         b.cost.generic  += v.mv;
+    };
+    for (std::size_t k = 0; k + 1 < fan.size(); ++k)
+    {
+        Action b = a;
+        stamp(b, fan[k]);
         actions.push_back(std::move(b));
     }
+    stamp(a, fan.back());
+    actions.push_back(std::move(a));
 }
 
 // The VICTIM CLASSES of a discard-cost sac outlet on the PRE-PLAN board: one battlefield index per
@@ -28252,15 +29471,22 @@ static bool HandCardIsSubtypeCreature(const Card& c, const std::string& sub)
 // there instead is a DEAD read: it silently disables whatever rule it guards (the free-cast bank's
 // CR 107.3b X = 0, MTG_FREECAST_X_ZERO; the one-host double-strike gate, MTG_EQUIP_DS_GATE_CASTS).
 // docs/design/precollect-def-dead-reads.md lists every such site.
+// The by-name branch keys on the INTERNED name (LookupInterned: a pointer-keyed index over the same
+// m_cards, rebuilt at every load / Register, so it returns exactly Lookup(name) -- every DB key is interned
+// there and interning is canonical) instead of hashing the string: ~1M string hashes per Vampires 2HG d5
+// game, 0.7% of its instructions (callgrind 2026-10-21). MTG_LOOKUP_INTERNED=0 restores the string lookup.
 static const CardDefinition* CollectedActionDef(const Player& ap, const Action& a)
 {
+    static const bool s_interned = EnvOn("MTG_LOOKUP_INTERNED", true);   // DEFAULT ON
     return (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
                ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
-               : CardDatabase::Instance().Lookup(a.card_name);
+               : (s_interned ? CardDatabase::Instance().LookupInterned(a.card_name)
+                             : CardDatabase::Instance().LookupInterned(a.card_name));
 }
 
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
+    CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
     const Player& ap = state.ActivePlayer();
     bool has_creature_target = HasLegalCreatureTarget(state);
     int  n = static_cast<int>(ap.hand.size());
@@ -32032,7 +33258,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // (conditional availability), an ETB tap rider (Skateboard), or hone counters on the
             // physical equipment -- EquipAttachDeltaFor structurally cannot see those (Dwalin), a
             // pre-existing emission gap this must not deepen.
-            const bool s_eqdom_open = EnvOn("MTG_EQUIP_ALL_HOSTS")
+            // The env read is cached (it was a getenv per CollectActions call: 0.2% of a Vampires 2HG
+            // game, callgrind 2026-10-21); the same flag is read through a static below.
+            static const bool s_all_hosts_env = EnvOn("MTG_EQUIP_ALL_HOSTS");
+            const bool s_eqdom_open = s_all_hosts_env
                                    || DecisionUnpruned(UnprunedGate::EquipHost)
                                    || HumanPlayActive();
             const bool s_eqdom = EquipEqcostDominanceEnabled() && !s_eqdom_open
@@ -34593,7 +35822,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.eval           = 0;   // card-neutral (discard one, draw one); the rollout scores it
                     a.is_noncreature = true;
                     // Vampires A1: crossed with the discard's madness answer (MadnessFanFor).
-                    PushWithMadnessFan(actions, a, MadnessFanFor(state, pin, bcost, src.card.m_name.str()));
+                    PushWithMadnessFan(actions, std::move(a), MadnessFanFor(state, pin, bcost, src.card.m_name.str()));
                 }
             }
 
@@ -35299,7 +36528,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.eval           = atk * sd->params.discard_team_pump_power * DMG - DMG;
                     a.is_noncreature = true;
                     // Vampires A1: crossed with the discard's madness answer (MadnessFanFor).
-                    PushWithMadnessFan(actions, a, MadnessFanFor(state, pin, ManaCost{}, src.card.m_name.str()));
+                    PushWithMadnessFan(actions, std::move(a), MadnessFanFor(state, pin, ManaCost{}, src.card.m_name.str()));
                 }
             }
         }
@@ -35403,6 +36632,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 fans.reserve(pins.size());
                 for (const std::string& pin : pins)
                 { fans.push_back(MadnessFanFor(state, pin, base.cost, src.card.m_name.str(), /*outlet_sacrifices=*/true)); }
+                // The pins interned ONCE: assigning a std::string to an InternedName interns it, and the
+                // loops below assign one per (victim class x pin) -- 1.4M interns per Vampires 2HG d5 game
+                // (callgrind 2026-10-21). Same canonical pointers.
+                std::vector<InternedName> pin_names;
+                pin_names.reserve(pins.size());
+                for (const std::string& pin : pins) { pin_names.emplace_back(pin); }
                 // Board victims.
                 for (const int vi : DiscardSacVictimClasses(state, src, op))
                 {
@@ -35416,9 +36651,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         Action a = base;
                         a.sac_victim_id = v.card.m_number;
-                        a.discard_name  = pins[pi];
+                        a.discard_name  = pin_names[pi];
                         a.eval          = (net_cards - loss) * DMG;
-                        PushWithMadnessFan(actions, a, fans[pi]);
+                        PushWithMadnessFan(actions, std::move(a), fans[pi]);
                     }
                 }
                 // Same-plan victims: one per distinct Vampire creature NAME in hand (staged castables too).
@@ -35431,6 +36666,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 for (const std::string& vn : hv)
                 {
+                    const InternedName vn_i(vn);
                     const CardDefinition* vd = CardDatabase::Instance().Lookup(vn);
                     const int pw   = (vd != nullptr) ? std::max(0, vd->card.m_power.value_or(0)) : 0;
                     const int loss = (vd != nullptr && vd->gy_landfall_watcher && land_in_hand) ? 0 : pw;
@@ -35438,11 +36674,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         Action a = base;
                         a.sac_victim_id   = 0;
-                        a.victim_name     = vn;
+                        a.victim_name     = vn_i;
                         a.needs_cast_mask = 2;   // the victim must be cast / put by this plan
-                        a.discard_name    = pins[pi];
+                        a.discard_name    = pin_names[pi];
                         a.eval            = (net_cards - loss) * DMG;
-                        PushWithMadnessFan(actions, a, fans[pi]);
+                        PushWithMadnessFan(actions, std::move(a), fans[pi]);
                     }
                 }
                 continue;
@@ -39105,7 +40341,7 @@ static int PlanHeroismCopies(const std::vector<Action>& cands, int* bodies = nul
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d != nullptr && d->params.frontline_copy_tokens > 0)
         {
             n += d->params.frontline_copy_tokens;
@@ -39118,7 +40354,7 @@ static int PlanHeroismCopies(const std::vector<Action>& cands, int* bodies = nul
 static int MintHeroismBonus(const Action& a, int heroism_copies, int heroism_bodies)
 {
     if (a.mint_gain <= 0 || heroism_copies <= 0) { return 0; }   // 0 with the lever off
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     if (d == nullptr) { return 0; }
     return SamePlanHeroismMint(*d, a.enchant_target, a.soulfire_own_targets, heroism_copies,
                                a.mint_magnet, heroism_bodies);
@@ -41315,7 +42551,7 @@ static void MaybePinRolloutAuraSwap(const GameState& state, bool is_pre_combat, 
     for (const Action& a : plan.actions)
     {
         if (a.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->params.aura_swap_cost.has_value()) { continue; }
         for (const Card& c : state.players[me].hand)
         { if (c.m_name == a.card_name) { plan.combat_aura_swap_choice = c.m_number; return; } }
@@ -41453,7 +42689,7 @@ static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Pla
         if (r == q) { continue; }
         const Action& o = plan.actions[r];
         if (o.cost.ManaValue() <= 0 && !o.cost.has_x) { continue; }
-        const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+        const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().LookupInterned(o.card_name);
         const bool for_creature = o.kind == Action::Kind::CastFromHand && od && od->card.IsCreature();
         payable = TapForCostDirect(cs, o.cost, for_creature);
     }
@@ -42047,7 +43283,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         for (const Action& ra : cands)
         {
             if (ra.kind != Action::Kind::Equip || ra.cost.generic <= leaf_waiver_bound) { continue; }
-            const CardDefinition* ed = ra.def ? ra.def : CardDatabase::Instance().Lookup(ra.card_name);
+            const CardDefinition* ed = ra.def ? ra.def : CardDatabase::Instance().LookupInterned(ra.card_name);
             if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }   // never waived
             leaf_waiver_bound = ra.cost.generic;
         }
@@ -42222,7 +43458,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     {
         const Action& fa = cands[j];
         const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
-                                 ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
+                                 ? (fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name))
                                  : nullptr;
         const bool fa_countered = RemandCountersCast(fa);   // both fills return 0 for it
         if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0 && !fa_countered)
@@ -42230,7 +43466,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
             && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
-        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
+        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
         { cand_draws[j] = 1; }
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
@@ -42370,6 +43606,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // parallelises across rollouts, never inside a walk), and the walk completes before the record
     // site below reads it.
     shapestats::CallFunnel callf;
+    // enumstats::Enabled() read once for the walk (a function-local static: a guard load + call per read,
+    // ~2 reads per visited subset -- 0.2% of a Vampires d5 game). The flag is process-constant.
+    const bool es_on_c = enumstats::Enabled();
     auto consider = [&](std::vector<int>& sel)
     {
         // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
@@ -42445,7 +43684,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             }
         }
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
-        if (enumstats::Enabled()) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
+        if (es_on_c) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
         // BRANCH SHAPE funnel: one visit. The three shared-resource predicates below each get a
         // counter; everything else is derived as (entered - passed - those three) at dump time.
         if (shape != nullptr) { shapestats::Bump(shape->entered); ++callf.entered; }
@@ -42471,7 +43710,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer,
-                                           pre.dup_clause))
+                                           pre.dup_clause, pre.DupM(cands)))
         { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; } return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
@@ -42490,7 +43729,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (pre.hand_blink     && SubsetHasStrandedHandBlink(cands, sel)) { return; }
         // Vampires A2 duplicates (over-pinned discards, a same-plan victim without its cast, the wrong
         // Blood cost variant, a non-canonical identical-Condemned pair). Lockstep twin in eval_and_push.
-        if (pre.vamp_outlet    && SubsetVampOutletInvalid(state, cands, sel, fold_from_odometer)) { return; }
+        if (pre.vamp_outlet    && SubsetVampOutletInvalidWith(state, cands, sel, fold_from_odometer, pre.vamp)) { return; }
         // Rule 9 (Vampires perf): a post-combat discard pump that only discards is dominated by its twin.
         if (pre.vamp_outlet    && SubsetPostCombatPumpDiscardDominated(state, cands, sel, is_pre_combat)) { return; }
         if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
@@ -42544,7 +43783,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
-        if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
+        if (es_on_c) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
         if (shape != nullptr) { shapestats::Bump(shape->passed); ++callf.passed; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
@@ -42917,7 +44156,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             && !(eff_cg.CanPay(combined) && eff_nc_cg.CanPay(noncreature_combined)))
         { mc_store_reject(); return; }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
-        if (!mana_ok && any_filter && enumstats::Enabled())
+        if (!mana_ok && any_filter && es_on_c)
         {
             enumstats::g_c_resc_call.fetch_add(1, std::memory_order_relaxed);
             for (int j : sel)
@@ -42940,7 +44179,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                > static_cast<int>((credited ? eff_nc : pool_noncreature).Total());
         // The gate now rides the RAW-POOL clause alone -- the only one that can be a true bound.
         const bool resc_tot_short = rt_pool;
-        if (enumstats::Enabled())
+        if (es_on_c)
         {
             if (resc_tot_short) { enumstats::g_c_resc_tot.fetch_add(1, std::memory_order_relaxed); }
             if (rt_pool) { enumstats::g_c_rt_pool.fetch_add(1, std::memory_order_relaxed); }
@@ -42980,16 +44219,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         { mc_store_reject(); return; }
         // Reached here on a !mana_ok subset => the real payment RESCUED it. If that subset was also
         // total-short the shortcut's argument is false; say so loudly rather than silently shipping.
-        if (enumstats::Enabled())
+        if (es_on_c)
         {
             if (resc_tot_short) { enumstats::g_c_resc_tot_ok.fetch_add(1, std::memory_order_relaxed); }
             if (rt_pool) { enumstats::g_c_rt_pool_ok.fetch_add(1, std::memory_order_relaxed); }
             if (rt_eff)  { enumstats::g_c_rt_eff_ok.fetch_add(1, std::memory_order_relaxed); }
             if (rt_nc)   { enumstats::g_c_rt_nc_ok.fetch_add(1, std::memory_order_relaxed); }
         }
-        if (!mana_ok && enumstats::Enabled())
+        if (!mana_ok && es_on_c)
         { enumstats::g_c_resc_ok.fetch_add(1, std::memory_order_relaxed); }   // reached here => rescued
-        if (enumstats::Enabled()) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
+        if (es_on_c) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
         if (seq_on) { apply_seq(); }   // filter-rescued survivor: keep its credited pool honest too
         if (sacrifice_count > total_lands)                   { mc_store_reject(); return; }
         if (discard_lands_used > lands_in_hand)              { mc_store_reject(); return; }
@@ -43026,7 +44265,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                                               /*any_rock_cand=*/any_rock);
             if (!SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
         }
-        if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
+        if (es_on_c) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
         // judged by a real payment, and colour_feas is unusable on a filter board anyway.
@@ -43105,7 +44344,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             }
         }
         if (mana_cache_on && !mc_hit) { mc_last_gmask = gmask; mc_reject = false; mc_mana_ok = mana_ok; }
-        if (enumstats::Enabled()) { enumstats::g_c_feas.fetch_add(1, std::memory_order_relaxed); }   // passed colour feasibility
+        if (es_on_c) { enumstats::g_c_feas.fetch_add(1, std::memory_order_relaxed); }   // passed colour feasibility
 
         // Irencrag Feat "you can cast only one more spell this turn": reject any subset that casts
         // more than max_casts_after spells AFTER the restricting ritual (ordered by CastOrderRank).
@@ -43412,7 +44651,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             rank_value = LearnedPlanScore(state, psum, *ev);
         }
 
-        if (enumstats::Enabled()) { enumstats::g_c_surv.fetch_add(1, std::memory_order_relaxed); }   // fully scored
+        if (es_on_c) { enumstats::g_c_surv.fetch_add(1, std::memory_order_relaxed); }   // fully scored
         // DIAG (MTG_SOLVE_PROJ_TRACE=<turn>, default 0 = off, print-only): every fully-scored subset
         // of Solve (the d0 runner / playout policy) on that turn with its this-turn projection terms --
         // the read that showed gi1106's T4 had no plan projected lethal (MTG_ATTACK_FREECAST_DAMAGE).
@@ -44370,6 +45609,41 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                               + ManaGateTriangular(my + gate->ind_gy_all));
         };
         bool done = false;
+        // MTG_WALK_DFS: the plain scalar walk as a pruned DFS (PlainOdometerDfs) -- the same selections
+        // handed to consider() in the same order; the carry loop below is skipped. Stops once the walk's
+        // budget is spent (every later consider() would return at its walk_exhausted test).
+        if (WalkDfsOn() && !gate_on && !copy_pred_on && !dep_pred_on && !fold_pred_on && !mana_audit_on
+            && PlainDfsCostsSound(groups, cand_mv))
+        {
+            // MTG_VAMP_PREFILTER (see VampPrefilterOn): the visits consider() would end at the Vampires
+            // rules are refused here, after replaying its entry (the abandon-poll cadence).
+            const bool vamp_prefilter = VampPrefilterOn() && pre.vamp_outlet && !VampRulePreVerifyOn()
+                                     && g_greedy_charge_budget == nullptr && !decisionwork::Armed()
+                                     && !es_on_c && shape == nullptr && !dupclause::Enabled()
+                                     && !payoff_prune_on && !HumanPlayActive();
+            PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel,
+                             [&](std::vector<int>& s) -> bool
+                             {
+                                 if (!vial_ok(s)) { return walk_exhausted; }
+                                 if (vamp_prefilter && pre.vamp.built && !walk_exhausted)
+                                 {
+                                     std::sort(s.begin(), s.end());   // consider()'s own first step
+                                     if (SubsetVampOutletInvalidPre(state, cands, s, /*fold_from_odometer=*/true, pre.vamp))
+                                     {
+                                         if (++g_walk_abandon_acc >= kWalkAbandonStride)
+                                         {
+                                             g_walk_abandon_acc = 0;
+                                             if (gamework::Abandoned()) { walk_exhausted = true; }
+                                         }
+                                         return walk_exhausted;
+                                     }
+                                 }
+                                 foldsel::g_from_odometer = true;
+                                 consider(s);
+                                 return walk_exhausted;
+                             });
+            done = true;
+        }
         while (!done)
         {
             // MTG_MANA_WALK_CUT_VERIFY: is this a position a mana jump would have passed over?
@@ -45248,7 +46522,7 @@ bool PdBatchTimingDominated(const GameState& s, const std::vector<Action>& acts)
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { return false; }
         if (!a.free_cast && a.cost.ManaValue() > 0) { ++paying; }
         if (d->card.IsInstant() || d->card.IsSorcery()) { continue; }   // does not stay
@@ -45380,7 +46654,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         { t.own_board_hazard = true; }
         if (a.kind != Action::Kind::CastFromHand
             && a.kind != Action::Kind::CastFromGraveyard) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (!d) { t.own_board_hazard = true; continue; }
         // ...and a cast that hits the board: a damage-each-creature sorcery (Rolling Earthquake), an
         // ETB destroy (Shriekmaw / Acidic Slime -- either may be pointed at our side), a creature
@@ -45507,7 +46781,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             for (const Action& a : acts)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                consider(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+                consider(a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name));
             }
             if (best_def != nullptr && best_pips > 0)
             {
@@ -45822,7 +47096,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind == Action::Kind::DigDraw) { return Pp(PP_DIG); }
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
             { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d && d->tmpl == CardTemplate::DrawUntilNonland) { return Pp(PP_FLOOD); }
         }
     }
@@ -45939,14 +47213,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // jointly payable three-cast plan applied as two casts in the user's Snow order, so it was
         // inexpressible at any budget). Producers that add mana (rituals, rocks, Treasure makers)
         // are untouched.
-        const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         const bool conversion_only = a.ritual_float == 0 && pd != nullptr
                                   && pd->params.any_color_filter && pd->params.filter_no_free_colorless;
         if ((a.ritual_float > 0 || a.rock_mana.Total() > 0) && !etb_treasure_only && !conversion_only)
         {
             if (!g_prepay_producer_on) { return Pp(PP_PRODUCER); }   // producer breaks fungibility
         }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         // KICKER: a kicked cast's bill is its "(Kicked)" face's cost, not the printed one. Swapped
         // here, before every test below reads `d`, so the prepay's affordability checks and its
         // combined bill agree with what enumeration charged.
@@ -46007,7 +47281,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
             rv_acts.push_back(a);
             if (rv_acts.back().def == nullptr)
-            { rv_acts.back().def = CardDatabase::Instance().Lookup(a.card_name); }
+            { rv_acts.back().def = CardDatabase::Instance().LookupInterned(a.card_name); }
             rv_sel.push_back(static_cast<int>(rv_acts.size()) - 1);
         }
         const RevealSurcharge rs = SameSubsetRevealSurcharge(state, rv_acts, rv_sel);
@@ -46039,7 +47313,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && _pd_pending.n < 8) { _pd_pending.d[_pd_pending.n++] = d; }
         }
     }
@@ -46064,7 +47338,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
             { ++no; small_all_creatures = false; continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             const bool q = SpellQualifiesForBigMana(d->card, *big_only_p);
             (q ? yes : no) += 1;
@@ -47202,7 +48476,7 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 bool CastOpensUnseen(const GameState& state, const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     return d != nullptr && TurnSolver::ParamKeyedDrawClass(state, *d);
 }
 
@@ -47434,7 +48708,7 @@ bool TurnSolver::TrailingHasCountBands(const std::vector<Action>& acts)
 static int TrailingRankOf(const DecisionProvider& prov, const GameState& state, const Action& a)
 {
     if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
 }
 static int TrailingBandOf(const Action& a)
@@ -47526,11 +48800,74 @@ struct ContPinFrame
     ContPinFrame& operator=(const ContPinFrame&) = delete;
 };
 
+// ---- THE PRE-PLAN FACTS SHARE (MTG_PREPLAN_SHARE, DEFAULT ON; =0 -> every apply recomputes) ----------
+// ApplyPlanDirect opens by reading two facts of the board it STARTS from: SnapshotActivatableAbilities
+// (site 9's pre-plan activation keys) and PrePlanAvailabilityKeys (MTG_BP_NEW_ONLY's). Both are pure
+// functions of that board -- a battlefield walk with an affordability probe per permanent -- and the
+// search's candidate loops apply EVERY candidate plan to a fresh copy of the SAME root board, so the
+// identical walk ran once per sibling: 3.5% of a Vampires 2HG d5 game (callgrind 2026-10-21). A loop
+// that copies its root and immediately applies arms the share for that copy (PrePlanShareArm); the
+// apply takes it at entry (only when handed exactly that object, so a nested apply never sees it),
+// computes each fact once at the point it always did, and every later sibling reads the cached value.
+// The siblings' boards are equal at that point (equal copies, the same deterministic preamble), so a
+// cached fact is the value a recompute returns. MTG_PREPLAN_SHARE_VERIFY=1 recomputes and aborts on any
+// difference.
+struct PrePlanShare
+{
+    bool keys_ready = false;
+    std::vector<std::uint64_t> keys;   // TurnSolver::SnapshotActivatableAbilities
+    bool acts_ready = false;
+    std::vector<std::uint64_t> acts;   // TurnSolver::PrePlanAvailabilityKeys
+};
+inline thread_local PrePlanShare*    t_pps_share  = nullptr;
+inline thread_local const GameState* t_pps_target = nullptr;
+static bool PrePlanShareOn()
+{
+    static const bool v = EnvOn("MTG_PREPLAN_SHARE", true);   // DEFAULT ON; =0 -> recompute per apply
+    return v;
+}
+static bool PrePlanShareVerifyOn()
+{
+    static const bool v = EnvOn("MTG_PREPLAN_SHARE_VERIFY");  // diagnostic: recompute and compare
+    return v;
+}
+// Arm right before ApplyPlanDirect(copy, ...) when `copy` was JUST copied from the loop's root board.
+static void PrePlanShareArm(PrePlanShare& sh, const GameState& copy)
+{
+    if (!PrePlanShareOn()) { return; }
+    t_pps_share  = &sh;
+    t_pps_target = &copy;
+}
+static PrePlanShare* PrePlanShareTake(const GameState& s)
+{
+    PrePlanShare* r = (t_pps_target == &s) ? t_pps_share : nullptr;
+    t_pps_share  = nullptr;
+    t_pps_target = nullptr;
+    return r;
+}
+static std::vector<std::uint64_t> PrePlanSnapshotKeys(PrePlanShare* sh, const GameState& state)
+{
+    if (sh == nullptr) { return TurnSolver::SnapshotActivatableAbilities(state); }
+    if (!sh->keys_ready) { sh->keys = TurnSolver::SnapshotActivatableAbilities(state); sh->keys_ready = true; }
+    else if (PrePlanShareVerifyOn() && sh->keys != TurnSolver::SnapshotActivatableAbilities(state))
+    { std::fprintf(stderr, "[preplan-share] MISMATCH keys t%d\n", state.turn_number); std::abort(); }
+    return sh->keys;
+}
+static std::vector<std::uint64_t> PrePlanAvailKeys(PrePlanShare* sh, const GameState& state)
+{
+    if (sh == nullptr) { return TurnSolver::PrePlanAvailabilityKeys(state); }
+    if (!sh->acts_ready) { sh->acts = TurnSolver::PrePlanAvailabilityKeys(state); sh->acts_ready = true; }
+    else if (PrePlanShareVerifyOn() && sh->acts != TurnSolver::PrePlanAvailabilityKeys(state))
+    { std::fprintf(stderr, "[preplan-share] MISMATCH acts t%d\n", state.turn_number); std::abort(); }
+    return sh->acts;
+}
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
                             int caller_line)
 {
+    PrePlanShare* const pps = PrePlanShareTake(state);   // armed by a sibling loop for exactly this board
     g_apply_caller_line = caller_line;
     // The Niv draw/damage loop: whatever this apply drew outside a flushed resolution (a land's ETB
     // draw) pings before the plan's outcome is read. Executor twin: AIEngine::TakeTurn's scope.
@@ -47582,7 +48919,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               || w0collapse::NobpSite9Watch()
                               || (!plan.bp_all && g_bp_enum_depth == 0 && g_rollout_nest == 0);
     const std::vector<uint64_t> pre_plan_keys = site9_keys_read
-        ? TurnSolver::SnapshotActivatableAbilities(state) : std::vector<uint64_t>{};
+        ? PrePlanSnapshotKeys(pps, state) : std::vector<uint64_t>{};
 
     // MTG_BP_CANON_AUDIT ONLY -- ASK THE FAN-OUT'S QUESTION AT THE FAN-OUT'S STATE.
     //
@@ -47610,7 +48947,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // MTG_BP_NEW_ONLY input, captured at the same point for the same reason: the activations the
     // base plan could have carried (empty when the lever is off). Bound on every breakpoint scope
     // this apply opens; AIEngine::TakeTurn captures the same set at its entry.
-    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanAvailabilityKeys(state);
+    const std::vector<std::uint64_t> pre_plan_acts = PrePlanAvailKeys(pps, state);
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
@@ -51539,7 +52876,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // BREAKPOINT LEFTOVERS: an impulse-exile site the provider merges for gets this
                     // list's remaining casts (see lo_pending). Param test first: no other deck pays.
                     {
-                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                         if (lod != nullptr && lod->params.impulse_exile > 0
                             && ResolveProvider(state).MergesBreakpointLeftovers(*lod))
                         {
@@ -51644,7 +52981,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 auto is_hoisted_minter = [&](const Action& a)
                 {
                     if (!mint_hoist || a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
-                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                     return d != nullptr && d->params.creates_treasures > 0;
                 };
                 std::vector<int> ena;
@@ -51654,8 +52991,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (mint_hoist)
                     { return HoistSortKey(state, acts[x], true) < HoistSortKey(state, acts[y], true); }
-                    const CardDefinition* dx = CardDatabase::Instance().Lookup(acts[x].card_name);
-                    const CardDefinition* dy = CardDatabase::Instance().Lookup(acts[y].card_name);
+                    const CardDefinition* dx = CardDatabase::Instance().LookupInterned(acts[x].card_name);
+                    const CardDefinition* dy = CardDatabase::Instance().LookupInterned(acts[y].card_name);
                     if (!dx || !dy) { return false; }
                     return ResolveProvider(state).CastOrderRank(state, *dx)
                          < ResolveProvider(state).CastOrderRank(state, *dy);
@@ -51770,7 +53107,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const int dbg_before = dbg_count(a);
                     // BREAKPOINT LEFTOVERS (see lo_pending): this list's remaining casts.
                     {
-                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                         if (lod != nullptr && lod->params.impulse_exile > 0 && a.kind == Action::Kind::CastFromHand
                             && ResolveProvider(state).MergesBreakpointLeftovers(*lod))
                         {
@@ -51923,7 +53260,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::DigDraw) { continue; }
-            const CardDefinition* sd = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* sd = CardDatabase::Instance().LookupInterned(a.card_name);
             if (!sd) { continue; }
             if (a.dig_sacrifice)
             {
@@ -52042,7 +53379,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (const Action& a : trailing_acts_in)
         {
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
         }
         if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
@@ -52093,7 +53430,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // restriction, the pinned discard, the baked victim) so a stale activation pays nothing;
             // then the mana under the creature-source scope; then the shared apply. Executor twin:
             // AIEngine::TakeTurn's trailing pass (identical sequence).
-            const CardDefinition* sod = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* sod = a.def != nullptr ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (sod != nullptr && IsDiscardSacOutlet(sod->params))
             {
                 const std::string& pin = a.discard_name.str();
@@ -52141,7 +53478,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
-                const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* chd = CardDatabase::Instance().LookupInterned(a.card_name);
                 if (chd && chd->params.transmute_cost.has_value())
                 { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
                 else
@@ -52594,7 +53931,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Wirewood Lodge: precondition-check FIRST so a stranded untap never pays its {G}.
             // The nesting below is the AUDIT split only -- same three tests in the same
             // short-circuit order, so with MTG_ACT_DROP_AUDIT off this is byte-identical.
-            const CardDefinition* ud = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ud = CardDatabase::Instance().LookupInterned(a.card_name);
             if (ud != nullptr
                 && CanApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
                                          ud->params.untap_creature_subtype))
@@ -52679,7 +54016,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // {T} is part of the cost, and the source must not fund its own activation), and untap
             // it again if the mana turns out to be unpayable -- the executor's ordering in
             // ActivateTapTokensShared, kept identical here so the two worlds realise one board.
-            const CardDefinition* td = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* td = CardDatabase::Instance().LookupInterned(a.card_name);
             for (std::size_t pi = 0; pi < state.battlefield.size(); ++pi)
             {
                 Permanent& p = state.battlefield[pi];
@@ -55256,7 +56593,7 @@ static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
     {
         const Action& c = cands[idx];
         if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = CardDatabase::Instance().LookupInterned(c.card_name);
         if (!cd || !cd->params.is_aura) { continue; }
         if (cd->params.aura_enchant_requires != "another_aura"
             && cd->params.aura_enchant_requires != "modified") { continue; }
@@ -55267,7 +56604,7 @@ static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
             if (jdx == idx) { continue; }
             const Action& d = cands[jdx];
             if (d.kind != Action::Kind::CastFromHand || d.enchant_target != c.enchant_target) { continue; }
-            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            const CardDefinition* dd = CardDatabase::Instance().LookupInterned(d.card_name);
             if (!dd || !dd->params.is_aura) { continue; }
             // A valid enabler is legal on that creature itself: plain aura, or restricted-but-frozen-legal.
             if (dd->params.aura_enchant_requires.empty()
@@ -55283,7 +56620,7 @@ static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
 static bool IsConditionalRestrictedAura(const GameState& state, const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
-    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
     if (!d || !d->params.is_aura) { return false; }
     if (d->params.aura_enchant_requires != "another_aura"
         && d->params.aura_enchant_requires != "modified") { return false; }
@@ -55377,7 +56714,7 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
     {
         const Action& c = cands[idx];
         if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = CardDatabase::Instance().LookupInterned(c.card_name);
         if (!cd || !cd->params.is_aura) { continue; }
         // An "Enchant LAND" aura's target is a LAND, so on_bf (which looks for a CREATURE with that
         // m_number) can never find it and this guard rejected EVERY subset containing one -- the
@@ -55393,7 +56730,7 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
             const Action& d = cands[jdx];
             if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
                 || d.hand_index >= (int)ap.hand.size()) { continue; }
-            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            const CardDefinition* dd = CardDatabase::Instance().LookupInterned(d.card_name);
             if (dd && dd->card.IsCreature() && ap.hand[d.hand_index].m_number == c.enchant_target)
             { cast_here = true; break; }
         }
@@ -55409,7 +56746,7 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
 static bool IsAuraOnNewCreature(const GameState& state, const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
-    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
     if (!d || !d->params.is_aura) { return false; }
     // An "enchant LAND" Aura's host is a LAND, so the battlefield scan below -- which looks for a
     // CREATURE carrying that m_number -- can never match, and this returned TRUE for every one of
@@ -55447,7 +56784,7 @@ static bool OrderingPlacesAuraBeforeCreature(const GameState& state, const std::
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         if (a.enchant_target > 0 && IsAuraOnNewCreature(state, a) && !cast_nums.count(a.enchant_target))
         { return true; }   // Aura targets a this-turn creature not yet cast in this ordering
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* cd = CardDatabase::Instance().LookupInterned(a.card_name);
         if (cd && cd->card.IsCreature() && a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
         { cast_nums.insert(ap.hand[a.hand_index].m_number); }
     }
@@ -55469,7 +56806,7 @@ static bool OrderingPlacesRestrictedAuraBeforeEnabler(const GameState& state, co
         if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
         if (IsConditionalRestrictedAura(state, a)
             && std::find(dressed.begin(), dressed.end(), a.enchant_target) == dressed.end()) { return true; }
-        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
         if (d != nullptr && d->params.is_aura && !d->params.is_land_aura) { dressed.push_back(a.enchant_target); }
     }
     return false;
@@ -56330,7 +57667,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         const Action& fa = cands[j];
         const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
-                                 ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
+                                 ? (fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name))
                                  : nullptr;
         const bool fa_countered = RemandCountersCast(fa);   // both fills return 0 for it
         if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0 && !fa_countered)
@@ -56338,7 +57675,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
             && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
-        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
+        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
         { cand_draws[j] = 1; }
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
@@ -56529,7 +57866,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
-            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause))
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause,
+                                           pre.DupM(cands)))
         { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_dup); ++ecallf.rej_dup; }
           // ...and the flat per-turn twin the census column `sub_rej_dupsrc_s1` reads. REDUNDANT with
           // e_rej_dup above -- kept only so that column does not silently read zero. The e_* funnel is
@@ -56554,8 +57892,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (pre.hand_blink     && SubsetHasStrandedHandBlink(cands, sel)) { return; }
         // Vampires A2 duplicates -- lockstep twin of Solve::consider's call (the symmetry rule only on an
         // odometer position: a constructed `sat_bypass` line has no enumerated twin).
-        if (pre.vamp_outlet    && SubsetVampOutletInvalid(state, cands, sel,
-                                                          fold_from_odometer || !sat_bypass)) { return; }
+        if (pre.vamp_outlet    && SubsetVampOutletInvalidWith(state, cands, sel,
+                                                              fold_from_odometer || !sat_bypass, pre.vamp)) { return; }
         // Rule 9 (Vampires perf): lockstep twin of Solve::consider's call.
         if (pre.vamp_outlet    && SubsetPostCombatPumpDiscardDominated(state, cands, sel, is_pre_combat)) { return; }
         if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
@@ -56937,7 +58275,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 {
                     const Action& c = cands[k];
                     if (c.kind != Action::Kind::CastFromHand) { continue; }
-                    const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+                    const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
                     if (!cd || !cd->card.IsCreature()) { continue; }
                     if (c.hand_index >= 0 && c.hand_index < static_cast<int>(ap.hand.size()))
                     {
@@ -57902,7 +59240,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& a : cands)
         {
             if (a.kind != Action::Kind::Equip || a.cost.generic <= waiver_bound) { continue; }
-            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }
             waiver_bound = a.cost.generic;
         }
@@ -58298,6 +59636,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         long long wd_visit = 0, wd_copy = 0, wd_dep = 0, wd_cut_hi = 0, wd_cut0 = 0, wd_mc_hit = 0,
                   wd_outer = 0;
         bool done = false;
+        // MTG_WALK_DFS: Solve's twin (PlainOdometerDfs) -- the same selections handed to eval_and_push
+        // in the same order, for the plain scalar walk only (no metalcraft bound, no diagnostic).
+        if (WalkDfsOn() && !gate_on && !copy_pred_on && !dep_pred_on && !fold_pred_on && !mcw.on
+            && !s_walk_diag && PlainDfsCostsSound(groups, cand_mv))
+        {
+            const bool fso = FoldSearchOdometerOn(state);
+            // MTG_VAMP_PREFILTER (see VampPrefilterOn): eval_and_push's prefix before its Vampires rules
+            // is pure rejections plus instruments, fenced off here.
+            const bool vamp_prefilter = VampPrefilterOn() && pre.vamp_outlet && !VampRulePreVerifyOn()
+                                     && eshape == nullptr && !enumstats::Enabled() && !dupclause::Enabled()
+                                     && !payoff_prune_on && !sat_subset && !HumanPlayActive()
+                                     && !SeqChainTraceOn() && !mcstats::Enabled() && !decisionwork::Armed();
+            PlainOdometerDfs(groups, independent, auto_sel, cand_mv, mana_bound, sel,
+                             [&](std::vector<int>& s) -> bool
+                             {
+                                 if (vamp_prefilter && pre.vamp.built
+                                     && SubsetVampOutletInvalidPre(state, cands, s, /*fold_from_odometer=*/true, pre.vamp))
+                                 { return false; }
+                                 if (fso) { foldsel::g_from_odometer = true; }
+                                 eval_and_push(s);
+                                 return false;
+                             });
+            done = true;
+        }
         while (!done)
         {
             // Fungible identical-Equipment copies: only the canonical (non-increasing) position of a
@@ -59244,7 +60606,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& a : rp.actions)
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             if (d->params.is_land_aura && a.enchant_target > 0)
             { ++s.n_aura; s.hosts += a.card_name.str() + "@" + std::to_string(a.enchant_target) + ";"; }
@@ -60343,7 +61705,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.draw_on_equipment_etb) { watcher = true; break; }
             }
         }
@@ -60368,7 +61730,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.draw_on_aura_cast) { aura_watcher = true; break; }
             }
         }
@@ -60410,7 +61772,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         for (const Action& a : p.actions)
         {
             if (a.kind != Action::Kind::CastFromHand) { continue; }
-            absorb(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+            absorb(a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name));
         }
     }
     auto cast_subtype_watched = [&](const CardDefinition& cd)
@@ -60444,7 +61806,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.cast_trigger_instant_sorcery_draw > 0) { parun_watcher = true; break; }
             }
         }
@@ -60463,7 +61825,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.own_creature_enters_draw > 0) { creature_watcher = true; break; }
             }
         }
@@ -60502,7 +61864,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         // predicate). a.card_name is the PUT card for this kind; the source rides sac_source_id.
         if (watcher && SfPutBreakpointEnabled() && a.kind == Action::Kind::PutFromHandAbility)
         {
-            const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (pd && pd->params.is_equipment) { mask |= 1 << 6; }
         }
         // Site 8: a gated look-at-top activation (Scrying Sheets / Frost Augur) that can move the
@@ -60512,7 +61874,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         if (a.kind == Action::Kind::ActivatePermAbility
             && a.ability_mode == Action::AbilityMode::TapDraw)
         {
-            const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (td && !td->params.tap_draw_requires_top_supertype.empty()) { mask |= 1 << 8; }
             // A PLAIN "{T}: Draw a card" (Niv-Mizzet, the Firemind) on a deck running the Niv loop:
             // the draw is outside any cast window, so it arms site 10 through MTG_BP_HAND_ENTRY's
@@ -60538,7 +61900,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         }
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
         { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         // REMAND rider (Action::remand_by): the Remand's resolution IS a plain cantrip draw, armed
         // exactly as Ponder's (apply_one's cantrip_breakpoint: deferred at the main-plan level ->
@@ -60874,7 +62236,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.play_lands_from_library_top) { source = true; break; }
             }
         }
@@ -60896,7 +62258,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         for (const Action& a : p.actions)
         {
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d && d->params.etb_return_equipment_from_gy) { mask |= 1 << 10; break; }
         }
     }
@@ -60923,7 +62285,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         {
             for (const Action& a : p.actions)
             {
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { continue; }
                 const bool puts_land = d->params.land_search_count > 0 || d->params.reveal_x_put_permanents;
                 if (puts_land && (a.kind == Action::Kind::CastFromHand
@@ -62869,7 +64231,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const Action& a : p.actions)
                 {
                     if (a.kind != Action::Kind::CastFromHand) { continue; }
-                    const CardDefinition* wd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* wd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                     if (wd != nullptr && wd->params.scry_reveal_land_to_battlefield) { chain = true; break; }
                 }
             }
@@ -62951,7 +64313,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (const Action& act : p.actions)
             {
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
@@ -63069,7 +64431,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
@@ -63173,7 +64535,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     && act.ability_mode == Action::AbilityMode::ActivatedDig)
                 {
                     const CardDefinition* ad = act.def ? act.def
-                                                       : CardDatabase::Instance().Lookup(act.card_name);
+                                                       : CardDatabase::Instance().LookupInterned(act.card_name);
                     if (ad == nullptr) { continue; }
                     const std::vector<int> legal_now =
                         LookTakeDigLegalNow(state, state.active_player_index,
@@ -63201,7 +64563,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 }
                 if (act.kind != Action::Kind::CastFromHand
                     && act.kind != Action::Kind::ActivateVial) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.etb_dig_count <= 0) { continue; }
                 const std::size_t cands_now = EtbDigCandidateCountNow(state, d->params);
                 const std::size_t k = std::min(cands_now, EtbDigAxisWidth(state));
@@ -63338,7 +64700,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 return std::any_of(p.actions.begin(), p.actions.end(), [&](const Action& a)
                 { return a.kind == Action::Kind::CastFromHand
-                      && is_vial(CardDatabase::Instance().Lookup(a.card_name)); });
+                      && is_vial(CardDatabase::Instance().LookupInterned(a.card_name)); });
             })))
         {
             std::vector<TurnSolver::Plan> extra;
@@ -63741,7 +65103,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand || act.ponder_keep >= 0) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.cast_reorder <= 0) { continue; }
                 if (PonderAxisPartial() && !PonderSetIsMixed(state, d->params.cast_reorder)) { break; }
                 if (PonderOrderAxis())
@@ -63811,7 +65173,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.put_back_from_hand <= 0) { continue; }
                 const int w = PutBackAxisWidth(state, p, ai, *d);
                 // The fan's sibling identity for the put-back fold (PutBackFoldMemo): on the variants
@@ -63880,7 +65242,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& a = p.actions[ai];
                 if (a.kind == Action::Kind::CastFromHand
-                    && pays_param(CardDatabase::Instance().Lookup(a.card_name))) { live = true; }
+                    && pays_param(CardDatabase::Instance().LookupInterned(a.card_name))) { live = true; }
             }
             if (!live) { continue; }
             TurnSolver::Plan v = p;
@@ -63966,7 +65328,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             int classes = subs.empty() ? -1 : board_classes;
             for (const Action& a : p.actions)
             {
-                const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { continue; }
                 if (targeted(d))
                 {
@@ -64102,7 +65464,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const Action& a : p.actions)
                 {
                     if (a.kind != Action::Kind::CastFromHand) { continue; }
-                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                     if (d && d->params.discard_land_damage > 0) { casts_le = true; break; }
                 }
             }
@@ -64568,7 +65930,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = act.def ? act.def
-                                                  : CardDatabase::Instance().Lookup(act.card_name);
+                                                  : CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d && d->params.creates_treasures > 0) { mints = true; break; }
             }
             if (!mints) { continue; }
@@ -64762,7 +66124,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
                 for (auto it = hand.begin(); it != hand.end(); ++it)
                 { if (it->m_name == a.card_name) { hand.erase(it); break; } }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { producer = true; may_draw = true; continue; }
                 const CardParams& q = d->params;
                 if ((!d->card.IsLand() && !q.produces.empty()) || q.ritual_floating_mana > 0
@@ -64922,7 +66284,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     {
         const int me = state.active_player_index;
         auto def_of = [](const Action& c) -> const CardDefinition*
-        { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+        { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
         int e_bf = 0;
         std::string sub;
         int need = 0;
@@ -64977,7 +66339,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                              && d->params.steal_adds_subtype == sub) { ++pre; }
                     if (a.madness_choice > 0 && !a.discard_name.empty())
                     {
-                        const CardDefinition* md = CardDatabase::Instance().Lookup(a.discard_name.str());
+                        const CardDefinition* md = CardDatabase::Instance().LookupInterned(a.discard_name);
                         if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)) { ++pre; }
                     }
                 }
@@ -65705,7 +67067,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             bool c_haste = false, c_fetch = false, c_team = false, c_self = false, c_hasty_self = false;
             for (const Action& a : p.actions)
             {
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { continue; }
                 if (gives_haste(d)) { c_haste = true; }
                 if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0) { c_fetch = true; }
@@ -66270,7 +67632,7 @@ static bool PositionPrefixChoiceMayAddMana(const GameState& state, const TurnSol
     if (DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive()) { return true; }
     for (const Action& a : p.actions)
     {
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && SacAxisEnabled()) { return true; }
         if (d->params.creates_treasures > 0) { return true; }
@@ -72887,6 +74249,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             return kM2FixNone;
         };
+        PrePlanShare m2_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -72967,6 +74330,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             const std::uint64_t any_before     = g_bp_any_last;
             const std::uint64_t latent9_before = g_bp_latent9_last;
             const std::uint64_t truncasym_before = g_bp_truncasym_last;
+            PrePlanShareArm(m2_pps, s2);
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
             m2_dig_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
             m2_pb_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
@@ -74495,6 +75859,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     GameState  s_buf;
     // Node children: resume-copy buffer (capacity reuse across children/pends) -- see the m2 host.
     GameState  s3_buf;
+    PrePlanShare fsw_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -74779,6 +76144,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const unsigned long long pf_reads0 = combatpin::t_reads;
         const long long pf_units0 = budget != nullptr ? budget->Used() : 0;
         etb_fold.ArmApply(static_cast<std::size_t>(&p - pre.data()), &s);
+        PrePlanShareArm(fsw_pps, s);
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
         // The in-plan probe records only an apply that spent no unit and stopped at no breakpoint node
         // (see BuildInPlan), with what the walker's records read from it.
@@ -80619,6 +81985,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         const int census_slot = (sub_depth >= 0 && sub_depth < 8) ? sub_depth : 7;
         if (candcensus::On())
         { candcensus::g_nodes[census_slot].fetch_add(1, std::memory_order_relaxed); }
+        PrePlanShare la_pps;   // every candidate below is applied to a fresh copy of `state`
         for (const Plan& plan : candidates)
         {
             // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
@@ -80893,6 +82260,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     const unsigned long long cp_reads0 = combatpin::t_reads;
                     const long long cp_units0 = budget != nullptr ? budget->Used() : 0;
                     etb_fold.ArmApply(cp_i, &copy);
+                    PrePlanShareArm(la_pps, copy);   // `copy` is a fresh copy of `state` (no cp_shared)
                     ApplyPlanDirect(copy, plan, true);
                     // The in-plan probe records only an apply that spent no unit (see BuildInPlan), with
                     // what the walker's records read from it.
@@ -81170,6 +82538,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 bounce_fold.Arm(plan);
+                PrePlanShareArm(la_pps, copy);   // `copy` is a fresh copy of `state`
                 ApplyPlanDirect(copy, plan, false);
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 pb_fold.Record(plan, true, static_cast<int>(cand_index));
@@ -83340,10 +84709,27 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // Fold the whole per-job arm; every slot unset (the entire non-batch world, and the regression
     // harness) folds the same constant => byte-identical outside mixed-arm batches.
     {
-        std::uint64_t armh = 0;
-        for (int ai = 0; ai < heurarm::COUNT; ++ai)
-        { armh = armh * 131 + static_cast<std::uint8_t>(heurarm::t_arm[ai] + 1); }
-        Fold(key, armh ^ 0xA53CULL);
+        // The arm's hash, CACHED PER THREAD on the arm's bytes (MTG_BP_ARM_HASH_CACHE, DEFAULT ON; =0 ->
+        // recomputed per key). The arm changes only at a batch job switch, but this loop re-read
+        // heurarm::t_arm -- a dynamically-initialised thread_local, so every element read went through
+        // its TLS wrapper -- COUNT times per key build: 1.8% of a Vampires 2HG d5 game's instructions
+        // (callgrind 2026-10-21, 29M __tls_init calls from this loop alone). The cached value is the
+        // same fold of the same bytes, so the key is unchanged.
+        static const bool s_cache = EnvOn("MTG_BP_ARM_HASH_CACHE", true);
+        const heurarm::Arm& arm = heurarm::t_arm;
+        static thread_local std::int8_t  s_last[heurarm::COUNT];
+        static thread_local bool          s_valid = false;
+        static thread_local std::uint64_t s_hash  = 0;
+        if (!s_cache || !s_valid || std::memcmp(s_last, arm.data(), sizeof s_last) != 0)
+        {
+            std::uint64_t armh = 0;
+            for (int ai = 0; ai < heurarm::COUNT; ++ai)
+            { armh = armh * 131 + static_cast<std::uint8_t>(arm[static_cast<std::size_t>(ai)] + 1); }
+            std::memcpy(s_last, arm.data(), sizeof s_last);
+            s_hash  = armh;
+            s_valid = true;
+        }
+        Fold(key, s_hash ^ 0xA53CULL);
     }
     // MTG_CANTRIP_ORDER: the continuation list depends on the bound site (its ban filters
     // CollectActions), so the same state under different sites must not share an entry.
@@ -84077,7 +85463,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                     // under-mark, which reads downstream as "the lever has no effect" -- the
                     // false-zero signature this feature has already produced three times.
                     const CardDefinition* d = a.def;
-                    if (d == nullptr) { d = CardDatabase::Instance().Lookup(a.card_name); }
+                    if (d == nullptr) { d = CardDatabase::Instance().LookupInterned(a.card_name); }
                     const std::uint64_t h = d ? d->card.m_name_hash : 0;
                     for (std::uint64_t k : t_bp_condemned_names) { if (k == h) { return false; } }
                 }
@@ -85929,7 +87315,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 || (a.kind == Action::Kind::CastFromHand && !a.tutor_target.empty()
                     && [&]() {
                            const CardDefinition* cd2 = a.def ? a.def
-                               : CardDatabase::Instance().Lookup(a.card_name);
+                               : CardDatabase::Instance().LookupInterned(a.card_name);
                            return cd2 && (cd2->params.tutor_mv_max_is_x
                                           || HumanPlayDefersTutorTarget(*cd2));
                        }());
@@ -85956,7 +87342,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // Ponder's keep/shuffle below). No sub => the plans that differ only in trick target share
             // a signature and collapse to one representative, ranked magnet-first just above.
             const CardDefinition* trdef = (a.enchant_target != 0 || a.kind == Action::Kind::CastFromHand)
-                                        ? CardDatabase::Instance().Lookup(a.card_name) : nullptr;
+                                        ? CardDatabase::Instance().LookupInterned(a.card_name) : nullptr;
             const bool is_trick = trdef && trdef->params.solo_target_trick;
             // Magnetic Theft: BOTH targets (Equipment on attach_equip_id, creature on enchant_target)
             // are re-asked at RESOLUTION on the board (ResolveAttachTargetEquipment's two
@@ -85996,7 +87382,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // mode sub so the dimension is asked once, cleanly, and the enchant sub only picks the host.
             {
                 const CardDefinition* bd = (a.kind == Action::Kind::CastFromHand)
-                                         ? CardDatabase::Instance().Lookup(a.card_name) : nullptr;
+                                         ? CardDatabase::Instance().LookupInterned(a.card_name) : nullptr;
                 if (bd && bd->params.bestow_cost.has_value())
                 {
                     const std::string mode = a.bestow ? "bestowed (Aura)" : "as a creature";
@@ -86016,7 +87402,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 // are distinct variants (#P) that would otherwise share every sub and collapse.
                 // Gated on the printed cost carrying a phyrexian pip, so both modes carry the sub.
                 {
-                    const CardDefinition* phd = CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* phd = CardDatabase::Instance().LookupInterned(a.card_name);
                     const bool has_phy = phd &&
                         ((a.kind == Action::Kind::CastFromHand
                           && phd->card.m_mana_cost.phyrexian_count > 0)
@@ -86100,7 +87486,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // dropped renderChooseDialog into its flat fallback picker. Emit a dedicated `modal` sub
             // for EVERY split including 0 (the soulfire/crackle/splice precedent) and spell the
             // modes out, so the dialog reads as an explicit list of what each split actually does.
-            const CardDefinition* mdef = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* mdef = CardDatabase::Instance().LookupInterned(a.card_name);
             const bool is_modal = mdef && mdef->params.modal_choose_n > 0;
             if (is_modal && a.chosen_x >= 0)
             {
@@ -86145,7 +87531,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // variant lacks subs) shows the old ugly picker instead of the nice per-count grid. Detect
             // the Soulfire cast by its def (damage_equals_top_mv) rather than by count>0.
             {
-                const CardDefinition* adef = CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* adef = CardDatabase::Instance().LookupInterned(a.card_name);
                 if (adef && adef->params.damage_equals_top_mv)
                 {
                     addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own",
@@ -88672,7 +90058,7 @@ void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, 
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->card.IsCreature()) { continue; }
         for (const Card& c : ap.hand)
         {
@@ -88687,7 +90073,7 @@ void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, 
     for (int k : pos)
     {
         const Action& a = acts[static_cast<std::size_t>(k)];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         std::vector<int> al{ a.enchant_target };
         auto add = [&](int n) { if (n > 0 && std::find(al.begin(), al.end(), n) == al.end()) { al.push_back(n); } };
         for (int n : LegalEnchantTargets(state, me, d->params)) { add(n); }
@@ -88792,3 +90178,7 @@ TurnSolver::SpentTwice TurnSolver::SimulateToEndSpentTwiceForTest(const GameStat
 }
 
 long long TurnSolver::FslEdgeNoReachCountForTest() { return t_fsl_edge_noreach_n; }
+std::vector<Action> TurnSolver::CollectActionsForTest(const GameState& state, bool is_pre_combat)
+{
+    return CollectActions(state, is_pre_combat);
+}

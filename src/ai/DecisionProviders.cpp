@@ -19512,9 +19512,18 @@ std::vector<std::string> VampiresProvider::ActivationDiscardCandidates(
         if (d->card.m_mana_cost.ManaValue() > pool) { return 2; }      // uncastable this turn
         return 3;
     };
-    std::stable_sort(out.begin(), out.end(),
-                     [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
-    return out;
+    // The tiers computed ONCE per name, then the same stable sort on them (the comparator used to look each
+    // name up again per comparison: ~350k by-string lookups a Vampires 2HG game). Same permutation.
+    std::vector<std::pair<int, std::size_t>> keyed;
+    keyed.reserve(out.size());
+    for (std::size_t i = 0; i < out.size(); ++i) { keyed.emplace_back(tier(out[i]), i); }
+    std::stable_sort(keyed.begin(), keyed.end(),
+                     [](const std::pair<int, std::size_t>& a, const std::pair<int, std::size_t>& b)
+                     { return a.first < b.first; });
+    std::vector<std::string> sorted;
+    sorted.reserve(out.size());
+    for (const auto& k : keyed) { sorted.push_back(std::move(out[k.second])); }
+    return sorted;
 }
 
 std::vector<int> VampiresProvider::SacOutletVictimCandidates(
