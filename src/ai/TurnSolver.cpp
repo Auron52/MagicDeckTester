@@ -3804,6 +3804,10 @@ static thread_local int           g_d0_permit_nest     = 0;       // live Greedy
 static thread_local int           g_decision_root_turn = -1;
 SearchBudget* TurnSolver::DecisionBudget()   { return g_decision_budget; }
 
+void AlchemistComboRouteNoteApplyContext(int other_actions);   // DecisionProviders.cpp (MTG_AA_ROUTE_STATS only)
+int  AlchemistComboRouteOriginId(const GameState& s, int me);  // DecisionProviders.cpp (MTG_AA_ROUTE_ORIGIN only)
+void AlchemistComboRouteNoteApplyOrigin(int id);
+bool AlchemistComboRouteTapeOn();                              // DecisionProviders.cpp: MTG_AA_ROUTE_TAPE
 // ---- THE ROUTE TAPE's breakpoint half (core/RouteTape.h holds the mode and the tutor half) ----------------------
 namespace routebptape
 {
@@ -40656,6 +40660,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.chosen_x       = 999;   // a go-off for every reader that sizes one by chosen_x (> 3)
                 a.eval           = (uroute == 1) ? 999 : 0;
                 a.is_noncreature = true;
+                a.sac_source_id  = AlchemistComboRouteOriginId(state, state.active_player_index);   // 0 unless MTG_AA_ROUTE_ORIGIN
                 actions.push_back(std::move(a));
             }
         }
@@ -53339,7 +53344,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (is_pre_combat)
         {
-            SimulateLandPlay(state);
+            // THE AA ROUTE OWNS ITS LAND DROP (with the tape, MTG_AA_ROUTE_TAPE). An unsearched (greedy) plan is
+            // chosen on the board BEFORE this fallback plays a land, and a ComboRoute in it was proven there -- on
+            // a board whose drop is still unused, which the route's own walk spends as one of its links. Playing a
+            // greedy land first handed the route a different board, where it found no kill: a ComboRoute the
+            // greedy picked as a win, applied as a no-op (MTG_AA_ROUTE_ORIGIN: 89 of 89 no-route applies in 8
+            // games, every one on the offer's board plus the greedy land). The equip route's "the route owns its
+            // own land drop" lesson, at the greedy fallback. A route win ends the turn, so declining the greedy
+            // drop for it can never cost one.
+            bool route_owns_drop = false;
+            if (AlchemistComboRouteTapeOn() && ResolveProvider(state).UntapLoopRouteEnabled())
+            {
+                for (const Action& ra : plan.actions)
+                { if (ra.kind == Action::Kind::ComboRoute) { route_owns_drop = true; break; } }
+            }
+            if (!route_owns_drop) { SimulateLandPlay(state); }
         }
     }
 
@@ -57689,7 +57708,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Provider-dispatched between the two routes sharing this kind, identically to the
             // executor's branch -- the rollout and the executor applying different routes for the
             // same action is precisely the lockstep break that makes a scored win unreproducible.
+            {
+                int other = 0;   // MTG_AA_ROUTE_STATS context only (see AlchemistComboRouteNoteApplyContext)
+                for (const Action& o : trailing_acts)
+                { if (o.kind != Action::Kind::ComboRoute && o.kind != Action::Kind::PlayLand) { ++other; } }
+                // +1000 when the plan carried a land drop (applied before this trailing pass).
+                if (plan.land_decided && !plan.land_to_play.empty()) { other += 1000; }
+                AlchemistComboRouteNoteApplyContext(other);
+                AlchemistComboRouteNoteApplyOrigin(a.sac_source_id);
+            }
             ComboRouteApplyFor(state, state.active_player_index);
+            AlchemistComboRouteNoteApplyContext(0);
         }
         else if (a.kind == Action::Kind::ActivateBlink)
         {

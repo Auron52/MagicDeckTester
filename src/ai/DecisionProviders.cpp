@@ -44538,9 +44538,13 @@ inline std::atomic<std::uint64_t> g_walks{0}, g_wins{0}, g_applies{0}, g_walk_us
 // open (the executor, the viewer), [1] the decision's own turn, [2] the next turn, [3] two or more later.
 inline std::atomic<std::uint64_t> g_walks_dt[4]{}, g_walk_us_dt[4]{};
 // Apply-side outcome counters (MTG_AA_ROUTE_STATS): the plan-vs-real record of the route.
-// Indexed by the tape's setting ([0] off, [1] on) so one pooled A/B batch reports both arms.
-inline std::atomic<std::uint64_t> g_ap_calls[2]{}, g_ap_noroute[2]{}, g_ap_probe_fail[2]{}, g_ap_rewalk_fail[2]{},
-                                  g_ap_live_fail[2]{}, g_ap_proven_used[2]{}, g_ap_tape_unclean[2]{};
+// Indexed by arm = 2 * tape + key (MTG_AA_ROUTE_TAPE, MTG_KEY_CHOSEN_COLOR) so one pooled A/B batch reports
+// every arm. g_ap_noroute_combined: the no-route no-ops whose ComboRoute rode in a plan WITH other actions
+// (applied in the trailing pass, after the plan's casts changed the board it was proven on).
+inline std::atomic<std::uint64_t> g_ap_calls[4]{}, g_ap_noroute[4]{}, g_ap_probe_fail[4]{}, g_ap_rewalk_fail[4]{},
+                                  g_ap_live_fail[4]{}, g_ap_proven_used[4]{}, g_ap_tape_unclean[4]{},
+                                  g_ap_noroute_combined[4]{}, g_ap_noroute_land[4]{};
+inline thread_local int t_apply_other_actions = 0;   // set by the rollout's trailing pass (stats only)
 struct StatsDumper
 {
     ~StatsDumper()
@@ -44560,13 +44564,15 @@ struct StatsDumper
                      (unsigned long long)g_walks_dt[2].load(), g_walk_us_dt[2].load() / 1000.0,
                      (unsigned long long)g_walks_dt[3].load(), g_walk_us_dt[3].load() / 1000.0,
                      (unsigned long long)g_cut_walks.load());
-        for (int a = 0; a < 2; ++a)
+        for (int a = 0; a < 4; ++a)
         {
             if (g_ap_calls[a].load() == 0) { continue; }
-            std::fprintf(stderr, "[aa-route-stats] apply (tape %s): calls %llu | no-op: no route here %llu, re-walk failed"
+            std::fprintf(stderr, "[aa-route-stats] apply (tape %s key %s): calls %llu | no-op: no route here %llu (in a plan with"
+                         " other actions %llu, after the plan's land drop %llu), re-walk failed"
                          " %llu | memoised path did not kill %llu | live replay failed %llu (proven board played %llu) |"
-                         " tape replays unclean %llu\n", a ? "on" : "off",
+                         " tape replays unclean %llu\n", (a & 2) ? "on" : "off", (a & 1) ? "on" : "off",
                          (unsigned long long)g_ap_calls[a].load(), (unsigned long long)g_ap_noroute[a].load(),
+                         (unsigned long long)g_ap_noroute_combined[a].load(), (unsigned long long)g_ap_noroute_land[a].load(),
                          (unsigned long long)g_ap_rewalk_fail[a].load(), (unsigned long long)g_ap_probe_fail[a].load(),
                          (unsigned long long)g_ap_live_fail[a].load(), (unsigned long long)g_ap_proven_used[a].load(),
                          (unsigned long long)g_ap_tape_unclean[a].load());
@@ -44598,13 +44604,20 @@ struct Link
     TurnSolver::RouteBpTape   bps;
     std::string proof_board;   // MTG_AA_ROUTE_TRACE only: the board this link's proving apply reached
 };
-// MTG_AA_ROUTE_TAPE (heurarm AA_ROUTE_TAPE): DEFAULT ON; =0 is exactly the untaped route (nothing recorded,
-// nothing played back). See core/RouteTape.h. Its sibling is MTG_KEY_CHOSEN_COLOR (TurnSolver.cpp, the sim
+// MTG_AA_ROUTE_TAPE (heurarm AA_ROUTE_TAPE): DEFAULT ON; =0 is exactly the old route. ON = the route REPLAYS where
+// it was proven: (1) the resolution tape (core/RouteTape.h); (2) a greedy plan carrying the ComboRoute does not get
+// the fallback land drop played in front of it (ApplyPlanDirect: the route owns its land drop). Its sibling is MTG_KEY_CHOSEN_COLOR (TurnSolver.cpp, the sim
 // key): the route memo and every plan cache keyed a board without its permanents' chosen colours.
 inline bool TapeOn()
 {
     static const bool env = EnvOn("MTG_AA_ROUTE_TAPE", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::AA_ROUTE_TAPE, env);
+}
+// The stats arm (MTG_AA_ROUTE_STATS only): 2 * tape + key.
+inline int StatArm()
+{
+    static const bool key_env = EnvOn("MTG_KEY_CHOSEN_COLOR", true);
+    return (TapeOn() ? 2 : 0) + (heurarm::Flag(heurarm::KEY_CHOSEN_COLOR, key_env) ? 1 : 0);
 }
 struct Walk
 {
@@ -44698,6 +44711,20 @@ struct BovDumper
     }
 };
 inline BovDumper g_bov_dumper;
+inline bool OriginOn() { static const bool v = EnvOn("MTG_AA_ROUTE_ORIGIN"); return v; }
+inline thread_local std::unordered_map<int, std::string> t_origin_board;
+inline thread_local int t_apply_origin = 0;
+inline std::atomic<std::uint64_t> g_origin_same{0}, g_origin_other{0}, g_origin_printed{0};
+struct OriginDumper
+{
+    ~OriginDumper()
+    {
+        if (!EnvOn("MTG_AA_ROUTE_ORIGIN")) { return; }
+        std::fprintf(stderr, "[aa-route-origin] no-route applies: on the offer's own board %llu, on another board %llu\n",
+                     (unsigned long long)g_origin_same.load(), (unsigned long long)g_origin_other.load());
+    }
+};
+inline OriginDumper g_origin_dumper;
 // Pay for one apply; false = the walk is cut here (nothing applied).
 inline bool PayApply(Walk& w)
 {
@@ -45140,7 +45167,7 @@ static int Replay(GameState& s, int me, const std::vector<Link>& path)
         TurnSolver::RouteTapeScope _tape(l.taped ? 2 : 0, const_cast<TurnSolver::RouteBpTape*>(&l.bps),
                                          const_cast<std::vector<std::string>*>(&l.tutors));
         TurnSolver::ApplyPlan(s, l.plan, /*is_pre_combat=*/true);
-        if (l.taped && !_tape.Clean() && StatsOn()) { g_ap_tape_unclean[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
+        if (l.taped && !_tape.Clean() && StatsOn()) { g_ap_tape_unclean[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed); }
         if (TraceOn() && !l.proof_board.empty())
         {
             const std::string now = BoardText(s, me);
@@ -45392,11 +45419,34 @@ int AlchemistComboRouteApply(GameState& s, int me)
 {
     if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
     // ALL-OR-NOTHING: only a proven path is played on the live state.
-    if (aaroute::StatsOn()) { aaroute::g_ap_calls[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
+    if (aaroute::StatsOn()) { aaroute::g_ap_calls[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed); }
     aaroute::Verdict v = aaroute::Trial(s, me, /*priced=*/false);   // a copy: the walk below may touch the memo
     if (v.r != 1)
     {
-        if (aaroute::StatsOn()) { aaroute::g_ap_noroute[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
+        if (aaroute::OriginOn() && aaroute::t_apply_origin != 0)
+        {
+            const int now_id = static_cast<int>(aaroute::Fingerprint(s, me) & 0x3FFFFFFFULL) + 1;
+            if (now_id == aaroute::t_apply_origin) { aaroute::g_origin_same.fetch_add(1); }
+            else
+            {
+                aaroute::g_origin_other.fetch_add(1);
+                if (aaroute::g_origin_printed.fetch_add(1) < 12)
+                {
+                    const auto it = aaroute::t_origin_board.find(aaroute::t_apply_origin);
+                    std::fprintf(stderr, "[aa-route-origin] t%d no-route apply on a board != its offer's\n   offer: %s\n   apply: %s\n",
+                                 s.turn_number, it != aaroute::t_origin_board.end() ? it->second.c_str() : "(evicted)",
+                                 aaroute::BoardText(s, me).c_str());
+                }
+            }
+        }
+        if (aaroute::StatsOn())
+        {
+            aaroute::g_ap_noroute[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed);
+            if (aaroute::t_apply_other_actions % 1000 > 0)
+            { aaroute::g_ap_noroute_combined[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed); }
+            if (aaroute::t_apply_other_actions >= 1000)
+            { aaroute::g_ap_noroute_land[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed); }
+        }
         if (aaroute::TraceOn())
         {
             std::fprintf(stderr, "[aa-route] t%d APPLY: no proven route on this board (memo/walk here; root_open=%d"
@@ -45449,12 +45499,12 @@ int AlchemistComboRouteApply(GameState& s, int me)
             if (aaroute::StatsOn())
             {
                 aaroute::g_rewalks.fetch_add(1, std::memory_order_relaxed);
-                aaroute::g_ap_probe_fail[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+                aaroute::g_ap_probe_fail[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed);
             }
             v = aaroute::Walk1(s, me, /*priced=*/false);
             if (v.r != 1)
             {
-                if (aaroute::StatsOn()) { aaroute::g_ap_rewalk_fail[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
+                if (aaroute::StatsOn()) { aaroute::g_ap_rewalk_fail[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed); }
                 if (aaroute::TraceOn()) { std::fprintf(stderr, "[aa-route] t%d APPLY: re-walk found no route here -- no-op\n", s.turn_number); }
                 return 0;
             }
@@ -45489,13 +45539,29 @@ int AlchemistComboRouteApply(GameState& s, int me)
                      proven.has_value() ? " -- played the proven board" : "");
         if (aaroute::StatsOn())
         {
-            aaroute::g_ap_live_fail[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
-            if (proven.has_value()) { aaroute::g_ap_proven_used[aaroute::TapeOn() ? 1 : 0].fetch_add(1, std::memory_order_relaxed); }
+            aaroute::g_ap_live_fail[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed);
+            if (proven.has_value()) { aaroute::g_ap_proven_used[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed); }
         }
         if (proven.has_value()) { s = std::move(*proven); r = 1; }
     }
     return r;
 }
+
+void AlchemistComboRouteNoteApplyContext(int other_actions) { aaroute::t_apply_other_actions = other_actions; }
+
+// MTG_AA_ROUTE_ORIGIN=1 (DIAGNOSTIC; it stamps the action, so play may move): which board did an applied ComboRoute
+// come from? The emission site stamps the offer board's id into the action (sac_source_id, unused by the kind);
+// a no-route apply then reports whether its board is that board, and prints both (first 12).
+int AlchemistComboRouteOriginId(const GameState& s, int me)
+{
+    if (!aaroute::OriginOn()) { return 0; }
+    const int id = static_cast<int>(aaroute::Fingerprint(s, me) & 0x3FFFFFFFULL) + 1;
+    if (aaroute::t_origin_board.size() > 100000) { aaroute::t_origin_board.clear(); }
+    aaroute::t_origin_board.emplace(id, aaroute::BoardText(s, me));
+    return id;
+}
+void AlchemistComboRouteNoteApplyOrigin(int id) { aaroute::t_apply_origin = id; }
+bool AlchemistComboRouteTapeOn() { return aaroute::TapeOn(); }
 
 int ComboRouteApplyFor(GameState& s, int me)
 {
