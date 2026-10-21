@@ -3733,3 +3733,16 @@ that board, not the engine mis-executing it. That is precisely what the depth-2 
 it is why this is a budget story and not an evaluator or execution story. (It is also the
 territory the repo's own measured lesson warns about — three rollout-accuracy "fixes" all LOST;
 pessimism is load-bearing. Do not go tuning the greedy tail off this one game.)
+
+## 2026-10-21 — the EMULATED LADDER adopted at budget 60 (USER: switch where it is a clear improvement)
+
+The 2026-09-09 emulated-gate ladder (above) now ships, with the per-deck frozen R and the model's root tie-break
+(`MTG_ID_HINT_ROOT=3`) it lacked then: `decks/Melira Pod/Melira Pod.value.json` runs `value_play {ladder:
+"emulated", emul_r: [6.78, 57.62, 124.87, 312.92], target_depth: 5, budget_ms: 60, enabled: true}` on the same
+model. Held-out vs the shipped hybrid at b20, 3,000 paired games (seeds 872000-875000 + 884000-891000): **b60
+-0.019 turns** (78 faster / 26 slower, t -5.2) at 0.86x the units; b45 -0.014 at 0.76x; b33 -0.007 at 0.67x. The
+adopted sidecar reproduces the measured arm's digests exactly. Suite d5 cells pin budget 20, so ground truth
+exercises the shape at b20, not the play budget 60. Evidence: `docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md` s8.
+OPEN at commit: callgrind instructions per unit for this shape (Kitty's are equal; Landfall's emulated ladder costs
+6-8% more per unit). Above ~16% more the b60 margin is gone, and the budget drops to b45 (-0.014 at 0.76x units);
+the suite pins b20, so that change moves no ground truth.

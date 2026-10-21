@@ -345,8 +345,20 @@ default WAS the full rollout ladder.
 | Hinata2 | 1.44x -0.042; 1.87x -0.046 | 1.25x -0.042; 1.48x -0.050 | shipped better at equal cost |
 | Prevent Damage | 0.81x +0.018; 0.97x +0.014 | 0.93x +0.007 | shipped better |
 
-Real cost (callgrind) for Kitty / Melira / FiveColour, and the top of the FiveColour / Melira curves plus Creature
-Giving's curve, were still running when this was written. Adoption per deck is the USER's call.
+**Larger sets and the verdicts** (USER: *"switch for the decks we discussed where it is a clear improvement ... if
+it is noticeably better on a large set we should"*; fresh seeds 884000-891000 added; `logs/tgt/fleet/curve2-4.*`):
+
+| deck | verdict | evidence (vs shipped b20) |
+|---|---|---|
+| **KittyEquipment** | **ADOPTED at b14** | 3,000 games -0.019 (65/22) at ~0.93x units; instructions per unit equal for both shapes (callgrind 154.6k vs 155.5k) |
+| **Melira Pod** | **ADOPTED at b60** | 3,000 games: b60 -0.019 (78/26, t -5.2) at 0.86x; b45 -0.014 at 0.76x; b33 -0.007 at 0.67x. Instructions per unit were still being measured (callgrind) at commit: a penalty above ~16% would erase b60's cost margin, and the fallback is b45 (24% margin) |
+| FiveColour | not adopted | the emulated curve flattens at +0.002-0.003 (b40 1.04x, b50 1.12x) while shipped improves to -0.007 at 1.16x |
+| Creature Giving | not adopted | emulated b8 -0.005 at 1.17x vs shipped b30 -0.008 at 1.19x; its larger gains cost 1.75x+ |
+| Hinata2, Prevent Damage | not adopted | shipped better at equal cost (table above) |
+
+Each adoption is a strict improvement on both axes at the deck's new play budget (a budget is part of the shape here:
+the emulated ladder spends a budget differently). Suite d5 cells pin budget 20, so ground truth exercises the
+adopted shapes at b20.
 
 **In the pipeline** (USER: *"Let's add this mode to the check in the value-leaf."*): `valueleaf.sh` phase E0
 calibrates R on the staged model at its final play settings, phase E plays an `emul` arm beside live / staged /

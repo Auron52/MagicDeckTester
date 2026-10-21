@@ -14443,6 +14443,17 @@
  "value_play": {
   "mull_gen_depth": 3,
   "mull_gen_budget_ms": 3,
-  "expected_buckets": 23
+  "expected_buckets": 23,
+  "ladder": "emulated",
+  "emul_r": [
+   6.78,
+   57.62,
+   124.87,
+   312.92
+  ],
+  "target_depth": 5,
+  "budget_ms": 60,
+  "enabled": true,
+  "note": "ADOPTED 2026-10-21 (USER: switch the decks where the emulated ladder is a clear improvement): the emulated ladder (model warm-ups, rollout committing pass, frozen emul_r) at budget 60. Held-out vs the shipped hybrid at b20, 3,000 paired games: b60 -0.019 turns (78 faster / 26 slower) at 0.86x the units; b45 -0.014 at 0.76x; b33 -0.007 at 0.67x. docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md s8."
  }
 }
