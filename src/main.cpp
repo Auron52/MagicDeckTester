@@ -4682,6 +4682,9 @@ if (!log_dir.empty())
     // Same pattern for the human Karoo TAP-IN-RESPONSE float (HumanKarooFloatOn, 2026-10-08): a
     // reference without `karoo_float` predates it and replays under --legacy-karoo-float.
     if (HumanKarooFloatRuleOn()) { out << ", \"karoo_float\": 1"; }
+    // Same contract for the CR 510.4 two-step combat damage (CombatDamageStepsOn, GameLogger.h): a
+    // reference without `combat_damage_steps` predates it and replays under --legacy-single-damage-step.
+    if (CombatDamageStepsOn()) { out << ", \"combat_damage_steps\": 1"; }
     // RECORDING-RULE STAMP: this game's auto-payments ran under the Prevent Damage PAIN DEFERRAL
     // (dmgev::PainDeferEnabled -- keep the painful lands for after a lifegain amplifier resolves).
     // A reference WITHOUT the key predates it and is replayed with --legacy-pain-pay. Same contract
@@ -8844,6 +8847,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-main-swap")    { g_play_legacy_main_swap = true; continue; }   // replay a reference recorded before the human combat-swap timing rule (value-less)    // #4: value-less, same trap as above
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
+        if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)
         if (flag == "--legacy-gsz-shuffle")  { g_play_legacy_gsz_shuffle = true; continue; } // replay a reference recorded before the Green Sun's Zenith copy-id shuffle (value-less; see GameLogger.h)
         if (flag == "--jitte-prompt")        { jitte_prompt = true; continue; }          // Jitte spend: value-less, same trap as above
         try

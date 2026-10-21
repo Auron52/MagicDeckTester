@@ -415,7 +415,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         fs_of[k] = CreatureHasFirstStrike(p, state, &bs.fs) ? 1 : 0;
         if (ds_of[k] || fs_of[k]) { any_first_step = true; }
     }
-    if (any_first_step)
+    if (any_first_step && CombatDamageStepsOn())   // =false only when replaying a pre-rule reference
     { return ResolveCombatDamageTwoStep(state, atk_idx, exalted_bonus, collect_descs, bs, fs_of, ds_of); }
 
     std::size_t atk_k = 0;

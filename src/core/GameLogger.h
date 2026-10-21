@@ -1405,6 +1405,19 @@ inline bool GszShuffleCopyIdOn()
     return heurarm::Flag(heurarm::GSZ_SHUFFLE_COPY_ID, s_env) && !g_play_legacy_gsz_shuffle;
 }
 
+// CR 510.4 TWO-STEP COMBAT DAMAGE (2026-10-18, Combat.cpp ResolveCombatDamageTwoStep): with a first or
+// double striker attacking, damage is dealt in a first-strike step and then a regular step, so first-step
+// lifelink reaches a life watcher (Archangel of Thune, Ajani's Pridemate, Serra Ascendant's 30-life
+// threshold) before the regular step. Applied wherever valid; there is no lever. `--legacy-single-damage-
+// step` restores the single-step loop for REPLAY only: a reference recorded before the rule carries no
+// `combat_damage_steps` key, and its replayer (test/viewer_protocol_check.py) passes the flag so the
+// recording replays exactly as played -- an OLD recording must never be invalidated by a NEW rule.
+// CritterLifegain/claude_s6_gi5 is the case: two Ocelot Prides' first-step lifelink take life past 30,
+// so Serra Ascendant connects as a 6/6 and the recorded line wins T4 under the rule, T5 as recorded.
+// Process-global like the flags above (a replay is one game in one process).
+inline bool g_play_legacy_single_damage_step = false;
+inline bool CombatDamageStepsOn() { return !g_play_legacy_single_damage_step; }
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit

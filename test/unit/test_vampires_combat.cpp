@@ -364,6 +364,21 @@ TEST_CASE("Angels: Lyra's first-step lifelink pumps the regular step through Arc
     CHECK(TurnSolver::ProjectedAttackDamageForTest(s) <= 10);
 }
 
+TEST_CASE("Replay of a pre-rule reference (--legacy-single-damage-step): the one summed step it was played with")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Lyra Dawnbringer", 1);
+    Put(s, "Archangel of Thune", 2);
+    g_play_legacy_single_damage_step = true;
+    GameState r = s;
+    const int legacy = Swing(r, {1, 2});
+    g_play_legacy_single_damage_step = false;
+    CHECK(legacy == 5 + 4);              // the old model: no Thune counter before Thune deals damage
+    GameState t = s;
+    CHECK(Swing(t, {1, 2}) == 5 + 5);    // and the gate is off again: the two-step result
+}
+
 TEST_CASE("Critter: Ocelot Pride's first-step lifelink pumps Ajani's Pridemate before it deals damage")
 {
     EnsureCardsLoaded();

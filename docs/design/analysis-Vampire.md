@@ -701,6 +701,12 @@ Flying (Keeper, Lord, tokens) inert; one steal per Captivating per main phase.
 27. **CritterLifegain/claude_s6_gi5 now replays T4 (recorded T5)** under the faithful first-strike step (see
     Status). The checker has no override mechanism by design, so the regression tier's reference gate stays red
     on this one reference until the USER rules. [default: reference untouched; drift disclosed]
+    **RESOLVED 2026-10-21 (USER: "we need to work to land it properly")** through the checker's existing
+    recording-rule route, the one `karoo_float` / `pain_defer` / `gsz_copy_id` use: the reference writer now
+    stamps `combat_damage_steps`, and a reference without it replays under `--legacy-single-damage-step`
+    (the one summed step it was played with). The reference is untouched and replays T5 as recorded; a game
+    recorded from now on replays under the two-step rule. `tools/play/DECISIONS.md`, unit test in
+    `test_vampires_combat.cpp`.
 28. **Baseline profile `min_playable: 0`** (the analyzer's output; Soldiers / Pirates / Colossus ship the same;
     the skill's old note asks >= 1 for multi-colour decks). Keep policy is USER-owned and the keep table
     replaces it. [default: as generated]

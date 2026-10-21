@@ -1006,3 +1006,16 @@ without it, so a game recorded before the rule replays exactly as played: no flo
 order as the default for any bounce prompt the recording predates. `MTG_HUMAN_KAROO_FLOAT=0` is the env
 twin. Pinned by `test/scenarios/bruna_human_karoo_float_{wild_growth,legacy}.json` and
 `test/viewer_client_check.js` (`testKarooFloatWildGrowth`, the user's game through the real client).
+
+## Combat damage is dealt in two steps when a first striker attacks (2026-10-18)
+
+CR 510.4: with a first or double striker attacking, combat damage is a first-strike step and then a regular
+step, and whatever happens in between is real -- first-step lifelink feeds Archangel of Thune, Ajani's
+Pridemate and Serra Ascendant's 30-life threshold before the regular step. The viewer has no decision here;
+the engine applies it in human play, search and rollouts alike (`src/ai/Combat.cpp`).
+
+**Replay of OLD recordings.** The reference writer stamps `"combat_damage_steps": 1`;
+`test/viewer_protocol_check.py`'s `recording_rule_args` passes `--legacy-single-damage-step` for a
+reference without it, so a game recorded under the one summed step replays exactly as played. The gate is
+load-bearing on `references/CritterLifegain/claude_s6_gi5` (recorded T5): two Ocelot Prides' first-step
+lifelink take life past 30, Serra Ascendant connects as a 6/6, and the same picks win T4 under the rule.

@@ -408,7 +408,13 @@ def recording_rule_args(ref):
     uses, as the executor always did -- Library::ShuffleByKey ranks by m_number, so the old template
     copy (m_number 0) sat at a different depth and changed every later draw. A recording made before
     carries no key and replays with --legacy-gsz-shuffle -- the draws it was actually played with.
-    Inert on every deck without Green Sun's Zenith."""
+    Inert on every deck without Green Sun's Zenith.
+
+    `combat_damage_steps` (2026-10-18, CR 510.4): from then on a combat with a first or double striker
+    deals damage in two steps, so first-step lifelink reaches Thune / Pridemate / Serra Ascendant's
+    30-life threshold before the regular step. A recording made before carries no key and replays with
+    --legacy-single-damage-step -- the one summed step it was played with. CritterLifegain/claude_s6_gi5
+    (recorded T5) otherwise replays T4. Inert on every deck without a first or double striker."""
     args = [] if ref.get("combat_swap_timing") else ["--legacy-main-swap"]
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
@@ -416,6 +422,8 @@ def recording_rule_args(ref):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):
         args.append("--legacy-gsz-shuffle")
+    if not ref.get("combat_damage_steps"):
+        args.append("--legacy-single-damage-step")
     return args
 
 
