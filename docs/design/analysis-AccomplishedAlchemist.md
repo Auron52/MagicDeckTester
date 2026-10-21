@@ -923,8 +923,84 @@ final defaults: mtg-test 1617 / 1617, scenarios 245 / 245, combo-off fixtures 50
 
 **For the USER** (defaults taken, nothing blocked): (1) the three root fixes ship ON as defect fixes and the union walk
 ships OFF -- say if you want the union walk back (`MTG_AA_ROUTE_MAIN_FIRST=1`); it buys the two d0 games above at 3.4x the
-d0 walk time. (2) The post-route greedy hazard on d0 (gi976) is open -- worth a fix only if the depth-0 runner matters
-beyond the canary.
+d0 walk time. (2) The two d0 games are fixed in the greedy policy -- next subsection.
+
+#### The greedy policy: d0 gi976 / gi990 (2026-10-21, coordinator) -- `MTG_GREEDY_LETHAL_STOP`, `MTG_GREEDY_PUMP_LETHAL` (ON)
+
+The coordinator's point: the greedy is not only the depth-0 canary -- it is the playout policy beyond the search horizon
+at every depth (the generator's d1 b1 included), so both games are defects in what the search's leaves evaluate. Both
+fixes live in `Solve`'s host only (`TurnSolver::Solve` needs a `GreedyPermit`: the depth-0 runner and the horizon
+leaf); the search window's `EnumeratePlans` host is untouched. Commit 5186b3c6.
+
+* **gi976 -- `MTG_GREEDY_LETHAL_STOP` (DEFAULT ON).** After the Combo Off route left a board lethal in combat (the
+  Witch loop's +3/+3 on the Alchemist), the executor's breakpoint re-solve (the Living Wish had put Scholar of Athreos
+  in hand) cast the Scholar, the payer tapped the pumped Alchemist, and the attack no longer killed (T7). The greedy's
+  win projection prices that cast off lands and kept crediting the kill; the verified board-lethal attack-only cut that
+  would have stopped it is a per-provider OPT-IN (`UseLethalShortCircuit`: Goblins, Bruna, Mirrorwing, Equipment,
+  Stompy -- kept opt-in so the SEARCH host's lists and other decks' digests stayed put). In the greedy host it now runs
+  for every provider, always verified (`LethalCutKillIsReal`: the attack-only plan applied, its combat simulated) --
+  the general case: on a board that already kills, any post-route (or any) action that taps or removes a counted
+  attacker can only undo it. The other combat-verdict route (the Equipment chain) already had the cut; EDF's routes
+  kill in main 1.
+* **gi990 -- `MTG_GREEDY_PUMP_LETHAL` (DEFAULT ON).** Why the policy skipped Ezuri's pump: it is **never offered** in
+  main 1 (a no-{T} team pump / firebreathing is spent from leftover mana at combat by the converter,
+  `ApplyFirebreathing`) **and mis-scored** -- the greedy's win projection (`projected_atk`) has no converter term. With
+  6 power against 17 and Forests paying one pump (+12) for lethal, every subset read as a non-win, so the greedy
+  ranked the casts that SPEND that pool (Weather the Storm, the Staffs untapping Arbor Elf), attacked for 3 and won T8.
+  Not gated. The fix is the same verified attack-only cut when the attack plus an upper bound on the converter (pool x
+  the best damage-per-mana of any pump that reaches an attacker) reaches lethal and the simulated combat -- converter
+  included -- kills. Scenario `aa_d0_ezuri_pump_lethal_from_forests` (no T6 win with the lever =0).
+
+Both are generic engine levers (any deck whose greedy meets these boards); `=0` is exact prior behaviour.
+
+**A/B -- one pooled batch, 5,600 games** (d0 s1001 x 1000, d3 b10 and d5 b20 s70001 x 200; 6 threads; every lever explicit;
+per-game from `--game-log-dir`). Base = v3; arms: + stop, + pump, + both (the new defaults):
+
+| cell | v3 | + stop | + pump | **+ both** |
+|---|---|---|---|---|
+| d0 avg (faster / slower vs v3) | 7.0640 | 7.0560 (8 / 0) | 6.9130 (90 / 0) | **6.9100 (93 / 0)** |
+| d0 core-ms per game | 5.10 | 3.10 | 3.91 | 3.94 |
+| d3 b10 avg (faster / slower) | 5.2500 | 5.2500 (0 / 0) | 5.2500 (0 / 0) | **5.2500 (0 / 0)** |
+| d3 b10 units / mean core-ms | 77.9k / 8,215 | 78.6k / 8,159 | 75.9k / 8,077 | **76.6k / 8,036** |
+| d5 b20 avg (faster / slower) | 5.2150 | 5.2150 (0 / 0) | 5.2150 (0 / 0) | **5.2150 (0 / 0)** |
+| d5 b20 units / mean core-ms | 146.1k / 15,481 | 146.1k / 15,887 | 145.0k / 14,892 | **145.1k / 14,423** |
+
+gi976 T7 -> T6 (stop) and gi990 T8 -> T6 (pump); "both" has both. The pump lever is the big one on d0 (90 games faster:
+the converter's lethal was invisible to every greedy decision with Ezuri out). The searched cells keep every win turn
+(the leaves' greedy rarely reaches these boards within d3 / d5 at s70001) and spend 1-2% fewer units; no slower game
+anywhere.
+
+**Smoke** (the new defaults, 6 threads, NOT accepted): **94 / 132** -- both levers are generic, so the d0 rows of most decks
+(the depth-0 runner IS the greedy) and a few searched rows move. Against the committed per-game GT logs **no row outside
+the alchemist ones has a slower game**; win turns improve on 12 rows and the rest move in play digest only:
+
+| row | GT avg -> now | faster / slower |
+|---|---|---|
+| fungusv2 d0 / d5 | 5.3520 -> 5.2640 / 4.5067 -> 4.4933 | 84 / 0, 1 / 0 |
+| dragonstorm d0 / d3 | 4.9950 -> 4.9930 / 4.4800 -> 4.4733 | 2 / 0, 1 / 0 |
+| fivecolour d0 | 5.4720 -> 5.4610 | 11 / 0 |
+| minotaur d0 | 5.3090 -> 5.3070 | 2 / 0 |
+| dragons d0 | 5.9360 -> 5.9030 | 33 / 0 |
+| melira d0 | 6.3380 -> 6.2380 | 91 / 0 |
+| giants d0 | 6.0750 -> 6.0270 | 48 / 0 |
+| selesnya d0 | 5.7150 -> 5.7130 | 2 / 0 |
+| pd d0 | 7.3020 -> 7.3010 | 1 / 0 |
+| colossus d0 | 4.3610 -> 4.3580 | 3 / 0 |
+
+Play digest only (identical win turns): fungusv2 d3, fungusv2-2HG d3, dragons d3, and the d0 rows of slivers, burn,
+knights, whiteknights, antilife, hinata, auras, creature_giving, breaching, critter, angels, fluctuator, pirates,
+soldiers, snow, landfall, galadriel. Unchanged: the selesnya d3 / d5 known moves (their known digests a1937cded0ab6f58 /
+9bd0e14ec876faa9). Everything else byte-identical. The four alchemist rows against v3 (the same binary, both levers
+=0 -- which reproduces v3's smoke digests exactly): d0 7.0640 -> **6.9100** (93 faster / 0 slower), d3 5.3933 ->
+**5.3733** (4 / 1: gi49 T8 -> unwon at b10, T8 in both arms at b100 -- a budget effect at the horizon edge), d5 5.2000
+(0 / 0), 2HG 5.4600 (0 / 0, digest only). Validation: mtg-test 1618 / 1618 (a new "Greedy lethal stop" case; the
+attack-projection cases read the walk's projection, so their helper runs with the stop off), scenarios 246 / 246,
+combo-off fixtures 50 / 50.
+
+**For the USER:** these two levers change the greedy policy for every deck (strictly toward verified this-turn kills);
+the smoke above is the whole blast radius -- 12 rows faster, none slower, 20 rows digest-only. Accepting them means
+re-accepting those smoke rows' GT.
+
 
 ## Optimization: mulligan trials + certificate (2026-10-20) -- landed: trial order + strict stop (sound, ON)
 
