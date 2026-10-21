@@ -459,6 +459,11 @@ if(MTG_TEST_PCH)
         [["core/SpellEffects.h"]] [["core/GameSetup.h"]]
         [["ai/DecisionProviders.h"]] [["ai/TurnSolver.h"]] [["ai/HeuristicArm.h"]])
     set_source_files_properties(test/unit/test_mana_payment.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    # GCC 13 then reports a known false positive (-Wstringop-overread inside std::string's move, inlined
+    # from SpellEffects.h's TopOption) in every TU that sees the header through the PCH. Test target only.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(mtg-test PRIVATE -Wno-stringop-overread)
+    endif()
 endif()
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working
 # directory is the build tree. It happened to work on Linux only because the loader walks up from
