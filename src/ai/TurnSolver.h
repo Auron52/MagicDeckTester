@@ -2265,6 +2265,21 @@ public:
     // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
     // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
     static int ProjectedAttackDamageForTest(const GameState& state);
+    // MTG_LEAF_KILL_ONLY test hook: one horizon rollout exactly as FSLineWin's leaf runs it (SimulateToEnd
+    // at `depth` under `cutoff`, a fresh leaf table, no budget), and how many kill-only turns it armed /
+    // candidate rollouts it skipped on this thread (counted in every build, thread-local).
+    // `budget_units` > 0 runs it under a finite budget that large (never spent), so `units` is reported.
+    struct KillOnlyTally { long long armed = 0; long long skipped = 0; long long units = 0; };
+    static int SimulateToEndForTest(const GameState& state, int depth, int max_turns, int cutoff,
+                                    bool second_main, KillOnlyTally* tally = nullptr,
+                                    long long budget_units = 0);
+    // MTG_EXH_LEAF_MEMO test hook: the same rollout twice, in ONE pass scope, under a budget of `limit`
+    // units that is already spent (but not overrun). Reports each call's result and the units it consumed.
+    struct SpentTwice { int first = 0; int second = 0; long long units_first = 0; long long units_second = 0; };
+    // MTG_FSL_EDGE_NO_REACH test hook: how many edge second mains this thread has skipped so far.
+    static long long FslEdgeNoReachCountForTest();
+    static SpentTwice SimulateToEndSpentTwiceForTest(const GameState& state, int depth, int max_turns,
+                                                      int cutoff, bool second_main, long long limit);
     // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
     // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
     static int ProjectedAttackDamage(const GameState& state);
