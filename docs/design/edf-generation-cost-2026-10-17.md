@@ -78,3 +78,30 @@ Re-time at 48 hands x R24, d1 b1, 32 threads, Release, idle box, alternating:
 | after (9f482696f) | 899, 898 | 54-56 | 6.7 GB |
 
 Scoring output byte-identical (md5) across all four runs. `fast` projection: ~66 h -> **~42 h PGO**.
+
+## The real run and the adoption (2026-10-18 .. 2026-10-21)
+
+The `fast` generation (R=30, d1 b1, flip_eps 0.10, PGO src 78628a77, 20 GB rss cap) took **~61.5 h** on the
+32-core box: adaptive bottoming converged at ~35 h (6 sub-waves), the size-7 floor + speculation sweep
+finished at ~46 h, and the refine froze 69.3% of the 773,890 cell-sides at the floor reconcile and the rest
+over ~15 h. Table: K=19, 386,945 entries. Adopted in 3c7d6c870 (every EDF suite cell faster in all three
+tiers; `keep_adoption_attribution.py`: 0 unexplained).
+
+mullgen validation, final numbers:
+
+| check | A | B | delta B-A | seeds B<A | se | t |
+|---|---|---|---|---|---|---|
+| keep (static -> exhaustive) | 4.2538 | 4.0042 | **-0.2496t** | 5/5 | 0.0124 | -20.1 (early stop) |
+| bottoming, confounded (lookahead -> blind exhaustive) | 4.1749 | 4.0754 | **-0.0995t** | 14/14 | 0.0054 | -18.5 |
+
+The bottoming A/B was **stopped by the USER** at 31,998 of 32,000 games: the lookahead arm's last game
+(s1004004 gi=476) had run 6.4 h with 30 of 32 cores idle. Two seeds' lookahead jobs (s1004004, s1009009)
+therefore wrote no results; the table is the 14 complete seed pairs (14 x 1000 games, above mullgen's
+12 x 500 gate). A lookahead job cost 2.4-4.5 h per 1000 games against ~0.25 h with the table.
+
+**Open, before the value leaf (USER: "let's wait on the value-leaf until we have optimized"):** the slow
+tail. 3,599 generation rollouts took >30 s (99 core-h, ~6% of the run; 12 over an hour, worst 3.9 h), and
+Kitchen is in 35 of the 44 over 10 minutes. A replay of 39 of them (10-60 min) on the post-rebase engine
+costs the same (92.9M ms Profile-build vs 64.0M logged PGO): per-node enumeration + mana payment under
+`BpDeriveContinuationList`, no single hotspot. Apparatus: `MTG_KEEP_REPLAY_LIST` +
+`MTG_EQUIV_CACHE` + `--gen-mulligan fast --seed 1000000` against a scratch copy of the deck.
