@@ -19459,7 +19459,7 @@ static bool VampiresBucketDiscardEnabled();                                     
 static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_mode);  // defined below
 
 
-// MTG_VAMP_FREE_DISCARD (heurarm VAMP_FREE_DISCARD; the USER's discard rule, 2026-10-21, PROTOTYPE, DEFAULT OFF):
+// MTG_VAMP_FREE_DISCARD (heurarm VAMP_FREE_DISCARD; the USER's discard rule, 2026-10-21, DEFAULT ON; =0 = every name):
 // *"when discarding the cards with madness that we can afford to cast for that cost are the ideal. If the cost
 // is the same or less than the casting cost there is no reason not to discard them"* and *"Bloodghast is another
 // very good choice for discards, since it comes back from the graveyard whenever a land drops."* So when the
@@ -19470,9 +19470,10 @@ static std::vector<int> VampBucketShedOrder(const GameState& s, bool activation_
 // searched variant, and the engine's madness fan -- cast / decline -- is untouched). No free discard: every name.
 static bool VampFreeDiscardOn()
 {
-    static const bool env = EnvOn("MTG_VAMP_FREE_DISCARD");
+    static const bool env = EnvOn("MTG_VAMP_FREE_DISCARD", true);
     return heurarm::Flag(heurarm::VAMP_FREE_DISCARD, env);
 }
+static bool VampSocialiteM2On();   // the USER's Socialite rule (defined below)
 static std::vector<std::string> VampFreeDiscards(const GameState& s, const CardDefinition& src_def,
                                                  const std::vector<std::string>& names)
 {
@@ -19494,6 +19495,11 @@ static std::vector<std::string> VampFreeDiscards(const GameState& s, const CardD
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*hc);
         if (d == nullptr) { continue; }
         bool free = d->gy_landfall_watcher;
+        // The USER's Socialite rule: a main-1 madness cast of Vampire Socialite is a main-1 cast, so it is
+        // not a free discard before combat.
+        const bool socialite = d->params.opp_lost_life_other_enters_counters > 0
+                            || d->params.etb_each_other_own_creature_counters_if_opp_lost_life > 0;
+        if (socialite && s.phase != Phase::PostCombatMain && VampSocialiteM2On()) { continue; }
         if (!free)
         {
             for (const ManaCost& m : MadnessCostsFor(s, me, *hc))
@@ -19574,6 +19580,34 @@ std::vector<std::string> VampiresProvider::ActivationDiscardCandidates(
     std::stable_sort(out.begin(), out.end(),
                      [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
     return out;
+}
+
+// The USER's play rules of 2026-10-21 (DecisionProviders.h, beside the declarations).
+static bool VampNoStealOn()
+{
+    static const bool env = EnvOn("MTG_VAMP_NO_STEAL", true);
+    return heurarm::Flag(heurarm::VAMP_NO_STEAL, env);
+}
+static bool VampSocialiteM2On()
+{
+    static const bool env = EnvOn("MTG_VAMP_SOCIALITE_M2", true);
+    return heurarm::Flag(heurarm::VAMP_SOCIALITE_M2, env);
+}
+bool VampiresProvider::RestrictsCollectedActions() const { return VampNoStealOn() || VampSocialiteM2On(); }
+bool VampiresProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    (void)s;
+    if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapSubtypeSteal)
+    { return !VampNoStealOn(); }
+    if (is_pre_combat && (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial)
+        && VampSocialiteM2On())
+    {
+        const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+        if (d != nullptr && (d->params.opp_lost_life_other_enters_counters > 0
+                             || d->params.etb_each_other_own_creature_counters_if_opp_lost_life > 0))
+        { return false; }
+    }
+    return true;
 }
 
 std::vector<int> VampiresProvider::SacOutletVictimCandidates(

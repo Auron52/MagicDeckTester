@@ -1125,6 +1125,15 @@ public:
     // cleanup's seven) are the engine's half. A card added to the list that reads the graveyard,
     // power after combat, or a discard must revisit this.
     bool PostCombatPumpDiscardFoldOptIn() const override { return true; }
+    // The USER's play rules (2026-10-21), restrictions of the collected options in every world but human
+    // play (DecisionProvider::RestrictsCollectedActions):
+    //   MTG_VAMP_NO_STEAL (heurarm VAMP_NO_STEAL, DEFAULT ON): *"Heuristically it isn't worthwhile to use
+    //     Captivating Vampire's ability."* -- the steal is never offered.
+    //   MTG_VAMP_SOCIALITE_M2 (heurarm VAMP_SOCIALITE_M2, DEFAULT ON): *"Vampire Socialite should always be
+    //     cast in main 2, so it can benefit from the damage dealt."* -- no pre-combat hand cast or Aether
+    //     Vial put of a card with Socialite's opp-lost-life clauses.
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
     // Vampires A1 (AGENT-DRAFTED, same lever): the madness default -- the base dominance rule (cast the
     // cheapest max-free option) except a graveyard-landfall card (Bloodghast) in a MAIN phase while this
     // turn's land drop is open and a land is in hand: DECLINE (it returns from the graveyard on that

@@ -22400,11 +22400,13 @@ inline Report g_report;
 // variants. Off: one static bool per candidate, no key built -- byte-identical.
 namespace vampaxis
 {
-enum Axis { kExact, kDisc, kMad, kPin, kVictim, kBp, kLand, kOrder, kVial, kCondAll, kPitfAll, kBloodAll, kN };
+enum Axis { kExact, kDisc, kMad, kPin, kVictim, kBp, kLand, kOrder, kVial, kCondAll, kPitfAll, kBloodAll,
+            kLandSlot, kLandName, kLandHold, kDiscCond, kDiscPitf, kDiscBlood, kN };
 static const char* kAxisNames[kN] = {
     "exact-duplicate", "discard-name", "madness-answer", "discard+madness", "pitf-victim",
     "breakpoint-arm", "land-choice", "action-order", "vial-vs-cast", "condemned-pump(any)",
-    "pitfighter-act(any)", "blood-act(any)" };
+    "pitfighter-act(any)", "blood-act(any)", "land-slot(timing)", "land-name", "land-or-hold",
+    "condemned-discard", "pitfighter-discard", "blood-discard" };
 inline bool On() { static const bool v = EnvOn("MTG_VAMP_AXIS_CENSUS"); return v; }
 inline std::atomic<long long> g_cands[2], g_root_units[2], g_roots[2];
 inline std::atomic<long long> g_var[kN][2], g_top[kN][2], g_units[kN][2];
@@ -22458,8 +22460,10 @@ inline std::uint64_t ActH(const Action& a, int ax)
     h = Mix(h, NameH(a.land_face));
     h = Mix(h, NameH(a.land_fetch_target));
     h = Mix(h, a.alt_cost ? 1u : 0u);
-    if (ax != kDisc && ax != kPin) { h = Mix(h, NameH(a.discard_name)); }
-    if (ax != kMad && ax != kPin)
+    const bool own_disc = (ax == kDiscCond && IsCond(a)) || (ax == kDiscPitf && IsPitf(a))
+                       || (ax == kDiscBlood && IsBlood(a));
+    if (ax != kDisc && ax != kPin && !own_disc) { h = Mix(h, NameH(a.discard_name)); }
+    if (ax != kMad && ax != kPin && !own_disc)
     {
         h = Mix(h, static_cast<std::uint64_t>(static_cast<int>(a.madness_choice) + 7));
         h = Mix(h, static_cast<std::uint64_t>(static_cast<int>(a.madness_arm) + 7));
@@ -22491,12 +22495,16 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     }
     if (ax != kLand)
     {
-        h = Mix(h, StrH(p.land_to_play));
-        h = Mix(h, StrH(p.fetch_target));
-        h = Mix(h, StrH(p.land_face));
-        h = Mix(h, static_cast<std::uint64_t>(p.land_slot + 7));
-        h = Mix(h, p.land_from_top ? 1u : 0u);
-        h = Mix(h, static_cast<std::uint64_t>(p.rad_mode + 7));
+        if (ax != kLandName && ax != kLandHold)
+        {
+            h = Mix(h, StrH(p.land_to_play));
+            h = Mix(h, StrH(p.fetch_target));
+            h = Mix(h, StrH(p.land_face));
+            h = Mix(h, p.land_from_top ? 1u : 0u);
+            h = Mix(h, static_cast<std::uint64_t>(p.rad_mode + 7));
+        }
+        else if (ax == kLandName) { h = Mix(h, p.land_to_play.empty() ? 0x11u : 0x22u); }   // has-land kept
+        if (ax != kLandSlot && ax != kLandHold) { h = Mix(h, static_cast<std::uint64_t>(p.land_slot + 7)); }
     }
     const int extra[] = { p.discard_choice, p.dig_choice, p.scry_choice, p.tutor_choice, p.fb_hold_choice,
                           p.landfall_target_choice, p.combat_transform_choice, p.tapmode_choice,
@@ -36829,6 +36837,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         actions.erase(std::remove_if(actions.begin(), actions.end(),
             [&](const Action& a)
             { return a.kind == Action::Kind::CastFromHand && !prov.Main2CastAllowed(state, a); }),
+            actions.end());
+    }
+    // ...and the same restriction in EITHER main, casts and activations alike
+    // (DecisionProvider::RestrictsCollectedActions / CollectedActionAllowed; Vampires: the USER's rules of
+    // 2026-10-21). Same reach and the same contract as the main-2 block above.
+    if (!actions.empty() && !HumanPlayActive() && ResolveProvider(state).RestrictsCollectedActions())
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+            [&](const Action& a) { return !prov.CollectedActionAllowed(state, a, is_pre_combat); }),
             actions.end());
     }
 
