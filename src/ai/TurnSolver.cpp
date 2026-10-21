@@ -28271,6 +28271,12 @@ struct CollectMemo
     std::vector<std::pair<const CardDefinition*, std::vector<std::string>>> discard_classes;
     std::unique_ptr<GameState> probe;                // MadnessFanFor's scratch: a copy of *st, hand restored
     bool probe_busy = false;                         // the scratch is mid-use (a re-entrant fan copies)
+    struct Fan                                       // MadnessFanFor's answers, by every input
+    {
+        std::string pin; ManaCost outlet_cost; std::string src_name; bool outlet_sacrifices;
+        bool scope_search; int scope_root; bool full; std::vector<MadnessVariant> fan;
+    };
+    std::vector<Fan> fans;
 };
 inline thread_local CollectMemo* t_collect_memo = nullptr;
 static bool CollectMemoOn()
@@ -28803,10 +28809,11 @@ static MadnessBodyBooks MadnessFanBooks(const GameState& probe, int me, const Co
     return b;
 }
 
-static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const std::string& pin,
-                                                 const ManaCost& outlet_cost, const std::string& src_name,
-                                                 bool outlet_sacrifices = false)
+static std::vector<MadnessVariant> MadnessFanForUncached(const GameState& state, const std::string& pin,
+                                                         const ManaCost& outlet_cost, const std::string& src_name,
+                                                         bool outlet_sacrifices, bool& full)
 {
+    full = false;
     std::vector<MadnessVariant> fan;
     if (!state.deck_has_madness || pin.empty() || HumanPlayActive()) { return fan; }
     const int me = state.active_player_index;
@@ -28968,7 +28975,39 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
     if (!(g_search_candidate_enum || g_condemn_root_turn < 0)) { fan.resize(1); return fan; }
     for (int k = 0; k < static_cast<int>(opts.size()); ++k)
     { if (k != dflt && !colour_dead[static_cast<std::size_t>(k)]) { fan.push_back(var_of(opts[static_cast<std::size_t>(k)])); } }
-    g_axis_madness_vars.fetch_add(static_cast<long long>(fan.size()), std::memory_order_relaxed);
+    full = true;   // the caller bumps g_axis_madness_vars (MadnessFanFor), exactly as this did here
+    return fan;
+}
+
+// MadnessFanFor = MadnessFanForUncached, memoised per CollectActions call (CollectMemo) on every argument
+// and the two scope globals the fan reads. Two copies of one outlet (two Stromkirk Condemned) ask the same
+// question of the same board; the second reads the first's fan. g_axis_madness_vars (a census counter) is
+// bumped exactly as the uncached path bumps it, hit or miss.
+static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const std::string& pin,
+                                                 const ManaCost& outlet_cost, const std::string& src_name,
+                                                 bool outlet_sacrifices = false)
+{
+    CollectMemo* cm = CollectMemoFor(state);
+    const bool scope_search = g_search_candidate_enum;
+    const int  scope_root   = g_condemn_root_turn;
+    if (cm != nullptr)
+    {
+        for (const CollectMemo::Fan& e : cm->fans)
+        {
+            if (e.outlet_sacrifices == outlet_sacrifices && e.scope_search == scope_search
+                && e.scope_root == scope_root && e.outlet_cost == outlet_cost && e.pin == pin
+                && e.src_name == src_name)
+            {
+                if (e.full) { g_axis_madness_vars.fetch_add(static_cast<long long>(e.fan.size()), std::memory_order_relaxed); }
+                return e.fan;
+            }
+        }
+    }
+    bool full = false;
+    std::vector<MadnessVariant> fan = MadnessFanForUncached(state, pin, outlet_cost, src_name, outlet_sacrifices, full);
+    if (full) { g_axis_madness_vars.fetch_add(static_cast<long long>(fan.size()), std::memory_order_relaxed); }
+    if (cm != nullptr)
+    { cm->fans.push_back(CollectMemo::Fan{ pin, outlet_cost, src_name, outlet_sacrifices, scope_search, scope_root, full, fan }); }
     return fan;
 }
 // RULE 10 -- THE MADNESS CONVOKE COVER BOOKS (Stage 6a defects D1 / D2, 2026-10-19). A madness CAST pin of a
