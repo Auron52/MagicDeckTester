@@ -214,6 +214,27 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   0 slower, net -11, worst row 0.273x, vs net 0 for the rules as written); and the agents' questions (R.8, P.4, B.8).
   The shared-branch landing still waits on question 27.
 
+## Mulligan profile -- buckets and generation setting (2026-10-21)
+- USER ruling (`Vampire.buckets.json`): *"we should at least make it K=18 with Secluded Courtyard and Unclaimed
+  Territory merged ... the next best one to merge is probably Voldaren Estate. I will leave that up to what you find
+  in bucketing."* Discovery (play setting d5 b20, 400 probes, threshold 0.01) gives **K=15**: {Courtyard, Unclaimed,
+  Voldaren Estate}, {Falkenrath Gorger, Falkenrath Pit Fighter}, {Captivating Vampire, Stromkirk Captain} (USER: *"I'm
+  okay with that merge"*), every other card alone. Nearest kept-apart pair: Blackcleave Cliffs to the land bucket at
+  0.0175; everything else >= 0.0575. K=15 is 116,280 size-7 cells against 346,104 at K=18.
+- **Gorger + Pit Fighter (USER: "seems a bit suspect, just because of the Madness option").** Paired A/B, one batch
+  (scratch `build/scratch/vampires/mull/gorger/ab.py`): the real deck against a twin whose Gorger carries no
+  `grants_madness_creature_subtype` (renamed, so the card numbering and shuffles stay paired). 1,100 games (std d3
+  b10 600, std d5 b20 300, 2HG d3 b10 200): **0 kill turns moved**, while every cell's play digest differs. The grant
+  IS used -- seed 5100001 game 1 T4: Condemned discards Legion Lieutenant with Gorger out, Lieutenant is madness-cast
+  and pumped, 13 damage, the T4 kill -- but it is redundant here: the deck already has 4 Markov Baron and 2 Asylum
+  Visitor with their own madness and 2 Bloodghast as free discards. The merge stands (K=15).
+- Log gap found on the way: a madness cast is not written as its own `CAST_SPELL` action in the JSON game log; it
+  shows only as the outlet's "discarded X" text plus the card on the battlefield afterwards. Follow-up, not fixed.
+- Generation setting (the mulligan stage's screen, `mullgen_finalize.py --write`, 48 openers R=24 vs the d5 b20 play
+  reference): **d1 b1**, 1,954 units/rollout = 0.26x play, fidelity 1.0000 (rho 0.9965 against a 0.9813 noise
+  ceiling). d2 b1 / d3 b1 / d1 b3 are within 4% of it; d3 b20 and d5 b20 cost 3.8-4.0x. Recorded with K in
+  `Vampire.profile.json` (`value_play`: no sidecar is created).
+
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
 pre-fix engine (every new test failed there), then fixed:
