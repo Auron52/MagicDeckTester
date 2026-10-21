@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 186a5c3e3  date 2026-10-20
+# Regression ground truth -- commit c4dc629cf  date 2026-10-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
 # accepted-with-regressions (smoke, 2026-10-20): Vampires code landed (deck OUT of the suite, USER 2026-10-20). Moves are exactly the expected set: the CR 510.4 two-step combat (angels, critter: faster or same) and the payer levers MTG_PAY_PAIN_LAST / MTG_PAY_NARROW_RESTRICTED_FIRST (auras creature_giving minotaur pirates selesnya soldiers th); every other deck byte-identical. searched 0 slower / 19 faster; d0 2 slower / 70 faster: soldiers d0 gi49 5->6, gi817 4->5, both restored with the levers =0 -- the painless payment saves a life and the d0 runner then sac-cycles Silent Clearing a land short (the branch's documented legitimate class; held-out A/B soldiers net 0).
@@ -135,6 +135,10 @@ galadriel2hg_smoke_d3_s1001=4.8933/d3057555a751735b
 colossus_smoke_d0_s1001=4.3610/5b076b322d4ff5e5
 colossus_smoke_d3_s1001=3.2533/3fccee818433ea10
 colossus_smoke_d5_s1001=3.2133/2f155b640caca7f2
+vampires_smoke_d0_s1001=4.6990/4b7a4788f380cb5a
+vampires_smoke_d3_s1001=4.3800/915c80dbbaaa1e9b
+vampires_smoke_d5_s1001=4.3467/b24f2acdc5d2458c
+vampires2hg_smoke_d3_s1001=4.8600/8d2f3b55fa47b97b
 
 # --- regression ---
 fungusv2_regression_d0_s2002=5.3740/3e4466ecbee3860b
@@ -315,6 +319,13 @@ colossus_regression_d3_s2002=3.4200/9a5609afa772e094
 colossus_regression_d3_s3003=3.4933/2b7a842d7a7c5a82
 colossus_regression_d5_s2002=3.4133/13a4d6f6acc3731f
 colossus_regression_d5_s3003=3.4400/fd10158d8dd88d0e
+vampires_regression_d0_s2002=4.7350/41f4ca5c1a71949d
+vampires_regression_d3_s2002=4.3733/a8cee21822370891
+vampires_regression_d3_s3003=4.4667/20c06430dede6629
+vampires_regression_d5_s2002=4.3600/2cdc42ec48de0ce6
+vampires_regression_d5_s3003=4.4533/da10a7163b53fc9a
+vampires2hg_regression_d3_s2002=4.8900/81b004286de687c8
+vampires2hg_regression_d5_s2002=4.9200/45ce2008fa2885e3
 
 # --- overnight ---
 fungusv2_overnight_d0_s4004=5.3810/218363fba321b400
@@ -758,3 +769,19 @@ colossus_overnight_d5_s4004=3.3680/77fc1a5aa4f1d166
 colossus_overnight_d5_s5005=3.3720/8815e366486b6eba
 colossus_overnight_d5_s6006=3.3100/204420ad95007c59
 colossus_overnight_d5_s7007=3.3980/b116710a5be09d92
+vampires_overnight_d0_s4004=4.7315/869bbcc81a141083
+vampires_overnight_d0_s6006=4.7115/7ed152ecc93103b9
+vampires_overnight_d0_s8008=4.6960/706db737d28ebcdf
+vampires_overnight_d0_s10010=4.7040/3dd36f0d31ecef24
+vampires_overnight_d3_s4004=4.4075/5219138794ddcfe9
+vampires_overnight_d3_s5005=4.4075/7f98d5c7646a6068
+vampires_overnight_d3_s6006=4.4275/f999d676f18a6b64
+vampires_overnight_d3_s7007=4.4100/d5d8e3e033676f69
+vampires_overnight_d5_s4004=4.4300/8f24e5ded3c58b23
+vampires_overnight_d5_s5005=4.4167/d41d0372daa07d69
+vampires_overnight_d5_s6006=4.4100/73de3007dccff17a
+vampires_overnight_d5_s7007=4.3967/4cb24b6a0afa15a5
+vampires2hg_overnight_d5_s4004=5.0500/95a1846a9f7368cb
+vampires2hg_overnight_d5_s5005=4.9300/27586d11399ea2ef
+vampires2hg_overnight_d5_s6006=4.9600/f7d1c2ac5d3166a8
+vampires2hg_overnight_d5_s7007=5.0000/c5b23fc971079ffd
