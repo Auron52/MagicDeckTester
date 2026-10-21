@@ -44476,7 +44476,8 @@ struct Guard { Guard() { ++t_in_route; } ~Guard() { --t_in_route; } };
 // the main-phase pass first keeps every board the shipped-first walk won byte-for-byte the same line, and the
 // combat pass adds what only it can prove. The route set is the UNION of the two walks -- never smaller than
 // either -- which is the invariant MTG_AA_COMBO_COMBAT must keep (a finisher row may add routes, never remove one).
-// =0 -> the combat pass alone (as first shipped).
+// The main-phase pass runs only on a board where the passes CAN differ (PassesCanDiffer: a pump piece reachable);
+// everywhere else the combat pass already contains it. =0 -> the combat pass alone (as first shipped).
 inline thread_local int t_main_pass = 0;
 inline bool RouteMainFirstOn()
 {
@@ -45013,11 +45014,61 @@ static Verdict WalkPass(const GameState& s, int me)
     return v;
 }
 
+// CAN THE TWO PASSES DIFFER ON THIS BOARD? The combat pass differs from the main-phase pass only through
+//   (1) the pump need (g_untap_loop_no_pump): a team pump on our battlefield (ComputeUntapLoopNeed (c)), a team-pump
+//       creature in hand ((e), the chained cast), one in the LIBRARY when no one-step payoff is there (the chained
+//       draw-to-find), and a pump untapper's own +3/+3 (UntapLoopPumpIterations: Seedcradle Witch on the
+//       battlefield, or cast from hand as the untapper setup);
+//   (2) a team-pump creature cast admitted as a setup (IsComboPieceCast, the route menu);
+//   (3) CombatLethalNow as a verdict -- which only ADDS wins.
+// With no piece of (1)-(2) reachable -- on our battlefield, in hand, in the sideboard behind a Living Wish in hand,
+// or in the library as above -- the combat pass IS the main-phase pass with extra verdicts, so running the
+// main-phase pass first is pure duplicate work (an identity fold, not a narrowing): only the combat pass runs,
+// exactly as shipped. A superset test (a non-creature team pump in hand counts too); a card the walk itself draws
+// mid-turn is not looked ahead to -- such a board plays exactly the shipped combat pass, never less.
+static bool PassesCanDiffer(const GameState& s, int me)
+{
+    auto piece = [](const CardDefinition* d) -> bool
+    {
+        return d != nullptr && (d->params.untap_pump_cost.has_value() || d->params.team_pump_cost.has_value());
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        if (piece(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    bool wish = false;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (piece(d)) { return true; }
+        if (d != nullptr && d->params.tutor_to_hand && d->params.wish_from_sideboard) { wish = true; }
+    }
+    if (wish)
+    {
+        for (const Card& c : pl.sideboard)
+        { if (piece(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    }
+    // The chained dig runs only when no one-step payoff is in the library (ComputeUntapLoopNeed's draw_to_find, which
+    // never draws the last card -- so a Stroke on the bottom does not stop it).
+    bool lib_piece = false;
+    for (std::size_t i = 0; i < pl.library.size(); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.library[i]);
+        if (d == nullptr) { continue; }
+        if (i + 1 < pl.library.size() && UntapLoopPayoffCard(s, me, *d, /*chained=*/false)) { return false; }
+        if (piece(d)) { lib_piece = true; }
+    }
+    return lib_piece;
+}
+
 // THE WALK: the main-phase pass first, then -- only if it proved nothing -- the combat pass (see MainPassScope).
-// With the combat finishers off, or MTG_AA_ROUTE_MAIN_FIRST=0, it is the single pass it always was.
+// With the combat finishers off, MTG_AA_ROUTE_MAIN_FIRST=0, or no pump piece reachable (PassesCanDiffer), it is the
+// single pass it always was.
 static Verdict Walk1(const GameState& s, int me)
 {
-    if (AlchemistComboCombatOn() && RouteMainFirstOn())
+    if (AlchemistComboCombatOn() && RouteMainFirstOn() && PassesCanDiffer(s, me))
     {
         Verdict v;
         {
