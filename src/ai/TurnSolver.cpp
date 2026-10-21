@@ -1596,7 +1596,7 @@ inline void PinClass(const GameState& s, const TurnSolver::Plan& plan, bool dup)
         bool adds = false;
         for (const Action& a : plan.actions)
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d && (d->params.wish_from_sideboard || d->params.tutor_to_hand || a.kind == Action::Kind::ActivatePermAbility))
             { adds = true; }
         }
@@ -1614,7 +1614,7 @@ inline void PinClass(const GameState& s, const TurnSolver::Plan& plan, bool dup)
         }
         for (const Action& a : plan.actions)
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (a.kind == Action::Kind::CastFromHand && d && d->params.is_equipment) { ++eq_cast; }
         }
         k = std::string("AATTACH k=") + std::to_string(plan.attack_attach_choice)
@@ -6942,7 +6942,7 @@ static const CardDefinition* ActionColoredReducerDef(const Action& a)
 {
     const CardDefinition* d = a.def;
     if (d == nullptr && a.kind == Action::Kind::ActivateVial)
-    { d = CardDatabase::Instance().Lookup(a.card_name); }
+    { d = CardDatabase::Instance().LookupInterned(a.card_name); }
     if (d == nullptr || d->params.reduces_subtype_colored_subtype.empty()
                      || !d->params.reduces_subtype_colored_cost.has_value()) { return nullptr; }
     return d;
@@ -7165,7 +7165,7 @@ static int StoriedFirstEquipWaiverCredit(const GameState& state, const std::vect
         // one that spends it. Its baked cost is > 0 only when metalcraft is OFF -- under metalcraft
         // the attach is Puresteel's granted equip {0}, which is free and already skipped here.
         const CardDefinition* ed = cands[j].def ? cands[j].def
-                                 : CardDatabase::Instance().Lookup(cands[j].card_name);
+                                 : CardDatabase::Instance().LookupInterned(cands[j].card_name);
         if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }
         best = cands[j].cost.generic;
     }
@@ -7765,7 +7765,7 @@ static const CardDefinition* CastCandidateDef(const GameState& state, const Acti
     const Player& ap = state.players[state.active_player_index];
     return (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
                ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
-               : CardDatabase::Instance().Lookup(a.card_name);
+               : CardDatabase::Instance().LookupInterned(a.card_name);
 }
 
 static bool MetalcraftWillFreeEquips(const GameState& state, const std::vector<Action>& cands)
@@ -9189,7 +9189,7 @@ bool TurnSolver::OrderPaysSequentially(const GameState& state, const std::vector
     if (use == &filled)
     {
         filled = acts;
-        for (Action& a : filled) { if (a.def == nullptr) { a.def = CardDatabase::Instance().Lookup(a.card_name); } }
+        for (Action& a : filled) { if (a.def == nullptr) { a.def = CardDatabase::Instance().LookupInterned(a.card_name); } }
     }
     std::vector<int> ord;
     ord.reserve(order.size());
@@ -10241,7 +10241,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
     for (int j : order)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (life) { ApplyCastLifegain(t, active, *d); }   // instants / sorceries only (inside)
         if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
@@ -10479,7 +10479,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             {
                 const Action& a = cands[j];
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr || !d->card.IsCreature()) { continue; }
                 for (const std::string* sub : scaler_subs)
                 {
@@ -10497,7 +10497,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         {
             const Action& a = cands[j];
             if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !d->params.is_aura || !d->params.aura_etb_tap_host) { continue; }
             if (!attacker(own_perm(a.enchant_target))) { continue; }
             set_bit(j, a.enchant_target);
@@ -10514,7 +10514,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         {
             const Action& a = cands[j];
             if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !RemovalSearchesForController(*d)) { continue; }
             if (!attacker(own_perm(a.enchant_target))) { continue; }
             set_bit(j, a.enchant_target);
@@ -10538,7 +10538,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         for (const Action& a : cands)
         {
             if (a.kind != Action::Kind::CastFromHand) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             // A watcher CAST this turn is sick, so only a team-wide one turns gains into attack.
             if (d->params.lifegain_each_own_creature_counters > 0
@@ -10555,7 +10555,7 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         unsigned char f = 0;
         if (a.kind == Action::Kind::CastFromHand)
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             if (pump && d->params.etb_team_pump_per_creature && d->card.IsCreature()) { f |= kWalkPump; }
             if (life && d->params.cast_lifegain > 0 && !d->params.solo_target_trick
@@ -10762,7 +10762,7 @@ static CannonsCtx BuildCannonsCtx(const GameState& state, const std::vector<Acti
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (d->params.multicolor_cast_damage_per_color) { cast_cannons = true; }
         if (d->card.IsMulticolored()) { multi = true; }
@@ -10782,7 +10782,7 @@ static int CannonsTriggerDamage(const GameState& state, const CannonsCtx& c,
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (d->params.multicolor_cast_damage_per_color) { casts_cannons = true; }
         if (d->card.IsMulticolored()) { colours += d->card.ColorCount(); }
@@ -10795,7 +10795,7 @@ static int CannonsTriggerDamage(const GameState& state, const CannonsCtx& c,
     for (int j : order)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (on > 0 && d->card.IsMulticolored()) { dmg += on * d->card.ColorCount(); }
         if (d->params.multicolor_cast_damage_per_color) { ++on; }
@@ -10895,7 +10895,7 @@ static FreeCastCtx BuildFreeCastCtx(const GameState& state, bool is_pre_combat,
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::CastFromHand || a.free_cast || a.alt_cost || a.hand_index < 0) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         const bool has_x = d != nullptr && d->card.m_mana_cost.has_x;
         c.casts.push_back({ a.hand_index, a.card_mv, has_x ? 0 : std::max(0, a.direct_damage) });
     }
@@ -12242,7 +12242,7 @@ static bool SubsetConvokeBodiesInvalid(const GameState& state, const std::vector
     {
         const Action& c = cands[static_cast<std::size_t>(idx)];
         if (c.kind != Action::Kind::CastFromHand || (c.convoke_green <= 0 && c.convoke_other <= 0)) { continue; }
-        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         if (!ConvokeTapsAtCast(cd)) { continue; }
         if (n_cv == 0) { pip = ConvokePipColor(*cd); }
         ++n_cv; dem_p += c.convoke_green; dem_o += c.convoke_other;
@@ -12263,7 +12263,7 @@ static bool SubsetConvokeBodiesInvalid(const GameState& state, const std::vector
         const Action& d = cands[static_cast<std::size_t>(idx)];
         const bool cast = d.kind == Action::Kind::CastFromHand && !d.bestow && !d.adventure && !d.sacrifice_land;
         if (!cast && d.kind != Action::Kind::ActivateVial) { continue; }
-        const CardDefinition* dd = d.def != nullptr ? d.def : CardDatabase::Instance().Lookup(d.card_name);
+        const CardDefinition* dd = d.def != nullptr ? d.def : CardDatabase::Instance().LookupInterned(d.card_name);
         if (dd == nullptr || !dd->card.IsCreature()) { continue; }
         const bool is_pip = dd->card.HasColor(pip);
         const bool is_cv  = cast && (d.convoke_green > 0 || d.convoke_other > 0) && ConvokeTapsAtCast(dd);
@@ -12277,7 +12277,7 @@ static bool SubsetConvokeBodiesInvalid(const GameState& state, const std::vector
     {
         const Action& c = cands[static_cast<std::size_t>(idx)];
         if (c.convoke_plan_pip <= 0 && c.convoke_plan_other <= 0) { continue; }
-        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         const bool self_pip = cd != nullptr && cd->card.HasColor(pip);
         if (c.convoke_plan_pip > ap + cvp - (self_pip ? 1 : 0)) { return true; }
         if (c.convoke_plan_other > ao + cvo - (self_pip ? 0 : 1)) { return true; }
@@ -12386,7 +12386,7 @@ static bool SubsetPostCombatPumpDiscardDominated(const GameState& state, const s
         if (c.discard_name.empty() || c.madness_choice > 0) { continue; }   // unpinned (human) / a madness CAST
         if (c.def != nullptr && c.def->params.discard_team_pump_power <= 0
             && c.def->params.discard_team_pump_toughness <= 0) { continue; }
-        const CardDefinition* xd = CardDatabase::Instance().Lookup(c.discard_name.str());
+        const CardDefinition* xd = CardDatabase::Instance().LookupInterned(c.discard_name);
         if (xd == nullptr || xd->gy_landfall_watcher) { continue; }        // Bloodghast comes back
         candidate = true;
         break;
@@ -12492,7 +12492,7 @@ static int VampArrivalsBeforeBlood(const GameState& state, const std::vector<Act
 {
     if (sub.empty()) { return 0; }
     auto def_of = [](const Action& c) -> const CardDefinition*
-    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
     auto sub_creature = [&](const CardDefinition* d)
     { return d != nullptr && d->card.IsCreature() && CardHasSubtype(d->card, sub); };
     bool bands = false;
@@ -12536,12 +12536,12 @@ static int VampArrivalsBeforeBlood(const GameState& state, const std::vector<Act
             if (becomes) { ++net; }
         }
         if (!d.discard_name.empty() && d.madness_choice > 0
-            && sub_creature(CardDatabase::Instance().Lookup(d.discard_name.str()))) { ++net; }   // a madness CAST
+            && sub_creature(CardDatabase::Instance().LookupInterned(d.discard_name))) { ++net; }   // a madness CAST
         if (d.kind == Action::Kind::SacCreatureOutlet && dd != nullptr)
         {
             bool victim_sub = dd->params.sac_creature_requires_subtype == sub;
             if (!victim_sub && !d.victim_name.empty())
-            { victim_sub = sub_creature(CardDatabase::Instance().Lookup(d.victim_name.str())); }
+            { victim_sub = sub_creature(CardDatabase::Instance().LookupInterned(d.victim_name)); }
             if (!victim_sub && d.sac_victim_id > 0 && d.sac_victim_id != kSameLineSacVictim)
             {
                 for (const Permanent& q : state.battlefield)
@@ -12564,7 +12564,7 @@ static bool BloodVariantMismatch(const GameState& state, const std::vector<Actio
 {
     const Action& c = cands[static_cast<std::size_t>(sel[pi])];
     if (c.kind != Action::Kind::ActivatePermAbility || c.ability_mode != Action::AbilityMode::TapBlood) { return false; }
-    const CardDefinition* bd = c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+    const CardDefinition* bd = c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
     const int added = VampArrivalsBeforeBlood(state, cands, sel, pi,
         bd != nullptr ? bd->params.tap_blood_cost_less_per_subtype : std::string());
     const int v = c.vamp_casts_needed;
@@ -12579,7 +12579,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
     if (SubsetMadnessCoverInvalid(state, cands, sel)) { return true; }   // rule 10
     const Player& ap = state.ActivePlayer();
     auto def_of = [](const Action& c) -> const CardDefinition*
-    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
     auto puts_name = [&](const std::string& nm) -> int
     {
         int n = 0;
@@ -12649,7 +12649,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
                     { ++adds; }
                     if (!d.discard_name.empty())
                     {
-                        const CardDefinition* md = CardDatabase::Instance().Lookup(d.discard_name.str());
+                        const CardDefinition* md = CardDatabase::Instance().LookupInterned(d.discard_name);
                         if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)
                             && (d.madness_choice > 0 || md->gy_landfall_watcher)) { ++adds; }
                     }
@@ -12669,7 +12669,7 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
         // meets a plain discard and the variant is the decline twice over.
         if (c.madness_choice > 0 && !c.discard_name.empty() && state.deck_has_madness)
         {
-            const CardDefinition* md = CardDatabase::Instance().Lookup(c.discard_name.str());
+            const CardDefinition* md = CardDatabase::Instance().LookupInterned(c.discard_name);
             if (md != nullptr && !md->params.madness_cost.has_value() && md->card.IsCreature())
             {
                 bool granted_now = false;
@@ -13496,7 +13496,7 @@ static bool SubsetHasUnclosedPersistLoop(const GameState& state,
         const Action& d = cands[jdx];
         if (d.kind != Action::Kind::CastFromHand) { continue; }
         const CardDefinition* dd = d.def != nullptr
-            ? d.def : CardDatabase::Instance().Lookup(d.card_name);
+            ? d.def : CardDatabase::Instance().LookupInterned(d.card_name);
         if (dd && (dd->params.prevents_minus_counters
                    || dd->params.reduces_minus_counters_by_one
                    || dd->params.other_creature_gy_enter_team_counters > 0)) { return false; }
@@ -13575,7 +13575,7 @@ static bool SubsetHasShroudBlockedEquip(const GameState& state,
 static bool AuraOrPairTargetsCand(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     if (d == nullptr) { return false; }
     // enchant_target is reused by other axes (copy source, trick target): only an Aura spell's host
     // and a soulbond creature's partner are the "host" this rule is about.
@@ -13676,7 +13676,7 @@ static bool AuraHostBranchOn()
 static bool IsCreatureAuraCast(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || a.bestow) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     // A REMANDED Aura (Action::remand_by) is countered back to hand and never attaches, so its host
     // is a cast-legality detail, not a host choice -- none of the host machinery (the host fold, the
     // host ranking) may drop or reorder it. A can't-be-countered one would attach; none exists.
@@ -13741,7 +13741,7 @@ static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>&
         {
             if (a.kind == Action::Kind::Equip) { equip = true; }
             if (a.kind != Action::Kind::CastFromHand) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && d->card.IsCreature() && d->tmpl == CardTemplate::ManaDork) { fresh_dork = true; }
         }
         any_dork = equip && fresh_dork;
@@ -13751,14 +13751,14 @@ static GameState AuraPlanHostBase(const GameState& s, const std::vector<Action>&
     for (const Action& a : acts)
     {
         const CardDefinition* d = (a.kind == Action::Kind::CastFromHand)
-                                ? (a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name)) : nullptr;
+                                ? (a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name)) : nullptr;
         const bool cre = d != nullptr && d->card.IsCreature() && !a.bestow;
         (cre ? cost_cre : cost_other) += a.cost.ManaValue();
     }
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->card.IsCreature()) { continue; }
         const int num = hand_number(a);
         if (num <= 0) { continue; }
@@ -13902,7 +13902,7 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
     for (const Action& a : acts)
     {
         if (!IsCreatureAuraCast(a)) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         Permanent p;
         p.card              = d->card;
         p.card.m_number     = hand_number(a);
@@ -13995,7 +13995,7 @@ static AuraHostKey AuraPlanHostKeyOn(const std::vector<Permanent>& base_bf, Game
             if (h.card.m_number != a.enchant_target) { continue; }
             const bool dork = AuraHostIsManaCreature(h);
             key.dork_hosts += dork ? 1 : 0;
-            const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (swap_order && ad != nullptr && ad->params.aura_swap_cost.has_value())
             { key.swap_rank += WingsHostRank(t, me, h, is_pre_combat); }
             break;
@@ -14067,7 +14067,7 @@ static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !d->card.IsCreature()) { continue; }
             const Card* hc = nullptr;
             if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size())
@@ -14092,7 +14092,7 @@ static void RetargetSolveAuraHosts(const GameState& state, bool is_pre_combat,
             if (c.alt_cost != c0.alt_cost || c.cost.ManaValue() != c0.cost.ManaValue()) { continue; }
             add(c.enchant_target);
         }
-        const CardDefinition* ad = a0.def ? a0.def : CardDatabase::Instance().Lookup(a0.card_name);
+        const CardDefinition* ad = a0.def ? a0.def : CardDatabase::Instance().LookupInterned(a0.card_name);
         if (ad != nullptr && ad->params.aura_enchant_requires.empty() && AuraOnNewCreatureEnabled())
         { for (int n : cast_nums) { add(n); } }
         if (al.size() < 2) { continue; }
@@ -14349,7 +14349,7 @@ static bool BigOnlySubsetPayable(const BigOnlyCtx& bc, const std::vector<Action>
         const Action& c = cands[static_cast<std::size_t>(j)];
         if (c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::CastFromGraveyard)
         {
-            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
             if (d != nullptr && SpellQualifiesForBigMana(d->card, *bc.pp)) { continue; }
         }
         AddCostCarryingHybrids(small, c.cost);
@@ -14407,7 +14407,7 @@ static bool PlanHasPendingAuraOn(const GameState& state, const std::vector<Actio
     for (const Action& c : acts)
     {
         if (c.kind != Action::Kind::CastFromHand || c.enchant_target != num) { continue; }
-        const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         if (!cd || !cd->params.is_aura || cd->params.is_land_aura) { continue; }
         for (const Card& h : ap.hand) { if (h.m_name == c.card_name) { return true; } }
     }
@@ -14431,7 +14431,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::Equip) { continue; }
-            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (!ed || !ed->params.equip_grants_shroud) { continue; }
             int from = -1; bool have_dest = false;
             for (const Permanent& p : state.battlefield)
@@ -14457,7 +14457,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::Equip) { continue; }
-        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (!ed || !ed->params.equip_grants_haste) { continue; }
         if (EquipmentAttachedTo(state, active, a.sac_source_id, a.sac_victim_id)) { continue; }
         // A shroud-granting unlock onto a creature a pending Aura of this plan targets would make
@@ -14666,7 +14666,7 @@ std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::Equip) { continue; }
-        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (!ed || !ed->params.equip_grants_haste) { continue; }
         ManaPool add, add_nc;
         HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
@@ -17367,7 +17367,7 @@ static bool EtbAttachLive(const GameState& state, const std::vector<Action>& can
     {
         const Action& c = cands[k];
         if (c.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         if (d != nullptr && d->params.attach_equipment_on_etb) { return true; }
     }
     return false;
@@ -17414,7 +17414,7 @@ static bool SubsetMayFreeHost(const std::vector<Action>& cands, const std::vecto
         const Action& c = cands[k];
         if (c.kind == Action::Kind::CastFromHand)
         {
-            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
             if (d == nullptr) { return true; }
             const bool after_attach = cast_rank == nullptr || after < 0
                 || (*cast_rank)[static_cast<std::size_t>(k)] > (*cast_rank)[static_cast<std::size_t>(after)];
@@ -17644,7 +17644,7 @@ static bool PlanHasTheftAndOpenRemoval(const std::vector<Action>& acts)
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         if (a.attach_equip_id != 0) { theft = true; continue; }
         if (a.enchant_target > 0) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d != nullptr && d->tmpl == CardTemplate::Removal) { open_removal = true; }
     }
     return theft && open_removal;
@@ -17694,7 +17694,7 @@ static bool TrailingRunsFirst(const GameState& state, const std::vector<Action>&
     const DecisionProvider& prov = ResolveProvider(state);
     auto rank_of = [&](const Action& a) -> int
     {
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
     };
     const int rx = rank_of(cands[static_cast<std::size_t>(sel[px])]);
@@ -17740,9 +17740,9 @@ static bool SubsetHasEquipOntoAttachedPiece(const GameState& state, const std::v
             if (pk == pj) { continue; }
             const Action& r = cands[static_cast<std::size_t>(sel[pk])];
             if (r.kind != Action::Kind::Equip || r.sac_source_id != e.sac_victim_id) { continue; }
-            const CardDefinition* hd = r.def ? r.def : CardDatabase::Instance().Lookup(r.card_name);
+            const CardDefinition* hd = r.def ? r.def : CardDatabase::Instance().LookupInterned(r.card_name);
             if (hd == nullptr || !hd->params.reconfigure_cost.has_value()) { continue; }
-            const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().Lookup(e.card_name);
+            const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().LookupInterned(e.card_name);
             if (AttachIntermediateObservable(state, ed, /*any_haste_shroud=*/true)) { continue; }
             if (TrailingRunsFirst(state, cands, sel, pk, pj))
             {
@@ -18256,12 +18256,12 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
     // candidate (the copy fold's territory) -- never relabelled here.
     auto copy_prone = [&](const Action& e) -> bool
     {
-        const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().Lookup(e.card_name);
+        const CardDefinition* ed = e.def ? e.def : CardDatabase::Instance().LookupInterned(e.card_name);
         for (const Action& o : cands)
         {
             if (o.kind != Action::Kind::Equip || o.sac_source_id == e.sac_source_id) { continue; }
             if (o.card_name == e.card_name) { return true; }
-            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().LookupInterned(o.card_name);
             if (ed != nullptr && od != nullptr && ed->behaviour_identity != 0
                 && ed->behaviour_identity == od->behaviour_identity) { return true; }
         }
@@ -18300,7 +18300,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
         }
         if (is_theft(a))
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr || !d->params.attach_target_equipment || a.hand_index < 0
                 || a.hand_index >= static_cast<int>(ap.hand.size()) || host_of(a.attach_equip_id) != nullptr)
             { block[j] = 1; continue; }
@@ -18349,7 +18349,7 @@ static void BuildEquipHostFold(const GameState& state, const std::vector<Action>
         if (a.kind == Action::Kind::ActivatePermAbility
             && a.ability_mode == Action::AbilityMode::ReconfigureUnattach) { continue; }
         if (a.kind != Action::Kind::CastFromHand) { block[j] = 1; continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || a.convoke_green > 0 || a.convoke_other > 0 || a.sac_victim_id != 0
             || a.enchant_target == kTrickBestOwnTarget)
         { block[j] = 1; continue; }
@@ -18508,7 +18508,7 @@ static void BuildEquipUnlandedCopy(const GameState& state, const std::vector<Act
                 break;
             case Action::Kind::CastFromHand:
             {
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 safe[j] = (d != nullptr && (d->params.is_equipment || a.attach_equip_id != 0)
                            && a.breakpoint_casts.empty()) ? 1 : 0;
                 break;
@@ -18575,7 +18575,7 @@ static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>
                 if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
                 // enchant_target is reused by non-Aura axes (copy source, soulbond, trick target);
                 // only an Aura SPELL's target is the host this rule is about.
-                const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* ad = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (!ad || !ad->params.is_aura || ad->params.is_land_aura || a.bestow) { continue; }
                 for (const std::pair<int, int>& g : grant)
                 { if (g.first == a.enchant_target) { out[j] = g.second; break; } }
@@ -18595,7 +18595,7 @@ static void BuildReplicatePending(const GameState& state, const std::vector<Acti
     {
         const Action& a = cands[j];
         if (a.kind != Action::Kind::CastFromHand || a.replicate_count < 0) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || CanReplicate(*d, state.battlefield, state.active_player_index)) { continue; }
         if (out.empty()) { out.assign(cands.size(), 0); }
         out[j] = 1;
@@ -18617,14 +18617,14 @@ static bool SubsetHasUngrantedReplicatePin(const std::vector<Action>& cands, con
     {
         if (!rep_pending[static_cast<std::size_t>(j)]) { continue; }
         const Action& a = cands[j];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         bool granted = false;
         for (int k : sel)
         {
             if (k == j) { continue; }
             const Action& g = cands[k];
             if (g.kind != Action::Kind::CastFromHand && g.kind != Action::Kind::ActivateVial) { continue; }
-            const CardDefinition* gd = g.def ? g.def : CardDatabase::Instance().Lookup(g.card_name);
+            const CardDefinition* gd = g.def ? g.def : CardDatabase::Instance().LookupInterned(g.card_name);
             if (gd != nullptr && d != nullptr && GrantsReplicateTo(*gd, *d)) { granted = true; break; }
         }
         if (!granted) { return true; }
@@ -18772,7 +18772,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         for (const Action& r : cands)
         {
             if (r.kind != Action::Kind::Equip) { continue; }
-            const CardDefinition* rd = r.def ? r.def : CardDatabase::Instance().Lookup(r.card_name);
+            const CardDefinition* rd = r.def ? r.def : CardDatabase::Instance().LookupInterned(r.card_name);
             if (rd == nullptr || !rd->params.reconfigure_cost.has_value()) { continue; }
             for (const Action& e : cands)
             {
@@ -19042,7 +19042,7 @@ static int FillScaledXTrick(const GameState& state, Action& a, int surplus_gener
 {
     if (a.kind != Action::Kind::CastFromHand || surplus_generic <= 0) { return 0; }
     if (RemandCountersCast(a)) { return 0; }   // a countered pump trick pumps nothing (see FillScaledCastFace)
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     if (!d || !d->params.solo_target_trick || d->params.pump_per_x_power <= 0) { return 0; }
     if (!d->card.m_mana_cost.has_x) { return 0; }
     const int pips = std::max(1, d->card.m_mana_cost.x_pips);
@@ -21560,7 +21560,7 @@ static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, s
         const Action& a = p.actions[j];
         window += 1;                                  // trigger slack (see above)
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { unsafe = true; continue; }
         if (d->tmpl == CardTemplate::DrawSpell)
         { window += std::max(0, d->params.draw) + std::max(0, d->params.cast_scry) + std::max(0, d->params.cast_reorder); }
@@ -25879,7 +25879,7 @@ bool TurnSolver::PutsLandfallWatcher(const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
         && a.kind != Action::Kind::ActivateVial) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     // A SCRY WATCHER (Galadriel) counts too: the land's own ETB scry is what fires it, so a land
     // played after the watcher is cast starts a reveal chain and one played before it does not.
     return d != nullptr && (d->landfall_watcher || d->params.reveal_x_put_permanents
@@ -25904,7 +25904,7 @@ bool TurnSolver::PutsGyLandfallFeeder(const GameState& state, const Action& a)
     {
         if (!a.discard_name.empty())
         {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(a.discard_name.str());
+            const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.discard_name);
             // Vampires A1: a discard whose madness pin CASTS the card never reaches the graveyard.
             if (d != nullptr && d->gy_landfall_watcher && a.madness_choice <= 0) { return true; }
         }
@@ -25917,7 +25917,7 @@ bool TurnSolver::PutsGyLandfallFeeder(const GameState& state, const Action& a)
     {
         if (!a.victim_name.empty())
         {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(a.victim_name.str());
+            const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.victim_name);
             if (d != nullptr && d->gy_landfall_watcher) { return true; }
         }
         for (const Permanent& q : state.battlefield)
@@ -26341,7 +26341,7 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                     {
                         if (pa.free_cast || pa.alt_cost || pa.sacrifice_land) { continue; }
                         const CardDefinition* pd =
-                            pa.def ? pa.def : CardDatabase::Instance().Lookup(pa.card_name);
+                            pa.def ? pa.def : CardDatabase::Instance().LookupInterned(pa.card_name);
                         // KICKER: the summed cost lives on the "(Kicked)" face, so swap the def
                         // before EffectiveCost rather than overriding the cost after it.
                         pd = KickedFaceOr(pd, pa.kicked);
@@ -27941,7 +27941,7 @@ static int InertHasteShroudMoveOldHost(const GameState& state, const Action& a)
         if (p.card.m_number == a.sac_source_id) { eq = &p; }
     }
     if (host == nullptr || host->entered_this_turn) { return -1; }   // a HAND host is cast this plan
-    const CardDefinition* ed = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* ed = CardDatabase::Instance().LookupInterned(a.card_name);
     if (ed == nullptr || !PureHasteShroudEquipment(ed->params)) { return -1; }
     if (eq != nullptr && (eq->hone_counters != 0 || eq->charge_counters != 0)) { return -1; }
     const CardDefinition* hd = CardDatabase::Instance().LookupCached(host->card);
@@ -28313,6 +28313,11 @@ static bool CollectMemoOn()
     static const bool v = EnvOn("MTG_COLLECT_MEMO", true);   // DEFAULT ON; =0 -> no per-call memo
     return v;
 }
+static bool CollectMemoVerifyOn()
+{
+    static const bool v = EnvOn("MTG_COLLECT_MEMO_VERIFY");   // diagnostic: recompute every hit, abort on a difference
+    return v;
+}
 struct CollectMemoScope
 {
     CollectMemo  memo;
@@ -28347,7 +28352,13 @@ static std::vector<std::string> ActivationDiscardClasses(const GameState& state,
 {
     CollectMemo* m = CollectMemoFor(state);
     if (m == nullptr) { return ActivationDiscardClassesUncached(state, src_def); }
-    for (const auto& e : m->discard_classes) { if (e.first == &src_def) { return e.second; } }
+    for (const auto& e : m->discard_classes)
+    {
+        if (e.first != &src_def) { continue; }
+        if (CollectMemoVerifyOn() && e.second != ActivationDiscardClassesUncached(state, src_def))
+        { std::fprintf(stderr, "[collect-memo] MISMATCH discard classes t%d\n", state.turn_number); std::abort(); }
+        return e.second;
+    }
     m->discard_classes.emplace_back(&src_def, ActivationDiscardClassesUncached(state, src_def));
     return m->discard_classes.back().second;
 }
@@ -29028,6 +29039,16 @@ static std::vector<MadnessVariant> MadnessFanFor(const GameState& state, const s
                 && e.src_name == src_name)
             {
                 if (e.full) { g_axis_madness_vars.fetch_add(static_cast<long long>(e.fan.size()), std::memory_order_relaxed); }
+                if (CollectMemoVerifyOn())
+                {
+                    bool full2 = false;
+                    const std::vector<MadnessVariant> f2 =
+                        MadnessFanForUncached(state, pin, outlet_cost, src_name, outlet_sacrifices, full2);
+                    bool same = full2 == e.full && f2.size() == e.fan.size();
+                    for (std::size_t k = 0; same && k < f2.size(); ++k)
+                    { same = f2[k].choice == e.fan[k].choice && f2[k].arm == e.fan[k].arm && f2[k].mv == e.fan[k].mv; }
+                    if (!same) { std::fprintf(stderr, "[collect-memo] MISMATCH madness fan t%d\n", state.turn_number); std::abort(); }
+                }
                 return e.fan;
             }
         }
@@ -29075,7 +29096,7 @@ static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::v
     MadnessBooksBoard(state, me, r, haste_in_reach, b);
     b.ub_t = b.ub_p + b.ub_o;
     auto def_of = [](const Action& c) -> const CardDefinition*
-    { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+    { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
     auto add = [&](bool pip, bool free)
     {
         (pip ? b.ub_p : b.ub_o) += 1; b.ub_t += 1;
@@ -29106,7 +29127,7 @@ static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::v
         }
         if (!sac.victim_name.empty())
         {
-            const CardDefinition* vd = CardDatabase::Instance().Lookup(sac.victim_name.str());
+            const CardDefinition* vd = CardDatabase::Instance().LookupInterned(sac.victim_name);
             const bool pip = vd != nullptr && vd->card.HasColor(r.pip);
             (pip ? b.ub_p : b.ub_o) -= 1; b.ub_t -= 1;
             int& lb = pip ? b.lb_p : b.lb_o;
@@ -29157,7 +29178,7 @@ static MadnessBodyBooks MadnessTriggerBooks(const GameState& state, const std::v
         }
         if (!d.discard_name.empty() && d.madness_choice > 0)
         {
-            const CardDefinition* md = CardDatabase::Instance().Lookup(d.discard_name.str());
+            const CardDefinition* md = CardDatabase::Instance().LookupInterned(d.discard_name);
             if (md != nullptr && md->card.IsCreature())
             {
                 add(md->card.HasColor(r.pip), ArrivalCertainlyFree(state, me, md, r, haste_in_reach));
@@ -29201,7 +29222,7 @@ static bool MadnessCoverInvalidAt(const GameState& state, const std::vector<Acti
     const int me = state.active_player_index;
     const Action& c = cands[static_cast<std::size_t>(sel[po])];
     if (c.madness_choice <= 0 || c.discard_name.empty()) { return false; }
-    const CardDefinition* md = CardDatabase::Instance().Lookup(c.discard_name.str());
+    const CardDefinition* md = CardDatabase::Instance().LookupInterned(c.discard_name);
     if (md == nullptr || !md->params.convoke || !md->card.IsCreature()) { return false; }
     const int hi = PinnedDiscardIndex(state, me, c.discard_name.str());
     if (hi < 0) { return false; }
@@ -29312,7 +29333,7 @@ static const CardDefinition* CollectedActionDef(const Player& ap, const Action& 
     return (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
                ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
                : (s_interned ? CardDatabase::Instance().LookupInterned(a.card_name)
-                             : CardDatabase::Instance().Lookup(a.card_name));
+                             : CardDatabase::Instance().LookupInterned(a.card_name));
 }
 
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
@@ -40172,7 +40193,7 @@ static int PlanHeroismCopies(const std::vector<Action>& cands, int* bodies = nul
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d != nullptr && d->params.frontline_copy_tokens > 0)
         {
             n += d->params.frontline_copy_tokens;
@@ -40185,7 +40206,7 @@ static int PlanHeroismCopies(const std::vector<Action>& cands, int* bodies = nul
 static int MintHeroismBonus(const Action& a, int heroism_copies, int heroism_bodies)
 {
     if (a.mint_gain <= 0 || heroism_copies <= 0) { return 0; }   // 0 with the lever off
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     if (d == nullptr) { return 0; }
     return SamePlanHeroismMint(*d, a.enchant_target, a.soulfire_own_targets, heroism_copies,
                                a.mint_magnet, heroism_bodies);
@@ -42382,7 +42403,7 @@ static void MaybePinRolloutAuraSwap(const GameState& state, bool is_pre_combat, 
     for (const Action& a : plan.actions)
     {
         if (a.kind != Action::Kind::CastFromHand) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->params.aura_swap_cost.has_value()) { continue; }
         for (const Card& c : state.players[me].hand)
         { if (c.m_name == a.card_name) { plan.combat_aura_swap_choice = c.m_number; return; } }
@@ -42520,7 +42541,7 @@ static bool CombatSwapStaysPayable(const GameState& state, const TurnSolver::Pla
         if (r == q) { continue; }
         const Action& o = plan.actions[r];
         if (o.cost.ManaValue() <= 0 && !o.cost.has_x) { continue; }
-        const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().Lookup(o.card_name);
+        const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().LookupInterned(o.card_name);
         const bool for_creature = o.kind == Action::Kind::CastFromHand && od && od->card.IsCreature();
         payable = TapForCostDirect(cs, o.cost, for_creature);
     }
@@ -43114,7 +43135,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         for (const Action& ra : cands)
         {
             if (ra.kind != Action::Kind::Equip || ra.cost.generic <= leaf_waiver_bound) { continue; }
-            const CardDefinition* ed = ra.def ? ra.def : CardDatabase::Instance().Lookup(ra.card_name);
+            const CardDefinition* ed = ra.def ? ra.def : CardDatabase::Instance().LookupInterned(ra.card_name);
             if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }   // never waived
             leaf_waiver_bound = ra.cost.generic;
         }
@@ -43289,7 +43310,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     {
         const Action& fa = cands[j];
         const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
-                                 ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
+                                 ? (fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name))
                                  : nullptr;
         const bool fa_countered = RemandCountersCast(fa);   // both fills return 0 for it
         if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0 && !fa_countered)
@@ -43297,7 +43318,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
             && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
-        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
+        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
         { cand_draws[j] = 1; }
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
@@ -46332,7 +46353,7 @@ bool PdBatchTimingDominated(const GameState& s, const std::vector<Action>& acts)
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { return false; }
         if (!a.free_cast && a.cost.ManaValue() > 0) { ++paying; }
         if (d->card.IsInstant() || d->card.IsSorcery()) { continue; }   // does not stay
@@ -46464,7 +46485,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         { t.own_board_hazard = true; }
         if (a.kind != Action::Kind::CastFromHand
             && a.kind != Action::Kind::CastFromGraveyard) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (!d) { t.own_board_hazard = true; continue; }
         // ...and a cast that hits the board: a damage-each-creature sorcery (Rolling Earthquake), an
         // ETB destroy (Shriekmaw / Acidic Slime -- either may be pointed at our side), a creature
@@ -46591,7 +46612,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             for (const Action& a : acts)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                consider(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+                consider(a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name));
             }
             if (best_def != nullptr && best_pips > 0)
             {
@@ -46906,7 +46927,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind == Action::Kind::DigDraw) { return Pp(PP_DIG); }
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
             { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d && d->tmpl == CardTemplate::DrawUntilNonland) { return Pp(PP_FLOOD); }
         }
     }
@@ -47023,14 +47044,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // jointly payable three-cast plan applied as two casts in the user's Snow order, so it was
         // inexpressible at any budget). Producers that add mana (rituals, rocks, Treasure makers)
         // are untouched.
-        const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         const bool conversion_only = a.ritual_float == 0 && pd != nullptr
                                   && pd->params.any_color_filter && pd->params.filter_no_free_colorless;
         if ((a.ritual_float > 0 || a.rock_mana.Total() > 0) && !etb_treasure_only && !conversion_only)
         {
             if (!g_prepay_producer_on) { return Pp(PP_PRODUCER); }   // producer breaks fungibility
         }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         // KICKER: a kicked cast's bill is its "(Kicked)" face's cost, not the printed one. Swapped
         // here, before every test below reads `d`, so the prepay's affordability checks and its
         // combined bill agree with what enumeration charged.
@@ -47091,7 +47112,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
             rv_acts.push_back(a);
             if (rv_acts.back().def == nullptr)
-            { rv_acts.back().def = CardDatabase::Instance().Lookup(a.card_name); }
+            { rv_acts.back().def = CardDatabase::Instance().LookupInterned(a.card_name); }
             rv_sel.push_back(static_cast<int>(rv_acts.size()) - 1);
         }
         const RevealSurcharge rs = SameSubsetRevealSurcharge(state, rv_acts, rv_sel);
@@ -47123,7 +47144,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && _pd_pending.n < 8) { _pd_pending.d[_pd_pending.n++] = d; }
         }
     }
@@ -47148,7 +47169,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
             { ++no; small_all_creatures = false; continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             const bool q = SpellQualifiesForBigMana(d->card, *big_only_p);
             (q ? yes : no) += 1;
@@ -48286,7 +48307,7 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 bool CastOpensUnseen(const GameState& state, const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { return false; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     return d != nullptr && TurnSolver::ParamKeyedDrawClass(state, *d);
 }
 
@@ -48518,7 +48539,7 @@ bool TurnSolver::TrailingHasCountBands(const std::vector<Action>& acts)
 static int TrailingRankOf(const DecisionProvider& prov, const GameState& state, const Action& a)
 {
     if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
-    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
 }
 static int TrailingBandOf(const Action& a)
@@ -52686,7 +52707,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // BREAKPOINT LEFTOVERS: an impulse-exile site the provider merges for gets this
                     // list's remaining casts (see lo_pending). Param test first: no other deck pays.
                     {
-                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                         if (lod != nullptr && lod->params.impulse_exile > 0
                             && ResolveProvider(state).MergesBreakpointLeftovers(*lod))
                         {
@@ -52791,7 +52812,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 auto is_hoisted_minter = [&](const Action& a)
                 {
                     if (!mint_hoist || a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
-                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                     return d != nullptr && d->params.creates_treasures > 0;
                 };
                 std::vector<int> ena;
@@ -52801,8 +52822,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (mint_hoist)
                     { return HoistSortKey(state, acts[x], true) < HoistSortKey(state, acts[y], true); }
-                    const CardDefinition* dx = CardDatabase::Instance().Lookup(acts[x].card_name);
-                    const CardDefinition* dy = CardDatabase::Instance().Lookup(acts[y].card_name);
+                    const CardDefinition* dx = CardDatabase::Instance().LookupInterned(acts[x].card_name);
+                    const CardDefinition* dy = CardDatabase::Instance().LookupInterned(acts[y].card_name);
                     if (!dx || !dy) { return false; }
                     return ResolveProvider(state).CastOrderRank(state, *dx)
                          < ResolveProvider(state).CastOrderRank(state, *dy);
@@ -52917,7 +52938,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const int dbg_before = dbg_count(a);
                     // BREAKPOINT LEFTOVERS (see lo_pending): this list's remaining casts.
                     {
-                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                        const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                         if (lod != nullptr && lod->params.impulse_exile > 0 && a.kind == Action::Kind::CastFromHand
                             && ResolveProvider(state).MergesBreakpointLeftovers(*lod))
                         {
@@ -53070,7 +53091,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::DigDraw) { continue; }
-            const CardDefinition* sd = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* sd = CardDatabase::Instance().LookupInterned(a.card_name);
             if (!sd) { continue; }
             if (a.dig_sacrifice)
             {
@@ -53189,7 +53210,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (const Action& a : trailing_acts_in)
         {
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
         }
         if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
@@ -53240,7 +53261,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // restriction, the pinned discard, the baked victim) so a stale activation pays nothing;
             // then the mana under the creature-source scope; then the shared apply. Executor twin:
             // AIEngine::TakeTurn's trailing pass (identical sequence).
-            const CardDefinition* sod = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* sod = a.def != nullptr ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (sod != nullptr && IsDiscardSacOutlet(sod->params))
             {
                 const std::string& pin = a.discard_name.str();
@@ -53288,7 +53309,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
-                const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* chd = CardDatabase::Instance().LookupInterned(a.card_name);
                 if (chd && chd->params.transmute_cost.has_value())
                 { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
                 else
@@ -53741,7 +53762,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Wirewood Lodge: precondition-check FIRST so a stranded untap never pays its {G}.
             // The nesting below is the AUDIT split only -- same three tests in the same
             // short-circuit order, so with MTG_ACT_DROP_AUDIT off this is byte-identical.
-            const CardDefinition* ud = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ud = CardDatabase::Instance().LookupInterned(a.card_name);
             if (ud != nullptr
                 && CanApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
                                          ud->params.untap_creature_subtype))
@@ -53826,7 +53847,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // {T} is part of the cost, and the source must not fund its own activation), and untap
             // it again if the mana turns out to be unpayable -- the executor's ordering in
             // ActivateTapTokensShared, kept identical here so the two worlds realise one board.
-            const CardDefinition* td = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* td = CardDatabase::Instance().LookupInterned(a.card_name);
             for (std::size_t pi = 0; pi < state.battlefield.size(); ++pi)
             {
                 Permanent& p = state.battlefield[pi];
@@ -56403,7 +56424,7 @@ static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
     {
         const Action& c = cands[idx];
         if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = CardDatabase::Instance().LookupInterned(c.card_name);
         if (!cd || !cd->params.is_aura) { continue; }
         if (cd->params.aura_enchant_requires != "another_aura"
             && cd->params.aura_enchant_requires != "modified") { continue; }
@@ -56414,7 +56435,7 @@ static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
             if (jdx == idx) { continue; }
             const Action& d = cands[jdx];
             if (d.kind != Action::Kind::CastFromHand || d.enchant_target != c.enchant_target) { continue; }
-            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            const CardDefinition* dd = CardDatabase::Instance().LookupInterned(d.card_name);
             if (!dd || !dd->params.is_aura) { continue; }
             // A valid enabler is legal on that creature itself: plain aura, or restricted-but-frozen-legal.
             if (dd->params.aura_enchant_requires.empty()
@@ -56430,7 +56451,7 @@ static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
 static bool IsConditionalRestrictedAura(const GameState& state, const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
-    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
     if (!d || !d->params.is_aura) { return false; }
     if (d->params.aura_enchant_requires != "another_aura"
         && d->params.aura_enchant_requires != "modified") { return false; }
@@ -56524,7 +56545,7 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
     {
         const Action& c = cands[idx];
         if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        const CardDefinition* cd = CardDatabase::Instance().LookupInterned(c.card_name);
         if (!cd || !cd->params.is_aura) { continue; }
         // An "Enchant LAND" aura's target is a LAND, so on_bf (which looks for a CREATURE with that
         // m_number) can never find it and this guard rejected EVERY subset containing one -- the
@@ -56540,7 +56561,7 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
             const Action& d = cands[jdx];
             if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
                 || d.hand_index >= (int)ap.hand.size()) { continue; }
-            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            const CardDefinition* dd = CardDatabase::Instance().LookupInterned(d.card_name);
             if (dd && dd->card.IsCreature() && ap.hand[d.hand_index].m_number == c.enchant_target)
             { cast_here = true; break; }
         }
@@ -56556,7 +56577,7 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
 static bool IsAuraOnNewCreature(const GameState& state, const Action& a)
 {
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
-    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
     if (!d || !d->params.is_aura) { return false; }
     // An "enchant LAND" Aura's host is a LAND, so the battlefield scan below -- which looks for a
     // CREATURE carrying that m_number -- can never match, and this returned TRUE for every one of
@@ -56594,7 +56615,7 @@ static bool OrderingPlacesAuraBeforeCreature(const GameState& state, const std::
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         if (a.enchant_target > 0 && IsAuraOnNewCreature(state, a) && !cast_nums.count(a.enchant_target))
         { return true; }   // Aura targets a this-turn creature not yet cast in this ordering
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* cd = CardDatabase::Instance().LookupInterned(a.card_name);
         if (cd && cd->card.IsCreature() && a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
         { cast_nums.insert(ap.hand[a.hand_index].m_number); }
     }
@@ -56616,7 +56637,7 @@ static bool OrderingPlacesRestrictedAuraBeforeEnabler(const GameState& state, co
         if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
         if (IsConditionalRestrictedAura(state, a)
             && std::find(dressed.begin(), dressed.end(), a.enchant_target) == dressed.end()) { return true; }
-        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
         if (d != nullptr && d->params.is_aura && !d->params.is_land_aura) { dressed.push_back(a.enchant_target); }
     }
     return false;
@@ -57477,7 +57498,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         const Action& fa = cands[j];
         const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
-                                 ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
+                                 ? (fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name))
                                  : nullptr;
         const bool fa_countered = RemandCountersCast(fa);   // both fills return 0 for it
         if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0 && !fa_countered)
@@ -57485,7 +57506,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
             && fd->card.m_mana_cost.has_x && !fa_countered)
         { fill_x_ok[j] = 1; }
-        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
+        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().LookupInterned(fa.card_name);
         if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
         { cand_draws[j] = 1; }
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
@@ -58085,7 +58106,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 {
                     const Action& c = cands[k];
                     if (c.kind != Action::Kind::CastFromHand) { continue; }
-                    const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+                    const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
                     if (!cd || !cd->card.IsCreature()) { continue; }
                     if (c.hand_index >= 0 && c.hand_index < static_cast<int>(ap.hand.size()))
                     {
@@ -59050,7 +59071,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& a : cands)
         {
             if (a.kind != Action::Kind::Equip || a.cost.generic <= waiver_bound) { continue; }
-            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (ed != nullptr && IsReconfigurePiece(*ed)) { continue; }
             waiver_bound = a.cost.generic;
         }
@@ -60407,7 +60428,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& a : rp.actions)
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
             if (d->params.is_land_aura && a.enchant_target > 0)
             { ++s.n_aura; s.hosts += a.card_name.str() + "@" + std::to_string(a.enchant_target) + ";"; }
@@ -61506,7 +61527,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.draw_on_equipment_etb) { watcher = true; break; }
             }
         }
@@ -61531,7 +61552,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.draw_on_aura_cast) { aura_watcher = true; break; }
             }
         }
@@ -61573,7 +61594,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         for (const Action& a : p.actions)
         {
             if (a.kind != Action::Kind::CastFromHand) { continue; }
-            absorb(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+            absorb(a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name));
         }
     }
     auto cast_subtype_watched = [&](const CardDefinition& cd)
@@ -61607,7 +61628,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.cast_trigger_instant_sorcery_draw > 0) { parun_watcher = true; break; }
             }
         }
@@ -61626,7 +61647,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.own_creature_enters_draw > 0) { creature_watcher = true; break; }
             }
         }
@@ -61665,7 +61686,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         // predicate). a.card_name is the PUT card for this kind; the source rides sac_source_id.
         if (watcher && SfPutBreakpointEnabled() && a.kind == Action::Kind::PutFromHandAbility)
         {
-            const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (pd && pd->params.is_equipment) { mask |= 1 << 6; }
         }
         // Site 8: a gated look-at-top activation (Scrying Sheets / Frost Augur) that can move the
@@ -61675,7 +61696,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         if (a.kind == Action::Kind::ActivatePermAbility
             && a.ability_mode == Action::AbilityMode::TapDraw)
         {
-            const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (td && !td->params.tap_draw_requires_top_supertype.empty()) { mask |= 1 << 8; }
             // A PLAIN "{T}: Draw a card" (Niv-Mizzet, the Firemind) on a deck running the Niv loop:
             // the draw is outside any cast window, so it arms site 10 through MTG_BP_HAND_ENTRY's
@@ -61701,7 +61722,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         }
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
         { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         // REMAND rider (Action::remand_by): the Remand's resolution IS a plain cantrip draw, armed
         // exactly as Ponder's (apply_one's cantrip_breakpoint: deferred at the main-plan level ->
@@ -62037,7 +62058,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             for (const Action& a : p.actions)
             {
                 if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d && d->params.play_lands_from_library_top) { source = true; break; }
             }
         }
@@ -62059,7 +62080,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         for (const Action& a : p.actions)
         {
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d && d->params.etb_return_equipment_from_gy) { mask |= 1 << 10; break; }
         }
     }
@@ -62086,7 +62107,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         {
             for (const Action& a : p.actions)
             {
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { continue; }
                 const bool puts_land = d->params.land_search_count > 0 || d->params.reveal_x_put_permanents;
                 if (puts_land && (a.kind == Action::Kind::CastFromHand
@@ -64032,7 +64053,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const Action& a : p.actions)
                 {
                     if (a.kind != Action::Kind::CastFromHand) { continue; }
-                    const CardDefinition* wd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* wd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                     if (wd != nullptr && wd->params.scry_reveal_land_to_battlefield) { chain = true; break; }
                 }
             }
@@ -64114,7 +64135,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (const Action& act : p.actions)
             {
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
@@ -64232,7 +64253,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
@@ -64336,7 +64357,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     && act.ability_mode == Action::AbilityMode::ActivatedDig)
                 {
                     const CardDefinition* ad = act.def ? act.def
-                                                       : CardDatabase::Instance().Lookup(act.card_name);
+                                                       : CardDatabase::Instance().LookupInterned(act.card_name);
                     if (ad == nullptr) { continue; }
                     const std::vector<int> legal_now =
                         LookTakeDigLegalNow(state, state.active_player_index,
@@ -64364,7 +64385,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 }
                 if (act.kind != Action::Kind::CastFromHand
                     && act.kind != Action::Kind::ActivateVial) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.etb_dig_count <= 0) { continue; }
                 const std::size_t cands_now = EtbDigCandidateCountNow(state, d->params);
                 const std::size_t k = std::min(cands_now, EtbDigAxisWidth(state));
@@ -64501,7 +64522,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 return std::any_of(p.actions.begin(), p.actions.end(), [&](const Action& a)
                 { return a.kind == Action::Kind::CastFromHand
-                      && is_vial(CardDatabase::Instance().Lookup(a.card_name)); });
+                      && is_vial(CardDatabase::Instance().LookupInterned(a.card_name)); });
             })))
         {
             std::vector<TurnSolver::Plan> extra;
@@ -64904,7 +64925,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand || act.ponder_keep >= 0) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.cast_reorder <= 0) { continue; }
                 if (PonderAxisPartial() && !PonderSetIsMixed(state, d->params.cast_reorder)) { break; }
                 if (PonderOrderAxis())
@@ -64974,7 +64995,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
-                const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().Lookup(act.card_name);
+                const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.put_back_from_hand <= 0) { continue; }
                 const int w = PutBackAxisWidth(state, p, ai, *d);
                 // The fan's sibling identity for the put-back fold (PutBackFoldMemo): on the variants
@@ -65043,7 +65064,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const Action& a = p.actions[ai];
                 if (a.kind == Action::Kind::CastFromHand
-                    && pays_param(CardDatabase::Instance().Lookup(a.card_name))) { live = true; }
+                    && pays_param(CardDatabase::Instance().LookupInterned(a.card_name))) { live = true; }
             }
             if (!live) { continue; }
             TurnSolver::Plan v = p;
@@ -65129,7 +65150,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             int classes = subs.empty() ? -1 : board_classes;
             for (const Action& a : p.actions)
             {
-                const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { continue; }
                 if (targeted(d))
                 {
@@ -65265,7 +65286,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const Action& a : p.actions)
                 {
                     if (a.kind != Action::Kind::CastFromHand) { continue; }
-                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                     if (d && d->params.discard_land_damage > 0) { casts_le = true; break; }
                 }
             }
@@ -65731,7 +65752,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = act.def ? act.def
-                                                  : CardDatabase::Instance().Lookup(act.card_name);
+                                                  : CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d && d->params.creates_treasures > 0) { mints = true; break; }
             }
             if (!mints) { continue; }
@@ -65925,7 +65946,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
                 for (auto it = hand.begin(); it != hand.end(); ++it)
                 { if (it->m_name == a.card_name) { hand.erase(it); break; } }
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { producer = true; may_draw = true; continue; }
                 const CardParams& q = d->params;
                 if ((!d->card.IsLand() && !q.produces.empty()) || q.ritual_floating_mana > 0
@@ -66085,7 +66106,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     {
         const int me = state.active_player_index;
         auto def_of = [](const Action& c) -> const CardDefinition*
-        { return c.def != nullptr ? c.def : CardDatabase::Instance().Lookup(c.card_name); };
+        { return c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name); };
         int e_bf = 0;
         std::string sub;
         int need = 0;
@@ -66140,7 +66161,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                              && d->params.steal_adds_subtype == sub) { ++pre; }
                     if (a.madness_choice > 0 && !a.discard_name.empty())
                     {
-                        const CardDefinition* md = CardDatabase::Instance().Lookup(a.discard_name.str());
+                        const CardDefinition* md = CardDatabase::Instance().LookupInterned(a.discard_name);
                         if (md != nullptr && md->card.IsCreature() && CardHasSubtype(md->card, sub)) { ++pre; }
                     }
                 }
@@ -66868,7 +66889,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             bool c_haste = false, c_fetch = false, c_team = false, c_self = false, c_hasty_self = false;
             for (const Action& a : p.actions)
             {
-                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                 if (d == nullptr) { continue; }
                 if (gives_haste(d)) { c_haste = true; }
                 if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0) { c_fetch = true; }
@@ -67433,7 +67454,7 @@ static bool PositionPrefixChoiceMayAddMana(const GameState& state, const TurnSol
     if (DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive()) { return true; }
     for (const Action& a : p.actions)
     {
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && SacAxisEnabled()) { return true; }
         if (d->params.creates_treasures > 0) { return true; }
@@ -84796,7 +84817,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                     // under-mark, which reads downstream as "the lever has no effect" -- the
                     // false-zero signature this feature has already produced three times.
                     const CardDefinition* d = a.def;
-                    if (d == nullptr) { d = CardDatabase::Instance().Lookup(a.card_name); }
+                    if (d == nullptr) { d = CardDatabase::Instance().LookupInterned(a.card_name); }
                     const std::uint64_t h = d ? d->card.m_name_hash : 0;
                     for (std::uint64_t k : t_bp_condemned_names) { if (k == h) { return false; } }
                 }
@@ -86648,7 +86669,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 || (a.kind == Action::Kind::CastFromHand && !a.tutor_target.empty()
                     && [&]() {
                            const CardDefinition* cd2 = a.def ? a.def
-                               : CardDatabase::Instance().Lookup(a.card_name);
+                               : CardDatabase::Instance().LookupInterned(a.card_name);
                            return cd2 && (cd2->params.tutor_mv_max_is_x
                                           || HumanPlayDefersTutorTarget(*cd2));
                        }());
@@ -86675,7 +86696,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // Ponder's keep/shuffle below). No sub => the plans that differ only in trick target share
             // a signature and collapse to one representative, ranked magnet-first just above.
             const CardDefinition* trdef = (a.enchant_target != 0 || a.kind == Action::Kind::CastFromHand)
-                                        ? CardDatabase::Instance().Lookup(a.card_name) : nullptr;
+                                        ? CardDatabase::Instance().LookupInterned(a.card_name) : nullptr;
             const bool is_trick = trdef && trdef->params.solo_target_trick;
             // Magnetic Theft: BOTH targets (Equipment on attach_equip_id, creature on enchant_target)
             // are re-asked at RESOLUTION on the board (ResolveAttachTargetEquipment's two
@@ -86715,7 +86736,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // mode sub so the dimension is asked once, cleanly, and the enchant sub only picks the host.
             {
                 const CardDefinition* bd = (a.kind == Action::Kind::CastFromHand)
-                                         ? CardDatabase::Instance().Lookup(a.card_name) : nullptr;
+                                         ? CardDatabase::Instance().LookupInterned(a.card_name) : nullptr;
                 if (bd && bd->params.bestow_cost.has_value())
                 {
                     const std::string mode = a.bestow ? "bestowed (Aura)" : "as a creature";
@@ -86735,7 +86756,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 // are distinct variants (#P) that would otherwise share every sub and collapse.
                 // Gated on the printed cost carrying a phyrexian pip, so both modes carry the sub.
                 {
-                    const CardDefinition* phd = CardDatabase::Instance().Lookup(a.card_name);
+                    const CardDefinition* phd = CardDatabase::Instance().LookupInterned(a.card_name);
                     const bool has_phy = phd &&
                         ((a.kind == Action::Kind::CastFromHand
                           && phd->card.m_mana_cost.phyrexian_count > 0)
@@ -86819,7 +86840,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // dropped renderChooseDialog into its flat fallback picker. Emit a dedicated `modal` sub
             // for EVERY split including 0 (the soulfire/crackle/splice precedent) and spell the
             // modes out, so the dialog reads as an explicit list of what each split actually does.
-            const CardDefinition* mdef = CardDatabase::Instance().Lookup(a.card_name);
+            const CardDefinition* mdef = CardDatabase::Instance().LookupInterned(a.card_name);
             const bool is_modal = mdef && mdef->params.modal_choose_n > 0;
             if (is_modal && a.chosen_x >= 0)
             {
@@ -86864,7 +86885,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // variant lacks subs) shows the old ugly picker instead of the nice per-count grid. Detect
             // the Soulfire cast by its def (damage_equals_top_mv) rather than by count>0.
             {
-                const CardDefinition* adef = CardDatabase::Instance().Lookup(a.card_name);
+                const CardDefinition* adef = CardDatabase::Instance().LookupInterned(a.card_name);
                 if (adef && adef->params.damage_equals_top_mv)
                 {
                     addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own",
@@ -89391,7 +89412,7 @@ void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, 
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.bestow) { continue; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->card.IsCreature()) { continue; }
         for (const Card& c : ap.hand)
         {
@@ -89406,7 +89427,7 @@ void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, 
     for (int k : pos)
     {
         const Action& a = acts[static_cast<std::size_t>(k)];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         std::vector<int> al{ a.enchant_target };
         auto add = [&](int n) { if (n > 0 && std::find(al.begin(), al.end(), n) == al.end()) { al.push_back(n); } };
         for (int n : LegalEnchantTargets(state, me, d->params)) { add(n); }
