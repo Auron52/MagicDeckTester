@@ -254,13 +254,18 @@ Niv-Mizzet -0.005 (partial), Hinata 1/1, **Bruna +0.015 (0/2)**, the rest 0/0; p
 **The amended root rule, `MTG_ID_HINT_ROOT=2` ("stable"):** the hinted plan keeps the root tie only while its win turn
 HELD at this depth; if it got worse than one pass shallower (Bruna's T4 -> T5), the root keeps the static tie-break
 (the static-tie machinery, armed for that node). Bruna s880019 / s880084: back to T5 / T6.
-Held-out, same 26 decks (`logs/tgt/oo/stab/`): Landfall -0.030 (8/2), Melira -0.020 (4/0), **Bruna 0/0**,
-Kitty 0/0 (its always-root gain is lost), and **FiveColour +0.0025 (0/1)**: s881103 T1, Steam Vents (static) and
+Held-out, all 35 decks (`logs/tgt/oo/stab/`; 12,800 paired games, pooled -0.0008, se 0.0003): Landfall -0.030
+(8/2), Melira -0.020 (4/0), Niv-Mizzet -0.0025 (1/0), **Bruna 0/0**, Kitty 0/0 (its always-root gain is lost), every
+other deck 0/0 -- and **FiveColour +0.0025 (0/1)**: s881103 T1, Steam Vents (static) and
 Windswept Heath (hinted, T5 at passes 3 and 4) tie on an ESTIMATED T5 -- a rollout past the horizon -- and the Heath
 line is refuted the next turn (T6) while the Steam Vents line wins T5. So neither root rule meets the every-deck bar,
 for the same reason: between plans tied on an ESTIMATED win turn, any tie-break is a guess, and the static order is
 just another guess. The principled form would break root ties on a finer estimate than the integer win turn -- the
 learned model's milliturns, which is presumably why the emulated ladder's root tie-break is the strongest arm.
+And the stable test does not transfer to the emulated ladder: there the hint's recorded win turn is the MODEL's (a
+value warm-up) and the committing pass's is the rollout's, so "got worse" fires on the scale difference. Landfall
+held-out: emulated + stable root b15 / b20 / b25 = 0.741x +0.0025 / 0.865x -0.0120 / 0.957x -0.0245, against
+-0.0375 / -0.0450 / -0.0535 with the root always hinted. (Live + stable root b20 is identical to live + root b20.)
 
 **The other shapes with the root hint** (2,000 paired games, seeds 860000-863000, vs live b20; `logs/tgt/oo/alt.*`):
 staged b10 1.05x -0.047, b15 1.30x -0.0525 (about level with live + root hint's curve, behind the emulated ladder);
@@ -269,10 +274,16 @@ behind: a leafless tree has no incumbent to prune against, and the hint cannot g
 
 ## Open USER decisions
 
-1. Landfall: adopt the emulated-ladder sidecar (model + `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6,
-   2.6]}`) -- with the ID hint, -0.045 at b20 against live + hint's -0.025 (~0.007-0.013 turns ahead at equal
-   instructions); or no leaf. Separately, the budget: with the hint, b25 is a further -0.009 for 1.14x instructions.
-   (emul_r was measured WITHOUT the hint; re-measuring it is cheap and may sharpen the committing-depth replay.)
-2. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point,
+1. **The root tie-break** (`MTG_ID_HINT_ROOT`; default 0 = the static order breaks ties at the committed decision).
+   `=1`: ties go to the shallower pass's best -- pooled -0.0020 over 26 decks (Landfall -0.030, Melira -0.025, Kitty
+   -0.0175), Landfall's emulated ladder -0.045 at b20 (the model breaks the rollout's ties), but Bruna +0.015 (an empty
+   T1 from an over-optimistic shallow rollout). `=2` (stable): Bruna fixed, pooled -0.0008 over all 35, FiveColour
+   +0.0025 (one estimated tie), and the emulated ladder's root gain mostly lost. Neither clears the every-deck bar;
+   the principled form is a tie-break on a finer estimate (the model's milliturns) -- unbuilt.
+2. Landfall: adopt the emulated-ladder sidecar (model + `value_play {ladder: "emulated", emul_r: [11.3, 6.6, 4.6,
+   2.6]}`)? With the interior hint alone it is ~0.006 turns ahead of live at equal units (level in instructions);
+   with the root hinted it is the strongest arm measured (-0.045 at 0.87x units, b20). Separately, the budget: with
+   the interior hint, b25 is -0.015 for 1.05x units. (emul_r was measured without the hint.)
+3. Phase E: judge every shape against a live budget CURVE (live at b x {0.75, 1.25, 1.5}) instead of one point,
    and add the emulated shape (with R measured in-pipeline) to its arms.
-3. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.
+4. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.

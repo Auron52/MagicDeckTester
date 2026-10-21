@@ -70649,7 +70649,7 @@ using IdHintMap = std::unordered_map<TranspositionTable::Key, IdHint, Transposit
 inline thread_local IdHintMap* g_idh_map = nullptr;
 static inline bool IdOrderHintOn()
 {
-    static const bool env = EnvOn("MTG_ID_ORDER_HINT");   // DEFAULT OFF until its GT is accepted; =1 -> on (interior nodes)
+    static const bool env = EnvOn("MTG_ID_ORDER_HINT", true);   // DEFAULT ON (interior nodes only); =0 -> the static order
     return heurarm::Flag(heurarm::ID_ORDER_HINT, env);
 }
 static inline void IdHintRecord(const TranspositionTable::Key& k, int idx, int n, int win)
