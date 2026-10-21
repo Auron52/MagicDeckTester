@@ -91157,6 +91157,13 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // MTG_CANTRIP_ORDER: the continuation list depends on the bound site (its ban filters
     // CollectActions), so the same state under different sites must not share an entry.
     if (g_cantrip_order_site != nullptr) { Fold(key, g_cantrip_order_site->card.m_name_hash); }
+    // THE UNTAP LOOP'S MAIN-PHASE-KILLS-ONLY SCOPE (g_untap_loop_no_pump, set only by the AccomplishedAlchemist
+    // Combo Off walk): it changes the loop's need, so whether a loop is offered and which kill the fold keeps --
+    // a memoised continuation list. Without this fold the walk's main-phase pass filled entries that the combat
+    // pass on the same board was then SERVED (smoke d0 s1001 gi16 T7: the combat pass proved a kill fresh and
+    // failed after a main-phase pass, 128 applies), and the walk's entries reached ordinary frames. Folded only
+    // when set, so every frame outside such a scope keys exactly as before.
+    if (g_untap_loop_no_pump != 0) { Fold(key, 0x4E50ULL + static_cast<std::uint64_t>(g_untap_loop_no_pump)); }
     // The PRE-DRAW hand decides which cards are exempt (new) and which MTG_BP_CLASSIFY drops,
     // so the same state under a different snapshot emits a different list and must not share
     // an entry. Order-sensitive fold is fine: the snapshot is built in hand order in both
