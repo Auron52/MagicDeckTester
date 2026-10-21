@@ -6,8 +6,9 @@
     "opponent at 20. The main-phase route is six links: Weather (X = 3), Crab Umbra off the Alchemist's blue, the Staff,",
     "its gain (X = 4), the Umbra loop drawing to the Stroke, Stroke at the opponent (LIFE-HAND+LOOP-STAFF-HAND+",
     "FIN-STAFF-DIG; 60 applies). With the combat finishers live the walk also admits every Ezuri cast as a setup and",
-    "spends its whole bound (128 applies) on them without proving anything. MTG_AA_ROUTE_MAIN_FIRST (the main-phase",
-    "pass first) proves it; =0 leaves the button unproven and the click fails."
+    "spends its whole bound (128 applies) on them without proving anything. Proved by MTG_AA_ROUTE_PUMP_SETUP_LAST",
+    "(Ezuri casts ordered in the finish stage: 100 applies) and, independently, by MTG_AA_ROUTE_MAIN_FIRST (the",
+    "main-phase pass). With both =0 the button is unproven and the click fails."
   ],
   "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
   "env": {

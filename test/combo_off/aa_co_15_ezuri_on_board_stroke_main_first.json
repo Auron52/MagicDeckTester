@@ -6,8 +6,10 @@
     "Genius, Living Wish, Crab Umbra; opponent at 18. The main-phase route: Staff + Feed the Clan (X = 5), the Staff",
     "loop, Stroke at the opponent (LIFE-HAND+LOOP-STAFF-HAND+FIN-STROKE). With the combat finishers live the walk's",
     "need was Ezuri's pump x1 (MV 5: Arbor Elf, Harbinger, the Alchemist and Ezuri counted as attackers) -- which the",
-    "board 'already funds' with those same Elves, so no loop was offered and the Stroke kill was never tried.",
-    "MTG_AA_ROUTE_MAIN_FIRST (the main-phase pass first) proves it; =0 leaves the button unproven and the click fails."
+    "board 'already funds' with those same Elves, so no loop was offered and neither kill was tried.",
+    "Proved by MTG_PUMP_PAY_NO_ATTACKERS (the attackers are not the payers: the Staff loop funds Ezuri x1, a combat-lethal",
+    "board) and, independently, by MTG_AA_ROUTE_MAIN_FIRST (the main-phase pass: Stroke). With both =0 the button is",
+    "unproven and the click fails."
   ],
   "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
   "env": {

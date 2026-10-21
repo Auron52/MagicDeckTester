@@ -628,6 +628,7 @@ enum Slot : int
     AA_ROUTE_MAIN_FIRST,      // MTG_AA_ROUTE_MAIN_FIRST  AccomplishedAlchemist COMBO OFF walk: with the combat finishers on (MTG_AA_COMBO_COMBAT) the walk runs its MAIN-PHASE pass first -- exactly the walk MTG_AA_COMBO_COMBAT=0 runs (no pump need, no Ezuri cast as a setup, OpponentHasLost as the verdict) -- and only when that pass proves nothing, the combat pass. The route set is then the UNION of both walks: a cheaper-by-mana Ezuri pump the board "already funds" (with the very Elves it counts as attackers) can no longer displace the Stroke kill (s70001 gi179 / gi111, 2026-10-21). Default ON; =0 -> the combat walk alone (as first shipped)
     PUMP_PAY_NO_ATTACKERS,    // MTG_PUMP_PAY_NO_ATTACKERS  a team pump's own ATTACKERS are not its PAYERS: the gates that ask "does the board already pay the pump?" (UntapLoopWorthOffering for a pump need, the mode-4 loop-funded pump's emission, FundTeamPumpByLoop) use the pool without attack-capable creature sources (AvailableManaPoolNoAttackers) -- TeamPumpLethalCount sized the pump on those creatures attacking (s70001 gi179, 2026-10-21: need Ezuri x1 'paid' by three of its four attackers, so no loop was offered). Default ON; =0 -> the whole board pool
     AA_ROUTE_PUMP_SETUP_LAST, // MTG_AA_ROUTE_PUMP_SETUP_LAST  AccomplishedAlchemist COMBO OFF walk: a team-pump creature cast (Ezuri) is ordered in the FINISH stage (after the lifegain / untapper setups), like a Stroke or Scholar cast -- an order, nothing dropped (s70001 gi111: Ezuri payment variants took the walk's whole 128-apply bound). Default ON; =0 -> ranked as any setup
+    UNTAP_PUMP_PROVE_LETHAL,  // MTG_UNTAP_PUMP_PROVE_LETHAL  the pump-untapper (Seedcradle Witch) loop sized on attackers that may pay its {G}/{W}: the net-zero pump loop is offered only when its k activations, run on a copy, leave a COMBAT-LETHAL board, and a banking loop stops at k_pump only once combat really is lethal (smoke d0 s1001 gi976, 2026-10-21). Default ON; =0 -> as before
     COUNT
 };
 
@@ -1206,6 +1207,7 @@ inline const char* Name(int slot)
         "MTG_AA_ROUTE_MAIN_FIRST",
         "MTG_PUMP_PAY_NO_ATTACKERS",
         "MTG_AA_ROUTE_PUMP_SETUP_LAST",
+        "MTG_UNTAP_PUMP_PROVE_LETHAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

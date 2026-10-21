@@ -31019,6 +31019,22 @@ inline bool PumpPayNoAttackersOn()
     static const bool s_env = EnvOn("MTG_PUMP_PAY_NO_ATTACKERS", true);
     return heurarm::Flag(heurarm::PUMP_PAY_NO_ATTACKERS, s_env);
 }
+// THE SAME DOUBLE COUNT, PUMP-UNTAPPER SHAPE (MTG_UNTAP_PUMP_PROVE_LETHAL, heurarm UNTAP_PUMP_PROVE_LETHAL, DEFAULT ON).
+// UntapLoopPumpIterations sizes Seedcradle Witch's own "+3/+3 and untap" loop on every creature that can attack, but
+// each activation's {G}/{W} the Alchemist's one-colour tap cannot cover is paid from the board -- an Elvish Harbinger
+// (or the Witch's other attackers) tapped for it no longer attacks, so the k activations need not be the kill they
+// were sized as. With the lever on, (a) the net-zero pump loop is offered only when its k activations, run on a copy,
+// leave a COMBAT-LETHAL board (CombatLethalNow), not merely when they are paid, and (b) a banking loop stops at k_pump
+// only once the board really is combat-lethal (otherwise it keeps pumping and banking toward its need). Smoke d0
+// s1001 gi976 T6: the net-zero Witch loop (X = 4 vs {2}{G}{W}) was offered, paid its pips with Harbinger and the
+// Witch, did not kill, and its variants took the Combo Off walk's width from the Living Wish -> Galvanic -> Scholar
+// drain the main-phase walk proves. =0 -> exactly as before.
+inline bool CombatLethalNow(const GameState& s, int ctrl);   // defined below (the Combo Off route's verdict)
+inline bool UntapPumpProveLethalOn()
+{
+    static const bool s_env = EnvOn("MTG_UNTAP_PUMP_PROVE_LETHAL", true);
+    return heurarm::Flag(heurarm::UNTAP_PUMP_PROVE_LETHAL, s_env);
+}
 // The pool that can pay a team pump without spending one of its attackers (+ the float, as every such gate adds it).
 inline ManaPool TeamPumpPayersPool(const GameState& s)
 {
@@ -31510,7 +31526,9 @@ inline bool UntapLoopWorthOffering(const GameState& s, int ctrl, int shape, int 
     GameState probe = s;
     probe.players[static_cast<std::size_t>(ctrl)].life_gained_this_turn += x_extra;
     RevealLogPause _quiet;   // a probe: no viewer events, no reveal / draw log
-    return ApplyActivatedUntap(probe, ctrl, shape, source_id, target_id, k_pump) >= k_pump;
+    if (ApplyActivatedUntap(probe, ctrl, shape, source_id, target_id, k_pump) < k_pump) { return false; }
+    // ...and, with MTG_UNTAP_PUMP_PROVE_LETHAL, really leave the kill they were sized as (see UntapPumpProveLethalOn).
+    return !UntapPumpProveLethalOn() || CombatLethalNow(probe, ctrl);
 }
 
 // Does the FLOAT alone pay the loop's need right now? (The site-9 kActUntapLoopFunded key's test, and the
@@ -31571,7 +31589,9 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
     for (int step = 0; step < kUntapLoopCeiling; ++step)
     {
         if (OpponentHasLost(state)) { break; }
-        if (k_pump > 0 && done >= k_pump) { break; }   // the Witch's own pump already makes combat lethal
+        // The Witch's own pump already makes combat lethal -- with MTG_UNTAP_PUMP_PROVE_LETHAL, only once it really does
+        // (an attacker tapped for a pip may have cost the kill; then keep pumping and banking).
+        if (k_pump > 0 && done >= k_pump && (!UntapPumpProveLethalOn() || CombatLethalNow(state, ctrl))) { break; }
         if (need.payoff != kLoopPayNone && state.floating_mana.CanPay(goal)
             && UntapLoopFloatPays(state.floating_mana, need))
         {
