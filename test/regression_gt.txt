@@ -1,15 +1,11 @@
-# Regression ground truth -- commit 8677477c1  date 2026-10-21
+# Regression ground truth -- commit 75994cd95  date 2026-10-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
-# accepted-with-regressions (smoke, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
-# accepted-with-regressions (regression, 2026-10-20): Landfall exhaustive keep table (5d08331b7) live: mullgen-validated keep -0.121t / bottoming -0.083t; landfall regression net faster (d0 -0.121; d3 +0.075 / -0.050; d5 0.000 / -0.200), smoke d0 -0.150, d3/d5 same average. Every other deck byte-identical (the Phylath pick, MTG_PROVISIONAL_NOWIN and the lazy-probe skip are play-identical).
 # accepted-with-regressions (overnight, 2026-10-20): fungusv3 overnight rows RE-SIZED to the standard FULL set (d3 4x1000 b20, d5 4x500 b40; USER 2026-10-17 'put everything into the latest version'): a resized row re-defines its key, accepted on its own with no play change (d0 rows unchanged 4/4; smoke+regression byte-identical for every non-EDF key).
-# accepted-with-regressions (smoke, 2026-10-20): EDF re-baselined TABLE-ABSENT on the rebased engine (origin 2026-10-20 + this batch, which is byte-identical for every other key): upstream play changes since the 2026-10-18 EDF accept move its cells; overnight searched 28 faster / 2 slower, d0 avg unchanged; smoke edf2hg -0.067; regression one d3 cell +0.025 (1 game of 40). Accepted on its own so the keep-table adoption that follows is like-for-like.
-# accepted-with-regressions (regression, 2026-10-20): EDF re-baselined TABLE-ABSENT on the rebased engine (origin 2026-10-20 + this batch, which is byte-identical for every other key): upstream play changes since the 2026-10-18 EDF accept move its cells; overnight searched 28 faster / 2 slower, d0 avg unchanged; smoke edf2hg -0.067; regression one d3 cell +0.025 (1 game of 40). Accepted on its own so the keep-table adoption that follows is like-for-like.
 # accepted-with-regressions (overnight, 2026-10-20): EDF re-baselined TABLE-ABSENT on the rebased engine (origin 2026-10-20 + this batch, which is byte-identical for every other key): upstream play changes since the 2026-10-18 EDF accept move its cells; overnight searched 28 faster / 2 slower, d0 avg unchanged; smoke edf2hg -0.067; regression one d3 cell +0.025 (1 game of 40). Accepted on its own so the keep-table adoption that follows is like-for-like.
-# accepted-with-regressions (smoke, 2026-10-21): EDF exhaustive keep table ADOPTED (K=19, 386,945 entries, R=30 fast, flip_eps 0.10, generated d1 b1 on PGO src 78628a77): mullgen keep A/B -0.250t (t -20.1, 5/5 seed pairs, early stop); confounded bottoming A/B -0.100t (t -18.5, 14/14 complete seed pairs, 14,000 paired games; the run's last 2 lookahead games still running at accept time). Every EDF cell faster in all three tiers (overnight d0 -0.17..-0.20, searched -0.08..-0.25); keep_adoption_attribution: 0 unexplained, both replays reproduce their baselines, in smoke/regression/overnight.
-# accepted-with-regressions (regression, 2026-10-21): EDF exhaustive keep table ADOPTED (K=19, 386,945 entries, R=30 fast, flip_eps 0.10, generated d1 b1 on PGO src 78628a77): mullgen keep A/B -0.250t (t -20.1, 5/5 seed pairs, early stop); confounded bottoming A/B -0.100t (t -18.5, 14/14 complete seed pairs, 14,000 paired games; the run's last 2 lookahead games still running at accept time). Every EDF cell faster in all three tiers (overnight d0 -0.17..-0.20, searched -0.08..-0.25); keep_adoption_attribution: 0 unexplained, both replays reproduce their baselines, in smoke/regression/overnight.
 # accepted-with-regressions (overnight, 2026-10-21): EDF exhaustive keep table ADOPTED (K=19, 386,945 entries, R=30 fast, flip_eps 0.10, generated d1 b1 on PGO src 78628a77): mullgen keep A/B -0.250t (t -20.1, 5/5 seed pairs, early stop); confounded bottoming A/B -0.100t (t -18.5, 14/14 complete seed pairs, 14,000 paired games; the run's last 2 lookahead games still running at accept time). Every EDF cell faster in all three tiers (overnight d0 -0.17..-0.20, searched -0.08..-0.25); keep_adoption_attribution: 0 unexplained, both replays reproduce their baselines, in smoke/regression/overnight.
+# accepted-with-regressions (smoke, 2026-10-21): MTG_FS_STRICT_CUT_O1 default ON (4fc1437a2, a sound collapse: same answer at every node). Moves only learned-leaf decks under budget: smoke antilife d3 s1001 gi194 4->5 = churn (recovers to 4 at 4x and 16x), fivecolour d5 same score; regression auras d5 + fivecolour d5 same score; refs 630 / 0 drift. Held-out 2026-10-20: 31 leaf decks x 400, every deck net <= 0. emul_r / MTG_LEAF_BLIND_K are inert here (no shipped sidecar sets them; env off).
+# accepted-with-regressions (regression, 2026-10-21): MTG_FS_STRICT_CUT_O1 default ON (4fc1437a2, a sound collapse: same answer at every node). Moves only learned-leaf decks under budget: smoke antilife d3 s1001 gi194 4->5 = churn (recovers to 4 at 4x and 16x), fivecolour d5 same score; regression auras d5 + fivecolour d5 same score; refs 630 / 0 drift. Held-out 2026-10-20: 31 leaf decks x 400, every deck net <= 0. emul_r / MTG_LEAF_BLIND_K are inert here (no shipped sidecar sets them; env off).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -34,7 +30,7 @@ whiteknights_smoke_d0_s1001=4.5830/4f65907e10e8ac82
 whiteknights_smoke_d3_s1001=4.1240/fbf06b3d2fbc270a
 whiteknights_smoke_d5_s1001=4.1467/be2f0e7be56975f6
 antilife_smoke_d0_s1001=4.8920/c0982042fca8bf38
-antilife_smoke_d3_s1001=4.1800/616246c99fb9fa0d
+antilife_smoke_d3_s1001=4.1840/449c1c832381c894
 antilife_smoke_d5_s1001=4.1800/98f08878a259d50a
 hinata_smoke_d0_s1001=6.7830/0b80ac146283b4df
 hinata_smoke_d3_s1001=5.6533/762a2e5b8f7e79ad
@@ -56,7 +52,7 @@ mirrorwing_smoke_d3_s1001=4.2133/bce2ae8b7df3651e
 mirrorwing_smoke_d5_s1001=4.2933/1ee0b9edf410b41b
 fivecolour_smoke_d0_s1001=5.4720/bbd8b3358c286cdd
 fivecolour_smoke_d3_s1001=4.8267/3fc9d38ce59fc359
-fivecolour_smoke_d5_s1001=4.8933/82238530e222ae1f
+fivecolour_smoke_d5_s1001=4.8933/f85a63887806eefd
 stompy_smoke_d0_s1001=4.8370/a0166060c77c1b0f
 stompy_smoke_d3_s1001=4.0267/af05fbe1e8e12d8b
 stompy_smoke_d5_s1001=4.0133/3f06eca243261b9e
@@ -197,7 +193,7 @@ auras_regression_d0_s2002=4.3480/9b07602910b4b77d
 auras_regression_d3_s2002=4.0760/ccfdcae52b3c4f91
 auras_regression_d3_s3003=4.1480/a4a7c084da7da6cc
 auras_regression_d5_s2002=4.0720/81f429d2edbcc2ae
-auras_regression_d5_s3003=4.1480/960dff8bf6dde21c
+auras_regression_d5_s3003=4.1480/21895c5bbc09cc97
 goblins_regression_d0_s2002=4.1040/f223061cdd5b6b7b
 goblins_regression_d3_s2002=3.8067/b15765f47714e948
 goblins_regression_d3_s3003=3.8367/08a7d15b7f9a1516
@@ -217,7 +213,7 @@ fivecolour_regression_d0_s2002=5.5560/807651a6fa93a1da
 fivecolour_regression_d3_s2002=4.8650/b1bcd3fe521d3add
 fivecolour_regression_d3_s3003=4.8050/f43900e1284f7f34
 fivecolour_regression_d5_s2002=4.7700/2ac87a7b3075c5a1
-fivecolour_regression_d5_s3003=4.8300/faec1adecf179c4f
+fivecolour_regression_d5_s3003=4.8300/6623cb5831a0c13e
 stompy_regression_d0_s2002=4.8650/2e09bd05d0abd877
 stompy_regression_d3_s2002=4.1667/987fbe7bc1fae882
 stompy_regression_d3_s3003=4.1033/0b4f1212a550147b
