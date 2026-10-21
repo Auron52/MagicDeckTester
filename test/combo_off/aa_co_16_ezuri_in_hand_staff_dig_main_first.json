@@ -1,0 +1,84 @@
+{
+  "_comment": [
+    "s70001 gi111 (d5 b200): the turn-6 board of the land-only turn-2 line, where the combat finishers",
+    "(MTG_AA_COMBO_COMBAT) made the game a turn slower. Seven Forests (the land drop made), a non-sick Accomplished",
+    "Alchemist; hand Weather the Storm, Ezuri, Crab Umbra, Staff of Domination; a Stroke of Genius 20 cards down;",
+    "opponent at 20. The main-phase route is six links: Weather (X = 3), Crab Umbra off the Alchemist's blue, the Staff,",
+    "its gain (X = 4), the Umbra loop drawing to the Stroke, Stroke at the opponent (LIFE-HAND+LOOP-STAFF-HAND+",
+    "FIN-STAFF-DIG; 60 applies). With the combat finishers live the walk also admits every Ezuri cast as a setup and",
+    "spends its whole bound (128 applies) on them without proving anything. MTG_AA_ROUTE_MAIN_FIRST (the main-phase",
+    "pass first) proves it; =0 leaves the button unproven and the click fails."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 47,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Weather the Storm",
+    "Ezuri, Renegade Leader",
+    "Crab Umbra",
+    "Staff of Domination"
+  ],
+  "library_top": [
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true
+}

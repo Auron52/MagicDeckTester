@@ -625,6 +625,7 @@ enum Slot : int
     AA_WISH_WITCH_WIN,        // MTG_AA_WISH_WITCH_WIN  AA Living Wish buckets: a held Seedcradle Witch fills BOTH Untap and Wincon/Draw (USER 2026-10-21: the Witch counts as a win condition, "This also makes the 4 life rule unnecessary") -- it fills Untap whatever the held lifegain total, and fills Wincon/Draw beside Stroke / Staff / Scholar. Default ON (the USER's decision); =0 -> the 2026-10-20 reading (Witch = Untap only, and only while the held lifegain sums to >= 5)
     AA_DISCARD_WITCH_WIN,     // MTG_AA_DISCARD_WITCH_WIN  AA discard buckets: Seedcradle Witch is a member of BOTH Untap and Wincon/Draw, like Staff (USER 2026-10-21), ranked LAST in each (Wincon: Stroke > Staff > Scholar > Ezuri > Witch); a Witch on the battlefield fills both. Default ON (the USER's decision); =0 -> the 2026-10-20 rule (Witch = Untap only)
     AA_DISCARD_MANA_CAP,      // MTG_AA_DISCARD_MANA_CAP  AA discard buckets, the USER's mana cap (2026-10-21: "You don't need more than 5-6 mana in any situation", "Let's cap it at 6"): mana sources count only up to 6 total mana (board + hand); the KEEP priority is the filled buckets, then mana up to 6, then a second REAL wincon and/or untapper (Stroke / Staff / Scholar / Ezuri, Crab Umbra / Staff / Galvanic), then everything else (mana beyond 6 first, then the other spares). Default ON (the USER's rule); =0 -> every spare sheds before any mana, as before
+    AA_ROUTE_MAIN_FIRST,      // MTG_AA_ROUTE_MAIN_FIRST  AccomplishedAlchemist COMBO OFF walk: with the combat finishers on (MTG_AA_COMBO_COMBAT) the walk runs its MAIN-PHASE pass first -- exactly the walk MTG_AA_COMBO_COMBAT=0 runs (no pump need, no Ezuri cast as a setup, OpponentHasLost as the verdict) -- and only when that pass proves nothing, the combat pass. The route set is then the UNION of both walks: a cheaper-by-mana Ezuri pump the board "already funds" (with the very Elves it counts as attackers) can no longer displace the Stroke kill (s70001 gi179 / gi111, 2026-10-21). Default ON; =0 -> the combat walk alone (as first shipped)
     COUNT
 };
 
@@ -1200,6 +1201,7 @@ inline const char* Name(int slot)
         "MTG_AA_WISH_WITCH_WIN",
         "MTG_AA_DISCARD_WITCH_WIN",
         "MTG_AA_DISCARD_MANA_CAP",
+        "MTG_AA_ROUTE_MAIN_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

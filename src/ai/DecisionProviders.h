@@ -3905,6 +3905,9 @@ void AlchemistComboRouteClearMemo();
 bool AlchemistComboRouteInProgress();
 bool AlchemistComboRouteOn();                                 // MTG_AA_COMBO_ROUTE (heurarm AA_COMBO_ROUTE)
 bool AlchemistComboCombatOn();                                // MTG_AA_COMBO_COMBAT (heurarm AA_COMBO_COMBAT)
+// Inside the route's walk: are the combat finishers live for THIS pass? (MTG_AA_COMBO_COMBAT, and not the walk's
+// main-phase pass -- MTG_AA_ROUTE_MAIN_FIRST.) Read by the walk's own menu filter (g_untap_loop_route_menu).
+bool AlchemistComboRouteCombatPass();
 // The COMBO OFF button's "did it win": the opponent is dead, or -- on a deck whose go-off is the untap-loop route,
 // with the combat finishers on -- the board is combat-lethal (CombatLethalNow; the attack after main 1 kills).
 bool AlchemistComboOffWon(const GameState& s, int controller);

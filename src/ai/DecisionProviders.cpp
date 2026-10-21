@@ -44458,21 +44458,61 @@ namespace aaroute
 {
 inline thread_local int t_in_route = 0;
 struct Guard { Guard() { ++t_in_route; } ~Guard() { --t_in_route; } };
-// Main-phase kills only -- unless the combat finishers are on (MTG_AA_COMBO_COMBAT), in which case the loop funds
-// the cheapest kill including Ezuri's pump and the Witch's own +3/+3, and CombatLethalNow is a verdict.
+
+// THE WALK'S TWO PASSES (MTG_AA_ROUTE_MAIN_FIRST, heurarm AA_ROUTE_MAIN_FIRST, DEFAULT ON). With the combat
+// finishers on, the walk first runs its MAIN-PHASE pass -- the walk MTG_AA_COMBO_COMBAT=0 runs, exactly: no pump
+// need (g_untap_loop_no_pump), no Ezuri cast admitted as a setup, OpponentHasLost as the verdict -- and only when
+// that pass proves nothing does it run the COMBAT pass (the pump finishers, CombatLethalNow as the verdict). A
+// verdict records which pass proved it, and every replay of its path runs in that pass's scope.
+//
+// Why both, and in this order. The two passes are NOT nested: the combat pass is not a superset of the main-phase
+// one. Its loop funds the CHEAPEST kill (ComputeUntapLoopNeed), and Ezuri's pump is cheaper by mana than a Stroke
+// -- but TeamPumpLethalCount counts the untapped Elves (Arbor Elf, Elvish Harbinger, the Alchemist itself) as
+// attackers while UntapLoopWorthOffering counts the SAME Elves' mana as "the board already funds it", so no loop
+// is offered at all, and the Stroke kill the main-phase pass finds (Staff + Feed the Clan, the Staff loop, Stroke
+// at the opponent) is never tried: s70001 gi179 T7 rollout board (MTG_AA_ROUTE_TRACE=2: need pump x1, MV 5, vs
+// Stroke MV 50; no LOOP plan at link 1). And its setups admit Ezuri casts, which take the setup width a dig needed
+// (gi111). Each pass proves a kill THIS turn, so which one proves it does not change the game's outcome; running
+// the main-phase pass first keeps every board the shipped-first walk won byte-for-byte the same line, and the
+// combat pass adds what only it can prove. The route set is the UNION of the two walks -- never smaller than
+// either -- which is the invariant MTG_AA_COMBO_COMBAT must keep (a finisher row may add routes, never remove one).
+// =0 -> the combat pass alone (as first shipped).
+inline thread_local int t_main_pass = 0;
+inline bool RouteMainFirstOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_ROUTE_MAIN_FIRST", true);
+    return heurarm::Flag(heurarm::AA_ROUTE_MAIN_FIRST, s_env);
+}
+// The combat finishers are live for THIS pass (the lever on, and not inside the main-phase pass).
+inline bool CombatPass() { return t_main_pass == 0 && AlchemistComboCombatOn(); }
+struct MainPassScope
+{
+    int prev;
+    explicit MainPassScope(bool main) : prev(t_main_pass) { t_main_pass = main ? 1 : 0; }
+    ~MainPassScope() { t_main_pass = prev; }
+};
+// Main-phase kills only -- unless the combat finishers are live for this pass (MTG_AA_COMBO_COMBAT, and not the
+// main-phase pass), in which case the loop funds the cheapest kill including Ezuri's pump and the Witch's own
+// +3/+3, and CombatLethalNow is a verdict.
 struct NoPumpScope
 {
     int prev;
-    NoPumpScope() : prev(g_untap_loop_no_pump) { g_untap_loop_no_pump = AlchemistComboCombatOn() ? prev : 1; }
+    // Explicit 0 in the combat pass (not `prev`): the apply's probe block holds a scope of the verdict's pass
+    // around a re-walk, whose own passes must not inherit it. Outside any route g_untap_loop_no_pump is 0, so
+    // every scope that is not nested is unchanged.
+    NoPumpScope() : prev(g_untap_loop_no_pump) { g_untap_loop_no_pump = CombatPass() ? 0 : 1; }
     ~NoPumpScope() { g_untap_loop_no_pump = prev; }
 };
-// THE ROUTE'S VERDICT: the opponent is dead -- or, with the combat finishers on, the board is combat-lethal (the
-// attack after main 1 kills; a goldfish never blocks).
+// THE ROUTE'S VERDICT: the opponent is dead -- or, in the combat pass, the board is combat-lethal (the attack
+// after main 1 kills; a goldfish never blocks).
 inline bool RouteWon(const GameState& s, int me)
 {
-    return OpponentHasLost(s) || (AlchemistComboCombatOn() && CombatLethalNow(s, me));
+    return OpponentHasLost(s) || (CombatPass() && CombatLethalNow(s, me));
 }
 inline bool TraceOn() { static const bool v = EnvOn("MTG_AA_ROUTE_TRACE"); return v; }
+// MTG_AA_ROUTE_TRACE=2 (diagnostic, print-only): also print every walk NODE -- the board, the hand, the float, the
+// loop's need and the kill-fold width -- so a walk that misses a route reads as a board, not an inference.
+inline bool TraceBoardOn() { static const bool v = EnvInt("MTG_AA_ROUTE_TRACE", 0) >= 2; return v; }
 // MTG_AA_ROUTE_STATS=1 (diagnostic, count-only): walks, their verdicts, applies inside walks, and the walk
 // wall time, printed once at exit -- the route's own cost, which the search budget does not meter.
 inline bool StatsOn() { static const bool v = EnvOn("MTG_AA_ROUTE_STATS"); return v; }
@@ -44594,7 +44634,7 @@ inline bool IsComboPieceCast(const Action& a)
         || (p.untap_target_creature_cost.has_value() && p.self_untap_cost.has_value())
         || (p.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
         || (p.tutor_to_hand && p.wish_from_sideboard)
-        || (AlchemistComboCombatOn() && d->card.IsCreature() && p.team_pump_cost.has_value() && p.team_pump_power > 0)
+        || (CombatPass() && d->card.IsCreature() && p.team_pump_cost.has_value() && p.team_pump_power > 0)
         || (d->card.IsCreature() && p.sac_creature_outlet && p.sac_outlet_self_only && p.sac_outlet_lifegain > 0)
         || (d->card.IsCreature() && p.etb_modal_lifegain > 0);
 }
@@ -44698,6 +44738,21 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
     if (OpponentHasLost(s) || (!w.path.empty() && RouteWon(s, me))) { return 1; }
     if (links_left <= 0 || w.nodes_left <= 0 || w.applies_left <= 0) { return 0; }
     std::vector<TurnSolver::Plan> kills = TurnSolver::UntapLoopKillPlans(s, /*is_pre_combat=*/true);
+    if (TraceBoardOn())
+    {
+        std::string bf, hd;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            bf += p.card.m_name.str() + (p.tapped ? "(T)" : "") + (p.entered_this_turn ? "(new)" : "") + ",";
+        }
+        for (const Card& c : s.players[me].hand) { hd += c.m_name.str() + ","; }
+        const UntapLoopNeed nd = ComputeUntapLoopNeed(s, me);
+        std::fprintf(stderr, "[aa-route] t%d NODE link%d bf=[%s] hand=[%s] float=%d gained=%d opp=%d need{pay=%d mv=%d n=%d} kills=%zu\n",
+                     s.turn_number, kLinks - links_left, bf.c_str(), hd.c_str(), (int)s.floating_mana.Total(),
+                     s.players[me].life_gained_this_turn, s.players[1 - me].life, nd.payoff, nd.cost.ManaValue(),
+                     nd.count, kills.size());
+    }
     if (!kills.empty())
     {
         const int n = std::min<int>(kKillWidth, static_cast<int>(kills.size()));
@@ -44882,7 +44937,9 @@ static int Replay(GameState& s, int me, const std::vector<Link>& path)
     return RouteWon(s, me) ? 1 : 0;
 }
 
-struct Verdict { int r = 0; std::vector<Link> path; };
+// `main_pass`: the path was proven by the walk's MAIN-PHASE pass (see MainPassScope), so it is replayed in that
+// pass's scope -- the loop inside it funds the main-phase kill the pass proved, not a pump.
+struct Verdict { int r = 0; std::vector<Link> path; bool main_pass = false; };
 // PER GAME, keyed on the full board (Fingerprint): a verdict is a function of the board -- including the
 // library ORDER, which is fixed within a game -- so it is reused across decisions; cleared at every game
 // start (TurnSolver::ClearPerGameCaches) so a batch worker never carries one game's verdicts into the next.
@@ -44906,9 +44963,11 @@ static const Verdict& Trial(const GameState& s, int me)
     return memo.m.emplace(key, Walk1(s, me)).first->second;
 }
 
-static Verdict Walk1(const GameState& s, int me)
+// ONE PASS of the walk, in whatever pass scope the caller set (MainPassScope).
+static Verdict WalkPass(const GameState& s, int me)
 {
     Verdict v;
+    v.main_pass = t_main_pass != 0;
     {
         // The human's scripted one-shot pins (a tutor pick, a top choice, ...) are CONSUMED by the
         // resolution that reads them; a trial inside a viewer frame must not eat them (the EDF gate's
@@ -44946,13 +45005,33 @@ static Verdict Walk1(const GameState& s, int me)
         }
         if (TraceOn())
         {
-            std::fprintf(stderr, "[aa-route] t%d TRIAL %s: %d link(s), %d apply(s)\n", s.turn_number,
+            std::fprintf(stderr, "[aa-route] t%d TRIAL%s %s: %d link(s), %d apply(s)\n", s.turn_number,
+                         v.main_pass && AlchemistComboCombatOn() ? " (main-phase pass)" : "",
                          v.r == 1 ? "WIN" : "no", (int)w.path.size(), w.applies);
         }
     }
     return v;
 }
+
+// THE WALK: the main-phase pass first, then -- only if it proved nothing -- the combat pass (see MainPassScope).
+// With the combat finishers off, or MTG_AA_ROUTE_MAIN_FIRST=0, it is the single pass it always was.
+static Verdict Walk1(const GameState& s, int me)
+{
+    if (AlchemistComboCombatOn() && RouteMainFirstOn())
+    {
+        Verdict v;
+        {
+            MainPassScope _main(true);
+            v = WalkPass(s, me);
+        }
+        if (v.r == 1) { return v; }
+    }
+    MainPassScope _combat(false);
+    return WalkPass(s, me);
+}
 }   // namespace aaroute
+
+bool AlchemistComboRouteCombatPass() { return aaroute::CombatPass(); }
 
 bool AlchemistComboOffWon(const GameState& s, int me)
 {
@@ -45003,6 +45082,7 @@ int AlchemistComboRouteApply(GameState& s, int me)
     // a path this context has not itself proven.
     {
         aaroute::Guard _g;
+        aaroute::MainPassScope _pass(v.main_pass);   // the replay runs in the scope of the pass that proved it
         aaroute::NoPumpScope _np;
         ExecutorMenuScope _exec;
         RevealLogPause _quiet;
@@ -45018,6 +45098,7 @@ int AlchemistComboRouteApply(GameState& s, int me)
         }
     }
     aaroute::Guard _g;
+    aaroute::MainPassScope _pass(v.main_pass);
     aaroute::NoPumpScope _np;
     ExecutorMenuScope _exec;
     ComboOffApplyPause _nochoosers;

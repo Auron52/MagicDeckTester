@@ -1,0 +1,44 @@
+{
+  "_comment": [
+    "s70001 gi179 (d3 b10): the turn-7 rollout board of the turn-2 Harbinger DECLINE line, where the combat finishers",
+    "(MTG_AA_COMBO_COMBAT) made the game a turn slower. Five Forests + the land drop, Arbor Elf, Elvish Harbinger, a",
+    "non-sick Accomplished Alchemist, Ezuri on the battlefield; hand Staff of Domination x3, Feed the Clan, Stroke of",
+    "Genius, Living Wish, Crab Umbra; opponent at 18. The main-phase route: Staff + Feed the Clan (X = 5), the Staff",
+    "loop, Stroke at the opponent (LIFE-HAND+LOOP-STAFF-HAND+FIN-STROKE). With the combat finishers live the walk's",
+    "need was Ezuri's pump x1 (MV 5: Arbor Elf, Harbinger, the Alchemist and Ezuri counted as attackers) -- which the",
+    "board 'already funds' with those same Elves, so no loop was offered and the Stroke kill was never tried.",
+    "MTG_AA_ROUTE_MAIN_FIRST (the main-phase pass first) proves it; =0 leaves the button unproven and the click fails."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 18,
+  "opponent_library_size": 47,
+  "battlefield": [
+    {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"}, {"name": "Forest"},
+    {"name": "Arbor Elf", "sick": false},
+    {"name": "Elvish Harbinger", "sick": false},
+    {"name": "Accomplished Alchemist", "sick": false},
+    {"name": "Ezuri, Renegade Leader", "sick": false}
+  ],
+  "hand": [
+    "Living Wish",
+    "Staff of Domination",
+    "Staff of Domination",
+    "Stroke of Genius",
+    "Staff of Domination",
+    "Feed the Clan",
+    "Forest",
+    "Crab Umbra"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true
+}

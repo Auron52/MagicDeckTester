@@ -41755,7 +41755,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         || (q.untap_target_creature_cost.has_value() && q.self_untap_cost.has_value())
                         || (q.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
                         || (q.tutor_to_hand && q.wish_from_sideboard)
-                        || (AlchemistComboCombatOn() && d->card.IsCreature() && q.team_pump_cost.has_value()
+                        || (AlchemistComboRouteCombatPass() && d->card.IsCreature() && q.team_pump_cost.has_value()
                             && q.team_pump_power > 0)
                         || (d->card.IsCreature() && q.sac_creature_outlet && q.sac_outlet_self_only
                             && q.sac_outlet_lifegain > 0)
