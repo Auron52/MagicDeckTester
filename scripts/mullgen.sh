@@ -83,7 +83,16 @@ if [ -z "$DECK" ]; then
         _hit=$(ci_find "$DECKDIR" "$_parent.$ext") && { DECK="$DECKDIR/$_hit"; STEM=${_hit%."$ext"}; break; }
     done
 fi
-[ -n "$DECK" ] || { echo "no <stem>.cod or <stem>.txt in $DECKDIR (tried \"$STEM\" and the parent folder's name)"; exit 1; }
+# A decklist named after neither the folder nor its parent (decks/Vampires/Vampire.cod): the folder's ONE
+# top-level decklist, the fallback scripts/suite_gate.py resolve_decklist already applies (that function's
+# docstring says it mirrors this driver; until 2026-10-21 this driver lacked the branch and refused the deck).
+# Unique only: with several lists the folder is ambiguous and the driver refuses rather than pick one.
+if [ -z "$DECK" ]; then
+    _lists=()
+    for f in "$DECKDIR"/*.cod "$DECKDIR"/*.txt; do [ -f "$f" ] && _lists+=("${f##*/}"); done
+    if [ "${#_lists[@]}" = 1 ]; then DECK="$DECKDIR/${_lists[0]}"; STEM=${_lists[0]%.*}; fi
+fi
+[ -n "$DECK" ] || { echo "no <stem>.cod or <stem>.txt in $DECKDIR (tried \"$STEM\", the parent folder's name and a unique decklist)"; exit 1; }
 
 BASE=$DECKDIR/$STEM.profile.json
 PROF=$DECKDIR/$STEM.keepmodel.exhaustive.profile.json
