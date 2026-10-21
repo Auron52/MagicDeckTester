@@ -3060,9 +3060,43 @@ static const bool s_move_order = !EnvOn("MTG_NO_MOVE_ORDER");
 // second reader).
 static const bool s_legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
 
+// THE SORT RUNS ON THE KEYS, NOT THE PLANS (MTG_MOVE_ORDER_KEYS, DEFAULT ON; =0 -> stable_sort the Plans).
+// The comparator reads five scalar fields, so a stable sort of (fields, index) yields exactly the stable
+// sort's permutation of the plans; the plans are then moved once (or not at all when already in order)
+// instead of being shuffled through the merge sort's buffer -- Plan moves were ~1.5% of a Vampires 2HG
+// game (callgrind 2026-10-21).
 static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
 {
     if (!s_move_order || plans.size() < 2) { return; }
+    static const bool s_keys = EnvOn("MTG_MOVE_ORDER_KEYS", true);
+    if (s_keys)
+    {
+        struct K { bool wins; bool pump_waste; bool atk_forfeit; int value; int bp_sched; std::uint32_t idx; };
+        std::vector<K> keys;
+        keys.reserve(plans.size());
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            const TurnSolver::Plan& p = plans[i];
+            keys.push_back(K{ p.wins_this_turn, p.pump_waste, p.atk_forfeit, p.value,
+                              static_cast<int>(p.bp_sched), static_cast<std::uint32_t>(i) });
+        }
+        std::stable_sort(keys.begin(), keys.end(), [](const K& a, const K& b)
+        {
+            if (a.wins != b.wins) { return a.wins; }
+            if (a.pump_waste != b.pump_waste) { return b.pump_waste; }
+            if (a.atk_forfeit != b.atk_forfeit) { return b.atk_forfeit; }
+            if (a.value != b.value) { return a.value > b.value; }
+            return a.bp_sched > b.bp_sched;
+        });
+        bool identity = true;
+        for (std::size_t i = 0; i < keys.size(); ++i) { if (keys[i].idx != i) { identity = false; break; } }
+        if (identity) { return; }
+        std::vector<TurnSolver::Plan> out;
+        out.reserve(plans.size());
+        for (const K& k : keys) { out.push_back(std::move(plans[k.idx])); }
+        plans.swap(out);
+        return;
+    }
     std::stable_sort(plans.begin(), plans.end(),
         [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
