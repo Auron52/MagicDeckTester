@@ -22417,7 +22417,11 @@ inline thread_local int t_in[kN] = {};
 inline thread_local int t_in_root = 0;
 inline std::mutex g_mx;
 struct Cell { long long n = 0, top = 0, units = 0; };
-inline std::map<std::string, Cell> g_disc[kB];   // "<outlet>|<card>|<madness>" -> pin variants
+inline std::map<std::string, Cell> g_disc[kB];
+// HOLD class: a plan that plays NO land while a land is in hand and this turn's drop is open (main 1 /
+// lookahead hosts only). Its outermost inclusive units, per bucket.
+inline std::atomic<long long> g_hold_units[kB], g_hold_n[kB];
+inline thread_local int t_in_hold = 0;   // "<outlet>|<card>|<madness>" -> pin variants
 
 inline std::uint64_t Mix(std::uint64_t h, std::uint64_t v)
 { return h ^ (v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2)); }
@@ -22530,7 +22534,8 @@ struct Scope
     bool top[kN] = {};
     long long u0 = 0;
     std::vector<std::string> disc_keys;
-    Scope(List& L, const TurnSolver::Plan& p)
+    bool hold = false;
+    Scope(List& L, const TurnSolver::Plan& p, const GameState* st = nullptr)
     {
         if (!On()) { return; }
         on = true;
@@ -22546,6 +22551,18 @@ struct Scope
             else { --t_in[ax]; }
         }
         if (t_in_root++ == 0) { root = true; }
+        if (st != nullptr && p.land_to_play.empty() && t_in_hold == 0)
+        {
+            const Player& ap = st->players[static_cast<std::size_t>(st->active_player_index)];
+            bool land = false;
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_is_staged) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->card.IsLand()) { land = true; break; }
+            }
+            if (land && ap.lands_played_this_turn < ap.LandDropsAvailable()) { hold = true; ++t_in_hold; }
+        }
         if (top[kPin])
         {
             for (const Action& a : p.actions)
@@ -22574,6 +22591,7 @@ struct Scope
             g_root_units[pi].fetch_add(d, std::memory_order_relaxed);
         }
         --t_in_root;
+        if (hold) { --t_in_hold; g_hold_units[pi].fetch_add(d, std::memory_order_relaxed); g_hold_n[pi].fetch_add(1, std::memory_order_relaxed); }
         if (!disc_keys.empty())
         {
             std::lock_guard<std::mutex> lk(g_mx);
@@ -22614,6 +22632,11 @@ struct Dumper
                          100.0 * static_cast<double>(g_units[ax][2].load()) / G, 100.0 * static_cast<double>(g_units[ax][3].load()) / G,
                          g_var[ax][0].load() + g_var[ax][1].load() + g_var[ax][2].load() + g_var[ax][3].load());
         }
+        std::fprintf(stderr, "[vamp-axis] HOLD (no land played, a land in hand, drop open) %6.1f%% | %10.1f%% %11.1f%% %11.1f%% %12.1f%%   plans=%lld\n",
+                     100.0 * static_cast<double>(g_hold_units[0].load() + g_hold_units[1].load() + g_hold_units[2].load() + g_hold_units[3].load()) / G,
+                     100.0 * static_cast<double>(g_hold_units[0].load()) / G, 100.0 * static_cast<double>(g_hold_units[1].load()) / G,
+                     100.0 * static_cast<double>(g_hold_units[2].load()) / G, 100.0 * static_cast<double>(g_hold_units[3].load()) / G,
+                     g_hold_n[0].load() + g_hold_n[1].load() + g_hold_n[2].load() + g_hold_n[3].load());
         std::map<std::string, Cell> all;
         for (int b = 0; b < kB; ++b)
         { for (const auto& e : g_disc[b]) { Cell& c = all[e.first]; c.n += e.second.n; c.units += e.second.units; } }
@@ -74571,7 +74594,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         pbsite::Note(pbsite::kFsPre, p, budget);
         cantripattr::Scope _cas(cantripattr::AxisOf(p));   // MTG_CANTRIP_ATTRIB (diagnostic)
         ChargePutBackVariant(budget, p);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
-        vampaxis::Scope _vax(vax_list_pre, p);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
+        vampaxis::Scope _vax(vax_list_pre, p, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
         if (s_rollout_stats)
         {
             g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -80644,7 +80667,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             cantripattr::Scope _cas(cantripattr::AxisOf(plan));   // MTG_CANTRIP_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             VampCandCensus(plan, is_pre_combat);
-            vampaxis::Scope _vax(vax_list, plan);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
+            vampaxis::Scope _vax(vax_list, plan, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);

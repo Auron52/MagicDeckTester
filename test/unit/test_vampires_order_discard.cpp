@@ -29,6 +29,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include "vamp_rules_off.h"
 
 namespace
 {
@@ -343,6 +344,7 @@ TEST_CASE("Vampires cast order: lever off is VialProvider's order, ties kept in 
 
 TEST_CASE("Vampires discard buckets: a creature madness can cast now is the free CLEANUP shed, best first")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     // Gorger out, three untapped Swamps (BBB). Madness-castable now: Markov Baron {2}{B} (own madness,
     // and Gorger's; convoke off the untapped Gorger) and Vampire of the Dire Moon {B} (Gorger's); NOT
     // Stromkirk Captain {1}{B}{R} (no red) nor Legion Lieutenant {W}{B} (no white) nor Bloodline Keeper
@@ -371,6 +373,7 @@ TEST_CASE("Vampires discard buckets: with no untapped mana nothing is free -- a 
 
 TEST_CASE("Vampires discard buckets: Bloodghast with a land in hand is a free shed")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     // No granter, no mana: Bloodghast comes back on the held land, ahead of a dead second Vial and the
     // surplus land.
     const GameState s = MakeVo({"Bloodghast", "Aether Vial", "Swamp", "Swamp", "Legion Lieutenant",
@@ -487,4 +490,77 @@ TEST_CASE("Vampires discard buckets: lever off is VialProvider's rule, byte for 
     }
     // The control arm must differ here: the bucket rule deploys the Baron, the inherited rule does not.
     CHECK(CleanupVo(s, true).front() != CleanupVo(s, false).front());
+}
+
+// ---- the USER's rules of 2026-10-21 ------------------------------------------------------------------
+
+namespace
+{
+std::vector<std::string> PinsUr(const GameState& s)
+{ return ProvVo().ActivationDiscardCandidates(s, DefVo("Stromkirk Condemned"), NamesVo(s)); }
+
+bool PlansCastUr(const std::vector<TurnSolver::Plan>& plans, const std::string& name)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial) && a.card_name == name)
+            { return true; }
+        }
+    }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("USER rule MTG_VAMP_FREE_DISCARD: an affordable madness card is the whole discard axis; =0 every name")
+{
+    // Markov Baron's own madness {2}{B} = its mana cost; three untapped Swamps pay it.
+    GameState s = MakeVo({"Markov Baron", "Swamp", "Aether Vial"}, {{"Swamp"}, {"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Markov Baron" });
+    {
+        VampRulesOff off;
+        CHECK(PinsUr(s).size() == 3);
+    }
+    // Two untapped Swamps cannot pay it, and no land drop is open: nothing is free -> every name.
+    GameState poor = MakeVo({"Markov Baron", "Swamp", "Aether Vial"}, {{"Swamp"}, {"Swamp"}, {"Swamp", true}});
+    poor.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(poor).size() == 3);
+    // ...unless the land drop is still open and a land is in hand: the drop pays the third mana.
+    GameState drop = poor;
+    drop.players[0].lands_played_this_turn = 0;
+    CHECK(PinsUr(drop) == std::vector<std::string>{ "Markov Baron" });
+}
+
+TEST_CASE("USER rule MTG_VAMP_FREE_DISCARD: Bloodghast is a free discard with no mana at all")
+{
+    GameState s = MakeVo({"Bloodghast", "Swamp", "Stromkirk Captain"}, {{"Swamp", true}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Bloodghast" });
+}
+
+TEST_CASE("USER rules: a pre-combat Vampire Socialite is not a free discard (its madness cast would be a main-1 cast)")
+{
+    // Gorger grants Socialite madness {B}{R}; Blackcleave Cliffs + a Swamp pay it.
+    GameState s = MakeVo({"Vampire Socialite", "Swamp", "Aether Vial"},
+                         {{"Falkenrath Gorger"}, {"Blackcleave Cliffs"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s).size() == 3);                                              // no free discard before combat
+    s.phase = Phase::PostCombatMain;
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Vampire Socialite" });       // after combat it is
+}
+
+TEST_CASE("USER rule MTG_VAMP_SOCIALITE_M2: Vampire Socialite is never cast or Vial-put before combat; =0 restores it")
+{
+    // "Vampire Socialite should always be cast in main 2, so it can benefit from the damage dealt."
+    GameState s = MakeVo({"Vampire Socialite", "Swamp"},
+                         {{"Blackcleave Cliffs"}, {"Swamp"}, {"Aether Vial", false, 2}});
+    s.phase = Phase::PreCombatMain;
+    CHECK_FALSE(PlansCastUr(TurnSolver::EnumerateMainPlans(s, true), "Vampire Socialite"));
+    GameState post = s;
+    post.phase = Phase::PostCombatMain;
+    CHECK(PlansCastUr(TurnSolver::EnumerateMainPlans(post, false), "Vampire Socialite"));
+    VampRulesOff off;
+    CHECK(PlansCastUr(TurnSolver::EnumerateMainPlans(s, true), "Vampire Socialite"));
 }

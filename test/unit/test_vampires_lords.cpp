@@ -29,6 +29,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include "vamp_rules_off.h"
 
 namespace
 {
@@ -470,6 +471,7 @@ TEST_CASE("Combat window: Mavren Fein's token makes the fifth Vampire; the pinne
 
 TEST_CASE("Steal legality: four untapped Vampires no; five with the source sick yes; no target no")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     Put(s, "Captivating Vampire", 1, /*sick=*/true);
@@ -495,6 +497,7 @@ TEST_CASE("Steal legality: four untapped Vampires no; five with the source sick 
 
 TEST_CASE("Steal effect: five tapped (sick ones and itself), control changes, owner kept, a Vampire, sick")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     Put(s, "Captivating Vampire", 1, /*sick=*/true);
@@ -540,6 +543,7 @@ TEST_CASE("Steal effect: five tapped (sick ones and itself), control changes, ow
 
 TEST_CASE("Steal folds: identical spawns are ONE target class; distinct targets / tap sets survive the dedup")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     s.phase = Phase::PostCombatMain;   // every untapped body is FREE (colour + live {T} classes)
@@ -582,6 +586,7 @@ TEST_CASE("Steal folds: identical spawns are ONE target class; distinct targets 
 
 TEST_CASE("Steal stale: a pinned body tapped earlier is a clean no-op (nothing tapped, nothing taken)")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     Put(s, "Captivating Vampire", 1, true);
@@ -600,6 +605,7 @@ TEST_CASE("Steal stale: a pinned body tapped earlier is a clean no-op (nothing t
 
 TEST_CASE("Steal reachability: Vampires cast THIS plan pay the cost; a Captivating cast this plan taps itself")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     EnsureCardsLoaded();
     GameState s = Fresh();
     Put(s, "Legion Lieutenant", 3);
@@ -709,4 +715,24 @@ TEST_CASE("Routing: Vampires stays VampiresProvider with the cluster B cards in 
         }), d.mainboard.end());
         CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "Vampires", "keep_keeper=", keep_keeper);
     }
+}
+
+TEST_CASE("USER rule MTG_VAMP_NO_STEAL (2026-10-21): Captivating Vampire's steal is never offered; =0 restores it")
+{
+    // "Heuristically it isn't worthwhile to use Captivating Vampire's ability." The legality test's live
+    // board (five untapped Vampires, an opposing target): the steal is legal, and the rule removes it from
+    // every collected menu.
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Captivating Vampire", 1, /*sick=*/true);
+    Put(s, "Vampire of the Dire Moon", 2, true);
+    Put(s, "Legion Lieutenant", 3);
+    Put(s, "Falkenrath Gorger", 4);
+    Put(s, "Stromkirk Captain", 5, true);
+    Spawn(s, 4, 4, 500000);
+    REQUIRE(PermAbilitySourceLive(s, 0, 1, PermAbilityMode::TapSubtypeSteal));
+    CHECK(ModeActions(TurnSolver::EnumerateMainPlans(s, true), Action::AbilityMode::TapSubtypeSteal).empty());
+    CHECK(ModeActions(TurnSolver::EnumerateMainPlans(s, false), Action::AbilityMode::TapSubtypeSteal).empty());
+    VampRulesOff off;
+    CHECK_FALSE(ModeActions(TurnSolver::EnumerateMainPlans(s, true), Action::AbilityMode::TapSubtypeSteal).empty());
 }
