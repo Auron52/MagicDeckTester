@@ -41718,6 +41718,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (a.kind == Action::Kind::PlayLand) { keep = true; }
             else if (a.kind == Action::Kind::ActivateUntap) { keep = a.chosen_x >= kUntapLoopToNeed; }
             else if (a.kind == Action::Kind::ActivatePermAbility) { keep = a.ability_mode == Action::AbilityMode::TapLifegain; }
+            else if (a.kind == Action::Kind::SacCreatureOutlet)
+            {
+                const CardDefinition* od = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                keep = od != nullptr && od->params.sac_outlet_lifegain > 0;   // Brindle Boar: gain 4 (stage 1)
+            }
             else if (a.kind == Action::Kind::CastFromHand)
             {
                 const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -41729,7 +41734,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         || (q.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
                         || (q.tutor_to_hand && q.wish_from_sideboard)
                         || (AlchemistComboCombatOn() && d->card.IsCreature() && q.team_pump_cost.has_value()
-                            && q.team_pump_power > 0);
+                            && q.team_pump_power > 0)
+                        || (d->card.IsCreature() && q.sac_creature_outlet && q.sac_outlet_self_only
+                            && q.sac_outlet_lifegain > 0)
+                        || (d->card.IsCreature() && q.etb_modal_lifegain > 0);
                 }
             }
             if (keep) { kept.push_back(std::move(a)); }

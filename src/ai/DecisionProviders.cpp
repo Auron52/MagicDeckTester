@@ -43876,6 +43876,15 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
         if (d == nullptr) { continue; }
         if (d->params.cast_lifegain > 0 && life.size() < 6)
         { life.push_back(LifeCard{ EffectiveSpellCost(*d, s, 1), CastLifegainOf(s, c, *d), d->params.storm }); }
+        // A lifegain CREATURE is LIFE too (USER 2026-10-20, seed 10 T6: Brindle Boar cast and sacrificed for 4):
+        // Brindle Boar's free self-sac (sac_outlet_lifegain), Trufflesnout's ETB life mode -- at the cast's cost.
+        else if (d->card.IsCreature() && life.size() < 6
+                 && ((d->params.sac_creature_outlet && d->params.sac_outlet_self_only && d->params.sac_outlet_lifegain > 0)
+                     || d->params.etb_modal_lifegain > 0))
+        {
+            life.push_back(LifeCard{ EffectiveSpellCost(*d, s, 1),
+                                     std::max(d->params.sac_outlet_lifegain, d->params.etb_modal_lifegain), false });
+        }
         if (IsLivingWishCreature(d)) { ++wishes; if (!wish_h) { wish_h = d; } }
         if (d->params.untap_enchanted_cost.has_value() && !umbra_h) { umbra_h = d; }
         if (d->params.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature() && !galv_h) { galv_h = d; }
@@ -44125,6 +44134,21 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
                     const int X = st.X;
                     const int op = UntapLoopBootOp(st.P, X, sT, st.aT, L.staff, L.c_untap,
                                                    L.staff ? L.self_untap : gain_untap, can_gain, gain_cost);
+                    // FIN-WITCH at NET ZERO (USER 2026-10-20, seed 10 T6, X = 4): the loop never banks, but K untaps
+                    // each pump the attacker -- K taps of X plus the other mana must pay K x {2}{G}{W} (one tap fewer
+                    // when the Alchemist starts tapped). Exact over the generic total; the colours are the Witch's
+                    // second-source check above plus the colour-smart payer (MTG_UNTAP_PAY_SMART).
+                    if (op < 0 && L.shape == kUntapPumpTarget && L.witch_num != 0 && AlchemistComboCombatOn())
+                    {
+                        const int kp = UntapLoopPumpIterations(s, c, kUntapPumpTarget, L.witch_num, A.card.m_number);
+                        const long long taps = st.aT ? kp - 1 : kp;
+                        if (kp > 0 && static_cast<long long>(st.P) + taps * X >= static_cast<long long>(kp) * L.c_untap)
+                        {
+                            const char* life_name = mask != 0 ? "LIFE-HAND" : "LIFE-GAINED";
+                            if (rule) { *rule = std::string(life_name) + "+" + L.name + "+FIN-WITCH"; }
+                            return true;
+                        }
+                    }
                     if (op < 0) { continue; }
                     // BANK: X after the bootstrap is at least c_steady + 1, over the loop's step ceiling (two steps
                     // per iteration, 16 held back for the bootstrap). With a Staff of Domination able to GAIN, the
@@ -44334,7 +44358,16 @@ inline bool IsComboPieceCast(const Action& a)
         || (p.untap_target_creature_cost.has_value() && p.self_untap_cost.has_value())
         || (p.soulbond_grants_untap_self_cost.has_value() && d->card.IsCreature())
         || (p.tutor_to_hand && p.wish_from_sideboard)
-        || (AlchemistComboCombatOn() && d->card.IsCreature() && p.team_pump_cost.has_value() && p.team_pump_power > 0);
+        || (AlchemistComboCombatOn() && d->card.IsCreature() && p.team_pump_cost.has_value() && p.team_pump_power > 0)
+        || (d->card.IsCreature() && p.sac_creature_outlet && p.sac_outlet_self_only && p.sac_outlet_lifegain > 0)
+        || (d->card.IsCreature() && p.etb_modal_lifegain > 0);
+}
+// A lifegain OUTLET activation (Brindle Boar's "sacrifice this: gain 4") is stage-1 life.
+inline bool IsLifegainOutletAct(const Action& a)
+{
+    if (a.kind != Action::Kind::SacCreatureOutlet) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.sac_outlet_lifegain > 0;
 }
 inline bool IsSetupPlan(const TurnSolver::Plan& p)
 {
@@ -44345,6 +44378,7 @@ inline bool IsSetupPlan(const TurnSolver::Plan& p)
         // The Staff's "{2},{T}: gain 1 life" is stage 1 too: one gain raises X for every later iteration.
         if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapLifegain)
         { ++casts; continue; }
+        if (IsLifegainOutletAct(a)) { ++casts; continue; }
         if (!IsComboPieceCast(a)) { return false; }
         ++casts;
     }
@@ -44485,6 +44519,7 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d == nullptr) { continue; }
             if (d->params.cast_lifegain > 0) { r.neg_life -= std::max(d->params.cast_lifegain, d->params.cast_lifegain_ferocious); }
+            if (d->card.IsCreature()) { r.neg_life -= std::max(d->params.sac_outlet_lifegain, d->params.etb_modal_lifegain); }
             if ((d->params.draw_target_player && d->tmpl == CardTemplate::DrawX)
                 || (d->card.IsCreature() && UntapLoopDrainCard(d->params))) { r.finisher = 1; }
             const CardParams& q = d->params;

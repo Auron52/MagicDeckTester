@@ -30728,8 +30728,10 @@ inline Color UntapPreTapColour(const ManaPool& fl, const ManaCost& unit, const s
         // ate the {B} the next drain needed (AccomplishedAlchemist COMBO OFF sweep, 2026-10-20: Staff loop +
         // Living Wish -> Scholar ran to the ceiling with 43 green floating). Tap the FIRST colour of that
         // order the source makes. A mana-payment choice; MTG_UNTAP_LOOP_SURPLUS_GENERIC=0 restores (3).
+        // Only inside a REAL loop (something is owed): the colour-smart single activations (MTG_UNTAP_PAY_SMART,
+        // an empty owed set) have no payoff payer to feed, so they keep C2a's rule (3) -- the untap's own colour.
         static const bool s_loop_surplus = EnvOn("MTG_UNTAP_LOOP_SURPLUS_GENERIC", true);
-        if (heurarm::Flag(heurarm::UNTAP_LOOP_SURPLUS_GENERIC, s_loop_surplus))
+        if (heurarm::Flag(heurarm::UNTAP_LOOP_SURPLUS_GENERIC, s_loop_surplus) && ow.ManaValue() > 0)
         { for (int i = 0; i < 5; ++i) { if (makes(cols[i])) { return cols[i]; } } }
     }
     Color col = prod.front();
@@ -30759,6 +30761,23 @@ inline Color UntapPreTapColour(const ManaPool& fl, const ManaCost& unit, const s
 inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source_id, int target_id, int K)
 {
     int done = 0;
+    // PAY AS NEEDED, SMARTLY, OUTSIDE THE LOOP TOO (MTG_UNTAP_PAY_SMART, heurarm UNTAP_PAY_SMART, DEFAULT ON).
+    // USER 2026-10-20, seed 10 T6 (4 Forests, Elvish Harbinger, Accomplished Alchemist, Seedcradle Witch; Brindle
+    // Boar sacrificed for 4): "This should be possible to win, but it misuses the mana". X = 4 against the Witch's
+    // {2}{G}{W} is mana-NEUTRAL, so the line lives or dies on colour: C2a's fixed rule tapped the Alchemist for its
+    // first pip (white) every time and the WUBRG payer spent the generic out of whatever was floating, so the one
+    // Forest's green was gone after the first untap. With no loop running, an EMPTY owed set is scoped here, which
+    // makes the pre-tap float a pip THIS untap lacks (UntapPreTapColour's rule 1) and the generic come out of the
+    // colour most in surplus (SpendFloatingTowardCost's loop branch) -- exactly what a human does by hand.
+    static const bool s_pay_smart_env = EnvOn("MTG_UNTAP_PAY_SMART", true);
+    const ManaCost no_owed{};
+    struct SmartScope
+    {
+        const ManaCost* prev; bool on;
+        SmartScope(bool o, const ManaCost* z) : prev(g_untap_loop_owed), on(o && g_untap_loop_owed == nullptr)
+        { if (on) { g_untap_loop_owed = z; } }
+        ~SmartScope() { if (on) { g_untap_loop_owed = prev; } }
+    } _smart(heurarm::Flag(heurarm::UNTAP_PAY_SMART, s_pay_smart_env), &no_owed);
     auto find_num = [&state, ctrl](int num, bool own) -> int
     {
         if (num == 0) { return -1; }
@@ -31453,8 +31472,18 @@ inline bool UntapLoopWorthOffering(const GameState& s, int ctrl, int shape, int 
     // HUMAN PLAY gets no projection: a loop offered on life the human has not gained yet would be a silent
     // no-op on the menu if they then skip the gain (the Wirewood Lodge rule) -- they cast the gain, and the
     // re-prompt offers the loop off the real X.
-    return UntapLoopNextOp(s, ctrl, shape, si, ti, nullptr,
-                           HumanPlayActive() ? 0 : UntapLoopHandLifegain(s, ctrl)) >= 0;
+    const int x_extra = HumanPlayActive() ? 0 : UntapLoopHandLifegain(s, ctrl);
+    if (UntapLoopNextOp(s, ctrl, shape, si, ti, nullptr, x_extra) >= 0) { return true; }
+    // The NET-ZERO PUMP LOOP (see ApplyUntapLoop): no bank, but k_pump activations each pumping the attacker.
+    // Offered when those k activations really pay -- proved by running them on a copy (the hand's projected life
+    // credited as already gained, exactly what the recognition above assumes). Only reached for a pump shape whose
+    // banking goal is out of reach, so every other board is unchanged.
+    const int k_pump = g_untap_loop_no_pump != 0 ? 0 : UntapLoopPumpIterations(s, ctrl, shape, source_id, target_id);
+    if (k_pump <= 0) { return false; }
+    GameState probe = s;
+    probe.players[static_cast<std::size_t>(ctrl)].life_gained_this_turn += x_extra;
+    RevealLogPause _quiet;   // a probe: no viewer events, no reveal / draw log
+    return ApplyActivatedUntap(probe, ctrl, shape, source_id, target_id, k_pump) >= k_pump;
 }
 
 // Does the FLOAT alone pay the loop's need right now? (The site-9 kActUntapLoopFunded key's test, and the
@@ -31476,6 +31505,18 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
     const int k_pump = (g_untap_loop_no_pump != 0 || g_untap_loop_force_need != nullptr)
                      ? 0 : UntapLoopPumpIterations(state, ctrl, shape, source_id, target_id);
     if (need.payoff == kLoopPayNone && k_pump <= 0) { return 0; }
+    // THE NET-ZERO PUMP LOOP (USER 2026-10-20, seed 10 T6): Seedcradle Witch at X = 4 pays {2}{G}{W} = 4 per untap,
+    // so the loop never BANKS (UntapLoopBootOp's goal "X > the per-iteration cost" is unreachable and the loop below
+    // would stop before its first op) -- but every untap still gives the attacker +3/+3, which is the kill. When the
+    // pump is the payoff and the banking goal is out of reach, run exactly k_pump activations (each re-pays from the
+    // float + the board, colour-smart: MTG_UNTAP_PAY_SMART). A board that CAN bank keeps the loop below unchanged.
+    if (k_pump > 0)
+    {
+        const int si0 = UntapLoopFindNum(state, source_id, ctrl, true);
+        const int ti0 = UntapLoopFindNum(state, target_id, ctrl, false);
+        if (si0 >= 0 && ti0 >= 0 && UntapLoopNextOp(state, ctrl, shape, si0, ti0, nullptr) < 0)
+        { return ApplyActivatedUntap(state, ctrl, shape, source_id, target_id, k_pump); }
+    }
     const bool staff_shape = shape == kUntapStaffTarget;
     ManaCost goal = need.cost;
     int staff_untap_mv = 0;

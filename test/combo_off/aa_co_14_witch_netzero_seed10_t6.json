@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "THE USER'S SEED-10 TURN 6 (USER 2026-10-20, viewer: 'This should be possible to win, but it misuses the mana').",
+    "Four Forests, Elvish Harbinger, a non-sick Accomplished Alchemist and Seedcradle Witch; hand Stroke of Genius +",
+    "Brindle Boar; opponent at 16. Cast Brindle Boar, sacrifice it (gain 4): X = 4 against the Witch's {2}{G}{W} is",
+    "mana-NEUTRAL, but every untap is +3/+3 on the Alchemist -- five untaps (alternating green / white taps, the",
+    "spare Forest + Harbinger floating the second colour) make it 17 power, and it attacks untapped for the kill.",
+    "COMBO OFF: rule LIFE-HAND+LOOP-WITCH+FIN-WITCH at net zero; the route casts the Boar, sacrifices it",
+    "and runs the five pumps; the verdict is a combat-lethal board."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 16,
+  "opponent_library_size": 47,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Elvish Harbinger",
+      "sick": false
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Seedcradle Witch",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Stroke of Genius",
+    "Brindle Boar"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true,
+  "expect_history_contains": [
+    "Seedcradle Witch"
+  ]
+}
