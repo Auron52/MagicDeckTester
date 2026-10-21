@@ -88,6 +88,22 @@ def _deck_at(d, stem):
     return None
 
 
+def _unique_decklist_stem(d):
+    """-> the file stem of `d`'s ONE top-level decklist (.cod|.txt), or None (none, or several).
+
+    WHY: decks/Vampires ships Vampire.cod / Vampire.profile.json -- named after neither the folder nor
+    a parent -- so the folder-name lookup found no deck and valueleaf.sh refused it ("no registry entry
+    for deck dir decks/Vampires"). scripts/mullgen.sh (eeb55d83a) and suite_gate.resolve_decklist
+    already fall back to the folder's unique decklist; this is the same rule. Unique only: a folder
+    holding several lists is ambiguous and stays undiscovered rather than have one picked. 2026-10-21."""
+    try:
+        lists = [e for e in os.listdir(d)
+                 if e.lower().endswith((".cod", ".txt")) and os.path.isfile(os.path.join(d, e))]
+    except OSError:
+        return None
+    return os.path.splitext(lists[0])[0] if len(lists) == 1 else None
+
+
 def discover(root="decks"):
     """-> {key: Deck} for every deck folder that has a decklist AND a profile.
 
@@ -127,13 +143,17 @@ def discover(root="decks"):
             continue
         stem = os.path.basename(d)
         hit = _deck_at(d, stem)
+        if not hit:
+            alt = _unique_decklist_stem(d)
+            hit = _deck_at(d, alt) if alt else None
         if hit:
             # The Deck's stem is the FILE stem (it names the sidecars); the key is the FOLDER's slug.
             out[slug(stem)] = Deck(slug(stem), d, hit[1], hit[0])
         for sub in sorted(glob.glob("%s/*" % d)):
             if not os.path.isdir(sub):
                 continue
-            sub_hit = _deck_at(sub, stem)
+            # Variant files carry the parent's FILE stem (sidecars resolve off the profile).
+            sub_hit = _deck_at(sub, hit[1] if hit else stem)
             if sub_hit:
                 key = "%s_%s" % (slug(stem), slug(os.path.basename(sub)))
                 out[key] = Deck(key, sub, sub_hit[1], sub_hit[0])
