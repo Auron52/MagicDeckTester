@@ -43063,6 +43063,8 @@ struct AaWishCensus
     bool blue_need = false;   // a held card needs {U}: a {U} pip in hand, or a Crab Umbra-style {U} untap in play
     int  mana = 0;
     int  gain_total = 0;      // read only by the wish rule's =0 path (MTG_AA_WISH_WITCH_WIN=0) and its trace
+    int  mana_board = 0;      // `mana` before the hand's lands: the battlefield's projected mana (the discard cap)
+    int  forest_bonus = 0;    // the best land-Aura bonus on one of our Forests (what an Arbor Elf re-tap adds)
     bool ezuri = false;       // a team pump (Ezuri) held -- read ONLY by the Elvish Harbinger rule's Wincon bucket
 };
 
@@ -43122,6 +43124,8 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
         { c.mana += best_forest_bonus; }
     }
     c.elf_multi = best_forest_bonus > 0;
+    c.mana_board = c.mana;
+    c.forest_bonus = best_forest_bonus;
     for (const Card& h : s.players[controller].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
@@ -43407,7 +43411,41 @@ std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const Ga
 //   * SHED ORDER (most expendable first): unclassified cards (Eternal Witness) -> spare bucket cards, the worst
 //     within-bucket rank first (equal ranks: WINCON, UNTAP, LIFEGAIN, ALCHEMIST spares in that order) -> spare
 //     Wishes -> MANA worst first (Harbinger ... Sprawl, then the lands from the back) -> the kept bucket cards
-//     (gap-filling Wishes, then WINCON, UNTAP, LIFEGAIN, ALCHEMIST).
+//     (gap-filling Wishes, then WINCON, UNTAP, LIFEGAIN, ALCHEMIST). That is the order with the mana cap OFF.
+//   * THE MANA CAP (USER 2026-10-21; MTG_AA_DISCARD_MANA_CAP, heurarm AA_DISCARD_MANA_CAP, DEFAULT ON). Asked
+//     whether a Stroke made spare by a Witch in play should shed before lands, the USER, verbatim: "I wouldn't do
+//     that unless the lands and such are actually useful. You don't need more than 5-6 mana in any situation."
+//     And: "Let's cap it at 6. So, the "filled buckets", but using Witch would next fill lands up to 6 and then it
+//     would fill in another win-con and/or untapper." So the KEEP priority is
+//       1. the filled buckets, best of each, + a Living Wish per remaining gap (unchanged);
+//       2. MANA up to 6 total: the battlefield's projected mana (the wish census: a land 1, a land Aura's bonus, a
+//          dork 1, an Arbor Elf's best-Forest bonus) + the hand's mana cards in the MANA keep order above, a land 1,
+//          Utopia Sprawl / Wild Growth their bonus (with a land to enchant), Arbor Elf 1 + the best Forest bonus (on
+//          the board, or a land Aura in hand), Elvish Harbinger 1; a card is useful while the running total is
+//          below 6, and every mana card after that is SURPLUS;
+//       3. a SECOND wincon and/or a SECOND untapper -- the REAL ones only (Stroke > Staff > Scholar > Ezuri; Crab
+//          Umbra > Staff > Galvanic; not the Witch): the best spare of each, one Staff serving as both;
+//       4. everything else.
+//     SHED ORDER = the reverse: unclassified -> SURPLUS mana (worst first) -> the other spare bucket cards (worst
+//     rank first) -> spare Wishes -> the second wincon / untapper (worse rank first; ties Wincon first) -> useful
+//     mana (worst first) -> the kept bucket cards. Still prefix-stable: the surplus is the TAIL of the mana keep
+//     order, a card's value reads only the cards before it, and the second-tier pick reads no mana.
+//   * THE MANA KEEP ORDER under the cap (USER 2026-10-21, verbatim: "the land enchantments are better than Arbor
+//     Elf in a lot of cases. The only cases the elf is better are where you already have an enchantment in play or
+//     hand and can afford the tempo loss."): lands first, then Utopia Sprawl > Wild Growth > Arbor Elf > Elvish
+//     Harbinger. EXCEPTION -- a land Aura already on our battlefield, or one KEPT in hand (the best hand Aura), AND
+//     the tempo affordable: Arbor Elf ranks ahead of any ADDITIONAL land Aura (it untaps the enchanted Forest for
+//     +2). "Can afford the tempo loss" is the coordinator's reading (at cleanup the Elf is cast next turn at the
+//     earliest, an Aura makes its mana the turn it lands): met when the battlefield's projected mana is already
+//     >= kAaElfTempoMana (4); below that the Auras stay ahead of the Elf. Arbor Elf counts +2 in the tally on a
+//     Forest with a land Aura (board, or an Aura kept before it in the walk), else +1. Why the Aura leads by
+//     default (USER, same day): "Wild Growth and Utopia Sprawl can effectively be played for free by casting them
+//     from one land to another" -- tap Forest A for {G}, enchant an untapped Forest B, and B taps for 2 that turn
+//     (the engine plays it: reference s9 T2, Utopia Sprawl -> Forest #1 then the Alchemist off 2 Forests + Arbor
+//     Elf). With 2+ Forests the Aura is +1 mana at no tempo cost; with fewer it is still +1 off the next land. So
+//     an Aura counts +1 in the tally either way, and only the exception above puts the Elf ahead of one.
+//     The cap, this order and the second tier are ONE lever: =0 -> the order above (Sprawl > Arbor Elf > Wild
+//     Growth > Harbinger, every spare before any mana), exactly as before.
 //   * MTG_AA_DISCARD_STAFF_FIRST (heurarm AA_DISCARD_STAFF_FIRST), a PROPOSED amendment, default OFF: UNTAP
 //     becomes Staff of Domination > Crab Umbra > Galvanic > Witch (the Staff is colourless and fills Wincon/Draw
 //     too; the Umbra needs {U} to cast and to untap). Built from the A/B's persistent slower games (Staff vs
@@ -43455,6 +43493,11 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
     // The USER's 2026-10-21 decision (DEFAULT ON): Seedcradle Witch is also the LAST member of WINCON/DRAW.
     static const bool s_witch_env = EnvOn("MTG_AA_DISCARD_WITCH_WIN", true);
     const bool witch_win = heurarm::Flag(heurarm::AA_DISCARD_WITCH_WIN, s_witch_env);
+    // The USER's mana cap (2026-10-21, DEFAULT ON): mana counts up to 6; see THE MANA CAP above.
+    static const bool s_cap_env = EnvOn("MTG_AA_DISCARD_MANA_CAP", true);
+    const bool mana_cap = heurarm::Flag(heurarm::AA_DISCARD_MANA_CAP, s_cap_env);
+    constexpr int kManaCap = 6;          // the USER: "Let's cap it at 6"
+    constexpr int kAaElfTempoMana = 4;   // Arbor Elf ahead of an extra land Aura only from this much board mana
     // Within-bucket rank (lower = better kept), -1 = not a member.
     auto rank_in = [staff_first, witch_win](const CardDefinition& d, int b) -> int
     {
@@ -43581,6 +43624,134 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
     std::vector<int> shed;
     shed.reserve(at(n));
     shed.insert(shed.end(), unclassified.begin(), unclassified.end());
+    if (mana_cap)
+    {
+        // MANA keep order = lands (Island possibly first) then Sprawl > Arbor Elf > Wild Growth > Harbinger. Walk
+        // it from the battlefield's projected mana: useful while the running total is below the cap.
+        const AaWishCensus cen = AaTakeWishCensus(s, me);
+        bool host_forest = false, host_land = false;   // a land (a Forest) on the board or in hand to enchant
+        int kept_aura_bonus = 0;                       // the best land-Aura bonus already counted in the walk
+        auto note_host = [&](const CardDefinition* d)
+        {
+            if (d == nullptr || !d->card.IsLand()) { return; }
+            host_land = true;
+            for (const std::string& st : d->card.m_subtypes) { if (st == "Forest") { host_forest = true; } }
+        };
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me) { note_host(CardDatabase::Instance().LookupCached(p.card)); } }
+        for (int i : lands) { note_host(defs[at(i)]); }
+        // A card's value reads only the board and the cards BEFORE it in the keep order (so shedding the surplus
+        // tail never re-values a useful card: prefix-stable). A land Aura's host is any land, board or hand: if a
+        // hand land is surplus, every non-land source after it is surplus too, so that never matters.
+        auto mana_value = [&](int i) -> int
+        {
+            const CardDefinition* d = defs[at(i)];
+            if (d == nullptr || CleanupDiscardIsLand(ap.hand[at(i)])) { return 1; }
+            const CardParams& p = d->params;
+            if (p.is_land_aura)                                                          // Sprawl, Wild Growth
+            {
+                const bool ok = p.land_aura_host_subtype.empty() ? host_land
+                              : p.land_aura_host_subtype == "Forest" ? host_forest : host_land;
+                // On a Forest it is also what an Arbor Elf re-tap adds (Wild Growth too, when a Forest exists).
+                if (ok && host_forest) { kept_aura_bonus = std::max(kept_aura_bonus, p.land_aura_extra_mana); }
+                return ok ? p.land_aura_extra_mana : 0;
+            }
+            if (!p.mana_requires_land_subtype.empty())                                   // Arbor Elf
+            { return 1 + std::max(cen.forest_bonus, kept_aura_bonus); }   // +2 on an enchanted Forest, else +1
+            return 1;                                                                    // a dork (Harbinger)
+        };
+        // The keep order of the non-land sources: Sprawl > Wild Growth > Arbor Elf > Harbinger; with a land Aura on
+        // the board (or the best one kept in hand) and the tempo affordable, Arbor Elf moves ahead of any ADDITIONAL
+        // land Aura.
+        auto base_rank = [&](int i) -> int
+        {
+            const CardParams& p = defs[at(i)]->params;
+            if (p.is_land_aura && p.etb_choose_color) { return 0; }                    // Utopia Sprawl
+            if (p.is_land_aura) { return 1; }                                         // Wild Growth
+            if (!p.mana_requires_land_subtype.empty()) { return 2; }                  // Arbor Elf
+            return 3;                                                                 // Elvish Harbinger (a dork)
+        };
+        std::vector<int> other(mana_other);
+        std::stable_sort(other.begin(), other.end(), [&](int a, int b) { return base_rank(a) < base_rank(b); });
+        bool board_aura = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.is_land_aura) { board_aura = true; }
+        }
+        const bool hand_aura = !other.empty() && base_rank(other.front()) <= 1;
+        if ((board_aura || hand_aura) && cen.mana_board >= kAaElfTempoMana)
+        {
+            std::vector<int> elves, rest;
+            for (int i : other) { (base_rank(i) == 2 ? elves : rest).push_back(i); }
+            // After the KEPT hand Aura when the board has none; ahead of every Aura when the board has one.
+            const std::size_t at_pos = board_aura ? 0 : 1;
+            const auto pos = static_cast<std::ptrdiff_t>(std::min(at_pos, rest.size()));
+            rest.insert(rest.begin() + pos, elves.begin(), elves.end());
+            other.swap(rest);
+        }
+        std::vector<int> keep_order(lands);
+        keep_order.insert(keep_order.end(), other.begin(), other.end());
+        std::vector<int> useful, surplus;
+        int total = cen.mana_board;
+        for (int i : keep_order)
+        {
+            if (total < kManaCap) { useful.push_back(i); total += mana_value(i); }
+            else { surplus.push_back(i); }
+        }
+        // The second tier: the best spare REAL wincon and the best spare REAL untapper (not the Witch).
+        auto real_rank = [&](int i, int b) -> int
+        {
+            const CardDefinition& d = *defs[at(i)];
+            return AaIsWitch(d.params) ? -1 : rank_in(d, b);
+        };
+        int second[2] = { -1, -1 }, second_r[2] = { 0, 0 };   // [0] Wincon, [1] Untap
+        for (int i : members)
+        {
+            if (kept[at(i)]) { continue; }
+            for (int k = 0; k < 2; ++k)
+            {
+                const int r = real_rank(i, k == 0 ? kWin : kUntap);
+                if (r >= 0 && (second[k] < 0 || r < second_r[k])) { second[k] = i; second_r[k] = r; }
+            }
+        }
+        shed.insert(shed.end(), surplus.rbegin(), surplus.rend());
+        std::vector<std::pair<std::pair<int, int>, int>> spare;   // ((rank, bucket), index)
+        for (int i : members)
+        {
+            if (kept[at(i)] || i == second[0] || i == second[1]) { continue; }
+            int r = -1, bk = -1;
+            for (int b = 0; b < kBuckets; ++b)
+            {
+                const int rb = rank_in(*defs[at(i)], b);
+                if (rb >= 0 && (r < 0 || rb < r)) { r = rb; bk = b; }
+            }
+            spare.push_back({ { r, bk }, i });
+        }
+        std::stable_sort(spare.begin(), spare.end(), [](const auto& a, const auto& b)
+        {
+            if (a.first.first != b.first.first) { return a.first.first > b.first.first; }
+            return a.first.second > b.first.second;
+        });
+        for (const auto& e : spare) { shed.push_back(e.second); }
+        shed.insert(shed.end(), wish_spare.begin(), wish_spare.end());
+        // The second tier, the worse-ranked first (ties: the Wincon pick first); one Staff may be both.
+        if (second[0] >= 0 && second[0] == second[1]) { shed.push_back(second[0]); }
+        else
+        {
+            const bool win_first = second[1] < 0 || (second[0] >= 0 && second_r[0] >= second_r[1]);
+            for (int k : { win_first ? 0 : 1, win_first ? 1 : 0 }) { if (second[k] >= 0) { shed.push_back(second[k]); } }
+        }
+        shed.insert(shed.end(), useful.rbegin(), useful.rend());
+        shed.insert(shed.end(), wish_kept.rbegin(), wish_kept.rend());
+        for (int b = kBuckets - 1; b >= 0; --b)
+        {
+            const int i = best[b];
+            if (i >= 0 && std::find(shed.begin(), shed.end(), i) == shed.end()) { shed.push_back(i); }
+        }
+        return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    }
     {
         // Spare bucket cards: the worst within-bucket rank first; equal ranks WINCON, UNTAP, LIFEGAIN, ALCHEMIST.
         std::vector<std::pair<std::pair<int, int>, int>> spare;   // ((rank, bucket), index)

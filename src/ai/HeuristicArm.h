@@ -624,6 +624,7 @@ enum Slot : int
     AA_COMBO_COMBAT,          // MTG_AA_COMBO_COMBAT  AccomplishedAlchemist COMBO OFF (USER 2026-10-20, "Combo Off also never showed up there"): the PUMP finishers -- FIN-EZURI / FIN-EZURI-HAND / FIN-WITCH -- in the rule table, and a COMBAT-LETHAL board as the route's verdict (the kill lands in the combat after main 1; a goldfish never blocks). Default ON; =0 -> main-phase kills only (Stroke / drain), as first shipped
     AA_WISH_WITCH_WIN,        // MTG_AA_WISH_WITCH_WIN  AA Living Wish buckets: a held Seedcradle Witch fills BOTH Untap and Wincon/Draw (USER 2026-10-21: the Witch counts as a win condition, "This also makes the 4 life rule unnecessary") -- it fills Untap whatever the held lifegain total, and fills Wincon/Draw beside Stroke / Staff / Scholar. Default ON (the USER's decision); =0 -> the 2026-10-20 reading (Witch = Untap only, and only while the held lifegain sums to >= 5)
     AA_DISCARD_WITCH_WIN,     // MTG_AA_DISCARD_WITCH_WIN  AA discard buckets: Seedcradle Witch is a member of BOTH Untap and Wincon/Draw, like Staff (USER 2026-10-21), ranked LAST in each (Wincon: Stroke > Staff > Scholar > Ezuri > Witch); a Witch on the battlefield fills both. Default ON (the USER's decision); =0 -> the 2026-10-20 rule (Witch = Untap only)
+    AA_DISCARD_MANA_CAP,      // MTG_AA_DISCARD_MANA_CAP  AA discard buckets, the USER's mana cap (2026-10-21: "You don't need more than 5-6 mana in any situation", "Let's cap it at 6"): mana sources count only up to 6 total mana (board + hand); the KEEP priority is the filled buckets, then mana up to 6, then a second REAL wincon and/or untapper (Stroke / Staff / Scholar / Ezuri, Crab Umbra / Staff / Galvanic), then everything else (mana beyond 6 first, then the other spares). Default ON (the USER's rule); =0 -> every spare sheds before any mana, as before
     COUNT
 };
 
@@ -1198,6 +1199,7 @@ inline const char* Name(int slot)
         "MTG_AA_COMBO_COMBAT",
         "MTG_AA_WISH_WITCH_WIN",
         "MTG_AA_DISCARD_WITCH_WIN",
+        "MTG_AA_DISCARD_MANA_CAP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -2709,6 +2709,14 @@ std::string ShedOneAa(const GameState& s)
     REQUIRE(c.size() == 1);
     return s.players[0].hand[static_cast<std::size_t>(c[0])].m_name.str();
 }
+// MTG_AA_DISCARD_MANA_CAP (USER 2026-10-21, default ON): mana counts up to 6; then a second real wincon / untapper.
+struct DiscManaArmAa
+{
+    std::int8_t saved;
+    explicit DiscManaArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_DISCARD_MANA_CAP])
+    { heurarm::t_arm[heurarm::AA_DISCARD_MANA_CAP] = static_cast<std::int8_t>(v); }
+    ~DiscManaArmAa() { heurarm::t_arm[heurarm::AA_DISCARD_MANA_CAP] = saved; }
+};
 // MTG_AA_DISCARD_WITCH_WIN (USER 2026-10-21, default ON): the Witch is in Untap AND Wincon/Draw, last in Wincon.
 struct DiscWitchArmAa
 {
@@ -2736,8 +2744,12 @@ TEST_CASE("Discard buckets: the best of each bucket is kept; the spare in a fill
     // Untap order: Galvanic > Seedcradle Witch; Wincon: Scholar > Ezuri.
     const GameState u = DiscAa({ "Seedcradle Witch", "Galvanic Alchemist", "Ezuri, Renegade Leader",
                                  "Scholar of Athreos", "Forest" });
-    const std::vector<std::string> ou = ShedNamesAa(u);
-    CHECK(ou[0] == "Ezuri, Renegade Leader");                 // rank 3 spares: Wincon before Untap
+    std::vector<std::string> ou = ShedNamesAa(u);
+    CHECK(ou[0] == "Seedcradle Witch");                       // mana cap: Ezuri is the second (real) wincon
+    CHECK(ou[1] == "Ezuri, Renegade Leader");
+    DiscManaArmAa off(0);
+    ou = ShedNamesAa(u);
+    CHECK(ou[0] == "Ezuri, Renegade Leader");                 // =0: rank 3 spares, Wincon before Untap
     CHECK(ou[1] == "Seedcradle Witch");
 }
 
@@ -2747,10 +2759,16 @@ TEST_CASE("Discard buckets: Staff of Domination in hand fills BOTH Untap and Win
     // is left for the Wish.
     const GameState s = DiscAa({ "Accomplished Alchemist", "Nourish", "Staff of Domination", "Galvanic Alchemist",
                                  "Scholar of Athreos", "Living Wish", "Forest", "Forest", "Forest" });
-    const std::vector<std::string> o = ShedNamesAa(s);
-    CHECK(o[0] == "Scholar of Athreos");                      // rank 2 spare (Wincon) before Galvanic (Untap)
+    std::vector<std::string> o = ShedNamesAa(s);
+    CHECK(o[0] == "Living Wish");                             // no gap -> the Wish is a spare
+    CHECK(o[1] == "Scholar of Athreos");                      // the second wincon and untapper (equal rank: Wincon first)
+    CHECK(o[2] == "Galvanic Alchemist");
+    CHECK(o[3] == "Forest");
+    DiscManaArmAa off(0);
+    o = ShedNamesAa(s);
+    CHECK(o[0] == "Scholar of Athreos");                      // =0: rank 2 spare (Wincon) before Galvanic (Untap)
     CHECK(o[1] == "Galvanic Alchemist");
-    CHECK(o[2] == "Living Wish");                             // no gap -> the Wish is a spare
+    CHECK(o[2] == "Living Wish");
     CHECK(o[3] == "Forest");
 }
 
@@ -2787,11 +2805,16 @@ TEST_CASE("Discard buckets: net of board -- a bucket filled on the battlefield o
     GameState w = DiscAa({ "Accomplished Alchemist", "Nourish", "Crab Umbra", "Stroke of Genius", "Forest" });
     PutAa(w, "Seedcradle Witch"); PutAa(w, "Brindle Boar");
     o = ShedNamesAa(w);
-    CHECK(o[0] == "Stroke of Genius");
-    CHECK(o[1] == "Crab Umbra");
-    CHECK(o[2] == "Nourish");
+    CHECK(o[0] == "Nourish");                                 // the mana cap keeps a second real wincon / untapper
+    CHECK(o[1] == "Stroke of Genius");                        // over the other spares
+    CHECK(o[2] == "Crab Umbra");
     {
-        DiscWitchArmAa off(0);                                // =0: the Witch in play fills Untap only
+        DiscManaArmAa cap_off(0);
+        o = ShedNamesAa(w);
+        CHECK(o[0] == "Stroke of Genius");
+        CHECK(o[1] == "Crab Umbra");
+        CHECK(o[2] == "Nourish");
+        DiscWitchArmAa off(0);                                // and =0: the Witch in play fills Untap only
         o = ShedNamesAa(w);
         CHECK(o[0] == "Crab Umbra");
         CHECK(o[1] == "Nourish");
@@ -2834,13 +2857,151 @@ TEST_CASE("Discard buckets: Seedcradle Witch fills BOTH Untap and Wincon/Draw, r
     CHECK(o[3] == "Seedcradle Witch");
 }
 
+TEST_CASE("Discard buckets, the USER's mana cap (2026-10-21): a Witch in play + a spare Stroke -- lands to 6 first, then the Stroke")
+{
+    // The Witch in play fills Untap and Wincon, so the Stroke in hand is a spare. "Lands up to 6 and then ... another
+    // win-con": with board + hand mana within 6 the Stroke goes before any land; past 6, the surplus lands go first.
+    const std::vector<std::string> hand = { "Accomplished Alchemist", "Nourish", "Stroke of Genius", "Forest", "Forest" };
+    GameState under = DiscAa(hand);
+    PutAa(under, "Seedcradle Witch");
+    for (int k = 0; k < 3; ++k) { PutAa(under, "Forest"); }       // 3 + 2 = 5 mana
+    std::vector<std::string> o = ShedNamesAa(under);
+    CHECK(o[0] == "Stroke of Genius");
+    CHECK(o[1] == "Forest");
+    GameState at6 = under;
+    PutAa(at6, "Forest");                                          // 4 + 2 = 6: still all useful
+    CHECK(ShedOneAa(at6) == "Stroke of Genius");
+    GameState over = DiscAa({ "Accomplished Alchemist", "Nourish", "Stroke of Genius", "Forest", "Forest", "Forest" });
+    PutAa(over, "Seedcradle Witch");
+    for (int k = 0; k < 5; ++k) { PutAa(over, "Forest"); }        // 5 + 3 = 8: the 7th and 8th are surplus
+    o = ShedNamesAa(over);
+    CHECK(o[0] == "Forest"); CHECK(o[1] == "Forest");
+    CHECK(o[2] == "Stroke of Genius");
+    CHECK(o[3] == "Forest");                                       // the 6th, useful
+    CHECK(o.back() == "Accomplished Alchemist");
+    { DiscManaArmAa off(0); CHECK(ShedOneAa(over) == "Stroke of Genius"); }   // =0: every spare before any mana
+}
+
+TEST_CASE("Discard buckets, mana cap: sources are valued (land Aura bonus, Arbor Elf on a Sprawl'd Forest, dorks)")
+{
+    // Board: two Forests (one with Utopia Sprawl) + Arbor Elf = 1 + 2 + (1 + 1) = 5. One hand Forest reaches 6.
+    GameState b = DiscAa({ "Accomplished Alchemist", "Nourish", "Stroke of Genius", "Forest", "Forest" });
+    PutAa(b, "Seedcradle Witch");
+    const int f = PutAa(b, "Forest");
+    PutAa(b, "Forest");
+    AttachAa(b, "Utopia Sprawl", f);
+    PutAa(b, "Arbor Elf");
+    std::vector<std::string> o = ShedNamesAa(b);
+    CHECK(o[0] == "Forest");                                       // surplus
+    CHECK(o[1] == "Stroke of Genius");
+    // Hand sources: 3 Forests in play; Sprawl +1 (4), Arbor Elf on the Sprawl'd Forest +2 (6) -> Harbinger is surplus.
+    GameState h = DiscAa({ "Accomplished Alchemist", "Nourish", "Stroke of Genius", "Utopia Sprawl", "Arbor Elf",
+                           "Elvish Harbinger" });
+    PutAa(h, "Seedcradle Witch");
+    for (int k = 0; k < 3; ++k) { PutAa(h, "Forest"); }
+    o = ShedNamesAa(h);
+    CHECK(o[0] == "Elvish Harbinger");
+    CHECK(o[1] == "Stroke of Genius");
+    CHECK(o[2] == "Arbor Elf");
+    CHECK(o[3] == "Utopia Sprawl");
+}
+
+TEST_CASE("Discard buckets, mana cap: the land Auras lead Arbor Elf unless an Aura is in play / kept AND board mana >= 4")
+{
+    // "the land enchantments are better than Arbor Elf in a lot of cases. The only cases the elf is better are where
+    // you already have an enchantment in play or hand and can afford the tempo loss." (USER 2026-10-21)
+    const std::vector<std::string> keep = { "Accomplished Alchemist", "Nourish" };
+    auto with = [&](std::vector<std::string> extra) { std::vector<std::string> h = keep; h.insert(h.end(), extra.begin(), extra.end()); return DiscAa(h); };
+    // Default: no Aura in play and only 2 board mana -> Sprawl (3) > Wild Growth (4) > Arbor Elf (+2 on the
+    // Sprawl'd Forest: 6) > Harbinger (surplus).
+    GameState d = with({ "Utopia Sprawl", "Wild Growth", "Arbor Elf", "Elvish Harbinger" });
+    PutAa(d, "Forest"); PutAa(d, "Forest");
+    std::vector<std::string> o = ShedNamesAa(d);
+    CHECK(o[0] == "Elvish Harbinger"); CHECK(o[1] == "Arbor Elf"); CHECK(o[2] == "Wild Growth"); CHECK(o[3] == "Utopia Sprawl");
+    // EXCEPTION, an Aura in play and 4 board mana: Arbor Elf (+2 -> 6) ahead of the extra Wild Growth (surplus).
+    GameState b = with({ "Wild Growth", "Arbor Elf" });
+    const int f = PutAa(b, "Forest");
+    PutAa(b, "Forest"); PutAa(b, "Forest");
+    AttachAa(b, "Utopia Sprawl", f);                                   // 3 Forests + Sprawl = 4
+    o = ShedNamesAa(b);
+    CHECK(o[0] == "Wild Growth"); CHECK(o[1] == "Arbor Elf");
+    // ... but below 4 board mana the tempo is not affordable: the Aura stays ahead (Wild Growth 4, Arbor Elf 6).
+    GameState t = with({ "Wild Growth", "Arbor Elf" });
+    const int g = PutAa(t, "Forest");
+    PutAa(t, "Forest");
+    AttachAa(t, "Utopia Sprawl", g);                                   // 2 Forests + Sprawl = 3
+    o = ShedNamesAa(t);
+    CHECK(o[0] == "Arbor Elf"); CHECK(o[1] == "Wild Growth");
+    // EXCEPTION, an Aura KEPT in hand and 4 board mana: Sprawl (5), then Arbor Elf (+2 -> 7), the extra Wild Growth
+    // is surplus.
+    GameState k = with({ "Utopia Sprawl", "Wild Growth", "Arbor Elf" });
+    for (int i = 0; i < 4; ++i) { PutAa(k, "Forest"); }
+    o = ShedNamesAa(k);
+    CHECK(o[0] == "Wild Growth"); CHECK(o[1] == "Arbor Elf"); CHECK(o[2] == "Utopia Sprawl");
+}
+
+TEST_CASE("Discard buckets, mana cap: Arbor Elf counts +2 on a Forest with a land Aura, otherwise +1")
+{
+    // A Witch in play makes the Stroke a second-tier spare, so where the Harbinger lands relative to it shows whether
+    // the Harbinger is still within the 6.
+    const std::vector<std::string> hand = { "Accomplished Alchemist", "Nourish", "Stroke of Genius", "Forest",
+                                            "Arbor Elf", "Elvish Harbinger" };
+    GameState bare = DiscAa(hand);
+    PutAa(bare, "Seedcradle Witch");
+    for (int i = 0; i < 3; ++i) { PutAa(bare, "Forest"); }            // 3, Forest 4, Elf +1 = 5, Harbinger 6
+    CHECK(ShedOneAa(bare) == "Stroke of Genius");
+    GameState ench = DiscAa(hand);
+    PutAa(ench, "Seedcradle Witch");
+    const int f = PutAa(ench, "Forest");
+    PutAa(ench, "Forest"); PutAa(ench, "Forest");
+    AttachAa(ench, "Utopia Sprawl", f);                                // 4, Forest 5, Elf +2 = 7: the Harbinger is surplus
+    const std::vector<std::string> o = ShedNamesAa(ench);
+    CHECK(o[0] == "Elvish Harbinger");
+    CHECK(o[1] == "Stroke of Genius");
+}
+
+TEST_CASE("Discard buckets, mana cap: ONE second wincon and ONE second untapper, real ones only (not the Witch)")
+{
+    // A Witch in play fills both buckets: Stroke is the second wincon and Crab Umbra the second untapper; Scholar and
+    // Galvanic are "everything else" (shed first, Wincon before Untap at equal rank).
+    GameState s = DiscAa({ "Accomplished Alchemist", "Nourish", "Scholar of Athreos", "Stroke of Genius",
+                           "Galvanic Alchemist", "Crab Umbra", "Forest", "Forest" });
+    PutAa(s, "Seedcradle Witch");
+    std::vector<std::string> o = ShedNamesAa(s);
+    CHECK(o[0] == "Scholar of Athreos"); CHECK(o[1] == "Galvanic Alchemist");
+    CHECK(o[2] == "Stroke of Genius");   CHECK(o[3] == "Crab Umbra");
+    CHECK(o[4] == "Forest");
+    // One spare Staff is both the second wincon and the second untapper.
+    GameState st = DiscAa({ "Accomplished Alchemist", "Nourish", "Staff of Domination", "Scholar of Athreos",
+                            "Galvanic Alchemist", "Forest" });
+    PutAa(st, "Seedcradle Witch");
+    o = ShedNamesAa(st);
+    CHECK(o[0] == "Scholar of Athreos"); CHECK(o[1] == "Galvanic Alchemist");
+    CHECK(o[2] == "Staff of Domination"); CHECK(o[3] == "Forest");
+    // A spare Witch is NOT a second-tier card: a Staff in play fills both buckets; the Witch goes after the surplus
+    // land but before the useful ones.
+    GameState w = DiscAa({ "Accomplished Alchemist", "Nourish", "Seedcradle Witch", "Forest", "Forest" });
+    PutAa(w, "Staff of Domination");
+    for (int k = 0; k < 5; ++k) { PutAa(w, "Forest"); }            // 5 + 2: the second hand Forest is surplus
+    o = ShedNamesAa(w);
+    CHECK(o[0] == "Forest");
+    CHECK(o[1] == "Seedcradle Witch");
+    CHECK(o[2] == "Forest");
+}
+
 TEST_CASE("Discard buckets: mana keeps lands first, then Sprawl > Arbor Elf > Wild Growth > Harbinger; Island when {U} is owed")
 {
     const GameState s = DiscAa({ "Elvish Harbinger", "Wild Growth", "Arbor Elf", "Utopia Sprawl", "Forest", "Forest",
                                  "Eternal Witness" });
-    const std::vector<std::string> o = ShedNamesAa(s);
-    CHECK(o == std::vector<std::string>{ "Eternal Witness", "Elvish Harbinger", "Wild Growth", "Arbor Elf",
-                                         "Utopia Sprawl", "Forest", "Forest" });
+    // The mana cap's order (USER 2026-10-21): Sprawl > Wild Growth > Arbor Elf > Harbinger; 1 + 1 + 1 + 1 + 2 = 6, so
+    // the Harbinger is surplus (it sheds first either way).
+    CHECK(ShedNamesAa(s) == std::vector<std::string>{ "Eternal Witness", "Elvish Harbinger", "Arbor Elf", "Wild Growth",
+                                                      "Utopia Sprawl", "Forest", "Forest" });
+    {
+        DiscManaArmAa off(0);                                          // =0: Sprawl > Arbor Elf > Wild Growth > Harbinger
+        CHECK(ShedNamesAa(s) == std::vector<std::string>{ "Eternal Witness", "Elvish Harbinger", "Wild Growth",
+                                                          "Arbor Elf", "Utopia Sprawl", "Forest", "Forest" });
+    }
     // A kept Crab Umbra needs {U}, nothing on the battlefield makes it: the Island is the last land shed.
     GameState b = DiscAa({ "Crab Umbra", "Forest", "Forest", "Island" });
     PutAa(b, "Forest");
