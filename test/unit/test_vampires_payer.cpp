@@ -32,6 +32,7 @@
 
 #include <string>
 #include <vector>
+#include "vamp_rules_off.h"
 
 namespace
 {
@@ -420,6 +421,7 @@ GameState Make91001()
 
 TEST_CASE("payer L (search): main 2's 'cast Pit Fighter, then activate it' really draws two, in both worlds (s91001 T4)")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     GameState s = Make91001();
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false);
     const TurnSolver::Plan* found = nullptr;

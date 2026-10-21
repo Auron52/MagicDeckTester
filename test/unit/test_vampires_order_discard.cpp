@@ -390,6 +390,7 @@ TEST_CASE("Vampires discard buckets: Bloodghast with a land in hand is a free sh
 
 TEST_CASE("Vampires discard buckets: an outlet discard leads with Bloodghast; a cleanup deploys the Baron")
 {
+    VampRulesOff _rules_off;   // tests the machinery the USER rules restrict (vamp_rules_off.h)
     // Gorger out, three untapped Swamps, a Swamp in hand. OUTLET order (the land drop open or spent):
     // Bloodghast first -- the held land returns it (this turn while the drop is open, for no mana) --
     // then the threats by EV with the board's 3 Swamps + the kept Swamp and a library of 7 lands / 4
@@ -563,4 +564,40 @@ TEST_CASE("USER rule MTG_VAMP_SOCIALITE_M2: Vampire Socialite is never cast or V
     CHECK(PlansCastUr(TurnSolver::EnumerateMainPlans(post, false), "Vampire Socialite"));
     VampRulesOff off;
     CHECK(PlansCastUr(TurnSolver::EnumerateMainPlans(s, true), "Vampire Socialite"));
+}
+
+TEST_CASE("PROPOSED amendment MTG_VAMP_FREE_DISCARD_V2: Bloodghast is free only with a land to return it this turn")
+{
+    ArmVo v2(heurarm::VAMP_FREE_DISCARD_V2, true);
+    GameState s = MakeVo({"Bloodghast", "Stromkirk Captain", "Bloodline Keeper"}, {{"Swamp", true}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s).size() == 3);                                              // no land: not free
+    GameState land = MakeVo({"Bloodghast", "Swamp", "Stromkirk Captain"}, {{"Swamp", true}});
+    land.phase = Phase::PreCombatMain;
+    land.players[0].lands_played_this_turn = 0;
+    CHECK(PinsUr(land) == std::vector<std::string>{ "Bloodghast" });           // the drop returns it
+}
+
+TEST_CASE("PROPOSED amendment MTG_VAMP_FREE_DISCARD_V2: two discard outlets and one free card -> every name")
+{
+    ArmVo v2(heurarm::VAMP_FREE_DISCARD_V2, true);
+    // Asylum Visitor ({1}{B} madness) is the one free card; two Condemneds both want a discard.
+    GameState s = MakeVo({"Asylum Visitor", "Vampire of the Dire Moon", "Swamp"},
+                         {{"Stromkirk Condemned"}, {"Stromkirk Condemned"}, {"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    CHECK(PinsUr(s).size() == 3);
+    ArmVo off(heurarm::VAMP_FREE_DISCARD_V2, false);
+    CHECK(PinsUr(s) == std::vector<std::string>{ "Asylum Visitor" });         // the USER's rule as written
+}
+
+TEST_CASE("PROPOSED amendment MTG_VAMP_FREE_DISCARD_DEAD: a card no cost of which fits the turn is free too")
+{
+    ArmVo dead(heurarm::VAMP_FREE_DISCARD_DEAD, true);
+    // Two untapped Swamps: Asylum Visitor's madness {1}{B} fits (free); Bloodline Keeper (4) cannot be cast
+    // this turn (dead); Vampire of the Dire Moon ({B}) can be cast, so it is neither.
+    GameState s = MakeVo({"Asylum Visitor", "Bloodline Keeper", "Vampire of the Dire Moon"}, {{"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    std::vector<std::string> pins = PinsUr(s);
+    std::sort(pins.begin(), pins.end());
+    CHECK(pins == std::vector<std::string>{ "Asylum Visitor", "Bloodline Keeper" });
 }

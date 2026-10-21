@@ -586,6 +586,8 @@ enum Slot : int
     VAMP_FREE_DISCARD,        // MTG_VAMP_FREE_DISCARD  the USER's discard rule (2026-10-21, PROTOTYPE): with a FREE discard in hand (a madness card payable now at a madness cost <= its mana cost, or Bloodghast) the outlet discard pins of Condemned / Pit Fighter / Blood are restricted to the free names. DEFAULT ON; =0 restores every name (VampiresProvider::ActivationDiscardCandidates)
     VAMP_NO_STEAL,            // MTG_VAMP_NO_STEAL  the USER's rule (2026-10-21): Captivating Vampire's steal is never offered. DEFAULT ON; =0 restores it (VampiresProvider::CollectedActionAllowed)
     VAMP_SOCIALITE_M2,        // MTG_VAMP_SOCIALITE_M2  the USER's rule (2026-10-21): Vampire Socialite is cast / Vial-put only after combat. DEFAULT ON; =0 restores main 1 (VampiresProvider::CollectedActionAllowed)
+    VAMP_FREE_DISCARD_V2,     // MTG_VAMP_FREE_DISCARD_V2  PROPOSED amendment to the USER's discard rule (2026-10-21): Bloodghast free only with a land to return it this turn; no restriction when discard outlets outnumber free discards. DEFAULT OFF
+    VAMP_FREE_DISCARD_DEAD,   // MTG_VAMP_FREE_DISCARD_DEAD  PROPOSED amendment to the USER's discard rule (2026-10-21): a nonland card no cost of which fits this turn's mana is a free discard too. DEFAULT OFF
     COUNT
 };
 
@@ -1122,6 +1124,8 @@ inline const char* Name(int slot)
         "MTG_VAMP_FREE_DISCARD",
         "MTG_VAMP_NO_STEAL",
         "MTG_VAMP_SOCIALITE_M2",
+        "MTG_VAMP_FREE_DISCARD_V2",
+        "MTG_VAMP_FREE_DISCARD_DEAD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

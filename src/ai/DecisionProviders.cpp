@@ -19474,6 +19474,24 @@ static bool VampFreeDiscardOn()
     return heurarm::Flag(heurarm::VAMP_FREE_DISCARD, env);
 }
 static bool VampSocialiteM2On();   // the USER's Socialite rule (defined below)
+// PROPOSED AMENDMENTS to the USER's discard rule (2026-10-21, DEFAULT OFF, pending the USER), from the root cause
+// of the rule's 8 slower games (docs/design/vampires-decision-census.md):
+//   MTG_VAMP_FREE_DISCARD_V2 -- Bloodghast is free only when a land drop is open and a land is in hand (it returns
+//     at once: "it comes back from the graveyard whenever a land drops"; with no land it is a lost attacker), and
+//     no restriction when the discard outlets on board + in hand outnumber the free discards (two Condemneds
+//     pumping need two discards).
+//   MTG_VAMP_FREE_DISCARD_DEAD -- a nonland card no cost of which fits this turn's mana (neither its mana cost nor
+//     a madness cost) is a free discard too: it cannot be cast this turn either way.
+static bool VampFreeV2On()
+{
+    static const bool env = EnvOn("MTG_VAMP_FREE_DISCARD_V2");
+    return heurarm::Flag(heurarm::VAMP_FREE_DISCARD_V2, env);
+}
+static bool VampFreeDeadOn()
+{
+    static const bool env = EnvOn("MTG_VAMP_FREE_DISCARD_DEAD");
+    return heurarm::Flag(heurarm::VAMP_FREE_DISCARD_DEAD, env);
+}
 static std::vector<std::string> VampFreeDiscards(const GameState& s, const CardDefinition& src_def,
                                                  const std::vector<std::string>& names)
 {
@@ -19486,6 +19504,9 @@ static std::vector<std::string> VampFreeDiscards(const GameState& s, const CardD
     const int outlet_mv = src_def.params.sac_outlet_discard_cost > 0 && src_def.params.sac_creature_cost.has_value()
                               ? src_def.params.sac_creature_cost->ManaValue()
                               : src_def.params.blood_draw_cost.has_value() ? src_def.params.blood_draw_cost->ManaValue() : 0;
+    const bool v2 = VampFreeV2On();
+    const bool dead_ok = VampFreeDeadOn();
+    const bool land_back = extra > 0;   // a land drop is open and a land is in hand
     std::vector<std::string> out;
     for (const std::string& nm : names)
     {
@@ -19494,7 +19515,7 @@ static std::vector<std::string> VampFreeDiscards(const GameState& s, const CardD
         if (hc == nullptr) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*hc);
         if (d == nullptr) { continue; }
-        bool free = d->gy_landfall_watcher;
+        bool free = d->gy_landfall_watcher && (!v2 || land_back);
         // The USER's Socialite rule: a main-1 madness cast of Vampire Socialite is a main-1 cast, so it is
         // not a free discard before combat.
         const bool socialite = d->params.opp_lost_life_other_enters_counters > 0
@@ -19513,7 +19534,27 @@ static std::vector<std::string> VampFreeDiscards(const GameState& s, const CardD
                 break;
             }
         }
+        if (!free && dead_ok && !d->card.IsLand())
+        {
+            int cheapest = d->card.m_mana_cost.ManaValue();
+            for (const ManaCost& m : MadnessCostsFor(s, me, *hc)) { cheapest = std::min(cheapest, m.ManaValue()); }
+            if (cheapest > static_cast<int>(have.Total()) + extra) { free = true; }
+        }
         if (free) { out.push_back(nm); }
+    }
+    if (v2 && !out.empty())
+    {
+        auto is_outlet = [](const CardDefinition* qd)
+        {
+            return qd != nullptr && (qd->params.discard_team_pump_power > 0 || qd->params.discard_team_pump_toughness > 0
+                                     || qd->params.sac_outlet_discard_cost > 0 || qd->params.blood_draw_cost.has_value());
+        };
+        int outlets = 0;
+        for (const Permanent& q : s.battlefield)
+        { if (q.controller_index == me && is_outlet(CardDatabase::Instance().LookupCached(q.card))) { ++outlets; } }
+        for (const Card& c : ap.hand)
+        { if (!c.m_is_staged && is_outlet(CardDatabase::Instance().LookupCached(c))) { ++outlets; } }
+        if (outlets > static_cast<int>(out.size())) { return {}; }   // more outlets than free discards: every name
     }
     return out;
 }
