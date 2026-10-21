@@ -26743,6 +26743,13 @@ struct Dump
 };
 inline Dump g_dump;
 }
+// MTG_BP_DERIVE_STATS (diagnostic): what a continuation derivation's list is made of. The size of the
+// enumeration's BASE list (before the sub-decision axes and the soulbond twins append their clones), and the
+// time those appends take, recorded by EnumeratePlansWithLandUncached for whichever derivation reads it next.
+static thread_local long long          t_bpd_pre_axes = -1;
+static thread_local unsigned long long t_bpd_axes_ns  = 0;
+static thread_local long long          t_bpd_prefilter = -1;   // the list before the new-only filter
+static bool BpDeriveAxesStatsOn() { static const bool v = EnvOn("MTG_BP_DERIVE_STATS"); return v; }
 
 // Breakpoint-continuation marker for MTG_CONDEMN_M1_BP -- see TurnSolver::BpContinuationScope in the
 // header for why g_bp_enum_depth cannot serve this purpose (it misses every GREEDY continuation).
@@ -73408,6 +73415,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // tutor / scry / Ponder cast there resolved by the provider's front pick while the same cast
         // one solve earlier was searched. Inside a breakpoint continuation derivation only the
         // DURING-CAST axes fan (see AppendSubdecisionAxes; the continuation carries their pins).
+        const bool axes_stats = BpDeriveAxesStatsOn() && g_bp_enum_depth > 0;
+        const auto axes_t0 = axes_stats ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const long long pre_axes = static_cast<long long>(plans.size());
         {
             const std::size_t n0 = plans.size();
             AppendSubdecisionAxes(state, is_pre_combat, plans);   // during-cast axes only inside a derivation
@@ -73418,6 +73428,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // The vial-order axis runs on the no-drop path too (m1 AND m2): a Vial deck spends most of
         // its turns with no land left to play, which is exactly when the puts and casts pile up.
         AppendSoulbondDeclineVariants(state, plans);
+        if (axes_stats)
+        {
+            t_bpd_pre_axes = pre_axes;
+            t_bpd_axes_ns += static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - axes_t0).count());
+        }
         return plans;
     }
 
@@ -74520,9 +74536,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         if (!keep.empty()) { all.swap(keep); }
     }
 
+    const bool axes_stats = BpDeriveAxesStatsOn() && g_bp_enum_depth > 0;
+    const auto axes_t0 = axes_stats ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const long long pre_axes = static_cast<long long>(all.size());
     AppendBreakpointVariants(state, all);
     AppendSubdecisionAxes(state, is_pre_combat, all);
     AppendSoulbondDeclineVariants(state, all);
+    if (axes_stats)
+    {
+        t_bpd_pre_axes = pre_axes;
+        t_bpd_axes_ns += static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - axes_t0).count());
+    }
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
@@ -91918,6 +91943,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         static const bool s_kill_fold = EnvOn("MTG_UNTAP_LOOP_KILL_FOLD", true);   // DEFAULT ON; =0 disables
         if (s_kill_fold && !HumanPlayActive()) { plans = UntapLoopKillPlansFor(state, is_pre_combat); }
     }
+    t_bpd_pre_axes = -1;
     if (plans.empty()) { plans = EnumeratePlansWithLand(state, is_pre_combat); }
     const bool bp_interrupted = g_bp_derive_interrupted;
     g_bp_derive_interrupted = bp_outer_interrupted || bp_interrupted;
@@ -91964,6 +91990,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 ap.hand.size(), hand.c_str(), board.c_str());
         }
     }
+    t_bpd_prefilter = static_cast<long long>(plans.size());
     --g_bp_enum_depth;
     t_bp_front_only_depth = outer_front_only;
     // MTG_BP_NEW_ONLY (see BpNewOnlyEnabled): keep only the continuations that USE a card that
@@ -92354,6 +92381,9 @@ namespace bpderive
 inline bool On() { static const bool v = EnvOn("MTG_BP_DERIVE_STATS"); return v; }
 inline std::atomic<unsigned long long> g_n[2], g_plans[2], g_us[2], g_uncached[2], g_max[2], g_lookups[2],
                                        g_big[2];
+// What the derivations were made of (see t_bpd_pre_axes): the enumeration's base list, the list before the
+// new-only filter, the axes' time, and how many derivations had no base count (the kill fold's lists).
+inline std::atomic<unsigned long long> g_pre_axes[2], g_prefilter[2], g_axes_us[2], g_no_base[2];
 struct Dumper
 {
     ~Dumper()
@@ -92366,6 +92396,10 @@ struct Dumper
                          c ? "route" : "other", g_lookups[c].load(), g_n[c].load(), g_plans[c].load(),
                          g_n[c].load() ? double(g_plans[c].load()) / double(g_n[c].load()) : 0.0,
                          g_max[c].load(), g_big[c].load(), g_us[c].load() / 1000.0, g_uncached[c].load());
+            std::fprintf(stderr, "[bp-derive] ctx=%s   made of: base (pre-axes) plans=%llu, pre-filter plans=%llu,"
+                         " axes_ms=%.1f, derivations with no base count (kill fold)=%llu\n",
+                         c ? "route" : "other", g_pre_axes[c].load(), g_prefilter[c].load(),
+                         g_axes_us[c].load() / 1000.0, g_no_base[c].load());
         }
     }
 };
@@ -92625,6 +92659,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // function of the budget left, not of the state: such a list is served (scratch path) but never
     // stored, so no later decision is handed a budget-truncated continuation. 0 moves with the price off.
     const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();
+    const unsigned long long bpd_axes0 = t_bpd_axes_ns;
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted);
@@ -92636,6 +92671,12 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     }
     if (bpderive::On())
     {
+        if (t_bpd_pre_axes >= 0)
+        { bpderive::g_pre_axes[bpd_ctx].fetch_add(static_cast<unsigned long long>(t_bpd_pre_axes), std::memory_order_relaxed); }
+        else { bpderive::g_no_base[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
+        if (t_bpd_prefilter >= 0)
+        { bpderive::g_prefilter[bpd_ctx].fetch_add(static_cast<unsigned long long>(t_bpd_prefilter), std::memory_order_relaxed); }
+        bpderive::g_axes_us[bpd_ctx].fetch_add((t_bpd_axes_ns - bpd_axes0) / 1000, std::memory_order_relaxed);
         const unsigned long long n = plans.size();
         bpderive::g_n[bpd_ctx].fetch_add(1, std::memory_order_relaxed);
         bpderive::g_plans[bpd_ctx].fetch_add(n, std::memory_order_relaxed);
