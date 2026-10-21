@@ -635,6 +635,11 @@ enum Slot : int
     AA_ROUTE_BASE_ONLY_PLAYOUT, // MTG_AA_ROUTE_BASE_ONLY_PLAYOUT  ...the same narrowing ONLY in walks run BEYOND the search window (greedywindow::t_depth == 0: the horizon playout's greedy Solve, where the doctrine permits a playout heuristic); every walk inside the window keeps the full menu. PROPOSED, default OFF (the USER's call)
     AA_ROUTE_TAPE,            // MTG_AA_ROUTE_TAPE  AccomplishedAlchemist COMBO OFF route: each link records what its proving apply RESOLVED (a tutor's fetched card, a breakpoint's continuation plan) and a replay plays that back instead of re-resolving ranks (core/RouteTape.h) -- a proven route lands on the board it was proven on. DEFAULT ON (a plan-vs-real defect fix); =0 -> exactly the untaped route
     KEY_CHOSEN_COLOR,         // MTG_KEY_CHOSEN_COLOR  BuildSimKey folds Permanent::chosen_color (Utopia Sprawl's colour, a locked mana rock's): every cache keyed on it served one colour's answer to the other colour's board (AccomplishedAlchemist: a ComboRoute proven with the Sprawl making {U} replayed as a no-op with it making {G}). DEFAULT ON (a key-hole fix); =0 -> the old key
+    AA_CAST_ORDER,            // MTG_AA_CAST_ORDER  PROPOSED AccomplishedAlchemist cast order (2026-10-21; DEFAULT OFF pending the USER's review): land drop > Living Wish > Utopia Sprawl > Wild Growth > Elvish Harbinger > Arbor Elf > Accomplished Alchemist > Ezuri > Scholar > Nourish > Feed the Clan > Trufflesnout > Brindle Boar > Eternal Witness > Weather the Storm > Crab Umbra > Galvanic Alchemist > Seedcradle Witch > Staff of Domination > Stroke of Genius, unlisted cards after them in generic order, ties by name (AccomplishedAlchemistProvider::CastOrderRank). =0 -> the generic tiers, byte-identical
+    AA_CAST_ORDER_AURAS_FIRST,  // MTG_AA_CAST_ORDER_AURAS_FIRST  amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): Living Wish moves AFTER the two land Auras (Sprawl > Wild Growth > Wish > Harbinger ...)
+    AA_CAST_ORDER_WEATHER_LAST, // MTG_AA_CAST_ORDER_WEATHER_LAST amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): Weather the Storm moves AFTER the untappers, right before Stroke of Genius
+    AA_CAST_ORDER_WISH_AFTER_LIFE, // MTG_AA_CAST_ORDER_WISH_AFTER_LIFE amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): Living Wish moves AFTER the lifegain block (Nourish, Feed the Clan, Trufflesnout, Brindle Boar)
+    AA_CAST_ORDER_LIFE_FIRST,   // MTG_AA_CAST_ORDER_LIFE_FIRST  amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): the lifegain block moves right after the land Auras, then Living Wish, then Harbinger / Arbor Elf / the Alchemist / Ezuri / Scholar (an Alchemist in play taps for the life gained THIS turn, so a cast ahead of the first lifegain spends the lands it needs)
     COUNT
 };
 
@@ -1220,6 +1225,11 @@ inline const char* Name(int slot)
         "MTG_AA_ROUTE_BASE_ONLY_PLAYOUT",
         "MTG_AA_ROUTE_TAPE",
         "MTG_KEY_CHOSEN_COLOR",
+        "MTG_AA_CAST_ORDER",
+        "MTG_AA_CAST_ORDER_AURAS_FIRST",
+        "MTG_AA_CAST_ORDER_WEATHER_LAST",
+        "MTG_AA_CAST_ORDER_WISH_AFTER_LIFE",
+        "MTG_AA_CAST_ORDER_LIFE_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

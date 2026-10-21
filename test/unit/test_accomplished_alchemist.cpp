@@ -3166,4 +3166,323 @@ TEST_CASE("route tape: a recorded tutor resolution is played back by NAME, not r
         PerformTutor(off, 0, wish.params, "", "Living Wish");
     }
     CHECK(none.empty());
+// ---- THE PROPOSED DECK CAST ORDER (2026-10-21, MTG_AA_CAST_ORDER, DEFAULT OFF pending the USER's review) --------
+// ON: one position per card of the 75, strictly increasing in the proposed order, the land drop before all of them,
+// an unlisted card after all of them in its generic tier order, ties by name. OFF (and unset): the generic tiers,
+// byte for byte, through the shared comparator both apply worlds sort with.
+namespace
+{
+struct CastOrderArmAa
+{
+    std::int8_t saved;
+    explicit CastOrderArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_CAST_ORDER])
+    { heurarm::t_arm[heurarm::AA_CAST_ORDER] = static_cast<std::int8_t>(v); }
+    ~CastOrderArmAa() { heurarm::t_arm[heurarm::AA_CAST_ORDER] = saved; }
+};
+
+const std::vector<std::string>& AaProposedOrder()
+{
+    static const std::vector<std::string> v = {
+        "Living Wish", "Utopia Sprawl", "Wild Growth", "Elvish Harbinger", "Arbor Elf", "Accomplished Alchemist",
+        "Ezuri, Renegade Leader", "Scholar of Athreos", "Nourish", "Feed the Clan", "Trufflesnout", "Brindle Boar",
+        "Eternal Witness", "Weather the Storm", "Crab Umbra", "Galvanic Alchemist", "Seedcradle Witch",
+        "Staff of Domination", "Stroke of Genius" };
+    return v;
+}
+
+Action CastActAa(const std::string& name)
+{
+    Action a;
+    a.kind      = Action::Kind::CastFromHand;
+    a.card_name = name;
+    a.def       = &DefAa(name);
+    return a;
+}
+
+std::vector<std::string> SortedCastsAa(const GameState& s, const std::vector<std::string>& hand_order)
+{
+    std::vector<Action> acts;
+    for (const std::string& n : hand_order) { acts.push_back(CastActAa(n)); }
+    std::vector<int> ord;
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i) { ord.push_back(i); }
+    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y) { return CastOrderLess(s, acts[x], acts[y]); });
+    std::vector<std::string> out;
+    for (int i : ord) { out.push_back(acts[i].card_name.str()); }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Cast order, PROPOSED (MTG_AA_CAST_ORDER=1): one position per card, in the proposed order")
+{
+    CastOrderArmAa on(1);
+    const GameState s = FreshAa();
+    const AccomplishedAlchemistProvider& p = AaProv();
+    int prev = p.LandDropCastOrderRank();
+    CHECK(prev == 0);                                       // the land drop before every cast
+    int pos = 0;
+    for (const std::string& n : AaProposedOrder())
+    {
+        CAPTURE(n);
+        const int r = p.CastOrderRank(s, DefAa(n));
+        CHECK(r > prev);
+        CHECK(r % 64 == 0);
+        CHECK(r / 64 == ++pos);                             // its OWN position: no two cards share one
+        CHECK(p.CastOrderTierName(r) != nullptr);
+        prev = r;
+    }
+    CHECK(p.CastOrderTotalByName());
+    // An unlisted card follows every listed one, keeping its generic tier order (rock 5 < creature 10 < spell 20).
+    const int rock = p.CastOrderRank(s, DefAa("Sol Ring"));
+    const int elf  = p.CastOrderRank(s, DefAa("Llanowar Elves"));
+    const int bolt = p.CastOrderRank(s, DefAa("Lightning Bolt"));
+    CHECK(rock > prev);
+    CHECK(rock < elf);
+    CHECK(elf < bolt);
+    CHECK(p.CastOrderTierName(elf) != nullptr);
+    // The shared comparator (executor + rollout) realises it from any hand order.
+    std::vector<std::string> rev(AaProposedOrder().rbegin(), AaProposedOrder().rend());
+    GameState g = FreshAa();
+    g.m_provider = &p;
+    CHECK(SortedCastsAa(g, rev) == AaProposedOrder());
+    // Copies keep plan order between them; a different card never ties.
+    CHECK(SortedCastsAa(g, { "Stroke of Genius", "Nourish", "Weather the Storm", "Nourish", "Living Wish" })
+          == std::vector<std::string>{ "Living Wish", "Nourish", "Nourish", "Weather the Storm", "Stroke of Genius" });
+}
+
+TEST_CASE("Cast order, PROPOSED: =0 (and unset) is the generic tiering, byte for byte")
+{
+    const GameState s = FreshAa();
+    const AccomplishedAlchemistProvider& p = AaProv();
+    const GenericProvider generic;
+    auto expect_generic = [&]()
+    {
+        for (const std::string& n : AaProposedOrder())
+        {
+            CAPTURE(n);
+            CHECK(p.CastOrderRank(s, DefAa(n)) == generic.CastOrderRank(s, DefAa(n)));
+            CHECK(p.CastOrderTierName(p.CastOrderRank(s, DefAa(n))) == nullptr);
+        }
+        CHECK(p.LandDropCastOrderRank() == -1);
+        CHECK_FALSE(p.CastOrderTotalByName());
+        // The generic tiers this deck plays today: land Auras 5, creatures 10, every other noncreature 20.
+        CHECK(p.CastOrderRank(s, DefAa("Utopia Sprawl")) == 5);
+        CHECK(p.CastOrderRank(s, DefAa("Seedcradle Witch")) == 10);
+        CHECK(p.CastOrderRank(s, DefAa("Living Wish")) == 20);
+        GameState g = FreshAa();
+        g.m_provider = &p;
+        // Plan order within a tier: Stroke before Nourish, Witch before the Alchemist, as the hand had them.
+        CHECK(SortedCastsAa(g, { "Stroke of Genius", "Nourish", "Seedcradle Witch", "Wild Growth",
+                                 "Accomplished Alchemist", "Living Wish" })
+              == std::vector<std::string>{ "Wild Growth", "Seedcradle Witch", "Accomplished Alchemist",
+                                           "Stroke of Genius", "Nourish", "Living Wish" });
+    };
+    { CastOrderArmAa off(0); expect_generic(); }
+    if (!EnvOn("MTG_AA_CAST_ORDER")) { CastOrderArmAa unset(-1); expect_generic(); }
+}
+
+TEST_CASE("Cast order, PROPOSED: the two amendment arms (DEFAULT OFF) move only their own card; inert with the order off")
+{
+    struct AmendArmAa
+    {
+        std::int8_t a, w;
+        AmendArmAa(int af, int wl) : a(heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST]),
+                                     w(heurarm::t_arm[heurarm::AA_CAST_ORDER_WEATHER_LAST])
+        { heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST]  = static_cast<std::int8_t>(af);
+          heurarm::t_arm[heurarm::AA_CAST_ORDER_WEATHER_LAST] = static_cast<std::int8_t>(wl); }
+        ~AmendArmAa() { heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST] = a;
+                        heurarm::t_arm[heurarm::AA_CAST_ORDER_WEATHER_LAST] = w; }
+    };
+    GameState g = FreshAa();
+    g.m_provider = &AaProv();
+    const std::vector<std::string>& base = AaProposedOrder();
+    std::vector<std::string> rev(base.rbegin(), base.rend());
+    auto moved = [&](const std::string& card, const std::string& after)
+    {
+        std::vector<std::string> v = base;
+        v.erase(std::find(v.begin(), v.end(), card));
+        v.insert(std::find(v.begin(), v.end(), after) + 1, card);
+        return v;
+    };
+    CastOrderArmAa on(1);
+    { AmendArmAa a(0, 0); CHECK(SortedCastsAa(g, rev) == base); }
+    { AmendArmAa a(1, 0); CHECK(SortedCastsAa(g, rev) == moved("Living Wish", "Wild Growth")); }
+    { AmendArmAa a(0, 1); CHECK(SortedCastsAa(g, rev) == moved("Weather the Storm", "Staff of Domination")); }
+    {
+        AmendArmAa a(1, 1);
+        std::vector<std::string> both = moved("Living Wish", "Wild Growth");
+        both.erase(std::find(both.begin(), both.end(), "Weather the Storm"));
+        both.insert(std::find(both.begin(), both.end(), "Staff of Domination") + 1, "Weather the Storm");
+        CHECK(SortedCastsAa(g, rev) == both);
+        // Still one position per card, and every rank still names its tier.
+        for (const std::string& n : base)
+        {
+            CAPTURE(n);
+            const int r = AaProv().CastOrderRank(g, DefAa(n));
+            CHECK(r % 64 == 0);
+            CHECK(AaProv().CastOrderTierName(r) != nullptr);
+        }
+    }
+    // Inert while the order itself is off.
+    CastOrderArmAa off(0);
+    const GenericProvider generic;
+    AmendArmAa a(1, 1);
+    for (const std::string& n : base) { CAPTURE(n); CHECK(AaProv().CastOrderRank(g, DefAa(n)) == generic.CastOrderRank(g, DefAa(n))); }
+}
+
+TEST_CASE("Cast order, PROPOSED: {Wild Growth, Living Wish} on two Forests -- realised only with the Aura before the Wish")
+{
+    // A MECHANISM PROBE (ledger, "Proposed cast order (2026-10-21)"). Two untapped Forests, Wild Growth {G} + Living
+    // Wish {1}{G} in hand: three mana of cost, and the third is Wild Growth's own extra {G} -- payable ONLY with the
+    // Aura cast first, onto a Forest not yet tapped. The plan is enumerated in every arm (the land-Aura bound credit);
+    // what the order decides is whether both worlds REALISE it.
+    GameState s = FreshAa();
+    s.deck_has_land_aura = true;
+    for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+    HandAa(s, "Wild Growth");
+    HandAa(s, "Living Wish");
+    for (const std::string& n : kAaSide) { SideAa(s, n); }
+    s.m_provider = &AaProv();
+    // -1 = no such plan; else the number of worlds (rollout, executor) in which BOTH cards left the hand.
+    auto realised = [&]()
+    {
+        int best = -1;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (CastOfAa(p, "Wild Growth") == nullptr || CastOfAa(p, "Living Wish") == nullptr || p.bp_choice >= 0) { continue; }
+            const auto [ro, ex] = BothWorldsAa(s, p);
+            int n = 0;
+            for (const GameState* g : { &ro, &ex })
+            {
+                bool held = false;
+                for (const Card& c : g->players[0].hand)
+                { if (c.m_name.str() == "Wild Growth" || c.m_name.str() == "Living Wish") { held = true; } }
+                if (!held) { ++n; }
+            }
+            best = std::max(best, n);
+        }
+        return best;
+    };
+    struct AfArm
+    {
+        std::int8_t v;
+        explicit AfArm(int x) : v(heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST])
+        { heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST] = static_cast<std::int8_t>(x); }
+        ~AfArm() { heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST] = v; }
+    };
+    int off = 0, on = 0, af = 0;
+    { CastOrderArmAa o(0); off = realised(); }
+    { CastOrderArmAa o(1); AfArm a(0); on = realised(); }
+    { CastOrderArmAa o(1); AfArm a(1); af = realised(); }
+    MESSAGE("realised in worlds: off=" << off << " on=" << on << " af=" << af);
+    CHECK(off == 2);   // generic: land Aura (5) before the Wish (20)
+    CHECK(on == 0);    // PROPOSED: the Wish pays off both Forests first and strands Wild Growth, in BOTH worlds
+    CHECK(af == 2);    // AURAS_FIRST: the Aura first again
+}
+
+namespace
+{
+// All four amendment arms of the PROPOSED order at once (-1 unset, 0 off, 1 on).
+struct AaOrderArmsAa
+{
+    std::int8_t saved[5];
+    static constexpr heurarm::Slot kSlots[5] = { heurarm::AA_CAST_ORDER, heurarm::AA_CAST_ORDER_AURAS_FIRST,
+                                                 heurarm::AA_CAST_ORDER_WISH_AFTER_LIFE,
+                                                 heurarm::AA_CAST_ORDER_LIFE_FIRST,
+                                                 heurarm::AA_CAST_ORDER_WEATHER_LAST };
+    AaOrderArmsAa(int on, int af, int wal, int lf, int wl)
+    {
+        const int v[5] = { on, af, wal, lf, wl };
+        for (int i = 0; i < 5; ++i) { saved[i] = heurarm::t_arm[kSlots[i]]; heurarm::t_arm[kSlots[i]] = static_cast<std::int8_t>(v[i]); }
+    }
+    ~AaOrderArmsAa() { for (int i = 0; i < 5; ++i) { heurarm::t_arm[kSlots[i]] = saved[i]; } }
+};
+}   // namespace
+
+TEST_CASE("Cast order, PROPOSED: WISH_AFTER_LIFE and LIFE_FIRST (DEFAULT OFF) -- the lifegain ahead of the Wish")
+{
+    GameState g = FreshAa();
+    g.m_provider = &AaProv();
+    const std::vector<std::string>& base = AaProposedOrder();
+    std::vector<std::string> rev(base.rbegin(), base.rend());
+    {
+        AaOrderArmsAa a(1, 0, 1, 0, 0);
+        std::vector<std::string> v = base;
+        v.erase(std::find(v.begin(), v.end(), "Living Wish"));
+        v.insert(std::find(v.begin(), v.end(), "Brindle Boar") + 1, "Living Wish");
+        CHECK(SortedCastsAa(g, rev) == v);
+    }
+    const std::vector<std::string> life_first = {
+        "Utopia Sprawl", "Wild Growth", "Nourish", "Feed the Clan", "Trufflesnout", "Brindle Boar", "Living Wish",
+        "Elvish Harbinger", "Arbor Elf", "Accomplished Alchemist", "Ezuri, Renegade Leader", "Scholar of Athreos",
+        "Eternal Witness", "Weather the Storm", "Crab Umbra", "Galvanic Alchemist", "Seedcradle Witch",
+        "Staff of Domination", "Stroke of Genius" };
+    { AaOrderArmsAa a(1, 0, 0, 1, 0); CHECK(SortedCastsAa(g, rev) == life_first); }
+    {
+        AaOrderArmsAa a(1, 0, 0, 1, 1);
+        std::vector<std::string> v = life_first;
+        v.erase(std::find(v.begin(), v.end(), "Weather the Storm"));
+        v.insert(std::find(v.begin(), v.end(), "Staff of Domination") + 1, "Weather the Storm");
+        CHECK(SortedCastsAa(g, rev) == v);
+        for (const std::string& n : base)
+        {
+            CAPTURE(n);
+            const int r = AaProv().CastOrderRank(g, DefAa(n));
+            CHECK(r % 64 == 0);
+            CHECK(AaProv().CastOrderTierName(r) != nullptr);
+        }
+    }
+    // Inert with the order off.
+    const GenericProvider generic;
+    AaOrderArmsAa off(0, 1, 1, 1, 1);
+    for (const std::string& n : base) { CAPTURE(n); CHECK(AaProv().CastOrderRank(g, DefAa(n)) == generic.CastOrderRank(g, DefAa(n))); }
+}
+
+TEST_CASE("Cast order, PROPOSED: an Alchemist turn's two-card bootstrap (Nourish, then the Wish off the Alchemist) survives every arm")
+{
+    // A MECHANISM PROBE (ledger, "Proposed cast order (2026-10-21)"), recorded because its answer narrowed the root
+    // cause. An untapped, non-sick Accomplished Alchemist and two Forests; Nourish {G}{G} + Living Wish {1}{G} in hand.
+    // The only line casting both is Nourish off the Forests, then the Wish off the Alchemist's six. It is realised in
+    // EVERY arm -- the Wish-first order included -- because the gain opens the lifegain breakpoint (site 9) and the
+    // Wish is cast in that continuation, not ranked inside one cast list with Nourish. So the WISH_AFTER_LIFE /
+    // LIFE_FIRST gains come from larger cast lists and from what the order does to the search's valuations, not from
+    // this two-card shape. Counts, over every enumerated plan, the worlds (rollout, executor) in which both left hand.
+    auto realised = [](bool wish_first_in_hand)
+    {
+        GameState s = FreshAa();
+        s.deck_reads_lifegain_in_play = true;
+        PutAa(s, "Accomplished Alchemist");
+        for (int k = 0; k < 2; ++k) { PutAa(s, "Forest"); }
+        if (wish_first_in_hand) { HandAa(s, "Living Wish"); HandAa(s, "Nourish"); }
+        else                    { HandAa(s, "Nourish"); HandAa(s, "Living Wish"); }
+        for (const std::string& n : kAaSide) { SideAa(s, n); }
+        s.m_provider = &AaProv();
+        int best = -1;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (CastOfAa(p, "Nourish") == nullptr) { continue; }
+            const auto [ro, ex] = BothWorldsAa(s, p);
+            int n = 0;
+            for (const GameState* w : { &ro, &ex })
+            {
+                bool held = false;
+                for (const Card& c : w->players[0].hand)
+                { if (c.m_name.str() == "Nourish" || c.m_name.str() == "Living Wish") { held = true; } }
+                if (!held) { ++n; }
+            }
+            best = std::max(best, n);
+        }
+        return best;
+    };
+    int gen_wf = 0, gen_nf = 0, on = 0, wal = 0, lf = 0;
+    { AaOrderArmsAa a(0, 0, 0, 0, 0); gen_wf = realised(true); gen_nf = realised(false); }
+    { AaOrderArmsAa a(1, 1, 0, 0, 1); on = realised(true); }      // the proposed order (+ both earlier amendments)
+    { AaOrderArmsAa a(1, 1, 1, 0, 1); wal = realised(true); }
+    { AaOrderArmsAa a(1, 0, 0, 1, 1); lf = realised(true); }
+    MESSAGE("both cast, worlds: generic wish-first-in-hand=" << gen_wf << " generic nourish-first=" << gen_nf
+            << " proposed(af+wl)=" << on << " wish_after_life=" << wal << " life_first=" << lf);
+    CHECK(gen_wf == 2);
+    CHECK(gen_nf == 2);
+    CHECK(on == 2);
+    CHECK(wal == 2);
+    CHECK(lf == 2);
 }

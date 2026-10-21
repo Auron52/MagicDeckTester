@@ -43785,6 +43785,224 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- AccomplishedAlchemistProvider::CastOrderRank: the PROPOSED deck cast order (2026-10-21) -------------------
+// MTG_AA_CAST_ORDER (heurarm AA_CAST_ORDER), DEFAULT OFF. Written by the analysis for the USER's review after the
+// USER asked for a cast order for this deck; the USER has NOT approved it, so it ships OFF and =0 (or unset) is the
+// generic tiering (land Auras 5, creatures 10, every other noncreature 20, plan order within a tier) byte for byte.
+// Measured ON vs OFF in docs/design/analysis-AccomplishedAlchemist.md, "Proposed cast order (2026-10-21)".
+//
+// THE ORDER (one position per card; the card each position holds on this list is named, but every test is a PARAMS
+// test through the deck's shared bucket roles AaIsAlchemist / AaIsUntapper / AaIsWitch / AaIsHarbingerTutor plus the
+// param that tells two members of one role apart -- AaCastOrderSlot):
+//    0  the land drop                         (LandDropCastOrderRank)
+//    1  Living Wish                           wish_from_sideboard -- find the missing piece before spending
+//    2  Utopia Sprawl                         a land Aura with a colour choice
+//    3  Wild Growth                           any other land Aura
+//    4  Elvish Harbinger                      AaIsHarbingerTutor
+//    5  Arbor Elf                             a dork re-tapping a land subtype (mana_requires_land_subtype)
+//    6  Accomplished Alchemist                AaIsAlchemist
+//    7  Ezuri, Renegade Leader                a team pump (team_pump_cost)
+//    8  Scholar of Athreos                    a drain (drain_cost)
+//    9  Nourish                               a plain cast-lifegain spell (no ferocious rider, no storm)
+//   10  Feed the Clan                         cast-lifegain with a ferocious rider
+//   11  Trufflesnout                          ETB-modal lifegain
+//   12  Brindle Boar                          sacrifice-outlet lifegain
+//   13  Eternal Witness                       etb_return_gy_to_hand ("if ever cast": the wish never offers it)
+//   14  Weather the Storm                     storm lifegain: the LAST lifegain, so every earlier cast is a copy
+//   15  Crab Umbra                            AaIsUntapper: untap_enchanted_cost
+//   16  Galvanic Alchemist                    AaIsUntapper: soulbond_grants_untap_self_cost
+//   17  Seedcradle Witch                      AaIsWitch
+//   18  Staff of Domination                   AaIsUntapper: untap_target_creature_cost
+//   19  Stroke of Genius                      draw_target_player -- the kill, last
+//   20  anything unlisted                     after every listed card, in its GENERIC tier order (5/10/20/...)
+// The analysis' four open questions to the USER, each with the default taken here (the USER's to overturn):
+//   (1) Living Wish stays AFTER the land drop even with no land in hand (a wished land is a new card and still
+//       playable as the drop); (2) Ezuri / Scholar go before the lifegain unconditionally; (3) the untappers go after
+//       the lifegain AND after Weather the Storm; (4) Feed the Clan's ferocious via a Witch pump is an ACTIVATION,
+//       outside the cast order -- no change.
+// FOUR AMENDMENT ARMS, all DEFAULT OFF and inert unless MTG_AA_CAST_ORDER is on (measurement levers for the USER's
+// review, never an adoption), applied in this order:
+//   MTG_AA_CAST_ORDER_AURAS_FIRST     Living Wish after the two land Auras (Sprawl, Wild Growth, Wish, Harbinger, ...)
+//   MTG_AA_CAST_ORDER_WISH_AFTER_LIFE Living Wish after the lifegain block (..., Brindle Boar, Wish, Eternal Witness)
+//   MTG_AA_CAST_ORDER_LIFE_FIRST      the lifegain block (Nourish, Feed the Clan, Trufflesnout, Brindle Boar) right after
+//                                     the land Auras, then Living Wish, then Harbinger, Arbor Elf, the Alchemist, Ezuri,
+//                                     Scholar, ... -- an Alchemist already in play taps for the life gained THIS turn, so
+//                                     every cast ranked ahead of the first lifegain is paid from the lands it needs
+//   MTG_AA_CAST_ORDER_WEATHER_LAST    Weather the Storm after the untappers, right before Stroke (question 3's other
+//                                     answer: every untapper cast before it is one more storm copy)
+// Every other position is unchanged.
+// TOTAL (CastOrderTotalByName): two DIFFERENT cards on one rank (only possible among unlisted cards) fall to the
+// name, never to plan order (the USER's 2026-10-14 cross-deck ruling); copies of one card keep plan order.
+// The land drop's slot (0, before every cast) meets DecisionProvider::LandDropCastOrderRank's two conditions:
+// holding the drop never pays here (no landfall, no Karoo, no storage land; a wished land is a new card), and
+// nothing in the list forces the defer branch. It is read only by breakpoint condemnation (MTG_BP_CONDEMN_LAND),
+// which this deck does not run, so today it is the reviewable statement of the order and nothing more.
+namespace
+{
+bool AaCastOrderOn()
+{
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER");   // DEFAULT OFF (PROPOSED, the USER's call); =1 enables
+    return heurarm::Flag(heurarm::AA_CAST_ORDER, s_env);
+}
+
+// The two amendment arms (DEFAULT OFF; read only while AaCastOrderOn()).
+bool AaCastOrderAurasFirst()
+{
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_AURAS_FIRST");   // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_CAST_ORDER_AURAS_FIRST, s_env);
+}
+bool AaCastOrderWeatherLast()
+{
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_WEATHER_LAST");  // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_CAST_ORDER_WEATHER_LAST, s_env);
+}
+bool AaCastOrderWishAfterLife()
+{
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_WISH_AFTER_LIFE");   // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_CAST_ORDER_WISH_AFTER_LIFE, s_env);
+}
+bool AaCastOrderLifeFirst()
+{
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_LIFE_FIRST");        // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_CAST_ORDER_LIFE_FIRST, s_env);
+}
+
+// The rank is position x kAaOrderScale, so an unlisted card's generic rank (0..30) fits under the unlisted position
+// without touching a listed slot.
+constexpr int kAaOrderScale    = 64;
+constexpr int kAaOrderUnlisted = 20;
+
+// The order's card roles, in the PROPOSED order (the position is the slot + 1 unless an amendment moves it).
+enum AaOrderSlot : int
+{
+    kAaWish = 0, kAaSprawl, kAaWildGrowth, kAaHarbinger, kAaArbor, kAaAlchemist, kAaEzuri, kAaScholar, kAaNourish,
+    kAaFeed, kAaTruffle, kAaBoar, kAaWitness, kAaWeather, kAaUmbra, kAaGalvanic, kAaWitch, kAaStaff, kAaStroke,
+    kAaSlots,
+    kAaUnlistedSlot = -1
+};
+
+int AaCastOrderSlot(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    if (p.wish_from_sideboard)                         { return kAaWish; }
+    if (p.is_land_aura)                                { return p.etb_choose_color ? kAaSprawl : kAaWildGrowth; }
+    if (AaIsAlchemist(p))                              { return kAaAlchemist; }
+    if (AaIsHarbingerTutor(p))                         { return kAaHarbinger; }
+    if (def.card.IsCreature() && !p.mana_requires_land_subtype.empty()) { return kAaArbor; }
+    if (p.team_pump_cost)                              { return kAaEzuri; }
+    if (p.drain_cost)                                  { return kAaScholar; }
+    if (AaIsUntapper(p) || AaIsWitch(p))
+    {
+        if (p.untap_enchanted_cost)            { return kAaUmbra; }
+        if (p.soulbond_grants_untap_self_cost) { return kAaGalvanic; }
+        if (AaIsWitch(p))                      { return kAaWitch; }
+        return kAaStaff;                                        // untap_target_creature_cost
+    }
+    if (p.cast_lifegain > 0)
+    {
+        if (p.storm)                       { return kAaWeather; }
+        if (p.cast_lifegain_ferocious > 0) { return kAaFeed; }
+        return kAaNourish;
+    }
+    if (p.etb_modal_lifegain > 0)                      { return kAaTruffle; }
+    if (p.sac_outlet_lifegain > 0)                     { return kAaBoar; }
+    if (p.etb_return_gy_to_hand)                       { return kAaWitness; }
+    if (p.draw_target_player)                          { return kAaStroke; }
+    return kAaUnlistedSlot;
+}
+
+// Position (1..kAaSlots) of every slot under each arm combination (bits: 1 WEATHER_LAST, 2 AURAS_FIRST,
+// 4 WISH_AFTER_LIFE, 8 LIFE_FIRST). Built once.
+constexpr int kAaOrderArms = 16;
+using AaPosTable = std::array<std::array<int, kAaSlots>, kAaOrderArms>;
+const AaPosTable& AaCastOrderPositions()
+{
+    static const AaPosTable t = []
+    {
+        AaPosTable out{};
+        for (int arm = 0; arm < kAaOrderArms; ++arm)
+        {
+            std::vector<int> seq;
+            for (int k = 0; k < kAaSlots; ++k) { seq.push_back(k); }
+            auto move_after = [&](int slot, int anchor)
+            {
+                seq.erase(std::find(seq.begin(), seq.end(), slot));
+                seq.insert(std::find(seq.begin(), seq.end(), anchor) + 1, slot);
+            };
+            if (arm & 2) { move_after(kAaWish, kAaWildGrowth); }   // AURAS_FIRST: Sprawl, Wild Growth, Wish
+            if (arm & 4) { move_after(kAaWish, kAaBoar); }         // WISH_AFTER_LIFE: ..., Brindle Boar, Wish
+            if (arm & 8)                                            // LIFE_FIRST: Auras, the lifegain, Wish, Harbinger ...
+            {
+                move_after(kAaNourish, kAaWildGrowth);
+                move_after(kAaFeed, kAaNourish);
+                move_after(kAaTruffle, kAaFeed);
+                move_after(kAaBoar, kAaTruffle);
+                move_after(kAaWish, kAaBoar);
+            }
+            if (arm & 1) { move_after(kAaWeather, kAaStaff); }      // WEATHER_LAST: after the untappers, before Stroke
+            for (int i = 0; i < kAaSlots; ++i) { out[arm][seq[i]] = i + 1; }
+        }
+        return out;
+    }();
+    return t;
+}
+
+int AaCastOrderArm()
+{
+    return (AaCastOrderWeatherLast() ? 1 : 0) + (AaCastOrderAurasFirst() ? 2 : 0)
+         + (AaCastOrderWishAfterLife() ? 4 : 0) + (AaCastOrderLifeFirst() ? 8 : 0);
+}
+
+const char* AaCastOrderSlotName(int slot)
+{
+    switch (slot)
+    {
+        case kAaWish:       return "LIVING WISH: find the missing piece before spending the turn's mana";
+        case kAaSprawl:     return "UTOPIA SPRAWL: the land Aura's extra mana online early";
+        case kAaWildGrowth: return "WILD GROWTH";
+        case kAaHarbinger:  return "ELVISH HARBINGER: the Elf tutor (and a five-colour dork)";
+        case kAaArbor:      return "ARBOR ELF";
+        case kAaAlchemist:  return "ACCOMPLISHED ALCHEMIST: out before the lifegain it converts";
+        case kAaEzuri:      return "EZURI, RENEGADE LEADER";
+        case kAaScholar:    return "SCHOLAR OF ATHREOS";
+        case kAaNourish:    return "NOURISH: lifegain, biggest first";
+        case kAaFeed:       return "FEED THE CLAN";
+        case kAaTruffle:    return "TRUFFLESNOUT";
+        case kAaBoar:       return "BRINDLE BOAR";
+        case kAaWitness:    return "ETERNAL WITNESS (if ever cast)";
+        case kAaWeather:    return "WEATHER THE STORM: late, so every earlier cast is a storm copy";
+        case kAaUmbra:      return "CRAB UMBRA: the untappers, after the lifegain";
+        case kAaGalvanic:   return "GALVANIC ALCHEMIST";
+        case kAaWitch:      return "SEEDCRADLE WITCH";
+        case kAaStaff:      return "STAFF OF DOMINATION";
+        case kAaStroke:     return "STROKE OF GENIUS: the kill, last";
+        default:            return nullptr;
+    }
+}
+}   // namespace
+
+int AccomplishedAlchemistProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!AaCastOrderOn()) { return SelesnyaLifegainProvider::CastOrderRank(s, def); }
+    const int slot = AaCastOrderSlot(def);
+    if (slot >= 0) { return AaCastOrderPositions()[AaCastOrderArm()][slot] * kAaOrderScale; }
+    return kAaOrderUnlisted * kAaOrderScale + SelesnyaLifegainProvider::CastOrderRank(s, def);
+}
+
+const char* AccomplishedAlchemistProvider::CastOrderTierName(int rank) const
+{
+    if (!AaCastOrderOn()) { return SelesnyaLifegainProvider::CastOrderTierName(rank); }
+    if (rank / kAaOrderScale == kAaOrderUnlisted) { return "UNLISTED: after every listed card, in generic tier order"; }
+    if (rank % kAaOrderScale != 0) { return nullptr; }
+    const std::array<int, kAaSlots>& pos = AaCastOrderPositions()[AaCastOrderArm()];
+    for (int k = 0; k < kAaSlots; ++k) { if (pos[k] * kAaOrderScale == rank) { return AaCastOrderSlotName(k); } }
+    return nullptr;
+}
+
+bool AccomplishedAlchemistProvider::CastOrderTotalByName() const { return AaCastOrderOn(); }
+
+int AccomplishedAlchemistProvider::LandDropCastOrderRank() const { return AaCastOrderOn() ? 0 : -1; }
+
 // ---- AccomplishedAlchemistProvider: the closed-form untap loop and its payoffs (chunk C2b) ---------
 std::vector<int> AccomplishedAlchemistProvider::UntapActivationCounts(const GameState& s, const Permanent& source,
                                                                       const Permanent& target, int shape,

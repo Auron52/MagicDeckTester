@@ -3185,6 +3185,20 @@ public:
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
     // TRUE while the rule is on (no card's verdict reads a card that sheds before it); =0 -> Selesnya's answer.
     bool CleanupDiscardShedStable() const override;
+    // THE PROPOSED DECK CAST ORDER (2026-10-21, MTG_AA_CAST_ORDER, heurarm AA_CAST_ORDER) -- DEFAULT OFF, pending
+    // the USER's review: land drop, Living Wish, Utopia Sprawl, Wild Growth, Elvish Harbinger, Arbor Elf,
+    // Accomplished Alchemist, Ezuri, Scholar of Athreos, Nourish, Feed the Clan, Trufflesnout, Brindle Boar,
+    // Eternal Witness, Weather the Storm, Crab Umbra, Galvanic Alchemist, Seedcradle Witch, Staff of Domination,
+    // Stroke of Genius; any unlisted card after them in its generic order. TOTAL (a tie between two different
+    // cards falls to the name). Keyed on params through the AaIs* roles -- see the .cpp. =0 -> the generic tiers
+    // (land Auras 5, creatures 10, other noncreatures 20), byte-identical. Four amendment arms, DEFAULT OFF:
+    // MTG_AA_CAST_ORDER_AURAS_FIRST (Living Wish after the land Auras), _WISH_AFTER_LIFE (Living Wish after the
+    // lifegain), _LIFE_FIRST (the lifegain right after the land Auras, then the Wish), _WEATHER_LAST (Weather the
+    // Storm after the untappers).
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool        CastOrderTotalByName() const override;
+    int         LandDropCastOrderRank() const override;
 };
 
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval
