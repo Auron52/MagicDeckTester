@@ -2484,3 +2484,80 @@ on the same four jobs (d0 7.0760 / 87fe2d52050de8af, d3 5.3933 / b9bae1a6cfc0a5b
 2HG d3 5.4600 / e9c1958b6ee17d84; units equal). No `!!` line in the smoke, so `MTG_AA_ROUTE_APPLY_PROVEN` never fired
 there. Scratch: `build/scratch/aa-slow/` (`ab/` the batches + `an.py` / `cross.py`, `c1*` `c2*` `r1_aaland` the
 repros, `list_*` the gen-setting replays, `verify/` the verdict tally, `g45/` the gi45 traces).
+
+## Route tape and the chosen-colour key (2026-10-21) -- landed DEFAULT ON (a plan-vs-real defect fix)
+
+Commits f6ddb408 (the route tape + `MTG_KEY_CHOSEN_COLOR`), 2b9ec453 (the route owns its land drop; per-arm
+`MTG_AA_ROUTE_STATS`; `MTG_AA_ROUTE_ORIGIN`). Scratch: `build/scratch/aa-slow/tapeab/` (`ab2` the final A/B,
+`stats4` the four-arm counts, `x10final` the 10x reruns), `tape/` the single-game traces.
+
+**The class: a ComboRoute emitted as a proven win that played nothing.** Three mechanisms, found in this order with
+`MTG_AA_ROUTE_TRACE` / the new `MTG_AA_LOOP_TRACE` / `MTG_AA_ROUTE_ORIGIN`:
+1. **The sim key missed `Permanent::chosen_color`** (Utopia Sprawl's colour). BuildSimKey -- so the TT, the solve /
+   enum memos, the breakpoint-continuation cache and the route memo (MidTurnStateKeyOf) -- served one colour's plans
+   and verdicts to the other colour's board. Seed 96046 gi45: a route proven with the Sprawl making {U} (the loop's
+   first {2}{U} untap is paid off it via Arbor Elf) replayed on the same board with the Sprawl making {G}, where the
+   loop cannot start: "memoised path does not kill in this context", re-walk empty, no-op -- 9 per game.
+   **`MTG_KEY_CHOSEN_COLOR`** (heurarm, DEFAULT ON) folds the colour, nonzero-gated (a board without one keeps its exact
+   prior key). Engine-wide: it moves play on any deck holding a chosen-colour permanent (Utopia Sprawl, Coldsteel
+   Heart); Snow's smoke rows are byte-identical.
+2. **The greedy fallback land.** An unsearched (greedy) plan is chosen on the pre-land board, and ApplyPlanDirect's
+   pre-combat fallback then plays a land (SimulateLandPlay) BEFORE the plan's actions -- in front of a route that was
+   proven with the drop unused (its walk spends the drop as a link). `MTG_AA_ROUTE_ORIGIN` put 89 of 89 such no-ops
+   on "the offer's board + the greedy land". Fixed under `MTG_AA_ROUTE_TAPE`: a pre-combat plan with no searched land
+   that carries the untap-loop ComboRoute skips the fallback land (the equip route's "the route owns its own land
+   drop"). A route win ends the turn, so this never costs one; only the rollout world reads it (the depth-0 executor
+   plays its land before it solves, depth > 0 plays the searched land).
+3. **Ranks re-resolved at apply time** -- the coordinator's "record resolved outcomes" fix. **`MTG_AA_ROUTE_TAPE`**
+   (heurarm, DEFAULT ON; `src/core/RouteTape.h`): each link records what its proving apply resolved -- every tutor's
+   fetched card NAME (PerformTutor) and every breakpoint's continuation PLAN with its site and the lambda's return
+   (bp_searched_plan) -- and a replay plays them back instead of re-ranking (a variant link's continuation by rank in a
+   list re-served from cache; a Living Wish pick by rank in the live ranking). Enumerations, derivations, solves and
+   rollouts run by a link's apply are suspended (not the link's own). A played-back breakpoint skips its derivation.
+   On the measured games it changes nothing by itself (the tape-only arm matched `off` game for game on 400 games),
+   because mechanisms 1 and 2 were the ones firing; it closes the rank channel the forced-eviction test reached
+   (1 divergence in 200 games before).
+
+**No-op Combo Off per game** (`MTG_AA_ROUTE_STATS`, the final A/B's 800 games per arm, seed 98001 d3 b10 + d5 b20):
+
+| arm | calls | no route on this board | memoised path did not kill | re-walk failed | live replay failed |
+|---|---|---|---|---|---|
+| off | 212,837 | 12,930 (16.2 / game) | 491 (0.61) | 114 (0.14) | 0 |
+| on | 272,692 | **5 (0.006 / game)** | **0** | **0** | 0 |
+
+Seed 96046 gi45 d5: 10 no-ops -> 0 (key alone suffices there). Smoke d3 gi12 8 -> 6 is the key alone (tape alone 8).
+
+**Held-out A/B ON vs OFF** (seed 98001, disjoint from 96001; ONE pooled batch of 1,600 games, 6 threads; both levers
+together, i.e. tape + land + key):
+
+| cell | off | on | delta | faster / slower | ms | units |
+|---|---|---|---|---|---|---|
+| d3 b10 | 5.3925 | 5.3625 | **-0.030** | 18 / 4 | 1.12x | 85.1k -> 95.4k |
+| d5 b20 | 5.3600 | 5.3275 | **-0.0325** | 16 / 4 | 1.16x | 165.4k -> 167.9k |
+
+**Every slower game re-run at 10x budget, both arms: all 8 recover** (d3 gi112 6/6, gi173 5/5, gi379 4/4, gi397 7/7;
+d5 gi3 4/4, gi55 7/7, gi112 6/6, gi250 6/6). Cost: +12-16% wall -- the key splits cache entries the TT / memos used
+to share across colours, and the realised routes are applied (calls +28%).
+
+**Smoke** (6 threads, not accepted): every non-alchemist row byte-identical (Snow included; the four known moves at
+their known digests). Alchemist rows vs the pre-fix binary (GT is aa-land's play, so compared to the 846135c7/c5808172
+binary's per-game outcomes): d0 unchanged (87fe2d52050de8af); d3 5.3933 -> 5.3667 (9e0e1ce48299b725; gi12 8 -> 6,
+gi32 8 -> 6); d5 5.2000 -> 5.1733 (d53b1e3b390414c8; gi12, gi32 8 -> 6; gi14 8 -> unwon, gi44 8 -> unwon); 2HG d3
+5.4600 -> 5.4200 (1f612b9e07b40c9a; gi12 8 -> 6). All from the key (the land fix moved no smoke row). At 10x: gi44
+recovers (8 / 8); **gi14 persists** (8 vs unwon at b200) -- a Seedcradle Witch beatdown with no Alchemist and no
+route at all: the key changes the T4 choice (Sprawl + Nourish instead of Sprawl + the Witch's untap pump), i.e. the
+search re-valued once its caches stopped sharing values across Sprawl colours. With both levers =0 the four alchemist
+rows reproduce the pre-fix binary exactly (avg, digest and units).
+
+**`MTG_AA_ROUTE_APPLY_PROVEN` (d6926447), answered.** When it fires it ADOPTS the proving copy's GameState as the live
+state (`s = std::move(*proven)`); it does not re-execute the copy's actions. As game state that is sound: the copy is
+a byte-copy of the live state taken a moment earlier and evolved by the same applier the live replay uses (every
+ComboRoute action, executor or rollout, is applied through TurnSolver::ApplyPlan), and library order and every
+shuffle seed are GameState fields, so the adopted board is exactly what those actions produce from that start. What
+is NOT carried: anything the failed live replay emitted outside the state (game-log / reveal entries, human-play
+narration) stays describing the attempt, not the adopted line. Redundant in practice: "live replay failed" is 0 in
+both arms of the 1,600-game A/B and in the smoke; with the tape both replays now play identical recorded outcomes.
+Kept ON as a guard (it costs the probe state it already computed); turning it OFF would make no measured difference.
+
+Validation (HEAD 2b9ec453): mtg-test 1619 / 1619 (2 new: the key splits on colour; a taped tutor fetches the taped
+name); scenarios 245 / 245 and combo-off fixtures 48 / 48 with both levers on and with both =0.
