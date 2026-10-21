@@ -587,6 +587,9 @@ enum Slot : int
     EXH_LEAF_MEMO,            // MTG_EXH_LEAF_MEMO  Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent R): once a pass has spent its decision budget, the leaf table stops storing no-wins (every later Exhausted() test binds), so a horizon leaf the pass reaches again is rolled out again. This memo keeps those spent-budget no-wins for the rest of the pass under its own namespace, read only while the same budget is still spent (and not overrun) -- the conditions under which a recompute returns the identical answer. Inert at an unlimited budget. SOUND, DEFAULT ON; =0 restores the recompute
     KO_M2_NO_REACH,           // MTG_KO_M2_NO_REACH  Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent R): inside a kill-only rollout turn (MTG_LEAF_KILL_ONLY) the searched second main exists only to find a kill; a deck whose provider vouches that its post-combat main can never make the opponent lose (DecisionProvider::PostCombatCannotKillOptIn -- Vampires) does not search it there. Exact under the deck's vouch. DEFAULT ON; =0 searches it
     FSL_EDGE_NO_REACH,        // MTG_FSL_EDGE_NO_REACH  Vampires search-cost round 2 (docs/design/vampires-search-cost-2.md, agent R): at a full-line search node on its cutoff turn (an ancestor already holds a win, so only a kill THIS turn can matter, and the next turn is cut), the second-main branching exists only to find a post-combat kill; a deck whose provider vouches it has none (DecisionProvider::PostCombatCannotKillOptIn -- Vampires) skips it. Exact under the vouch. DEFAULT ON; =0 branches it
+    BP_PO_W0_FOLD,            // MTG_BP_PO_W0_FOLD  the PLAYOUT wave-0 identity (Vampires search-cost round 2, docs/design/vampires-search-cost-2.md): inside a playout (g_rollout_nest > 0) a BASE plan resolves every breakpoint to EMPTY (both canon defaults stand down there), so its EMPTY arm, its rank variants past the first list's length and its chain arm with no chainable continuation (one class-on breakpoint) re-apply the base plan's own line onto the same state. Declined BEFORE the unit charge and the apply when the base apply showed none of the three control-flow asymmetries a bp_choice carries (node partition, site 9, site 8's return-value branch). DEFAULT ON (sound identity fold); =0 restores the applies
+    BP_PO_W0_BASE_LEN,        // MTG_BP_PO_W0_BASE_LEN  the playout wave-0 identity's BASE-SIDE list read (same doc): the measured base reads the continuation list at its first class-on occurrence (the one rank 0 targets; memoized on state), and when it is EMPTY rank 0 is a twin of the base too (0 >= n0 = 0), so the whole family collapses without rank 0's apply. DEFAULT ON (sound identity fold, under MTG_BP_PO_W0_FOLD); =0 leaves rank 0 as the measurer
+    CAND_DEDUP,               // MTG_CAND_DEDUP  SolveWithLookahead skips a candidate's ROLLOUT when its post-apply state an earlier sibling of the same pass already reached (identical state, identical future; the first copy was scored first). Pre-existing env lever (default OFF since 2026-09-09, "a quality lever, not a speed one"); a slot so its A/B pools into one batch
     COUNT
 };
 
@@ -1124,6 +1127,9 @@ inline const char* Name(int slot)
         "MTG_EXH_LEAF_MEMO",
         "MTG_KO_M2_NO_REACH",
         "MTG_FSL_EDGE_NO_REACH",
+        "MTG_BP_PO_W0_FOLD",
+        "MTG_BP_PO_W0_BASE_LEN",
+        "MTG_CAND_DEDUP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
