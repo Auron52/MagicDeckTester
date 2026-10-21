@@ -19639,21 +19639,43 @@ static bool VampAlwaysLandOn()
     static const bool env = EnvOn("MTG_VAMP_ALWAYS_LAND");
     return heurarm::Flag(heurarm::VAMP_ALWAYS_LAND, env);
 }
+static bool VampAlwaysLandFodderOn()
+{
+    static const bool env = EnvOn("MTG_VAMP_ALWAYS_LAND_FODDER");
+    return heurarm::Flag(heurarm::VAMP_ALWAYS_LAND_FODDER, env);
+}
 bool VampiresProvider::OffersLandDeferral(const GameState& s) const
 {
     if (!VampAlwaysLandOn()) { return true; }
     const int me = s.active_player_index;
+    // A discard outlet this turn: Stromkirk Condemned's pump, Falkenrath Pit Fighter's draw, a Blood token's
+    // crack, and Voldaren Estate (it makes a Blood this turn) -- on the battlefield or (a creature) in hand.
+    auto is_outlet = [](const CardDefinition* d)
+    {
+        return d != nullptr && (d->params.discard_team_pump_power > 0 || d->params.discard_team_pump_toughness > 0
+                                || d->params.sac_outlet_discard_cost > 0 || d->params.blood_draw_cost.has_value()
+                                || d->params.tap_blood_cost.has_value());
+    };
+    int outlets = 0, nonland = 0;
     for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
     {
+        if (c.m_is_staged) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d != nullptr && d->gy_landfall_watcher) { return true; }
+        if (d != nullptr && !d->card.IsLand()) { ++nonland; }
+        if (is_outlet(d) && d->card.IsCreature()) { ++outlets; }
     }
     for (const Permanent& q : s.battlefield)
     {
         if (q.controller_index != me) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
         if (d != nullptr && d->gy_landfall_watcher) { return true; }
+        if (is_outlet(d)) { ++outlets; }
     }
+    // MTG_VAMP_ALWAYS_LAND_FODDER (the amendment, from the root cause of always-land's slower games): a held land
+    // is DISCARD FODDER when the outlets this turn are at least the hand's non-land cards (two Condemned pumps on a
+    // hand of one spell and two lands discard both lands) -- the hold plans stay.
+    if (VampAlwaysLandFodderOn() && outlets > 0 && outlets >= nonland) { return true; }
     return false;
 }
 bool VampiresProvider::RestrictsCollectedActions() const { return VampNoStealOn() || VampSocialiteM2On(); }

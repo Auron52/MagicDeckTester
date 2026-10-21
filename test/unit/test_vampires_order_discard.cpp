@@ -626,3 +626,19 @@ TEST_CASE("PROPOSED MTG_VAMP_ALWAYS_LAND: main 1 never holds the land drop -- un
     gh.players[0].lands_played_this_turn = 0;
     CHECK(holds(TurnSolver::EnumerateMainPlans(gh, true)) > 0);              // Bloodghast: the hold stays
 }
+
+TEST_CASE("PROPOSED MTG_VAMP_ALWAYS_LAND_FODDER: two Condemneds and one spell in hand -- the held lands are fodder")
+{
+    ArmVo on(heurarm::VAMP_ALWAYS_LAND, true);
+    ArmVo fod(heurarm::VAMP_ALWAYS_LAND_FODDER, true);
+    GameState s = MakeVo({"Swamp", "Unclaimed Territory", "Legion Lieutenant"},
+                         {{"Stromkirk Condemned"}, {"Stromkirk Condemned"}, {"Swamp"}, {"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 0;
+    CHECK(ProvVo().OffersLandDeferral(s));                    // 2 outlets >= 1 spell: the hold stays
+    GameState wide = MakeVo({"Swamp", "Legion Lieutenant", "Vampire of the Dire Moon", "Stromkirk Captain"},
+                            {{"Stromkirk Condemned"}, {"Swamp"}, {"Swamp"}});
+    wide.phase = Phase::PreCombatMain;
+    wide.players[0].lands_played_this_turn = 0;
+    CHECK_FALSE(ProvVo().OffersLandDeferral(wide));           // 1 outlet < 3 spells: always the land
+}
