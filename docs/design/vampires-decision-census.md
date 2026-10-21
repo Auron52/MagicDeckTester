@@ -105,4 +105,15 @@ A/B 2 (one pooled batch, 13,560 games, scratch `ab2/`, same cells and seeds as A
   the kill line HOLDS lands as discard fodder -- two Condemned pumps (or a pump and a Pit Fighter draw) each
   discard a land, sometimes with the drop deferred to main 2 after the discards.
 - Amendment `MTG_VAMP_ALWAYS_LAND_FODDER`: the hold stays while the discard outlets this turn (Condemned, Pit Fighter,
-  a Blood token, Voldaren Estate) are at least the hand's non-land cards. A/B 3: pending.
+  a Blood token, Voldaren Estate) are at least the hand's non-land cards.
+
+A/B 3 (6,780 games, scratch `ab3/`, same cells and seeds):
+
+| arm | held-out units | worst row | faster / slower | net |
+|---|---|---|---|---|
+| always-land + FODDER | 0.869x | 0.834x (play identical) | 2 / 1 | -1 |
+| discard + V2, no steal, Socialite main 2, always-land + FODDER | **0.804x** | **0.791x** | **7 / 1** | **-6** |
+
+The fodder exception gives back part of the saving (0.812x -> 0.869x alone) and turns always-land from +3 into -1.
+The combined arm is the best of every arm measured. Slower: always-land + FODDER regression 2HG d3 gi70 (5 -> 6);
+the combined arm regression d3 s3003 gi136 (4 -> 5, the game the discard rule + V2 already slowed).
