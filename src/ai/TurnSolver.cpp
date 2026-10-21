@@ -28288,6 +28288,8 @@ static std::vector<AttachSpellPair> BuildAttachSpellPairs(const GameState& state
 // (CollectMemoScope; nested calls push their own), and a helper uses it only when it is handed THAT
 // call's state object -- any other state (a copy, a probe) misses and computes as before. Every cached
 // value is a pure function of (state, the helper's arguments), so a hit returns what a recompute would.
+// One madness answer of a pinned discard (see MadnessFanFor below). Defined here: CollectMemo caches fans.
+struct MadnessVariant { std::int8_t choice = 0; std::int8_t arm = 0; std::int8_t mv = 0; };
 struct CollectMemo
 {
     const GameState* st = nullptr;
@@ -28703,7 +28705,7 @@ static void EmitTransformAction(const GameState& state, const Card& src_card, co
 //     want that body untapped, so "pay with lands, keep the body for the steal" is a real line). Each
 //     selection's own books (subset rule 10, SubsetMadnessCoverInvalid) then keep exactly the covers its
 //     trigger can pay and that its own free arrivals do not dominate -- one variant per distinct line.
-struct MadnessVariant { std::int8_t choice = 0; std::int8_t arm = 0; std::int8_t mv = 0; };
+// (struct MadnessVariant is defined above, with CollectMemo, which caches fans of them.)
 
 // The distinct madness costs of hand card `c` for an outlet of THIS plan (cheapest first): its own and
 // a battlefield granter's (MadnessCostsFor), plus the printed cost when a granter in hand the plan can cast
