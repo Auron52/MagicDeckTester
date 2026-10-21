@@ -1,0 +1,485 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 6, "won": true,
+  "mulligan": { "count": 1, "bottom": [3] }, "combat_swap_timing": 1, "karoo_float": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 47, "name": "Staff of Domination" }, { "num": 51, "name": "Stroke of Genius" }, { "num": 52, "name": "Stroke of Genius" }, { "num": 20, "name": "Forest" }, { "num": 4, "name": "Arbor Elf" }, { "num": 5, "name": "Arbor Elf" }, { "num": 55, "name": "Utopia Sprawl" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 2, "name": "Accomplished Alchemist" }, { "num": 11, "name": "Elvish Harbinger" }, { "num": 26, "name": "Forest" }, { "num": 28, "name": "Forest" }, { "num": 3, "name": "Accomplished Alchemist" }, { "num": 45, "name": "Nourish" }, { "num": 53, "name": "Stroke of Genius" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 2, "name": "Accomplished Alchemist", "win_optimal": true }, { "num": 11, "name": "Elvish Harbinger", "win_optimal": true }, { "num": 26, "name": "Forest", "win_optimal": true }, { "num": 28, "name": "Forest", "win_optimal": true }, { "num": 3, "name": "Accomplished Alchemist", "win_optimal": true }, { "num": 45, "name": "Nourish", "win_optimal": true }, { "num": 53, "name": "Stroke of Genius", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 2, "name": "Accomplished Alchemist" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Elvish Harbinger", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Elvish Harbinger", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Elvish Harbinger", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Crab Umbra" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 11, "name": "Elvish Harbinger", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Nourish", "land": "Forest", "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 11, "name": "Elvish Harbinger", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 11, "name": "Elvish Harbinger", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 52 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 11, "name": "Elvish Harbinger", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Elvish Harbinger → Arbor Elf", "land": "Forest", "casts": ["Elvish Harbinger"], "actions": [{ "card": "Elvish Harbinger", "tutor_target": "Arbor Elf" }] },
+    { "index": 1, "summary": "land=Forest; cast: Elvish Harbinger → Elvish Harbinger", "land": "Forest", "casts": ["Elvish Harbinger"], "actions": [{ "card": "Elvish Harbinger", "tutor_target": "Elvish Harbinger" }] },
+    { "index": 2, "summary": "land=Forest; cast: Elvish Harbinger → Ezuri, Renegade Leader", "land": "Forest", "casts": ["Elvish Harbinger"], "actions": [{ "card": "Elvish Harbinger", "tutor_target": "Ezuri, Renegade Leader" }] },
+    { "index": 3, "summary": "land=Forest; cast: Elvish Harbinger → Seedcradle Witch", "land": "Forest", "casts": ["Elvish Harbinger"], "actions": [{ "card": "Elvish Harbinger", "tutor_target": "Seedcradle Witch" }] },
+    { "index": 4, "summary": "land=Forest; cast: Elvish Harbinger → Accomplished Alchemist", "land": "Forest", "casts": ["Elvish Harbinger"], "actions": [{ "card": "Elvish Harbinger", "tutor_target": "Accomplished Alchemist" }] },
+    { "index": 5, "summary": "land=Forest; cast: Elvish Harbinger → fail to find (X=0)", "land": "Forest", "casts": ["Elvish Harbinger"], "actions": [{ "card": "Elvish Harbinger", "tutor_target": "(decline search)" }] },
+    { "index": 6, "summary": "land=Forest; cast: Nourish", "land": "Forest", "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 7, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 8, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 3, "source": "Elvish Harbinger (searched)", "cards": [{ "name": "Arbor Elf", "disposition": "to top" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 28, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 28, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 51 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 9, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Arbor Elf" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "taps": "WUBRG", "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 21, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Arbor Elf", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Accomplished Alchemist", "land": null, "casts": ["Accomplished Alchemist"], "actions": [{ "card": "Accomplished Alchemist" }] },
+    { "index": 1, "summary": "land=none; cast: Arbor Elf, Crab Umbra → Elvish Harbinger, Nourish", "land": null, "casts": ["Arbor Elf", "Crab Umbra", "Nourish"], "cast_order_canonical": ["Arbor Elf", "Crab Umbra", "Nourish"], "actions": [{ "card": "Arbor Elf" }, { "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }] },
+    { "index": 2, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Arbor Elf, Nourish", "land": null, "casts": ["Crab Umbra", "Arbor Elf", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Arbor Elf", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Arbor Elf" }, { "card": "Nourish" }] },
+    { "index": 3, "summary": "land=none; cast: Arbor Elf, Crab Umbra → Arbor Elf, Nourish", "land": null, "casts": ["Arbor Elf", "Crab Umbra", "Nourish"], "cast_order_canonical": ["Arbor Elf", "Crab Umbra", "Nourish"], "actions": [{ "card": "Arbor Elf" }, { "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }] },
+    { "index": 4, "summary": "land=none; cast: Arbor Elf, Nourish", "land": null, "casts": ["Arbor Elf", "Nourish"], "cast_order_canonical": ["Arbor Elf", "Nourish"], "actions": [{ "card": "Arbor Elf" }, { "card": "Nourish" }] },
+    { "index": 5, "summary": "land=none; cast: Arbor Elf, Crab Umbra → Elvish Harbinger", "land": null, "casts": ["Arbor Elf", "Crab Umbra"], "cast_order_canonical": ["Arbor Elf", "Crab Umbra"], "actions": [{ "card": "Arbor Elf" }, { "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 6, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Arbor Elf", "land": null, "casts": ["Crab Umbra", "Arbor Elf"], "cast_order_canonical": ["Crab Umbra", "Arbor Elf"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Arbor Elf" }] },
+    { "index": 7, "summary": "land=none; cast: Arbor Elf, Crab Umbra → Arbor Elf", "land": null, "casts": ["Arbor Elf", "Crab Umbra"], "cast_order_canonical": ["Arbor Elf", "Crab Umbra"], "actions": [{ "card": "Arbor Elf" }, { "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 8, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }] },
+    { "index": 9, "summary": "land=none; cast: Arbor Elf", "land": null, "casts": ["Arbor Elf"], "actions": [{ "card": "Arbor Elf" }] },
+    { "index": 10, "summary": "land=none; cast: Arbor Elf, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Arbor Elf", "Stroke of Genius"], "cast_order_canonical": ["Arbor Elf", "Stroke of Genius"], "actions": [{ "card": "Arbor Elf" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 11, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 12, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "opponent" }] }
+  ],
+  "plans_hidden": 48,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 4, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "taps": "WUBRG", "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 21, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }] },
+    { "index": 1, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }] },
+    { "index": 2, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 3, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 4, "summary": "land=none; cast: Crab Umbra → Arbor Elf", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self" }] },
+    { "index": 7, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "opponent" }] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Elvish Harbinger (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 4, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Elvish Harbinger", "idx": 4, "num": 11, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 21, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 50 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 11, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Arbor Elf", "idx": 5, "num": 4, "is_land": false, "taps": "G", "power": 1, "toughness": 1 }, { "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "taps": "WUBRG", "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 21, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Accomplished Alchemist", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Accomplished Alchemist, Nourish", "land": "Forest", "casts": ["Accomplished Alchemist", "Nourish"], "cast_order_canonical": ["Accomplished Alchemist", "Nourish"], "actions": [{ "card": "Accomplished Alchemist" }, { "card": "Nourish" }] },
+    { "index": 1, "summary": "land=Forest; cast: Accomplished Alchemist, Crab Umbra → Elvish Harbinger", "land": "Forest", "casts": ["Accomplished Alchemist", "Crab Umbra"], "cast_order_canonical": ["Accomplished Alchemist", "Crab Umbra"], "actions": [{ "card": "Accomplished Alchemist" }, { "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 2, "summary": "land=Forest; cast: Crab Umbra → Elvish Harbinger, Accomplished Alchemist", "land": "Forest", "casts": ["Crab Umbra", "Accomplished Alchemist"], "cast_order_canonical": ["Crab Umbra", "Accomplished Alchemist"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Accomplished Alchemist" }] },
+    { "index": 3, "summary": "land=Forest; cast: Accomplished Alchemist, Crab Umbra → Arbor Elf", "land": "Forest", "casts": ["Accomplished Alchemist", "Crab Umbra"], "cast_order_canonical": ["Accomplished Alchemist", "Crab Umbra"], "actions": [{ "card": "Accomplished Alchemist" }, { "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 4, "summary": "land=Forest; cast: Crab Umbra → Arbor Elf, Accomplished Alchemist", "land": "Forest", "casts": ["Crab Umbra", "Accomplished Alchemist"], "cast_order_canonical": ["Crab Umbra", "Accomplished Alchemist"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Accomplished Alchemist" }] },
+    { "index": 5, "summary": "land=Forest; cast: Accomplished Alchemist, Crab Umbra → Accomplished Alchemist", "land": "Forest", "casts": ["Accomplished Alchemist", "Crab Umbra"], "cast_order_canonical": ["Accomplished Alchemist", "Crab Umbra"], "actions": [{ "card": "Accomplished Alchemist" }, { "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }] },
+    { "index": 6, "summary": "land=none; cast: Accomplished Alchemist, Crab Umbra → Elvish Harbinger", "land": null, "casts": ["Accomplished Alchemist", "Crab Umbra"], "cast_order_canonical": ["Accomplished Alchemist", "Crab Umbra"], "actions": [{ "card": "Accomplished Alchemist" }, { "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 7, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Accomplished Alchemist", "land": null, "casts": ["Crab Umbra", "Accomplished Alchemist"], "cast_order_canonical": ["Crab Umbra", "Accomplished Alchemist"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Accomplished Alchemist" }] },
+    { "index": 8, "summary": "land=none; cast: Accomplished Alchemist, Crab Umbra → Arbor Elf", "land": null, "casts": ["Accomplished Alchemist", "Crab Umbra"], "cast_order_canonical": ["Accomplished Alchemist", "Crab Umbra"], "actions": [{ "card": "Accomplished Alchemist" }, { "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 9, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Accomplished Alchemist", "land": null, "casts": ["Crab Umbra", "Accomplished Alchemist"], "cast_order_canonical": ["Crab Umbra", "Accomplished Alchemist"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Accomplished Alchemist" }] },
+    { "index": 10, "summary": "land=none; cast: Accomplished Alchemist, Crab Umbra → Accomplished Alchemist", "land": null, "casts": ["Accomplished Alchemist", "Crab Umbra"], "cast_order_canonical": ["Accomplished Alchemist", "Crab Umbra"], "actions": [{ "card": "Accomplished Alchemist" }, { "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }] },
+    { "index": 11, "summary": "land=Forest; cast: Accomplished Alchemist", "land": "Forest", "casts": ["Accomplished Alchemist"], "actions": [{ "card": "Accomplished Alchemist" }] },
+    { "index": 12, "summary": "land=Forest; cast: Nourish, Stroke of Genius (X chosen at cast) → you draw", "land": "Forest", "casts": ["Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 13, "summary": "land=Forest; cast: Crab Umbra → Elvish Harbinger, Nourish", "land": "Forest", "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }] },
+    { "index": 14, "summary": "land=Forest; cast: Crab Umbra → Arbor Elf, Nourish", "land": "Forest", "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }] },
+    { "index": 15, "summary": "land=none; cast: Accomplished Alchemist", "land": null, "casts": ["Accomplished Alchemist"], "actions": [{ "card": "Accomplished Alchemist" }] },
+    { "index": 16, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }] },
+    { "index": 17, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }] },
+    { "index": 18, "summary": "land=Forest; cast: Nourish", "land": "Forest", "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 19, "summary": "land=Forest; cast: Stroke of Genius (X chosen at cast) → you draw", "land": "Forest", "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 20, "summary": "land=Forest; cast: Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": "Forest", "casts": ["Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 21, "summary": "land=Forest; cast: Crab Umbra → Elvish Harbinger", "land": "Forest", "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 22, "summary": "land=Forest; cast: Crab Umbra → Arbor Elf", "land": "Forest", "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 23, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 24, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 25, "summary": "land=none; cast: Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 26, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 27, "summary": "land=none; cast: Crab Umbra → Arbor Elf", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 28, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 29, "summary": "land=Forest; cast: Stroke of Genius (X chosen at cast) → opponent draws", "land": "Forest", "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 30, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "opponent" }] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Accomplished Alchemist", "idx": 7, "num": 2, "is_land": false, "yield": 1, "power": 2, "toughness": 5 }, { "name": "Arbor Elf", "idx": 5, "num": 4, "is_land": false, "taps": "G", "power": 1, "toughness": 1 }, { "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "taps": "WUBRG", "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 28, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 21, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 20, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "life_gained_this_turn": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 1, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 2, "summary": "land=none; cast: Crab Umbra → Arbor Elf", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 3, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Elvish Harbinger (1), Arbor Elf (1) — 2 to opponent (19→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Accomplished Alchemist", "idx": 7, "num": 2, "is_land": false, "yield": 1, "power": 2, "toughness": 5 }, { "name": "Arbor Elf", "idx": 5, "num": 4, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Elvish Harbinger", "idx": 4, "num": 11, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 28, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 3, "num": 21, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 6, "num": 20, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "life_gained_this_turn": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 49 },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 32, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Nourish" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Accomplished Alchemist", "idx": 7, "num": 2, "is_land": false, "taps": "WUBRG", "yield": 1, "power": 2, "toughness": 5 }, { "name": "Arbor Elf", "idx": 5, "num": 4, "is_land": false, "taps": "G", "power": 1, "toughness": 1 }, { "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "taps": "WUBRG", "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 21, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 20, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Crab Umbra", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 43, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1, "life_gained_this_turn": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 48 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Nourish, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Crab Umbra", "Nourish", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Nourish, Crab Umbra → Elvish Harbinger, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Nourish", "Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw, Nourish, Crab Umbra → Elvish Harbinger", "land": null, "drops": ["Crab Umbra"], "casts": ["Stroke of Genius", "Nourish", "Crab Umbra"], "cast_order_canonical": ["Stroke of Genius", "Nourish", "Crab Umbra"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }, { "card": "Nourish" }, { "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 3, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Nourish, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Crab Umbra", "Nourish", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Nourish, Crab Umbra → Arbor Elf, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Nourish", "Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw, Nourish, Crab Umbra → Arbor Elf", "land": null, "drops": ["Crab Umbra"], "casts": ["Stroke of Genius", "Nourish", "Crab Umbra"], "cast_order_canonical": ["Stroke of Genius", "Nourish", "Crab Umbra"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }, { "card": "Nourish" }, { "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 6, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist, Nourish, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Crab Umbra", "Nourish", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }, { "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Nourish, Crab Umbra → Accomplished Alchemist, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Nourish", "Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw, Nourish, Crab Umbra → Accomplished Alchemist", "land": null, "drops": ["Crab Umbra"], "casts": ["Stroke of Genius", "Nourish", "Crab Umbra"], "cast_order_canonical": ["Stroke of Genius", "Nourish", "Crab Umbra"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }, { "card": "Nourish" }, { "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }] },
+    { "index": 9, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Nourish, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }, { "card": "Nourish" }] },
+    { "index": 10, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Nourish, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }, { "card": "Nourish" }] },
+    { "index": 11, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist, Nourish, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }, { "card": "Nourish" }, { "card": "Nourish" }] },
+    { "index": 12, "summary": "land=none; cast: Nourish, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw, Nourish", "land": null, "casts": ["Stroke of Genius", "Nourish"], "cast_order_canonical": ["Stroke of Genius", "Nourish"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }, { "card": "Nourish" }] },
+    { "index": 14, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }] },
+    { "index": 15, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Crab Umbra", "Nourish", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 17, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }] },
+    { "index": 18, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 19, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Crab Umbra", "Nourish", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 20, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist, Nourish", "land": null, "casts": ["Crab Umbra", "Nourish"], "cast_order_canonical": ["Crab Umbra", "Nourish"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }, { "card": "Nourish" }] },
+    { "index": 21, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 22, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist, Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Crab Umbra", "Nourish", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Nourish", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }, { "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 23, "summary": "land=none; cast: Nourish, Nourish", "land": null, "casts": ["Nourish", "Nourish"], "cast_order_canonical": ["Nourish", "Nourish"], "actions": [{ "card": "Nourish" }, { "card": "Nourish" }] },
+    { "index": 24, "summary": "land=none; cast: Nourish, Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Nourish", "Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 25, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 26, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 27, "summary": "land=none; cast: Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 28, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }] },
+    { "index": 29, "summary": "land=none; cast: Crab Umbra → Elvish Harbinger, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 11, "enchant_target_name": "Elvish Harbinger" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 30, "summary": "land=none; cast: Crab Umbra → Arbor Elf", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }] },
+    { "index": 31, "summary": "land=none; cast: Crab Umbra → Arbor Elf, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 4, "enchant_target_name": "Arbor Elf" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 32, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist", "land": null, "casts": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }] },
+    { "index": 33, "summary": "land=none; cast: Crab Umbra → Accomplished Alchemist, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Crab Umbra", "Stroke of Genius"], "cast_order_canonical": ["Crab Umbra", "Stroke of Genius"], "actions": [{ "card": "Crab Umbra", "enchant_target": 2, "enchant_target_name": "Accomplished Alchemist" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 34, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 35, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 132, "summary": "land=none; cast: Combo Off route", "land": null, "combo_off": true, "combo_off_rule": "LIFE-HAND+LOOP-UMBRA-HAND+FIN-STROKE", "casts": ["Combo Off"], "actions": [{ "card": "Combo Off", "x": 999 }] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 45, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Accomplished Alchemist", "idx": 7, "num": 2, "tapped": true, "is_land": false, "yield": 1, "power": 2, "toughness": 5 }, { "name": "Arbor Elf", "idx": 5, "num": 4, "is_land": false, "taps": "G", "power": 1, "toughness": 1 }, { "name": "Crab Umbra", "idx": 8, "num": 9, "is_aura": true, "attached_to": 2, "attached_to_idx": 7, "is_land": false }, { "name": "Elvish Harbinger", "idx": 4, "num": 11, "is_land": false, "taps": "WUBRG", "power": 1, "toughness": 2 }, { "name": "Forest", "idx": 0, "num": 26, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 3, "num": 21, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 6, "num": 20, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 45, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 43, "name": "Nourish", "cost": "{G}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Stroke of Genius", "cost": "{X}{2}{U}", "mv": 3, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1, "life_gained_this_turn": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "4/4 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }], "library_size": 48 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Nourish, Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Nourish, Nourish", "land": null, "casts": ["Nourish", "Nourish"], "cast_order_canonical": ["Nourish", "Nourish"], "actions": [{ "card": "Nourish" }, { "card": "Nourish" }] },
+    { "index": 2, "summary": "land=none; cast: Nourish, Crab Umbra: untap Accomplished Alchemist", "land": null, "casts": ["Nourish"], "activations": ["Crab Umbra"], "actions": [{ "card": "Nourish" }, { "card": "Crab Umbra", "src_num": 9, "activate": true, "cost_pips": "U", "activation_cost": "{2}{U}", "verb": "untapact", "x": 1, "untap_target": 2, "untap_target_name": "Accomplished Alchemist", "untap_src": 9, "untap_shape": 1, "repeatable": true }] },
+    { "index": 3, "summary": "land=none; cast: Nourish", "land": null, "casts": ["Nourish"], "actions": [{ "card": "Nourish" }] },
+    { "index": 4, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → you draw", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "self", "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Nourish, Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Nourish", "Stroke of Genius"], "cast_order_canonical": ["Nourish", "Stroke of Genius"], "actions": [{ "card": "Nourish" }, { "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 6, "summary": "land=none; cast: Crab Umbra: untap Accomplished Alchemist", "land": null, "casts": [], "activations": ["Crab Umbra"], "actions": [{ "card": "Crab Umbra", "src_num": 9, "activate": true, "cost_pips": "U", "activation_cost": "{2}{U}", "verb": "untapact", "x": 1, "untap_target": 2, "untap_target_name": "Accomplished Alchemist", "untap_src": 9, "untap_shape": 1, "repeatable": true }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: Stroke of Genius (X chosen at cast) → opponent draws", "land": null, "casts": ["Stroke of Genius"], "actions": [{ "card": "Stroke of Genius", "draw_target": "opponent" }] },
+    { "index": 45, "summary": "land=none; cast: Combo Off route -- COMBO OFF: wins this turn", "land": null, "combo_off": true, "combo_off_verified": true, "combo_off_rule": "LIFE-HAND+LOOP-UMBRA+FIN-STROKE", "casts": ["Combo Off"], "actions": [{ "card": "Combo Off", "x": 999 }] }
+  ],
+  "plans_hidden": 36,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "cast", "text": "cast: Nourish, Crab Umbra: untap Accomplished Alchemist -- LOOP until the kill is funded" },
+    { "turn": 6, "kind": "lifegain", "text": "❤️ Nourish -- gain 6 life" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "Crab Umbra: untapped Accomplished Alchemist" },
+    { "turn": 6, "kind": "ability", "text": "untap loop x18 -- floating 51 mana ({W}x46 {U}x5) for Stroke of Genius" },
+    { "turn": 6, "kind": "cast", "text": "cast: Stroke of Genius" },
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Arbor Elf (1), Accomplished Alchemist (2) — 3 to opponent (17→14)" }
+  ]
+}
