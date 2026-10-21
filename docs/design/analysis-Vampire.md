@@ -255,6 +255,16 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   ceiling). d2 b1 / d3 b1 / d1 b3 are within 4% of it; d3 b20 and d5 b20 cost 3.8-4.0x. Recorded with K in
   `Vampire.profile.json` (`value_play`: no sidecar is created).
 
+- **Generated and ADOPTED 2026-10-21** (`mullgen.sh run decks/Vampires complete`, landed commit eeb55d83a, PGO, 2 h 26 m
+  end to end incl. the PGO build and both A/Bs). 161,724 size-7 entries; adaptive keep mean R 7.66 (3-40); every
+  bottoming sub cell at R40 (86,402 cells, none at R1). The floor pass printed "COMPLETE ~37 h" -- the stated upper
+  bound from the floor rate, which had already paid the full bottoming; the refine took ~25 min.
+  Validation: keep A/B -0.159t; confounded bottoming A/B -0.0297t (6/6 seeds, mean/se -11.7). Before adopting, the
+  overnight rows were re-sized to the FULL set and accepted with the table ABSENT (496638bd0). Adoption, all three
+  tiers: `keep_adoption_attribution.py` 0 unexplained (every changed game a different mulligan count, a different
+  bottom, or bottom order only); standard rows -0.03..-0.15t, 2HG mixed on small samples. Cost: the worst searched
+  row 2,508 -> 348 ms/game (0.12x Galadriel): the bottoming trial games were the deck's cost.
+
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
 pre-fix engine (every new test failed there), then fixed:
