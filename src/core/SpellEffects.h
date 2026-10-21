@@ -20593,7 +20593,15 @@ inline void ApplyBlink(GameState& state, int controller, int source_id, int targ
     perm.tapped            = returns_tapped;
     state.battlefield.push_back(perm);   // may reallocate -- no Permanent& into battlefield survives
     const int slot = static_cast<int>(state.battlefield.size()) - 1;
-    FireEtbWatchers(state, owner, slot);       // Emiel's +1/+1 counter watcher lives here
+    {
+        // A flicker's ETB pays the optional counter only if the provider allows it
+        // (DecisionProvider::PaysEtbCounterOnFlicker); a declining payer outranks the searched pin.
+        static const std::function<bool(const ManaCost&)> decline = [](const ManaCost&) { return false; };
+        const bool decline_counter = state.deck_has_etb_counter_payer
+            && !ResolveProvider(state).PaysEtbCounterOnFlicker(state, owner);
+        EtbOptionalPayerScope _flicker_counter(decline_counter ? &decline : g_etb_optional_payer);
+        FireEtbWatchers(state, owner, slot);   // Emiel's +1/+1 counter watcher lives here
+    }
     FireOwnEtbTriggers(state, owner, slot);    // the Drake's "untap up to five lands" lives here
     if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
     { EnforceLegendRule(state, owner); }

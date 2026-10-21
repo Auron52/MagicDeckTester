@@ -3350,6 +3350,19 @@ public:
         return false;
     }
 
+    // ...AND NEVER ON A FLICKER (USER 2026-10-21: *"not to use Emiel's come into play with a +1/+1
+    // counter. At minimum anytime we flicker."*). A flickered creature is a new object (CR 400.7), so
+    // the next blink wipes the counter the last one bought, and the {G/W} comes out of the bank the
+    // loop runs on. Covers the searched pin and the blink loop's last-pass pump alike, which also
+    // removes the pay variant of every flicker-only plan (the ETB-counter fold drops a variant whose
+    // pin is never read). MTG_EDF_FLICKER_COUNTER=1 restores paying.
+    bool PaysEtbCounterOnFlicker(const GameState& s, int controller) const override;
+    // ...and not searched at all (USER 2026-10-21: *"I have never used the +1/+1 counter with this
+    // deck ever"*, *"a very unusual case"*). The axis existed for two measured games (s71001 gi76,
+    // s72001 gi124) that lost a turn under a bare decline; the user rules it out anyway.
+    // MTG_EDF_SEARCH_ETB_COUNTER=1 restores the axis.
+    bool SearchesOptionalEtbCounter(const GameState& s) const override;
+
     // The go-off recognizer: with the loop assembled and a SINK to cash the mana on (Shivan Gorge
     // damage, an {X} draw, or either of the two {T}-less Eldrazi sinks), the kill is arithmetic,
     // not search. ProjectsAlternateWin is the Infiltrator's half -- a DECK-OUT, which is a

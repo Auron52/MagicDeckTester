@@ -448,3 +448,60 @@ before pricing it for the pool. Contents unchanged, so byte-identical.
 2. **A host-late land-Aura enumeration** (7d.3): the largest remaining waste; needs a design and the USER.
 3. **`MTG_BP_DERIVE_METER` with an exchange weight above 1** (section 4a): the only lever that BOUNDS the
    tail; play-changing, the USER's call.
+
+## 8. Round 3 (2026-10-21): the value leaf's own exposure (phase A), and the pooled-pool multiplier
+
+The keep table removed the mulligan trial games, so the remaining question for the value leaf was its own
+phase A: every position of 2,500 played games labelled by K=3 earliest-win searches at the engine's label
+ceiling (1e6 virtual ms, effectively unbounded). Probe: phase A's own games (seed 900000+k, game index k,
+`MTG_DUMP_VALUE_ROWS`, `MTG_EVAL_ROWS_K=3`), first 160 pooled on 32 threads, then 960 more on 27.
+
+### 8a. What a slow label is
+
+Every slow game broken down has the same shape: ONE of a position's three sampled futures has no early
+win, and the label ladder (`EnumerateEarliestWins`, one FSLineTail pass per cutoff) must prove it, e.g.
+
+    seed 900411 gi161, t1:  result=7 | dd3=56ms dd4=3.8s dd5=195s (7.6M applies) dd6=0.6s
+
+-- 195 of the game's 200 s, every other label in the game milliseconds. Game 157 (seed 900157) is the same
+thing one turn deeper (the `MTG_LABEL_HORIZON` comment's own example) at 44.8M units / 75 min. The branch
+census says it is volume, not width: 157 = 37M `EnumeratePlans` calls (30M at turn 7, average odometer 31);
+900411 = 2.1M (turns 5-6, average 10-17); game 43 = 5.5M (average 12). The widest single decisions are
+land-Aura copies over two hosts (4 Overgrowth + 2 Trace = 46,656 positions) but they are rare: the copy
+fold prices 1.16-1.25x over the whole search, the host fold 1.50x on the ~2% of calls it reaches.
+
+### 8b. Landed: the FSL line-cache pool bills real bytes (the pooled multiplier)
+
+The same game cost very different amounts alone and pooled: seed 900411 gi161 was 7.7M units / 197 s alone
+and 12.5M / 1,007 s inside the 27-worker probe; the 160-game probe reported 377,478 refused FSL stores.
+Shrinking the pool alone reproduced it monotonically (300 MB: 14.3M / 373 s; 50 MB: 30.1M / 773 s). The
+cause was the accounting, not the budget: `ApproxFslKb` rounded every entry UP to a whole KB, and a label
+search's entries are ~100-150 B (no phases -- stripping them was tried and changed nothing), so the pool
+held ~8x fewer entries than its memory bound allowed. `ApproxFslBytes` bills real bytes against the same
+bound: 900411 at 300 MB is back to 7.7M / 201 s, labels byte-identical across every variant; the pooled
+re-run of the probe peaks at 112 MB of the 1.6 GB pool. Inert while the pool does not bind: smoke and
+regression byte-identical on every non-EDF key. Game 157 alone was also mildly starved (4 GB pool under
+the old accounting: 44.8M -> 40.1M units).
+
+Not the cause, measured: the bp continuation cache's 8,192-entry clear-on-full (cap 1M: identical units on
+157) and the plan-cache pool (20 MB: identical units on 900411).
+
+### 8c. Landed: the USER's EDF rules
+
+USER 2026-10-21: *"not to use Emiel's come into play with a +1/+1 counter. At minimum anytime we flicker"*,
+*"I have never used the +1/+1 counter with this deck ever"*, and *"flickers should only target untappers.
+There is no benefit to targeting anything else."* `DecisionProvider::PaysEtbCounterOnFlicker` (ApplyBlink
+installs a declining payer that outranks the searched pin and the blink loop's own payer) and
+`SearchesOptionalEtbCounter` (the etb-counter axis) are both false for EDF; `BlinkTargetCandidates` no
+longer offers the attacker branch. Restore: `MTG_EDF_FLICKER_COUNTER=1`, `MTG_EDF_SEARCH_ETB_COUNTER=1`,
+`MTG_EDF_BLINK_UNTAPPER_ONLY=0`. Work on the slow phase-A games: within 2% (they are not where it goes).
+Play: smoke d0 5.3170 -> 5.3160, regression d0 5.3420 -> 5.3410 (gi738 7->6, gi785 7->6, gi91 7->8), d3/d5
+same scores; regression d3 s2002 gi37 still wins T7 by combat, at opponent life 0 instead of -1.
+
+### 8d. What is left
+
+1. **The bricked-future refutation itself.** Exact routes: a certificate that refutes one turn EARLIER
+   (bound end-of-next-turn damage from a node, so a whole turn of plans need not be enumerated) -- a
+   design job in the EDF provider's `ProvenWinlessThisTurn` family; or per-node cost.
+2. **`MTG_LABEL_HORIZON`** (built, default OFF): stop the ladder at pass H and label deeper samples by a
+   searched playout. It changes which labels exist -- the label ceiling is a USER decision.

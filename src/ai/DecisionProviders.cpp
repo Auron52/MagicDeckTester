@@ -42790,13 +42790,35 @@ std::vector<int> EldraziFlickerProvider::BlinkTargetCandidates(const GameState& 
     // turn (a blinked creature comes back summoning-sick), whereas the untap loop can win THIS one
     // -- and if the loop is live, its iterations put those same counters on anyway.
     //
+    // ONLY UNTAPPERS, EVER (USER 2026-10-21: *"flickers should only target untappers. There is no
+    // benefit to targeting anything else."*). The attacker branch used to survive on a board with no
+    // untapper; it grew an attacker with Emiel's counters, which a flicker no longer pays
+    // (PaysEtbCounterOnFlicker), so it is a {3} for an ETB that does nothing. No untapper = no
+    // blink target.
+    //
     // MTG_EDF_BLINK_UNTAPPER_ONLY=0 restores the two-candidate set.
     static const bool s_untapper_only = EnvOn("MTG_EDF_BLINK_UNTAPPER_ONLY", true);
-    const bool have_untapper = (best_payload != 0 && best_untaps > 0);
-    if (!(s_untapper_only && have_untapper)
-        && best_attacker != 0 && best_attacker != best_payload)
-    { out.push_back(best_attacker); }
+    if (s_untapper_only)
+    {
+        if (best_untaps <= 0) { out.clear(); }
+        return out;
+    }
+    if (best_attacker != 0 && best_attacker != best_payload) { out.push_back(best_attacker); }
     return out;
+}
+
+bool EldraziFlickerProvider::PaysEtbCounterOnFlicker(const GameState& s, int controller) const
+{
+    (void)s; (void)controller;
+    static const bool s_pay = EnvOn("MTG_EDF_FLICKER_COUNTER");
+    return s_pay;
+}
+
+bool EldraziFlickerProvider::SearchesOptionalEtbCounter(const GameState& s) const
+{
+    (void)s;
+    static const bool s_search = EnvOn("MTG_EDF_SEARCH_ETB_COUNTER");
+    return s_search;
 }
 
 // HOW MANY activations. Generic caps at 3, which for this deck is not merely conservative -- it

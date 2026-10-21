@@ -111,19 +111,20 @@ TEST_CASE("EDF blink target: Cloud of Faeries IS the target when no Drake is ava
     CHECK(Targets(s) == std::vector<int>{cloud});
 }
 
-TEST_CASE("EDF blink target: with no untapper at all the attacker branch is still offered")
+TEST_CASE("EDF blink target: with no untapper at all nothing is offered")
 {
     EnsureCardsLoaded();
     GameState s;
     s.active_player_index = 0;
 
     Put(s, "Emiel the Blessed", 0, 100);
-    const int displacer = Put(s, "Eldrazi Displacer", 0, 103);   // 3/3
-    Put(s, "Essence Depleter", 0, 104);                          // 2/3
+    Put(s, "Eldrazi Displacer", 0, 103);   // 3/3
+    Put(s, "Essence Depleter", 0, 104);    // 2/3
 
-    // The preference SUPPRESSES the attacker, it does not delete it: with nothing to untap, growing
-    // the biggest body is the only blink worth proposing and it must still be reachable.
-    CHECK(Targets(s) == std::vector<int>{displacer});
+    // USER 2026-10-21: "flickers should only target untappers. There is no benefit to targeting
+    // anything else." The old attacker branch grew a body with Emiel's counter, which a flicker no
+    // longer pays (PaysEtbCounterOnFlicker), so it would be {3} for an ETB that does nothing.
+    CHECK(Targets(s).empty());
 }
 
 TEST_CASE("EDF blink target: blink_own_only excludes the opponent's untapper")

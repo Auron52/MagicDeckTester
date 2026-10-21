@@ -1792,6 +1792,25 @@ public:
         return true;
     }
 
+    // PaysEtbCounterOnFlicker -- may an ETB that a FLICKER caused (ApplyBlink: exile, then return)
+    // pay the optional counter at all? false installs a declining payer around the returned
+    // creature's ETB watchers, which outranks the searched pin (Plan::etbcounter_choice) and every
+    // caller-owned payer, so the search never branches on it. DEFAULT true = unchanged.
+    virtual bool PaysEtbCounterOnFlicker(const GameState& s, int controller) const
+    {
+        (void)s; (void)controller;
+        return true;
+    }
+
+    // SearchesOptionalEtbCounter -- does the search offer the OPPOSITE of PaysOptionalEtbCounter as
+    // a variant of every base plan that can trigger the counter (TurnSolver's etb-counter axis)?
+    // false = the provider's answer is the only option (a one-option prune). DEFAULT true.
+    virtual bool SearchesOptionalEtbCounter(const GameState& s) const
+    {
+        (void)s;
+        return true;
+    }
+
     // HoldFuelWhileComboing -- "once you are going off, don't play any fuel; just cycle everything"
     // (USER, 2026-09-05, on Fluctuator). While the combo is live, every card in hand is AMMUNITION,
     // not a resource: cycling is 1-for-1 (it draws a replacement AND pings), a cast is 1-for-0, and
