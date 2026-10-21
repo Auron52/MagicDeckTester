@@ -511,11 +511,14 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   (required status checks exist only on PRs, and this repo works on shared branches). It is
   therefore on YOU to look:
   ```
-  gh run watch                                  # blocks until the just-pushed run lands
-  gh run list --branch "$(git rev-parse --abbrev-ref HEAD)" --limit 3
+  gh run list --branch "$(git rev-parse --abbrev-ref HEAD)" --limit 3   # the just-pushed run's id
+  gh run watch <id> --exit-status               # run THIS in the background (it blocks until the run lands)
   gh run view --log-failed                      # on a red run
   ```
-  Report the per-OS outcome in the same message as the push. Do NOT rely on email: pushes
+  **Do NOT wait on CI (USER 2026-10-21: *"we could also not wait on CI, but still check the result when it
+  finishes. It rarely fails after all."*).** Start the watch in the background and carry on: never hold a
+  landing, a report or the next step for it. Report the per-OS outcome when it lands; if it has not landed
+  by your closing message, say it is still running and report it when it does. Do NOT rely on email: pushes
   authenticate as `dtippett-bot`, so GitHub's failure mail goes to the bot's mailbox, not the
   user's. The job that matters most is **determinism parity** — it asserts Linux and Windows
   produce the same result for the same seed, which is what `src/core/Library.h`'s open-coded
