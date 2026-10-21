@@ -445,6 +445,21 @@ add_executable(mtg-test
     test/unit/test_izzet_mana_fidelity.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
+# Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism
+# are too). Nearly every test TU includes the same heavy engine headers; parsing them once instead of ~150
+# times is most of mtg-test's compile time, which was 12 of the Windows CI build's 18 minutes.
+# test_mana_payment.cpp defines DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN before it includes doctest, which a
+# force-included doctest.h would pre-empt, so it skips the PCH.
+option(MTG_TEST_PCH "Precompiled header for mtg-test" ON)
+if(MTG_TEST_PCH)
+    target_precompile_headers(mtg-test PRIVATE
+        <string> <vector> <algorithm>
+        <doctest/doctest.h>
+        [["cards/CardDatabase.h"]] [["core/HeuristicDefaults.h"]] [["core/GameState.h"]]
+        [["core/SpellEffects.h"]] [["core/GameSetup.h"]]
+        [["ai/DecisionProviders.h"]] [["ai/TurnSolver.h"]] [["ai/HeuristicArm.h"]])
+    set_source_files_properties(test/unit/test_mana_payment.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+endif()
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working
 # directory is the build tree. It happened to work on Linux only because the loader walks up from
 # /proc/self/exe -- a route Windows does not have -- so on MSVC every test threw "Cannot open card
