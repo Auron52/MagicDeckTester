@@ -197,19 +197,37 @@ def _resolve_deck_dir(ref_dir):
         if not os.path.isdir(os.path.join(_REPO_ROOT, base)):
             continue
         stem = cparts[0]          # the decklist is named for the DECK, never for the version folder
+        # A list named after neither the folder (decks/Vampires/Vampire.cod): the deck folder's ONE
+        # top-level decklist names the stem, as in server.js folderDecklist / deck_registry (2026-10-21).
+        stems = [stem]
+        only = _unique_decklist_stem(os.path.join(_REPO_ROOT, "decks", stem))
+        if only and only.lower() != stem.lower():
+            stems.append(only)
         # Matched CASE-INSENSITIVELY, as the user's (Windows) filesystem matches it: Soldiers ships as
         # decks/Soldiers/soldiers.cod, which the viewer finds and saves references for, while an
         # exact-name lookup here found nothing and its six references were never replayed.
-        for ext in (".cod", ".txt"):
-            hit = _ci_entry(os.path.join(_REPO_ROOT, base), stem + ext)
-            if not hit:
-                continue
-            fstem = hit[:-len(ext)]
-            deck = f"{base}/{hit}"
-            prof = f"{base}/{fstem}.profile.json"
-            if os.path.exists(os.path.join(_REPO_ROOT, prof)):
-                return (deck, prof)
+        for s in stems:
+            for ext in (".cod", ".txt"):
+                hit = _ci_entry(os.path.join(_REPO_ROOT, base), s + ext)
+                if not hit:
+                    continue
+                fstem = hit[:-len(ext)]
+                deck = f"{base}/{hit}"
+                prof = f"{base}/{fstem}.profile.json"
+                if os.path.exists(os.path.join(_REPO_ROOT, prof)):
+                    return (deck, prof)
     return None
+
+
+def _unique_decklist_stem(d):
+    """-> the file stem of `d`'s ONE top-level decklist (.cod|.txt), else None (none, or several).
+    Same contract as scripts/deck_registry._unique_decklist_stem."""
+    try:
+        lists = [e for e in os.listdir(d)
+                 if e.lower().endswith((".cod", ".txt")) and os.path.isfile(os.path.join(d, e))]
+    except OSError:
+        return None
+    return os.path.splitext(lists[0])[0] if len(lists) == 1 else None
 
 
 def _ci_entry(d, name):

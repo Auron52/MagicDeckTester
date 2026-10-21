@@ -131,6 +131,26 @@ function ciEntry(dir, name) {
   return hits.length === 1 ? hits[0] : null;
 }
 
+// The decklist of deck folder `dir` (named `name`) as [the FOLDER-named id the client sends back,
+// the file stem ON DISK], or null. The layout's <name>.cod|.txt first (case-insensitively), else the
+// folder's ONE top-level decklist: decks/Vampires ships Vampire.cod / Vampire.profile.json, named
+// after neither the folder nor a parent, and was missing from the deck list (2026-10-21). Same rule
+// as deck_registry._unique_decklist_stem, mullgen.sh and suite_gate.resolve_decklist. Several lists
+// in one folder are ambiguous and resolve to none.
+function folderDecklist(dir, name) {
+  for (const ext of ['.cod', '.txt']) {
+    const hit = ciEntry(dir, name + ext);
+    if (hit) return [name + ext, hit.slice(0, -ext.length)];
+  }
+  let lists = [];
+  try {
+    lists = fs.readdirSync(dir).filter(e => /\.(cod|txt)$/i.test(e) && fs.statSync(path.join(dir, e)).isFile());
+  } catch (e) { return null; }
+  if (lists.length !== 1) return null;
+  const ext = path.extname(lists[0]);
+  return [name + ext, lists[0].slice(0, -ext.length)];
+}
+
 function resolveDeck(deckName, version) {
   if (typeof deckName !== 'string' || !deckName) throw new Error('deck required');
   const base = path.basename(deckName);                    // strip any path components
@@ -146,7 +166,14 @@ function resolveDeck(deckName, version) {
     dir = path.join(deckDir, version);
     if (path.dirname(dir) !== deckDir) throw new Error('version must be one folder under the deck');
   }
-  const deckPath = path.join(dir, ciEntry(dir, base) || base);
+  let file = ciEntry(dir, base);
+  if (!file) {
+    // A list named after neither the folder (decks/Vampires/Vampire.cod): its stem is the deck
+    // folder's own decklist stem, in a version folder too (variants carry the parent's file stem).
+    const top = folderDecklist(deckDir, stem);
+    if (top) file = ciEntry(dir, top[1] + path.extname(base));
+  }
+  const deckPath = path.join(dir, file || base);
   if (path.dirname(deckPath) !== dir) throw new Error('deck must be under decks/<name>/');
   if (!fs.existsSync(deckPath)) throw new Error('deck not found: ' + base);
   const fstem = path.basename(deckPath).replace(/\.[^.]+$/, '');   // the stem ON DISK (names the sidecars)
@@ -1340,12 +1367,9 @@ function listDecks() {
     // `deckFile` is the FOLDER-named id the client sends back (resolveDeck maps it to the file on
     // disk case-insensitively, and the folder name is what names references/<Deck>/); `onDisk` is
     // the actual file, whose stem names the sidecars.
-    let deckFile = null, onDisk = null;
-    for (const ext of ['.cod', '.txt']) {
-      const hit = ciEntry(dir, name + ext);
-      if (hit) { deckFile = name + ext; onDisk = hit.slice(0, -ext.length); break; }
-    }
-    if (!deckFile) continue;                                 // folder without a matching decklist
+    const found = folderDecklist(dir, name);
+    if (!found) continue;                                    // folder without a matching decklist
+    const [deckFile, onDisk] = found;
     const hasProfile = fs.existsSync(path.join(dir, onDisk + '.profile.json'));
     out.push(Object.assign({ id: deckFile, deck: deckFile, name, version: null, label: name, hasProfile },
                            deckMaturity(dir, name, hasProfile, null, onDisk)));
@@ -1360,7 +1384,7 @@ function listDecks() {
       if (!fs.statSync(subdir).isDirectory()) continue;
       let vFile = null, vOnDisk = null;
       for (const ext of ['.cod', '.txt']) {
-        const hit = ciEntry(subdir, name + ext);
+        const hit = ciEntry(subdir, name + ext) || ciEntry(subdir, onDisk + ext);   // parent's FILE stem
         if (hit) { vFile = name + ext; vOnDisk = hit.slice(0, -ext.length); break; }
       }
       if (!vFile) continue;
