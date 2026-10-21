@@ -72256,6 +72256,33 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // plays (the caller re-searches once it exhausts the committed line). The
         // rollout only CONSUMES the budget (enforce_budget is false inside), so it
         // never truncates -- the start gate alone reads the budget, between passes.
+        // BLIND LEAF (MTG_LEAF_BLIND_K=K; DIAGNOSTIC, default 0 = off). The rollout above plays the REAL
+        // upcoming draws, while the learned value leaf is trained on a de-clairvoyed label (K reshuffles)
+        // and reads no library order. To size how much of the value leaf's deficit at matched depth is that
+        // information gap, this replaces the rollout with the mean of K rollouts over reshuffled unseen
+        // libraries (mid-game shuffles decoupled too), rounded like the model's estimate. The K futures are
+        // shared by every leaf of the same turn (common random numbers), so siblings differ by board, not
+        // luck. No leaf memo (its key reads library SIZE, not order). A measurement tool, never play.
+        static const int s_leaf_blind_k = EnvInt("MTG_LEAF_BLIND_K", 0);
+        if (s_leaf_blind_k > 0)
+        {
+            long long sum = 0;
+            for (int k = 0; k < s_leaf_blind_k; ++k)
+            {
+                GameState bl = state;
+                const uint64_t bsalt = SaltSeed(
+                    state.game_seed + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(state.turn_number),
+                    0xB1D0ULL + static_cast<uint64_t>(k));
+                bl.ActivePlayer().library.Shuffle(bsalt);
+                bl.shuffle_salt_search = bsalt;
+                sum += SimulateToEnd(std::move(bl), EffectiveFdLeafDepth(), max_turns, budget, max_turns + 1,
+                                     second_main, nullptr);
+            }
+            int w = static_cast<int>((2 * sum + s_leaf_blind_k) / (2 * s_leaf_blind_k));   // round half up
+            if (w < state.turn_number) { w = state.turn_number; }
+            g_fs_leaf_wt_sum += w;
+            return { w, {} };
+        }
         GameState leaf = state;
         int w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
         g_fs_leaf_wt_sum += w;
