@@ -19634,6 +19634,28 @@ static bool VampSocialiteM2On()
     static const bool env = EnvOn("MTG_VAMP_SOCIALITE_M2", true);
     return heurarm::Flag(heurarm::VAMP_SOCIALITE_M2, env);
 }
+static bool VampAlwaysLandOn()
+{
+    static const bool env = EnvOn("MTG_VAMP_ALWAYS_LAND");
+    return heurarm::Flag(heurarm::VAMP_ALWAYS_LAND, env);
+}
+bool VampiresProvider::OffersLandDeferral(const GameState& s) const
+{
+    if (!VampAlwaysLandOn()) { return true; }
+    const int me = s.active_player_index;
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->gy_landfall_watcher) { return true; }
+    }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->gy_landfall_watcher) { return true; }
+    }
+    return false;
+}
 bool VampiresProvider::RestrictsCollectedActions() const { return VampNoStealOn() || VampSocialiteM2On(); }
 bool VampiresProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
 {

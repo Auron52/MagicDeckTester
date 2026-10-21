@@ -1133,6 +1133,11 @@ public:
     //     cast in main 2, so it can benefit from the damage dealt."* -- no pre-combat hand cast or Aether
     //     Vial put of a card with Socialite's opp-lost-life clauses.
     bool RestrictsCollectedActions() const override;
+    // MTG_VAMP_ALWAYS_LAND (heurarm VAMP_ALWAYS_LAND, PROPOSED 2026-10-21, DEFAULT OFF, for the USER): the census
+    // put 48% of the deck's units under plans that hold a land with the drop open. Always make the land drop in
+    // main 1 -- except while a Bloodghast is in hand or on the battlefield (a main-2 discard or Pit Fighter
+    // sacrifice puts it in the graveyard, and a land played after that returns it).
+    bool OffersLandDeferral(const GameState& s) const override;
     bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
     // Vampires A1 (AGENT-DRAFTED, same lever): the madness default -- the base dominance rule (cast the
     // cheapest max-free option) except a graveyard-landfall card (Bloodghast) in a MAIN phase while this

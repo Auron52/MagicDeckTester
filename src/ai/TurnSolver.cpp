@@ -66566,6 +66566,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                                                                     bool is_pre_combat)
 {
     std::vector<TurnSolver::Plan> all = EnumeratePlansWithLandUncachedBody(state, is_pre_combat);
+    // A PROVIDER'S LAND-DEFERRAL RESTRICTION (DecisionProvider::OffersLandDeferral; Vampires' PROPOSED
+    // MTG_VAMP_ALWAYS_LAND). Pre-combat, while the drop is open and a land is in hand, a provider that says no
+    // drops every plan that plays no land; the land plans (land-first and land-after-the-activations alike)
+    // stay. Nothing is dropped when no plan plays a land. Human play keeps the full menu.
+    if (is_pre_combat && !all.empty() && !HumanPlayActive()
+        && !ResolveProvider(state).OffersLandDeferral(state))
+    {
+        const Player& ap = state.ActivePlayer();
+        bool land_in_hand = false;
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsLand()) { land_in_hand = true; break; }
+        }
+        if (land_in_hand && ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            std::vector<TurnSolver::Plan> kept;
+            kept.reserve(all.size());
+            for (TurnSolver::Plan& p : all) { if (!p.land_to_play.empty()) { kept.push_back(std::move(p)); } }
+            if (!kept.empty()) { all.swap(kept); }
+        }
+    }
     // MTG_VAMP_PLAN_DUMP=<min plans> (inert by default; Vampires Stage 5f): print every enumeration of at
     // least that many plans -- turn, phase, hand, our board, and each plan with its Vampires pins (discard,
     // madness, victim, convoke arm, Blood k, steal spec, breakpoint choice) -- at most MTG_VAMP_PLAN_DUMP_N

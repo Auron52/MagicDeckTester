@@ -601,3 +601,28 @@ TEST_CASE("PROPOSED amendment MTG_VAMP_FREE_DISCARD_DEAD: a card no cost of whic
     std::sort(pins.begin(), pins.end());
     CHECK(pins == std::vector<std::string>{ "Asylum Visitor", "Bloodline Keeper" });
 }
+
+TEST_CASE("PROPOSED MTG_VAMP_ALWAYS_LAND: main 1 never holds the land drop -- unless a Bloodghast could use it later")
+{
+    ArmVo on(heurarm::VAMP_ALWAYS_LAND, true);
+    GameState s = MakeVo({"Swamp", "Vampire of the Dire Moon", "Legion Lieutenant"}, {{"Swamp"}});
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 0;
+    auto holds = [](const std::vector<TurnSolver::Plan>& plans)
+    {
+        int n = 0;
+        for (const TurnSolver::Plan& p : plans) { if (p.land_to_play.empty()) { ++n; } }
+        return n;
+    };
+    const std::vector<TurnSolver::Plan> pre = TurnSolver::EnumerateMainPlans(s, true);
+    CHECK_FALSE(pre.empty());
+    CHECK(holds(pre) == 0);
+    {
+        ArmVo off(heurarm::VAMP_ALWAYS_LAND, false);
+        CHECK(holds(TurnSolver::EnumerateMainPlans(s, true)) > 0);
+    }
+    GameState gh = MakeVo({"Swamp", "Bloodghast", "Legion Lieutenant"}, {{"Swamp"}});
+    gh.phase = Phase::PreCombatMain;
+    gh.players[0].lands_played_this_turn = 0;
+    CHECK(holds(TurnSolver::EnumerateMainPlans(gh, true)) > 0);              // Bloodghast: the hold stays
+}
