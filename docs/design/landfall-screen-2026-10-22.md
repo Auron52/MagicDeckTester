@@ -96,3 +96,45 @@ Reading (clairvoyant engine; the bracket is still owed):
   read the clairvoyant search already knows the answer to, and as a land it replaces a basic Forest that the
   fetch rule can find. Needs the bracket before it is believed.
 - Stomping Ground is neutral (one more red source the deck rarely needs). Primal Vigor is worse.
+
+## Round 1 — Mossborn Hydra, Kessig Wolf Run, mana creatures (`logs/landfall_screen/r1.json`, seed 7400000)
+
+20,000 paired games per arm, pre-rebase engine (`ae1bb771c`'s code without the 11 commits pulled at push
+time; `cards.json` identical). Base 5.7321 (T7+ 6.84%, T8+ 0.69%, unwon 0.13%). Negative = faster.
+
+| arm | change | delta | se | identical | T7+ d | T8+ d | unwon d |
+|---|---|---|---|---|---|---|---|
+| h4_phy0 | 4 Phylath -> 4 Hydra | **-0.6989** | 0.0047 | 40.4% | -3.59% | -0.30% | -0.07% |
+| h4_k0_elf4_rg0 | 4 Khalni -> 4 Hydra, 4 Rampant Growth -> 4 Llanowar Elves | -0.6791 | 0.0052 | 41.8% | -4.18% | -0.35% | -0.05% |
+| h4_k0 | 4 Khalni -> 4 Hydra | -0.6009 | 0.0049 | 49.8% | -4.12% | -0.37% | -0.04% |
+| h4_rg0 | 4 Rampant Growth -> 4 Hydra | -0.5841 | 0.0051 | 48.4% | -2.80% | **+0.07%** | **+0.14%** |
+| h4_c0_cult0 | 2 Courser + 2 Cultivate -> 4 Hydra | -0.5327 | 0.0055 | 53.1% | -2.54% | -0.20% | -0.04% |
+| h4_sft0 | 4 Search for Tomorrow -> 4 Hydra | -0.5206 | 0.0053 | 50.8% | -2.10% | **+0.47%** | **+0.30%** |
+| h2_cult0 | 2 Cultivate -> 2 Hydra | -0.4051 | 0.0046 | 65.7% | -2.10% | -0.15% | -0.03% |
+| h2_k2 | 2 Khalni -> 2 Hydra | -0.3952 | 0.0045 | 67.8% | -2.80% | -0.29% | -0.04% |
+| h2_wave0 | 2 Genesis Wave -> 2 Hydra | -0.3609 | 0.0046 | 71.6% | -2.40% | -0.14% | -0.06% |
+| h2_bal0 | 2 Baloths -> 2 Hydra | -0.3582 | 0.0045 | 72.7% | -2.59% | -0.19% | -0.04% |
+| h2_c0_wr | 2 Courser -> 2 Hydra, Fengraf -> Wolf Run | -0.3510 | 0.0045 | 72.3% | -3.06% | -0.34% | -0.07% |
+| h2_c0 | 2 Courser -> 2 Hydra | -0.3439 | 0.0044 | 73.3% | -2.65% | -0.27% | -0.06% |
+| elf4_k0 | 4 Khalni -> 4 Llanowar Elves | -0.1137 | 0.0032 | 79.1% | -1.60% | -0.25% | -0.07% |
+| elf4_rg0 | 4 Rampant Growth -> 4 Llanowar Elves | -0.1048 | 0.0032 | 79.9% | -0.60% | +0.07% | +0.06% |
+| bop4_rg0 | 4 Rampant Growth -> 4 Birds of Paradise | -0.0877 | 0.0032 | 80.3% | -0.06% | +0.16% | +0.04% |
+| wr_font | Radiant Fountain -> Kessig Wolf Run | -0.0145 | 0.0010 | 98.0% | -0.97% | -0.15% | -0.01% |
+| wr_feng | Haunted Fengraf -> Kessig Wolf Run | -0.0138 | 0.0010 | 98.0% | -0.87% | -0.14% | -0.01% |
+| wr_mtn | 1 Mountain -> Kessig Wolf Run | -0.0043 | 0.0015 | 95.6% | -0.63% | -0.11% | -0.01% |
+| wr_forest | 1 Forest -> Kessig Wolf Run | +0.0078 | 0.0017 | 96.1% | -0.22% | +0.14% | +0.13% |
+
+Reading:
+- **Mossborn Hydra is the screen's headline: ~0.35 t per pair, ~0.5-0.7 t as a 4-of**, an order of magnitude
+  past any floor this apparatus could carry, and it roughly HALVES the T7+ tail (6.8% -> 2.7-3.3%) -- the
+  threat problem the deck's owner reported. A spot-checked game (`h4_phy0`, seed 7400003) shows the mechanism
+  as printed: T3 Hydra (1), T4 suspended Search + land drop (4) and a Genesis Wave, T5 Cultivate's battlefield
+  land + the drop -> 16 counters, an exactly-lethal swing.
+- **The cut matters.** Phylath (a 6-drop) is the best slot measured; cutting ramp that puts LANDS (Rampant
+  Growth, Search for Tomorrow) gains less and RAISES the T8+ / unwon tail -- those spells are Hydra fuel.
+- **Kessig Wolf Run is a real 1-of over a colourless utility land** (-0.014 t, T7+ -0.9 points), as the USER
+  expected; over a Mountain it is ~neutral, over a Forest slightly worse (the green source matters more).
+- **Mana creatures help (-0.09 to -0.11 t)** but far less than the Hydra.
+- **Clairvoyance direction.** Every Hydra arm cuts a shuffler or a Phylath, so the arm holds FEWER shuffles
+  than base; if the clairvoyant search over-values shuffles, these deltas are, if anything, understated.
+  The bracket below tests that.
