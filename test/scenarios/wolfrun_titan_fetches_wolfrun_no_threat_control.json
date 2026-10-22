@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "CONTROL for wolfrun_titan_fetches_wolfrun_no_threat: the same T5 board and hand with NO Kessig Wolf Run in",
+    "the library (its slot filled by another Radiant Fountain). Titan's rule picks (Wilds / Myriad pairs) add no",
+    "damage: Titan deals 6 on T6 and 6 on T7 -- the kill is T7. So the T6 in the main fixture is the Wolf Run",
+    "the Titan fetched, pumping on T6."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 11,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Primeval Titan"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Radiant Fountain",
+    "Evolving Wilds",
+    "Terramorphic Expanse",
+    "Myriad Landscape",
+    "Myriad Landscape",
+    "Radiant Fountain",
+    "Haunted Fengraf",
+    "Forest",
+    "Forest",
+    "Mountain"
+  ],
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 6,
+  "expect_no_win": true
+}

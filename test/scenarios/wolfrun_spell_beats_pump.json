@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Kessig Wolf Run 2026-10-22: the mana is better spent on a SPELL than on the pump, and the search does that.",
+    "Board: Courser of Kruphix (2/4, can attack), Kessig Wolf Run, one Mountain and two Forests; Lightning Bolt in",
+    "hand. Opponent at 5. The ONLY red source pays either the Bolt or the pump's {R}, never both. Pumping (X = 1,",
+    "the most the two Forests + Mountain pay beyond {R}{G}) swings for 3: opponent at 2, no kill. Bolt (3) + the",
+    "Courser's 2 is exactly 5: the T6 kill. The search must take the cast over the pump (the d0 greedy pump",
+    "would cost the turn). Library filler Swords to Plowshares (white -- never castable here)."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 5,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Kessig Wolf Run" },
+    { "name": "Mountain" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Courser of Kruphix" }
+  ],
+  "hand": [
+    "Lightning Bolt"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "expect_win_turn": 6
+}

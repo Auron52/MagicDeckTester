@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "VIEWER (Kessig Wolf Run, 2026-10-22): the human makes BOTH of the pump's choices. Under human play the",
+    "engine offers every legal X (0 included) and every legal target, unfolded -- no Landfall fold applies. Here",
+    "the OTHER sources (Mountain + two Forests) pay {R}{G} plus at most one more: X = 0 or 1, at Courser of",
+    "Kruphix or Avenger of Zendikar (the opponent has no creature). A bare `cast=Kessig Wolf Run` (the verbless",
+    "land convention) must resolve to a `choose` over EXACTLY 2 x 2 = 4 variants, each naming its X and its",
+    "target (the `pumptarget` and `x` sub-choices)."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Kessig Wolf Run" },
+    { "name": "Mountain" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Courser of Kruphix" },
+    { "name": "Avenger of Zendikar" }
+  ],
+  "hand": [],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "validate_line": "cast=Kessig Wolf Run",
+  "expect_verdict": "choose",
+  "expect_variants": 4,
+  "expect_variants_all_contain": "Kessig Wolf Run: X="
+}

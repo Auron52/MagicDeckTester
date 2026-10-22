@@ -895,6 +895,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // The Blood token's searched discard (Vampires A2); absent in human play.
                 if (a.ability_mode == Action::AbilityMode::BloodDraw && !a.discard_name.empty())
                 { tag += " (discard " + a.discard_name.str() + ")"; }
+                // Kessig Wolf Run's pump: the X and the TARGET are the whole decision (the blink lesson).
+                if (a.ability_mode == Action::AbilityMode::TapTargetPump)
+                {
+                    tag += " -- X=" + (a.chosen_x == kTapTargetPumpXAll ? std::string("all remaining mana")
+                                                                        : std::to_string(a.chosen_x))
+                         + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
+                }
                 break;
             // Birthing Pod: the VICTIM and the FETCH are the whole decision (the blink lesson
             // above) -- without both, every Pod variant renders identically.
@@ -2797,6 +2804,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                    << ", \"untap_shape\": " << ac.gy_exile_mode;
                 // The closed-form LOOP (chunk C2b): verb untaploop= on the line.
                 if (ac.chosen_x >= kUntapLoopToNeed) { os << ", \"untap_loop\": true"; }
+            }
+            // Kessig Wolf Run's pump (TapTargetPump): the target (m_number + name) and the X, so the GUI
+            // and the claude-play protocol can tell the (target, X) variants apart. `pump_x` -1 = the
+            // max-X fold's "all remaining mana" (never emitted under human play).
+            if (ac.kind == Action::Kind::ActivatePermAbility && ac.ability_mode == Action::AbilityMode::TapTargetPump)
+            {
+                os << ", \"pump_target\": " << ac.sac_victim_id
+                   << ", \"pump_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+                os << ", \"pump_x\": " << (ac.chosen_x == kTapTargetPumpXAll ? -1 : ac.chosen_x);
             }
             // REPEATABLE (no {T} and no sacrifice in the cost, so activation count is bounded only
             // by mana): tells the viewer it may STACK this activation -- clicking it K times queues

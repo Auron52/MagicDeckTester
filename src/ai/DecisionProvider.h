@@ -1558,6 +1558,41 @@ public:
         return out;
     }
 
+    // TapTargetPumpXCandidates / TapTargetPumpTargets -- the two SEARCHED choices of a "{X}{cost}, {T}:
+    // target creature gets +X/+0" activation (Kessig Wolf Run: "{X}{R}{G}, {T}: Target creature gets
+    // +X/+0 and gains trample until end of turn"; PermAbilityMode::TapTargetPump). The engine emits ONE
+    // plan variant per (target, X) the two hooks return, all one activation family (one {T} per plan),
+    // so the search -- never the host -- picks. Human play bypasses both: every legal X 0..max and every
+    // legal target (own and opposing creatures) is offered.
+    //
+    // X. `x_max` = the largest X the turn's OTHER sources can pay (the land taps itself as part of the
+    // cost, so its own mana is debited). The base returns EVERY affordable X, max first (x_max .. 1).
+    // X = 0 is not offered autonomously: it pays {R}{G} and the {T} for +0/+0 and a trample that is inert
+    // in this engine (no blocker path), so it is weakly dominated by not activating, which the subset walk
+    // always enumerates. A provider may ORDER the list, or return {kTapTargetPumpXAll} ("every mana the
+    // turn has left, paid AT the activation", SpellEffects.h) -- only under a stated SOUND max-X dominance
+    // argument (nothing later in the turn can spend the leftover); the engine then runs that activation
+    // LAST in its trailing pass (TurnSolver::TrailingForcedLast). For a cost with no {X} the hook is not
+    // asked (X = 0).
+    virtual std::vector<int> TapTargetPumpXCandidates(const GameState& s, const Permanent& source,
+                                                      int x_max, bool is_pre_combat) const
+    {
+        (void)s; (void)source; (void)is_pre_combat;
+        std::vector<int> out;
+        for (int x = x_max; x >= 1; --x) { out.push_back(x); }
+        return out;
+    }
+    // TARGET. `targets` arrives as the engine's legal OWN-creature list -- battlefield indices, one per
+    // identity class (LandfallTargetFoldKey: two identical Plants are one target), in battlefield order.
+    // The provider may RESTRICT it (a stated sound fold or a USER rule) or ORDER it. Base: unchanged --
+    // every own creature, in either main (a creature that cannot attack still gets the power, and some
+    // pools read power outside combat damage: Fling-class sacrifice, equip_min_power, ...). An opponent's
+    // creature is a legal target too, never offered autonomously (the passive opponent never attacks or
+    // blocks, so its power is read by nothing -- the Seedcradle Witch precedent; human play offers it).
+    virtual void TapTargetPumpTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
+                                      std::vector<int>& targets) const
+    { (void)s; (void)source; (void)is_pre_combat; (void)targets; }
+
     // MainPhaseTeamPumpCounts -- MAIN-PHASE activation counts for a stacking P/T team pump with no
     // keyword rider and no {T} (Ezuri, Renegade Leader's "{2}{G}{G}{G}: Elf creatures you control get
     // +3/+3"; Action::Kind::ActivatePump mode 2). The combat converter (ApplyFirebreathing) already

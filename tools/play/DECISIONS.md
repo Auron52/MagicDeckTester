@@ -520,6 +520,19 @@ the generic `act=Stromkirk Condemned` board token; Voldaren Estate's Blood creat
 `revive` row above. The land after a Bloodghast discard / sacrifice is the existing `landafter=` (-1)
 position. All human-play only: every chooser is nulled by `RevealLogPause` in search and rollouts.
 
+**Kessig Wolf Run (2026-10-22) -- both choices are `main_phase` plan VARIANTS (bucket A, no new type).**
+"{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn"
+(`PermAbilityMode::TapTargetPump`). Under `HumanPlayActive()` the enumerator emits one plan per (legal
+target, X) -- EVERY legal X 0..max (the land's own {C} never pays; the R and the G come from other
+sources) and EVERY legal target, own and opposing creatures alike, unfolded (no provider narrowing in
+human play). The line verb is the verbless land convention, `cast=Kessig Wolf Run`; CheckLine carries a
+`pumptarget` sub (`<source> pumps`, board-object `num`, asked first -- linebuild.js SUBKIND_PRI 1.5) and an
+`x` sub for EVERY X including 0, so a bare `cast=Kessig Wolf Run` opens the dimension walk (target, then
+X). Plan JSON carries `pump_target` / `pump_target_name` / `pump_x`. Fixture:
+`test/scenarios/wolfrun_human_choose_target_and_x.json` (4 variants). Autonomously the deck provider may
+fold both (LandfallProvider: one attack-eligible target, X = all remaining mana -- `pump_x` -1); the human
+never sees a fold.
+
 **World War Hulk (Saga) and Natural Order — every choice happens IN ITS ZONE (2026-09-17).** A user
 hand-playing the promoted Stompy list found four decisions the viewer never offered. All four are now
 surfaced, and none of them uses a dialog for an object that is already on screen:

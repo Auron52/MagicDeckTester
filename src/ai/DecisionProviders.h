@@ -3340,6 +3340,14 @@ public:
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
     bool        CleanupDiscardShedStable() const override;
+    // KESSIG WOLF RUN (2026-10-22): the pump's two searched choices, narrowed only by SOUND folds the
+    // .cpp states (power is read by nothing but combat damage in this pool; the leftover mana of the
+    // turn's last activation buys nothing) -- every attack-eligible target is one outcome, and X is the
+    // most the turn pays. MTG_UNPRUNE=xspell opens both.
+    std::vector<int> TapTargetPumpXCandidates(const GameState& s, const Permanent& source, int x_max,
+                                              bool is_pre_combat) const override;
+    void             TapTargetPumpTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
+                                          std::vector<int>& targets) const override;
 };
 
 // Melira Pod (persist combo / creature toolbox: Melira / Vizier of Remedies + Kitchen Finks /

@@ -308,6 +308,14 @@ enum class PermAbilityMode
     // so in PermAbilityTaps' exclusion list. One-shot (the back face carries no transform). The face
     // swap keeps the permanent (CR 701.28 / 712.8: same object, no ETB). Appended LAST.
     TransformSelf,
+    // [{X}]{cost}, {T}: Target creature gets +N/+M [for each X] [and gains trample] until end of turn
+    // (Kessig Wolf Run, "{X}{R}{G}, {T}: ... +X/+0 and gains trample"; CardParams::tap_target_pump_*).
+    // A {T} mode on a LAND (the Shivan Gorge shape): the {T} is paid BEFORE the mana half, so the land
+    // never pays toward its own cost. TARGET (Action::sac_victim_id) and X (Action::chosen_x -- an {X}
+    // value here, NOT an activation count: a {T} mode is once per untap) are SEARCHED, emitted out of
+    // band (never the ModeSpec K block); the shared resolver reads both off TapTargetPumpPinScope.
+    // Appended LAST.
+    TapTargetPump,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used

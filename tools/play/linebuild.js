@@ -791,8 +791,10 @@
   // collapsed to a single choice by the picks above and never surfaces at all, which is the point:
   // at candidate-B Fungus seed 12 T4 this axis alone was 76% of the emitted plan menu (151 of 200
   // slots, one play appearing 18 times) purely because it had no dimension to live in.
+  // `pumptarget` (WHICH creature Kessig Wolf Run's "+X/+0" lands on) is a per-action target pick like
+  // `equip`, so it is asked before that pump's `x`.
   const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, loyalty: 1.3,
-                        bestow: 1.4, enchant: 1.5, equip: 1.5, jitte: 1.6, x: 2, activations: 2,
+                        bestow: 1.4, enchant: 1.5, equip: 1.5, pumptarget: 1.5, jitte: 1.6, x: 2, activations: 2,
                         modal: 2.5, soulfire: 3, crackle: 4, splice: 5, devour: 5.5, replicate: 6,
                         color: 7 };
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }

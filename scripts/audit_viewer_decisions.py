@@ -359,6 +359,10 @@ MANIFEST = {
     # Voldaren Estate "{5}, {T}: Create a Blood token": whether / when is a main_phase plan variant
     # (verbless `cast=Voldaren Estate`, the Conservatory precedent -- a land is never a hand cast).
     "tap_blood_cost":                ("main_phase",  truthy),
+    # Kessig Wolf Run "{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample" (2026-10-22): the
+    # TARGET and the X are main_phase plan VARIANTS (every legal X 0..max and every legal creature under
+    # human play; the `pumptarget` / `x` sub-choices of a verbless `cast=Kessig Wolf Run` line).
+    "tap_target_pump_cost":          ("main_phase",  truthy),
     # Bloodghast "you MAY return this card from your graveyard to the battlefield" (landfall): the
     # existing `revive` decision from the landfall chokepoint, one 0/1 flag per graveyard copy, all
     # preselected (autonomous play resolves YES by a PROVISIONAL dominance).
@@ -650,6 +654,8 @@ BOARD_ACTIVATIONS = {
     # real cost is {5} minus the Vampires we control).
     "discard_team_pump_power":                   ("activate",       positive, None),
     "tap_blood_cost":                            ("activate",       truthy,   "tap_blood_cost"),
+    # Kessig Wolf Run's pump: the verbless land convention (`cast=Kessig Wolf Run`), cost {X}{R}{G}.
+    "tap_target_pump_cost":                      ("activate",       truthy,   "tap_target_pump_cost"),
     # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every
     # other land-borne PermAbilityMode uses (Shivan Gorge, Botanical Conservatory, Mariposa) -- a land
     # is never in the cast multiset for a real hand cast, so the name is unambiguous. VERIFIABLE
@@ -731,6 +737,10 @@ INERT_PARAMS = {
     "activate_once_each_turn": "'Activate only once each turn' RESTRICTION (per object) -- a legality gate, not a choice",
     "tap_blood_cost_less_per_subtype": "Voldaren Estate's Blood cost reduction (per Vampire we control, counted at activation) -- a cost detail, not a choice",
     "haste_if_opp_life_at_most": "Bloodghast's conditional haste (opponent at 10 or less life) -- a static, no choice",
+    # ---- Kessig Wolf Run (2026-10-22) -- the pump's magnitudes and its keyword rider ----
+    "tap_target_pump_power": "Kessig Wolf Run's +N/+0 per X -- a printed magnitude (rides tap_target_pump_cost -> main_phase)",
+    "tap_target_pump_tough": "Kessig Wolf Run's +0 toughness -- a printed magnitude",
+    "tap_target_pump_grants_trample": "Kessig Wolf Run's trample rider -- a printed grant, structurally inert (no blocker path); no choice",
     # ---- Vampires A1 (2026-10-18). Classified inert by the integrator; PENDING USER OK per the self-guard
     #      (recorded in docs/design/analysis-Vampire.md -- surfaced, not blocking).
     "hellbent_upkeep_draw": "Asylum Visitor's upkeep trigger -- MANDATORY (draw a card and lose 1 life), an intervening-if on the hand being empty; no choice",

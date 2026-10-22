@@ -126,6 +126,19 @@ struct BottomCostReport
 };
 static BottomCostReport g_bottom_cost_report;
 
+// Kessig Wolf Run: the executor's game-log label for a RESOLVED pump -- the X actually paid and the
+// creature it went to, read off the live pin (TapTargetPumpPay rewrote its X to the paid value).
+static std::string TapTargetPumpPaidLabel(const GameState& s, const CardDefinition& d)
+{
+    const TapTargetPumpPin pin = g_tap_target_pump_pin;
+    const int x = pin.x == kTapTargetPumpXAll ? 0 : std::max(0, pin.x);
+    std::string who = "target creature";
+    for (const Permanent& q : s.battlefield) { if (q.card.m_number == pin.target) { who = q.card.m_name.str(); break; } }
+    return "X=" + std::to_string(x) + ": " + who + " gets +" + std::to_string(TapTargetPumpPowerAt(d, x)) + "/+"
+         + std::to_string(TapTargetPumpToughAt(d, x))
+         + (d.params.tap_target_pump_grants_trample ? " and gains trample" : "") + " until end of turn";
+}
+
 // Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
 // environment), TakeTurn checks each committed decision and prints a [nonconv]
 // record whenever a later turn's verified win turn exceeds one proved earlier.
@@ -5975,6 +5988,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d != nullptr && _p.ActivationOrderRankForAction(state, *d, a) != 0) { _any = true; break; }
+            if (TurnSolver::TrailingForcedLast(a)) { _any = true; break; }   // Kessig Wolf Run's max-X pump (rollout twin)
         }
         if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
         if (_any)
@@ -6430,6 +6444,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // searched target + tap spec scope.
             const int src_id = ResolveHandSourceActivation(state, a);
             const StealPinScope _steal_pin(a.enchant_target, a.steal_spec);
+            // Kessig Wolf Run's searched target + X (TapTargetPump) -- lockstep twin of the rollout's.
+            const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
+            const TapTargetPumpPinScope _tpump_pin(tpump ? a.sac_victim_id : 0, tpump ? a.chosen_x : 0);
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
                                                           src_id, a.ability_mode,
                                                           &a.discard_name.str()))
@@ -6449,7 +6466,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (taps) { SetPermTapped(state, state.active_player_index, src_id, true); }
                 ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
                 ManaPool avail = AvailableManaPool(state);
-                if (!TapForCost(state, act_cost, avail, /*for_creature=*/false))
+                // Kessig Wolf Run: {X}{R}{G} at the pinned X, or the max-X fold's largest payable X
+                // (TapTargetPumpPay -- each attempt a fresh pool, the way every activation here pays).
+                const bool paid = tpump
+                    ? TapTargetPumpPay(state, state.active_player_index, src_id, *a.def,
+                                       [this, &state](const ManaCost& c)
+                                       { ManaPool av = AvailableManaPool(state);
+                                         return TapForCost(state, c, av, /*for_creature=*/false); })
+                    : TapForCost(state, act_cost, avail, /*for_creature=*/false);
+                if (!paid)
                 {
                     if (taps) { SetPermTapped(state, state.active_player_index, src_id, false); }
                     // MTG_ACT_DROP_AUDIT "unpaid": the mana half failed and rolled back, so a pip the
@@ -6483,8 +6508,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // not a draw (USER reveal!=draw convention, 2026-09-06) -- the generic
                         // TapDraw label would log "draw a card" and misrepresent it. Param-keyed,
                         // so every real tap-draw keeps its exact label (digest-stable elsewhere).
+                        // Kessig Wolf Run: the X it paid and the creature it pumped (the pin, still live).
                         m_logger->LogAbility(src_id, a.card_name.str(),
                                              snow_look ? "look at top; put a snow card into hand"
+                                             : tpump   ? TapTargetPumpPaidLabel(state, *a.def)
                                                        : PermAbilityLabelFor(a.ability_mode, a.def));
                     }
                     // LOCKSTEP with the rollout's repeat loop (TurnSolver apply_one). A repeatable

@@ -5585,6 +5585,19 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
     if (sd.params.reconfigure_cost.has_value() && src.equipped_to != 0
         && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.reconfigure_cost)))
     { bits |= 1u << static_cast<int>(PermAbilityMode::ReconfigureUnattach); }
+    // Kessig Wolf Run's targeted pump: the out-of-band block's conditions, mirrored (an untapped,
+    // tappable source, {R}{G} at X = 0 payable, a legal own target). See CollectActions, "Kessig Wolf Run".
+    if (sd.params.tap_target_pump_cost.has_value() && !src.tapped && CanTapNow(src, state.battlefield)
+        && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, TapTargetPumpCostAt(sd, 0))))
+    {
+        bool target = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index == ctrl && q.card.m_number != 0 && TapTargetPumpTargetLegal(state, q, ctrl))
+            { target = true; break; }
+        }
+        if (target) { bits |= 1u << static_cast<int>(PermAbilityMode::TapTargetPump); }
+    }
     return bits;
 }
 
@@ -15721,7 +15734,11 @@ std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
     {
         if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id <= 0) { continue; }
         if (!PermAbilityTaps(a.ability_mode)) { continue; }
-        if (!lever && a.ability_mode != Action::AbilityMode::TapBlood) { continue; }
+        // Kessig Wolf Run (TapTargetPump) gets the Voldaren Estate hold for the same reason: it is a MANA
+        // land ({C}) whose ability owes its {T}, so a cast's greedy payment could tap it and strand the
+        // pump the plan was scored on. New-mode-gated: no other deck holds one.
+        if (!lever && a.ability_mode != Action::AbilityMode::TapBlood
+            && a.ability_mode != Action::AbilityMode::TapTargetPump) { continue; }
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
@@ -18927,6 +18944,7 @@ static bool TrailingRunsFirst(const GameState& state, const std::vector<Action>&
     const DecisionProvider& prov = ResolveProvider(state);
     auto rank_of = [&](const Action& a) -> int
     {
+        if (TurnSolver::TrailingForcedLast(a)) { return std::numeric_limits<int>::max() - 1; }   // TrailingRankOf's rule
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         return d != nullptr ? prov.ActivationOrderRankForAction(state, *d, a) : 0;
     };
@@ -26277,6 +26295,10 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         // Blood token's crack. A Blood MADE mid-plan is newly crackable, which is what opens site 9 for it.
         { PermAbilityMode::TapBlood,           &pp.tap_blood_cost                 },
         { PermAbilityMode::BloodDraw,          &pp.blood_draw_cost                },
+        // Kessig Wolf Run (2026-10-22) -- appended LAST. A Wolf Run that ARRIVES untapped mid-plan (a
+        // Genesis Wave put) is newly activatable, which is what opens site 9 for it. Priced at X = 0
+        // (the printed cost's MV), total-only like every row here.
+        { PermAbilityMode::TapTargetPump,      &pp.tap_target_pump_cost           },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -38594,6 +38616,107 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (m.mode == Action::AbilityMode::PingAll) { a.eval = a.direct_damage; }
                         a.is_noncreature = true;
                         actions.push_back(std::move(a));
+                    }
+                }
+            }
+
+            // ---- Kessig Wolf Run: "{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until
+            // end of turn." (PermAbilityMode::TapTargetPump; CardParams::tap_target_pump_*.) NOT in the
+            // ModeSpec table: that table emits one TARGET-LESS action per activation count, and this
+            // ability makes two decisions, both SEARCHED (the no-greedy rule): WHICH creature and WHAT X.
+            // One variant per (target, X), all ONE activation family (ActivationFamilyKey keys every
+            // ActivatePermAbility on its source: one {T} per plan), so the subset walk picks at most one --
+            // whether to activate is the empty choice. WHERE: the trailing pass, after the plan's casts and
+            // land, i.e. before combat damage in the pre-combat main (the USER's Landfall order puts
+            // abilities at the end of a main phase's pass).
+            //   * MANA FROM OTHER SOURCES. The land taps as part of the cost (CR 602.2a -- its {T} is paid
+            //     before the mana, SetPermTapped), so its own {C} can never pay: X is sized on the pool
+            //     with this source's own mana debited (PermAbilityTapDebitOf, the walkers' {T}-ability
+            //     debit), and the R and G must come from elsewhere (CanPay on that pool).
+            //   * X: DecisionProvider::TapTargetPumpXCandidates (base: every affordable X, max first; X = 0
+            //     dominated by not activating). Human play: every legal X, 0 included.
+            //   * TARGET: one per IDENTITY CLASS of our creatures (LandfallTargetFoldKey -- the SOUND
+            //     fold: two identical Plants pumped are boards that differ only in which per-copy number
+            //     holds the bonus), then DecisionProvider::TapTargetPumpTargets may restrict / order.
+            //     An opponent's creature is legal but never offered autonomously (inert vs the passive
+            //     goldfish opponent, the Seedcradle Witch precedent); human play offers every legal
+            //     target, unfolded. A token numbered 0 (none today) cannot be pinned, so is not offered.
+            if (sd->params.tap_target_pump_cost.has_value() && !src.tapped && CanTapNow(src, state.battlefield))
+            {
+                const int me = state.active_player_index;
+                const bool human = HumanPlayActive();
+                ManaPool others = turn_pool();
+                others.AddPool(state.floating_mana);
+                SubtractPoolClamped(others, PermAbilityTapDebitOf(state, turn_pool(), src.card.m_number));
+                const ManaCost& printed = *sd->params.tap_target_pump_cost;
+                auto cost_at = [&](int x)
+                { return EffectiveActivationCost(state, me, src.card, TapTargetPumpCostAt(*sd, x)); };
+                const ManaCost base = cost_at(0);
+                if (others.CanPay(base))
+                {
+                    std::vector<int> xs;
+                    int xmax = 0;
+                    if (printed.has_x)
+                    {
+                        const int per = std::max(1, printed.x_pips);
+                        xmax = (static_cast<int>(others.Total()) - base.ManaValue()) / per;
+                        while (xmax > 0 && !others.CanPay(cost_at(xmax))) { --xmax; }
+                        if (human) { for (int x = xmax; x >= 0; --x) { xs.push_back(x); } }
+                        else if (xmax >= 1)
+                        { xs = ResolveProvider(state).TapTargetPumpXCandidates(state, src, xmax, is_pre_combat); }
+                        // Keep only what the pool can pay (a provider returning a wider list is clamped,
+                        // never trusted) -- the sentinel is priced at X = 1 below.
+                        xs.erase(std::remove_if(xs.begin(), xs.end(), [&](int x)
+                                 { return x != kTapTargetPumpXAll && (x < 0 || x > xmax); }), xs.end());
+                    }
+                    else { xs.push_back(0); }
+                    std::vector<int> tgts;
+                    std::vector<std::uint64_t> keys;
+                    std::vector<int> linked;   // the attachment links, walked once (LandfallTargetLinks)
+                    if (!human) { LandfallTargetLinks(state, linked); }
+                    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                    {
+                        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                        if (q.card.m_number == 0 || !TapTargetPumpTargetLegal(state, q, me)) { continue; }
+                        if (!human)
+                        {
+                            if (q.controller_index != me) { continue; }
+                            std::uint64_t k = 0;
+                            if (LandfallTargetFoldKey(state, q, k, &linked))
+                            {
+                                if (std::find(keys.begin(), keys.end(), k) != keys.end()) { continue; }
+                                keys.push_back(k);
+                            }
+                        }
+                        tgts.push_back(i);
+                    }
+                    if (!human && !tgts.empty())
+                    { ResolveProvider(state).TapTargetPumpTargets(state, src, is_pre_combat, tgts); }
+                    for (int ti : tgts)
+                    {
+                        if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { continue; }
+                        const Permanent& q = state.battlefield[static_cast<std::size_t>(ti)];
+                        for (int x : xs)
+                        {
+                            const bool all = x == kTapTargetPumpXAll;
+                            Action a;
+                            a.kind           = Action::Kind::ActivatePermAbility;
+                            a.card_name      = src.card.m_name;
+                            a.def            = sd;
+                            a.hand_index     = -1;
+                            a.sac_source_id  = src.card.m_number;
+                            a.sac_victim_id  = q.card.m_number;
+                            a.ability_mode   = Action::AbilityMode::TapTargetPump;
+                            a.chosen_x       = x;
+                            // The books: the activation at its X; the max-X fold's sentinel reserves X = 1
+                            // and spends the rest at the activation (TapTargetPumpPay), which runs last.
+                            a.cost           = cost_at(all ? 1 : x);
+                            // Ordering / depth-0 only (the rollout scores the real combat): the face
+                            // damage the pump adds if its target connects.
+                            a.eval           = 2 * TapTargetPumpPowerAt(*sd, all ? std::max(1, xmax) : x);
+                            a.is_noncreature = true;
+                            actions.push_back(std::move(a));
+                        }
                     }
                 }
             }
@@ -52770,6 +52893,12 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
     }
 }
 
+bool TurnSolver::TrailingForcedLast(const Action& a)
+{
+    return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTargetPump
+        && a.chosen_x == kTapTargetPumpXAll;
+}
+
 thread_local std::vector<std::string>* g_line_order_record = nullptr;
 thread_local std::vector<std::string>* g_line_order_capture = nullptr;
 thread_local std::vector<std::string>* g_human_step_fail_sink = nullptr;
@@ -53335,6 +53464,12 @@ bool TurnSolver::TrailingHasCountBands(const std::vector<Action>& acts)
 static int TrailingRankOf(const DecisionProvider& prov, const GameState& state, const Action& a)
 {
     if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
+    // Kessig Wolf Run's "spend every mana left" pump (kTapTargetPumpXAll -- the provider's max-X fold)
+    // must run LAST: its books reserve only X = 1, so any activation after it in the pass would find the
+    // mana gone. Last is also exactly the premise of the fold (nothing after it this turn can use the
+    // leftover). Only that sentinel is moved, so every other pass keeps its order (and the no-opinion
+    // early-outs stay byte-identical for every deck without the card).
+    if (TurnSolver::TrailingForcedLast(a)) { return std::numeric_limits<int>::max() - 1; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     return d != nullptr ? prov.ActivationOrderRankForAction(state, *d, a) : 0;
 }
@@ -58636,6 +58771,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && _p.ActivationOrderRankForAction(state, *d, a) != 0) { _any = true; break; }
+            if (TurnSolver::TrailingForcedLast(a)) { _any = true; break; }   // Kessig Wolf Run's max-X pump
         }
         if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
         if (_any)
@@ -58885,6 +59021,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Executor twin: AIEngine.
             const int src_id = ResolveHandSourceActivation(state, a);
             const StealPinScope _steal_pin(a.enchant_target, a.steal_spec);
+            // Kessig Wolf Run's searched TARGET + X (TapTargetPump), read by the liveness check, the
+            // payment (TapTargetPumpPay) and the resolver. {0, 0} for every other mode (never read).
+            const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
+            const TapTargetPumpPinScope _tpump_pin(tpump ? a.sac_victim_id : 0, tpump ? a.chosen_x : 0);
             // The {T} half of the cost is paid BEFORE the mana half, so the source cannot tap
             // itself toward its own activation (see SetPermTapped). Restored if the mana fails.
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
@@ -58911,7 +59051,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 { g_activation_discard_unpinned.fetch_add(1, std::memory_order_relaxed); }
                 if (taps) { SetPermTapped(state, state.active_player_index, src_id, true); }
                 ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
-                if (TapForCostDirect(state, act_cost, /*for_creature=*/false))
+                // Kessig Wolf Run pays {X}{R}{G} at the pinned X -- or, for the provider's max-X fold, the
+                // largest X the remaining mana pays (TapTargetPumpPay; executor twin in AIEngine).
+                if (tpump ? TapTargetPumpPay(state, state.active_player_index, src_id, *a.def,
+                                             [&state](const ManaCost& c)
+                                             { return TapForCostDirect(state, c, /*for_creature=*/false); })
+                          : TapForCostDirect(state, act_cost, /*for_creature=*/false))
                 {
                     _act_line_pay.Paid();
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
@@ -62665,6 +62810,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (act.vamp_casts_needed != 0) { w.Put("#V"); w.Int(static_cast<int>(act.vamp_casts_needed)); }
                 if (act.steal_spec != 0 || act.ability_mode == Action::AbilityMode::TapSubtypeSteal)
                 { w.Put("#T"); w.Int(act.enchant_target); w.Put("#S"); w.Put(StealSpecText(act.steal_spec)); }
+                // Kessig Wolf Run's pump target (TapTargetPump; its X rides chosen_x). Lockstep with the
+                // legacy builder.
+                if (act.ability_mode == Action::AbilityMode::TapTargetPump) { w.Put("#P"); w.Int(act.sac_victim_id); }
                 w.End(); break;
         }
     }
@@ -66842,7 +66990,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                   // number and the tap spec's CONTENT. 0 for every other ability.
                                   + (act.steal_spec == 0 && act.ability_mode != Action::AbilityMode::TapSubtypeSteal
                                      ? std::string()
-                                     : "#T" + std::to_string(act.enchant_target) + "#S" + StealSpecText(act.steal_spec)));
+                                     : "#T" + std::to_string(act.enchant_target) + "#S" + StealSpecText(act.steal_spec))
+                                  // Kessig Wolf Run's pump (TapTargetPump): WHICH creature is a decision
+                                  // (chosen_x above is its X) -- the Gamble lesson. Every other ability: no tag.
+                                  + (act.ability_mode != Action::AbilityMode::TapTargetPump
+                                     ? std::string() : "#P" + std::to_string(act.sac_victim_id)));
                     break;
             }
         }
@@ -74261,6 +74413,8 @@ static std::string PlanDomKey(const Action& a)
     if (a.vamp_casts_needed != 0) { k += "|B"; k += std::to_string(static_cast<int>(a.vamp_casts_needed)); }
     if (a.steal_spec != 0)   // Vampires B: the steal's target + tap spec content
     { k += "|S"; k += std::to_string(a.enchant_target); k += "/"; k += StealSpecText(a.steal_spec); }
+    if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTargetPump)
+    { k += "|T"; k += std::to_string(a.sac_victim_id); }   // Kessig Wolf Run: the pump's target
     // Vampires sweep items A-C: a creature-spell convoke arm (its body counts and plan-body need).
     if (a.def != nullptr && ConvokeTapsAtCast(a.def) && (a.convoke_green != 0 || a.convoke_other != 0))
     {
@@ -94296,6 +94450,22 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
             else if (uk > 1) { lbl += " x" + std::to_string(uk); }
             cast_names.push_back(lbl);
         }
+        // Kessig Wolf Run's pump: its two decisions -- the X and WHICH creature -- are the label (the
+        // blink shape), so a history row says what was pumped and by how much.
+        else if (a.kind == Action::Kind::ActivatePermAbility
+                 && a.ability_mode == Action::AbilityMode::TapTargetPump)
+        {
+            const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
+            const bool all = a.chosen_x == kTapTargetPumpXAll;
+            const std::string xs = all ? std::string("all remaining mana") : std::to_string(a.chosen_x);
+            const std::string pt = (a.def == nullptr || all) ? std::string("+X/+0")
+                : "+" + std::to_string(TapTargetPumpPowerAt(*a.def, a.chosen_x)) + "/+"
+                  + std::to_string(TapTargetPumpToughAt(*a.def, a.chosen_x));
+            cast_names.push_back(a.card_name + ": X=" + xs + " \xE2\x86\x92 "
+                                 + (tn.empty() ? std::string("target creature") : tn) + " " + pt
+                                 + (a.def != nullptr && a.def->params.tap_target_pump_grants_trample
+                                        ? " and trample" : ""));
+        }
         // Battlefield tap abilities (Mariposa's draw, Shivan Gorge's damage, investigate): also
         // read as a bare "cast: <land>" in the history. Mirror main.cpp's SummarizePlan label.
         else if (a.kind == Action::Kind::ActivatePermAbility)
@@ -95947,6 +96117,25 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                                        + " card" + (draws == 1 ? "" : "s");
                 addSub(a.card_name + " " + desc, a.card_name + " modes", desc, a.card_name, "modal");
             }
+            // Kessig Wolf Run's pump (TapTargetPump): BOTH decisions are subs -- WHICH creature (the
+            // untapper's board-object shape, so two same-named Plants get distinct choices) and the X,
+            // for EVERY X including 0 (a mixed sub/no-sub set would otherwise collapse the X = 0 entry).
+            else if (a.kind == Action::Kind::ActivatePermAbility
+                     && a.ability_mode == Action::AbilityMode::TapTargetPump)
+            {
+                const std::string hn = SubChoiceHostLabel(state, a.sac_victim_id);
+                std::string art;
+                for (const Permanent& perm : state.battlefield)
+                { if (perm.card.m_number == a.sac_victim_id) { art = perm.card.m_name.str(); break; } }
+                if (!hn.empty())
+                {
+                    addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " pumps", hn, art,
+                           "pumptarget", a.sac_victim_id);
+                }
+                const std::string xs = (a.chosen_x == kTapTargetPumpXAll) ? std::string("all remaining mana")
+                                                                            : std::to_string(a.chosen_x);
+                addSub(a.card_name + " X=" + xs, a.card_name + " X", "X=" + xs, a.card_name.str(), "x");
+            }
             // A REPEATABLE battlefield activation enumerates its per-turn COUNT K as mutually-exclusive
             // variants carrying K on chosen_x (Call of the Wild's "{2}{G}{G}: reveal the top card",
             // Burning-Fist / Sethron's pumps). That is a count of activations, not an {X} in a cost, so
@@ -96635,6 +96824,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 // {1} crack -- both named by `cast=<source>`.
                 { Action::AbilityMode::TapBlood,       &bd->params.tap_blood_cost       },
                 { Action::AbilityMode::BloodDraw,      &bd->params.blood_draw_cost      },
+                // Kessig Wolf Run's "{X}{R}{G}, {T}" pump, priced at its cheapest (X = 0): the line names
+                // no X, and the validator must never call a payable line Illegal.
+                { Action::AbilityMode::TapTargetPump,  &bd->params.tap_target_pump_cost },
             };
             for (const auto& m : modes)
             {
@@ -98226,7 +98418,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "IceCounter", "GrantLifelink", "SporeSaproling", "PayToken", "FadeSaproling", "PingAll",
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
         "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
-        "TapSubtypeSteal", "TransformSelf"
+        "TapSubtypeSteal", "TransformSelf", "TapTargetPump"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

@@ -4158,6 +4158,20 @@ struct CardParams
     // token: Draw a card." PermAbilityMode::BloodDraw -- a {T} mode (artifacts are never summoning
     // sick, so a Blood made this turn cracks now); the discard is a searched pin (Action::discard_name).
     std::optional<ManaCost>  blood_draw_cost;
+    // Kessig Wolf Run: "{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn."
+    // PermAbilityMode::TapTargetPump -- a {T} mode (the land taps as part of the cost, so it can never
+    // pay toward its own activation: the {T} is paid first, SetPermTapped, and the enumerator debits
+    // its own mana, PermAbilityTapDebitOf). tap_target_pump_cost is the PRINTED cost; an {X} in it
+    // (has_x) makes the pump scale: the target gets +X*power/+X*tough. Without an {X} the pump is the
+    // flat +power/+tough. TARGET and X are SEARCHED (Action::sac_victim_id / Action::chosen_x, see
+    // TurnSolver's TapTargetPump emission and DecisionProvider::TapTargetPumpTargets / _XCandidates).
+    // tap_target_pump_grants_trample records the keyword rider: structurally INERT in this engine --
+    // Combat.cpp has no blocker path and Keyword::Trample has no reader (the Craterhoof / Rageblood
+    // Shaman disclosure class) -- so it is parsed and labelled, never applied. Empty cost = inert.
+    std::optional<ManaCost>  tap_target_pump_cost;
+    int                      tap_target_pump_power = 0;
+    int                      tap_target_pump_tough = 0;
+    bool                     tap_target_pump_grants_trample = false;
     // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." A DERIVED
     // Permanent::cond_haste bit, refreshed at entry and at the beginning of combat in both worlds
     // (RefreshOppLifeHaste). 0 = no such clause.

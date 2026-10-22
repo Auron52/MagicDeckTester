@@ -2730,6 +2730,11 @@ public:
     // canonical pass -- so the failure mode is "the viewer can't sequence it", never a double
     // apply or a dropped action.
     static bool IsTrailingActivation(Action::Kind k);
+    // A trailing activation that must run LAST in its pass, whatever the provider's order: Kessig Wolf
+    // Run's "every mana left" pump (TapTargetPump at kTapTargetPumpXAll -- the provider's max-X fold; its
+    // books reserve X = 1 only). Read by every trailing-order consumer (TrailingRankOf and both passes'
+    // no-opinion early-outs), so a deck without the card is byte-identical.
+    static bool TrailingForcedLast(const Action& a);
     // THE HUMAN'S WHOLE SEQUENCE (Plan::human_sequence; the viewer's "**" --cast-order list). `tokens`
     // is the list WITHOUT its marker, one entry per queued step in queue order, each `<verb>=<name>`
     // with the LineSpec verb the viewer writes for that entry (cast / act / sacout / vial / retrace /

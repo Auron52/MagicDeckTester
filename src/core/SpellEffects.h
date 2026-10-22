@@ -24681,6 +24681,115 @@ inline bool StealTargetLegal(const Permanent& q, int controller)
 }
 inline int StealSourceTapCount(const CardDefinition& d) { return d.params.steal_tap_count; }
 
+// ---- KESSIG WOLF RUN: "{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn."
+// (PermAbilityMode::TapTargetPump; CardParams::tap_target_pump_*; 2026-10-22.)
+//
+// THE PIN of the activation being applied: WHICH creature (Action::sac_victim_id, a card number) and its
+// X (Action::chosen_x). ApplyPermAbility's signature carries no Action, so both trailing passes install
+// it around the liveness check, the payment and the apply -- the StealPinScope shape. The payment
+// (TapTargetPumpPay) REWRITES `x` to the X it actually paid, which is what the resolver applies.
+//
+// kTapTargetPumpXAll is the one non-literal X: "every mana the turn has left at this activation". It is
+// emitted ONLY when the deck's provider states the SOUND max-X dominance fold
+// (DecisionProvider::TapTargetPumpXCandidates -- the leftover provably buys nothing later this turn, and
+// the activation runs LAST in the trailing pass, TrailingRankOf), never by the engine on its own; every
+// other X is a literal value the search chose.
+struct TapTargetPumpPin { int target = 0; int x = 0; };
+inline thread_local TapTargetPumpPin g_tap_target_pump_pin{};
+constexpr int kTapTargetPumpXAll = 1 << 20;
+// MEASUREMENT: an AUTONOMOUS pump applied with no target pin inside the search window (the no-greedy
+// rule: must read 0; every emitted variant carries its target).
+inline std::atomic<long long> g_tap_target_pump_unpinned{0};
+struct TapTargetPumpPinScope
+{
+    TapTargetPumpPin prev;
+    TapTargetPumpPinScope(int target, int x) : prev(g_tap_target_pump_pin)
+    { g_tap_target_pump_pin = TapTargetPumpPin{ target, x }; }
+    ~TapTargetPumpPinScope() { g_tap_target_pump_pin = prev; }
+    TapTargetPumpPinScope(const TapTargetPumpPinScope&) = delete;
+    TapTargetPumpPinScope& operator=(const TapTargetPumpPinScope&) = delete;
+};
+
+// A legal TARGET for the pump ("target creature", CR 115.1): any creature on the battlefield (an animated
+// land is a creature, CR 205.3b), except one with shroud (CR 702.18a -- no player may target it) or an
+// OPPONENT's creature with hexproof (CR 702.11b). Shared by the enumeration, the liveness check and the
+// human-play target list, so they cannot disagree.
+inline bool TapTargetPumpTargetLegal(const GameState& s, const Permanent& q, int controller)
+{
+    if (!q.card.IsCreature() && !q.is_animated) { return false; }
+    if (CreatureHasShroud(q, s, nullptr)) { return false; }
+    if (q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+
+// The cost of ONE activation at X = x: the printed cost with x per {X} pip folded into GENERIC, and the
+// {X} metadata cleared (the payers pay a flat cost). A cost with no {X} ignores x.
+inline ManaCost TapTargetPumpCostAt(const CardDefinition& d, int x)
+{
+    ManaCost c = d.params.tap_target_pump_cost.value_or(ManaCost{});
+    if (c.has_x) { c.generic += std::max(0, x) * std::max(1, c.x_pips); }
+    c.has_x  = false;
+    c.x_pips = 0;
+    return c;
+}
+
+// The pump's +power / +toughness at X = x (per X when the cost has an {X}, else flat).
+inline int TapTargetPumpPowerAt(const CardDefinition& d, int x)
+{
+    const bool per_x = d.params.tap_target_pump_cost.has_value() && d.params.tap_target_pump_cost->has_x;
+    return per_x ? d.params.tap_target_pump_power * std::max(0, x) : d.params.tap_target_pump_power;
+}
+inline int TapTargetPumpToughAt(const CardDefinition& d, int x)
+{
+    const bool per_x = d.params.tap_target_pump_cost.has_value() && d.params.tap_target_pump_cost->has_x;
+    return per_x ? d.params.tap_target_pump_tough * std::max(0, x) : d.params.tap_target_pump_tough;
+}
+
+// PAY the TapTargetPump the pin names, through the CALLER's world's payer -- the rollout's
+// TapForCostDirect, the executor's TapForCost: the pair every ActivatePermAbility already pays through,
+// so both worlds realise the same X (lockstep). The {T} half is the caller's (SetPermTapped, BEFORE this
+// runs, so the source never pays toward its own cost).
+//   * a literal X: exactly the printed cost at that X (EffectiveActivationCost applied) -- the plan's
+//     own books;
+//   * kTapTargetPumpXAll: the LARGEST X the turn's remaining mana pays, tried from the pool's total
+//     down (a colour-short pool falls back one X at a time; a failed payment taps nothing), never below
+//     X = 1 (X = 0 buys only the inert trample: weakly dominated by not activating).
+// On success rewrites g_tap_target_pump_pin.x to the X paid and returns true; false = nothing was paid.
+template <class Payer>
+inline bool TapTargetPumpPay(GameState& state, int controller, int source_id, const CardDefinition& d,
+                             Payer&& pay)
+{
+    TapTargetPumpPin& pin = g_tap_target_pump_pin;
+    if (!d.params.tap_target_pump_cost.has_value()) { return false; }
+    // The source by VALUE: a payment may erase battlefield entries (a cracked Treasure), so no reference
+    // into the battlefield survives a payer call. Only its characteristics are read (cost reducers).
+    Card src;
+    bool found = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number == source_id && p.controller_index == controller) { src = p.card; found = true; break; }
+    }
+    if (!found) { return false; }
+    if (pin.x != kTapTargetPumpXAll)
+    { return pay(EffectiveActivationCost(state, controller, src, TapTargetPumpCostAt(d, pin.x))); }
+    const ManaCost& printed = *d.params.tap_target_pump_cost;
+    if (!printed.has_x)
+    {
+        pin.x = 0;
+        return pay(EffectiveActivationCost(state, controller, src, TapTargetPumpCostAt(d, 0)));
+    }
+    const int per = std::max(1, printed.x_pips);
+    ManaPool have = AvailableManaPool(state, nullptr);
+    if (!FloatLeftoverManaEnabled()) { have.AddPool(state.floating_mana); }
+    const int base_mv = EffectiveActivationCost(state, controller, src, TapTargetPumpCostAt(d, 0)).ManaValue();
+    for (int x = (static_cast<int>(have.Total()) - base_mv) / per; x >= 1; --x)
+    {
+        if (pay(EffectiveActivationCost(state, controller, src, TapTargetPumpCostAt(d, x))))
+        { pin.x = x; return true; }
+    }
+    return false;
+}
+
 // Bloodline Keeper's activation restriction, counted NOW (CR 602.5b).
 inline bool TransformRestrictionMet(const GameState& state, int controller, const CardParams& pp)
 {
@@ -24778,6 +24887,24 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
                 }
                 if (untapped < sd2->params.steal_tap_count) { return false; }
             }
+        }
+        // Kessig Wolf Run: "target creature" is chosen as the ability is activated (CR 601.2c via
+        // 602.2b), so the activation is impossible without a legal target -- checked here, before the
+        // {T} or the mana is paid. Pinned (the searched variant): THAT creature must still be a legal
+        // target; a stale plan (it left, or gained shroud) is a clean no-op -- NO substitution, which
+        // would be an in-window pick. Unpinned (target 0): any legal target exists.
+        if (mode == PermAbilityMode::TapTargetPump)
+        {
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
+            if (td == nullptr || !td->params.tap_target_pump_cost.has_value()) { return false; }
+            const int want = g_tap_target_pump_pin.target;
+            bool target_ok = false;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (want != 0 && q.card.m_number != want) { continue; }
+                if (TapTargetPumpTargetLegal(state, q, controller)) { target_ok = true; break; }
+            }
+            if (!target_ok) { return false; }
         }
         // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
         // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
@@ -24904,6 +25031,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapSubtypeSteal:
                                               return "tap five untapped Vampires: gain control of target creature";
         case PermAbilityMode::TransformSelf:  return "transform it (you control five or more Vampires)";
+        case PermAbilityMode::TapTargetPump:  return "target creature gets a pump until end of turn";
         default:                              return "activate";
     }
 }
@@ -25012,6 +25140,22 @@ inline bool PayTapSubtypeCost(GameState& state, int controller, const CardDefini
 // PermAbilityLabel text (log digests stay put).
 inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinition* d)
 {
+    // Kessig Wolf Run: the printed pump, read off the params ("+X/+0 and gains trample").
+    if (mode == PermAbilityMode::TapTargetPump && d != nullptr && d->params.tap_target_pump_cost.has_value())
+    {
+        const bool per_x = d->params.tap_target_pump_cost->has_x;
+        auto amt = [per_x](int n) -> std::string
+        {
+            if (!per_x) { return std::to_string(n); }
+            return n == 1 ? std::string("X") : std::to_string(n) + "X";
+        };
+        std::string t = "target creature gets +" + (d->params.tap_target_pump_power != 0 || !per_x
+                                                        ? amt(d->params.tap_target_pump_power) : std::string("0"))
+                      + "/+" + (d->params.tap_target_pump_tough != 0 ? amt(d->params.tap_target_pump_tough)
+                                                                     : std::string("0"));
+        if (d->params.tap_target_pump_grants_trample) { t += " and gains trample"; }
+        return t + " until end of turn";
+    }
     if (mode == PermAbilityMode::TapLifegain && d != nullptr && d->params.tap_lifegain_per_subtype.empty()
         && d->params.tap_lifegain_flat > 0)
     { return "gain " + std::to_string(d->params.tap_lifegain_flat) + " life"; }
@@ -25749,6 +25893,51 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             {
                 EmitPlayEvent(state.turn_number, "ability",
                               src_name + " transforms into " + bd->card.m_name.str());
+            }
+            break;
+        }
+        case PermAbilityMode::TapTargetPump:
+        {
+            // Kessig Wolf Run: "Target creature gets +X/+0 and gains trample until end of turn." The {T}
+            // and {X}{R}{G} were paid by the caller (TapTargetPumpPay, which rewrote the pin's X to the
+            // X actually paid). The TARGET is the pin: no substitution (the caller's liveness check
+            // proved it legal under the same pin). Unpinned (target 0, never emitted today): the
+            // largest-power legal own creature -- the playout policy's fallback, counted by
+            // g_tap_target_pump_unpinned (must read 0 inside the search window).
+            const TapTargetPumpPin pin = g_tap_target_pump_pin;
+            int ti = -1;
+            int best_pw = INT_MIN;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (!TapTargetPumpTargetLegal(state, q, controller)) { continue; }
+                if (pin.target != 0)
+                {
+                    if (q.card.m_number == pin.target) { ti = i; break; }
+                    continue;
+                }
+                if (q.controller_index != controller) { continue; }
+                if (q.EffectivePower() > best_pw) { best_pw = q.EffectivePower(); ti = i; }
+            }
+            if (pin.target == 0 && !HumanPlayActive() && greedywindow::InWindow(0))
+            { g_tap_target_pump_unpinned.fetch_add(1, std::memory_order_relaxed); }
+            if (ti < 0) { break; }   // unreachable after PermAbilitySourceLive: never a phantom pump
+            Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+            const int x  = (pin.x == kTapTargetPumpXAll) ? 0 : std::max(0, pin.x);
+            const int pp = TapTargetPumpPowerAt(*d, x);
+            const int pt = TapTargetPumpToughAt(*d, x);
+            // Until end of turn: temp_power_bonus / temp_tough_bonus, which both cleanup sites zero
+            // (CR 514.2) and the sim key folds. TRAMPLE is not applied -- structurally inert here
+            // (no blocker path in Combat.cpp, no Keyword::Trample reader; tap_target_pump_grants_trample).
+            t.temp_power_bonus += pp;
+            t.temp_tough_bonus += pt;
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              src_name + ": X=" + std::to_string(x) + " -- " + t.card.m_name.str() + " gets +"
+                              + std::to_string(pp) + "/+" + std::to_string(pt)
+                              + (d->params.tap_target_pump_grants_trample ? " and trample" : "")
+                              + " until end of turn");
             }
             break;
         }

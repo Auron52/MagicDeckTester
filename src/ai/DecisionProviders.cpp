@@ -2149,6 +2149,60 @@ TitanLand TitanLandOf(const CardDefinition* d)
     return TitanLand::Other;
 }
 
+// KESSIG WOLF RUN in the Titan pick (USER 2026-10-22: "we should also try Kessig Wolf Run. My suspicion is
+// that it is a clear 1-of (since it can be fetched by Primeval Titan. We should add that to the heuristic."
+// -- "It's a very good option if you don't have other threats."). The pump land, read off the definition.
+bool IsPumpLand(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsLand() && d->params.tap_target_pump_cost.has_value();
+}
+
+// A Wolf Run the Titan could fetch: one in the LIBRARY while we control none (a second one adds no pump).
+bool WolfRunFetchable(const GameState& s, int controller)
+{
+    bool in_library = false;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
+    { if (IsPumpLand(CardDatabase::Instance().LookupCached(c))) { in_library = true; break; } }
+    if (!in_library) { return false; }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index == controller && IsPumpLand(CardDatabase::Instance().LookupCached(q.card)))
+        { return false; }
+    }
+    return true;
+}
+
+// "OTHER THREATS" (the agent's reading of the USER's "if you don't have other threats", 2026-10-22 --
+// REPORTED, not confirmed): a creature we control, other than a Primeval Titan, with power >= 4 or a
+// landfall payoff that makes tokens or counters (Avenger, Baloths, Omnath, Phylath); a creature card in
+// hand of the same kind; or a Genesis Wave in hand. Read off params, never names. Titans are excluded
+// everywhere: the Titan whose trigger is resolving is the threat the pump would carry.
+bool IsTitanDef(const CardDefinition* d) { return d != nullptr && d->params.land_search_on_enter_or_attack; }
+bool IsLandfallPayoffDef(const CardDefinition* d)
+{
+    return d != nullptr && d->card.IsCreature()
+        && (d->params.landfall_creates_tokens > 0 || d->params.landfall_counters_each > 0
+            || d->params.landfall_target_counters > 0);
+}
+bool HasOtherThreat(const GameState& s, int controller)
+{
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || (!q.card.IsCreature() && !q.is_animated)) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (IsTitanDef(d)) { continue; }
+        if (q.EffectivePower() >= 4 || IsLandfallPayoffDef(d)) { return true; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || IsTitanDef(d)) { continue; }
+        if (d->params.reveal_x_put_permanents) { return true; }   // Genesis Wave
+        if (d->card.IsCreature() && (d->card.m_power.value_or(0) >= 4 || IsLandfallPayoffDef(d))) { return true; }
+    }
+    return false;
+}
+
 bool HandHasLand(const GameState& s, int controller)
 {
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
@@ -2196,6 +2250,35 @@ std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller
     {
         for (const std::string& nm : picks[i]) { cls[i].push_back(TitanLandOf(CardDatabase::Instance().Lookup(nm))); }
     }
+    // KESSIG WOLF RUN (USER 2026-10-22; the agent's interpretation, REPORTED): while one is in the library
+    // and we control none, the picks holding it are ADMITTED beside the rule's own -- paired with a land the
+    // rule would pick -- and SEARCHED. Order: with no other threat (HasOtherThreat) the Wolf Run picks go
+    // first, so an exact tie takes the Wolf Run; otherwise after the rule's picks, so a tie keeps the rule's.
+    // Never a basic (LandSearchAdmitsLand still holds). Inert -- every list exactly as before -- unless a
+    // Wolf Run is in the library, which the current Landfall list does not run.
+    const bool wr_live = WolfRunFetchable(s, controller);
+    std::vector<char> wr_pick(picks.size(), 0);
+    bool no_threat = false;
+    if (wr_live)
+    {
+        for (std::size_t i = 0; i < picks.size(); ++i)
+        {
+            for (const std::string& nm : picks[i])
+            { if (IsPumpLand(CardDatabase::Instance().Lookup(nm))) { wr_pick[i] = 1; break; } }
+        }
+        no_threat = !HasOtherThreat(s, controller);
+    }
+    // Lay out [first, then] as the returned list: each part in LIST order, `*n_rule` = the first part's
+    // size (LandSearchPickOrder tiers on it, and LandSearchPickWidth's prefix test needs list order).
+    auto lay_out = [&](std::vector<std::size_t> first, std::vector<std::size_t> then)
+    {
+        std::sort(first.begin(), first.end());
+        std::sort(then.begin(), then.end());
+        std::vector<std::size_t> r = first;
+        r.insert(r.end(), then.begin(), then.end());
+        if (n_rule != nullptr) { *n_rule = first.size(); }
+        return r;
+    };
     // Read off the LIBRARY: the autonomous list holds no basic at all (LandSearchAdmitsLand).
     bool basics_left = false;
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
@@ -2218,8 +2301,8 @@ std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller
             }
             return nm == "Radiant Fountain" ? 2 : nm == "Haunted Fengraf" ? 3 : 4;
         };
-        std::size_t best = 0;
-        std::vector<int> best_key;
+        std::size_t best = 0, wr_best = picks.size();
+        std::vector<int> best_key, wr_key;
         for (std::size_t i = 0; i < picks.size(); ++i)
         {
             std::vector<int> key;
@@ -2227,8 +2310,13 @@ std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller
             std::sort(key.begin(), key.end());
             // A longer pick (more lands) first: the maximal-pick fold leaves only full picks here anyway.
             key.insert(key.begin(), -static_cast<int>(key.size()));
+            if (wr_live && wr_pick[i] && (wr_best == picks.size() || key < wr_key)) { wr_best = i; wr_key = key; }
             if (i == 0 || key < best_key) { best = i; best_key = std::move(key); }
         }
+        // KESSIG WOLF RUN, the fixed order's searched alternative: the best-ranked pick that holds it, first
+        // with no other threat (a tie takes the Wolf Run), else after the rule's pick (a tie keeps the rule's).
+        if (wr_best != picks.size() && wr_best != best)
+        { return no_threat ? lay_out({ wr_best }, { best }) : lay_out({ best }, { wr_best }); }
         out.push_back(best);
         if (n_rule != nullptr) { *n_rule = out.size(); }
         return out;
@@ -2256,19 +2344,64 @@ std::vector<std::size_t> LandfallTitanAllowed(const GameState& s, int controller
     if (most == 0)
     {
         if (turf_pool) { out = std::move(pool); }
+        // Wolf Run: the rule keeps every Turf pick here (or does not narrow at all), so the Wolf Run picks
+        // are searched already -- with no other threat they are ORDERED first.
+        if (wr_live && no_threat)
+        {
+            std::vector<std::size_t> base = out;
+            if (base.empty()) { for (std::size_t i = 0; i < picks.size(); ++i) { base.push_back(i); } }
+            std::vector<std::size_t> w, o;
+            for (std::size_t i : base) { (wr_pick[i] ? w : o).push_back(i); }
+            if (!w.empty() && !o.empty()) { return lay_out(w, o); }
+        }
         if (n_rule != nullptr) { *n_rule = out.size(); }
         return out;
     }
-    for (std::size_t i : pool) { if (wm(i) == most) { out.push_back(i); } }
-    if (n_rule != nullptr) { *n_rule = out.size(); }
+    std::vector<std::size_t> rule, extra;
+    for (std::size_t i : pool) { if (wm(i) == most) { rule.push_back(i); } }
     // The proposed amendment (LandfallTitanMixed, above): the picks holding fewer Wilds / Myriad but at
     // least one, searched AFTER the rule's own. Nothing to add when the rule already keeps every pick
     // holding one (most == 1), or in the Turf pool (its pairs are Turf + one Wilds / Myriad already).
     if (LandfallTitanMixed() && !turf_pool && most > 1)
     {
-        for (std::size_t i : pool) { const int n = wm(i); if (n >= 1 && n < most) { out.push_back(i); } }
+        for (std::size_t i : pool) { const int n = wm(i); if (n >= 1 && n < most) { extra.push_back(i); } }
     }
-    return out;
+    // Wolf Run PAIRS: the Wolf Run plus a land the rule would pick -- Gruul Turf when the rule makes Turf
+    // automatic, otherwise each Wilds-class / Myriad land of the rule's own picks.
+    std::vector<std::size_t> wr;
+    if (wr_live)
+    {
+        std::vector<std::string> partner;
+        for (std::size_t i : rule)
+        {
+            for (std::size_t j = 0; j < picks[i].size(); ++j)
+            {
+                const TitanLand t = cls[i][j];
+                const bool ok = turf_pool ? t == TitanLand::Karoo : (t == TitanLand::Fetch || t == TitanLand::Myriad);
+                if (ok && std::find(partner.begin(), partner.end(), picks[i][j]) == partner.end())
+                { partner.push_back(picks[i][j]); }
+            }
+        }
+        for (std::size_t i = 0; i < picks.size(); ++i)
+        {
+            if (!wr_pick[i] || picks[i].size() != 2) { continue; }
+            if (std::find(rule.begin(), rule.end(), i) != rule.end()
+                || std::find(extra.begin(), extra.end(), i) != extra.end()) { continue; }
+            const bool first_is_wr = IsPumpLand(CardDatabase::Instance().Lookup(picks[i][0]));
+            const std::string& other = first_is_wr ? picks[i][1] : picks[i][0];
+            if (std::find(partner.begin(), partner.end(), other) != partner.end()) { wr.push_back(i); }
+        }
+    }
+    if (wr.empty())   // the rule exactly as before (every list without a fetchable Wolf Run)
+    {
+        out = rule;
+        out.insert(out.end(), extra.begin(), extra.end());
+        if (n_rule != nullptr) { *n_rule = rule.size(); }
+        return out;
+    }
+    std::vector<std::size_t> rest = no_threat ? rule : wr;
+    rest.insert(rest.end(), extra.begin(), extra.end());
+    return lay_out(no_threat ? wr : rule, rest);
 }
 }   // namespace
 
@@ -2285,6 +2418,15 @@ bool LandfallProvider::LandSearchPickOrderKey(const GameState& s, int controller
     // The proposed Titan amendment widens the list; a per-job arm (heurarm) can flip it between jobs
     // that share this thread's memo, so it is part of the key.
     key |= static_cast<std::uint64_t>(LandfallTitanMixed() ? 1 : 0) << 17;
+    // Kessig Wolf Run: whether the Titan may fetch it (one in the library -- held exactly by the memo key
+    // -- and none on our battlefield, which the key does not hold) and the "no other threat" ORDER, which
+    // reads our battlefield and hand. Both bits stay 0 while no Wolf Run is fetchable, so every other
+    // state keys exactly as before.
+    if (WolfRunFetchable(s, controller))
+    {
+        key |= static_cast<std::uint64_t>(1) << 18;
+        key |= static_cast<std::uint64_t>(HasOtherThreat(s, controller) ? 0 : 1) << 19;
+    }
     // lib_main / lib_splash, and whether any basic is left for Titan, are functions of the library
     // multiset, which the memo key holds exactly.
     return true;
@@ -3203,7 +3345,11 @@ int LandfallProvider::BounceUserRulePick(const GameState& s, int controller, con
     };
     bool non_karoo = false;
     for (int i : legal) { if (!karoo_at(i)) { non_karoo = true; break; } }
-    struct Key { int tier; int spare_neg; int untapped; int copies_neg; int pos; int idx; };
+    // `pump`: KESSIG WOLF RUN ranks LAST among the colourless lands (the agent's reading inside the USER's
+    // rule, REPORTED 2026-10-22: "colourless producing lands can go first" -- but the pump land is the one
+    // colourless land worth keeping on board while another colourless land can go). 0 for every other land,
+    // so a board without one bounces exactly as before.
+    struct Key { int tier; int pump; int spare_neg; int untapped; int copies_neg; int pos; int idx; };
     std::vector<Key> keys;
     std::vector<std::string> names;
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
@@ -3232,7 +3378,8 @@ int LandfallProvider::BounceUserRulePick(const GameState& s, int controller, con
         int copies = 0;
         for (const Permanent& o : s.battlefield)
         { if (o.controller_index == controller && o.card.IsLand() && o.card.m_name == p.card.m_name) { ++copies; } }
-        keys.push_back({ coloured ? 1 : 0, coloured ? -spare : 0, p.tapped ? 0 : 1, -copies, pos, i });
+        const int pump = (!coloured && d->params.tap_target_pump_cost.has_value()) ? 1 : 0;
+        keys.push_back({ coloured ? 1 : 0, pump, coloured ? -spare : 0, p.tapped ? 0 : 1, -copies, pos, i });
         const std::string nm = p.card.m_name.str();
         if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
     }
@@ -3242,7 +3389,7 @@ int LandfallProvider::BounceUserRulePick(const GameState& s, int controller, con
     for (const Key& k : keys)
     {
         const auto rank = [](const Key& x)
-        { return std::make_tuple(x.tier, x.spare_neg, x.untapped, x.copies_neg, x.pos); };
+        { return std::make_tuple(x.tier, x.pump, x.spare_neg, x.untapped, x.copies_neg, x.pos); };
         if (rank(k) < rank(*best)) { best = &k; }
     }
     return best->idx;
@@ -3838,6 +3985,127 @@ static bool LandfallTargetPickEnabled()
 }
 
 bool LandfallProvider::LandfallCounterTargetIsPick(const GameState& s) const { (void)s; return LandfallTargetPickEnabled(); }
+
+// ---- LandfallProvider: KESSIG WOLF RUN's pump (2026-10-22) ----------------------------------------------
+// "{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn." The engine emits one
+// variant per (target identity class, X) and asks the two hooks below. Both narrow ONLY by a SOUND fold --
+// never a pick among real alternatives (the no-greedy rule) -- and each fold is CHECKED on the live state,
+// so a board where its premise fails keeps the full fan. MTG_UNPRUNE=xspell (or MTG_UNPRUNED) opens both.
+//
+// TARGET.
+//   (a) Only creatures that can still ATTACK this turn, and only in the pre-combat main. +X/+0 (and the
+//       inert trample -- no blocker path) is read by nothing in this pool except COMBAT DAMAGE: Avenger and
+//       Phylath put counters, Baloths and Omnath make tokens, Terastodon destroys, Titan searches, Courser
+//       gains life; nothing flings, fights, equips by power or checks a power threshold. The pump resolves
+//       in main 1's trailing pass, before combat damage, so on a creature that cannot attack (summoning
+//       sick, tapped) -- or in a second main, after damage -- it changes nothing any rule observes, and the
+//       activation is dominated by not activating. CHECKED: no power-reading param on our battlefield or in
+//       our hand (WolfRunPowerUnread).
+//   (b) ONE of the attack-eligible. The passive opponent never blocks, so every attacker connects and +X on
+//       ANY of them adds exactly X to the same simultaneous combat-damage total; the bonus is gone at
+//       cleanup. The boards then differ only in which creature carried the bonus -- an identity of outcome,
+//       as long as no candidate's OWN damage matters (double strike, lifelink, an attachment) and nothing on
+//       our board watches combat damage per creature (combat_damage_* params). CHECKED; a board that fails
+//       keeps every attack-eligible class. The kept target is the largest power (ties: the first).
+// X.
+//   The most the turn pays (kTapTargetPumpXAll), when nothing after the activation can spend mana this
+//   turn: the game plays no second main (state.uses_second_main), the deck runs no attack-untap, no
+//   combat-time mana sink (firebreathing / team pump) is on our board, and no creature of ours that could
+//   attack is a mana source (so the X never costs an attacker). The engine runs the pump LAST in the
+//   trailing pass (TurnSolver::TrailingForcedLast) and pays the largest X the remaining mana covers. For a
+//   FIXED rest of the plan a larger X only adds damage and its leftover could buy nothing, so it weakly
+//   dominates every smaller X -- and the exact-lethal pump is still found (max X >= the lethal X). The
+//   rest of the plan stays fully searched: a cast competing for the same mana is its own subset.
+namespace
+{
+bool WolfRunPowerUnread(const GameState& s, int me)
+{
+    auto reads = [](const CardDefinition* d)
+    {
+        if (d == nullptr) { return false; }
+        const CardParams& p = d->params;
+        return p.controller_lifegain_equals_power || p.creature_enters_min_power > 0 || p.equip_min_power > 0
+            || p.cast_lifegain_ferocious > 0 || p.firebreathing_threshold_power > 0 || p.ltb_return_max_power > 0
+            || p.sac_outlet_self_pump_power_from_victim || p.etb_damage_equals_power || p.saga_ch3_double_pt_target;
+    };
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index == me && reads(CardDatabase::Instance().LookupCached(q.card))) { return false; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    { if (reads(CardDatabase::Instance().LookupCached(c))) { return false; } }
+    return true;
+}
+
+bool WolfRunNoCombatDamageWatcher(const GameState& s, int me)
+{
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        if (p.combat_damage_free_cast || p.combat_damage_counters_each_attacker > 0
+            || p.combat_damage_tokens_per_damage > 0 || !p.combat_damage_puts_subtype_from_hand.empty()
+            || p.combat_damage_each_discards > 0)
+        { return false; }
+    }
+    return true;
+}
+}   // namespace
+
+void LandfallProvider::TapTargetPumpTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
+                                            std::vector<int>& targets) const
+{
+    (void)source;
+    if (DecisionUnpruned(UnprunedGate::XSpell) || targets.empty()) { return; }
+    const int me = s.active_player_index;
+    if (!WolfRunPowerUnread(s, me)) { return; }
+    if (!is_pre_combat) { targets.clear(); return; }                       // fold (a): after damage
+    std::vector<int> atk;
+    for (int i : targets)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == me && !q.tapped && CanAttackFull(q, s.battlefield, me)) { atk.push_back(i); }
+    }
+    targets = std::move(atk);                                              // fold (a): attack-eligible only
+    if (targets.size() < 2 || !WolfRunNoCombatDamageWatcher(s, me)) { return; }
+    for (int i : targets)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (CreatureHasDoubleStrike(q, s) || CreatureHasLifelink(q, s)) { return; }
+        for (const Permanent& o : s.battlefield)
+        {
+            if (o.aura_attached_to == q.card.m_number || o.equipped_to == q.card.m_number) { return; }
+        }
+    }
+    int best = targets.front();
+    for (int i : targets)
+    {
+        if (s.battlefield[static_cast<std::size_t>(i)].EffectivePower()
+            > s.battlefield[static_cast<std::size_t>(best)].EffectivePower()) { best = i; }
+    }
+    targets.assign(1, best);                                               // fold (b): one outcome
+}
+
+std::vector<int> LandfallProvider::TapTargetPumpXCandidates(const GameState& s, const Permanent& source,
+                                                            int x_max, bool is_pre_combat) const
+{
+    std::vector<int> all = DecisionProvider::TapTargetPumpXCandidates(s, source, x_max, is_pre_combat);
+    if (DecisionUnpruned(UnprunedGate::XSpell) || x_max < 1 || !is_pre_combat) { return all; }
+    if (s.uses_second_main || s.deck_has_attack_untap) { return all; }
+    const int me = s.active_player_index;
+    if (ControlsFirebreathingSource(s, me)) { return all; }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || q.tapped || (!q.card.IsCreature() && !q.is_animated)) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        const bool mana_source = !d->params.produces.empty() || d->tmpl == CardTemplate::ManaDork;
+        if (mana_source && CanAttackFull(q, s.battlefield, me)) { return all; }
+    }
+    return { kTapTargetPumpXAll };
+}
 
 bool LandfallProvider::WantsCastOrderingSearch() const { return LandfallOrderEnabled(); }
 

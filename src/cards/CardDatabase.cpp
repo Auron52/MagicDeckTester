@@ -1825,6 +1825,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_blood_cost_less_per_subtype = params.value("tap_blood_cost_less_per_subtype", std::string{});
     if (params.contains("blood_draw_cost"))
         p.blood_draw_cost = ManaCostFromString(params["blood_draw_cost"].get<std::string>());
+    // Kessig Wolf Run (2026-10-22) -- see CardParams::tap_target_pump_cost.
+    if (params.contains("tap_target_pump_cost"))
+        p.tap_target_pump_cost = ManaCostFromString(params["tap_target_pump_cost"].get<std::string>());
+    p.tap_target_pump_power          = params.value("tap_target_pump_power", 0);
+    p.tap_target_pump_tough          = params.value("tap_target_pump_tough", 0);
+    p.tap_target_pump_grants_trample = params.value("tap_target_pump_grants_trample", false);
     p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
     p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
 

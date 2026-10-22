@@ -1,0 +1,50 @@
+{
+  "_comment": [
+    "Kessig Wolf Run 2026-10-22, the USER's Titan heuristic: 'it can be fetched by Primeval Titan. We should add",
+    "that to the heuristic' -- 'a very good option if you don't have other threats'. T5: four Forests and two",
+    "Mountains (g4 r2), a Forest and Primeval Titan in hand, NO other threat (no creature on board, none in",
+    "hand but the Titan). The Landfall Titan rule keeps only the Wilds / Myriad pairs here (a land in hand, no",
+    "colour short); the Wolf Run pairs (Wolf Run + Wilds, Wolf Run + Myriad) are ADMITTED beside them and, with",
+    "no other threat, ordered first. Play the Forest, cast Titan: its ETB fetches Wolf Run + a Wilds / Myriad",
+    "(tapped). T6: Titan attacks for 6 and the Wolf Run pumps it by X = 5 (seven untapped basics pay {5}{R}{G}):",
+    "11, exactly the opponent's life. Without the Wolf Run (the rule's own picks) Titan deals 6 a turn: T7.",
+    "Primeval Titan never fetches a basic (the USER's rule), so the library's basics only keep the rule out of",
+    "its out-of-basics branch."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 11,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Mountain" },
+    { "name": "Mountain" }
+  ],
+  "hand": [
+    "Forest",
+    "Primeval Titan"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "library": [
+    "Kessig Wolf Run",
+    "Evolving Wilds",
+    "Terramorphic Expanse",
+    "Myriad Landscape",
+    "Myriad Landscape",
+    "Radiant Fountain",
+    "Haunted Fengraf",
+    "Forest",
+    "Forest",
+    "Mountain"
+  ],
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 9,
+  "expect_win_turn": 6
+}

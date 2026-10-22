@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Kessig Wolf Run 2026-10-22: '{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn'.",
+    "Board: Avenger of Zendikar (5/5, can attack), Kessig Wolf Run, a Mountain and five Forests -- the OTHER",
+    "sources pay exactly {4}{R}{G} (the Wolf Run taps as part of the cost, so its own {C} cannot pay); empty hand.",
+    "Opponent at 9: the T6 kill is Avenger 5 + X = 4, EXACTLY lethal, and only through the pump (the search must",
+    "find the X and the target; the Landfall provider's max-X fold spends every remaining mana, which is X = 4).",
+    "Without the pump Avenger deals 5 a turn: win T7. The _control fixture (opponent at 10) proves the pump is",
+    "not over-credited: X = 4 deals 9, one short, so it wins T7 too."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 9,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Kessig Wolf Run" },
+    { "name": "Mountain" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Avenger of Zendikar" }
+  ],
+  "hand": [],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "expect_win_turn": 6
+}

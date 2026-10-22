@@ -5967,5 +5967,14 @@
     "power": "0",
     "toughness": "0",
     "type_line": "Creature — Elemental Hydra"
+  },
+  "Kessig Wolf Run": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   }
 }
