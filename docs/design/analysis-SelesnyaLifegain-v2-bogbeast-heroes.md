@@ -1,8 +1,12 @@
 # SelesnyaLifegain v2-bogbeast-heroes -- analysis record
 
 The USER-approved list from the 2026-10-22 screen (rounds 1-15, `logs/selesnya_screen/`), staged at
-`decks/SelesnyaLifegain/v2-bogbeast-heroes/` while its artifacts are generated. The shipped list stays
-at `decks/SelesnyaLifegain/` and is archived only after every v2 resource exists (USER 2026-10-22).
+`decks/SelesnyaLifegain/v2-bogbeast-heroes/` while its artifacts were generated, and **PROMOTED to the
+shipped path `decks/SelesnyaLifegain/` on 2026-10-22** once every v2 resource existed (USER 2026-10-22).
+The original list is archived at `decks/SelesnyaLifegain/v1-avatar-alchemist/` (suite key `selesnya`,
+ledger `analysis-SelesnyaLifegain.md`); this list keeps its own suite keys `selesnyav2` / `selesnyav22hg`.
+Paths below that name `v2-bogbeast-heroes/` describe where the work was done on the day; the files now
+live at the top level. Promotion record: `selesnya-v2-promotion-2026-10-22.md`.
 
 ## The list (60)
 
@@ -82,6 +86,11 @@ search shape, not the cards alone. Generator + analysis: `logs/selv2_vs_shipped/
 | std (20, 1 head) | 5.1341 | 4.5908 | **-0.5433** | 0.0043 | -127 | 10/10 | 0.48% -> 0.20% | 18.59% -> 53.74% | 24.57% -> 9.46% | 123.4 -> 40.6 |
 | 2HG (30, 2 heads) | 5.4255 | 4.8892 | **-0.5363** | 0.0074 | -73 | 10/10 | 0.99% -> 0.48% | 9.02% -> 35.00% | 37.78% -> 17.50% | 216.3 -> 75.4 |
 
-## Next
+## Promotion (2026-10-22)
 
-Promotion + archive of the shipped list: the USER's decision.
+USER-approved and done: v2 is the shipped list at `decks/SelesnyaLifegain/`, the original is archived as
+`v1-avatar-alchemist/` with its references. The move is inert for both lists (every suite key reproduces
+its GT byte-identically). Details and the traps checked: `selesnya-v2-promotion-2026-10-22.md`.
+
+**The shipped list has ZERO hand-played references** until some are saved: all ten of the original's
+(plus its one suboptimal target) were played on v1 and moved with it.
