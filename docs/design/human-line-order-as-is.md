@@ -189,8 +189,8 @@ by the viewer's side channel, so every search, rollout and autonomous apply is b
   before that source exists. Every other `"**"` line keeps the joint prepay (it allocates; it does not
   reorder anything the human said).
 * **Server truth is unchanged:** a step the human put where it cannot be paid is dropped where it
-  stands, never moved. (AIEngine's "an order that cannot pay for the line is not honoured" fallback is
-  untouched and applies to `"**"` lines as it did to `"*"` ones.)
+  stands, never moved. (AIEngine's "an order that cannot pay for the line is not honoured" fallback no
+  longer applies to `"**"` lines: such an order is REJECTED -- see "The two exceptions, ruled" below.)
 * `MTG_LINE_ORDER_TRACE=1` prints every step under its kind (`land`, `cast`, `sacland`, `retrace`,
   `landsedge`, `tokens`, `sacmana`, `suspend`, `landsearch`, `garth`, `activate`, `vial`); the scenario
   harness binds the same lines as data (`g_line_order_record`) for its `expect_line_order` assertion,
@@ -270,10 +270,9 @@ Only a NEW game sends `"**"`.
 
 ### Left as is, and why
 
-* **Out of scope by instruction** (asked of the user separately): AIEngine's cast-order swap when the
-  human's order cannot pay ("AN ORDER THAT CANNOT PAY FOR THE LINE IS NOT HONOURED");
-  `DeferHumanAuraSwapToCombat` (it now erases through `EraseHumanSequenceAction`, so the land's step and
-  the taps' positions stay on the steps they named).
+* **Out of scope by instruction** (asked of the user separately; both since RULED -- see "The two
+  exceptions, ruled" below): AIEngine's cast-order swap when the human's order cannot pay ("AN ORDER
+  THAT CANNOT PAY FOR THE LINE IS NOT HONOURED"); `DeferHumanAuraSwapToCombat`.
 * **No user input exists today**, so there is no order to honour: trigger ordering, attacker choice,
   scry-bottom order, end-step auto-taps, the viewer's auto-answers.
 * **DigDraw** is not a step: the viewer commits a cycle / sac-dig as a line of its own (`fireDig`
@@ -443,6 +442,71 @@ The USER ruled on the first three findings; the code follows the rulings, not th
   contract-fail; `viewer_linebuild_check.js` 0 FAIL (3726 lines over 650 refs); `check_gt_logs.py` 888
   consistent / 0 stale / 0 missing; `viewer_client_check.js` only the pre-existing `equip` /
   `equip from hand` failures.
+
+### The two exceptions, ruled (2026-10-22)
+
+**1. The Arcanum Wings swap timing.** USER, in three steps: *"Arcanum Wings should be deferred into
+combat, but only if it is done last I suppose"*, then *"Arguably it shouldn't be unless I pass to combat
+and [do] nothing else in between"*, then the governing principle: *"Essentially, it shouldn't lose any
+options for the user"*, and *"If I want to activate and then re-enchant (and perhaps activate again) I
+should be able to."* Every inferred deferral -- including "last action, then pass" -- still takes away
+the main-phase swap followed by an attack, so the ruling is a CHOICE, not an inference.
+
+* **What the human path could already offer.** The combat swap window has a human prompt today:
+  `ApplyCombatAuraSwap` asks, after attackers are declared, *"aura swap {2}{U} in combat (on <host>):
+  bring in which Aura? (decline = no swap)"* whenever a Wings is attached and the swap is affordable
+  (the viewer's swap hint already said "To swap AFTER attackers are declared instead, skip this: you are
+  asked in combat"). So the variant that loses no option needs NO new surface: stop moving the main-phase
+  swap. A main-phase `auraswap=` now happens at its queued position like every other step, and the combat
+  swap is the human's own answer to that prompt.
+* **The deferral is now REPLAY-ONLY.** Four Bruna references were played under it (`claude_s6_gi5`,
+  `s11_gi10`, `s19_gi18`, `s20_gi19`: each replays a turn LATER without it -- measured, 4 play-drift), so
+  it stays for exactly the references stamped `"combat_swap_timing": 1`:
+  `test/viewer_protocol_check.py` now passes `--legacy-combat-swap-defer` for a stamped reference and
+  nothing for an unstamped one (main-phase timing is the default again, which is also what the pre-
+  2026-10-06 recordings were played with). **Simplified, not kept:** `MTG_HUMAN_COMBAT_SWAP` is deleted
+  and `--legacy-main-swap` is replaced by `--legacy-combat-swap-defer` (inverted: it turns the old rule
+  ON); a new recording carries no stamp. `HumanCombatSwapOn()` (GameLogger.h) reads only that flag.
+* **Swap, recast, swap again.** Works as consecutive commits in one main phase, each at its position, and
+  the combat prompt is still offered afterwards. One queue cannot hold it: the viewer has no hand card
+  for a Wings the queue itself returns to hand, and the engine does not enumerate swap + recast + swap
+  as one human line (`legal_not_enumerated`); since each commit is its own frame, the second swap's
+  `#src` is read off the recast Wings on the board.
+* Scenarios: `bruna_human_wings_swap_main_at_position` and `bruna_human_wings_swap_combat_choice` (the
+  SAME position, both choices: main swap -> Mother tapped, no attack, 21; pass + combat pick -> T5 kill),
+  `bruna_human_wings_swap_combat_declined` (the prompt declined: 20), `bruna_human_wings_swap_recast_swap_again`
+  (three commits, T4 kill), `bruna_human_wings_swap_recast_then_combat` (swap + recast in main, the second
+  swap in combat, T4 kill). The three fixtures of the old rule (`..._deferred_to_combat`,
+  `..._land_drop_pays`, `..._unpayable_in_combat`) set the new scenario key `legacy_combat_swap_defer`;
+  the old `..._legacy_main` fixture became `..._main_at_position`. Scenario harness keys added:
+  `human_dig_picks` (answers to the card prompts, the combat swap's included; `"decline"` = none), a
+  `"pass"` entry in `human_lines`, `expect_reason_contains` for `validate_line`.
+
+**2. The "your order cannot pay" fallback.** USER: *"You should reject it in that case. The user should
+make their line playable."* For a `"**"` sequence (`PrepareHumanCommit`):
+
+* The queued order is trial-applied once; if it drops a cast, each such cast is an error *"cast <X>: it
+  cannot be paid at its position in your order -- <cost> is more than the steps queued before it leave
+  available"*, plus *"(the order <...> pays every spell: queue it that way)"* when the plan's own order
+  pays. Taps or no taps: the human's order is the line.
+* **Validation** (`seq=`): those errors make the line Illegal with that reason (scenario
+  `burn_human_seq_unpayable_order_rejected`).
+* **Commit** (should one reach it without the preview): NOTHING of the segment is applied -- no reorder,
+  no partial line -- the history says why, and the frame is offered again (scenario
+  `burn_human_seq_fallback_reports_what_changed`, which now shows the rejection).
+* **Legacy pins** (`"*"`, a bare cast list, taps only -- every saved reference) keep the fallback exactly
+  as recorded, so references replay unchanged.
+* `viewer_client_check.js` "no silent revert" (Bruna s13 T5, the user's 2026-10-08 game) now asserts the
+  ruling: "Thicket; Bruna; Glittering Wish" is rejected with its reason and nothing is committed, and
+  "Thicket; Glittering Wish; Bruna" commits as queued with Bruna on the battlefield.
+
+Measurements (both rulings, tree ebbed7382 + the client-check update): smoke 140/140, **configs changed:
+0**, 0 slower / faster / play-changed (searched and d0); scenarios 295/295; unit 1861/1861; reference
+replay (651, `--strict`) 228 ok / 423 repaired / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0
+enum-gap / 0 mull-drift / 0 contract-fail; `viewer_linebuild_check.js` 0 FAIL (3733 lines over 651 refs);
+`check_gt_logs.py` 888 consistent / 0 stale / 0 missing; `viewer_client_check.js` only the pre-existing
+`equip` / `equip from hand` failures. The replay-only flag measured load-bearing: without it the four
+stamped Bruna references above play-drift (each a turn later); with it all 20 Bruna references replay.
 
 ## DEFERRED: a dropped board ACTIVATION is silent in the viewer
 
