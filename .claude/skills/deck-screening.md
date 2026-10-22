@@ -194,7 +194,9 @@ numbering (which inherits its own reference's, down to base):
 
 - An arm and its reference then differ in exactly the copies that differ, and a one-copy swap puts the
   incoming card on the outgoing card's number. Two one-swap siblings of one centre differ only where
-  their edits do (hh vs rr: n = 2).
+  their edits do (hh vs rr: n = 2). Measured on round 15's seed, 2,000 games, both numberings in one
+  batch: hh vs rr discordant **20.3% → 0.5%** (std) and **23.4% → 1.6%** (2hg), se **0.0131 →
+  0.0024** / **0.0144 → 0.0035**; the old-numbered arms reproduced round 15's win turns 2000/2000.
 - `replace` for a referenced arm is relative to the **reference**, not base (the driver refuses a
   base-relative map there). A one-copy swap needs no map.
 - **The price**, printed per arm as `[vs base k=.. n=.., +e paid for the reference]`: an arm that
