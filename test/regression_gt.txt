@@ -1,8 +1,7 @@
-# Regression ground truth -- commit 744d66887  date 2026-10-22
+# Regression ground truth -- commit 413e99bb1  date 2026-10-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-22): Periodic overnight rebaseline 2026-10-22 on 519c1f470 (PGO+LTO, 24/24 workers; 41m02s makespan on a loaded host -- same 1,642M units as a 25m29s run an hour earlier): 414 moved + 72 NEW (the UNBUDGETED BACKSTOP rows, USER 2026-10-22); searched 1760 faster / 704 slower, d0 8583 faster / 2518 slower. classify_turn_later (now pooled; d5 replayed at the case's value_play config): 167 churn / 537 PERSISTS, of which 527 are alchemist (346) and landfall (181) -- the keep-table / leaf / play-setting adoptions since 10-19 change which hands are kept, so their games diverge from the first draw; both decks are among the biggest net gains (alchemist searched -0.37t, d0 -0.83t; landfall -0.08t / -0.14t). The rest: edf 6, dragonstorm 3, hinata 1. Net slower groups: fivecolour2hg +0.0125, edf +0.0010, colossus +0.0004, fivecolour/fungusv3/creature_giving/slivers <= +0.0002. FIVECOLOUR IS A KNOWN REGRESSION, NOT CHURN: bisected to 4fc1437a2 (MTG_FS_STRICT_CUT_O1 default ON, 2026-10-21) -- its parent reproduces every moved FiveColour d5 game's GT digest, the commit moves 11 of 12. Held-out on/off at play settings: +0.0053t (0/7, t 2.5) std and +0.0217t (2/12, t 2.6) 2HG at 1.09-1.19x units, i.e. the cut ADDS work on this deck; root-cause open (suspect: the strict cut turns estimated wins into bounded no-wins that the budget-bind veto refuses to store). Carried, standing USER rulings: Galadriel ScryVerdict scry prune (5c85e812; clairvoyant +0.0476t, honest bar -0.0108t); escalation fresh 0.5 x budget_ms floor (per-deck escalation_fresh_frac deleted); MTG_ID_HINT_ROOT default 3 (2026-10-21); AccomplishedAlchemist keep table K=15 + nlfit sidecar + E.7 play setting d4b20. Prior overnight notes dropped deliberately: every cell re-measured; their adoption records (fungusv3/vampires resizes, EDF/Vampires keep tables) are in git.
-# accepted-with-regressions (smoke, 2026-10-22): MTG_PROBE_INCLUSIVE_CUT (DEFAULT ON, 2026-10-22): the value-leaf probe keeps the inclusive cut at an O(1) leaf while it records the leaf counts the escalation is priced from (MTG_FS_STRICT_CUT_O1 had collapsed them: FiveColour 1.46 -> 240 units/leaf). Held-out 36 value-leaf decks x 300 + FiveColour 1500 std / 600 2HG: every deck net <= 0, 22 faster / 3 slower; FiveColour -0.0053 (t -2.5) / 2HG -0.0217 (t -2.6) at 0.88-0.98x units; Landfall byte-identical; 35 other decks 0 score change. Smoke: 138/140 identical; burn d5 play-only; fivecolour d5 s1001 +0.0133 = gi70 4->5 churn (recovers to 4 at 4x and 16x). Carried verbatim from the prior smoke note: Rebase of the AccomplishedAlchemist branch (119 local commits + the 0fe1b0994 GT accept) onto origin 8c2797282 (escalation 0.5 floor eb0e7d066, Vampires keep table + value leaf, EDF sidecar, Karoo position, Heroes' Reunion / Rest for the Weary). 130/140 keys byte-identical (every alchemist cell included); 10 move, all the two sides' accepted changes composed: searched 0 slower / 0 faster / 1 play-only (edf d5 gi4 T4 both = our MTG_UNTAP_LOOP_KILL_FOLD on upstream's play: =0 restores upstream's digest exactly); d0 0 slower / 16 faster: angels auras creature_giving minotaur pirates selesnya soldiers vampires d0 are our greedy policy fixes (MTG_GREEDY_LETHAL_STOP + MTG_GREEDY_PUMP_LETHAL =0 restores upstream's GT digest exactly in all 8; vampires d0 4.5660->4.5540), critter d0 avg = upstream's (greedy fix + chunk-A card data). Carried from the dropped smoke notes, still in force: escalation fresh 0.5 x budget_ms floor (USER; per-deck escalation_fresh_frac deleted); MTG_ID_HINT_ROOT default 3 (USER 2026-10-21); AccomplishedAlchemist keep table (K=15) + nlfit value sidecar adopted; fluctuator escalation_skip_r re-fit under the floor.
-# accepted-with-regressions (regression, 2026-10-22): MTG_PROBE_INCLUSIVE_CUT (DEFAULT ON, 2026-10-22): the value-leaf probe keeps the inclusive cut at an O(1) leaf while it records the leaf counts the escalation is priced from (MTG_FS_STRICT_CUT_O1 had collapsed them: FiveColour 1.46 -> 240 units/leaf). Held-out 36 value-leaf decks x 300 + FiveColour 1500 std / 600 2HG: every deck net <= 0, 22 faster / 3 slower; FiveColour -0.0053 (t -2.5) / 2HG -0.0217 (t -2.6) at 0.88-0.98x units; Landfall byte-identical; 35 other decks 0 score change. Regression: 258/267 identical; 9 play-only at the same avg (fivecolour, burn, knights, auras, slivers d5), 0 slower; refs 651 / 0 drift. Carried verbatim from the prior regression note: UNBUDGETED BACKSTOP added (USER 2026-10-22): 72 NEW budget-0 keys (every deck at d3 and play depth, seeds 30001-30341, screened cheap, abandon_units 2000000, weight 1); all 195 prior keys byte-identical, smoke 140/140 unchanged. Carried verbatim from the prior regression note (its cells are unchanged and its rulings still in force): Rebase of the AccomplishedAlchemist branch (119 local commits + 0fe1b0994) onto origin 8c2797282. 176/195 keys byte-identical (every alchemist cell included); 19 move, 0 slower (searched 0 slower / 1 faster / 25 play-only; d0 0 slower / 38 faster), each restored to upstream's committed digest EXACTLY by turning our accepted levers off: angels auras creature_giving minotaur pirates selesnya soldiers d0 + dragonstorm d3 s3003 + fivecolour d3 s2002 + fungusv3 d3 s3003 = greedy policy fixes (MTG_GREEDY_LETHAL_STOP + MTG_GREEDY_PUMP_LETHAL, d0 and the playout); edf d3 s2002 / d3 s3003 / d5 s2002 / d5 s3003 = MTG_UNTAP_LOOP_KILL_FOLD (play-only, same avgs); critter d3 s2002 (gi209 5->4) + knights d3 s3003 (play-only) = MTG_HAND_COPY_CLASS_FOLD (chunk P); vampires d0 4.5790->4.5660 = greedy + HAND_COPY_CLASS_FOLD; edf d0 5.3410->5.3290 = greedy + chunk-P folds + UNTAP_LOOP_KILL_FOLD; critter d0 avg = upstream's (greedy + chunk-A card data). Viewer protocol 0 drift / 0 diverged / 0 enum-gap. Carried from the dropped regression notes (cells unchanged here, rulings still in force): escalation fresh 0.5 x budget_ms floor (USER; per-deck escalation_fresh_frac deleted) with creature_giving d5 s3003 gi194 6->7 PERSISTS and hinata d3 x3 churn; MTG_ID_HINT_ROOT default 3 (USER 2026-10-21) with hinata d3 s2002 gi192 persists and landfall d3 s2002 gi37 persists; AccomplishedAlchemist keep table K=15 + nlfit value sidecar adopted with alchemist d3 s3003 g110 T7->unwon / g113 T8->unwon (MTG_KEY_CHOSEN_COLOR; T7 at d8 b0) and d5 s3003 gi4 7->8 (recovers at 10x and d8 b0).
+# accepted-with-regressions (regression, 2026-10-22): NivMizzetCombo admitted (6 NEW keys) + MTG_DEPLETION_SBA (search removes an emptied depletion land where the executor does): bruna_regression_d3_s3003 5.0400->5.0333 and _d5_s3003 5.0933->5.0667, both FASTER, one game (gi 15, seed 3018: T7/T8 -> T6); MTG_DEPLETION_SBA=0 restores T7 at d3 b10 -- correctness fix, accepted.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -140,6 +139,10 @@ galadriel_smoke_d0_s1001=6.9400/6bc17b54bd07fe59
 galadriel_smoke_d3_s1001=4.9933/e962de98bc12e846
 galadriel_smoke_d5_s1001=4.8933/0bebbdb5d1970e7b
 galadriel2hg_smoke_d3_s1001=4.8933/d3057555a751735b
+niv_smoke_d0_s1001=6.6060/4ec9147aab75b76c
+niv_smoke_d3_s1001=4.6667/b8afc77c20d96ad7
+niv_smoke_d5_s1001=4.4000/c2a2fa11261cb1ac
+niv2hg_smoke_d3_s1001=4.6667/b061059881da02a0
 colossus_smoke_d0_s1001=4.3580/f1a3ce0a59cfc500
 colossus_smoke_d3_s1001=3.2533/3fccee818433ea10
 colossus_smoke_d5_s1001=3.2133/2f155b640caca7f2
@@ -387,9 +390,9 @@ pd_regression_d5_s2002=5.7200/e1db8e672d70ba87
 pd_regression_d5_s3003=5.3600/64d8710930c63000
 bruna_regression_d0_s2002=6.1890/88f8a4c701e01bf0
 bruna_regression_d3_s2002=5.1400/1022f4b2a3dcdf94
-bruna_regression_d3_s3003=5.0400/a094a32e8d24a1f0
+bruna_regression_d3_s3003=5.0333/8bf9be4e9775074f
 bruna_regression_d5_s2002=5.0400/4572e0718af5e41f
-bruna_regression_d5_s3003=5.0933/a50ef14d725afc9a
+bruna_regression_d5_s3003=5.0667/a4c8af9b0b9cfaa4
 edf_regression_d0_s2002=5.3290/4bd4ec47005cbc0d
 edf_regression_d3_s2002=4.0250/50feef11bcaeee2c
 edf_regression_d3_s3003=4.2250/1e7922a1917533f2
@@ -412,6 +415,12 @@ galadriel_regression_d5_s2002=4.7467/cea0d50820af0494
 galadriel_regression_d5_s3003=5.0400/0ffe792cccf1eede
 galadriel2hg_regression_d3_s2002=4.8000/cbb05033420480e8
 galadriel2hg_regression_d5_s2002=4.7000/0bc1a02dac979b66
+niv_regression_d0_s2002=6.6200/63a53bb7914b8098
+niv_regression_d3_s2002=4.6750/6c39d6f8a48429fc
+niv_regression_d3_s3003=4.7000/b5645c67062d37f8
+niv_regression_d5_s2002=4.6500/976baac83b6608e4
+niv_regression_d5_s3003=4.7500/1803c996209d7e73
+niv2hg_regression_d3_s2002=4.7000/6bd3fdbb26f719dd
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4200/9a5609afa772e094
 colossus_regression_d3_s3003=3.4933/2b7a842d7a7c5a82
@@ -962,6 +971,22 @@ galadriel2hg_overnight_d5_s4004=4.9059/b2fcdcf33e2a7461
 galadriel2hg_overnight_d5_s5005=4.9353/477794f925cc6d56
 galadriel2hg_overnight_d5_s6006=5.0529/a7bb5353cde65e18
 galadriel2hg_overnight_d5_s7007=5.1412/1093c6d432cd13e2
+niv_overnight_d0_s4004=6.5665/a74b7509800701d6
+niv_overnight_d0_s6006=6.5775/d1d0f51754119b36
+niv_overnight_d0_s8008=6.5075/e47ca5f42c522bf1
+niv_overnight_d0_s10010=6.5720/8aa502083532022d
+niv_overnight_d3_s4004=4.7120/0d071b81385ea556
+niv_overnight_d3_s5005=4.6760/1178a1d2a7e1a812
+niv_overnight_d3_s6006=4.6040/1b97c86249a20944
+niv_overnight_d3_s7007=4.6080/9a78d4dee47bbb60
+niv_overnight_d5_s4004=4.6667/5b01932f3e46c4eb
+niv_overnight_d5_s5005=4.6133/cd0c5bb103f11310
+niv_overnight_d5_s6006=4.5800/ac4cb94025dcd222
+niv_overnight_d5_s7007=4.6267/eac9d255d19c2c5a
+niv2hg_overnight_d5_s4004=4.7400/37875509744651e2
+niv2hg_overnight_d5_s5005=4.6400/39d9caad0e0759e4
+niv2hg_overnight_d5_s6006=4.5600/2debe49d35a79890
+niv2hg_overnight_d5_s7007=4.7800/d6c6a973c4b3588f
 colossus_overnight_d0_s4004=4.3635/e3789421e6d183e4
 colossus_overnight_d0_s6006=4.3820/fe58fbd7e62e11a4
 colossus_overnight_d0_s8008=4.4325/ff17112d76d792a4
