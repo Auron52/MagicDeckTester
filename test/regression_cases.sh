@@ -568,6 +568,94 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # UNBUDGETED BACKSTOP (REGRESSION half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
+  # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
+  # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
+  # break. This is a SMOKE of those paths, not a measurement of unbudgeted quality: a few games per
+  # deck, kept to about 300 core-s per tier (about 15 s of wall on 24 threads). Never in smoke (USER).
+  # SCREENED to exclude games that are degenerate TODAY. Unbudgeted play has a real tail: about 1 game in
+  # 20 hits the 2,000,000-unit ceiling on several decks (Colossus, FiveColour, Hinata, Landfall,
+  # Selesnya, Vampires, Snow, Bruna, Alchemist). Each block below finished every game, the slowest in
+  # under about 15 s. Method: .claude/skills/regression-testing.md, "Unbudgeted backstop rows".
+  # A block that turns degenerate LATER is the signal this exists for: regression.sh caps a budget-0
+  # searched game at abandon_units=2000000, so the game is abandoned deterministically, the case's
+  # avg/digest moves and the tier FAILS (detect, then fix the regression), instead of hanging.
+  # It also gives these rows weight 1, so they start before every weight-0 job instead of sorting
+  # last (budget 0 < any budget in the batch's depth/budget order) and stretching the tail.
+  # Seeds: mostly 30001; the overnight half uses disjoint blocks. Bases are spaced wider than the game count.
+  # The heavy decks carry 3-5 games, FiveColour/Landfall 10, everyone else 20.
+  "alchemist        3 30211   5 0"
+  "alchemist        5 30211   5 0"
+  "angels           3 30001  20 0"
+  "angels           5 30001  20 0"
+  "antilife         3 30001  20 0"
+  "antilife         5 30001  20 0"
+  "auras            3 30001  20 0"
+  "auras            5 30001  20 0"
+  "breaching        3 30001  20 0"
+  "breaching        5 30001  20 0"
+  "bruna            3 30221   3 0"
+  "bruna            5 30221   3 0"
+  "burn             3 30001  20 0"
+  "burn             5 30001  20 0"
+  "colossus         3 30001  20 0"
+  "colossus         5 30001  20 0"
+  "creature_giving  3 30001  20 0"
+  "creature_giving  5 30001  20 0"
+  "critter          3 30001  20 0"
+  "critter          5 30001  20 0"
+  "dragons          3 30001  20 0"
+  "dragons          5 30001  20 0"
+  "dragonstorm      3 30201   3 0"
+  "dragonstorm      5 30201   3 0"
+  "edf              3 30001  20 0"
+  "edf              5 30001  20 0"
+  "fivecolour       3 30331  10 0"
+  "fivecolour       5 30331  10 0"
+  "fluctuator       3 30001  20 0"
+  "fluctuator       5 30001  20 0"
+  "fungusv3         3 30001  20 0"
+  "fungusv3         5 30001  20 0"
+  "galadriel        3 30001  20 0"
+  "galadriel        5 30001  20 0"
+  "giants           3 30001  20 0"
+  "giants           5 30001  20 0"
+  "goblins          3 30001  20 0"
+  "goblins          5 30001  20 0"
+  "hinata           3 30001   5 0"
+  "hinata           5 30001   5 0"
+  "kittyv3          3 30301  20 0"
+  "kittyv3          5 30301  20 0"
+  "knights          3 30001  20 0"
+  "knights          5 30001  20 0"
+  "landfall         3 30311  10 0"
+  "landfall         5 30311  10 0"
+  "melira           3 30001  20 0"
+  "melira           5 30001  20 0"
+  "minotaur         3 30001  20 0"
+  "minotaur         5 30001  20 0"
+  "mirrorwing       3 30001  20 0"
+  "mirrorwing       5 30001  20 0"
+  "pd               3 30001   5 0"
+  "pd               5 30001   5 0"
+  "pirates          3 30001  20 0"
+  "pirates          5 30001  20 0"
+  "selesnya         3 30001  20 0"
+  "selesnya         5 30001  20 0"
+  "slivers          3 30001  20 0"
+  "slivers          5 30001  20 0"
+  "snow             3 30001   3 0"
+  "snow             5 30001   3 0"
+  "soldiers         3 30001  20 0"
+  "soldiers         5 30001  20 0"
+  "stompy           3 30001  20 0"
+  "stompy           5 30001  20 0"
+  "th               3 30001  20 0"
+  "th               5 30001  20 0"
+  "vampires         3 30001  20 0"
+  "vampires         5 30001  20 0"
+  "whiteknights     3 30001  20 0"
+  "whiteknights     5 30001  20 0"
   # fungus: Hinata's sizing (d0 full + d3/d5 at both seeds).
   # STALE COST NOTE, CORRECTED 2026-10-01 -- the numbers that were here are HISTORY, not a current
   # cost, and must not be used to size or gate anything. They read: "1,331.1s CPU = the suite's
@@ -852,6 +940,94 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # UNBUDGETED BACKSTOP (OVERNIGHT half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
+  # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
+  # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
+  # break. This is a SMOKE of those paths, not a measurement of unbudgeted quality: a few games per
+  # deck, kept to about 300 core-s per tier (about 15 s of wall on 24 threads). Never in smoke (USER).
+  # SCREENED to exclude games that are degenerate TODAY. Unbudgeted play has a real tail: about 1 game in
+  # 20 hits the 2,000,000-unit ceiling on several decks (Colossus, FiveColour, Hinata, Landfall,
+  # Selesnya, Vampires, Snow, Bruna, Alchemist). Each block below finished every game, the slowest in
+  # under about 15 s. Method: .claude/skills/regression-testing.md, "Unbudgeted backstop rows".
+  # A block that turns degenerate LATER is the signal this exists for: regression.sh caps a budget-0
+  # searched game at abandon_units=2000000, so the game is abandoned deterministically, the case's
+  # avg/digest moves and the tier FAILS (detect, then fix the regression), instead of hanging.
+  # It also gives these rows weight 1, so they start before every weight-0 job instead of sorting
+  # last (budget 0 < any budget in the batch's depth/budget order) and stretching the tail.
+  # Seeds: mostly 30101; the regression half uses disjoint blocks. Bases are spaced wider than the game count.
+  # The heavy decks carry 3-5 games, FiveColour/Landfall 10, everyone else 20.
+  "alchemist        3 30101   5 0"
+  "alchemist        5 30101   5 0"
+  "angels           3 30101  20 0"
+  "angels           5 30101  20 0"
+  "antilife         3 30301  20 0"
+  "antilife         5 30301  20 0"
+  "auras            3 30101  20 0"
+  "auras            5 30101  20 0"
+  "breaching        3 30101  20 0"
+  "breaching        5 30101  20 0"
+  "bruna            3 30231   3 0"
+  "bruna            5 30231   3 0"
+  "burn             3 30101  20 0"
+  "burn             5 30101  20 0"
+  "colossus         3 30301  20 0"
+  "colossus         5 30301  20 0"
+  "creature_giving  3 30101  20 0"
+  "creature_giving  5 30101  20 0"
+  "critter          3 30101  20 0"
+  "critter          5 30101  20 0"
+  "dragons          3 30101  20 0"
+  "dragons          5 30101  20 0"
+  "dragonstorm      3 30211   3 0"
+  "dragonstorm      5 30211   3 0"
+  "edf              3 30101  20 0"
+  "edf              5 30101  20 0"
+  "fivecolour       3 30341  10 0"
+  "fivecolour       5 30341  10 0"
+  "fluctuator       3 30101  20 0"
+  "fluctuator       5 30101  20 0"
+  "fungusv3         3 30101  20 0"
+  "fungusv3         5 30101  20 0"
+  "galadriel        3 30101  20 0"
+  "galadriel        5 30101  20 0"
+  "giants           3 30101  20 0"
+  "giants           5 30101  20 0"
+  "goblins          3 30101  20 0"
+  "goblins          5 30101  20 0"
+  "hinata           3 30021   3 0"
+  "hinata           5 30021   3 0"
+  "kittyv3          3 30101  20 0"
+  "kittyv3          5 30101  20 0"
+  "knights          3 30101  20 0"
+  "knights          5 30101  20 0"
+  "landfall         3 30341  10 0"
+  "landfall         5 30341  10 0"
+  "melira           3 30101  20 0"
+  "melira           5 30101  20 0"
+  "minotaur         3 30101  20 0"
+  "minotaur         5 30101  20 0"
+  "mirrorwing       3 30101  20 0"
+  "mirrorwing       5 30101  20 0"
+  "pd               3 30101   5 0"
+  "pd               5 30101   5 0"
+  "pirates          3 30101  20 0"
+  "pirates          5 30101  20 0"
+  "selesnya         3 30301  20 0"
+  "selesnya         5 30301  20 0"
+  "slivers          3 30101  20 0"
+  "slivers          5 30101  20 0"
+  "snow             3 30211   3 0"
+  "snow             5 30211   3 0"
+  "soldiers         3 30101  20 0"
+  "soldiers         5 30101  20 0"
+  "stompy           3 30101  20 0"
+  "stompy           5 30101  20 0"
+  "th               3 30101  20 0"
+  "th               5 30101  20 0"
+  "vampires         3 30401  20 0"
+  "vampires         5 30401  20 0"
+  "whiteknights     3 30101  20 0"
+  "whiteknights     5 30101  20 0"
   # fungus: Hinata's overnight sizing (scripts/fungus_regression_add.sh: d0 x4 @2000, d3 x4 @400 b10,
   # d5 x4 @300 b20, ~1.8 CPU-hours at this deck's measured rates). Added WITH its baseline 2026-09-27
   # (USER: "Let's add Fungus there as well. I never wanted to have things partly added.") -- it had

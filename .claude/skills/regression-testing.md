@@ -91,6 +91,29 @@ bash test/regression.sh              # pre-commit
 bash test/regression.sh --overnight  # deep sweep (run later, not inline)
 ```
 
+### Unbudgeted backstop rows (USER 2026-10-22)
+
+Every other row is budgeted, so a path that runs only at `--budget-ms 0` (`g_unbudgeted_play`,
+`Unlimited()`, the lazy leaf) would break with every tier green. The backstop rows are budget-0 rows
+(`"<deck> 3|5 <seed> <games> 0"`) at the TOP of `REGRESSION_CASES` and `OVERNIGHT_CASES`. They cover
+every deck at d3 and at its play depth, on the 30001-30551 seed range, disjoint between the two
+tiers. **They smoke those paths; they do not measure unbudgeted quality**, so keep them small: about
+300 core-s per tier, and none in smoke (USER).
+
+* **They were screened to be cheap TODAY.** Unbudgeted play has a real degenerate tail: about 1 game in
+  20 on several decks costs tens of seconds or more. Every chosen block finished every game, the
+  slowest in under about 15 s. The heavy decks carry 3-5 games, FiveColour/Landfall 10, the rest 20.
+* **A row turning degenerate LATER is exactly what they exist to catch.** `regression.sh` caps a
+  searched budget-0 game at `abandon_units: 2000000` (~45 s). An abandoned game drops out, the case's
+  avg/digest moves and the tier FAILS: root-cause it like any other regression. Never re-screen a block
+  away because a change made it slow.
+* **The cap is in search units.** A cost the meter does not count (an Alchemist d3 s30011 game ran for minutes
+  without reaching it, and kittyv3 spent 5.8 s on 17,914 units) is not bounded. That is one more reason to keep these blocks clean.
+* **They are scheduled first** (weight 1). Otherwise budget 0 sorts last at its depth in the batch's
+  depth/budget order and puts unbounded games on the tail.
+* **Adding a deck:** screen its blocks the same way (budget-0 jobs with `abandon_units`, then
+  `MTG_SLOW_GAME_MS=5000` to see the per-game maxima) and add one block per tier.
+
 ---
 
 ## Reading results

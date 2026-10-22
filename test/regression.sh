@@ -355,6 +355,17 @@ MANIFEST="$LOGDIR/manifest.json"
     # jobs keep weight 0 (the depth/budget proxy). Ordering is lossless -- results are unchanged.
     weight=0
     if [ "$base" = "hinata" ] && [ "$depth" -gt 0 ]; then weight=$((depth * 1000 + bud)); fi
+    # UNBUDGETED BACKSTOP rows (searched depth, budget 0 = unlimited; see the note above them in
+    # regression_cases.sh). They were screened to games far below this ceiling, so it never binds on a
+    # healthy engine; it exists so a change that makes one of them DEGENERATE abandons that game
+    # deterministically (the case's avg/digest then moves and the tier FAILS) instead of hanging the
+    # tier for hours. 2,000,000 units is ~45 s of search on this box. Weight 1 starts them ahead of
+    # every weight-0 job: by the batch's own depth/budget order budget 0 sorts LAST at its depth, which
+    # would put unbounded games on the tail (Hinata's weight, if any, still outranks them).
+    if [ "$depth" -gt 0 ] && [ "$bud" -eq 0 ]; then
+      extra2hg="${extra2hg}\"abandon_units\": 2000000, "
+      [ "$weight" -eq 0 ] && weight=1
+    fi
     [ $first -eq 1 ] && first=0 || printf ',\n'
     # value_play integration (docs/design/value-leaf-fallback-table.md): every deck ships an ENABLED value_play
     # block that OWNS the play depth. The depth-5 case is the "value_play-driven" case -- we DROP the depth key

@@ -430,10 +430,13 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     never by what keeps the GT still.
   * **An exception must say why in its code comment**: what makes the change meaningless or
     inapplicable under a finite budget, not merely "it would move budgeted play".
-  * **Owed:** the 2026-10-14 cuts above get a budgeted version (after the Snow value leaf). Every other
-    existing unbudgeted-only gate gets either one or a stated structural reason. A minimal unbudgeted
-    backstop in the suite (a few cheap decks whose cases are shown to exercise these paths) is planned,
-    not yet sized.
+  * **Owed:** every other existing unbudgeted-only gate gets either a budgeted version or a stated
+    structural reason. (The 2026-10-14 cuts have run at every budget since 2026-10-15.)
+  * **The UNBUDGETED BACKSTOP is in the suite (USER 2026-10-22).** Every deck plays a few screened
+    budget-0 games at d3 and at its play depth in REGRESSION and OVERNIGHT (never smoke), about 300
+    core-s per tier. These rows SMOKE the unbudgeted paths; they do not measure unbudgeted quality. A
+    row turning degenerate is abandoned at a fixed unit ceiling and FAILS the tier. See "Unbudgeted
+    backstop rows" in `.claude/skills/regression-testing.md`.
 
 - **A DECK MUST BE IN THE REGRESSION SUITE BEFORE THE VALUE LEAF OR MULLIGAN PROFILE (user
   directive, 2026-09-26).** Adding the deck to `test/regression_cases.sh` is a **required step of
