@@ -765,6 +765,9 @@ INERT_PARAMS = {
     "landfall_quest_counters": "Khalni Heart Expedition's 'you MAY put a quest counter' -- resolved YES by dominance (a quest counter only feeds the optional activation; one more never removes an option), the quest_counter_per_attacker precedent -- DISCLOSED 6a, PROVISIONAL",
     "etb_tokens_per_land": "automatic ETB token count per land you control (Avenger of Zendikar / Phylath), no choice",
     "etb_tokens_per_land_basic_only": "ETB per-land count filter -- BASIC lands only (Phylath), via IsBasicLandCard",
+    # ---- Mossborn Hydra (2026-10-22, a Landfall screening candidate) -- PROVISIONAL, pending the user's OK ----
+    "landfall_double_self_counters": "Mossborn Hydra's 'double the number of +1/+1 counters on this creature' -- MANDATORY, no target, no choice (CR 701.10e put through DoublePlusCounters); the viewer shows the counter badge",
+    "enters_with_plus_counters": "'This creature enters with N +1/+1 counters on it' -- an as-enters REPLACEMENT (CR 614.1c), MANDATORY, no choice; the viewer shows the counter badge",
     # ---- Courser of Kruphix's static clauses (2026-10-15) ----
     "library_top_revealed": "Courser of Kruphix's 'Play with the top card of your library revealed' -- DISPLAY ONLY in goldfish (the search is clairvoyant; the passive opponent reads nothing). The viewer shows it as me.library_top while a revealer is ours; no choice",
     # ---- Giants (2026-09-22) ----

@@ -874,6 +874,21 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
     std::vector<Placed> placed;
     placed.reserve(picks.size());
     int n_put = 0;
+    // As-enters +1/+1 counters (Mossborn Hydra) belong to THIS event, so they are applied here in
+    // pass 1, at the doubler shift of the board BEFORE the event (CR 614.12), and the scope below
+    // keeps FireEtbWatchers from applying them again -- so an earlier entrant's trigger in pass 2
+    // (Primeval Titan's lands) already finds the Hydra grown. See EntersWithPreappliedScope.
+    // The shift is read BEFORE the first push, and only when a selected card carries the param, so a
+    // Wave that puts no such card reads nothing new.
+    std::vector<int> enters_with_done;
+    int enters_with_shift = 0;
+    for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+    {
+        if (!put_flag[static_cast<std::size_t>(i)]) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
+        if (d != nullptr && d->params.enters_with_plus_counters > 0)
+        { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
+    }
     for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
     {
         if (!put_flag[static_cast<std::size_t>(i)]) { continue; }
@@ -899,11 +914,15 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
             perm.controller_index  = controller;
             perm.owner_index       = controller;
             perm.entered_this_turn = true;   // summoning sick: the Wave's board cannot attack today
+            ApplyEntersWithOnPut(perm, *d, enters_with_shift, enters_with_done);   // no-op unless the param
             state.battlefield.push_back(perm);
         }
         placed.push_back(Placed{ raw.m_name, raw.m_number, d, d->card.IsLand() });
         ++n_put;
     }
+    // Over every trigger pass below: the copies pass 1 already gave their as-enters counters.
+    EntersWithPreappliedScope enters_with_scope(enters_with_done.empty() ? g_enters_with_preapplied
+                                                                         : &enters_with_done);
 
     // "Then put all cards revealed this way that weren't put onto the battlefield into your
     // graveyard" -- part of the SPELL's resolution, so before the enter-triggers resolve. Reveal

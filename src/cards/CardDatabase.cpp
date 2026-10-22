@@ -864,6 +864,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.landfall_target_subtype        = params.value("landfall_target_subtype", std::string());
     p.landfall_lifegain              = params.value("landfall_lifegain", 0);
     p.landfall_quest_counters        = params.value("landfall_quest_counters", 0);
+    p.landfall_double_self_counters  = params.value("landfall_double_self_counters", false);   // Mossborn Hydra
     p.etb_tokens_per_land            = params.value("etb_tokens_per_land", 0);
     p.etb_tokens_per_land_basic_only = params.value("etb_tokens_per_land_basic_only", false);
     // Courser of Kruphix's two static clauses (CardParams' LIBRARY TOP block).
@@ -927,6 +928,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.doubles_tokens   = params.value("doubles_tokens", false);
     p.doubles_counters = params.value("doubles_counters", false);
     p.devour           = params.value("devour", 0);
+    // "This creature enters with N +1/+1 counters on it" (Mossborn Hydra) -- see CardParams.
+    p.enters_with_plus_counters = params.value("enters_with_plus_counters", 0);
     if (params.contains("tap_token_cost"))
         p.tap_token_cost = ManaCostFromString(params["tap_token_cost"].get<std::string>());
     p.tap_token_power     = params.value("tap_token_power", 0);

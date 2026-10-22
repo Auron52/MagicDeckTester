@@ -12320,6 +12320,16 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
                   ? SnowPermanentCount(state, state.active_player_index) + 1
                   : def.params.pt_equals_snow_permanents_on_battlefield
                   ? SnowPermanentCount(state, -1) + 1 : 0;
+        // "This creature enters with N +1/+1 counters on it" (Mossborn Hydra, a printed 0/0): price
+        // the body it IS the instant it resolves (doubler-aware, exactly what PutPlusCounters will
+        // put), or a 0/0 scores 0 here and the greedy leaf never deploys it. Its landfall doubling is
+        // the search's to value (the leaf/search split the lifegain credits below document; under-
+        // crediting is the safe direction for a greedy leaf). 0 for every other creature.
+        if (def.params.enters_with_plus_counters > 0)
+        {
+            dyn += def.params.enters_with_plus_counters
+                   << DoublerShift(state, state.active_player_index, /*for_tokens=*/false);
+        }
         // "Whenever you gain life, put a +1/+1 counter on this creature" (Ajani's Pridemate /
         // Voice of the Blessed): the body enters INTO its own entry's enter-watcher gains -- one
         // counter per own watcher permanent (Soul Warden / Soul's Attendant / Auriok Champion /

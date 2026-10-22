@@ -45,8 +45,13 @@ card pays one bool test per land entry.
 `landfall_creates_tokens` + `landfall_token_*` (Baloths, Omnath; the colour string may hold several
 letters), `landfall_counters_each` + `_subtype` (Avenger; the "may" resolved YES by dominance),
 `landfall_target_counters` + `landfall_target_subtype` (Phylath; searched target), `landfall_lifegain`
-(Courser), `landfall_quest_counters` (Khalni; the "may" resolved YES by dominance). ETB:
-`etb_tokens_per_land` (+ `_basic_only`, through the shared `IsBasicLandCard`).
+(Courser), `landfall_quest_counters` (Khalni; the "may" resolved YES by dominance),
+`landfall_double_self_counters` (Mossborn Hydra, 2026-10-22: the keyword action DOUBLE, CR 701.10e,
+through the shared `DoublePlusCounters` -- a "put", so a counter doubler applies again). ETB:
+`etb_tokens_per_land` (+ `_basic_only`, through the shared `IsBasicLandCard`). As-enters:
+`enters_with_plus_counters` (Mossborn Hydra's one counter; a CR 614.1c replacement applied at the top
+of `FireEtbWatchers`, and in pass 1 of a simultaneous multi-put such as Genesis Wave, so a
+co-entrant's trigger resolving first already sees it -- `EntersWithPreappliedScope`).
 
 ## 3. Searched axes added
 

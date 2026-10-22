@@ -2317,6 +2317,65 @@ inline void PutPlusCounters(GameState& state, Permanent& p, int n)
     AddPlusCounters(p, n << DoublerShift(state, p.controller_index, /*for_tokens=*/false));
 }
 
+// ---- "DOUBLE THE NUMBER OF +1/+1 COUNTERS ON <permanent>" (CR 701.10e) ---------------------------
+// "To double the number of a kind of counters on a player or permanent, give that player or
+// permanent as many counters of that kind as it already has." So it is a PUT of N more, never a
+// multiplication of the stored count: it goes through PutPlusCounters, and a counter doubler on the
+// battlefield applies to it again (one Primal Vigor / Doubling Season: N -> N + 2N = 3N). N is read
+// NOW -- a trigger doubles the count at RESOLUTION, after every earlier trigger in the same cascade
+// (Mossborn Hydra seeing two landfalls: 1 -> 2 -> 4). -1/-1 counters are annihilated first, as the
+// SBA (CR 704.5r) would have done before the ability resolved, so N counts only what survives.
+// ONE routine for every "double the counters" clause: Mossborn Hydra's landfall today; Kalonian
+// Hydra's attack trigger and Primordial Hydra's upkeep reuse it with their own trigger params.
+//
+// THE CAP (kPlusCounterCap) is an OVERFLOW GUARD, not a model choice: the count is an int and the
+// doubling compounds -- 31 doublings overflow it (UB), and a long rollout past a stalled board can
+// reach that. A million +1/+1 counters is lethal to every opponent this engine can field many times
+// over, so clamping there changes no reachable outcome. Returns the counters actually added.
+constexpr int kPlusCounterCap = 1 << 20;
+inline int DoublePlusCounters(GameState& state, Permanent& p)
+{
+    AnnihilateCounters(p);
+    const int have = PlusCountersOn(p);
+    if (have <= 0) { return 0; }   // doubling zero puts nothing: no event, no doubler
+    PutPlusCounters(state, p, std::min(have, kPlusCounterCap));
+    for (Counter& c : p.counters)
+    {
+        if (c.type == Counter::Type::PlusOnePlusOne && c.count > kPlusCounterCap) { c.count = kPlusCounterCap; }
+    }
+    return PlusCountersOn(p) - have;
+}
+
+// ---- AS-ENTERS +1/+1 COUNTERS ON A SIMULTANEOUS MULTI-PUT (CardParams::enters_with_plus_counters) ---
+// The as-enters counters are applied at the universal enter cascade (FireEtbWatchers) for every
+// SINGLE entry. A multi-put whose entrants enter SIMULTANEOUSLY (Genesis Wave, Defense of the Heart,
+// Ghalta) places every entrant first and only then runs each one's cascade in turn -- so entrant A's
+// enter trigger (Primeval Titan's land search -> a landfall) would resolve while a co-entering
+// Mossborn Hydra still stood as a bare 0/0 waiting for its own cascade. The replacement belongs to
+// the EVENT (CR 614.1c), so such a site applies it in its own pass 1 (ApplyEntersWithOnPut, with the
+// doubler shift of the board BEFORE the event: a Doubling Season entering in the same event does not
+// apply to its co-entrants, CR 614.12) and installs this scope over its trigger passes, naming the
+// entrants already done so FireEtbWatchers does not apply them a second time. Null everywhere else.
+inline thread_local const std::vector<int>* g_enters_with_preapplied = nullptr;
+struct EntersWithPreappliedScope
+{
+    const std::vector<int>* saved;
+    explicit EntersWithPreappliedScope(const std::vector<int>* nums) : saved(g_enters_with_preapplied)
+    { g_enters_with_preapplied = nums; }
+    ~EntersWithPreappliedScope() { g_enters_with_preapplied = saved; }
+    EntersWithPreappliedScope(const EntersWithPreappliedScope&)            = delete;
+    EntersWithPreappliedScope& operator=(const EntersWithPreappliedScope&) = delete;
+};
+// Pass-1 half of a simultaneous multi-put: the entrant's as-enters counters on the not-yet-pushed
+// Permanent, at `pre_shift` (DoublerShift of the board before the event). Records the copy in `done`
+// when it applied anything, for the scope above. A no-op (one int test) for every other card.
+inline void ApplyEntersWithOnPut(Permanent& perm, const CardDefinition& d, int pre_shift, std::vector<int>& done)
+{
+    if (d.params.enters_with_plus_counters <= 0) { return; }
+    AddPlusCounters(perm, d.params.enters_with_plus_counters << pre_shift);
+    done.push_back(perm.card.m_number);
+}
+
 inline void PutSporeCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }
@@ -7400,10 +7459,11 @@ inline void FireSnowEnterWatchers(GameState& state, int entered_index)
 //   one for every payload in the pool: Avenger's "each Plant" counters land on the Plants its own ETB
 //   just made.) A put of SEVERAL LANDS AND NOTHING ELSE (Primeval Titan, Khalni Heart Expedition's
 //   sacrifice) may simply call EnterLand once per land: every landfall payload in the pool commutes
-//   with every other (tokens, counters on each <subtype>, life, quest counters) and no payload makes a
-//   permanent another landfall trigger could target, so sequential and simultaneous resolution are
-//   identical. A future payload that DOES create a target-subtype permanent breaks that argument and
-//   must take the snapshot shape instead.
+//   with every other (tokens, counters on each <subtype>, life, quest counters, a creature doubling its
+//   OWN counters -- Mossborn Hydra is no Plant, so no other payload puts a counter on it) and no
+//   payload makes a permanent another landfall trigger could target, so sequential and simultaneous
+//   resolution are identical. A future payload that DOES create a target-subtype permanent breaks
+//   that argument and must take the snapshot shape instead.
 //
 //   PER-GAME GATE: GameState::deck_has_landfall (stamped from DefHasLandfallTrigger, the same
 //   disjunction as the per-definition CardDefinition::landfall_watcher byte). A deck with no landfall
@@ -7791,6 +7851,28 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
                 break;
             }
         }
+
+        // "Double the number of +1/+1 counters on this creature" (Mossborn Hydra). MANDATORY, no
+        // target. Through DoublePlusCounters (CR 701.10e: put as many as it has NOW, doubler-aware),
+        // so each landfall of a cascade doubles the count the previous one left. Re-found by number:
+        // a token payload above may have reallocated the battlefield.
+        if (wp.landfall_double_self_counters)
+        {
+            for (Permanent& w : state.battlefield)
+            {
+                if (w.card.m_number != num || w.controller_index != controller) { continue; }
+                const int before = PlusCountersOn(w);
+                const int added  = DoublePlusCounters(state, w);
+                if (log)
+                {
+                    EmitPlayEvent(state.turn_number, "trigger",
+                                  "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name
+                                  + "): doubles its +1/+1 counters (" + std::to_string(before) + " \xE2\x86\x92 "
+                                  + std::to_string(before + added) + ")");
+                }
+                break;
+            }
+        }
     }
 
     // ---- "you MAY return this card from your graveyard to the battlefield" (Bloodghast) ----------
@@ -7870,6 +7952,32 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // as a Human/Soldier for Champion of the Parish / Thalia's Lieutenant's watchers). Param-gated
     // inside (one cached lookup) -> byte-identical for every other deck.
     ApplyDayboundOnEnter(state, entered_index);
+    // "This creature enters with N +1/+1 counters on it" (CardParams::enters_with_plus_counters,
+    // Mossborn Hydra) -- an AS-ENTERS REPLACEMENT (CR 614.1c), so it sits HERE, right after the face
+    // is settled and before anything below can observe the entrant (every enter watcher, the landfall
+    // route-3 dispatch, the creature-enter triggers). This function is the universal enter cascade, so
+    // one site reaches every enter route. Through PutPlusCounters: a counter given as the permanent
+    // enters is a "put" (CR 122.6), so a counter doubler already on the battlefield doubles it. A
+    // simultaneous multi-put applied it in its own pass 1 (EntersWithPreappliedScope) -- skipped here.
+    // Param-gated: one cached lookup + one int test for every other entrant.
+    {
+        Permanent& e = state.battlefield[entered_index];
+        const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
+        if (ed != nullptr && ed->params.enters_with_plus_counters > 0
+            && (g_enters_with_preapplied == nullptr
+                || std::find(g_enters_with_preapplied->begin(), g_enters_with_preapplied->end(),
+                             e.card.m_number) == g_enters_with_preapplied->end()))
+        {
+            PutPlusCounters(state, e, ed->params.enters_with_plus_counters);
+            AnnihilateCounters(e);   // CR 704.5r -- a no-op unless it entered carrying -1/-1 (persist)
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "etb",
+                              e.card.m_name.str() + " enters with " + std::to_string(PlusCountersOn(e))
+                              + " +1/+1 counter" + (PlusCountersOn(e) == 1 ? "" : "s"));
+            }
+        }
+    }
     if (tokenstats::On())
     {
         tokenstats::g_enters.fetch_add(1, std::memory_order_relaxed);
@@ -9383,9 +9491,19 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             gp.hand.erase(gp.hand.begin() + hi);
             deploy.push_back(std::move(moved));
         }
-        // Phase 1: everything enters.
+        // Phase 1: everything enters. As-enters +1/+1 counters (enters_with_plus_counters) belong to
+        // this one event, so they are applied here at the pre-event doubler shift and the scope over
+        // phase 2 keeps FireEtbWatchers from applying them again (EntersWithPreappliedScope).
         std::vector<int> entered_slots;
         entered_slots.reserve(deploy.size());
+        std::vector<int> enters_with_done;
+        int enters_with_shift = 0;
+        for (const Card& dc : deploy)
+        {
+            const CardDefinition* dd = CardDatabase::Instance().LookupCached(dc);
+            if (dd != nullptr && dd->params.enters_with_plus_counters > 0)
+            { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
+        }
         for (const Card& dc : deploy)
         {
             const CardDefinition* dd = CardDatabase::Instance().LookupCached(dc);
@@ -9395,9 +9513,12 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             perm.controller_index  = controller;
             perm.owner_index       = controller;
             perm.entered_this_turn = true;
+            if (dd != nullptr) { ApplyEntersWithOnPut(perm, *dd, enters_with_shift, enters_with_done); }
             state.battlefield.push_back(perm);
             entered_slots.push_back(static_cast<int>(state.battlefield.size()) - 1);
         }
+        EntersWithPreappliedScope enters_with_scope(enters_with_done.empty() ? g_enters_with_preapplied
+                                                                             : &enters_with_done);
         // Phase 2: only now do their triggers go on the stack. kEtbKxHeuristic: a PUT Terastodon
         // has no searched destroy-K axis, exactly as on the Turntimber put path.
         for (int slot : entered_slots)
@@ -19208,6 +19329,11 @@ inline void PerformUpkeepSacTutor(GameState& state)
         // erase lower battlefield slots (tokens carry no number, so puts are unambiguous).
         int puts = 0;
         std::vector<std::pair<std::string, int>> placed;   // (name, per-copy number)
+        // As-enters +1/+1 counters belong to this one event: applied in pass 1 at the PRE-event
+        // doubler shift (a pure read, taken before the first push), and kept from re-applying in
+        // pass 2 by the scope below (EntersWithPreappliedScope).
+        const int enters_with_shift = DoublerShift(state, active, /*for_tokens=*/false);
+        std::vector<int> enters_with_done;
         for (const std::string& nm : put_list)
         {
             if (puts >= max_puts) { break; }
@@ -19225,10 +19351,13 @@ inline void PerformUpkeepSacTutor(GameState& state)
             perm.controller_index  = active;
             perm.owner_index       = active;
             perm.entered_this_turn = true;
+            ApplyEntersWithOnPut(perm, *d, enters_with_shift, enters_with_done);
             state.battlefield.push_back(perm);
             placed.emplace_back(nm, raw.m_number);
             ++puts;
         }
+        EntersWithPreappliedScope enters_with_scope(enters_with_done.empty() ? g_enters_with_preapplied
+                                                                             : &enters_with_done);
         for (const auto& pl : placed)
         {
             int slot = -1;

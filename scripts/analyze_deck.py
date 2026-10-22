@@ -533,6 +533,16 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
                 and not any(v for k, v in params.items() if k.startswith("landfall_")):
             gaps.append("Landfall in oracle text but no landfall_* param set")
 
+        # "This creature enters with N +1/+1 counter(s) on it" (Mossborn Hydra, 2026-10-22): an
+        # as-enters replacement read by FireEtbWatchers. A printed 0/0 entered without the param is a
+        # creature that dies to the toughness SBA on arrival -- silently. (Turntimber's "additional",
+        # Giada's / Mimic's "each other ... enters with" and devour's reminder text do not match.)
+        if re.search(r"this creature enters with (?:a|an|one|two|three|four|five|six|x|\d+) \+1/\+1 counters?",
+                     oracle, re.I) \
+                and not params.get("enters_with_plus_counters") and not is_d("enters with"):
+            gaps.append("'This creature enters with N +1/+1 counters' in oracle text but "
+                        "enters_with_plus_counters not set")
+
         # Playing lands from the top of the library (Courser of Kruphix; Oracle of Mul Daya, Radha,
         # Augur later): the source-zone permission is its own param, read by every land-drop site
         # through TopLandPlayStaticSource. A card saying it without the param would silently play

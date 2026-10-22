@@ -248,6 +248,15 @@ struct CardParams
     // PutQuestCounters (Doubling Season doubles it). The "may" is resolved as YES by dominance (see
     // FireLandfallTriggers).
     int                      landfall_quest_counters       = 0;
+    // "double the number of +1/+1 counters on this creature" (Mossborn Hydra, 2026-10-22). The
+    // keyword action DOUBLE (CR 701.10e): put on it as many +1/+1 counters as it has AT RESOLUTION,
+    // through DoublePlusCounters (SpellEffects.h) -- the shared routine a later "double the counters"
+    // card (Kalonian Hydra's attack trigger, Primordial Hydra's upkeep) reuses with its own trigger.
+    // The doubling IS a "put", so a counter doubler (Doubling Season / Primal Vigor) applies to it
+    // again: N -> N + 2N = 3N under one. MANDATORY, no target, no choice. Commutes with every other
+    // landfall payload in the pool (none of them puts a counter on the doubling creature), so the
+    // sequential-entry argument in OnLandEntered's contract still holds.
+    bool                     landfall_double_self_counters = false;
 
     // ETB per-land tokens (Avenger of Zendikar: "create a 0/1 green Plant creature token for each
     // land you control"; Phylath, World Sculptor: "...for each BASIC land you control"). N tokens of
@@ -487,6 +496,18 @@ struct CardParams
     // by construction rather than needing a filter. The victims' dies-triggers are DEFERRED and fired
     // after the entrant's own cascade, per CR. 0 = no devour.
     int devour = 0;
+
+    // ---- "THIS CREATURE ENTERS WITH N +1/+1 COUNTERS ON IT" (Mossborn Hydra: 1; 2026-10-22) ------
+    // An AS-ENTERS REPLACEMENT (CR 614.1c), not an ETB trigger: the counters are on the body as it
+    // enters, so a printed 0/0 never meets the toughness SBA (CR 704.5f) and every enter watcher and
+    // trigger already sees the grown body. A counter put as a permanent enters is a "put" (CR 122.6),
+    // so a counter doubler on the battlefield doubles it (PutPlusCounters). Applied at the UNIVERSAL
+    // enter cascade (FireEtbWatchers, before anything observes the entrant), so it reaches every
+    // enter route -- a cast, Genesis Wave, a tutor-to-battlefield, a graveyard return -- with no
+    // per-route copy; a SIMULTANEOUS multi-put applies it in its own pass 1 instead (see
+    // EntersWithPreappliedScope, SpellEffects.h), so a co-entrant's enter trigger resolving first
+    // already sees the counters. 0 = none -> byte-identical for every other card.
+    int enters_with_plus_counters = 0;
 
     // Tap-and-pay activated token creation: {tap_token_cost}, {T} creates 1 token
     // with the given power/toughness/subtypes. Only activatable when at least one
@@ -4341,7 +4362,8 @@ inline bool DefHasLandfallTrigger(const CardParams& p)
         || (p.landfall_counters_each > 0 && !p.landfall_counters_each_subtype.empty())
         || (p.landfall_target_counters > 0 && !p.landfall_target_subtype.empty())
         || p.landfall_lifegain > 0
-        || p.landfall_quest_counters > 0;
+        || p.landfall_quest_counters > 0
+        || p.landfall_double_self_counters;   // Mossborn Hydra (2026-10-22)
 }
 
 // Codegen hints for CardDatabase::LookupCached (the hottest call in the search; see its comment).
