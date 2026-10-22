@@ -443,7 +443,22 @@
   // 'all' = after every cast, or the number of casts before it (`landat=<k>`). Only a land queued
   // AFTER a cast on a decision that offers positioned lines (`after`, stamped by queueCard) is
   // positioned at all; every other land is land-first, exactly as before.
+  // A KAROO (bounce land) whose position the decision offers (engine Plan::land_slot <= -2, published
+  // as `karoo_before`, 2026-10-22): the engine plays it AFTER the casts by default, and any earlier
+  // point is a real line ("Selesnya Sanctuary, then Rest for the Weary for 8"). Its queue position IS
+  // its timing: queued with casts still to come it encodes `landat=<k>` (k = the casts before it, 0 =
+  // before every cast); queued after every cast it is the plain `land=` (the after-the-casts default).
+  function karooPositionsOffered(decision, name) {
+    return !!(decision && Array.isArray(decision.plans)
+              && decision.plans.some(pl => pl && pl.land === name && pl.karoo_before));
+  }
   function landPosition(plan, l) {
+    if (l && l.karoo) {
+      const i = plan.indexOf(l);
+      const before = plan.slice(0, i).filter(isSpecCast).length;
+      const later  = plan.slice(i + 1).filter(isSpecCast).length;
+      return later === 0 ? '' : String(before);
+    }
     if (!l || !l.after) return '';
     const i = plan.indexOf(l);
     const before = plan.slice(0, i).filter(isSpecCast).length;
@@ -571,6 +586,7 @@
         const e = (offersLandAfter(decision) && plan.some(isCastLike))
           ? { name, kind, after: true } : { name, kind };
         if (top) e.fromTop = true;   // absent for a hand land: the entry is exactly what it always was
+        if (karooPositionsOffered(decision, name)) e.karoo = true;   // its queue position is its timing
         return e;
       };
       if (lands.length < landDropsLeft(decision) && same.length < cap) {
@@ -721,7 +737,7 @@
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            toggleKicker,
-           offersLandAfter, topLandOffered, landPosition,
+           offersLandAfter, topLandOffered, landPosition, karooPositionsOffered,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.

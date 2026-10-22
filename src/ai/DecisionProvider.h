@@ -2994,6 +2994,41 @@ public:
     // payable-prefix probe ran), and no land-search ACTIVATION position twins (Plan::land_search_act_slot)
     // -- the activations stay in the trailing pass. Landfall's USER rule. Base: false (every spot).
     virtual bool LandEntrySpotsRule(const GameState& s) const { (void)s; return false; }
+    // KarooEntryObserver -- the PRUNE on the Karoo drop's searched POSITION (MTG_KAROO_POSITION;
+    // Plan::land_slot <= -2, TurnSolver::KarooSlotCounts). The engine's axis is "play the Karoo right
+    // BEFORE the r-th counted cast-section action" (a hand cast, a graveyard cast or a Vial put) besides
+    // the after-the-casts default; human play and MTG_UNPRUNE=landpick count EVERY such action (every
+    // legal point). In autonomous search an action counts only when this returns true, so the drop is
+    // offered right before each OBSERVER of the land entering and nowhere else.
+    //
+    // MAY READ ONLY the action's card definition and per-game DECK constants: the enumeration counts
+    // over plan.actions on the node's state and both applies count again at dispatch on mid-plan states,
+    // so anything that changes during the turn would make position r mean different points in the two
+    // worlds.
+    //
+    // Base -- SOUND, by this argument. Moving the Karoo from after the casts to before cast c changes
+    // what the casts see in exactly three ways: (1) a land has ENTERED by the time c resolves; (2) any
+    // landfall trigger the Karoo fires has resolved before c; (3) the land the bounce returns left the
+    // battlefield earlier. (3) never helps: the bounce victim is still chosen from the same lands (all of
+    // ours), an untapped victim is tapped for mana in response (MTG_BOUNCE_UNTAPPED_FIRST), and a land on
+    // the battlefield pays anything its floated mana could, so the later point offers every mana and
+    // every victim the earlier one does -- and when nothing between the two points observes (1) or (2),
+    // the later point (after the casts) is at least as good. Hence an action is an observer iff
+    //   * its resolution reads the land-entry CONDITION (landfall_damage -- Searing Blaze;
+    //     cast_lifegain_landfall -- Rest for the Weary): the 8-life line this axis exists for, or
+    //   * the deck holds a LANDFALL TRIGGER (GameState::deck_has_landfall, Bloodghast's graveyard one
+    //     included): its payload (tokens, counters, life, quest counters, a returned Bloodghast) lands
+    //     before c and c may read it (a creature count, a power threshold, life gained this turn). Not
+    //     narrowed per payload -- every cast counts, which keeps the prune sound at the price of the
+    //     axis's full width in a landfall deck.
+    // DISCLOSED BOUNDARY of (3): a cast that reads our HAND (a random discard, a discard-a-land cost, a
+    // hand-size count) sees the returned land earlier. No Karoo deck in the suite holds one whose answer
+    // the earlier point could improve; a deck that does should override this (or run MTG_UNPRUNE=landpick).
+    virtual bool KarooEntryObserver(const GameState& s, const CardDefinition& def) const
+    {
+        if (def.params.landfall_damage > 0 || def.params.cast_lifegain_landfall > 0) { return true; }
+        return s.deck_has_landfall;
+    }
     // LandfallCounterTargetIsPick -- is LandfallCounterTargetOrder's FRONT class the target of every
     // targeted landfall trigger (a one-option provider prune), rather than the first of a searched rank
     // axis? Base false: the engine fans Plan::landfall_target_choice / combat_landfall_target_choice over

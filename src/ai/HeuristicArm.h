@@ -601,6 +601,7 @@ enum Slot : int
     VAMP_ALWAYS_LAND,         // MTG_VAMP_ALWAYS_LAND  PROPOSED (2026-10-21): Vampires always makes the land drop in main 1 unless a Bloodghast is in hand or on the battlefield (VampiresProvider::OffersLandDeferral). DEFAULT OFF
     VAMP_ALWAYS_LAND_FODDER,  // MTG_VAMP_ALWAYS_LAND_FODDER  amendment to MTG_VAMP_ALWAYS_LAND: the hold stays while the discard outlets this turn are at least the hand's non-land cards (the held land is fodder). DEFAULT OFF
     PAY_ENERGY_LAST,          // MTG_PAY_ENERGY_LAST  amendment to MTG_PAY_PAIN_LAST (2026-10-21): a coloured tap that spends ENERGY (Aether Hub) is a costly mode too -- banded with pain in the greedy, withheld with pain in the backtracker's painless-first pass, and refused by the prepay give-back guard. Without it pain-last spent EDF's single Hub energy to save one life (smoke edf d0 gi712: no {W}{W} for Emiel on T3, T4 -> loss). Default ON; =0 -> energy counts as painless
+    KAROO_POSITION,           // MTG_KAROO_POSITION  the Karoo drop's POSITION is searched (USER 2026-10-22: "allow the sanctuary to be played at the end of the phase at latest"): besides the after-the-casts default, a Karoo plan is cloned with the drop right BEFORE each cast that can observe the land entering (Plan::land_slot <= -2; TurnSolver::KarooSlotCounts, pruned by DecisionProvider::KarooEntryObserver). KarooPositionSearchOn, EngineFlags.h
     COUNT
 };
 
@@ -1152,6 +1153,7 @@ inline const char* Name(int slot)
         "MTG_VAMP_ALWAYS_LAND",
         "MTG_VAMP_ALWAYS_LAND_FODDER",
         "MTG_PAY_ENERGY_LAST",
+        "MTG_KAROO_POSITION",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

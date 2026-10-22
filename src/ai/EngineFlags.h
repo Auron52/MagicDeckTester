@@ -610,6 +610,25 @@ inline bool KarooBounceSearchOn()
     return heurarm::Flag(heurarm::BOUNCE_SEARCH, env_on);
 }
 
+// MTG_KAROO_POSITION -- DEFAULT ON; =0 restores "a Karoo drop is always played after the casts". The
+// Karoo drop's POSITION in the cast sequence is a searched choice (USER 2026-10-22: "We should allow
+// the sanctuary to be played at the end of the phase at latest"). The deferral (karoo_deferred: play it
+// after the casts, so its mandatory bounce returns a land the casts already spent) stays the default
+// and is always enumerated; this adds the EARLIER positions -- the drop right before a cast that can
+// observe the land entering (Rest for the Weary's landfall 8, Searing Blaze's landfall 3, a landfall
+// trigger whose payload a later cast reads) -- as clones of the Karoo plan (Plan::land_slot <= -2,
+// TurnSolver::KarooSlotBefore). An untapped returned land is tapped in response
+// (MTG_BOUNCE_UNTAPPED_FIRST's float), so "tap the Forest, play Sanctuary returning it, cast Rest with
+// the floating {G}" is the same line a human plays. Read by the enumeration only (the applies follow
+// whatever position a plan carries, so a committed plan is realised identically either way); human play
+// offers every position regardless (the viewer never narrows). heurarm slot so a pooled batch carries
+// both arms.
+inline bool KarooPositionSearchOn()
+{
+    static const bool env_on = EnvOn("MTG_KAROO_POSITION", true);   // DEFAULT ON; =0 = after the casts only
+    return heurarm::Flag(heurarm::KAROO_POSITION, env_on);
+}
+
 // MTG_NEEDS_TAP_ORDER -- DEFAULT OFF until measured. Needs-based mana-source choice: see the
 // ComputeNeedsDemandSupply header in ManaPayment.cpp. Read inside the shared payment, so executor
 // and rollout see one value; heurarm slot so a pooled batch can carry both arms.

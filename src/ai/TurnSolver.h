@@ -1197,6 +1197,14 @@ public:
         // other land sub-decisions (fetch_target / land_face / rad_mode / scry_choice / bounce_choice
         // and land_from_top ride to the deferred play). Human play: `landafter=` (-1) and the
         // `landat=<k>` modifier (after the line's k-th cast; CheckLine maps it to the watcher count).
+        //
+        //   <= -2 (KAROO PLANS ONLY, MTG_KAROO_POSITION, 2026-10-22) -- a Karoo is played AFTER the
+        //       casts by default (land_slot 0 on a Karoo plan means that, the karoo_deferred rule);
+        //       TurnSolver::KarooSlotBefore(r) plays it right BEFORE the r-th dispatched action that
+        //       TurnSolver::KarooSlotCounts (an observer of the land entering), so "Selesnya Sanctuary,
+        //       then Rest for the Weary for 8 before combat" is a line. Cloned from each Karoo plan once
+        //       per counted action it holds; the bounce returns (and floats, if untapped) a land at that
+        //       point. Human play: `land=<Karoo>;landat=<k>` (k casts before it, 0 = first).
         int8_t      land_slot = 0;
         // (Placed after land_slot, in the same padding before land_to_play: no size cost --
         // which is exactly why kPlanDomAssertedSize cannot notice it; the census key carries it by hand.)
@@ -1878,6 +1886,21 @@ public:
     // ---- THE LAND-DROP POSITION (Plan::land_slot, 2026-10-15) -----------------------------------
     static constexpr int8_t kLandSlotFirst      = 0;    // before every cast (the default)
     static constexpr int8_t kLandSlotAfterCasts = -1;   // after ALL the main casts (`landafter=`)
+    // ---- THE KAROO DROP'S POSITION (Plan::land_slot <= -2, MTG_KAROO_POSITION, 2026-10-22) ----------
+    // A Karoo (etb_bounce_land) is played after the casts by default (karoo_deferred) and its plans keep
+    // land_slot 0 for that. land_slot = KarooSlotBefore(r), r >= 1, plays it right BEFORE the r-th
+    // dispatched action of the plan's own cast section that KarooSlotCounts -- in human play every hand
+    // cast / graveyard cast / Vial put, in autonomous search only the observers of a land entering
+    // (DecisionProvider::KarooEntryObserver). A position whose r-th action never comes falls back to
+    // after the casts (never lost). Meaningful on a Karoo plan only; no other land ever carries <= -2.
+    static constexpr int8_t KarooSlotBefore(int r) { return static_cast<int8_t>(-1 - r); }
+    static constexpr int    KarooSlotOrdinal(int8_t land_slot) { return land_slot <= -2 ? -1 - land_slot : 0; }
+    static constexpr int    kKarooSlotMax = 126;   // KarooSlotBefore(126) == -127, inside int8_t
+    // Does dispatching `a` count toward a Karoo position? ONE predicate for the enumeration (how many
+    // positions a plan has) and both applies' pre-dispatch hooks (ApplyPlanDirect's karoo_pre_hook,
+    // AIEngine::TakeTurn's twin), so position r is one point in every world. Reads only the action's
+    // definition, process constants and per-game deck stamps (see KarooEntryObserver).
+    static bool KarooSlotCounts(const GameState& state, const Action& a);
     // Does this action put a LANDFALL WATCHER onto the battlefield -- a cast / graveyard cast / Vial
     // put of a card with a landfall trigger (CardDefinition::landfall_watcher), or a mass put that
     // can put one (Genesis Wave, reveal_x_put_permanents)? THE ONE predicate the position axis is
@@ -2729,6 +2752,10 @@ public:
         // i.e. the human's click order). CheckLine maps it onto Plan::land_slot (the count of landfall-
         // watcher casts up to and including cast k, which must itself put a watcher). 0 = unset.
         int         land_at_cast = 0;
+        // ...the same `landat=<k>` value with 0 KEPT (-1 = no `landat=<number>`): a KAROO's position
+        // (Plan::land_slot <= -2) is "before the line's (k+1)-th cast", and k = 0 -- the Karoo played
+        // before every cast -- is a real position for it, unlike for a land-first ordinary land.
+        int         land_at_raw = -1;
         // "landtop=<name>": the land is the library TOP (Plan::land_from_top, Courser of Kruphix).
         // false == a hand copy, as `land=` / `landafter=` always meant, so saved references replay
         // unchanged.

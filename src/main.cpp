@@ -510,6 +510,24 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             os << " (after " << (after_name.empty() ? "landfall cast #" + std::to_string(plan.land_slot)
                                                     : after_name) << ")";
         }
+        // A KAROO at an earlier position (Plan::land_slot <= -2, MTG_KAROO_POSITION): played right
+        // before the r-th counted cast. Human play counts every hand cast / graveyard cast / Vial put
+        // (TurnSolver::KarooSlotCounts), so the label names that card in the plan's own order.
+        else if (plan.land_slot <= -2)
+        {
+            const int r = TurnSolver::KarooSlotOrdinal(plan.land_slot);
+            int seen = 0; std::string before_name;
+            if (HumanPlayActive())
+            {
+                for (const Action& a : plan.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+                        && a.kind != Action::Kind::ActivateVial) { continue; }
+                    if (++seen == r) { before_name = a.card_name.str(); break; }
+                }
+            }
+            os << " (before " << (before_name.empty() ? "cast #" + std::to_string(r) : before_name) << ")";
+        }
         // THE LAND'S SOURCE (Plan::land_from_top, Courser of Kruphix): the library top, not a hand
         // copy. Annotated only when set (every other deck reads byte-identically), and the top Forest
         // and a hand Forest are never menu twins.
@@ -2028,6 +2046,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // mid-sequence position k is `land_slot` (the k-th landfall-watcher cast it follows).
         if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { os << ", \"land_after_casts\": true"; }
         else if (p.land_slot > 0) { os << ", \"land_slot\": " << static_cast<int>(p.land_slot); }
+        // A KAROO played right before its r-th cast (Plan::land_slot <= -2, MTG_KAROO_POSITION): the GUI
+        // encodes a Karoo it queued before a cast as `landat=<k>` (k casts before it) when this is offered.
+        else if (p.land_slot <= -2)
+        { os << ", \"karoo_before\": " << TurnSolver::KarooSlotOrdinal(p.land_slot); }
         // The land's SOURCE (Plan::land_from_top, Courser of Kruphix): emitted only when set, so every
         // other plan serialises byte-identically. The GUI encodes a top land it queued as `landtop=`.
         if (p.land_from_top) { os << ", \"land_from_top\": true"; }
@@ -4337,7 +4359,11 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "landat")
         {
             if (val == "all") { ls.land_slot = TurnSolver::kLandSlotAfterCasts; }
-            else              { ls.land_at_cast = std::max(0, std::atoi(val.c_str())); }
+            else
+            {
+                ls.land_at_cast = std::max(0, std::atoi(val.c_str()));
+                ls.land_at_raw  = ls.land_at_cast;   // 0 kept: a Karoo before every cast (Plan::land_slot <= -2)
+            }
         }
         else if (key == "cast")      { ls.casts.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation

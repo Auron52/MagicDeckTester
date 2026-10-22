@@ -818,6 +818,46 @@ function checkLandPosition() {
   return fails;
 }
 
+// THE KAROO DROP'S POSITION (engine Plan::land_slot <= -2, published as `karoo_before`, 2026-10-22). On
+// a decision that offers an earlier Karoo point, a queued Karoo's QUEUE POSITION is its timing: with casts
+// still to come it encodes `landat=<k>` (k = the casts before it, 0 = before every cast); after every cast
+// it is the plain `land=` (the engine's after-the-casts default). A decision with no `karoo_before` plan
+// (every pre-2026-10-22 recording, every non-Karoo land) encodes exactly as before.
+function checkKarooPosition() {
+  const hand = [{ name: 'Selesnya Sanctuary', num: 40 }, { name: 'Rest for the Weary', num: 50 },
+                { name: 'Llanowar Elves', num: 51 }];
+  const offers = { me: { hand, land_drops_left: 1 },
+                   plans: [{ land: 'Selesnya Sanctuary' }, { land: 'Selesnya Sanctuary', karoo_before: 1 }] };
+  const plain  = { me: { hand, land_drops_left: 1 }, plans: [{ land: 'Selesnya Sanctuary' }] };
+  const fails = [];
+  // Sanctuary first, then Rest -> before cast #1: landat=0.
+  let a = [];
+  a = LB.queueCard(offers, a, 'Selesnya Sanctuary', 'land');
+  a = LB.queueCard(offers, a, 'Rest for the Weary', 'nonpermanent');
+  if (LB.encodeLine(a) !== 'land=Selesnya Sanctuary;landat=0;cast=Rest for the Weary')
+    fails.push(`karoo first -> ${LB.encodeLine(a)}`);
+  // Elves, Sanctuary, Rest -> between the casts: landat=1.
+  let b = [];
+  b = LB.queueCard(offers, b, 'Llanowar Elves', 'permanent');
+  b = LB.queueCard(offers, b, 'Selesnya Sanctuary', 'land');
+  b = LB.queueCard(offers, b, 'Rest for the Weary', 'nonpermanent');
+  if (LB.encodeLine(b) !== 'land=Selesnya Sanctuary;landat=1;cast=Llanowar Elves;cast=Rest for the Weary')
+    fails.push(`karoo between -> ${LB.encodeLine(b)}`);
+  // Rest, then Sanctuary -> after every cast: the plain land= (the engine's default point).
+  let c = [];
+  c = LB.queueCard(offers, c, 'Rest for the Weary', 'nonpermanent');
+  c = LB.queueCard(offers, c, 'Selesnya Sanctuary', 'land');
+  if (LB.encodeLine(c) !== 'land=Selesnya Sanctuary;cast=Rest for the Weary')
+    fails.push(`karoo last -> ${LB.encodeLine(c)}`);
+  // No earlier Karoo point offered: click order never matters, exactly as before.
+  let d = [];
+  d = LB.queueCard(plain, d, 'Selesnya Sanctuary', 'land');
+  d = LB.queueCard(plain, d, 'Rest for the Weary', 'nonpermanent');
+  if (LB.encodeLine(d) !== 'land=Selesnya Sanctuary;cast=Rest for the Weary')
+    fails.push(`no karoo position offered -> ${LB.encodeLine(d)}`);
+  return fails;
+}
+
 function main() {
   const refs = collectRefs();
   if (!refs.length) { console.log('no reference games found under references/'); return 0; }
@@ -884,13 +924,18 @@ function main() {
   posFails.forEach(m => console.log(`  FAIL  land position: ${m}`));
   console.log(`Viewer land position: ${posFails.length ? 'WRONG' : 'a land between two casts encodes landat=<k>, after all landafter='} ` +
               `(${posFails.length} FAIL)`);
+  const karooFails = checkKarooPosition();
+  karooFails.forEach(m => console.log(`  FAIL  karoo position: ${m}`));
+  console.log(`Viewer karoo position: ${karooFails.length ? 'WRONG' : 'a Karoo before a cast encodes landat=<k> (0 = first), after every cast land='} ` +
+              `(${karooFails.length} FAIL)`);
   const kickFails = checkKickerToken();
   kickFails.forEach(m => console.log(`  FAIL  kicker: ${m}`));
   console.log(`Viewer kicker: ${kickFails.length ? 'WRONG' : 'cast=+kicked= per kicked copy; the badge toggles in place and never over-queues'} ` +
               `(${kickFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
-          + tapFails.length + topFails.length + posFails.length + kickFails.length) ? 1 : 0;
+          + tapFails.length + topFails.length + posFails.length + kickFails.length
+          + karooFails.length) ? 1 : 0;
 }
 
 process.exit(main());

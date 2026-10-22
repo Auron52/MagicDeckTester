@@ -3438,6 +3438,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Land Auras whose host is the deferred karoo (name, host number) -- lockstep twin of
     // ApplyPlanDirect's karoo_host_auras (Bruna sweep D): held by cast_by_name, cast after the karoo.
     std::vector<std::pair<std::string, int>> karoo_host_auras;
+    // THE KAROO'S SEARCHED POSITION (Plan::land_slot <= -2, MTG_KAROO_POSITION) -- lockstep twin of
+    // ApplyPlanDirect's deferred_karoo_slot / karoo_slot_seen: the deferred Karoo is played right BEFORE
+    // the plan's r-th cast-section action that TurnSolver::KarooSlotCounts (exec_karoo_pre_hook), else
+    // after the main cast loop. 0 = the after-the-casts default.
+    int         exec_karoo_slot     = 0;
+    int         exec_karoo_seen     = 0;
     // SEARCHED LAND POSITION (Plan::land_slot != 0) -- lockstep twin of ApplyPlanDirect's
     // land_after_deferred: an ordinary land the committed plan scored as played AFTER a cast rides the
     // Karoo deferral (karoo_deferred reserves the drop) and keeps its face / rad mode / scry pin.
@@ -4084,11 +4090,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
                 if (s_karoo_defer && ld && ld->params.etb_bounce_land)
                 {
-                    // Reserve the drop; play it after the main cast loop (see karoo_deferred).
+                    // Reserve the drop; play it after the main cast loop (see karoo_deferred) -- or right
+                    // before its r-th counted cast (exec_karoo_slot, MTG_KAROO_POSITION).
                     karoo_deferred  = true;
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
                     karoo_from_top  = plan.land_from_top;
+                    exec_karoo_slot = TurnSolver::KarooSlotOrdinal(plan.land_slot);
                 }
                 else if (plan.land_slot != 0)
                 {
@@ -6829,6 +6837,40 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             resolve_now();
         }
     };
+    // THE DEFERRED KAROO's play -- at its searched position (exec_karoo_pre_hook) or after the main cast
+    // loop (below). One body, lockstep twin of ApplyPlanDirect's play_deferred_karoo: the plan's searched
+    // bounce (Plan::bounce_choice; the human chooser still asks when installed), then the held land Auras.
+    auto exec_play_deferred_karoo = [&]()
+    {
+        karoo_deferred  = false;
+        exec_karoo_slot = 0;
+        {
+            // The SEARCHED bounce the plan was scored with (Plan::bounce_choice; lockstep with
+            // ApplyPlanDirect's deferred Karoo play). -1 = the front; the human chooser, when
+            // installed, still asks (human plans never carry a pin).
+            ScriptedBounceChoice _sbc(plan.bounce_choice);
+            TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, "", -1, karoo_from_top);
+        }
+        // ...then the land Auras that named it (Bruna sweep D), on the karoo.
+        std::vector<std::pair<std::string, int>> held;
+        held.swap(karoo_host_auras);
+        for (const std::pair<std::string, int>& ha : held)
+        {
+            cast_by_name(ha.first, "", 0, 0, -1, -1, 0, "", ha.second);
+            resolve_now();
+        }
+    };
+    // THE KAROO-POSITION HOOK (Plan::land_slot <= -2, MTG_KAROO_POSITION) -- twin of ApplyPlanDirect's
+    // karoo_pre_hook: called BEFORE each main-loop cast / put at every site exec_slot_hook is called
+    // after, it plays the deferred Karoo right before the r-th action TurnSolver::KarooSlotCounts. A loop
+    // a breakpoint truncation broke out of never reaches its later actions, exactly as the rollout skips
+    // a truncated one. Inert (one int test) for a plan without a Karoo position.
+    auto exec_karoo_pre_hook = [&](const Action& a)
+    {
+        if (exec_karoo_slot <= 0 || !karoo_deferred) { return; }
+        if (!TurnSolver::KarooSlotCounts(state, a)) { return; }
+        if (++exec_karoo_seen == exec_karoo_slot) { exec_play_deferred_karoo(); }
+    };
     // ...and the plan's land-search activations at a position (Plan::land_search_act_slot >= 1), on
     // the same hook AFTER the land at the same k -- twin of ApplyPlanDirect's slot_hook, through the
     // ONE shared body. The cast window's library-top verdict is frozen across them (rdb_top_verdict).
@@ -6939,9 +6981,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         for (const Action& a : plan.actions)
         {
-            if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+            if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
-            if (a.alt_cost) { m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
+            if (a.alt_cost) { exec_karoo_pre_hook(a); m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
+            exec_karoo_pre_hook(a);
             m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
@@ -7046,6 +7089,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int i : ena)
         {
             const Action& a = plan.actions[i];
+            exec_karoo_pre_hook(a);
             m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
         }
@@ -7116,7 +7160,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : ord)
     {
         const Action& a = plan.actions[oi];
-        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+        if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -7135,6 +7179,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
         {
+            exec_karoo_pre_hook(a);
             m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now();
             exec_slot_hook(a);
         }
@@ -7144,6 +7189,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // At its rank (SacLandCastsInOrder): the trailing sac loop below skips it.
             if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }
+            exec_karoo_pre_hook(a);
             m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
             exec_slot_hook(a);
             const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
@@ -7226,7 +7272,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
-        if (is_put(a)) { deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+        if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -7244,8 +7290,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             continue;
         }
-        if (a.alt_cost) { m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
+        if (a.alt_cost) { exec_karoo_pre_hook(a); m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
         if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(oi)); }   // at its rank (SacLandCastsInOrder)
+        exec_karoo_pre_hook(a);
         m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock();
         exec_slot_hook(a);
         const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
@@ -7310,13 +7357,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
+        { exec_karoo_pre_hook(a); m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
     }
     for (const Action& a : plan.actions)
     {
         if (staged_break || bp_trunc_exec) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
-        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(BpNameOf(a)); resolve_now(); exec_slot_hook(a); }
+        { exec_karoo_pre_hook(a); cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(BpNameOf(a)); resolve_now(); exec_slot_hook(a); }
     }
 
     // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
@@ -7610,25 +7657,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // watcher cast never came -- lockstep with ApplyPlanDirect's deferred play: the casts above have
     // resolved, so a landfall permanent among them sees this land enter.
     if (karoo_deferred && land_after_deferred) { exec_play_deferred_land(); }
-    if (karoo_deferred)
-    {
-        karoo_deferred = false;
-        {
-            // The SEARCHED bounce the plan was scored with (Plan::bounce_choice; lockstep with
-            // ApplyPlanDirect's deferred Karoo play). -1 = the front; the human chooser, when
-            // installed, still asks (human plans never carry a pin).
-            ScriptedBounceChoice _sbc(plan.bounce_choice);
-            TryPlaySpecificLand(state, karoo_land_name, karoo_fetch, "", -1, karoo_from_top);
-        }
-        // ...then the land Auras that named it (Bruna sweep D), on the karoo.
-        std::vector<std::pair<std::string, int>> held;
-        held.swap(karoo_host_auras);
-        for (const std::pair<std::string, int>& ha : held)
-        {
-            cast_by_name(ha.first, "", 0, 0, -1, -1, 0, "", ha.second);
-            resolve_now();
-        }
-    }
+    // ...and the Karoo, if its searched position (exec_karoo_slot) did not already play it.
+    if (karoo_deferred) { exec_play_deferred_karoo(); }
 
     // Commit-the-line: replay any recorded dig (Kind::DigDraw) the draw-engine breakpoint
     // above did not already replay. A flooded turn whose only action is digging for

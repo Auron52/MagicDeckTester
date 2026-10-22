@@ -23426,6 +23426,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // mid-sequence position k folds its own value.
     if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { fold(0x4C41465445ull); }   // "LAFTE"
     else if (p.land_slot > 0) { fold(0x4C534C4F54ull); fold(static_cast<uint64_t>(p.land_slot)); }   // "LSLOT"
+    // ...and a KAROO's earlier position (land_slot <= -2, MTG_KAROO_POSITION): its own must-fold.
+    else if (p.land_slot <= -2) { fold(0x4B534C4F54ull); fold(static_cast<uint64_t>(-p.land_slot)); }   // "KSLOT"
     // ...and the land's SOURCE ZONE (Courser of Kruphix's top vs a hand copy): the same must-fold.
     if (p.land_from_top)               { fold(0x4C544F50ull); }       // "LTOP"
     if (p.landfall_target_choice >= 0) { fold(static_cast<uint64_t>(p.landfall_target_choice + 2) * 89); }
@@ -27754,6 +27756,20 @@ void TurnSolver::LandSlotWatchersFirst(const std::vector<Action>& acts, std::vec
 {
     std::stable_partition(order.begin(), order.end(),
                           [&acts](int i) { return PutsLandfallWatcher(acts[static_cast<std::size_t>(i)]); });
+}
+
+bool TurnSolver::KarooSlotCounts(const GameState& state, const Action& a)
+{
+    // The actions the cast sections DISPATCH one at a time (the ones slot_hook / exec_slot_hook see):
+    // a hand cast (any cost route), a graveyard cast, a Vial put. Board activations run in the trailing
+    // pass, after the default Karoo point already.
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+        && a.kind != Action::Kind::ActivateVial) { return false; }
+    // Human play offers EVERY legal point (the viewer never narrows), and so does the unpruned audit.
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::LandPick)) { return true; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (d == nullptr) { return true; }   // unknown card: count it (never prune what we cannot read)
+    return ResolveProvider(state).KarooEntryObserver(state, *d);
 }
 
 bool TurnSolver::PlanCastsEnumeratedPostDrop(const Plan& p)
@@ -51025,6 +51041,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     std::string karoo_fetch;
     // Land Auras whose host is the deferred karoo (name, host number), cast right after it lands.
     std::vector<std::pair<std::string, int>> karoo_host_auras;
+    // THE KAROO'S SEARCHED POSITION (Plan::land_slot <= -2, MTG_KAROO_POSITION, 2026-10-22): the
+    // deferred Karoo is played right BEFORE the r-th action of the TOP-LEVEL plan's cast section that
+    // TurnSolver::KarooSlotCounts (karoo_pre_hook in apply_plan_actions), instead of after the casts.
+    // 0 = the after-the-casts default. An r never reached plays at the default point (never lost).
+    // Lockstep twin: AIEngine::TakeTurn's exec_karoo_slot / exec_karoo_seen.
+    int         deferred_karoo_slot = 0;
+    int         karoo_slot_seen     = 0;
     // SEARCHED LAND POSITION (Plan::land_slot != 0, 2026-10-15): the SAME deferral as the Karoo's --
     // `karoo_deferred` reserves the drop and every breakpoint guard that keys on it applies unchanged
     // -- but for an ordinary land, which keeps the rest of its land choice: the face, the rad mode and
@@ -51110,11 +51133,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
                 if (s_karoo_defer && ld && ld->params.etb_bounce_land)
                 {
-                    // Reserve the drop; play it after the main casts (see karoo_deferred above).
+                    // Reserve the drop; play it after the main casts (see karoo_deferred above) -- or
+                    // right before its r-th counted cast (deferred_karoo_slot, MTG_KAROO_POSITION).
                     karoo_deferred  = true;
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
                     karoo_from_top  = plan.land_from_top;
+                    deferred_karoo_slot = TurnSolver::KarooSlotOrdinal(plan.land_slot);
                 }
                 else if (plan.land_slot != 0)
                 {
@@ -54530,6 +54555,35 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                       std::string{}, ha.second, false, -1, 0, 0, 0, false, false, false);
         }
     };
+    // THE DEFERRED KAROO's play -- at its searched position (karoo_pre_hook, MTG_KAROO_POSITION) or
+    // after the main casts (below, the historical point). ONE body for both, so the searched bounce pin
+    // (Plan::bounce_choice: candidate k of the provider's set on THIS state), the bounce-fold probe and
+    // the held land Auras are identical wherever the drop lands. Lockstep twin: AIEngine::TakeTurn's
+    // exec_play_deferred_karoo.
+    auto play_deferred_karoo = [&]()
+    {
+        karoo_deferred      = false;
+        deferred_karoo_slot = 0;
+        {
+            // The plan's SEARCHED bounce (Plan::bounce_choice): candidate k of the provider's narrowed
+            // set on THIS state, the one the casts above just paid from. -1 = the front. Lockstep
+            // with AIEngine::TakeTurn's deferred Karoo play.
+            ScriptedBounceChoice _sbc(plan.bounce_choice);
+            // The bounce-fold probe, when the candidate loop armed it for THIS apply (see BounceProbe).
+            const bool probe_here = g_bounce_probe.armed_depth == g_apd_depth;
+            if (probe_here) { g_bounce_probe.live = true; }
+            PlayLandByName(state, karoo_land_name, karoo_fetch, true, "", -1, karoo_from_top);
+            if (probe_here) { g_bounce_probe.live = false; }
+        }
+        // ...then the land Auras that named it (Bruna sweep D): cast now, on the karoo.
+        std::vector<std::pair<std::string, int>> held;
+        held.swap(karoo_host_auras);
+        for (const std::pair<std::string, int>& ha : held)
+        {
+            apply_one(ha.first, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
+                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false, false);
+        }
+    };
 
     apply_plan_actions = [&](const std::vector<Action>& acts, bool explicit_order)
     {
@@ -54577,6 +54631,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 TurnSolver::ApplyLandSearchActs(state, plan.actions);
                 ls_act_done = true;
             }
+        };
+        // THE KAROO-POSITION HOOK (Plan::land_slot <= -2, MTG_KAROO_POSITION, 2026-10-22) -- the mirror
+        // image of slot_hook: called BEFORE each action this section dispatches (at every site slot_hook
+        // is called after), it plays the deferred Karoo right before the r-th action KarooSlotCounts, so
+        // that action and every later one sees the land enter ("Sanctuary, then Rest for the Weary for
+        // 8"). Top-level section only (slot_top), and an action a partition truncation will skip is not
+        // dispatched, so it is not counted (the executor's loops have broken out by then -- lockstep).
+        // Inert (one int test) for every plan without a Karoo position.
+        auto karoo_pre_hook = [&](const Action& a)
+        {
+            if (deferred_karoo_slot <= 0 || !slot_top || !karoo_deferred || bp_truncate) { return; }
+            if (!TurnSolver::KarooSlotCounts(state, a)) { return; }
+            if (++karoo_slot_seen == deferred_karoo_slot) { play_deferred_karoo(); }
         };
         // ...and a position plan's tied-rank watchers go first (TurnSolver::LandSlotWatchersFirst) --
         // for a land position (the plan's or a continuation's) and an activation position alike.
@@ -54647,6 +54714,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("vial", a);
+                    karoo_pre_hook(a);
                     const bool tb = bp_truncate;
                     apply_vial(a.card_name);
                     fire_unlock();
@@ -54669,6 +54737,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             lo_pending_set = !lo_pending.empty();
                         }
                     }
+                    karoo_pre_hook(a);
                     const bool tb = bp_truncate;
                     cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     lo_pending_set = false; lo_pending.clear();
@@ -54824,7 +54893,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); const bool tb = bp_truncate; cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); karoo_pre_hook(a); const bool tb = bp_truncate; cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); fire_unlock(); slot_hook(a, tb); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -54885,6 +54954,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
+                    karoo_pre_hook(a);
                     const bool tb = bp_truncate;
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     const int dbg_before = dbg_count(a);
@@ -54944,6 +55014,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
+                    karoo_pre_hook(a);
                     const bool tb = bp_truncate;
                     if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }   // cast here, not in the trailing pass
@@ -54960,6 +55031,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
+                karoo_pre_hook(a);
                 const bool tb = bp_truncate;
                 cast_riders = CastRiders::Of(a); apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
@@ -54969,6 +55041,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
+                karoo_pre_hook(a);
                 const bool tb = bp_truncate;
                 cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                 slot_hook(a, tb);
@@ -56311,29 +56384,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // watcher cast never came: the plan's casts have all resolved, so every landfall permanent among
     // them sees this land enter. Lockstep with AIEngine::TakeTurn's deferred play.
     if (karoo_deferred && land_after_deferred) { play_deferred_land(); }
-    if (karoo_deferred)
-    {
-        karoo_deferred = false;
-        {
-            // The plan's SEARCHED bounce (Plan::bounce_choice): candidate k of the provider's narrowed
-            // set on THIS state, the one the casts above just paid from. -1 = the front. Lockstep
-            // with AIEngine::TakeTurn's deferred Karoo play.
-            ScriptedBounceChoice _sbc(plan.bounce_choice);
-            // The bounce-fold probe, when the candidate loop armed it for THIS apply (see BounceProbe).
-            const bool probe_here = g_bounce_probe.armed_depth == g_apd_depth;
-            if (probe_here) { g_bounce_probe.live = true; }
-            PlayLandByName(state, karoo_land_name, karoo_fetch, true, "", -1, karoo_from_top);
-            if (probe_here) { g_bounce_probe.live = false; }
-        }
-        // ...then the land Auras that named it (Bruna sweep D): cast now, on the karoo.
-        std::vector<std::pair<std::string, int>> held;
-        held.swap(karoo_host_auras);
-        for (const std::pair<std::string, int>& ha : held)
-        {
-            apply_one(ha.first, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                      std::string{}, ha.second, false, -1, 0, 0, 0, false, false, false);
-        }
-    }
+    // ...and the Karoo, if its searched position (deferred_karoo_slot) did not already play it.
+    if (karoo_deferred) { play_deferred_karoo(); }
     }   // end of the bp_resume prefix skip
 
     // Deferred plain-cantrip re-solve: run after every main-plan cast, using only the mana
@@ -68691,6 +68743,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         auto width_of = [&](const TurnSolver::Plan& p, const KarooSizing& z) -> std::size_t
         {
             if (unpruned) { return z.lands; }
+            // A Karoo at an EARLIER position (Plan::land_slot <= -2, MTG_KAROO_POSITION) bounces before
+            // some of the plan's casts have paid, so the spent-clean-land bound below (which reasons
+            // about the board after ALL of them) can sit under the truth. Keep the distinct-name bound:
+            // never below it, and an over-wide index clamps onto a sibling (the post-apply dedup).
+            if (p.land_slot <= -2) { return std::min(z.distinct, DecisionProvider::kBounceSearchWidth); }
             int spend = 0;
             bool has_x = false, producer = false, may_draw = !p.breakpoint_actions.empty() || z.watcher_draws;
             std::vector<Card> hand = z.hand;
@@ -70816,6 +70873,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
 
     std::vector<TurnSolver::Plan> all;
 
+    // ---- THE KAROO DROP'S SEARCHED POSITION (MTG_KAROO_POSITION, Plan::land_slot <= -2; 2026-10-22) ----
+    // USER: "We should allow the sanctuary to be played at the end of the phase at latest". Every Karoo
+    // plan below is played AFTER its casts (karoo_deferred), so on a turn whose only land entry is a
+    // Selesnya Sanctuary "Sanctuary, then Rest for the Weary for 8 before combat" was unenumerable at any
+    // budget. Each Karoo plan is now CLONED once per cast-section action that KarooSlotCounts (in
+    // autonomous search an observer of the land entering, DecisionProvider::KarooEntryObserver -- a
+    // sound prune, argued there; in human play and MTG_UNPRUNE=landpick every action), carrying
+    // KarooSlotBefore(r): the drop right before the r-th such action. The after-the-casts plan stays
+    // (the latest point, always offered); the clones are appended after every other plan, so on a
+    // scoring tie the search keeps the historical line. The casts were enumerated on the PRE-Karoo board
+    // (all our lands), which an earlier drop does not shrink: the bounce floats an untapped victim's mana
+    // (MTG_BOUNCE_UNTAPPED_FIRST) and returns a spent one otherwise. Not inside a breakpoint
+    // continuation (g_bp_enum_depth > 0): there bp_play_searched_land plays a Karoo FIRST already.
+    // Rides MTG_NO_KAROO_DEFER: with the deferral off every Karoo is land-first and there is no axis.
+    std::vector<TurnSolver::Plan> karoo_pos;
+    const bool karoo_pos_on = (KarooPositionSearchOn() || HumanPlayActive()) && g_bp_enum_depth == 0;
+
     // Every (land, fetch target, face) the land-first enumeration below actually OFFERED (its legality
     // probe passed), Karoos excluded -- a Karoo is always played after the casts already. The
     // land-after-casts axis (after the defer plans) re-offers exactly these, so it can never invent a
@@ -70902,6 +70976,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             p.fetch_target = fetch_target;
             p.land_face    = land_face;
             p.land_from_top = from_top;
+            // The Karoo's earlier positions (see karoo_pos): one clone per counted action, r = 1..n.
+            if (karoo_drop && karoo_pos_on && !p.actions.empty() && p.land_slot == 0)
+            {
+                int n = 0;
+                for (const Action& a : p.actions) { if (TurnSolver::KarooSlotCounts(state, a)) { ++n; } }
+                n = std::min(n, TurnSolver::kKarooSlotMax);
+                for (int r = 1; r <= n; ++r)
+                {
+                    TurnSolver::Plan v = p;
+                    v.land_slot = TurnSolver::KarooSlotBefore(r);
+                    karoo_pos.push_back(std::move(v));
+                }
+            }
             all.push_back(std::move(p));
         }
     };
@@ -71191,6 +71278,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
               state.turn_number, n_after, after.size() - n_after, offered_lands.size(), n_slot_pruned);
         all.insert(all.end(), std::make_move_iterator(after.begin()),
                               std::make_move_iterator(after.end()));
+    }
+
+    // The Karoo's earlier positions (MTG_KAROO_POSITION), after every other plan (see karoo_pos).
+    if (!karoo_pos.empty())
+    {
+        TRACE("karoopos", "T%d %s Karoo position clones: %zu", state.turn_number,
+              is_pre_combat ? "m1" : "m2", karoo_pos.size());
+        all.insert(all.end(), std::make_move_iterator(karoo_pos.begin()),
+                              std::make_move_iterator(karoo_pos.end()));
     }
 
     // Land's Edge activation as a PICKABLE plan action (human play only) -- see the helper. Applied
@@ -89551,6 +89647,8 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { s += " (after the casts)"; }
         else if (p.land_slot > 0)
         { s += " (after landfall cast #" + std::to_string(static_cast<int>(p.land_slot)) + ")"; }
+        else if (p.land_slot <= -2)   // a Karoo at an earlier position (MTG_KAROO_POSITION)
+        { s += " (before cast #" + std::to_string(TurnSolver::KarooSlotOrdinal(p.land_slot)) + ")"; }
         s += "; ";
     }
     int le_count = 0;
@@ -90375,6 +90473,36 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         }
         wantSlot = (kth_is_watcher && spec.land_at_cast <= static_cast<int>(spec.casts.size()))
                  ? m : std::numeric_limits<int8_t>::max();
+    }
+    // A KAROO's position (Plan::land_slot <= -2, MTG_KAROO_POSITION) is its own encoding: its plans are
+    // played AFTER the casts by default (land_slot 0 -- what `land=` / `landafter=` / `landat=all` all
+    // mean for a Karoo), and `landat=<k>` (k = the casts queued before it, 0 = before every cast) is
+    // "right before the line's (k+1)-th cast" -- KarooSlotBefore(k+1), counting the line's HAND casts
+    // (`act=` board activations are not dispatched in the cast section, so they are not counted; human
+    // play counts every dispatched cast, TurnSolver::KarooSlotCounts). A `landat=<k>` with no hand cast
+    // after it is the after-the-casts default.
+    if (spec.has_land)
+    {
+        static const bool s_karoo_defer_cl = !EnvOn("MTG_NO_KAROO_DEFER");
+        const CardDefinition* wl = CardDatabase::Instance().Lookup(spec.land);
+        if (s_karoo_defer_cl && wl != nullptr && wl->params.etb_bounce_land)
+        {
+            wantSlot = 0;
+            if (spec.land_slot != kLandSlotAfterCasts && spec.land_at_raw >= 0)
+            {
+                std::map<std::string, int> acts_left;
+                for (const std::string& b : spec.board_acts) { ++acts_left[b]; }
+                int before = 0, total = 0;
+                for (int i = 0; i < static_cast<int>(spec.casts.size()); ++i)
+                {
+                    auto it = acts_left.find(spec.casts[static_cast<std::size_t>(i)]);
+                    if (it != acts_left.end() && it->second > 0) { --it->second; continue; }
+                    ++total;
+                    if (i < spec.land_at_raw) { ++before; }
+                }
+                if (before < total) { wantSlot = KarooSlotBefore(std::min(before + 1, kKarooSlotMax)); }
+            }
+        }
     }
     // Names a plain `cast=` must satisfy with a HAND cast (see the mirror check in the plan loop):
     // non-`act=` cast tokens for a card both in hand and on the battlefield, capped at hand copies.
@@ -92221,7 +92349,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     // is Illegal. Only when those k names are the line's first k hand casts (a battlefield activation
     // among them is paid in the trailing pass, not at its click position), and not on a board with an
     // unmodelled sacrifice-for-mana source (`sac_wild`, the walk's own blind spot).
-    if (spec.has_land && spec.land_at_cast > 0 && sac_wild == 0)
+    // Not for a KAROO (`landat=<k>` is "before cast k+1" there, MTG_KAROO_POSITION): it adds no mana this
+    // turn (it enters tapped) and its bounce floats an untapped victim, so the prefix is not paid
+    // without it in the way this check models.
+    const CardDefinition* lat_def = spec.has_land ? CardDatabase::Instance().Lookup(spec.land) : nullptr;
+    const bool lat_karoo = lat_def != nullptr && lat_def->params.etb_bounce_land;
+    if (spec.has_land && spec.land_at_cast > 0 && sac_wild == 0 && !lat_karoo)
     {
         const std::size_t kk = static_cast<std::size_t>(spec.land_at_cast);
         bool mapped = kk <= pending.size() && kk <= spec.casts.size();
