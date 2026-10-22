@@ -3,7 +3,7 @@
     "VIEWER (USER 2026-10-20, seed 2 T7: 'No ability to activate Ezuri for the win ... you should just be able",
     "to pay it as needed'). Mid-turn: Ezuri and Nourish already cast (life gained 6, five Forests tapped), the",
     "Alchemist untapped and soulbonded to Galvanic Alchemist, no mana floating. The menu must offer Ezuri's pump",
-    "directly -- ActivatePump mode 4, the untap loop pays -- once per count 1..lethal (2 here). Committing the x2",
+    "directly -- ActivatePump mode 5 (mode 4 is Stromkirk Condemned), the untap loop pays -- once per count 1..lethal (2 here). Committing the x2",
     "variant runs the Galvanic loop to fund {4}{G}{G}{G}{G}{G}{G} and pumps the Elves twice."
   ],
   "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
