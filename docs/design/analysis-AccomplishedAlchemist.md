@@ -2734,7 +2734,11 @@ aa-castorder). The table and raw were COPIED from `aa-land` (gzipped; the origin
 
 Smoke + regression GT accepted deck-scoped with the attribution in the notes. **Overnight rows stay at the ENTRY
 shape** (as EDF, 04fabc8e2: a heavy deck), rather than being expanded to the FULL set at adoption. This was
-surfaced to the USER as their call; the alchemist overnight keys go stale until the next periodic overnight run.
+surfaced to the USER as their call; the alchemist overnight keys go stale until the next periodic overnight run. **USER 2026-10-22: "they should be reasonably sized for the current deck speed."** Measured in one pooled smoke
+run at equal settings, the deck costs ~0.6x Hinata per game (d3 b10 954 vs 1,556 ms; d5 b20 1,512 vs 2,549; Bruna
+1,837 / 2,894, EDF 937 / 1,313, Snow 1,095 / 1,620), still a heavy deck (3-4x a typical one). The heavy decks at or
+above its cost (Hinata, Bruna, EDF) run 4x400 b10 / 4x300 b20, which is what alchemist already has, projected ~6-7%
+of the overnight tier; the standard FULL shape would be ~40-50%. So the rows are unchanged and are now the SIZED set.
 
 ## The walk's breakpoint variants: no byte-identical speedup at this layer; BASE_ONLY_PLAYOUT on the fixed play (2026-10-21)
 

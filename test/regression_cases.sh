@@ -1476,7 +1476,9 @@ OVERNIGHT_CASES=(
   "vampires2hg 5 5005 150 40"
   "vampires2hg 5 6006 150 40"
   "vampires2hg 5 7007 150 40"
-  # alchemist: see the SMOKE block. ENTRY set (4x400 b10 / 4x300 b20) until the keep table.
+  # alchemist: see the SMOKE block. SIZED by measured cost (USER 2026-10-22: "reasonably sized for the current deck
+  # speed"): with the keep table + leafless sidecar it runs ~0.6x Hinata per game (pooled smoke, d3 b10 954 vs 1556 ms,
+  # d5 b20 1512 vs 2549), so it keeps Hinata's heavy-deck shape (4x400 b10 / 4x300 b20), like Bruna and EDF; ~6-7% of the tier.
   "alchemist 0 4004 2000 0"
   "alchemist 0 6006 2000 0"
   "alchemist 0 8008 2000 0"
