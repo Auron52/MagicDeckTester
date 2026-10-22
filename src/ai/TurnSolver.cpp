@@ -54731,6 +54731,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("cast", a);
+                    // Before the leftovers block: the Karoo's held land Auras cast through apply_one,
+                    // which must not see this cast's lo_pending.
+                    karoo_pre_hook(a);
                     // BREAKPOINT LEFTOVERS: an impulse-exile site the provider merges for gets this
                     // list's remaining casts (see lo_pending). Param test first: no other deck pays.
                     {
@@ -54744,7 +54747,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             lo_pending_set = !lo_pending.empty();
                         }
                     }
-                    karoo_pre_hook(a);
                     const bool tb = bp_truncate;
                     cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     lo_pending_set = false; lo_pending.clear();
