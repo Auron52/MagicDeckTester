@@ -1944,6 +1944,19 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // Read BEFORE End(), which resets both (same rule as Used() above).
                 const gamework::Cause g_cause   = gamework::AbandonCause();
                 const double          g_elapsed = gamework::Elapsed();
+                const double          g_fired   = gamework::FiredAt();   // when the backstop fired
+                // MTG_BACKSTOP_GAP_STATS (diagnostic, print-only; see gamework::GapStats): the longest wall
+                // gap between deadline reads in this game, now and under the pre-2026-10-21 schedule.
+                if (gamework::GapStatsOn() && g_elapsed > 0.0)
+                {
+                    const gamework::GapStats& gg = gamework::Gaps();
+                    std::fprintf(stderr,
+                                 "[backstop-gaps] job=%s gi=%d elapsed=%.1fs units=%lld | longest gap between "
+                                 "deadline reads %.2fs (ending at %.1fs) | under the old 4096-unit schedule %.2fs "
+                                 "(ending at %.1fs)\n",
+                                 job.name.c_str(), global_gi, g_elapsed, g_units, gg.max, gg.max_at,
+                                 gg.lg_max, gg.lg_max_at);
+                }
                 gamework::End();
                 if (wt == GameEngine::kAbandoned)
                 {
@@ -1968,11 +1981,18 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     const char* tag = (g_cause == gamework::Cause::kWall)    ? "ABANDONED-WALL"
                                     : (g_cause == gamework::Cause::kPredict) ? "ABANDONED-PREDICT"
                                                                              : "ABANDONED";
+                    // With a deadline armed, WHEN the game was cut too: elapsed minus that is the time it
+                    // took to unwind after the cut, and (for a wall cut) that minus the cap is how late
+                    // the cap was noticed -- the two ways a cut can land late (docs/design/per-game-wall-
+                    // clock-backstop.md, "Uncharged loops").
+                    char fired_txt[48] = "";
+                    if (g_fired > 0.0)
+                    { std::snprintf(fired_txt, sizeof fired_txt, " (fired at %.1fs)", g_fired); }
                     std::fprintf(stderr,
                                  "[goldfish] %s job=%s gi=%d units=%lld limit=%lld cause=%s "
-                                 "elapsed=%.1fs  repro: --seed %llu --game-index %d --games 1\n",
+                                 "elapsed=%.1fs%s  repro: --seed %llu --game-index %d --games 1\n",
                                  tag, job.name.c_str(), global_gi, g_units, ceiling,
-                                 gamework::CauseName(g_cause), g_elapsed,
+                                 gamework::CauseName(g_cause), g_elapsed, fired_txt,
                                  static_cast<unsigned long long>(job.seed
                                                                  + static_cast<uint64_t>(wi.game)),
                                  global_gi);

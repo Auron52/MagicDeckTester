@@ -38874,6 +38874,12 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
     for (int i = 0; i < width; ++i)
     {
         // THE BOUND, checked and charged per link BEFORE the apply (the apply is the work).
+        // The per-GAME backstop first (gamework::Poll; 2026-10-21): under an unlimited root this walk charges
+        // nothing (b.budget == nullptr), so the wall cap was never read here -- the same hole the
+        // AccomplishedAlchemist route walk had (aaroute::CutForVoidGame). A cut walk records nothing (the
+        // winless transpose below requires !b.cut, and TrialPolicy stores nothing for a void game). Inert
+        // unless a unit ceiling or a wall cap is armed.
+        if (gamework::Poll()) { b.cut = true; break; }
         if (b.budget != nullptr && (b.budget->Exhausted() || b.budget->Overrun())) { b.cut = true; break; }
         if (b.nodes_left <= 0) { b.cut = true; break; }
         --b.nodes_left;
@@ -39061,7 +39067,7 @@ static int RunSearch(GameState& s, int me, RunMode mode)
                      b.nodes_used, b.unit_price,
                      (unsigned long long)(DSeen().hits - hits0), seen.size(), ms);
     }
-    if (mode == RunMode::Apply && r != 1)
+    if (mode == RunMode::Apply && r != 1 && !gamework::Abandoned())   // a void game's walk is cut, not wrong
     {
         // Must not happen: the board carried a proven verdict and the replay is unbounded.
         std::fprintf(stderr, "[equip-route] !! t%d APPLY replay found no kill on a board the trial proved (links %d)\n",
@@ -39338,7 +39344,8 @@ int TrialPolicy(const GameState& s, int me)
     if (PayloadRetryEnabled()) { retry(Adv::PayloadFirst, 2, "PAYLOAD-FIRST"); }
     if (ChainRetryEnabled())   { retry(Adv::ChainFirst,   3, "CHAIN-FIRST");   }
     if (SearchRetryEnabled())  { retry(Adv::Search,       4, "SEARCH");        }
-    if (use_memo) { memo[key] = r; }
+    // Not in a VOID game (the per-game backstop cut the walk -- see RunSearchRec): its "no" is the cut's.
+    if (use_memo && !gamework::Abandoned()) { memo[key] = r; }
     if (Trace())
     {
         std::fprintf(stderr, "[equip-route] MEMO-WRITE t%d key=%016llx r=%d :: %s\n", s.turn_number,
@@ -44950,10 +44957,24 @@ struct OriginDumper
     }
 };
 inline OriginDumper g_origin_dumper;
+// THE GAME'S OWN BACKSTOP (gamework::Poll; 2026-10-21). The walk charges no unit, so the per-game wall cap
+// and the unit ceiling's abandon flag are read here or nowhere: one decision sat in this walk for hours past
+// the value-leaf phase-A cap. An abandoned game is VOID, so this cut is taken on every walk -- priced or
+// not, offer or apply, any turn -- and rides the price's cut path, which is what keeps it out of every
+// cache: a cut verdict is never memoised (Trial), and a continuation list derived across a cut is never
+// stored (WalkPass bumps t_cuts; BpEnumEntryFor / BpCanonFront decline). Inert unless a unit ceiling or a
+// wall cap is armed (gamework::Poll then returns false and reads no clock), so shipped play never takes it.
+inline bool CutForVoidGame(Walk& w)
+{
+    if (!gamework::Poll()) { return false; }
+    w.cut = true;
+    return true;
+}
 // Pay for one apply; false = the walk is cut here (nothing applied).
 inline bool PayApply(Walk& w)
 {
     if (w.cut) { return false; }
+    if (CutForVoidGame(w)) { return false; }
     if (w.price <= 0 || w.budget == nullptr) { return true; }
     if (w.cut_ok && (w.budget->Exhausted() || w.budget->Overrun())) { w.cut = true; return false; }
     TurnSolver::ChargeAaRouteUnits(w.budget, w.price);
@@ -45180,6 +45201,7 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
     // THE PRICE'S CUT, before this node's enumerations too (they are most of a node's cost when nothing
     // is cached): a spent budget stops the walk here. Inert with the price off or no budget.
     if (w.cut) { return 0; }
+    if (CutForVoidGame(w)) { return 0; }   // the per-game backstop, before this node's enumerations too
     if (w.price > 0 && w.budget != nullptr && w.cut_ok && (w.budget->Exhausted() || w.budget->Overrun()))
     { w.cut = true; return 0; }
     std::vector<TurnSolver::Plan> kills = TurnSolver::UntapLoopKillPlans(s, /*is_pre_combat=*/true);
@@ -45442,7 +45464,10 @@ static const Verdict& Trial(const GameState& s, int me, bool priced)
     const auto it = memo.m.find(key);
     if (it != memo.m.end()) { if (StatsOn()) { g_memo_hits.fetch_add(1, std::memory_order_relaxed); } return it->second; }
     Verdict v = Walk1(s, me, priced);
-    if (v.cut)
+    // ...and nothing a VOID game's walk concluded is memoised either (gamework::Abandoned: the per-game
+    // backstop fired, see CutForVoidGame), not even a win -- its applies may have been served interrupted
+    // continuation lists. Always false unless a unit ceiling or a wall cap is armed.
+    if (v.cut || gamework::Abandoned())
     {
         static thread_local Verdict t_cut_verdict;
         t_cut_verdict = std::move(v);
@@ -45769,9 +45794,14 @@ int AlchemistComboRouteApply(GameState& s, int me)
     {
         int var_links = 0;
         for (const aaroute::Link& l : v.path) { if (l.plan.bp_choice >= 0) { ++var_links; } }
-        std::fprintf(stderr, "[aa-route] !! t%d APPLY replay did not kill on a board the trial proved (%zu links,"
-                     " %d of them breakpoint variants)%s\n", s.turn_number, v.path.size(), var_links,
-                     proven.has_value() ? " -- played the proven board" : "");
+        // Not in a VOID game: the per-game backstop interrupts the replay's derivations (gamework::Poll), so a
+        // failed replay there is the cut, not the defect this line exists to flag.
+        if (!gamework::Abandoned())
+        {
+            std::fprintf(stderr, "[aa-route] !! t%d APPLY replay did not kill on a board the trial proved (%zu links,"
+                         " %d of them breakpoint variants)%s\n", s.turn_number, v.path.size(), var_links,
+                         proven.has_value() ? " -- played the proven board" : "");
+        }
         if (aaroute::StatsOn())
         {
             aaroute::g_ap_live_fail[aaroute::StatArm()].fetch_add(1, std::memory_order_relaxed);

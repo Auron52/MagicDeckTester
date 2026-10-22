@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include "../core/EnvFlags.h"
 
 // Per-GAME work ceiling: a deterministic way to ABANDON a game whose cost explodes, rather than
 // letting it hold a core until it finishes.
@@ -119,16 +120,49 @@ inline thread_local double    t_hard_sec    = 0.0;    // 0 == disarmed
 inline thread_local double    t_predict_sec = 0.0;    // 0 == disarmed
 inline thread_local bool      t_predicted   = false;  // stage 1 evaluated once, then never again
 inline thread_local long long t_clock_next  = 0;      // 0 == no deadline armed; see kClockStride
+// Seconds into the game at which it was ABANDONED (0 = it has not been, or no deadline is armed -- the
+// clock is only read with one). Reported beside the game's final elapsed time (BatchRunner's ABANDONED*
+// lines) so the two latencies a late cut can hide in read apart: noticing the cap (this minus the cap)
+// and unwinding after it (elapsed minus this). Set for a unit-ceiling cut too when a deadline is armed,
+// which is what lets the unwind be measured at a DETERMINISTIC point (abandon_units).
+inline thread_local double    t_fired_sec   = 0.0;
 // The clock is read on a UNIT stride, never per call: Add() runs once per simulated turn-step, and
-// the worst game on record would otherwise read steady_clock 614 million times. 4096 units is
-// ~5 s of granularity even at the 830 units/s pathological rate and ~0.1 s at a healthy one, which
-// is nothing against a bound denominated in hours.
-constexpr long long kClockStride = 4096;
+// the worst game on record would otherwise read steady_clock 614 million times.
+//
+// 64, NOT 4096 (2026-10-21). The old 4096 was sized off "~5 s of granularity even at the 830 units/s
+// pathological rate", and that premise was the bug: a stride in UNITS is a bound in TIME only while the
+// unit rate is bounded below, and on AccomplishedAlchemist's value-leaf label games it is not -- between
+// two charged units sits a Combo Off route walk with its continuation derivations, uncharged. Measured
+// (MTG_BACKSTOP_GAP_STATS) on a quiet box: up to 81 s between two 4096-unit reads, on games the loaded
+// generation box ran ~8x slower. The uncharged loops now read the deadline themselves (Poll, below), and
+// this stride bounds whatever uncharged work is left between charges. The price of 64 is nothing: one
+// steady_clock read (~25-50 ns, vDSO) per 64 Adds, i.e. ~0.3 s across the 614M-unit game above, and only
+// in a game with a deadline armed -- with none, t_clock_next stays 0 and the stride is never consulted.
+constexpr long long kClockStride = 64;
 // Stage 1 cuts only when the projection misses the hard cap by THIS multiple. 1.5 is deliberately
 // generous: the games this exists for project at 3-4x the cap (a 40M ceiling at 830 units/s implies
 // 13.4 h against a 3.5 h cap), so the margin costs nothing on the real pathology while keeping a
 // merely-slow game for stage 2 to judge on its own evidence.
 constexpr double kPredictSafety = 1.5;
+
+// MTG_BACKSTOP_GAP_STATS=1 (DIAGNOSTIC, print-only, default OFF). Per game with a deadline armed: the
+// longest WALL GAP between two reads of the deadline, i.e. how late the cap can be noticed wherever in the
+// game it lands -- for this binary's schedule (every CheckDeadline: Add's kClockStride and every Poll) AND
+// for the schedule the meter had before 2026-10-21 (Add alone, every 4096 units), shadowed from the same
+// game. The polls change no play, so both numbers describe ONE trajectory: a before/after measurement of
+// the detection latency over a whole game without having to land a cap inside a stall. BatchRunner prints
+// it as `[backstop-gaps]`. Reads no extra clock. Arm a cap past the game's length to measure a whole game
+// (MTG_MAX_GAME_WALL_SEC=1000000).
+inline bool GapStatsOn() { static const bool v = EnvOn("MTG_BACKSTOP_GAP_STATS"); return v; }
+constexpr long long kLegacyClockStride = 4096;   // the pre-2026-10-21 kClockStride, shadowed (diagnostic)
+struct GapStats
+{
+    double    last = 0.0, max = 0.0, max_at = 0.0;           // this binary's reads
+    double    lg_last = 0.0, lg_max = 0.0, lg_max_at = 0.0;  // the legacy 4096-unit schedule
+    long long lg_next = 0;
+};
+inline thread_local GapStats t_gap;
+inline const GapStats& Gaps() { return t_gap; }
 
 // Arm (or disarm, with 0) the meter for one game and reset the counter.
 inline void Begin(long long limit_units)
@@ -144,6 +178,7 @@ inline void Begin(long long limit_units)
     t_predict_sec = 0.0;
     t_predicted = false;
     t_clock_next = 0;
+    t_fired_sec = 0.0;
 }
 
 // Arm the wall-clock backstop for this game. Call AFTER Begin (which disarms it), the same shape as
@@ -157,6 +192,8 @@ inline void ArmDeadline(double predict_sec, double hard_sec)
     if (t_predict_sec <= 0.0 && t_hard_sec <= 0.0) { t_clock_next = 0; return; }
     t_t0 = std::chrono::steady_clock::now();
     t_clock_next = t_used + kClockStride;
+    t_gap = GapStats{};
+    t_gap.lg_next = t_used + kLegacyClockStride;
 }
 
 // Seconds this game has been running. Only meaningful with a deadline armed (t_t0 is set there);
@@ -173,12 +210,24 @@ inline void CheckDeadline()
 {
     t_clock_next = t_used + kClockStride;
     const double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_t0).count();
+    if (GapStatsOn())   // MTG_BACKSTOP_GAP_STATS (diagnostic): see GapStats
+    {
+        GapStats& g = t_gap;
+        if (el - g.last > g.max) { g.max = el - g.last; g.max_at = el; }
+        g.last = el;
+        if (t_used >= g.lg_next)
+        {
+            if (el - g.lg_last > g.lg_max) { g.lg_max = el - g.lg_last; g.lg_max_at = el; }
+            g.lg_last = el;
+            g.lg_next = t_used + kLegacyClockStride;
+        }
+    }
     // STAGE 2 first: it is unconditional, so a game past the hard cap is reported as kWall even if
     // the stage-1 check happens to land on the same stride.
     if (t_hard_sec > 0.0 && el >= t_hard_sec)
     {
         t_abandoned = true;
-        if (t_cause == Cause::kNone) { t_cause = Cause::kWall; }
+        if (t_cause == Cause::kNone) { t_cause = Cause::kWall; t_fired_sec = el; }
         return;
     }
     if (t_predicted || t_predict_sec <= 0.0 || el < t_predict_sec) { return; }
@@ -188,8 +237,44 @@ inline void CheckDeadline()
     if (projected > t_hard_sec * kPredictSafety)
     {
         t_abandoned = true;
-        if (t_cause == Cause::kNone) { t_cause = Cause::kPredict; }
+        if (t_cause == Cause::kNone) { t_cause = Cause::kPredict; t_fired_sec = el; }
     }
+}
+
+// --------------------------------------------------- POLLING FROM AN UNCHARGED LOOP (2026-10-21)
+// CheckDeadline runs from Add() alone, i.e. only when work is CHARGED. A loop that charges no unit
+// therefore never reads the clock, and the backstop cannot fire inside it however long it runs.
+// AccomplishedAlchemist's Combo Off ROUTE WALK is such a loop (aaroute::Dfs: provider sub-search,
+// never calls SearchBudget::Consume), and so are the breakpoint-continuation DERIVATIONS its applies
+// trigger (BpDeriveContinuationList -> EnumeratePlansWithLand under g_bp_enum_depth: 17k plans per
+// list on average, 287k at the worst). Its value-leaf phase A runs the label games with a 4 h hard
+// cap (MTG_MAX_GAME_WALL_SEC=14400), and they ran straight through it: gi137 of
+// accomplishedalchemist_rows_00750_000 at 7.4 h and still going, others abandoned only at 16,742 s.
+// USER 2026-10-21: "they should be cutting off naturally". A late cut is late in one of two places,
+// and both were unbounded: NOTICING the cap (this poll and kClockStride) and UNWINDING after it (the
+// search loops that keep applying plans once their children have stopped -- they now leave on
+// gamework::Abandoned; see FSLineWin's plan loop, the label ladder, TurnSolver's AnytimeStop).
+// docs/design/per-game-wall-clock-backstop.md, "Uncharged loops", has the measurements.
+//
+// Poll() reads the SAME deadline from inside such a loop. The loop then unwinds through the cut path
+// it already has (the route walk's `cut`, a derivation's interrupted flag, the greedy walk's
+// walk_exhausted), exactly as it does for a unit ceiling. NO STRIDE HERE: a coarse loop (one route-walk
+// apply costs milliseconds) calls it every iteration; a per-visit loop keeps its own counter and calls
+// it every N visits (TurnSolver's kWalkAbandonStride), because the cheapest stride is the one the hot
+// loop already pays for.
+//
+// INERT WHERE NOTHING IS ARMED, by construction. With no wall deadline (t_clock_next == 0: every GT
+// tier, the viewer, shipped play) it returns t_abandoned -- false unless a unit ceiling fired -- and
+// reads no clock. A game that is never abandoned takes no branch a caller adds on its result; a game
+// that IS abandoned is VOID (RunGame -> kAbandoned, reduce_job drops it), so where its loops noticed
+// cannot move any reported result. Callers must still not CACHE anything computed after the cut
+// (each call site says how it avoids that).
+inline bool Poll()
+{
+    if (t_abandoned) { return true; }
+    if (t_clock_next == 0) { return false; }   // no wall deadline armed: nothing to read
+    CheckDeadline();
+    return t_abandoned;
 }
 
 // Publish this game's progress (and honour a ceiling that freezes while it runs). Call after Begin.
@@ -201,6 +286,14 @@ inline void PublishTo(std::atomic<long long>* progress, const std::atomic<long l
     if (t_publish) { t_publish->store(0, std::memory_order_relaxed); }
 }
 
+// A unit-ceiling cut's moment, for the report (see t_fired_sec). Once per game, and only with a deadline
+// armed (t_t0 is set there), so a unit-ceiling run without one reads no clock -- as before.
+inline void NoteUnitsFired()
+{
+    if (t_clock_next == 0) { return; }
+    t_fired_sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_t0).count();
+}
+
 // Fold in work units. Called from SearchBudget::Consume, i.e. once per simulated turn-step,
 // so this is the same currency the user-facing virtual-ms budget is denominated in.
 inline void Add(long long n)
@@ -209,7 +302,7 @@ inline void Add(long long n)
     if (t_limit > 0 && t_used >= t_limit)
     {
         t_abandoned = true;
-        if (t_cause == Cause::kNone) { t_cause = Cause::kUnits; }
+        if (t_cause == Cause::kNone) { t_cause = Cause::kUnits; NoteUnitsFired(); }
     }
     // One integer compare when no deadline is armed, which is every caller that does not opt in.
     if (t_clock_next != 0 && t_used >= t_clock_next) { CheckDeadline(); }
@@ -226,7 +319,7 @@ inline void Add(long long n)
             if (late > 0 && t_used >= late)
             {
                 t_abandoned = true;
-                if (t_cause == Cause::kNone) { t_cause = Cause::kUnits; }
+                if (t_cause == Cause::kNone) { t_cause = Cause::kUnits; NoteUnitsFired(); }
             }
         }
     }
@@ -236,6 +329,7 @@ inline bool      Abandoned()    { return t_abandoned; }
 inline long long Used()         { return t_used; }
 inline long long Limit()        { return t_limit; }
 inline Cause     AbandonCause() { return t_cause; }
+inline double    FiredAt()      { return t_fired_sec; }   // see t_fired_sec; read before End()
 
 // For the runner's report. "UNITS" is the deterministic verdict; the other two are the backstop and
 // a reader must be able to tell them apart at a glance -- a run that fired one is not reproducible
@@ -260,5 +354,6 @@ inline void End()
     t_hard_sec = 0.0;
     t_predict_sec = 0.0;
     t_clock_next = 0;
+    t_fired_sec = 0.0;
 }
 }   // namespace gamework

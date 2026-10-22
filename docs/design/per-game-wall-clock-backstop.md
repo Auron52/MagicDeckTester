@@ -1018,3 +1018,129 @@ number with a known expiry is the wrong trade while phase A is running.
 What is already known is enough to bound the risk: on that game at d4 the lever cost **+0.15%**. So
 the downside where it does not help is ~1%, and the open question is only the size of the upside.
 That question is answerable cheaply and correctly after phase B, in one run, in the right config.
+
+## Uncharged loops: the cap was never read inside them (2026-10-21)
+
+**Symptom.** AccomplishedAlchemist's value-leaf phase A runs its K=3 label games with a 4 h hard cap
+(`MTG_MAX_GAME_WALL_SEC=14400`, no predictive stage). Games ran straight past it: `ABANDONED-WALL`
+lines at 15,183 / 15,855 / 16,280 / **16,742 s**, and `accomplishedalchemist_rows_00750_000` gi137
+still running at **7.4 h**, holding a core through the batch's tail. USER: *"they should be cutting
+off naturally"*.
+
+**Mechanism -- a late cut has two parts, and both were unbounded.**
+1. **Noticing the cap.** `CheckDeadline` ran only from `Add()`, i.e. only when a unit was CHARGED, and
+   only every `kClockStride = 4096` units. A stride in units is a bound in time only while the unit
+   rate is bounded below -- the sizing note above ("~5 s even at 830 units/s") assumed exactly that.
+   On this deck it is not: the Combo Off route walk (`aaroute::Dfs`, up to 128 applies per walk) and
+   the breakpoint-continuation derivations its applies trigger (`BpDeriveContinuationList` ->
+   `EnumeratePlansWithLand` under `g_bp_enum_depth`: 17k plans per list on average, 287k at the
+   worst) charge NO unit, and they sit between consecutive charges. The greedy subset walk polled the
+   abandon FLAG, but nothing uncharged ever set it. Note WHERE the hours are: in the unbounded label
+   search (`EnumerateEarliestWins`, K=3, refuting late or no-win positions), not in the walk (0-8% of
+   those games' time per the route root-cause analysis in analysis-AccomplishedAlchemist.md). The label
+   search does charge units, so HEAD read the clock there -- but only every 4096 units, and on this
+   deck 4096 units can take a minute and more solo (table below), ~7x that in the 32-worker batch.
+2. **Unwinding after it.** Once the flag is set, `SearchBudget::Overrun` makes every search frame
+   return at its entry guard -- but the LOOPS around those frames kept going, paying a plan APPLY per
+   remaining candidate before each child returned: the label ladder (`EnumerateEarliestWins`: every
+   candidate x every pass left), `FSLineWin` / `FSLineTail`'s plan loops on every frame of the stack,
+   and unbudgeted playouts (`budget == nullptr`), which never consult `Overrun` at all. Measured on
+   gi247 (seed 900747): the cap fired at 2,400.0 s and the game returned at **2,500.7 s**.
+
+**Fix (branch `aa-wallcap`).**
+* `gamework::Poll()` reads the same deadline from an uncharged loop. With no deadline armed it returns
+  the abandon flag and reads no clock, so every GT tier, the viewer and shipped play are untouched.
+* Polled at: the route walk's node entry and every apply (`aaroute::CutForVoidGame` -> the price's
+  existing `w.cut` path); `EnumeratePlans`' per-visit body inside a derivation or the route walk
+  (every 1024 visits, the greedy walk's counter; sets `g_bp_derive_interrupted`, the
+  `MTG_BP_DERIVE_METER=2` path, so the derivation returns EMPTY); the greedy subset walk's existing
+  1024-visit check (it read only the flag); the equip-route DFS per link (an unlimited root charges
+  nothing there either); and the label ladder's loops, once per root candidate (its pass 0 applies
+  every candidate without charging a unit -- the label search is where the hours are).
+* `kClockStride` 4096 -> **64**: one clock read per 64 charged units, only in a game with a deadline.
+* The unwind stops at the flag: the label ladder's loops, the m1 / m2 plan loops (by the constant-leaf
+  exit, `++g_fs_trunc_events`), `FSLineWin` / `FSLineTail`'s entry guard and `SimulateToEnd`'s per-turn
+  guard (both now also for an unbudgeted frame).
+* **Nothing a void game computes is cached**: a cut route verdict was already never memoised and now
+  no verdict of a void game is; a derivation interrupted by the poll is stored by neither
+  `BpEnumEntryFor` nor `BpCanonFront` (the latter did not check the interrupted flag before);
+  `enummemo` (m1 and m2 hosts), `solvememo`, the continuation-length memo and the equip route's
+  decision memo skip their stores once the game is void. All of these are per-game caches cleared at
+  the next game's start anyway; the guards make "a later game reads a truncated result" impossible by
+  construction rather than by the clear. `g_bp_derive_interrupted` is cleared per game. A label whose
+  search was cut is already dropped (`EarliestWinReport::truncated` via `budget.Overrun()`).
+* The two `!!` replay-failure lines (`[aa-route]`, `[equip-route]`) stay quiet in a void game: there a
+  failed replay is the cut, not the defect they exist to flag.
+* Telemetry: with a deadline armed, the `ABANDONED*` lines now say `(fired at X s)` -- `elapsed` minus
+  that is the unwind, and for a wall cut that minus the cap is the detection latency. A unit-ceiling cut
+  records its moment too, which makes the unwind measurable at a DETERMINISTIC point
+  (`abandon_units`). `MTG_BACKSTOP_GAP_STATS=1` (diagnostic, print-only) reports per game the longest
+  wall gap between deadline reads, both for this schedule and for the pre-fix one, shadowed from the
+  same game (the polls change no play, so both describe one trajectory).
+
+**Measured** (Release, solo or 1-4 thread batches beside the running generation; phase A's settings:
+`MTG_DUMP_VALUE_ROWS`, `MTG_EVAL_ROWS_K=3`, `MTG_EVAL_ROWS_ROLLOUT=0`, the deck's profile, no
+predictive stage; scratch `build/scratch/aa-wallcap/repro/`).
+
+*The cut, end to end (`elapsed` at the cap; HEAD = 644530764):*
+
+| game (seed, gi) | where the cap lands | cap | HEAD | fixed |
+|---|---|---|---|---|
+| 00750 gi137 (900887, 137) | T1 label search | 120 s | 130.9 s | **120.0 s** |
+| 02250 gi120 (902370, 120) | T3 label search | 120 s | 123.6 s | **120.0 s** |
+| 00250 gi209 (900459, 209) | T1 label search | 120 s | 120.5 s | **120.0 s** |
+| 01750 gi206 (901956, 206) | T2 label search | 120 s | 120.3 s | **120.0 s** |
+| 00500 gi247 (900747, 247) | T2 label ladder | 2,400 s | 2,512.6 s | 2,426.7 s (detection + ladder/FSLine exits only) |
+
+(The 120 s rows' HEAD numbers are from a contended run; side by side on a quiet box HEAD stopped gi137
+and gi209 at 120.1 s -- where a cap lands decides how late HEAD is. The gi247 run of the final binary
+was stopped to keep the box free; its unwind is measured at a deterministic point below.)
+
+*Detection: the longest wall gap between deadline reads* (`MTG_BACKSTOP_GAP_STATS`, both schedules on
+one trajectory, the first 2,400 s or the whole game):
+
+| game | 4096-unit schedule (before) | this schedule |
+|---|---|---|
+| 00250 gi209 | 81.3 s | 0.25 s |
+| 02250 gi120 | 69.8 s | 0.57 s |
+| 01000 gi34 | 38.5 s | 1.38 s |
+| 00500 gi247 | 18.7 s | 0.92 s |
+| 01250 gi64 | 14.9 s | 1.18 s |
+| 01750 gi206 | 8.8 s | 0.75 s |
+| 00750 gi137 | 6.1 s | 0.41 s |
+| 00500 gi62 | 5.2 s | 0.92 s |
+
+*Unwind, at a DETERMINISTIC point* (`abandon_units`, two binaries side by side, every cut inside a label
+search):
+
+| game | cut at | before | fixed |
+|---|---|---|---|
+| 00500 gi247 (T2 label ladder) | 11,500,000 units | 27.5 s and 630,722 units past the cut (with the ladder / FSLine exits already in; HEAD lacks those too) | **0.0 s, 0 units** |
+| 00750 gi137 (T1 label) | 6,000,000 units | HEAD: ~5 s, 25,834 units past the cut | **0.0 s, 0 units** |
+| 00250 gi209 (T1 label) | 8,000,000 units | HEAD: 222 units past the cut | **0.0 s, 0 units** |
+
+What the 27.5 s was: `SolveWithLookahead`'s candidate loop and the anytime waves, which kept applying
+plans and charging units after every frame below them had returned.
+
+These gaps are on a quieter box than the generation's (the same games ran ~7-8x slower there at
+identical units -- 32 workers on 32 hardware threads and a shared plan pool: gi206 6,602 s vs 828 s
+solo, gi120 3,168 s vs 393 s). Scaled by that, 81 s of detection plus a 100 s unwind is the scale of
+the generation's 783-2,343 s late cuts; the fixed schedule's worst gap (1.4 s) is ~10 s there.
+
+**Byte-identical wherever no cut fires** (every added branch reads the abandon flag, false until a
+ceiling or cap fires, or the clock, read only with a deadline armed):
+* smoke `--smoke` 136/136, per-game audit 0 configs changed, 0 play changes; scenarios 246/246;
+  mtg-test 1636/1636 (5 new meter cases);
+* at phase A's settings WITH the cap armed and not firing (polls live, clock read): 16 label games of
+  `accomplishedalchemist_rows_00000` -- digest `f1f1086ea55c70cc`, 5,144,179 units and all 75 value
+  rows identical to HEAD; gi120 and gi206 played to the end on the detection-only build (the unwind exits
+  run only after a cut), digests identical (gi206 run solo on both binaries: 14,629,427 units and rows
+  identical);
+* no state leaks out of a void game: gi137 cut at 120 s mid-label, then 8 label games on the SAME
+  worker thread -- digest `0642022868f95190`, 2,623,037 units and rows identical to those 8 games run
+  alone; the cut game wrote no row (its truncated label was dropped).
+
+**Uncharged loops NOT given a poll, and why.** A top-level enumeration outside a derivation and the
+route walk runs to its end (one enumeration; truncating it would hand index-keyed consumers a short
+list); the EDF combo route (a bounded go-off playout) and the equip route's non-search advance
+policies (`MaxIter`) are bounded by construction; the closed-form untap loop is closed-form.

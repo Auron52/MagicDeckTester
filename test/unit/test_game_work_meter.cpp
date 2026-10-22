@@ -91,7 +91,7 @@ TEST_CASE("work meter: STAGE 2 bounds a game whose ceiling is DISARMED (the skip
 
 TEST_CASE("work meter: STAGE 1 -- a game far off the pace is cut at the predictive check")
 {
-    // 4096 units in >=20 ms against a 10^9 ceiling projects to ~4,000,000 s, which is astronomically
+    // One clock stride of units in >=20 ms against a 10^9 ceiling projects to >= 300,000 s, astronomically
     // past 1.5 x the 10 s hard cap. This is the shape of the real pathology (a 40M ceiling at
     // 830 units/s projects to 13.4 h against a 3.5 h cap), just scaled down.
     gamework::Begin(1000000000LL);
@@ -130,7 +130,7 @@ TEST_CASE("work meter: STAGE 1 is INERT without a unit ceiling -- there is nothi
 
 TEST_CASE("work meter: STAGE 1 is evaluated ONCE, not on every stride")
 {
-    // A game spared by the check must not be re-judged every 4096 units: the rate it was spared on
+    // A game spared by the check must not be re-judged on every clock stride: the rate it was spared on
     // is the rate it gets credit for until stage 2 has its say.
     gamework::Begin(kStride * 2);
     gamework::ArmDeadline(0.02, 10.0);
@@ -170,6 +170,73 @@ TEST_CASE("work meter: Begin() alone clears a deadline left armed by a previous 
     gamework::Begin(0);                      // re-armed without an intervening End()
     gamework::Add(kStride);
     CHECK_FALSE(gamework::Abandoned());
+    gamework::End();
+}
+
+// ---- Poll(): the deadline read from a loop that CHARGES NOTHING (2026-10-21) --------------------------
+// The defect these lock down: CheckDeadline ran only from Add(), so AccomplishedAlchemist's value-leaf label
+// games -- whose Combo Off route walk and breakpoint derivations charge no unit -- ran hours past a 4 h cap.
+
+TEST_CASE("work meter: Poll() fires the hard cap with NO unit charged (the uncharged-loop defect)")
+{
+    gamework::Begin(0);
+    gamework::ArmDeadline(0.0, 0.04);        // 40 ms hard cap
+    CHECK_FALSE(gamework::Poll());           // not yet past it
+    SleepMs(80);
+    // No Add() at all: before Poll existed, nothing here could ever read the clock.
+    CHECK_FALSE(gamework::Abandoned());
+    CHECK(gamework::Poll());
+    CHECK(gamework::Abandoned());
+    CHECK(gamework::AbandonCause() == gamework::Cause::kWall);
+    CHECK(gamework::Used() == 0);
+    CHECK(gamework::FiredAt() >= 0.04);      // when it fired, for the ABANDONED-WALL line
+    gamework::End();
+    CHECK(gamework::FiredAt() == 0.0);
+}
+
+TEST_CASE("work meter: Poll() is inert with nothing armed -- the GT tiers' case")
+{
+    gamework::Begin(0);
+    SleepMs(30);
+    for (int i = 0; i < 1000; ++i) { CHECK_FALSE(gamework::Poll()); }
+    CHECK(gamework::AbandonCause() == gamework::Cause::kNone);
+    gamework::End();
+}
+
+TEST_CASE("work meter: Poll() reports a UNIT ceiling that already fired, without a deadline")
+{
+    gamework::Begin(10);
+    CHECK_FALSE(gamework::Poll());
+    gamework::Add(10);
+    CHECK(gamework::Poll());
+    CHECK(gamework::AbandonCause() == gamework::Cause::kUnits);
+    CHECK(gamework::FiredAt() == 0.0);       // the backstop did not fire; the ceiling did
+    gamework::End();
+}
+
+TEST_CASE("work meter: a UNIT cut records its moment when a deadline is armed (the unwind's start)")
+{
+    gamework::Begin(10);
+    gamework::ArmDeadline(0.0, 100.0);       // armed far away: only the moment is wanted
+    SleepMs(20);
+    gamework::Add(10);
+    REQUIRE(gamework::Abandoned());
+    CHECK(gamework::AbandonCause() == gamework::Cause::kUnits);
+    CHECK(gamework::FiredAt() >= 0.02);
+    gamework::End();
+}
+
+TEST_CASE("work meter: Poll() after End() reads nothing -- no leak into the next game")
+{
+    gamework::Begin(0);
+    gamework::ArmDeadline(0.0, 0.01);
+    SleepMs(30);
+    REQUIRE(gamework::Poll());
+    gamework::End();
+    gamework::Begin(0);                      // the next game on this worker asks for no deadline
+    SleepMs(30);
+    CHECK_FALSE(gamework::Poll());
+    CHECK(gamework::AbandonCause() == gamework::Cause::kNone);
     gamework::End();
 }
 

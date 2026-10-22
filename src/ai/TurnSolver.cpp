@@ -3761,8 +3761,28 @@ static thread_local int g_greedy_charge_acc = 0;
 // RunGame returns kAbandoned and reduce_job drops it -- so no REPORTED result can depend on where in
 // the walk we noticed. That is also why this residual is not guard-scoped the way
 // g_greedy_charge_acc must be: carrying it between games cannot move a result that does not exist.
+//
+// IT NOW READS THE CLOCK TOO (gamework::Poll, 2026-10-21). Reading only the flag left a hole: the flag
+// is set by CheckDeadline, which runs from gamework::Add, i.e. only when some site CHARGES a unit -- so
+// a walk with no budget host (the plan-scoring rollouts, an unlimited label search) could run past the
+// wall cap with nothing ever setting it. Poll reads the same deadline itself; with no deadline armed it
+// is the flag read it replaces, so the argument above is unchanged. The SAME stride and counter serve
+// EnumeratePlans' per-visit body inside a breakpoint-continuation derivation or the Combo Off route
+// walk (bp_abandon_watch), the other uncharged per-visit loops of AccomplishedAlchemist's multi-hour
+// label games.
 constexpr int kWalkAbandonStride = 1024;
 static thread_local int g_walk_abandon_acc = 0;
+// THE ANYTIME STOP of the strictly-better loops -- the deferred continuation waves, the group-wave
+// tranches, the m2 fixpoint: the finite budget is spent, or the game is VOID (gamework::Abandoned: the
+// per-game unit ceiling or wall cap fired). Every such loop keeps `best` exactly as it was when it stops,
+// so stopping a void game's early only skips applies whose result nobody reads -- the unwind that, with
+// the other void-game exits (FSLineWin's plan loop, the label ladder), kept an AccomplishedAlchemist label
+// game running ~100 s past its cap (2026-10-21). The budget test is the one each site had, evaluated
+// first and unchanged (Exhausted() counts its binds); Abandoned() is false unless a ceiling or cap is armed.
+static inline bool AnytimeStop(const SearchBudget* budget)
+{
+    return (budget != nullptr && !budget->Unlimited() && budget->Exhausted()) || gamework::Abandoned();
+}
 struct GreedyChargeGuard
 {
     SearchBudget* prev;
@@ -46322,6 +46342,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, c
 
     solvememo::g_misses.fetch_add(1, std::memory_order_relaxed);
     TurnSolver::Plan p = SolveUncached(state, is_pre_combat, permit);
+    // A VOID game stores nothing: the walk above may have stopped early on the per-game backstop
+    // (kWalkAbandonStride / gamework::Poll), so `p` is the best-so-far of a truncated walk. Always
+    // false unless a unit ceiling or a wall cap is armed.
+    if (gamework::Abandoned()) { return p; }
     if (cache.size() >= solvememo::Cap())
     {
         cache.clear();
@@ -47344,10 +47368,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Observe the per-GAME abandon flag HERE -- see kWalkAbandonStride above the function. This
         // walk honours no budget, so without this it never learns the game has been voided by its
         // unit ceiling or its wall deadline. Strided, and inert unless one of those is armed.
+        // gamework::Poll, not Abandoned: an unbudgeted walk charges nothing, so the wall deadline is
+        // never READ unless this reads it (Abandoned alone only saw a flag some charged site had set).
         if (++g_walk_abandon_acc >= kWalkAbandonStride)
         {
             g_walk_abandon_acc = 0;
-            if (gamework::Abandoned()) { walk_exhausted = true; return; }
+            if (gamework::Poll()) { walk_exhausted = true; return; }
         }
         if (g_greedy_charge_budget != nullptr)
         {
@@ -62641,6 +62667,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // decision meter, outside human play. Read once per call.
     const bool bp_meter_on = BpDeriveMeterOn() && g_bp_enum_depth > 0 && decisionwork::Armed()
                           && !HumanPlayActive();
+    // THE PER-GAME BACKSTOP INSIDE A DERIVATION (gamework::Poll; 2026-10-21). A breakpoint-continuation
+    // derivation is an enumeration, not a search node, so it charges no unit and the wall cap was never read
+    // while one ran: AccomplishedAlchemist's route walk derives every affordable subset of the hand after
+    // each untap loop (287k plans at the worst), and its value-leaf label games ran hours past the 4 h cap.
+    // Once the game is VOID the derivation stops on the path MTG_BP_DERIVE_METER=2 already built: the flag
+    // makes BpDeriveContinuationList return EMPTY and report it interrupted, so no cache stores the list
+    // (BpEnumEntryFor, BpCanonFront). Only inside a derivation (g_bp_enum_depth > 0), where EMPTY is a list
+    // every consumer already takes (an overrun rank falls through to EMPTY), and inside the Combo Off route
+    // walk, whose node menus are its own (enummemo bypasses them) and whose next PayApply / Dfs entry cuts
+    // the walk on the same flag, so a short menu there is discarded with the walk. Any other top-level
+    // enumeration runs to its end -- one enumeration, after which its host's own cut (Overrun) unwinds.
+    // Strided with the greedy walk's counter; inert (t_abandoned stays false, Poll reads no clock) unless a
+    // unit ceiling or a wall cap is armed.
+    const bool bp_abandon_watch = g_bp_enum_depth > 0 || AlchemistComboRouteInProgress();
     // (The PUTS-LAST retry that lived here is gone: a Vial put is sequenced like a cast of its card,
     // USER 2026-10-06, so a Pirate put that ranks after Daring Buccaneer is still in hand for the
     // reveal under the ordinary pricing -- SameSubsetRevealSurcharge prices the put at its position.)
@@ -62652,6 +62692,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // odometer walk the odo/plans/dedup columns actually describe.
         if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }
         const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
+        // The per-game backstop (see bp_abandon_watch): stop deriving once the game is void.
+        if (bp_abandon_watch)
+        {
+            bool void_game = gamework::Abandoned();
+            if (!void_game && ++g_walk_abandon_acc >= kWalkAbandonStride)
+            {
+                g_walk_abandon_acc = 0;
+                void_game = gamework::Poll();
+            }
+            if (void_game)
+            {
+                if (g_bp_enum_depth > 0) { g_bp_derive_interrupted = true; }   // a derivation: report it
+                return;
+            }
+        }
         // MTG_BP_DERIVE_METER (default OFF; see BpDeriveMeterOn): bill this visit to the armed decision
         // meter while deriving a breakpoint continuation list, and stop the derivation once it is spent.
         if (bp_meter_on)
@@ -68554,6 +68609,9 @@ namespace
     { static const std::size_t v = static_cast<std::size_t>(EnvInt("MTG_BP_NSKIP_GLOBAL_CAP", 262144)); return v; }
     inline void BpLenRecord(const BpLenKey& k, int n)
     {
+        // A VOID game records nothing: an interrupted derivation (the per-game backstop) reports EMPTY, and
+        // a length of 0 is not this key's length. Always false unless a unit ceiling or a wall cap is armed.
+        if (gamework::Abandoned()) { return; }
         BpLenMap& m = BpLenMemo();
         if (BpNSkipGlobalVerify())
         {
@@ -75009,6 +75067,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
+    // A VOID game (the per-game backstop fired: gamework::Poll) stores nothing -- a route walk cut inside
+    // this enumeration's CollectActions made the list a function of the cut. Always false unless a unit
+    // ceiling or a wall cap is armed.
+    if (gamework::Abandoned()) { return plans; }
     if (second_visit)
     {
         // Second visit this decision: the state provably recurs -- promote to full storage,
@@ -75127,6 +75189,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
+    if (gamework::Abandoned()) { return plans; }   // a VOID game stores nothing (see the m1 host)
     if (second_visit)
     {
         // Same byte-budget gate as the m1 host above (over budget: stay a marker, recompute).
@@ -75191,6 +75254,13 @@ void TurnSolver::ClearPerGameCaches()
     // work meter, and a thread_local that outlived a batch worker's job switch would make a game's
     // units depend on which games shared the worker. Same argument as the plan memos above.
     BpLenMemo().clear();
+    // The derivation-interrupted flag. It is reset at every derivation's entry, but the OUTERMOST
+    // interrupted derivation leaves it set behind it (it ORs into its caller's value), and the per-game
+    // backstop is what sets it now (gamework::Poll, see bp_abandon_watch) -- so a game abandoned
+    // mid-derivation would hand the flag to the next game on this worker. Nothing reads it outside a
+    // derivation today; cleared here so that stays true by construction. A no-op in every game that is
+    // not abandoned (with MTG_BP_DERIVE_METER off nothing else ever sets it).
+    g_bp_derive_interrupted = false;
     // The breakpoint-enum plan cache (BpEnumEntryFor). Unlike the epoch-scoped memos above, its hits
     // are NOT confined to one decision -- it is keyed on BuildBreakpointKey alone and evicted only by a
     // count/byte cap -- so it carried both CONTENT and FILL LEVEL from one game into the next on a
@@ -76514,7 +76584,7 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
         // misattribution section). Whether the unfiltered scan (which rescues 2 more split
         // games on the hinata battery) is affordable is MTG_M2_FIX_UNFILTERED's A/B.
         if (!e.wins_this_turn && !M2FixUnfiltered()) { continue; }
-        if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+        if (AnytimeStop(budget))
         { ++g_fs_trunc_events; break; }
         ConsumeAt(budget, unitsite::kFsMain2);
         PROF_INC(gamestate_copies);
@@ -76533,7 +76603,7 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
         const std::vector<InternedName> drawn = M2FixDrawnDelta(std::move(hand0), copy);
         if (M2FixActionable(fx, drawn))
         {
-            if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+            if (AnytimeStop(budget))
             { ++g_fs_trunc_events; return false; }
             ++g_m2fix_nest;
             TurnSolver::Plan post2 = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
@@ -76647,7 +76717,10 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // Rollout board census (MTG_BOARD_CENSUS). THIS is the step the 58x-per-node cost is paid
         // on, so it is where the board that causes it has to be sampled. Off = one static load.
         if (boardcensus::On()) { boardcensus::Record(state); }
-        if (budget && budget->Overrun())
+        // ...or the game is VOID (gamework::Abandoned), which an unbudgeted rollout (budget == nullptr: the
+        // search's plan-scoring samples) never asked about and so played out to max_turns. Always false
+        // unless a unit ceiling or a wall cap is armed.
+        if ((budget && budget->Overrun()) || gamework::Abandoned())
         { ++g_fs_trunc_events; leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
         // Per-decision ceiling for the UNBUDGETED rollouts (the search's plan-scoring samples
         // pass budget=nullptr by design, so ConsumeAt above bills nothing for them): when the
@@ -79878,8 +79951,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                          std::vector<dominance::DomSnap>* dom_arch = nullptr,
                                          EotStateSet* eot_seen = nullptr)
 {
-    // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
-    if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
+    // Mid-pass overrun guard (see FSLineWin): abort the runaway pass -- or a VOID game's (see FSLineWin).
+    if ((budget && budget->Overrun()) || gamework::Abandoned()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // MTG_FSL_EDGE_NO_REACH (see FslEdgeNoReachOn): on the cutoff turn, under a win an ancestor already
     // holds, only a post-combat kill could matter -- and the deck vouches it has none.
@@ -80216,7 +80289,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // Projected-lethal plans only -- see ApplySecondMainInSearch's filter note
                 // (the filter's justification is open; MTG_M2_FIX_UNFILTERED is the A/B).
                 if (!e.wins_this_turn && !M2FixUnfiltered()) { continue; }
-                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                if (AnytimeStop(budget))
                 { ++g_fs_trunc_events; break; }
                 ConsumeAt(budget, unitsite::kFsMain2);
                 PROF_INC(gamestate_copies);
@@ -80252,7 +80325,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             {
                 const std::vector<InternedName> drawn = M2FixDrawnDelta(m2fix_hand0, s2);
                 if (M2FixActionable(fx, drawn)
-                    && !(budget != nullptr && !budget->Unlimited() && budget->Exhausted()))
+                    && !(AnytimeStop(budget)))
                 {
                     ++g_m2fix_nest;
                     TurnSolver::SearchLine cont =
@@ -80335,6 +80408,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; w0_trunc = true; break; }
+            // A VOID game stops scanning here, the same exit (see the m1 loop in FSLineWin).
+            if (gamework::Abandoned()) { ++g_fs_trunc_events; w0_trunc = true; break; }
             ++m2_scanned;
             ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
             pbsite::Note(pbsite::kFsM2, q, budget);
@@ -80728,7 +80803,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 {
                     // Anytime: a variant only ever wins on a STRICTLY better win turn, so
                     // stopping here keeps `best` exactly as the loop left it.
-                    if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                    if (AnytimeStop(budget))
                     { ++g_fs_trunc_events; break; }
                     ConsumeAt(budget, unitsite::kFsM2Wave);   // one interior node (plan applied)
                     if (s_rollout_stats)
@@ -81021,7 +81096,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 #endif
     // Mid-pass overrun: this pass has blown far past its budget estimate; bail out with a
     // no-win so FullSearchLine rolls back to the last completed pass (see SetOverrunLimit).
-    if (budget && budget->Overrun())   { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
+    // ...and a VOID game (gamework::Abandoned) unwinds here even with no budget to consult: Overrun
+    // already includes it when there is one, an unbudgeted frame never asked. Always false unless a
+    // unit ceiling or a wall cap is armed.
+    if ((budget && budget->Overrun()) || gamework::Abandoned()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     if (depth <= 0)
     {
         ++g_fs_leaf_evals;   // count leaf evaluations (value-leaf or rollout) for the K-predictor's leaf-count model
@@ -82085,6 +82163,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
         // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
         if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; break; }
+        // A VOID game (gamework::Abandoned: the per-game unit ceiling or wall cap fired) stops scanning
+        // here, by the constant-leaf exit above. The child of every remaining plan would return at its
+        // entry guard anyway, but each plan's APPLY runs first, and across every frame on the stack and
+        // every candidate of a label ladder that was the 100 s an AccomplishedAlchemist label game spent
+        // after its cap had fired (2026-10-21). Always false unless a ceiling or a cap is armed.
+        if (gamework::Abandoned()) { ++g_fs_trunc_events; break; }
         // COUNTERFACTUAL PIN (MTG_FORCE_T1_LAND=<name>, diagnosis only, unset = byte-identical):
         // at the REAL turn-1 root, keep only plans whose land drop is the named land. Exists to
         // measure a land-sequencing counterfactual (EDF s1: T1 Conservatory-vs-Aether Hub) with
@@ -83191,7 +83275,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 // Anytime: a variant only ever wins on a STRICTLY better win turn, so stopping here
                 // keeps `best` exactly as the search left it.
-                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                if (AnytimeStop(budget))
                 { ++g_fs_trunc_events;
                   if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
@@ -83367,7 +83451,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         bool gw_stop = false;
         for (int R = cap_base; !gw_stop && R < cap_base + gw_dropped; ++R)
         {
-            if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+            if (AnytimeStop(budget))
             { ++g_fs_trunc_events;
               if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); } break; }
             // Enumerate tranche R. bound_limit: a budgeted node cannot even SCORE more plans than
@@ -83405,7 +83489,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                           bool& won_now) -> bool
             {
                 won_now = false;
-                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                if (AnytimeStop(budget))
                 { ++g_fs_trunc_events;
                   if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
                   return false; }
@@ -86933,8 +87017,18 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         // triggers, and a plan that wins this turn (the floor; no later pass can beat it).
         // Hoisted scratch board -- see LoadPlanState (capacity reuse across plans).
         GameState p0_buf;
+        // A VOID game leaves every loop of this ladder at once: the report is truncated anyway
+        // (budget.Overrun() includes the flag, so EmitEvalRows drops the position), and each remaining
+        // iteration still pays a plan APPLY before its search returns at the entry guard -- thousands of
+        // candidates times every pass left, ~100 s after the cap had fired on one AccomplishedAlchemist
+        // label game (2026-10-21). gamework::Poll, not the bare flag: this unbounded label search is
+        // where phase A's multi-hour games spend their hours, and its pass 0 applies every candidate
+        // without charging a unit, so the per-candidate read is what keeps the cap's detection here
+        // independent of the unit rate (one clock read per root candidate, only with a deadline armed;
+        // with none, Poll is the flag read). Always false unless a ceiling or a cap is armed.
         for (std::size_t i = 0; i < pre.size(); ++i)
         {
+            if (gamework::Poll()) { break; }
             LpSite _lps(0);   // apply-site attribution (see g_lp_site)
             LoadPlanState(p0_buf, state, s_state_reuse);
             GameState& s = p0_buf;
@@ -86985,6 +87079,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         int  hz_playout_wt = -1, hz_tried = 0;
         for (int dd = 0; dd <= depth - 1 && unsettled > 0; ++dd)
         {
+            if (gamework::Poll()) { break; }   // a VOID game (see the pass-0 loop)
             if (hz_on && dd > winlesscert::LabelHorizon()) { horizon_cut = true; break; }
             const int cut = state.turn_number + dd;
             bool any_new = false;
@@ -86997,6 +87092,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pass_refuted;
             for (std::size_t i = 0; i < pre.size(); ++i)
             {
+                if (gamework::Poll()) { break; }   // a VOID game (see the pass-0 loop)
                 if (settled[i]) { continue; }
                 if (ldedup && pass_refuted.count(ckey[i]) != 0)
                 {
@@ -87070,6 +87166,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             std::size_t best_i = pre.size();
             for (std::size_t i = 0; i < pre.size() && hz_tried < winlesscert::LabelHorizonWidth(); ++i)
             {
+                if (gamework::Poll()) { break; }   // a VOID game (see the pass-0 loop)
                 if (settled[i]) { continue; }
                 ++hz_tried;
                 LpSite _lps(1);
@@ -87137,6 +87234,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     std::size_t cand_index = 0;
     for (const TurnSolver::Plan& p : pre)
     {
+        if (!ladder && gamework::Poll()) { break; }   // a VOID game (see the ladder's pass-0 loop)
         const std::size_t ci = cand_index++;
         int wt;
         if (ladder)
@@ -87922,6 +88020,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         int       pass_best_inf    = -1;                   // ...and its winning rollout's inf stamp
         bool      pass_has_best    = false;
         bool      pass_aborted     = false;
+        bool      void_cut         = false;   // the candidate loop stopped for a VOID game (see there)
         long long candidates_done  = 0;
         std::vector<EscEntry> esc_pool;   // this pass's evaluated candidates (escalation)
 
@@ -88574,6 +88673,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (pass_ceiling.b != nullptr && budget->Overrun()) { pass_ceiling_tripped = true; break; }
             // ...and the same for a NESTED solve under a tripped ceiling (see LaNestedBailOn).
             if (nested_bail && budget->Overrun()) { pass_ceiling_tripped = true; break; }
+            // ...and for a VOID game (gamework::Abandoned: the per-game unit ceiling or wall cap fired),
+            // with or without a budget here: every remaining candidate would pay an apply and a rollout
+            // that returns at its first turn-step. Aborted below like a tripped ceiling, minus the
+            // rescue (nothing a void game commits is read). Always false unless a ceiling or cap is armed.
+            if (gamework::Abandoned()) { void_cut = true; break; }
             // --- Overrun guard: finish if almost done, else abort + roll back ---
             if (gate && budget->Exhausted() && candidates_done > 0)
             {
@@ -89563,6 +89667,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             }
             pass_aborted = true;   // skips the waves; the abort below ends the ladder
         }
+        if (void_cut && !pass_aborted) { ++g_fs_trunc_events; pass_aborted = true; }   // a VOID game (see above)
 
         // ---- DEFERRED CONTINUATION WAVES (see BpWaveWalker) --------------------------------------
         // The second fan-out site. This loop decides EVERY ROLLOUT TURN (SimulateToEndImpl calls
@@ -89607,7 +89712,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                    TranspositionTable::KeyHash> la_prefix_states;
                 while (walker.Next(candidates, v))
                 {
-                    if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                    if (AnytimeStop(budget))
                     { ++g_fs_trunc_events;
                       if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                     if (BpWaveProbeOn())
@@ -89768,7 +89873,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             auto score_gw = [&](const Plan& v, bool& won_out) -> bool
             {
                 won_out = false;
-                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                if (AnytimeStop(budget))
                 { ++g_fs_trunc_events;
                   if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
                   return false; }
@@ -92871,9 +92976,12 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         }
     }
     const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();   // see BpEnumEntryFor's twin
+    // An INTERRUPTED derivation (the per-game backstop, or MTG_BP_DERIVE_METER=2) returns EMPTY: served, never
+    // stored -- BpEnumEntryFor's rule, which this twin did not apply until the backstop could interrupt here.
+    bool bp_interrupted = false;
     std::vector<TurnSolver::Plan> plans =
         BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/true, /*demoted_out=*/nullptr,
-                                 /*front_only=*/true);
+                                 /*front_only=*/true, &bp_interrupted);
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (s_rollout_stats) { bpcanon::g_derives.fetch_add(1, std::memory_order_relaxed); }
     static const bool s_verify = EnvOn("MTG_BP_CANON_FRONT_VERIFY");
@@ -92890,7 +92998,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
                          state.turn_number, is_pre_combat ? "m1" : "m2", full.size(), plans.size());
         }
     }
-    if (keyed && !aa_cut_inside)
+    if (keyed && !aa_cut_inside && !bp_interrupted)
     {
         static const std::size_t s_cap = static_cast<std::size_t>(
             std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
