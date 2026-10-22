@@ -1,0 +1,45 @@
+{
+  "deck": "decks/Melira Pod/Melira Pod.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Melira, Sylvok Outcast",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Kitchen Finks",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Carrion Feeder",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "validate_line": "sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;seq=sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder",
+  "comment": "THIRD REVIEW 2026-10-22 item 1, the NON-mana outlet (USER ruling: Carrion Feeder's loop is a real action): Melira + Kitchen Finks + Carrion Feeder, the human clicks the Feeder eleven times. The plan holds ONE demand-driven loop action (sac 19, CheckLine's loop-count fold) plus a single sac. The first click claims a step; a further click first claims any separate action of the source still unclaimed (the single sac), then folds into the loop -- the loop absorbs any number of clicks, its K is the variant's. Validates with its sequence."
+}

@@ -113,7 +113,9 @@ TEST_CASE("human sequence: every queueable kind is a step at its own position")
     CHECK(Names(p) == std::vector<std::string>{ "Krenko, Mob Boss", "Shard Volley", "Goblin Lackey",
                                                 "Throes of Chaos", "Lightning Bolt", "Lotus Bloom",
                                                 "Skirk Prospector" });
-    CHECK(p.human_seq_len == 7);
+    // Skirk Prospector's sacrifice is MANA (USER 2026-10-22): its click is a payment, not a step -- the
+    // action stays implicit (laid out after the steps; ApplyPlanDirect runs it before the first one).
+    CHECK(p.human_seq_len == 6);
     CHECK(p.human_land_step == 3);
     CHECK(p.actions[1].sacrifice_land);
 }
@@ -264,6 +266,45 @@ TEST_CASE("human sequence: a step that could mean two different plays is REFUSED
     CHECK(q.human_seq_len == 2);
 }
 
+TEST_CASE("human sequence: the twin test is conservative -- counter CONTENTS, P/T, temporary grants")
+{
+    // Third review item 4: a false twin plays the wrong permanent, so every per-object field that can
+    // affect play must agree. Each difference below makes the two Krenkos DIFFERENT permanents, so an
+    // unstated `#src` is refused rather than resolved to the first.
+    auto refused_with = [](auto tweak) {
+        GameState s;
+        s.battlefield.push_back(PermOf("Krenko, Mob Boss", 5));
+        s.battlefield.push_back(PermOf("Krenko, Mob Boss", 7));
+        tweak(s.battlefield.back());
+        TurnSolver::Plan p = PlanOf("", { ActOn(K::TapForTokens, "Krenko, Mob Boss", 5),
+                                          ActOn(K::TapForTokens, "Krenko, Mob Boss", 7) });
+        std::vector<std::string> errors;
+        TurnSolver::ApplyHumanSequencePin(p, { "act=Krenko, Mob Boss" }, &s, &errors);
+        // (twins leave the second Krenko's action unqueued, which is reported too -- look for the REFUSAL)
+        for (const std::string& e : errors) { if (e.find("could mean") != std::string::npos) { return true; } }
+        return false;
+    };
+    CHECK(refused_with([](Permanent& p) { p.counters.Add(Counter::Type::PlusOnePlusOne, 1); }));
+    CHECK(refused_with([](Permanent& p) { p.temp_haste = true; }));
+    CHECK(refused_with([](Permanent& p) { p.exile_at_end = true; }));
+    CHECK(refused_with([](Permanent& p) { p.card.m_power = 4; }));
+    CHECK(refused_with([](Permanent& p) { p.chosen_color = 2; }));
+    CHECK_FALSE(refused_with([](Permanent&) {}));   // identical: twins, no refusal
+    // Same counter COUNT, different contents: still different.
+    CHECK([&] {
+        GameState s;
+        s.battlefield.push_back(PermOf("Krenko, Mob Boss", 5));
+        s.battlefield.push_back(PermOf("Krenko, Mob Boss", 7));
+        s.battlefield[0].counters.Add(Counter::Type::PlusOnePlusOne, 1);
+        s.battlefield[1].counters.Add(Counter::Type::PlusOnePlusOne, 2);
+        TurnSolver::Plan p = PlanOf("", { ActOn(K::TapForTokens, "Krenko, Mob Boss", 5),
+                                          ActOn(K::TapForTokens, "Krenko, Mob Boss", 7) });
+        std::vector<std::string> errors;
+        TurnSolver::ApplyHumanSequencePin(p, { "act=Krenko, Mob Boss" }, &s, &errors);
+        return !errors.empty() && errors[0].find("could mean") != std::string::npos;
+    }());
+}
+
 TEST_CASE("human sequence: an equip names its Equipment and its host")
 {
     TurnSolver::Plan p = PlanOf("", { ActOn(K::Equip, "Bonesplitter", 2, 9), ActOn(K::Equip, "Bonesplitter", 3, 9),
@@ -376,4 +417,103 @@ TEST_CASE("human sequence: each Land's Edge step NAMES the land it discards")
     CHECK(p.actions[0].discard_name.str() == "Mountain");
     CHECK(p.actions[1].discard_name.str() == "Forest");
     CHECK(p.human_land_step == 1);
+}
+
+// ---- THIRD REVIEW 2026-10-22: actions a token claims WITHOUT a step of its own -------------------
+
+TEST_CASE("human sequence: a MANA sac outlet's clicks are payment, never steps")
+{
+    // USER 2026-10-22: Skirk Prospector's sacrifices are MANA -- they belong to the payment. One plan
+    // action carries both (sac_count 2); the two `sacout=` clicks claim nothing as steps, and the action
+    // stays implicit (run before the first step, so its {R}{R} pays for the casts that need it).
+    Action burst = ActOn(K::SacForMana, "Skirk Prospector", 3);
+    burst.sac_count = 2;
+    TurnSolver::Plan p = PlanOf("", { burst, Act(K::CastFromHand, "Krenko, Mob Boss") });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "sacout=Skirk Prospector", "sacout=Skirk Prospector",
+                                           "cast=Krenko, Mob Boss" }, nullptr, &errors);
+    CHECK(errors.empty());
+    CHECK(p.human_seq_len == 1);
+    CHECK(Names(p) == std::vector<std::string>{ "Krenko, Mob Boss", "Skirk Prospector" });
+    CHECK(p.actions[1].sac_count == 2);
+}
+
+TEST_CASE("human sequence: two single activations of a NON-mana outlet are two steps")
+{
+    Action one = ActOn(K::SacCreatureOutlet, "Carrion Feeder", 4);
+    one.sac_count = 1;
+    TurnSolver::Plan r = PlanOf("", { one, one });
+    std::vector<std::string> e3;
+    TurnSolver::ApplyHumanSequencePin(r, { "sacout=Carrion Feeder", "sacout=Carrion Feeder" }, nullptr, &e3);
+    CHECK(e3.empty());
+    CHECK(r.human_seq_len == 2);
+    // ...and a third click has nothing left to claim.
+    TurnSolver::Plan q = PlanOf("", { one, one });
+    std::vector<std::string> e2;
+    TurnSolver::ApplyHumanSequencePin(q, { "sacout=Carrion Feeder", "sacout=Carrion Feeder",
+                                           "sacout=Carrion Feeder" }, nullptr, &e2);
+    CHECK(e2.size() == 1);
+}
+
+TEST_CASE("human sequence: a sac LOOP absorbs any number of clicks (its K is the variant's)")
+{
+    Action loop = ActOn(K::SacCreatureOutlet, "Carrion Feeder", 4);
+    loop.sac_count = 8;
+    TurnSolver::Plan p = PlanOf("", { loop });
+    std::vector<std::string> tokens(11, "sacout=Carrion Feeder");
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, tokens, nullptr, &errors);
+    CHECK(errors.empty());
+    CHECK(p.human_seq_len == 1);
+}
+
+TEST_CASE("human sequence: cast=Remand claims the Remand riding on the cast it counters")
+{
+    Action ponder = Act(K::CastFromHand, "Ponder");
+    ponder.remand_by = "Remand";
+    TurnSolver::Plan p = PlanOf("", { ponder });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "cast=Ponder", "cast=Remand" }, nullptr, &errors);
+    CHECK(errors.empty());
+    CHECK(p.human_seq_len == 1);
+    // ...once: a second Remand has no rider left to claim.
+    TurnSolver::Plan q = PlanOf("", { ponder });
+    std::vector<std::string> e2;
+    TurnSolver::ApplyHumanSequencePin(q, { "cast=Ponder", "cast=Remand", "cast=Remand" }, nullptr, &e2);
+    CHECK(e2.size() == 1);
+}
+
+TEST_CASE("human sequence: EVERY action kind is claimable by the token the viewer writes for it")
+{
+    // TurnSolver::HumanStepVerbFor is one entry per kind behind a static_assert on the enum's end, so a
+    // new kind cannot reach a "**" line without a verb; this claims one action of every kind through it,
+    // so a verb that does not actually claim its kind (the orphan rule would drop it) fails here.
+    for (int ki = 0; ki <= static_cast<int>(K::AuraSwap); ++ki)
+    {
+        const K k = static_cast<K>(ki);
+        const std::string verb = TurnSolver::HumanStepVerbFor(k);
+        CAPTURE(ki);
+        CAPTURE(verb);
+        if (verb.empty())
+        {
+            CHECK((k == K::DigDraw || k == K::ComboRoute || k == K::PlayLand || k == K::SacForMana));
+            if (k == K::SacForMana)
+            {
+                // MANA: never a step, never an orphan -- an unclaimed one stays in the plan, implicit.
+                TurnSolver::Plan p = PlanOf("", { Act(k, "X") });
+                std::vector<std::string> errors;
+                TurnSolver::ApplyHumanSequencePin(p, {}, nullptr, &errors);
+                CHECK(errors.empty());
+                CHECK(p.actions.size() == 1);
+            }
+            continue;
+        }
+        Action a = Act(k, "X");
+        if (k == K::DiscardToLandsEdge) { a.discard_lands = 1; }
+        TurnSolver::Plan p = PlanOf("", { a });
+        std::vector<std::string> errors;
+        TurnSolver::ApplyHumanSequencePin(p, { verb == "le" ? std::string("le=Mountain") : verb + "=X" }, nullptr, &errors);
+        CHECK(errors.empty());
+        CHECK(p.human_seq_len == 1);
+    }
 }

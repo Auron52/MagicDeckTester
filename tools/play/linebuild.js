@@ -503,7 +503,12 @@
   // equip-all host, `*<n>` a blink's count, `+kicked` / `+adventure` a cast's mode. The engine
   // (TurnSolver::ApplyHumanSequencePin) matches on all of it, and REFUSES a step that still could mean
   // two different plays rather than guess. No MTG card name contains '#', '@' or '*'.
+  // A MANA sac outlet's click (`sacMana`: Skirk Prospector, a Utopia Mycon's Saproling sac -- the engine's
+  // `sac_mana`) is a PAYMENT, not a step (USER 2026-10-22): it writes no token (null, filtered out by
+  // sequenceTokens) and counts as no step; its sacrifices pay for the casts that need them. The line
+  // string keeps its `sacout=` (CheckLine matches the plan with the burst by it).
   function sequenceToken(p) {
+    if (p && p.sacMana) return null;
     if (isPreTap(p)) return preTapToken(p);
     if (p.kind === 'land') return (p.fromTop ? 'landtop=' : 'land=') + p.name;
     if (p.kind === 'le') return 'le=' + p.name;
@@ -519,7 +524,7 @@
          + (p.kicked ? '+kicked' : '')
          + (p.adventure ? '+adventure' : '');
   }
-  function sequenceTokens(seg) { return (seg || []).map(sequenceToken); }
+  function sequenceTokens(seg) { return (seg || []).map(sequenceToken).filter(t => t != null); }
 
   // ONE-AT-A-TIME PICKS IN THE ORDER THEY WERE CLICKED (cleanup discard, London bottoming; USER
   // 2026-10-22: "The viewer should use exactly the order I give."). The engine asks one decision per
@@ -539,7 +544,7 @@
   }
   // How many STEPS a segment holds (every entry but a manual tap, which is a payment, not a step). The
   // viewer pins a segment of two or more: a single step has no order to keep.
-  function sequenceSteps(seg) { return (seg || []).filter(p => !isPreTap(p)).length; }
+  function sequenceSteps(seg) { return (seg || []).filter(p => !isPreTap(p) && !p.sacMana).length; }
   // Does a committing segment carry a "**" pin? Two or more steps (an order to keep), or a manual tap
   // (a payment with a position). index.html adds the continuation's `need=` on top.
   function sequencePinned(seg) { return sequenceSteps(seg) >= 2 || (seg || []).some(isPreTap); }
@@ -686,6 +691,16 @@
       // A queued land drop consumes a land that can no longer feed Land's Edge -> trim excess.
       while (leCount(plan) > leMax(decision, plan)) { const i = plan.map(p => p.kind).lastIndexOf('le'); if (i < 0) break; plan.splice(i, 1); }
     } else {
+      // A SUSPEND-ONLY card (Lotus Bloom: no mana cost; the engine stamps `suspend_only` on the hand
+      // card) cannot be cast, only suspended (USER 2026-10-22), so every play of its thumb -- click,
+      // double-click, drag -- queues the SUSPEND, exactly as its badge does. It used to queue a plain
+      // `cast=`, which the "**" sequence could not match to the card's only action.
+      const hc = ((decision && decision.me && decision.me.hand) || []).find(c => c.name === name);
+      if (hc && hc.suspend_only) {
+        const n = plan.filter(p => p.kind === 'suspend' && p.name === name).length;
+        if (n < castableCount(decision, name)) plan.push({ name, kind: 'suspend' });
+        return plan;
+      }
       if (plannedCount(plan, name) < castableCount(decision, name)) plan.push({ name, kind });
     }
     return plan;

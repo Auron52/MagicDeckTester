@@ -1,0 +1,45 @@
+{
+  "_comment": "THIRD REVIEW 2026-10-22, kind coverage: Cid's graveyard return (gyreturn=, whose LINE value names the returned card) is claimed by its \"**\" step naming the SOURCE, `gyreturn=Cid, Freeflier Pilot` -- one of the verbs whose token names the action's card rather than the line value.",
+  "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "max_turns": 5,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Cid, Freeflier Pilot",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Plains"
+  ],
+  "graveyard": [
+    "Colossus Hammer",
+    "Bone Saw",
+    "Plains"
+  ],
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 200,
+  "validate_line": "land=Plains;gyreturn=Colossus Hammer;seq=land=Plains|gyreturn=Cid, Freeflier Pilot",
+  "expect_verdict": "accept",
+  "lands_played_this_turn": 0,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  }
+}

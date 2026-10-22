@@ -1237,6 +1237,12 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0);
         os << ", \"kind\": \"" << HandKind(d) << "\"";
         if (HandIsDraw(d)) { os << ", \"is_draw\": true"; }
+        // `suspend_only`: a suspend card with no mana cost (Lotus Bloom) cannot be CAST, only suspended
+        // (USER 2026-10-22), so the viewer turns any play of its thumb into the suspend
+        // (linebuild.js queueCard) -- the same "castable only if it has a mana cost" test CheckLine's
+        // legacy by-name suspend rule uses, so a recorded `cast=Lotus Bloom` line still validates.
+        if (d && d->params.suspend_time_counters > 0 && d->card.m_mana_cost.ManaValue() == 0)
+        { os << ", \"suspend_only\": true"; }
         // is_creature lets the GUI offer an Aether Vial deploy (a creature whose MV equals a
         // Vial's charge counters can be put onto the battlefield for free).
         if (d && d->card.IsCreature()) { os << ", \"is_creature\": true"; }
@@ -2449,7 +2455,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // line could never match a plan and every Minotaur pump read as a reject.
                 if (ac.kind == Action::Kind::SacForMana
                  || ac.kind == Action::Kind::SacCreatureOutlet)
-                { os << ", \"sacout\": true, \"sac_count\": " << std::max(1, ac.sac_count); }
+                {
+                    os << ", \"sacout\": true, \"sac_count\": " << std::max(1, ac.sac_count);
+                    // `sac_mana` = this outlet's sacrifices are MANA (SacForMana -- Skirk Prospector, a
+                    // Utopia Mycon's Saproling sac), USER 2026-10-22: they belong to the payment, not to
+                    // the order, so the viewer writes no "**" step for them (linebuild.js sequenceToken)
+                    // and the engine runs the action where the line's payments need it. A non-mana
+                    // outlet (Carrion Feeder, SacCreatureOutlet) carries no flag: its clicks are steps.
+                    if (ac.kind == Action::Kind::SacForMana) { os << ", \"sac_mana\": true"; }
+                }
                 // `act_label` = what THIS activation does, in words. USER-REPORTED 2026-09-25:
                 // "How can I activate the remove counters ability on Utopia Mycon or Deathspore
                 // Thallid? ... The choice is not given when both are available."

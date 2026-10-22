@@ -1,0 +1,52 @@
+{
+  "deck": "decks/Goblins/Goblins.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Skirk Prospector",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Goblin Guide",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Goblin Guide",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Krenko, Mob Boss"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "validate_line": "sacout=Skirk Prospector;sacout=Skirk Prospector;cast=Krenko, Mob Boss;seq=sacout=Skirk Prospector|sacout=Skirk Prospector|cast=Krenko, Mob Boss",
+  "expect_verdict": "accept",
+  "comment": "THIRD REVIEW 2026-10-22 item 1 (reviewer repro skirk_seq) + USER ruling: Skirk Prospector 'sacrifice two Goblins', then Krenko. Skirk's sacrifices are MANA, so they belong to the payment, not the order: its `sacout=` clicks are no \"**\" steps (the viewer writes none for a `sac_mana` outlet; an older sequence that still carries them, as here, has them absorbed), and the plan's ONE SacForMana burst (sac_count 2) stays implicit -- run before the first step, so its {R}{R} pays for Krenko. It was Illegal under its sequence ('matches nothing')."
+}

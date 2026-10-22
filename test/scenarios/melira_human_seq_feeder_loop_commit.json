@@ -1,0 +1,67 @@
+{
+  "deck": "decks/Melira Pod/Melira Pod.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Melira, Sylvok Outcast",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Kitchen Finks",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Carrion Feeder",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;sacout=Carrion Feeder;seq=sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder|sacout=Carrion Feeder"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder",
+      "sacout=Carrion Feeder"
+    ]
+  ],
+  "expect_history_lacks": [
+    "NOT applied"
+  ],
+  "expect_win_turn": 5,
+  "comment": "THIRD REVIEW 2026-10-22 item 1, the commit: the same eleven Carrion Feeder clicks committed under the \"**\" pin. The loop and the single sac are both claimed (nothing reported as NOT applied), the persist loop runs and the grown Feeder kills on T5."
+}

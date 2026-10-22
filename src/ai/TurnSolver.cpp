@@ -52811,8 +52811,18 @@ static HumanStepToken ParseHumanStepToken(const std::string& tok)
     return t;
 }
 
-// Are two permanents indistinguishable but for their number (same card, same state, same counters,
-// nothing attached that the other lacks)? Then which of the two a step uses is not a choice.
+// Are two permanents indistinguishable but for their number? Then which of the two a step uses is not
+// a choice. CONSERVATIVE BY CONSTRUCTION (third review, 2026-10-22): EVERY per-object field of Card and
+// Permanent that can affect play is compared -- the printed card (name, types, colours, keywords, P/T --
+// a token's P/T lives here --, cost, subtypes, a copy's printed name), every status flag (tapped, sick,
+// the temporary haste / lifelink / double strike / conditional haste, exile-at-end, skip-untap, gained
+// control, the once-per-turn usage flags, echo, storage hold, the colour / keyword / subtype choices,
+// pairing), the damage and pumps, every counter (the CounterList's CONTENTS, not just its size, and every
+// named counter field), the links (attached-to, linked exile) -- and anything attached to either one
+// makes them distinct. A false "not twins" only costs a refusal message; a false twin plays the wrong
+// permanent. Only the identity itself (m_number, the name hash derived from the name) and the token's
+// provenance (created_by_number: which permanent made it, read by no effect a twin swap could change)
+// are left out.
 static bool HumanTwinPermanents(const GameState* state, int x, int y)
 {
     if (x == y) { return true; }
@@ -52824,24 +52834,59 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
     {
         if (p.card.m_number == x) { px = &p; }
         if (p.card.m_number == y) { py = &p; }
-        if (p.equipped_to == x || p.aura_attached_to == x) { ++ax; }
-        if (p.equipped_to == y || p.aura_attached_to == y) { ++ay; }
+        if (p.equipped_to == x || p.aura_attached_to == x || p.paired_with == x) { ++ax; }
+        if (p.equipped_to == y || p.aura_attached_to == y || p.paired_with == y) { ++ay; }
     }
-    if (px == nullptr || py == nullptr) { return false; }
+    if (px == nullptr || py == nullptr || ax != 0 || ay != 0) { return false; }
     const Permanent& a = *px;
     const Permanent& b = *py;
-    return a.card.m_name == b.card.m_name && a.controller_index == b.controller_index
-        && a.tapped == b.tapped && a.entered_this_turn == b.entered_this_turn && a.is_token == b.is_token
-        && a.is_animated == b.is_animated && a.damage == b.damage
+    const Card& ca = a.card;
+    const Card& cb = b.card;
+    if (!(ca.m_name == cb.m_name && ca.m_type_mask == cb.m_type_mask && ca.m_supertype_mask == cb.m_supertype_mask
+          && ca.m_color_mask == cb.m_color_mask && ca.m_keyword_mask == cb.m_keyword_mask
+          && ca.m_power == cb.m_power && ca.m_toughness == cb.m_toughness && ca.m_mana_cost == cb.m_mana_cost
+          && ca.m_is_staged == cb.m_is_staged && ca.m_impulse_no_land == cb.m_impulse_no_land
+          && ca.m_staged_expiry == cb.m_staged_expiry))
+    { return false; }
+    {
+        auto ia = ca.m_subtypes.begin();
+        auto ib = cb.m_subtypes.begin();
+        for (; ia != ca.m_subtypes.end() && ib != cb.m_subtypes.end(); ++ia, ++ib) { if (!(*ia == *ib)) { return false; } }
+        if (ia != ca.m_subtypes.end() || ib != cb.m_subtypes.end()) { return false; }
+    }
+    if (a.counters.size() != b.counters.size()) { return false; }
+    for (std::size_t i = 0; i < a.counters.size(); ++i)
+    {
+        if (a.counters[i].type != b.counters[i].type || a.counters[i].count != b.counters[i].count) { return false; }
+    }
+    return a.controller_index == b.controller_index && a.owner_index == b.owner_index
+        && a.tapped == b.tapped && a.def_absent == b.def_absent && a.is_token == b.is_token
+        && a.entered_this_turn == b.entered_this_turn && a.fresh_hold_exempt == b.fresh_hold_exempt
+        && a.gained_control_this_turn == b.gained_control_this_turn
+        && a.marked_for_destruction == b.marked_for_destruction && a.is_animated == b.is_animated
+        && a.animated_printed_types == b.animated_printed_types && a.temp_haste == b.temp_haste
+        && a.temp_lifelink == b.temp_lifelink && a.temp_double_strike == b.temp_double_strike
+        && a.skip_next_untap == b.skip_next_untap && a.etb_tap_pending == b.etb_tap_pending
+        && a.exile_at_end == b.exile_at_end && a.pay_sac_eaten == b.pay_sac_eaten
+        && a.mana_tap_mark == b.mana_tap_mark && a.echo_resolved == b.echo_resolved
+        && a.storage_hold_this_turn == b.storage_hold_this_turn
+        && a.loyalty_activated_this_turn == b.loyalty_activated_this_turn
+        && a.colored_cast_lifegain_used_this_turn == b.colored_cast_lifegain_used_this_turn
+        && a.storied_draw_used_this_turn == b.storied_draw_used_this_turn
+        && a.once_per_turn_used == b.once_per_turn_used && a.cond_haste == b.cond_haste
+        && a.lifegain_counters_used_this_turn == b.lifegain_counters_used_this_turn
+        && a.chosen_color == b.chosen_color && a.garth_chosen_mask == b.garth_chosen_mask
+        && a.chosen_keyword_mask == b.chosen_keyword_mask && a.chosen_subtype_id == b.chosen_subtype_id
+        && a.paired_with == b.paired_with && a.damage == b.damage
         && a.temp_power_bonus == b.temp_power_bonus && a.temp_tough_bonus == b.temp_tough_bonus
         && a.equipped_to == b.equipped_to && a.aura_attached_to == b.aura_attached_to
+        && a.pending_death_trigger == b.pending_death_trigger
         && a.charge_counters == b.charge_counters && a.verse_counters == b.verse_counters
         && a.lore_counters == b.lore_counters && a.storage_counters == b.storage_counters
         && a.loyalty == b.loyalty && a.ice_counters == b.ice_counters && a.age_counters == b.age_counters
         && a.spore_counters == b.spore_counters && a.fade_counters == b.fade_counters
         && a.quest_counters == b.quest_counters && a.hone_counters == b.hone_counters
-        && a.counters.size() == b.counters.size()
-        && a.loyalty_activated_this_turn == b.loyalty_activated_this_turn && ax == ay && ax == 0;
+        && a.linked_exile_number == b.linked_exile_number && a.copy_printed_name == b.copy_printed_name;
 }
 
 // A card the human plays from HAND or the GRAVEYARD (not a permanent's ability): two copies of it are
@@ -52899,6 +52944,54 @@ static bool HumanStepAmbiguous(const HumanStepToken& st, const std::vector<std::
     return false;
 }
 
+// See the header. EVERY Action::Kind, and the token the viewer writes for it (so no kind can fall into the
+// orphan rule unnoticed: test_human_sequence_pin.cpp claims one action of every kind through its verb).
+const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
+{
+    using K = Action::Kind;
+    // A NEW KIND fails this assert: give it its verb below, or it is an orphan in every "**" line.
+    static_assert(static_cast<int>(K::AuraSwap) == 32, "Action::Kind changed: update HumanStepVerbFor");
+    switch (k)
+    {
+        case K::CastFromHand:           return "cast";
+        case K::CastFromGraveyard:      return "retrace";
+        case K::ActivateVial:           return "vial";
+        case K::DiscardToLandsEdge:     return "le";
+        case K::Suspend:                return "suspend";
+        case K::Channel:                return "channel";
+        case K::Eternalize:             return "eternalize";
+        case K::SacForMana:             return "";         // MANA: payment, never a step (USER ruling)
+        case K::SacCreatureOutlet:      return "sacout";
+        case K::TapForTokens:
+        case K::GarthActivate:
+        case K::ActivateLoyalty:
+        case K::Equip:
+        case K::GraveyardReturnAbility:
+        case K::GraveyardPlayAbility:
+        case K::GraveyardExileAbility:
+        case K::AttachAllEquipment:
+        case K::PutFromHandAbility:
+        case K::JitteModeAbility:
+        case K::ActivateRevealTop:
+        case K::ActivatePump:
+        case K::AnimateLand:
+        case K::TapForTokenPay:
+        case K::UntapCreature:
+        case K::ActivateBlink:
+        case K::ActivatePermAbility:
+        case K::ActivatePod:
+        case K::GraveyardExileGrow:
+        case K::AttachAllFreeEquipment:
+        case K::AuraSwap:               return "act";      // (or its own board verb: equip=, blink=, ...)
+        // Never a step of a "**" line: a dig is committed alone (fireDig clears the queue), the COMBO OFF
+        // route alone (its button), and a PlayLand action exists only in breakpoint records.
+        case K::DigDraw:
+        case K::ComboRoute:
+        case K::PlayLand:               return "";
+    }
+    return "";
+}
+
 // See the header. THE IMPLICIT-ACTION RULE (an action of the matched plan that no queued step names --
 // in practice a self-sacrifice mana source the viewer deliberately does not offer as a click, Dwarven
 // Ruins / Lotus Bloom / an Eldrazi Spawn, which CheckLine matches implicitly; or the units of a Land's
@@ -52915,6 +53008,26 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
     const std::vector<Action> src = plan.actions;
     std::vector<char> used(src.size(), 0);
     std::vector<char> refused(src.size(), 0);   // candidates of a refused (ambiguous) step: never run
+    // SACRIFICE OUTLETS (USER rulings 2026-10-22).
+    //   * A MANA outlet's sacrifices are MANA (Skirk Prospector, "Sacrifice a Goblin: Add {R}" --
+    //     Action::Kind::SacForMana): they belong to the payment, like every other sac-for-mana source,
+    //     not to the order. A `sacout=` click naming one is a payment instruction, never a step: the
+    //     action stays implicit and runs before the first step, so its mana is there for the casts that
+    //     need it (the viewer writes no such token any more; one from an older queue is absorbed here).
+    //   * A NON-mana outlet (Melira's Carrion Feeder -- SacCreatureOutlet) is a real action, and ONE plan
+    //     action can carry several sacrifices (Action::sac_count; the Melira loop folds eleven clicks into
+    //     one demand-driven loop) while the viewer queues one `sacout=` per creature clicked. The FIRST
+    //     click claims the action as a step; every further click of the same source claims one more of its
+    //     units and is NOT a step of its own -- the whole burst runs at its first click's position. It is
+    //     not split: the engine pays and resolves it as one activation (one payment for the lot, one
+    //     combined payload; a loop recurses through its own fodder), so per-click pieces would change what
+    //     the action is. A LOOP (sac_count >= 2) absorbs any number of clicks: how many loops is the
+    //     variant's own "loops xK" choice (CheckLine's loop-count fold), never the click count.
+    std::vector<int> burst_left(src.size(), 0);
+    // A REMAND rides on the cast it counters (Action::remand_by) and has no action of its own; the
+    // human's `cast=Remand` claims that rider -- it resolves where it really does, with the countered
+    // spell's cast -- and is not a step of its own.
+    std::vector<char> rider_claimed(src.size(), 0);
     std::vector<Action> seq;
     seq.reserve(src.size());
     const bool has_land = plan.land_decided && !plan.land_to_play.empty();
@@ -52970,6 +53083,16 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
         }
         // Every unused action this step can mean: the verb's KIND, the card, and every identifying
         // detail the token carries (WHICH permanent, WHICH host / target, the count, kicked, adventure).
+        if (st.verb == "sacout")
+        {
+            bool mana = false;
+            for (std::size_t i = 0; i < src.size() && !mana; ++i)
+            {
+                mana = src[i].kind == Action::Kind::SacForMana
+                    && (HumanStepMatches(st, src[i], state, false) || HumanStepMatches(st, src[i], state, true));
+            }
+            if (mana) { continue; }   // payment, not a step: the SacForMana action stays implicit
+        }
         // (Exact permanents first; an indistinguishable twin of a stated permanent only when no action
         // names the exact one.)
         std::vector<std::size_t> cands;
@@ -52981,6 +53104,32 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
                 if (HumanStepMatches(st, src[i], state, pass == 1)) { cands.push_back(i); }
             }
         }
+        // A further click of a non-mana outlet whose every own action is already claimed: one more unit of
+        // the LOOP its first click claimed (a click first claims any separate action of the source still
+        // unclaimed -- the Melira plan holds the loop AND a single sac -- and only then folds into the loop).
+        if (cands.empty() && st.verb == "sacout")
+        {
+            bool absorbed = false;
+            for (std::size_t i = 0; i < src.size() && !absorbed; ++i)
+            {
+                if (used[i] == 0 || burst_left[i] == 0) { continue; }
+                if (!HumanStepMatches(st, src[i], state, false) && !HumanStepMatches(st, src[i], state, true)) { continue; }
+                if (burst_left[i] > 0) { --burst_left[i]; }
+                absorbed = true;
+            }
+            if (absorbed) { continue; }
+        }
+        if (cands.empty() && (st.verb == "cast" || st.verb.empty()))
+        {
+            bool rider = false;
+            for (std::size_t i = 0; i < src.size() && !rider; ++i)
+            {
+                if (rider_claimed[i] != 0 || src[i].remand_by.empty() || src[i].remand_by.str() != st.name) { continue; }
+                rider_claimed[i] = 1;
+                rider = true;
+            }
+            if (rider) { continue; }
+        }
         if (cands.empty())
         { fail("queued step '" + tok + "' matches nothing in the committed plan -- it was NOT applied"); continue; }
         if (HumanStepAmbiguous(st, cands, src, state))
@@ -52991,6 +53140,14 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
             continue;
         }
         used[cands[0]] = 1;
+        {
+            const Action& ca = src[cands[0]];
+            if (ca.kind == Action::Kind::SacCreatureOutlet)
+            {
+                const bool loop = ca.sac_count >= 2;
+                burst_left[cands[0]] = loop ? -1 : 0;   // -1 = absorbs any number of further clicks
+            }
+        }
         seq.push_back(src[cands[0]]);
         ++steps;
     }
@@ -57763,6 +57920,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const bool self_reporting = a.kind == Action::Kind::CastFromHand
                         || a.kind == Action::Kind::CastFromGraveyard || a.kind == Action::Kind::DiscardToLandsEdge
                         || a.kind == Action::Kind::Equip;
+                    // An equip with no Equipment id (cast-and-equip from hand) is judged by COUNT: one more
+                    // copy of it on its host than before -- a second copy already there must not hide a
+                    // failed equip.
+                    auto attached_copies = [&]() {
+                        int n = 0;
+                        for (const Permanent& bp : state.battlefield)
+                        { if (bp.card.m_name == a.card_name && bp.equipped_to == aimed) { ++n; } }
+                        return n;
+                    };
+                    const int copies_before = (a.kind == Action::Kind::Equip && aimed > 0 && a.sac_source_id <= 0)
+                        ? attached_copies() : 0;
                     const std::uint64_t fp_before = (step_watch && !self_reporting) ? step_fp() : 0;
                     bool did = true;
                     if (is_put(a))
@@ -57866,12 +58034,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (did && a.kind == Action::Kind::Equip && aimed > 0 && !bp_truncate)
                     {
                         bool attached = false;
-                        for (const Permanent& bp : state.battlefield)
+                        if (a.sac_source_id > 0)
                         {
-                            const bool is_it = a.sac_source_id > 0 ? bp.card.m_number == a.sac_source_id
-                                                                   : bp.card.m_name == a.card_name;
-                            if (is_it && bp.equipped_to == aimed) { attached = true; break; }
+                            for (const Permanent& bp : state.battlefield)
+                            { if (bp.card.m_number == a.sac_source_id && bp.equipped_to == aimed) { attached = true; break; } }
                         }
+                        else { attached = attached_copies() > copies_before; }
                         if (!attached)
                         { report_step_fail(step_desc, "it did not attach to its host at this point of your order (unpaid, or no legal host)"); }
                     }

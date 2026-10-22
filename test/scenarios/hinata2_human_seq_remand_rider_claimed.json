@@ -1,0 +1,55 @@
+{
+  "deck": "decks/Hinata2/Hinata2.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Ponder",
+    "Remand"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "human_lines": [
+    "cast=Ponder;cast=Remand;seq=cast=Ponder|cast=Remand"
+  ],
+  "expect_no_win": true,
+  "expect_human_summary_contains": "Ponder + Remand on it (back to hand; draw a card)",
+  "expect_history_contains": [
+    "Remand targets Ponder -- countered, back to hand; draw a card"
+  ],
+  "comment": "THIRD REVIEW 2026-10-22 item 2 (reviewer repro remand_seq): `cast=Ponder;cast=Remand` with its \"**\" sequence. Remand has no action of its own -- it rides on the cast it counters (Action::remand_by) -- so the `cast=Remand` step matched nothing and the line was Illegal. The step now claims the rider; it resolves where it really does, with Ponder's cast. (Same rider in Hinata2, NivMizzetCombo, Unpredictable Cyclone.)",
+  "human_cast_orders": [
+    [
+      "**",
+      "cast=Ponder",
+      "cast=Remand"
+    ]
+  ],
+  "expect_history_lacks": [
+    "NOT applied"
+  ]
+}

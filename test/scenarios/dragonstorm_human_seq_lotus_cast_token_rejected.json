@@ -1,0 +1,31 @@
+{
+  "deck": "decks/Dragonstorm/Dragonstorm.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Lightning Bolt",
+    "Lotus Bloom"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "comment": "THIRD REVIEW 2026-10-22 item 3 + USER ruling: Lotus Bloom (any suspend-only card) is NOT castable without suspend. The engine adds no cast=->Suspend match: a `cast=Lotus Bloom` step is rejected with its reason. The VIEWER no longer writes one -- the hand card carries `suspend_only` and every play of its thumb queues the suspend (linebuild.js queueCard; dragonstorm_human_seq_suspend_after_cast is that line). A recorded legacy `cast=Lotus Bloom` line without a sequence still validates through CheckLine's by-name rule, unchanged.",
+  "validate_line": "cast=Lightning Bolt;cast=Lotus Bloom;seq=cast=Lightning Bolt|cast=Lotus Bloom",
+  "expect_verdict": "illegal"
+}

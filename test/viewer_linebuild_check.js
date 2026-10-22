@@ -933,6 +933,30 @@ function checkSequenceTokens() {
   if (LB.validationLine(tapped) !== 'tap=Forest#3:G;cast=Llanowar Elves;seq=tap=Forest#3:G|cast=Llanowar Elves')
     fails.push(`validationLine(tap + one step) -> ${LB.validationLine(tapped)}`);
   if (LB.validationLine([]) !== 'pass') fails.push(`validationLine([]) -> ${LB.validationLine([])}`);
+  // A MANA sac outlet's clicks (`sacMana`, the engine's `sac_mana`: Skirk Prospector) are payment, not
+  // steps (USER 2026-10-22): no token, no step; the line keeps its `sacout=` for CheckLine.
+  const skirk = { name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', verb: 'sacout', sacout: true, sacMana: true };
+  const sk = [skirk, Object.assign({}, skirk), { name: 'Krenko, Mob Boss', kind: 'permanent' }];
+  if (!eq(LB.sequenceTokens(sk), ['cast=Krenko, Mob Boss'])) fails.push(`mana sac tokens -> ${JSON.stringify(LB.sequenceTokens(sk))}`);
+  if (LB.sequenceSteps(sk) !== 1) fails.push(`mana sac steps -> ${LB.sequenceSteps(sk)}`);
+  if (LB.validationLine(sk) !== 'cast=Krenko, Mob Boss;sacout=Skirk Prospector;sacout=Skirk Prospector')
+    fails.push(`mana sac validationLine -> ${LB.validationLine(sk)}`);
+  // A NON-mana outlet's clicks (Carrion Feeder) stay steps.
+  const feeder = { name: 'Carrion Feeder', src: 'Carrion Feeder', kind: 'activate', verb: 'sacout', sacout: true };
+  if (!eq(LB.sequenceTokens([feeder, feeder]), ['sacout=Carrion Feeder', 'sacout=Carrion Feeder']))
+    fails.push('non-mana sac clicks must stay steps');
+  // A SUSPEND-ONLY card's thumb (Lotus Bloom, `suspend_only` on the hand card) queues the SUSPEND, never a
+  // cast -- it cannot be cast (USER 2026-10-22).
+  const dLotus = { me: { hand: [{ name: 'Lotus Bloom', num: 7, kind: 'permanent', suspend_only: true },
+                                { name: 'Lightning Bolt', num: 8, kind: 'nonpermanent' }] } };
+  let q = [];
+  q = LB.queueCard(dLotus, q, 'Lightning Bolt', 'nonpermanent');
+  q = LB.queueCard(dLotus, q, 'Lotus Bloom', 'permanent');
+  if (!eq(LB.sequenceTokens(q), ['cast=Lightning Bolt', 'suspend=Lotus Bloom']))
+    fails.push(`suspend-only thumb -> ${JSON.stringify(LB.sequenceTokens(q))}`);
+  if (LB.encodeLine(q) !== 'cast=Lightning Bolt;suspend=Lotus Bloom') fails.push(`suspend-only line -> ${LB.encodeLine(q)}`);
+  q = LB.queueCard(dLotus, q, 'Lotus Bloom', 'permanent');   // one copy: a second click queues nothing more
+  if (q.filter(p => p.name === 'Lotus Bloom').length !== 1) fails.push('suspend-only thumb over-queued');
   // ...and the continuation's `need=` the commit pin carries rides the previewed sequence too.
   if (LB.validationLine(one, 'need=G') !== 'cast=Sol Ring;seq=cast=Sol Ring|need=G')
     fails.push(`validationLine(one step + need) -> ${LB.validationLine(one, 'need=G')}`);

@@ -1408,6 +1408,8 @@ function activatableSources(){
                                                    || (a.sacout ? ('sacrifice ' + (a.sac_count||1)
                                                         + ' for mana') : null)),
                                          sacout:!!a.sacout,
+                                         // a MANA sac outlet: its clicks are payment, not "**" steps
+                                         sacMana:!!a.sac_mana,
                                          makesClue:!!a.makes_clue,
                                          blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
                                          blinkCount:(a.verb==='blink' ? (a.blink_count||1) : undefined),
@@ -1731,6 +1733,7 @@ function queueActivation(src, opt, clickedNum){
   const srcNum = actionSourceNum(src, clickedNum);
   S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
                 mode:opt.mode, sacout: sac || undefined, srcNum: srcNum || undefined,
+                sacMana: (sac && opt.sacMana) || undefined,
                 // Stackable: repeats of this entry commit as their own consecutive segments.
                 repeatable: opt.repeatable || undefined,
                 // The blinked creature's m_number, so the line can write `blink=<outlet>@<num>` and

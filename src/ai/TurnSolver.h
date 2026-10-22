@@ -2751,6 +2751,10 @@ public:
     // combat): erase actions[q] and keep human_seq_len, human_land_step and the pre-tap positions
     // naming the same steps. Plain erase for every other plan.
     static void EraseHumanSequenceAction(Plan& plan, std::size_t q);
+    // The verb the viewer's "**" token writes for an action of kind `k` ("" = never a step of a "**"
+    // line: a dig, the COMBO OFF route, a breakpoint-only PlayLand). One entry per kind, guarded by a
+    // static_assert, so a new kind cannot silently fall into the orphan rule.
+    static const char* HumanStepVerbFor(Action::Kind k);
     // Plan::land_search_act_slot support (shared by ApplyPlanDirect and AIEngine::TakeTurn, so the
     // two worlds apply the positioned land-search activations through ONE body): is `a` a land-search
     // activation; apply every such action of `acts` now (live source, {T} first, shared payer,
