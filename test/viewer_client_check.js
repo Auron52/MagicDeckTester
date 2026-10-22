@@ -1822,8 +1822,10 @@ async function testKarooFloatWildGrowth() {
 // with no explanation or error"). Board: two Azorius Chanceries ({W}{U} each), Somberwald Sage
 // (creature-only), Razorverge Thicket played. Wish {G}{W} first floats a Chancery's {U} into Bruna
 // {3}{W}{W}{U}; Bruna first leaves the Wish without a {W}.
-//   A. Queued "Bruna, then Glittering Wish" (the click order the user used): the engine plays the
-//      order that pays (the cast-order fallback, AIEngine) and the history says so -- no rollback.
+//   A. Queued "Bruna, then Glittering Wish" (the click order the user used): REJECTED with its reason,
+//      nothing committed (USER 2026-10-22: "You should reject it in that case. The user should make
+//      their line playable." -- it used to be replayed in the engine's order); queued "Glittering Wish,
+//      then Bruna" it commits, Bruna resolves, and no order is changed behind the user's back.
 //   B. A line that DOES drop a cast, committed with "Commit turn": the rollback must keep the screen
 //      -- the reason shown, no auto-pass landing on top of it. step() used to call advanceTo (which
 //      fires Commit turn's un-awaited pass) BEFORE checking dropped_casts, so the pass moved the game
@@ -1843,7 +1845,7 @@ async function brunaT5(win) {
 async function testOneStepLineNoSilentRevert() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
-  // A. the user's click order commits, in the order that pays, and says so.
+  // A. the user's click order cannot pay: rejected with its reason, nothing committed.
   {
     const win = buildDom(); await settle(win);
     const d0 = await brunaT5(win);
@@ -1854,19 +1856,31 @@ async function testOneStepLineNoSilentRevert() {
     win.queueCard('Bruna, Light of Alabaster', 'permanent');
     win.queueCard('Glittering Wish', 'nonpermanent');
     await win.commitLine(); await settle(win);
-    for (let i = 0; i < 4 && st.decision && st.decision.type === 'tutor_etb'; i++) {
-      const d = st.decision;
-      const k = Math.max(0, (d.candidates || []).findIndex(c => c.name === 'Indrik Umbra'));
-      win.pushChoice(d, k, 'Glittering Wish: Indrik Umbra'); await settle(win);
-    }
     const d = st.decision || {};
-    const bf = ((d.me || {}).battlefield || []).map(p => p.name);
-    chk(st.choices.length > n0, 'the one-step line was rolled back (no choice survived the commit)');
+    chk(st.choices.length === n0, `an order that cannot pay was committed (${JSON.stringify(st.choices.slice(n0))})`);
+    chk(d.type === 'main_phase' && d.turn === 5 && d.phase === 'pre_main',
+        `after the rejection the game must wait on T5 pre_main, got ${d.type} T${d.turn} ${d.phase}`);
+    const ve = win.document.getElementById('verdict');
+    chk(ve && ve.style.display === 'block' && /cannot be paid at its position/.test(ve.textContent || ''),
+        `the rejection does not name the step that cannot be paid (verdict: "${ve && (ve.textContent || '').slice(0, 160)}")`);
+    // ...and queued in the order that pays, it commits as queued.
+    st.plan = [];
+    win.queueCard('Razorverge Thicket', 'land');
+    win.queueCard('Glittering Wish', 'nonpermanent');
+    win.queueCard('Bruna, Light of Alabaster', 'permanent');
+    await win.commitLine(); await settle(win);
+    for (let i = 0; i < 4 && st.decision && st.decision.type === 'tutor_etb'; i++) {
+      const dd = st.decision;
+      const k = Math.max(0, (dd.candidates || []).findIndex(c => c.name === 'Indrik Umbra'));
+      win.pushChoice(dd, k, 'Glittering Wish: Indrik Umbra'); await settle(win);
+    }
+    const d2 = st.decision || {};
+    const bf = ((d2.me || {}).battlefield || []).map(p => p.name);
+    chk(st.choices.length > n0, 'the paying order "Thicket; Glittering Wish; Bruna" was rolled back');
     chk(bf.includes('Bruna, Light of Alabaster'),
-        `Bruna is not on the battlefield after "Thicket; Bruna; Glittering Wish" (bf: ${bf.join(', ')})`);
-    // (A "**" line's fallback names the whole queued order: "your order (...) cannot pay ...".)
-    const said = (st.history || []).some(h => /your (cast )?order .*cannot pay/.test(h.label || ''));
-    chk(said, 'the history does not say the line was cast in a different order than queued');
+        `Bruna is not on the battlefield after "Thicket; Glittering Wish; Bruna" (bf: ${bf.join(', ')})`);
+    chk(!(st.history || []).some(h => /cannot pay/.test(h.label || '')),
+        'the paying order was reported as reordered');
   }
   // B. a real drop under Commit turn keeps its explanation on screen.
   {
@@ -2218,7 +2232,7 @@ async function testColorlessFirstTapOrder() {
     try { nsFails = await testOneStepLineNoSilentRevert(); }
     catch (e) { console.error(`✗ no silent revert: harness error: ${e.stack || e}`); process.exit(2); }
     if (nsFails.length) { anyFail = true; console.log(`✗ no silent revert: ${nsFails.length} fail`); nsFails.forEach(m => console.log('  - ' + m)); }
-    else { console.log('✓ no silent revert (Bruna s13 T5: "Bruna, Glittering Wish" commits in the order that pays and says so; a dropped line under Commit turn keeps its reason on screen)'); }
+    else { console.log('✓ no silent revert (Bruna s13 T5: "Bruna, Glittering Wish" is rejected with its reason, "Glittering Wish, Bruna" commits as queued; a dropped line under Commit turn keeps its reason on screen)'); }
   }
   for (const sc of SCENARIOS) {
     let res;
