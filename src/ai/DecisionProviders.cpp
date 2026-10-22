@@ -2174,7 +2174,7 @@ bool WolfRunFetchable(const GameState& s, int controller)
 
 // "OTHER THREATS" (the agent's reading of the USER's "if you don't have other threats", 2026-10-22 --
 // REPORTED, not confirmed): a creature we control, other than a Primeval Titan, with power >= 4 or a
-// landfall payoff that makes tokens or counters (Avenger, Baloths, Omnath, Phylath); a creature card in
+// landfall payoff that makes tokens or counters (Avenger, Baloths, Omnath, Phylath, Mossborn Hydra); a creature card in
 // hand of the same kind; or a Genesis Wave in hand. Read off params, never names. Titans are excluded
 // everywhere: the Titan whose trigger is resolving is the threat the pump would carry.
 bool IsTitanDef(const CardDefinition* d) { return d != nullptr && d->params.land_search_on_enter_or_attack; }
@@ -2182,7 +2182,7 @@ bool IsLandfallPayoffDef(const CardDefinition* d)
 {
     return d != nullptr && d->card.IsCreature()
         && (d->params.landfall_creates_tokens > 0 || d->params.landfall_counters_each > 0
-            || d->params.landfall_target_counters > 0);
+            || d->params.landfall_target_counters > 0 || d->params.landfall_double_self_counters);
 }
 bool HasOtherThreat(const GameState& s, int controller)
 {

@@ -392,6 +392,11 @@ TEST_CASE("Landfall Titan pick + Kessig Wolf Run: the Wolf Run pairs are admitte
         // ...and so does a power-4 creature CARD in hand, or a Genesis Wave in hand.
         GameState u = s; HandK(u, "Genesis Wave", 45);
         CHECK(LandSearchPicks(u, 0, ti).back() == wr_turf);
+        // A Mossborn Hydra is a landfall payoff even as a 0/0 card in hand or a 1/1 on the battlefield.
+        GameState h = s; HandK(h, "Mossborn Hydra", 46);
+        CHECK(LandSearchPicks(h, 0, ti).back() == wr_turf);
+        GameState hb = s; PutK(hb, "Mossborn Hydra", 7);
+        CHECK(LandSearchPicks(hb, 0, ti).back() == wr_turf);
         // A Titan is never the "other" threat.
         GameState w = s; PutK(w, "Primeval Titan", 6);
         CHECK(LandSearchPicks(w, 0, ti).front() == wr_turf);
