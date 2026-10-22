@@ -3262,7 +3262,8 @@ async function commitLine() {
   // queued, with its reason -- instead of the commit dropping it.
   const segs = LB.encodeSegments(S.plan);
   S.segmentsLeft = segs.length - 1;
-  const line = LB.validationLine(LB.segmentParts(S.plan)[0] || []);
+  const seg0 = LB.segmentParts(S.plan)[0] || [];
+  const line = LB.validationLine(seg0, segmentNeed(seg0));
   const res=await post('/api/validate', cfg({ line }));
   S.busy=false;
   if (res.kind==='validation') return handleVerdict(res, line);
@@ -3530,6 +3531,12 @@ function validationPlanView(v, idx) {
   const mp = (v && v.matched_plans) || [];
   return mp.find(p => p && p.index === idx) || null;
 }
+// The `need=<COLOURS>` token of a committing segment: the colours everything STILL QUEUED behind it
+// wants (docs/design/viewer-line-macros.md). ONE function for the commit's pin AND the validation's
+// `seq=`, so the order the validation previews is the pin the commit sends, token for token.
+function segmentNeed(seg){
+  return LB.untapNeedToken((S.plan||[]).filter(p => (seg||[]).indexOf(p) < 0), entryPips);
+}
 function applyAccepted(planIndex, label, planView) {
   // DISPLAY-ONLY RELABEL (USER 2026-09-05, seed 2: fifty-seven blink activations each logged as
   // "cast: Eldrazi Displacer"). The engine's summary uses one verb for the whole list, so a line
@@ -3611,7 +3618,7 @@ function applyAccepted(planIndex, label, planView) {
   // STILL QUEUED behind this segment wants, so an ETB untap inside this line can serve the next
   // iteration instead of raw yield. Rides the same list as the taps, for the same reasons.
   // Empty continuation -> empty token -> omitted.
-  const need = LB.untapNeedToken((S.plan||[]).filter(p => seg0.indexOf(p) < 0), entryPips);
+  const need = segmentNeed(seg0);
   const withNeed = a => need ? a.concat([need]) : a;
   if (dec0 && dec0.main_ordinal != null && (steps >= 2 || taps || need)) {
     coKey = String(dec0.main_ordinal);

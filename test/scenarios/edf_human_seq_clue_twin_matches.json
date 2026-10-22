@@ -1,0 +1,42 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "battlefield": [
+    {
+      "name": "Clue Token",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Clue Token",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Conservatory"
+  ],
+  "lands_played_this_turn": 0,
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "validate_line": "land=Conservatory;act=Clue Token;seq=act=Clue Token#2|land=Conservatory",
+  "expect_verdict": "accept",
+  "comment": "RE-REVIEW 2026-10-22 item C (reviewer repro clue_2): two identical Clue Tokens; the plan cracks Clue #1 and the human clicked Clue #2 (`act=Clue Token#2`). An exact `#src` match found nothing and the line was Illegal. A stated permanent now also matches an INDISTINGUISHABLE twin when no action names the exact one, so the line is accepted."
+}

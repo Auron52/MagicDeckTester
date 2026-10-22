@@ -250,8 +250,9 @@ TEST_CASE("human sequence: a step that could mean two different plays is REFUSED
     std::vector<std::string> errors;
     TurnSolver::ApplyHumanSequencePin(p, { "act=Krenko, Mob Boss" }, &s, &errors);
     REQUIRE(errors.size() == 1);
-    CHECK(errors[0].find("could mean 2 different plays") != std::string::npos);
+    CHECK(errors[0].find("could mean 2 different permanents") != std::string::npos);
     CHECK(p.human_seq_len == 0);
+    CHECK(p.actions.empty());   // and NEITHER candidate runs (re-review item D): no "unqueued" fallback
 
     // ...but two INDISTINGUISHABLE permanents are the same play: no choice, no error.
     s.battlefield.back().spore_counters = 0;
@@ -268,7 +269,8 @@ TEST_CASE("human sequence: an equip names its Equipment and its host")
     TurnSolver::Plan p = PlanOf("", { ActOn(K::Equip, "Bonesplitter", 2, 9), ActOn(K::Equip, "Bonesplitter", 3, 9),
                                       ActOn(K::Equip, "Bonesplitter", 3, 11) });
     std::vector<std::string> errors;
-    TurnSolver::ApplyHumanSequencePin(p, { "equip=Bonesplitter#3@11", "equip=Bonesplitter#2@9" }, nullptr, &errors);
+    TurnSolver::ApplyHumanSequencePin(p, { "equip=Bonesplitter#3@11", "equip=Bonesplitter#2@9", "equip=Bonesplitter#3@9" },
+                                      nullptr, &errors);
     CHECK(errors.empty());
     CHECK(p.actions[0].sac_source_id == 3);
     CHECK(p.actions[0].sac_victim_id == 11);
@@ -311,9 +313,57 @@ TEST_CASE("human sequence: an unmatched step is an ERROR, never an implicit acti
     TurnSolver::Plan p = PlanOf("Forest", { Act(K::CastFromHand, "A") });
     std::vector<std::string> errors;
     TurnSolver::ApplyHumanSequencePin(p, { "act=A", "cast=Nope", "land=Island" }, nullptr, &errors);
-    REQUIRE(errors.size() == 3);
+    REQUIRE(errors.size() == 4);
     CHECK(errors[0].find("matches nothing") != std::string::npos);    // act= is not a hand cast
     CHECK(errors[2].find("is not the committed plan's land") != std::string::npos);
+    // ...and the cast nobody claimed does NOT run after the last step as though it were unqueued.
+    CHECK(errors[3].find("is not in your queue -- it was NOT applied") != std::string::npos);
+    CHECK(p.actions.empty());
+}
+
+TEST_CASE("human sequence: hand copies differing only in the variant's sub-decisions are interchangeable")
+{
+    // Re-review item A: two Stoneforge Mystics whose plan variant fetches Jitte with one and Bonesplitter
+    // with the other. The token names the card, never the copy and never the fetch -- the human chose
+    // the fetches by choosing the variant -- so the steps take the plan's copies in order and nothing is
+    // refused (refusing them shrank the variant menu, 3 -> 2).
+    Action a = Act(K::CastFromHand, "Stoneforge Mystic");
+    a.tutor_target = "Umezawa's Jitte";
+    Action b = Act(K::CastFromHand, "Stoneforge Mystic");
+    b.tutor_target = "Bonesplitter";
+    Action x5 = Act(K::CastFromHand, "Fireball");
+    x5.chosen_x = 5;
+    Action x2 = Act(K::CastFromHand, "Fireball");
+    x2.chosen_x = 2;
+    TurnSolver::Plan p = PlanOf("", { a, b, x5, x2 });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "cast=Stoneforge Mystic", "cast=Fireball", "cast=Stoneforge Mystic",
+                                           "cast=Fireball" }, nullptr, &errors);
+    CHECK(errors.empty());
+    REQUIRE(p.actions.size() == 4);
+    CHECK(p.actions[0].tutor_target.str() == "Umezawa's Jitte");
+    CHECK(p.actions[1].chosen_x == 5);
+    CHECK(p.actions[2].tutor_target.str() == "Bonesplitter");
+    CHECK(p.actions[3].chosen_x == 2);
+}
+
+TEST_CASE("human sequence: a stated permanent matches its indistinguishable twin")
+{
+    // Re-review item C: two identical Clue Tokens; the plan cracks #1, the human clicked #2.
+    GameState s;
+    s.battlefield.push_back(PermOf("Clue Token", 1));
+    s.battlefield.push_back(PermOf("Clue Token", 2));
+    TurnSolver::Plan p = PlanOf("", { ActOn(K::ActivatePermAbility, "Clue Token", 1) });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "act=Clue Token#2" }, &s, &errors);
+    CHECK(errors.empty());
+    CHECK(p.human_seq_len == 1);
+    // ...but a DIFFERENT permanent is not a twin.
+    s.battlefield.back().tapped = true;
+    TurnSolver::Plan q = PlanOf("", { ActOn(K::ActivatePermAbility, "Clue Token", 1) });
+    std::vector<std::string> e2;
+    TurnSolver::ApplyHumanSequencePin(q, { "act=Clue Token#2" }, &s, &e2);
+    CHECK(e2.size() == 2);   // the step matches nothing, and the plan's crack of #1 is not run either
 }
 
 TEST_CASE("human sequence: each Land's Edge step NAMES the land it discards")

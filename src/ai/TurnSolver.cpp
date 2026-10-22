@@ -52811,27 +52811,6 @@ static HumanStepToken ParseHumanStepToken(const std::string& tok)
     return t;
 }
 
-// Can action `a` be the play step `st` names? The verb's kind, the card, and every detail the token
-// states. A cast's kicker / adventure mode is always stated (absent = not kicked, the creature half),
-// exactly as the line verbs treat them.
-static bool HumanStepMatches(const HumanStepToken& st, const Action& a)
-{
-    if (a.card_name.str() != st.name || !HumanVerbMatchesKind(st.verb, a.kind)) { return false; }
-    if (a.kind == Action::Kind::CastFromHand && (a.kicked != st.kicked || a.adventure != st.adventure))
-    { return false; }
-    if (st.src > 0 && a.sac_source_id != st.src) { return false; }
-    // `@` is the creature / land a CAST enchants or targets (an Aura dragged onto its host:
-    // Action::enchant_target), and the host / blinked creature of an ACTIVATION (sac_victim_id).
-    if (st.target > 0)
-    {
-        const int have = (a.kind == Action::Kind::CastFromHand) ? a.enchant_target : a.sac_victim_id;
-        if (have != st.target) { return false; }
-    }
-    if (st.count > 0 && a.kind == Action::Kind::ActivateBlink && std::max(1, a.chosen_x) != st.count)
-    { return false; }
-    return true;
-}
-
 // Are two permanents indistinguishable but for their number (same card, same state, same counters,
 // nothing attached that the other lacks)? Then which of the two a step uses is not a choice.
 static bool HumanTwinPermanents(const GameState* state, int x, int y)
@@ -52865,21 +52844,59 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.loyalty_activated_this_turn == b.loyalty_activated_this_turn && ax == ay && ax == 0;
 }
 
-// Are two of the plan's actions the SAME play (so taking either for a step is no choice at all)?
-static bool HumanStepSameIdentity(const Action& a, const Action& b, const GameState* state)
+// A card the human plays from HAND or the GRAVEYARD (not a permanent's ability): two copies of it are
+// interchangeable for matching -- the token names the card, never the copy.
+static bool HumanStepFromCard(Action::Kind k)
 {
-    if (a.kind != b.kind || a.card_name != b.card_name || a.kicked != b.kicked || a.adventure != b.adventure
-        || a.alt_cost != b.alt_cost || a.evoke != b.evoke || a.bestow != b.bestow || a.chosen_x != b.chosen_x
-        || a.tutor_target != b.tutor_target || a.ability_mode != b.ability_mode
-        || a.gy_exile_mode != b.gy_exile_mode || a.loyalty_ability != b.loyalty_ability
-        || a.sacrifice_land != b.sacrifice_land || a.discard_lands != b.discard_lands
-        || a.replicate_count != b.replicate_count || a.splice_count != b.splice_count
-        || a.devour_count != b.devour_count || a.chosen_float_color != b.chosen_float_color
-        || a.convoke_green != b.convoke_green || a.convoke_other != b.convoke_other)
+    using K = Action::Kind;
+    return k == K::CastFromHand || k == K::ActivateVial || k == K::CastFromGraveyard || k == K::Suspend
+        || k == K::Channel || k == K::Eternalize;
+}
+
+// Can action `a` be the play step `st` names? The verb's kind, the card, and every detail the token
+// states. A cast's kicker / adventure mode is always stated (absent = not kicked, the creature half),
+// exactly as the line verbs treat them. `twins`: a stated permanent (`#src` / `@target`) also matches an
+// INDISTINGUISHABLE permanent (HumanTwinPermanents) -- the second pass, taken only when no action names
+// the exact one (two identical Clue Tokens: the plan cracks #1, the human clicked #2 -- same play).
+static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const GameState* state, bool twins)
+{
+    if (a.card_name.str() != st.name || !HumanVerbMatchesKind(st.verb, a.kind)) { return false; }
+    if (a.kind == Action::Kind::CastFromHand && (a.kicked != st.kicked || a.adventure != st.adventure))
     { return false; }
-    return HumanTwinPermanents(state, a.sac_source_id, b.sac_source_id)
-        && HumanTwinPermanents(state, a.sac_victim_id, b.sac_victim_id)
-        && HumanTwinPermanents(state, a.enchant_target, b.enchant_target);
+    auto same = [&](int stated, int have) { return have == stated || (twins && HumanTwinPermanents(state, stated, have)); };
+    if (st.src > 0 && !same(st.src, a.sac_source_id)) { return false; }
+    // `@` is the creature / land a CAST enchants or targets (an Aura dragged onto its host:
+    // Action::enchant_target), and the host / blinked creature of an ACTIVATION (sac_victim_id).
+    if (st.target > 0)
+    {
+        const int have = (a.kind == Action::Kind::CastFromHand) ? a.enchant_target : a.sac_victim_id;
+        if (!same(st.target, have)) { return false; }
+    }
+    if (st.count > 0 && a.kind == Action::Kind::ActivateBlink && std::max(1, a.chosen_x) != st.count)
+    { return false; }
+    return true;
+}
+
+// Is the step REFUSED as ambiguous? Only for a choice the token could have stated and did not: a
+// permanent's ability with no `#src`, whose candidate sources are DIFFERENT permanents (not twins). The
+// sub-decisions of the chosen plan variant (a tutor's fetch, an X, a convoke split, an alt cost, a
+// float colour, an equip host or Aura host picked in the variant dialog) are NOT the token's to state:
+// the human chose them by choosing the variant, so candidates that differ only there are taken in the
+// plan's order -- refusing them would shrink the variant menu (re-review 2026-10-22: two Stoneforge
+// Mystics fetching Jitte + Bonesplitter). Hand / graveyard copies of one card are always interchangeable.
+static bool HumanStepAmbiguous(const HumanStepToken& st, const std::vector<std::size_t>& cands,
+                               const std::vector<Action>& src, const GameState* state)
+{
+    if (st.src > 0 || cands.size() < 2) { return false; }
+    const Action& a0 = src[cands[0]];
+    if (HumanStepFromCard(a0.kind)) { return false; }
+    for (std::size_t c = 1; c < cands.size(); ++c)
+    {
+        const Action& ac = src[cands[c]];
+        if (a0.sac_source_id > 0 && ac.sac_source_id > 0 && !HumanTwinPermanents(state, a0.sac_source_id, ac.sac_source_id))
+        { return true; }
+    }
+    return false;
 }
 
 // See the header. THE IMPLICIT-ACTION RULE (an action of the matched plan that no queued step names --
@@ -52897,6 +52914,7 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
     plan.human_untap_need = 0;
     const std::vector<Action> src = plan.actions;
     std::vector<char> used(src.size(), 0);
+    std::vector<char> refused(src.size(), 0);   // candidates of a refused (ambiguous) step: never run
     std::vector<Action> seq;
     seq.reserve(src.size());
     const bool has_land = plan.land_decided && !plan.land_to_play.empty();
@@ -52952,30 +52970,36 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
         }
         // Every unused action this step can mean: the verb's KIND, the card, and every identifying
         // detail the token carries (WHICH permanent, WHICH host / target, the count, kicked, adventure).
+        // (Exact permanents first; an indistinguishable twin of a stated permanent only when no action
+        // names the exact one.)
         std::vector<std::size_t> cands;
-        for (std::size_t i = 0; i < src.size(); ++i)
+        for (int pass = 0; pass < 2 && cands.empty(); ++pass)
         {
-            if (used[i] != 0 || static_cast<int>(i) == le_idx) { continue; }
-            if (HumanStepMatches(st, src[i])) { cands.push_back(i); }
+            for (std::size_t i = 0; i < src.size(); ++i)
+            {
+                if (used[i] != 0 || static_cast<int>(i) == le_idx) { continue; }
+                if (HumanStepMatches(st, src[i], state, pass == 1)) { cands.push_back(i); }
+            }
         }
         if (cands.empty())
-        { fail("queued step '" + tok + "' matches nothing in the committed plan"); continue; }
-        // AMBIGUOUS = two candidates that are not the same play. Two hand copies of one card, or two
-        // indistinguishable permanents (HumanStepSameIdentity: same state, same everything but the
-        // number), are the same play, so the first is as good as any. Anything else is a choice the
-        // token does not make, and the engine does not make it for the human.
-        bool ambiguous = false;
-        for (std::size_t c = 1; c < cands.size() && !ambiguous; ++c)
-        { if (!HumanStepSameIdentity(src[cands[0]], src[cands[c]], state)) { ambiguous = true; } }
-        if (ambiguous)
-        { fail("queued step '" + tok + "' could mean " + std::to_string(cands.size())
-               + " different plays of the committed plan -- queue it from the exact permanent"); continue; }
+        { fail("queued step '" + tok + "' matches nothing in the committed plan -- it was NOT applied"); continue; }
+        if (HumanStepAmbiguous(st, cands, src, state))
+        {
+            for (std::size_t c : cands) { refused[c] = 1; }
+            fail("queued step '" + tok + "' could mean " + std::to_string(cands.size())
+                 + " different permanents' abilities -- it was NOT applied (click the exact permanent)");
+            continue;
+        }
         used[cands[0]] = 1;
         seq.push_back(src[cands[0]]);
         ++steps;
     }
     const std::size_t named = std::min<std::size_t>(seq.size(), 255);
-    // The implicit actions, in the plan's own order; the Land's Edge units no step placed run as one.
+    // The implicit actions, in the plan's own order: ONLY what the viewer never queues -- a
+    // sac-for-mana source (CheckLine matches it implicitly) and the Land's Edge units no step placed
+    // (run as one). Any OTHER plan action no step claimed -- the candidates of a refused step, or an
+    // action left over by a step that matched nothing -- is NOT run at all (re-review 2026-10-22: it used
+    // to run after the last step as though it were unqueued); a leftover nobody reported yet is reported.
     for (std::size_t i = 0; i < src.size(); ++i)
     {
         if (used[i] != 0) { continue; }
@@ -52987,7 +53011,10 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
             seq.push_back(std::move(rest));
             continue;
         }
-        seq.push_back(src[i]);
+        if (src[i].kind == Action::Kind::SacForMana) { seq.push_back(src[i]); continue; }
+        if (refused[i] == 0)
+        { fail("the committed plan's " + std::string(HumanStepLabel(src[i])) + " " + src[i].card_name.str()
+               + " is not in your queue -- it was NOT applied"); }
     }
     plan.actions            = std::move(seq);
     plan.human_seq_len      = static_cast<std::uint8_t>(named);
@@ -57712,8 +57739,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     }
                     else if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend)
                     { continue; }   // implicit mana / suspend: the pre-cast pass already ran it
+                    // EACH STEP IS JUDGED BY ITS OWN EFFECT where it has a checkable one (re-review
+                    // 2026-10-22: a state-unchanged test reads a step as done when something unrelated
+                    // moved). A step aimed at a PERMANENT -- an equip / equip-all host, a blinked
+                    // creature -- that is not on the battlefield at this point of the order (a creature
+                    // the line casts LATER) is not dispatched at all, and is reported: the validation
+                    // preview rejects such an order before it is committed. An equip is then checked
+                    // for what it is for: the Equipment attached to that host.
+                    const std::string step_desc = std::string(HumanStepLabel(a)) + " " + a.card_name.str();
+                    const int aimed = (a.kind == Action::Kind::Equip || a.kind == Action::Kind::ActivateBlink
+                                       || a.kind == Action::Kind::AttachAllFreeEquipment) ? a.sac_victim_id : 0;
+                    if (aimed > 0)
+                    {
+                        bool there = false;
+                        for (const Permanent& bp : state.battlefield) { if (bp.card.m_number == aimed) { there = true; break; } }
+                        if (!there)
+                        {
+                            report_step_fail(step_desc, "its target is not on the battlefield at this point of your order");
+                            human_v2_done[i] = 1;   // never run later either
+                            continue;
+                        }
+                    }
                     const bool self_reporting = a.kind == Action::Kind::CastFromHand
-                        || a.kind == Action::Kind::CastFromGraveyard || a.kind == Action::Kind::DiscardToLandsEdge;
+                        || a.kind == Action::Kind::CastFromGraveyard || a.kind == Action::Kind::DiscardToLandsEdge
+                        || a.kind == Action::Kind::Equip;
                     const std::uint64_t fp_before = (step_watch && !self_reporting) ? step_fp() : 0;
                     bool did = true;
                     if (is_put(a))
@@ -57811,8 +57860,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (did) { human_v2_done[i] = 1; }
                     if (did && step_watch && !self_reporting && !bp_truncate && step_fp() == fp_before)
                     {
-                        report_step_fail(std::string(HumanStepLabel(a)) + " " + a.card_name.str(),
+                        report_step_fail(step_desc,
                                          "it could not be done at this point of your order (unpaid, or nothing to act on)");
+                    }
+                    if (did && a.kind == Action::Kind::Equip && aimed > 0 && !bp_truncate)
+                    {
+                        bool attached = false;
+                        for (const Permanent& bp : state.battlefield)
+                        {
+                            const bool is_it = a.sac_source_id > 0 ? bp.card.m_number == a.sac_source_id
+                                                                   : bp.card.m_name == a.card_name;
+                            if (is_it && bp.equipped_to == aimed) { attached = true; break; }
+                        }
+                        if (!attached)
+                        { report_step_fail(step_desc, "it did not attach to its host at this point of your order (unpaid, or no legal host)"); }
                     }
                 }
                 if (acts.size() <= n_named) { finish_named(); }

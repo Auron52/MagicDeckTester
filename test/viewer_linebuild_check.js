@@ -933,6 +933,9 @@ function checkSequenceTokens() {
   if (LB.validationLine(tapped) !== 'tap=Forest#3:G;cast=Llanowar Elves;seq=tap=Forest#3:G|cast=Llanowar Elves')
     fails.push(`validationLine(tap + one step) -> ${LB.validationLine(tapped)}`);
   if (LB.validationLine([]) !== 'pass') fails.push(`validationLine([]) -> ${LB.validationLine([])}`);
+  // ...and the continuation's `need=` the commit pin carries rides the previewed sequence too.
+  if (LB.validationLine(one, 'need=G') !== 'cast=Sol Ring;seq=cast=Sol Ring|need=G')
+    fails.push(`validationLine(one step + need) -> ${LB.validationLine(one, 'need=G')}`);
   return fails;
 }
 

@@ -1,0 +1,58 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "battlefield": [
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Kor Duelist",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Lightning Greaves",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Kor Duelist"
+  ],
+  "lands_played_this_turn": 1,
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 50,
+  "human_lines": [
+    "cast=Kor Duelist;equip=Lightning Greaves;seq=equip=Lightning Greaves|cast=Kor Duelist"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "equip=Lightning Greaves",
+      "cast=Kor Duelist"
+    ]
+  ],
+  "expect_history_lacks": [
+    "NOT applied"
+  ],
+  "expect_line_order": [
+    "activate Lightning Greaves",
+    "cast Kor Duelist"
+  ],
+  "expect_opponent_life": 18,
+  "expect_no_win": true,
+  "comment": "RE-REVIEW 2026-10-22 item B (reviewer repro greaves): 'equip Lightning Greaves, then cast Kor Duelist', validated with its sequence. The equip's host is a variant-dialog choice; the variant that equips the Duelist about to be cast cannot be played in THIS order (its host is still in hand at the equip), so the validation's preview drops that variant and the one that equips the Duelist already in play is the one committed -- applied in the human's order, nothing silently skipped. (Before: variant 0 equipped the Duelist in hand, Greaves never attached, and the state-unchanged test missed it.)"
+}

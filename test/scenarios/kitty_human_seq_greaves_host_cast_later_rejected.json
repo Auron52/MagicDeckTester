@@ -1,0 +1,41 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "battlefield": [
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Kor Duelist",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Lightning Greaves",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Kor Duelist"
+  ],
+  "lands_played_this_turn": 1,
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 50,
+  "validate_line": "cast=Kor Duelist;equip=Lightning Greaves#3@4;seq=equip=Lightning Greaves#3@4|cast=Kor Duelist",
+  "expect_verdict": "illegal",
+  "comment": "RE-REVIEW 2026-10-22 item B, the validation half: the human pins the equip's host to the Kor Duelist in HAND (#4) and queues the equip BEFORE casting it. Its target does not exist at its position, so the order cannot be played as queued: Illegal, with the reason ('its target is not on the battlefield at this point of your order'), instead of an accept the commit could not honour."
+}

@@ -1,0 +1,52 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "battlefield": [
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Stoneforge Mystic",
+    "Stoneforge Mystic"
+  ],
+  "library": [
+    "Bonesplitter",
+    "Umezawa's Jitte",
+    "Plains",
+    "Plains"
+  ],
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 0,
+  "budget_ms": 0,
+  "validate_line": "cast=Stoneforge Mystic;cast=Stoneforge Mystic;seq=cast=Stoneforge Mystic|cast=Stoneforge Mystic",
+  "expect_verdict": "choose",
+  "expect_no_win": true,
+  "expect_variants": 3,
+  "comment": "RE-REVIEW 2026-10-22 item A (reviewer repro sfm2): two Stoneforge Mystics in hand, the line 'cast both' validated WITH its \"**\" sequence. The step matcher treated two hand copies whose plans differ only in a sub-decision (which Equipment each one fetches) as 'different plays' and refused them, so the natural 'Jitte + Bonesplitter' variant silently vanished from the choose dialog (3 -> 2), and where only such variants existed the line was Illegal ('queue it from the exact permanent' -- impossible for a hand card). Hand copies of one card are interchangeable for matching; the fetches are the chosen variant's. All 3 variants stay."
+}

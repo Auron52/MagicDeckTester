@@ -547,9 +547,13 @@
   // sequence as `seq=<step>|<step>|...` -- so the engine previews the commit in exactly the order it will
   // apply (src/main.cpp ValidateHumanSequence) and rejects a step that cannot be done where it was
   // queued, with its reason, instead of the commit dropping it. Tokens never contain ';' or '|'.
-  function validationLine(seg) {
+  // `need` (optional): the continuation's `need=<COLOURS>` token the commit's pin carries -- passed here
+  // too, so the sequence the validation previews is the pin the commit sends, token for token.
+  function validationLine(seg, need) {
     const line = encodeLine(seg || []);
-    return sequencePinned(seg) ? line + ';seq=' + sequenceTokens(seg).join('|') : line;
+    if (!(sequencePinned(seg) || need)) { return line; }
+    const toks = sequenceTokens(seg);
+    return line + ';seq=' + (need ? toks.concat([need]) : toks).join('|');
   }
 
   // THE LIBRARY TOP AS A LAND SOURCE (engine Plan::land_from_top, Courser of Kruphix, 2026-10-15).

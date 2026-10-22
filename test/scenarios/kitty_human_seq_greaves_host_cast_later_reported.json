@@ -1,0 +1,53 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "battlefield": [
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Kor Duelist",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Lightning Greaves",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Kor Duelist"
+  ],
+  "lands_played_this_turn": 1,
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 50,
+  "human_lines": [
+    "cast=Kor Duelist;equip=Lightning Greaves"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "equip=Lightning Greaves",
+      "cast=Kor Duelist"
+    ]
+  ],
+  "expect_history_contains": [
+    "equip Lightning Greaves was NOT applied: its target is not on the battlefield"
+  ],
+  "expect_no_win": true,
+  "comment": "RE-REVIEW 2026-10-22 item B, the commit half: the same order committed WITHOUT the validation preview (a line with no `seq=`), whose first variant equips the Duelist still in hand. Each step is now judged by its own effect: an equip whose host is not on the battlefield at its position is not dispatched and is REPORTED ('equip Lightning Greaves was NOT applied: its target is not on the battlefield ...'); an equip that runs is checked for the Equipment actually attached to its host. Before, Greaves never attached and nothing was said."
+}
