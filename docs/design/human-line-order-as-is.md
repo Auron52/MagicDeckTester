@@ -338,6 +338,38 @@ Only a NEW game sends `"**"`.
   Mountain) cannot pay for every spell in the line (not paid in that order: Sol Ring), so the WHOLE line
   was played in the engine's order instead: land Mountain, cast Sol Ring, which pays them all".
 
+### Re-review fixes (61fcdee17..d0804925e)
+
+* **(A, a regression of item 4) Never refuse what the token cannot say.** The ambiguity test compared
+  fields no token carries (a tutor's fetch, X, convoke split, alt cost, evoke, float colour), so two
+  hand copies whose plans differ only in a sub-decision were "different plays": with `seq=` the
+  "Stoneforge fetches Jitte + Bonesplitter" variant vanished (choose 3 -> 2), and where only such variants
+  existed the line was Illegal with an instruction impossible for a hand card. The rule now
+  (`HumanStepAmbiguous`): a step is matched on what it states; the remaining candidates are taken in
+  the plan's order -- their sub-decisions ARE the variant the human chose -- and a step is refused only
+  for a choice it could have stated and did not: a permanent's ability with no `#src` whose candidate
+  sources are different (non-twin) permanents. Hand / graveyard copies are always interchangeable. The
+  variant menu is never shrunk by the matcher. Scenario `kitty_human_seq_two_stoneforge_variants_kept`.
+* **(B) Each step is judged by its own effect.** An equip / equip-all / blink aimed at a permanent that
+  is not on the battlefield at its position (a creature the line casts LATER) is not dispatched and is
+  reported; an equip that runs is checked for the Equipment actually attached to that host. Through the
+  validation preview this rejects such an order (or, where the host is a variant-dialog choice, drops just
+  the variant that cannot be played in that order). Scenarios `kitty_human_seq_greaves_host_cast_later_
+  rejected`, `..._reported`, `kitty_human_seq_greaves_order_filters_variant`.
+* **(C) A stated permanent matches its indistinguishable twin** (`HumanStepMatches`, second pass) when no
+  action names the exact one -- two identical Clue Tokens. Scenario `edf_human_seq_clue_twin_matches`.
+* **(D) A refused or orphaned step never runs.** The implicit actions are now ONLY what the viewer never
+  queues (a sac-for-mana source, the Land's Edge units no step placed); every other plan action no step
+  claimed -- a refused step's candidates, an action a failed step left behind -- is not run and is
+  reported, instead of running after the last step as though unqueued. And the validation's `seq=`
+  carries the continuation's `need=` token, so the previewed sequence IS the commit's pin
+  (`segmentNeed` in index.html, one function for both).
+* Measurements after the re-review fixes: smoke 136/136, **configs changed: 0**, 0 slower / faster /
+  play-changed; scenarios 259/259; unit 1728/1728; reference replay (640, `--strict`) 222 ok / 418
+  repaired / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap / 0 mull-drift / 0
+  contract-fail; `viewer_linebuild_check.js` 0 FAIL; `viewer_client_check.js` only the two pre-existing
+  `equip` failures.
+
 ## DEFERRED: a dropped board ACTIVATION is silent in the viewer
 
 *(2026-10-22: closed for `"**"` lines -- each step is dispatched alone, so "the state did not change" IS a failed step and is reported; see "Review fixes" above. What follows still describes the `"*"` route and the autonomous trailing pass.)*
