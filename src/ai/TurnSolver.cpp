@@ -89734,10 +89734,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         else if (s_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
                         {
                             BpPrefixSnap snap;
-                            {
-                                PreApplyHandoff _pah(la_pre_share, copy);   // no hit: a fresh copy of `state`
-                                ApplyPlanDirect(copy, v, true, nullptr, &snap, nullptr);
-                            }
+                            PrePlanShareArm(la_pps, copy);   // no hit: a fresh copy of `state`
+                            ApplyPlanDirect(copy, v, true, nullptr, &snap, nullptr);
                             if (snap.valid)
                             {
                                 if (BpWaveProbeOn())
@@ -89751,7 +89749,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         }
                         else
                         {
-                            PreApplyHandoff _pah(la_pre_share, copy);   // no hit: a fresh copy of `state`
+                            PrePlanShareArm(la_pps, copy);   // no hit: a fresh copy of `state`
                             ApplyPlanDirect(copy, v, true);
                         }
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
@@ -89777,8 +89775,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     {
                         {
                             // A fresh copy of `state` only when no prefix snapshot was hit.
-                            std::optional<PreApplyHandoff> _pah;
-                            if (hit == prefix_cache.end()) { _pah.emplace(la_pre_share, copy); }
+                            if (hit == prefix_cache.end()) { PrePlanShareArm(la_pps, copy); }
                             ApplyPlanDirect(copy, v, false);
                         }
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
