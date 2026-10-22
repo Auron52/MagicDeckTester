@@ -73217,6 +73217,20 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     v.putback_choice = k;
                     v.putback_group  = s_putback_group;
                     extra.push_back(std::move(v));
+                    // MTG_PUTBACK_TRACE: a fan crossing 1M / 2M / 4M / ... clones is reported WHILE it is
+                    // being built (the per-enumeration line below only prints after it), so a list that
+                    // takes the process past its RSS cap still names its site. Print-only.
+                    static const bool s_pb_big = EnvOn("MTG_PUTBACK_TRACE");
+                    if (s_pb_big && extra.size() >= (std::size_t{1} << 20)
+                        && (extra.size() & (extra.size() - 1)) == 0)
+                    {
+                        std::fprintf(stderr,
+                            "[putback-big] T%d %s +%zu clones so far (base %zu of %zu, fanned %zu, w=%d) "
+                            "bp_enum_depth=%d rollout_nest=%d fsline_nest=%d solver_nest=%d hand=%zu lib=%zu\n",
+                            state.turn_number, is_pre_combat ? "m1" : "m2", extra.size(), pi, n_now, fanned + 1, w,
+                            g_bp_enum_depth, g_rollout_nest, g_fsline_nest, g_cs_solver_nest,
+                            ap.hand.size(), ap.library.size());
+                    }
                 }
                 ++fanned;
                 widest = std::max(widest, static_cast<std::size_t>(std::max(0, w)));
