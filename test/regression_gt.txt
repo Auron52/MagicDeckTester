@@ -10,6 +10,8 @@
 # accepted-with-regressions (regression, 2026-10-21): Integration of aa-ezslow + aa-slow + aa-castorder onto the rebased AA branch (2026-10-21). Every non-AA mover restores its base digest with MTG_GREEDY_LETHAL_STOP=0 + MTG_GREEDY_PUMP_LETHAL=0 (greedy policy fixes; d0 0 slower vs base, searched 0 slower). AA: 3 searched games slower, all MTG_KEY_CHOSEN_COLOR (=0 restores them; a sound key split): smoke d5 g14 T8->unwon (unwon at 10x b200, T8 at d8 b0 = base's d8 b0 line), regression d3 s3003 g110 T7->unwon / g113 T8->unwon (T7 / T8 at 10x; T7 / T7 at d8 b0). The 18 non-AA keys moved by pre-existing AA commits (MTG_SITE9_REOPEN goblins; MTG_UNTAP_LOOP_KILL_FOLD edf; chunk-P copy folds incl. d0 fungusv3 g89 4->5 / melira g229 6->8; chunk A critter; C2a lifegain breakpoint selesnya) are accepted with them.
 # accepted-with-regressions (smoke, 2026-10-21): AccomplishedAlchemist exhaustive keep table ADOPTED (K=15, 71,620 entries, bottoming on; keep -0.428t t-12.7, confounded bottoming -0.160t t-11.7): keep_adoption_attribution 0 unexplained (smoke 657 count / 103 bottom / 2 order-only), both baselines reproduced; alchemist d0 6.905->6.331, d3 5.340->4.993, d5 5.160->4.973, 2hg 5.42->5.22. melira/melira2hg re-accepted after rebasing onto upstream's Melira emulated-ladder sidecar (1ccda665): no game slower than BOTH parents (d0 == our greedy-fix GT exactly; searched slower games each equal one parent's accepted result).
 # accepted-with-regressions (regression, 2026-10-21): AccomplishedAlchemist exhaustive keep table ADOPTED (K=15): keep_adoption_attribution 0 unexplained (699 count / 108 bottom / 4 order-only), both baselines reproduced; alchemist d0 6.767->6.347, d3 5.073->4.920 / 5.387->5.133, d5 5.000->4.867 / 5.173->4.987. melira re-accepted after rebasing onto upstream's Melira emulated-ladder sidecar (1ccda665): no game slower than BOTH parents (d0 == our greedy-fix GT exactly; d3 s3003 1 game slower than upstream = our accepted result).
+# accepted-with-regressions (smoke, 2026-10-22): AccomplishedAlchemist value sidecar ADOPTED by valueleaf.sh E.5: shape #3 nlfit {ladder single, leaf none, alpha relaxed} -- phase E vs no sidecar -0.0125t (t -7.30, 8/8 seeds, 0.962x units). Suite: smoke 7 faster / 0 slower; regression 2 faster / 2 slower (d3 s2002 gi102 5->6, d5 s3003 gi4 7->8), both recover at 10x and at d8 b0 (equal win turns, identical d8 b0 units).
+# accepted-with-regressions (regression, 2026-10-22): AccomplishedAlchemist value sidecar ADOPTED by valueleaf.sh E.5: shape #3 nlfit {ladder single, leaf none, alpha relaxed} -- phase E vs no sidecar -0.0125t (t -7.30, 8/8 seeds, 0.962x units). Suite: smoke 7 faster / 0 slower; regression 2 faster / 2 slower (d3 s2002 gi102 5->6, d5 s3003 gi4 7->8), both recover at 10x and at d8 b0 (equal win turns, identical d8 b0 units).
 # accepted-with-regressions (overnight, 2026-10-21): vampires overnight rows RE-SIZED from the ENTRY set to the FULL set (d3 4x1000 b20, d5 4x500 b40, 2HG d5 4x150 b40) just before the keep table's adoption, accepted with the table ABSENT (regression-testing.md 'Sizing a deck's overnight rows'): a resized row re-defines its key; d0 rows unchanged 4/4; no play change.
 # accepted-with-regressions (overnight, 2026-10-21): Vampires exhaustive keep table ADOPTED (K=15, 161,724 size-7 entries, R40 complete, adaptive keep mean R 7.66, bottoming sub cells all R40; generated d1 b1 on PGO src 208b5152 / eeb55d83a): mullgen keep A/B -0.159t, confounded bottoming A/B -0.0297t (6/6, mean/se -11.7). keep_adoption_attribution.py, every tier and both keys: baselines reproduced on both sides, 0 unexplained (smoke 542 mulligan-count / 137 bottom / 5 order-only; regression 702 / 116 / 6; overnight 6425 / 1281 / 55). Standard rows -0.03..-0.15t; 2HG rows mixed on small samples (regression d3 +0.020 / d5 +0.100, overnight d5 -0.053/0/-0.067/-0.100): every change a keep/bottom decision, the standard metric still credits the old lookahead bottomer's library peek.
 # accepted-with-regressions (smoke, 2026-10-22): (rebased onto 1e8c63dba) Escalation budget: fresh 0.5 x budget_ms as a FLOOR, unconditional; per-deck escalation_fresh_frac DELETED (USER 2026-09-11 'make the fresh escalation budget unconditional', restated 2026-10-21 'The escalated shape was meant to always use 0.5'). Smoke 8 cells 0 slower / 4 faster. Regression 12 cells 4 slower / 5 faster: hinata d3 x3 churn (4x/16x), creature_giving d5 s3003 gi194 6->7 PERSISTS -- held-out CG play floor vs flat 1 faster / 0 slower. Held-out vs the leftover (logs/tgt/fresh05): play 26 decks x 500 -0.0012 (14/1); d3 b10 33 decks x 300 -0.0004 (5/1); the 7 keyed decks floor vs flat 0.5 at play 3500 games 1/0.
@@ -152,9 +154,9 @@ colossus_smoke_d0_s1001=4.3580/f1a3ce0a59cfc500
 colossus_smoke_d3_s1001=3.2533/3fccee818433ea10
 colossus_smoke_d5_s1001=3.2133/2f155b640caca7f2
 alchemist_smoke_d0_s1001=6.3310/31e2b6a5c6a1f5f4
-alchemist_smoke_d3_s1001=4.9933/d6947fb47036414d
-alchemist_smoke_d5_s1001=4.9733/43133333237eca16
-alchemist2hg_smoke_d3_s1001=5.2200/f26d0050859f8bba
+alchemist_smoke_d3_s1001=4.9733/9bfb0deb6e247a18
+alchemist_smoke_d5_s1001=4.9067/2e8852894d5375c7
+alchemist2hg_smoke_d3_s1001=5.2000/4ad3d68838036e40
 vampires_smoke_d0_s1001=4.5660/b0de2ee24c91dada
 vampires_smoke_d3_s1001=4.2333/247883f2ab18e48e
 vampires_smoke_d5_s1001=4.2133/0d95bc73dac6513a
@@ -345,10 +347,10 @@ colossus_regression_d3_s3003=3.4933/2b7a842d7a7c5a82
 colossus_regression_d5_s2002=3.4133/13a4d6f6acc3731f
 colossus_regression_d5_s3003=3.4400/fd10158d8dd88d0e
 alchemist_regression_d0_s2002=6.3470/075f1f8d1cc3de97
-alchemist_regression_d3_s2002=4.9133/95ef14aa2471b094
-alchemist_regression_d3_s3003=5.1333/9551d850e37b7a43
-alchemist_regression_d5_s2002=4.8667/bb4db94477c8c214
-alchemist_regression_d5_s3003=4.9867/682b4d97ae1534cd
+alchemist_regression_d3_s2002=4.9133/2a3f86719821afea
+alchemist_regression_d3_s3003=5.1333/f3e6525dd9dca2f5
+alchemist_regression_d5_s2002=4.8667/ee3aad1f5796a24d
+alchemist_regression_d5_s3003=4.9867/e9bfacfec5018dd8
 vampires_regression_d0_s2002=4.5790/cff70d8676cae1dd
 vampires_regression_d3_s2002=4.2333/453cc6bb23e28849
 vampires_regression_d3_s3003=4.3400/5af8e2952a86478b

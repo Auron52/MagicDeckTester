@@ -2825,3 +2825,55 @@ strictly not-worse. Its 10x reruns on the key-fixed play: gi25 recovers (6 = 6),
 c2 272.2 s -> 1.4 s, the gen's 59 slowest rollouts 0.14x** (max 308 s -> 8.4 s), 300 ordinary rollouts 0.82x. A
 lossy narrowing of the walk's menu beyond the search window -- the doctrine's permitted region, so the trade is the
 USER's: about one turn per 600 d5 games against a 30-200x cut of the generation's worst rollouts.
+
+## Value leaf (2026-10-21/22) -- the leafless single-pass shape ADOPTED; the trained leaf is a TRADE (USER)
+
+`bash scripts/valueleaf.sh run decks/AccomplishedAlchemist`, launched overnight on the USER's instruction ("pull,
+optimize as needed and then launch the value-leaf"), frozen at 644530764 (play fingerprint 6e79cbeedc4f), PGO.
+Queue `logs/vlq_accomplishedalchemist/`; every decision taken without stopping is in its `DECISIONS.txt`.
+
+**Phase A (2,500 label games, K=3).** 15:35 -> 00:29. About 25 games ran 2-6+ h each in the UNBOUNDED label
+search, refuting late or no-win positions. The Combo Off walk was 0-8% of those games (worktree `aa-walkroot`,
+"Why the Combo Off route gets stuck"). In the batch they ran ~7x slower than solo at identical units. The 4 h wall
+cap fired up to 3.4 h late, because it was read only when units were charged. The last 6 games were cut at the
+USER's direction ("only consider cutting them off when only a small number remain"), and `finish` accepted
+12,170 rows. Then the cap was fixed so it is read inside the uncharged loops: aa-wallcap 4841f0a8f -> ed28dbca3,
+byte-identical (smoke 136/136). It was integrated before the matrix resumed; the driver confirmed "PLAY UNCHANGED
+-- keeping every game".
+
+**Model.** 120 trees, held-out RMSE 0.700 turns, against 0.45-0.55 on other decks (a combo deck's win-turn
+variance). Phase C0: greedy horizon leaf from H4 (K=4).
+
+**Depth matrix** (unbounded, 400 games x 4 seeds per cell, 0 intractable, 7 deals abandoned and skip-listed):
+
+| depth | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| heuristic H | 5.0237 | 4.9569 | 4.9294 | 4.9169 | 4.9119 | | | |
+| value leaf V | 5.8712 | 5.4075 | 5.1437 | 4.9625 | 4.9225 | 4.9125 | 4.9112 | 4.9106 |
+
+The leaf is weaker than the rollout heuristic at equal depth, as is usual. It reaches heuristic quality deeper and
+cheaper: V6 4.9125 at 16.2 s/game beats H3 and H4 (19-20 s), and V7 matches H5 at ~0.68x the time. Crossover
+c->take@hc 5->4, 6->5, 7->6, 8->6; trust UNSET. Phase C.5 sign-off owed (default taken): V3/V5 and V4/V5 flip
+sides of tol with |diff| << SE; more games would settle them.
+
+**Phase E** (8 seeds x 1,000 games at play settings, vs the deck with NO sidecar, 4.96275):
+
+| arm | delta | paired t | seeds better | units |
+|---|---|---|---|---|
+| **nlfit** -- single final-depth pass, no leaf | **-0.0125** | -7.30 | 8/0/0 | **0.962x** |
+| nlesc -- escalation, leafless probe | -0.0116 | -6.15 | 8/0/0 | 1.066x |
+| staged -- the trained value leaf | -0.0111 | -4.93 | 8/0/0 | 1.195x |
+| emul -- emulated ladder | -0.0083 | -8.00 | 8/0/0 | 1.299x |
+
+E.5 ADOPTED **nlfit** (cheaper and better): `AccomplishedAlchemist.value.json` = `{ladder: single, leaf: none,
+alpha: relaxed}`. The staged leaf, nlesc and emul are each better but dearer, i.e. TRADES for the USER; the staged
+model stays at `logs/eval/AccomplishedAlchemist.value.STAGED.json`. Depth sweep d4/d5/d6: +0.004 (n.s.). Leaf
+rule ON == OFF (byte-identical). E.6: no ladder escalations, R = 0.
+
+**Suite with the sidecar.** Smoke: 7 faster / 0 slower (d3 4.993 -> 4.973, d5 4.973 -> 4.907, 2HG 5.22 -> 5.20).
+Regression: 2 faster / 2 slower, averages unchanged; d3 s2002 gi102 5 -> 6 and d5 s3003 gi4 7 -> 8 both recover
+at 10x (5 / 7) and at d8 b0 (identical units). GT accepted deck-scoped.
+
+**Note:** the sidecar's `value_play` replaces the profile's generation keys (K 15, mull_gen_depth 1,
+mull_gen_budget_ms 1) wholesale. A later `mullgen.sh run` copies the profile-screened setting into the sidecar;
+nothing in play reads them.
