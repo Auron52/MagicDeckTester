@@ -59,8 +59,7 @@ cases has no ground truth, so nothing detects when an engine change breaks that 
 spending hours fitting a model to a foundation nothing is checking, and Rule 0's freeze protects only
 the generation window, not the months after it.
 
-A deck may only be ADDED to the suite if its cost is ≤ **3x** the most expensive deck that already has
-both a value leaf and a mulligan profile. If it is over: report it to the user and make getting it into
+A deck may only be ADDED to the suite if its cost is ≤ **3x** Hinata's — **PINNED to Hinata** (USER 2026-10-22: *"We shouldn't be arbitrarily increasing the limit"*; the old wording ratcheted the limit up with every expensive admission), and `--cost` times Hinata in the same run. If it is over: report it to the user and make getting it into
 range the first goal. `MTG_ALLOW_UNTESTED_DECK=1` overrides and is a USER decision, never an agent's.
 
 ## NOTHING ELSE RUNS WHILE THIS DOES (user directive, 2026-08-31)

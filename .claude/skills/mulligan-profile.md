@@ -65,8 +65,7 @@ adoption reports **VALIDATION PASSED** having run one fewer check than every oth
 A/Bs are still hard gates, but the suite report — the thing that would catch collateral damage to other
 decks — just vanishes. WhiteKnights shipped that way on 2026-09-26 before this gate existed.
 
-A deck may only be ADDED to the suite if its cost is ≤ **3x** the most expensive deck that already has
-both a value leaf and a mulligan profile. If it is over: report it to the user and make getting it into
+A deck may only be ADDED to the suite if its cost is ≤ **3x** Hinata's — **PINNED to Hinata** (USER 2026-10-22: *"We shouldn't be arbitrarily increasing the limit"*; the old wording ratcheted the limit up with every expensive admission), and `--cost` times Hinata in the same run. If it is over: report it to the user and make getting it into
 range the first goal — **do not** generate anyway and do not exempt the deck.
 `MTG_ALLOW_UNTESTED_DECK=1` overrides and is a USER decision, never an agent's.
 
