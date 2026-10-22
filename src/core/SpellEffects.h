@@ -34828,6 +34828,25 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
         EmitReveal(state.turn_number, source, seen_nums, seen_names, kept_nums, bottom_nums);
     }
 
+    // MTG_SCRY_TRACE=<turn> (diagnostic, print-only, default off): the scry's board, look and
+    // disposition, tagged real/search, so an apply-vs-executor scry divergence is a read.
+    {
+        static const int s_scry_trace = EnvInt("MTG_SCRY_TRACE", 0);
+        if (s_scry_trace > 0 && state.turn_number == s_scry_trace)
+        {
+            std::string bf, lk, tp;
+            for (const Permanent& pm : state.battlefield)
+            {
+                if (pm.controller_index != state.active_player_index || !pm.card.IsLand()) { continue; }
+                bf += pm.card.m_name.str() + (pm.tapped ? "(T)" : "") + ",";
+            }
+            for (const Card& c : looked) { lk += c.m_name.str() + ","; }
+            for (int idx : disp.top_order) { tp += std::to_string(idx) + ","; }
+            std::fprintf(stderr, "[scry-trace] T%d real=%d src=%s lands=[%s] looked=[%s] top=[%s]\n",
+                         state.turn_number, g_real_resolution ? 1 : 0, source.c_str(), bf.c_str(),
+                         lk.c_str(), tp.c_str());
+        }
+    }
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
     ApplyTopDisposition(state, looked, disp, LookKind::Scry);
     if (watched) { FireScryWatchers(state); }
@@ -35374,6 +35393,18 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
             remap[j] = best;
         }
         pick = remap;
+    }
+    // MTG_SCRY_TRACE=<turn> also covers the put-back (diagnostic, print-only).
+    {
+        static const int s_pb_trace = EnvInt("MTG_SCRY_TRACE", 0);
+        if (s_pb_trace > 0 && state.turn_number == s_pb_trace && pick != nullptr)
+        {
+            std::string hd, pk;
+            for (const Card& c : pl.hand) { hd += c.m_name.str() + ","; }
+            for (int j = 0; j < take; ++j) { pk += pl.hand[static_cast<std::size_t>(pick[j])].m_name.str() + ","; }
+            std::fprintf(stderr, "[putback-trace] T%d real=%d want=%d count=%d hand=[%s] back=[%s]\n",
+                         state.turn_number, g_real_resolution ? 1 : 0, want, count, hd.c_str(), pk.c_str());
+        }
     }
     // Copy the cards out first (indices refer to the current hand), then erase highest index first.
     std::vector<Card> moved;
