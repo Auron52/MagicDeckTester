@@ -1,7 +1,8 @@
 # Vampires: the bottom-evaluation setting -- the route under the 3x suite gate (2026-10-21)
 
-**Status: MEASURED, NOT ADOPTED.** The bottom-eval setting is mulligan policy, so adopting one is the USER's
-call (NivMizzetCombo question 15 is the same question for Niv).
+**Status: REJECTED by the USER (2026-10-21):** *"No, I want solutions that speed it up without doing mulligan
+stuff. Look for proper optimizations or branch cuts."* Kept as the record of what the setting would buy. The route
+under the gate is now search speed and sound branch cuts (`docs/design/vampires-search-cost-2.md`).
 
 ## Why this is the lever
 
