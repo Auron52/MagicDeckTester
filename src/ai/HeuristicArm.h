@@ -650,6 +650,9 @@ enum Slot : int
     CANON_CONT_TRAITS,        // MTG_CANON_CONT_TRAITS  LOCKSTEP #19: an unbranched-canon breakpoint continuation (Plan::cont_canon) is paid under PlanTraits built from the actions it APPLIES (its casts), not its unapplied board activations -- the rollout and the executor's re-derived continuation held mana for an activation nothing makes (the act-line hold), while the committed-line record replay (casts only) did not, so the two paid the same cast from different sources (AccomplishedAlchemist s160426 gi425 T5: the rollout paid Arbor Elf with Elvish Harbinger, the replay tapped the pumped Alchemist and lost the proven kill). DEFAULT ON; =0 -> the full action list
     AA_GENERIC_WEATHER_FLEX,  // MTG_AA_GENERIC_WEATHER_FLEX  AccomplishedAlchemist measurement arm read with MTG_AA_CAST_ORDER OFF (DEFAULT OFF; the USER's 2026-10-22 rule "Weather the Storm needs to be flexible ... the untappers should be possible to do before or after it (depending on mana)"): the generic tiers with Weather the Storm preferred LAST (rank 21, as MTG_AA_GENERIC_WEATHER_ONLY_LAST) PLUS the mana ladder (AccomplishedAlchemistProvider::ArrangeCastOrder): when the list cannot pay with every untapper (Crab Umbra, Staff of Domination, Seedcradle Witch, Galvanic Alchemist) ahead of Weather without tapping an Accomplished Alchemist before the list's last lifegain, the fewest untappers (latest first) move to right AFTER Weather, paid from the Alchemist's X -- judged by the exact order walk crediting the Alchemist's life-scaled mana (storm copies included; LifeScaledManaInOrderWalk)
     AA_CAST_ORDER_V2,         // MTG_AA_CAST_ORDER_V2  AccomplishedAlchemist: the coordinator's proposed TOTAL order for the USER (DEFAULT OFF, measurement only; overrides MTG_AA_CAST_ORDER and the generic arms while on): land drop, Utopia Sprawl, Wild Growth, Arbor Elf, Elvish Harbinger, Accomplished Alchemist, Galvanic Alchemist, Seedcradle Witch, Ezuri, Scholar, Trufflesnout, Brindle Boar, Living Wish, Nourish, Feed the Clan, Eternal Witness, Stroke of Genius (a dig; at the opponent it goes after every cast), Crab Umbra, Staff of Domination, Weather the Storm -- with the same mana ladder as MTG_AA_GENERIC_WEATHER_FLEX, and the board activations ordered life -> untap loop (cheapest first) -> finish -> combat pumps (ActivationOrderRankForAction)
+    NIV_CANTRIP_RULES,        // MTG_NIV_CANTRIP_RULES  NivMizzetCombo: the USER's bucket categories (2026-10-22) decide Preordain's keep/bottom and Ponder's keep/shuffle + order (NivMizzetComboProvider::TopDispositionPick). DEFAULT OFF pending its A/B and the USER
+    NIV_PONDER_SINGLE,        // MTG_NIV_PONDER_SINGLE  NivMizzetCombo: Ponder's searched disposition fan is pruned to the rule's pick alone (ReorderSingleCandidate; USER 2026-10-22: "Searching every option is too expensive"). Inert unless MTG_NIV_CANTRIP_RULES is on. DEFAULT OFF pending its A/B
+    NIV_BUCKET_DISCARD,       // MTG_NIV_BUCKET_DISCARD  NivMizzetCombo: cleanup discard by the same buckets (Niv / draw-on-damage / go-off / mana to 6 with <= 3 hand lands / draw / a 7th source if space). DEFAULT OFF pending its A/B and the USER
     COUNT
 };
 
@@ -1250,6 +1253,9 @@ inline const char* Name(int slot)
         "MTG_CANON_CONT_TRAITS",
         "MTG_AA_GENERIC_WEATHER_FLEX",
         "MTG_AA_CAST_ORDER_V2",
+        "MTG_NIV_CANTRIP_RULES",
+        "MTG_NIV_PONDER_SINGLE",
+        "MTG_NIV_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
