@@ -329,3 +329,16 @@ TEST_CASE("Karoo position: the enumeration offers the earlier point only where a
         CHECK(GenericProvider().KarooEntryObserver(s, DefKp("Heroes' Reunion")));
     }
 }
+
+TEST_CASE("Karoo position: Landfall's provider folds the payload observers (sound for its list)")
+{
+    GameState s = FreshKp();
+    s.deck_has_landfall = true;
+    // The base rule: in a deck with a landfall trigger every cast may read a payload the Turf fires.
+    CHECK(GenericProvider().KarooEntryObserver(s, DefKp("Avenger of Zendikar")));
+    CHECK(GenericProvider().KarooEntryObserver(s, DefKp("Rampant Growth")));
+    // Landfall's list reads no payload at resolution: only a land-entry CONDITION reader counts.
+    CHECK_FALSE(LandfallProvider().KarooEntryObserver(s, DefKp("Avenger of Zendikar")));
+    CHECK_FALSE(LandfallProvider().KarooEntryObserver(s, DefKp("Rampant Growth")));
+    CHECK(LandfallProvider().KarooEntryObserver(s, DefKp("Rest for the Weary")));
+}

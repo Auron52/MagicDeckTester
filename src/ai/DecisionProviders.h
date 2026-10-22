@@ -3209,6 +3209,10 @@ public:
                                        std::vector<std::vector<int>>& out) const override;
     // The land drop's two spots and the abilities at the END (USER 2026-10-16; MTG_LANDFALL_SPOTS).
     bool        LandEntrySpotsRule(const GameState& s) const override;
+    // Gruul Turf's earlier positions (MTG_KAROO_POSITION) only before a reader of the land-entry CONDITION:
+    // no cast in this list reads a landfall PAYLOAD, so the base rule's "every cast" is a provable waste
+    // here -- see the .cpp for the card-by-card argument.
+    bool        KarooEntryObserver(const GameState& s, const CardDefinition& def) const override;
     // Phylath's Plant is the provider's pick, not a searched axis (USER 2026-10-20; MTG_LANDFALL_TARGET_PICK).
     bool        LandfallCounterTargetIsPick(const GameState& s) const override;
     // The analyze-deck 5i BUCKET discard (PROVISIONAL, MTG_LANDFALL_BUCKET_DISCARD): dead legends, lands over

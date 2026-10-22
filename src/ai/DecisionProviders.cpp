@@ -3780,6 +3780,31 @@ static bool LandfallSpotsEnabled()
 
 bool LandfallProvider::LandEntrySpotsRule(const GameState& s) const { (void)s; return LandfallSpotsEnabled(); }
 
+// THE KAROO DROP'S POSITION (MTG_KAROO_POSITION, 2026-10-22). The base rule counts EVERY cast as an
+// observer in a deck with a landfall trigger, because a Gruul Turf played before a cast resolves its
+// landfall triggers first and the cast might read their payload. For THIS list that never helps, so the
+// earlier Turf positions are only offered before a reader of the land-entry condition (none in the list
+// today) -- a SOUND fold, not a heuristic. Measured before the fold: 3000 held-out std games, 0 better /
+// 3 worse (+1 each, search budget spent on the extra clones), units x1.010.
+// Card by card, what a Turf entering BEFORE cast c (instead of after the casts) changes for c:
+//   * the payloads it fires -- Rampaging Baloths' / Omnath's tokens, Avenger of Zendikar's counter on
+//     each Plant, Phylath's four counters on a target Plant, Courser of Kruphix's 1 life, Khalni Heart
+//     Expedition's quest counter -- are read at resolution by no card here: no creature-count, power,
+//     life-gained or quest-counter reader is in the list (Khalni's crack is an activation, which runs
+//     after the casts either way);
+//   * the land counts: Avenger's Plants per land are unchanged (the Turf comes in, the bounce takes one
+//     out); Phylath's Plants per BASIC land can only fall (the Turf is not basic, the bounce may take a
+//     basic); Terastodon's targets swap the bounced land for the Turf, the same count;
+//   * a landfall WATCHER cast after an early Turf misses its trigger: strictly worse;
+//   * mana: the Turf enters tapped and an untapped returned land is floated in response, so nothing.
+// A card added to this list that reads a landfall payload at resolution (Craterhoof's creature count, a
+// ferocious / power check, life gained this turn) must be counted here, or the base rule restored for it.
+bool LandfallProvider::KarooEntryObserver(const GameState& s, const CardDefinition& def) const
+{
+    (void)s;
+    return def.params.landfall_damage > 0 || def.params.cast_lifegain_landfall > 0;
+}
+
 // THE PLANT TARGET IS THE PICK (USER 2026-10-20: "this should have been just the pick. If I gave that rule
 // that was my intention for sure"). Phylath's "four +1/+1 counters on target Plant" goes to the front of
 // LandfallCounterTargetOrder -- a Plant that can attack now, then the biggest, then the oldest: the counters
