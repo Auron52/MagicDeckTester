@@ -1,0 +1,319 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 40, "name": "Stromkirk Condemned" }, { "num": 43, "name": "Swamp" }, { "num": 9, "name": "Bloodghast" }, { "num": 32, "name": "Secluded Courtyard" }, { "num": 16, "name": "Falkenrath Gorger" }, { "num": 17, "name": "Falkenrath Gorger" }, { "num": 24, "name": "Legion Lieutenant" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Falkenrath Gorger" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Falkenrath Gorger", "land": "Secluded Courtyard", "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Swamp; cast: (nothing)", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Bloodline Keeper" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Stromkirk Condemned", "land": "Swamp", "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Bloodghast", "land": "Swamp", "casts": ["Bloodghast"], "actions": [{ "card": "Bloodghast" }] },
+    { "index": 2, "summary": "land=Swamp; cast: Falkenrath Gorger", "land": "Swamp", "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 3, "summary": "land=Swamp; cast: Legion Lieutenant", "land": "Swamp", "casts": ["Legion Lieutenant"], "actions": [{ "card": "Legion Lieutenant" }] },
+    { "index": 4, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 5, "summary": "land=Swamp; cast: (nothing)", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 6, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "tapped": true, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 6, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Captivating Vampire" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "is_land": true, "taps": "C" }, { "name": "Swamp", "idx": 6, "num": 43, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Stromkirk Condemned", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned" }] },
+    { "index": 1, "summary": "land=none; cast: Bloodghast", "land": null, "casts": ["Bloodghast"], "actions": [{ "card": "Bloodghast" }] },
+    { "index": 2, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "discard",
+  "turn": 3,
+  "over_by": 1,
+  "discard_context": "cost",
+  "source": "Stromkirk Condemned",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "ai_set": [],
+  "heuristic_default": 3,
+  "options": [{ "index": 0, "name": "Bloodghast" }, { "index": 1, "name": "Falkenrath Gorger" }, { "index": 2, "name": "Falkenrath Gorger" }, { "index": 3, "name": "Bloodline Keeper" }, { "index": 4, "name": "Captivating Vampire" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "discard", "text": "Bloodghast -- discarded into exile (madness, Stromkirk Condemned)" }, { "turn": 3, "kind": "discard", "text": "Bloodghast -- not cast (madness declined): put into the graveyard" }, { "turn": 3, "kind": "ability", "text": "Stromkirk Condemned: discarded Bloodghast -- Vampires you control get +1/+1 until end of turn (3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodghast"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (4), Legion Lieutenant (3) — 7 to opponent (17→10)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "tapped": true, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "tapped": true, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodghast"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 9, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Voldaren Estate" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "is_land": true, "taps": "C" }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Voldaren Estate", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Bloodghast"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Voldaren Estate; cast: Falkenrath Gorger, Falkenrath Gorger, Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": "Voldaren Estate", "casts": ["Falkenrath Gorger", "Falkenrath Gorger", "Stromkirk Condemned"], "cast_order_canonical": ["Falkenrath Gorger", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }, { "card": "Falkenrath Gorger" }, { "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Voldaren Estate; cast: Falkenrath Gorger, Falkenrath Gorger", "land": "Voldaren Estate", "casts": ["Falkenrath Gorger", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Gorger", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 2, "summary": "land=Voldaren Estate; cast: Falkenrath Gorger, Voldaren Estate: create a Blood token, Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": "Voldaren Estate", "casts": ["Falkenrath Gorger", "Stromkirk Condemned", "Voldaren Estate"], "actions": [{ "card": "Falkenrath Gorger" }, { "card": "Voldaren Estate", "src_num": 57, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }, { "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=Voldaren Estate; cast: Falkenrath Gorger, Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": "Voldaren Estate", "casts": ["Falkenrath Gorger", "Stromkirk Condemned"], "actions": [{ "card": "Falkenrath Gorger" }, { "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=Voldaren Estate; cast: Captivating Vampire, Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": "Voldaren Estate", "casts": ["Captivating Vampire", "Stromkirk Condemned"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Voldaren Estate; cast: Falkenrath Gorger, Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Falkenrath Gorger", "Voldaren Estate"], "actions": [{ "card": "Falkenrath Gorger" }, { "card": "Voldaren Estate", "src_num": 57, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 6, "summary": "land=Voldaren Estate; cast: Falkenrath Gorger", "land": "Voldaren Estate", "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 7, "summary": "land=Voldaren Estate; cast: Captivating Vampire", "land": "Voldaren Estate", "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire" }] },
+    { "index": 8, "summary": "land=Voldaren Estate; cast: Voldaren Estate: create a Blood token, Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": "Voldaren Estate", "casts": ["Stromkirk Condemned", "Voldaren Estate"], "actions": [{ "card": "Voldaren Estate", "src_num": 57, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }, { "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 9, "summary": "land=Voldaren Estate; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": "Voldaren Estate", "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Voldaren Estate; cast: Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Voldaren Estate"], "actions": [{ "card": "Voldaren Estate", "src_num": 57, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Falkenrath Gorger, Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Falkenrath Gorger", "Stromkirk Condemned"], "actions": [{ "card": "Falkenrath Gorger" }, { "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 13, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 40, "activate": true, "x": 1 }] },
+    { "index": 14, "summary": "land=Voldaren Estate; cast: (nothing)", "land": "Voldaren Estate", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": [1], "decision": {
+  "decision_index": 13,
+  "type": "revive",
+  "source": "Bloodghast (landfall)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "is_land": true, "taps": "C" }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "is_land": true, "taps": "B" }, { "name": "Voldaren Estate", "idx": 11, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodghast"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "max_puts": 1,
+  "ai_set": [0],
+  "candidates": [{ "index": 0, "def": true, "name": "Bloodghast" }],
+  "note": "reply one int per candidate (1 = return this creature card to the battlefield), up to max_puts total. Default = the AI's pick (missing combo pieces first)."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 14,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 1,
+  "discard_context": "cost",
+  "source": "Stromkirk Condemned",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bloodghast", "idx": 12, "num": 9, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "is_land": true, "taps": "C" }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "is_land": true, "taps": "B" }, { "name": "Voldaren Estate", "idx": 11, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "ai_set": [],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "name": "Falkenrath Gorger" }, { "index": 1, "name": "Falkenrath Gorger" }, { "index": 2, "name": "Bloodline Keeper" }, { "index": 3, "name": "Captivating Vampire" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "madness",
+  "source": "Stromkirk Condemned",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bloodghast", "idx": 12, "num": 9, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "is_land": true, "taps": "C" }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "is_land": true, "taps": "B" }, { "name": "Voldaren Estate", "idx": 11, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "card": "Captivating Vampire",
+  "card_number": 13,
+  "options": [{ "index": 0, "cost": "{1}{B}{B}", "convoke_taps": 0, "label": "Cast for {1}{B}{B}" }],
+  "note": "reply an option index to CAST the card for its madness cost (the label says what it pays and taps), or -1 to put it into the graveyard. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "🌍 Bloodghast (landfall: Voldaren Estate): returns from the graveyard to the battlefield" }, { "turn": 4, "kind": "return", "text": "♻️ Bloodghast -- returned to the battlefield (landfall)" }, { "turn": 4, "kind": "discard", "text": "Captivating Vampire -- discarded into exile (madness, Stromkirk Condemned)" }, { "turn": 4, "kind": "cast", "text": "Captivating Vampire -- cast for its madness cost (Stromkirk Condemned)" }, { "turn": 4, "kind": "ability", "text": "Stromkirk Condemned: discarded Captivating Vampire -- Vampires you control get +1/+1 until end of turn (5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bloodghast", "idx": 12, "num": 9, "is_land": false }, { "name": "Captivating Vampire", "idx": 13, "num": 13, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 3, "num": 16, "is_land": false }, { "name": "Legion Lieutenant", "idx": 7, "num": 24, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Stromkirk Condemned", "idx": 10, "num": 40, "is_land": false }, { "name": "Swamp", "idx": 6, "num": 43, "tapped": true, "is_land": true }, { "name": "Voldaren Estate", "idx": 11, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Bloodline Keeper", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (5), Legion Lieutenant (4), Stromkirk Condemned (5), Bloodghast (5) — 19 to opponent (10→-9)" }
+  ]
+}

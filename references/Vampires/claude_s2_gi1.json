@@ -1,0 +1,347 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [40] }, "combat_swap_timing": 1, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 32, "name": "Secluded Courtyard" }, { "num": 54, "name": "Vampire of the Dire Moon" }, { "num": 43, "name": "Swamp" }, { "num": 40, "name": "Stromkirk Condemned" }, { "num": 53, "name": "Vampire Socialite" }, { "num": 5, "name": "Asylum Visitor" }, { "num": 24, "name": "Legion Lieutenant" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 14, "name": "Captivating Vampire" }, { "num": 43, "name": "Swamp" }, { "num": 4, "name": "Aether Vial" }, { "num": 42, "name": "Stromkirk Condemned" }, { "num": 40, "name": "Stromkirk Condemned" }, { "num": 27, "name": "Legion Lieutenant" }, { "num": 44, "name": "Swamp" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 14, "name": "Captivating Vampire", "win_optimal": true }, { "num": 43, "name": "Swamp", "win_optimal": true }, { "num": 4, "name": "Aether Vial", "win_optimal": true }, { "num": 42, "name": "Stromkirk Condemned", "win_optimal": true }, { "num": 40, "name": "Stromkirk Condemned", "win_optimal": true }, { "num": 27, "name": "Legion Lieutenant", "win_optimal": true }, { "num": 44, "name": "Swamp", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 14, "name": "Captivating Vampire" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Aether Vial", "land": "Swamp", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=Swamp; cast: (nothing)", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }], "vial_counters": [0], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Falkenrath Gorger", "Stromkirk Condemned"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Falkenrath Gorger" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }], "vial_counters": [1], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Stromkirk Condemned, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Stromkirk Condemned", "Falkenrath Gorger"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Gorger"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Stromkirk Condemned", "land": "Swamp", "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned" }] },
+    { "index": 2, "summary": "land=Swamp; cast: Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 3, "summary": "land=none; cast: Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 4, "summary": "land=Swamp; cast: (nothing)", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 2, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 2, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [1], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Falkenrath Pit Fighter" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [2], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Legion Lieutenant (vial), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Legion Lieutenant", "Stromkirk Condemned"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Legion Lieutenant (vial)", "land": null, "casts": ["Legion Lieutenant"], "actions": [{ "card": "Legion Lieutenant" }] },
+    { "index": 2, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Legion Lieutenant", "idx": 5, "num": 27, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [2], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (3), Stromkirk Condemned (3) — 6 to opponent (20→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "tapped": true, "is_land": false }, { "name": "Legion Lieutenant", "idx": 5, "num": 27, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "tapped": true, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [2], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 14,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Legion Lieutenant", "idx": 5, "num": 27, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [2], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 14, "cast_order": ["*", "Captivating Vampire", "Stromkirk Condemned"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Markov Baron" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Legion Lieutenant", "idx": 5, "num": 27, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [3], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Captivating Vampire", "Markov Baron", "Stromkirk Condemned"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Captivating Vampire #14" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Falkenrath Gorger #19), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Captivating Vampire", "Markov Baron", "Stromkirk Condemned"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Gorger #19" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14, Falkenrath Gorger #19), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Captivating Vampire", "Markov Baron", "Stromkirk Condemned"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Captivating Vampire #14, Falkenrath Gorger #19" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14, Legion Lieutenant #27, Falkenrath Gorger #19), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Captivating Vampire", "Markov Baron", "Stromkirk Condemned"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Captivating Vampire #14, Legion Lieutenant #27, Falkenrath Gorger #19" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14, Legion Lieutenant #27), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Captivating Vampire", "Markov Baron", "Stromkirk Condemned"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 1, "taps": "Captivating Vampire #14, Legion Lieutenant #27" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14)", "land": null, "casts": ["Captivating Vampire", "Markov Baron"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Captivating Vampire #14" } }] },
+    { "index": 8, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Falkenrath Gorger #19)", "land": null, "casts": ["Captivating Vampire", "Markov Baron"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Gorger #19" } }] },
+    { "index": 9, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14, Falkenrath Gorger #19)", "land": null, "casts": ["Captivating Vampire", "Markov Baron"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Captivating Vampire #14, Falkenrath Gorger #19" } }] },
+    { "index": 10, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14, Legion Lieutenant #27, Falkenrath Gorger #19)", "land": null, "casts": ["Captivating Vampire", "Markov Baron"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Captivating Vampire #14, Legion Lieutenant #27, Falkenrath Gorger #19" } }] },
+    { "index": 12, "summary": "land=none; cast: Captivating Vampire (vial), Markov Baron (convoke: Captivating Vampire #14, Legion Lieutenant #27)", "land": null, "casts": ["Captivating Vampire", "Markov Baron"], "cast_order_canonical": ["Captivating Vampire", "Markov Baron"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 1, "taps": "Captivating Vampire #14, Legion Lieutenant #27" } }] },
+    { "index": 14, "summary": "land=none; cast: Captivating Vampire (vial), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Captivating Vampire", "Stromkirk Condemned"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 15, "summary": "land=none; cast: Markov Baron (vial), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Markov Baron", "Stromkirk Condemned"], "actions": [{ "card": "Markov Baron" }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #27), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Markov Baron", "Stromkirk Condemned"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #27" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 17, "summary": "land=none; cast: Markov Baron (convoke: Falkenrath Gorger #19), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Markov Baron", "Stromkirk Condemned"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Gorger #19" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 18, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #27, Falkenrath Gorger #19), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Markov Baron", "Stromkirk Condemned"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #27, Falkenrath Gorger #19" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 19, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #27, Stromkirk Condemned #42, Falkenrath Gorger #19), Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Markov Baron", "Stromkirk Condemned"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #27, Stromkirk Condemned #42, Falkenrath Gorger #19" } }, { "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 20, "summary": "land=none; cast: Captivating Vampire (vial)", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire" }] },
+    { "index": 21, "summary": "land=none; cast: Markov Baron (vial)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron" }] },
+    { "index": 22, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #27)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #27" } }] },
+    { "index": 23, "summary": "land=none; cast: Markov Baron (convoke: Falkenrath Gorger #19)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Gorger #19" } }] },
+    { "index": 24, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #27, Falkenrath Gorger #19)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #27, Falkenrath Gorger #19" } }] },
+    { "index": 25, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #27, Stromkirk Condemned #42, Falkenrath Gorger #19)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #27, Stromkirk Condemned #42, Falkenrath Gorger #19" } }] },
+    { "index": 26, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 27, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 4,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 1,
+  "discard_context": "cost",
+  "source": "Stromkirk Condemned",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Captivating Vampire", "idx": 6, "num": 14, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Legion Lieutenant", "idx": 5, "num": 27, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [3], "hand": [{ "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [] },
+  "ai_set": [],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Falkenrath Pit Fighter" }, { "index": 1, "name": "Markov Baron" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "madness",
+  "source": "Stromkirk Condemned",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Captivating Vampire", "idx": 6, "num": 14, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Legion Lieutenant", "idx": 5, "num": 27, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "is_land": true, "taps": "B" }, { "name": "Swamp", "idx": 2, "num": 44, "is_land": true, "taps": "B" }], "vial_counters": [3], "hand": [{ "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "card": "Markov Baron",
+  "card_number": 29,
+  "options": [{ "index": 0, "cost": "{2}", "convoke_taps": 1, "label": "Cast for {2}, tapping 1 creature (convoke): Captivating Vampire #14" }, { "index": 1, "cost": "{1}", "convoke_taps": 2, "label": "Cast for {1}, tapping 2 creatures (convoke): Captivating Vampire #14, Legion Lieutenant #27" }, { "index": 2, "cost": "{1}{B}", "convoke_taps": 1, "label": "Cast for {1}{B}, tapping 1 creature (convoke): Falkenrath Gorger #19" }, { "index": 3, "cost": "", "convoke_taps": 3, "label": "Cast for {0}, tapping 3 creatures (convoke): Captivating Vampire #14, Legion Lieutenant #27, Falkenrath Gorger #19" }],
+  "note": "reply an option index to CAST the card for its madness cost (the label says what it pays and taps), or -1 to put it into the graveyard. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "discard", "text": "Markov Baron -- discarded into exile (madness, Stromkirk Condemned)" }, { "turn": 4, "kind": "convoke", "text": "🙌 Convoke -- tapped 1 creature(s): Captivating Vampire #14" }, { "turn": 4, "kind": "cast", "text": "Markov Baron -- cast for its madness cost (Stromkirk Condemned)" }, { "turn": 4, "kind": "ability", "text": "Stromkirk Condemned: discarded Markov Baron -- Vampires you control get +1/+1 until end of turn (5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Captivating Vampire", "idx": 6, "num": 14, "tapped": true, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 3, "num": 19, "is_land": false }, { "name": "Legion Lieutenant", "idx": 5, "num": 27, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 29, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 4, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 0, "num": 43, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 2, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (6), Stromkirk Condemned (6), Legion Lieutenant (5) — 17 to opponent (14→-3)" }
+  ]
+}

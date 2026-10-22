@@ -1,0 +1,352 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [35] }, "combat_swap_timing": 1, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 54, "name": "Vampire of the Dire Moon" }, { "num": 49, "name": "Unclaimed Territory" }, { "num": 43, "name": "Swamp" }, { "num": 36, "name": "Stromkirk Captain" }, { "num": 32, "name": "Secluded Courtyard" }, { "num": 57, "name": "Voldaren Estate" }, { "num": 16, "name": "Falkenrath Gorger" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 54, "name": "Vampire of the Dire Moon" }, { "num": 22, "name": "Falkenrath Pit Fighter" }, { "num": 29, "name": "Markov Baron" }, { "num": 55, "name": "Vampire of the Dire Moon" }, { "num": 35, "name": "Secluded Courtyard" }, { "num": 51, "name": "Unclaimed Territory" }, { "num": 33, "name": "Secluded Courtyard" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 54, "name": "Vampire of the Dire Moon", "win_optimal": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "win_optimal": true }, { "num": 29, "name": "Markov Baron", "win_optimal": true }, { "num": 55, "name": "Vampire of the Dire Moon", "win_optimal": true }, { "num": 35, "name": "Secluded Courtyard", "win_optimal": true }, { "num": 51, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 33, "name": "Secluded Courtyard", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 35, "name": "Secluded Courtyard" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Asylum Visitor" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Vampire of the Dire Moon", "land": "Unclaimed Territory", "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Blackcleave Cliffs" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Blackcleave Cliffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blackcleave Cliffs; cast: Vampire of the Dire Moon, Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22)", "land": "Blackcleave Cliffs", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 2, "taps": "Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22" } }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 2, "taps": "Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22" } }] },
+    { "index": 2, "summary": "land=Blackcleave Cliffs; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": "Blackcleave Cliffs", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 3, "summary": "land=Blackcleave Cliffs; cast: Asylum Visitor", "land": "Blackcleave Cliffs", "casts": ["Asylum Visitor"], "actions": [{ "card": "Asylum Visitor" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Asylum Visitor", "land": "Secluded Courtyard", "casts": ["Asylum Visitor"], "actions": [{ "card": "Asylum Visitor" }] },
+    { "index": 6, "summary": "land=Blackcleave Cliffs; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": "Blackcleave Cliffs", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 7, "summary": "land=Blackcleave Cliffs; cast: Vampire of the Dire Moon, Vampire of the Dire Moon", "land": "Blackcleave Cliffs", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 9, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 10, "summary": "land=Blackcleave Cliffs; cast: Vampire of the Dire Moon", "land": "Blackcleave Cliffs", "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 11, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 12, "summary": "land=none; cast: Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 13, "summary": "land=Blackcleave Cliffs; cast: (nothing)", "land": "Blackcleave Cliffs", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Asylum Visitor", "idx": 4, "num": 5, "is_land": false }, { "name": "Blackcleave Cliffs", "idx": 3, "num": 7, "tapped": true, "is_land": true }, { "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Falkenrath Pit Fighter (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Asylum Visitor", "idx": 4, "num": 5, "is_land": false }, { "name": "Blackcleave Cliffs", "idx": 3, "num": 7, "tapped": true, "is_land": true }, { "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "tapped": true, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 32, "cast_order": ["*", "Legion Lieutenant", "Vampire of the Dire Moon"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Legion Lieutenant" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Asylum Visitor", "idx": 4, "num": 5, "is_land": false }, { "name": "Blackcleave Cliffs", "idx": 3, "num": 7, "is_land": true, "taps": "BR" }, { "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 25, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Legion Lieutenant, Vampire of the Dire Moon, Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Legion Lieutenant", "Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Legion Lieutenant", "Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 2, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Legion Lieutenant, Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Legion Lieutenant", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Legion Lieutenant", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Legion Lieutenant" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 2, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Legion Lieutenant, Markov Baron (convoke: Legion Lieutenant #25, Asylum Visitor #5, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Legion Lieutenant", "Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Legion Lieutenant", "Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Legion Lieutenant #25, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22), Legion Lieutenant", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Legion Lieutenant"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron", "Legion Lieutenant"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Legion Lieutenant" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #22), Vampire of the Dire Moon, Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Markov Baron", "Vampire of the Dire Moon", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 9, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Vampire of the Dire Moon #55)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 2, "taps": "Vampire of the Dire Moon #54, Vampire of the Dire Moon #55" } }] },
+    { "index": 10, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 2, "taps": "Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22" } }] },
+    { "index": 13, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 15, "summary": "land=Secluded Courtyard; cast: Legion Lieutenant, Markov Baron (convoke: Legion Lieutenant #25, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Legion Lieutenant", "Markov Baron"], "cast_order_canonical": ["Legion Lieutenant", "Markov Baron"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Falkenrath Pit Fighter #22" } }] },
+    { "index": 16, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #22), Legion Lieutenant", "land": "Secluded Courtyard", "casts": ["Markov Baron", "Legion Lieutenant"], "cast_order_canonical": ["Markov Baron", "Legion Lieutenant"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Legion Lieutenant" }] },
+    { "index": 18, "summary": "land=Secluded Courtyard; cast: Legion Lieutenant, Markov Baron (convoke: Legion Lieutenant #25, Asylum Visitor #5, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Legion Lieutenant", "Markov Baron"], "cast_order_canonical": ["Legion Lieutenant", "Markov Baron"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Legion Lieutenant #25, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }] },
+    { "index": 19, "summary": "land=none; cast: Vampire of the Dire Moon, Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 2, "taps": "Vampire of the Dire Moon #54, Vampire of the Dire Moon #55, Falkenrath Pit Fighter #22" } }] },
+    { "index": 20, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 22, "summary": "land=none; cast: Legion Lieutenant, Markov Baron (convoke: Legion Lieutenant #25, Asylum Visitor #5, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Legion Lieutenant", "Markov Baron"], "cast_order_canonical": ["Legion Lieutenant", "Markov Baron"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Legion Lieutenant #25, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }] },
+    { "index": 23, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 24, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 25, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Asylum Visitor #5), Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Asylum Visitor #5" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 26, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #54" } }] },
+    { "index": 27, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 28, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 31, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }] },
+    { "index": 32, "summary": "land=Secluded Courtyard; cast: Legion Lieutenant, Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Legion Lieutenant", "Vampire of the Dire Moon"], "cast_order_canonical": ["Legion Lieutenant", "Vampire of the Dire Moon"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 33, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Legion Lieutenant", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Legion Lieutenant"], "cast_order_canonical": ["Vampire of the Dire Moon", "Legion Lieutenant"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Legion Lieutenant" }] },
+    { "index": 34, "summary": "land=none; cast: Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": null, "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 35, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 37, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #54, Asylum Visitor #5, Falkenrath Pit Fighter #22" } }] },
+    { "index": 38, "summary": "land=Secluded Courtyard; cast: Markov Baron", "land": "Secluded Courtyard", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron" }] },
+    { "index": 39, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 40, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Asylum Visitor #5)", "land": "Secluded Courtyard", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Asylum Visitor #5" } }] },
+    { "index": 41, "summary": "land=Secluded Courtyard; cast: Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #22)", "land": "Secluded Courtyard", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #22" } }] },
+    { "index": 42, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon, Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 43, "summary": "land=Secluded Courtyard; cast: Legion Lieutenant", "land": "Secluded Courtyard", "casts": ["Legion Lieutenant"], "actions": [{ "card": "Legion Lieutenant" }] },
+    { "index": 44, "summary": "land=none; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 45, "summary": "land=none; cast: Markov Baron (convoke: Asylum Visitor #5)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Asylum Visitor #5" } }] },
+    { "index": 46, "summary": "land=none; cast: Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 0, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #22" } }] },
+    { "index": 47, "summary": "land=none; cast: Vampire of the Dire Moon, Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "cast_order_canonical": ["Vampire of the Dire Moon", "Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 48, "summary": "land=none; cast: Legion Lieutenant", "land": null, "casts": ["Legion Lieutenant"], "actions": [{ "card": "Legion Lieutenant" }] },
+    { "index": 49, "summary": "land=Secluded Courtyard; cast: Vampire of the Dire Moon", "land": "Secluded Courtyard", "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 50, "summary": "land=none; cast: Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 51, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 52, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Asylum Visitor", "idx": 4, "num": 5, "is_land": false }, { "name": "Blackcleave Cliffs", "idx": 3, "num": 7, "tapped": true, "is_land": true }, { "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 25, "is_land": false }, { "name": "Secluded Courtyard", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 7, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Falkenrath Pit Fighter (3), Asylum Visitor (4) — 7 to opponent (18→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Asylum Visitor", "idx": 4, "num": 5, "tapped": true, "is_land": false }, { "name": "Blackcleave Cliffs", "idx": 3, "num": 7, "tapped": true, "is_land": true }, { "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "tapped": true, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 25, "is_land": false }, { "name": "Secluded Courtyard", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 7, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 12, "cast_order": ["*", "Vampire of the Dire Moon", "Markov Baron"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Voldaren Estate" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Asylum Visitor", "idx": 4, "num": 5, "is_land": false }, { "name": "Blackcleave Cliffs", "idx": 3, "num": 7, "is_land": true, "taps": "BR" }, { "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 25, "is_land": false }, { "name": "Secluded Courtyard", "idx": 5, "num": 33, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 7, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 29, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Voldaren Estate", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25), Vampire of the Dire Moon, Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon", "Voldaren Estate"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25" } }, { "card": "Vampire of the Dire Moon" }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 1, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Voldaren Estate"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 2, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22), Vampire of the Dire Moon, Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon", "Voldaren Estate"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 3, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Falkenrath Pit Fighter #22), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Voldaren Estate"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 4, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54), Vampire of the Dire Moon, Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon", "Voldaren Estate"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54" } }, { "card": "Vampire of the Dire Moon" }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 5, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Voldaren Estate"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 6, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22), Vampire of the Dire Moon, Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon", "Voldaren Estate"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 7, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25, Falkenrath Pit Fighter #22), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Voldaren Estate"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25, Falkenrath Pit Fighter #22" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 10, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25, Vampire of the Dire Moon #54), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron", "Voldaren Estate"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 3, "other": 0, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25, Vampire of the Dire Moon #54" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 11, "summary": "land=Voldaren Estate; cast: Markov Baron, Vampire of the Dire Moon", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 12, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron" }] },
+    { "index": 13, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25), Vampire of the Dire Moon", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 14, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55)", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55" } }] },
+    { "index": 15, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 16, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 17, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54), Vampire of the Dire Moon", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 18, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25)", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25" } }] },
+    { "index": 19, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": "Voldaren Estate", "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 20, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25, Falkenrath Pit Fighter #22)", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25, Falkenrath Pit Fighter #22" } }] },
+    { "index": 23, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25, Vampire of the Dire Moon #54)", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 3, "other": 0, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25, Vampire of the Dire Moon #54" } }] },
+    { "index": 24, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #25), Vampire of the Dire Moon", "land": null, "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 25, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55)", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55" } }] },
+    { "index": 26, "summary": "land=none; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": null, "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 27, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 28, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54), Vampire of the Dire Moon", "land": null, "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 29, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25)", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25" } }] },
+    { "index": 30, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22), Vampire of the Dire Moon", "land": null, "casts": ["Markov Baron", "Vampire of the Dire Moon"], "cast_order_canonical": ["Markov Baron", "Vampire of the Dire Moon"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 31, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25, Falkenrath Pit Fighter #22" } }] },
+    { "index": 34, "summary": "land=none; cast: Vampire of the Dire Moon, Markov Baron (convoke: Vampire of the Dire Moon #55, Legion Lieutenant #25, Vampire of the Dire Moon #54)", "land": null, "casts": ["Vampire of the Dire Moon", "Markov Baron"], "cast_order_canonical": ["Vampire of the Dire Moon", "Markov Baron"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Markov Baron", "convoke": { "pip": 3, "other": 0, "plan_bodies": 1, "taps": "Vampire of the Dire Moon #55, Legion Lieutenant #25, Vampire of the Dire Moon #54" } }] },
+    { "index": 35, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Voldaren Estate"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 36, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Voldaren Estate"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 37, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Voldaren Estate"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 38, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22), Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Markov Baron", "Voldaren Estate"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 39, "summary": "land=Voldaren Estate; cast: Markov Baron", "land": "Voldaren Estate", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron" }] },
+    { "index": 40, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25)", "land": "Voldaren Estate", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25" } }] },
+    { "index": 41, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": "Voldaren Estate", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 42, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54)", "land": "Voldaren Estate", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54" } }] },
+    { "index": 43, "summary": "land=Voldaren Estate; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": "Voldaren Estate", "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 44, "summary": "land=none; cast: Markov Baron", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron" }] },
+    { "index": 45, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #25)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 1, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25" } }] },
+    { "index": 46, "summary": "land=none; cast: Markov Baron (convoke: Falkenrath Pit Fighter #22)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 1, "plan_bodies": 0, "taps": "Falkenrath Pit Fighter #22" } }] },
+    { "index": 47, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 0, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54" } }] },
+    { "index": 48, "summary": "land=none; cast: Markov Baron (convoke: Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 2, "other": 1, "plan_bodies": 0, "taps": "Legion Lieutenant #25, Vampire of the Dire Moon #54, Falkenrath Pit Fighter #22" } }] },
+    { "index": 49, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon, Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon", "Voldaren Estate"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 50, "summary": "land=Voldaren Estate; cast: Vampire of the Dire Moon", "land": "Voldaren Estate", "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 51, "summary": "land=none; cast: Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 52, "summary": "land=Voldaren Estate; cast: Voldaren Estate: create a Blood token", "land": "Voldaren Estate", "casts": ["Voldaren Estate"], "actions": [{ "card": "Voldaren Estate", "src_num": 59, "activate": true, "makes_blood": true, "act_label": "create a Blood token", "x": 1 }] },
+    { "index": 53, "summary": "land=Voldaren Estate; cast: (nothing)", "land": "Voldaren Estate", "casts": [], "actions": [] },
+    { "index": 54, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Asylum Visitor", "idx": 4, "num": 5, "is_land": false }, { "name": "Blackcleave Cliffs", "idx": 3, "num": 7, "tapped": true, "is_land": true }, { "name": "Falkenrath Pit Fighter", "idx": 2, "num": 22, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 25, "is_land": false }, { "name": "Markov Baron", "idx": 10, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 5, "num": 33, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 51, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 7, "num": 54, "is_land": false }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 55, "is_land": false }, { "name": "Voldaren Estate", "idx": 8, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Falkenrath Pit Fighter (4), Asylum Visitor (5), Legion Lieutenant (3), Vampire of the Dire Moon (3) — 15 to opponent (11→-4)" }
+  ]
+}
