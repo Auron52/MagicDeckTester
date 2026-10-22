@@ -3191,10 +3191,12 @@ public:
     // Eternal Witness, Weather the Storm, Crab Umbra, Galvanic Alchemist, Seedcradle Witch, Staff of Domination,
     // Stroke of Genius; any unlisted card after them in its generic order. TOTAL (a tie between two different
     // cards falls to the name). Keyed on params through the AaIs* roles -- see the .cpp. =0 -> the generic tiers
-    // (land Auras 5, creatures 10, other noncreatures 20), byte-identical. Four amendment arms, DEFAULT OFF:
+    // (land Auras 5, creatures 10, other noncreatures 20), byte-identical. Five amendment arms, DEFAULT OFF:
     // MTG_AA_CAST_ORDER_AURAS_FIRST (Living Wish after the land Auras), _WISH_AFTER_LIFE (Living Wish after the
     // lifegain), _LIFE_FIRST (the lifegain right after the land Auras, then the Wish), _WEATHER_LAST (Weather the
-    // Storm after the untappers).
+    // Storm after the untappers), _WISH_LATE (Living Wish after Staff of Domination, before Weather / Stroke). One
+    // arm read with the order OFF, DEFAULT OFF: MTG_AA_GENERIC_WEATHER_LAST (the generic tiers, Weather the Storm
+    // then Stroke of Genius after every other card).
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
     bool        CastOrderTotalByName() const override;

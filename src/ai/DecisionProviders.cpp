@@ -43836,7 +43836,7 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
 //       playable as the drop); (2) Ezuri / Scholar go before the lifegain unconditionally; (3) the untappers go after
 //       the lifegain AND after Weather the Storm; (4) Feed the Clan's ferocious via a Witch pump is an ACTIVATION,
 //       outside the cast order -- no change.
-// FOUR AMENDMENT ARMS, all DEFAULT OFF and inert unless MTG_AA_CAST_ORDER is on (measurement levers for the USER's
+// FIVE AMENDMENT ARMS, all DEFAULT OFF and inert unless MTG_AA_CAST_ORDER is on (measurement levers for the USER's
 // review, never an adoption), applied in this order:
 //   MTG_AA_CAST_ORDER_AURAS_FIRST     Living Wish after the two land Auras (Sprawl, Wild Growth, Wish, Harbinger, ...)
 //   MTG_AA_CAST_ORDER_WISH_AFTER_LIFE Living Wish after the lifegain block (..., Brindle Boar, Wish, Eternal Witness)
@@ -43846,7 +43846,20 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
 //                                     every cast ranked ahead of the first lifegain is paid from the lands it needs
 //   MTG_AA_CAST_ORDER_WEATHER_LAST    Weather the Storm after the untappers, right before Stroke (question 3's other
 //                                     answer: every untapper cast before it is one more storm copy)
+//   MTG_AA_CAST_ORDER_WISH_LATE       Living Wish after Staff of Domination: behind the lifegain block AND the engine
+//                                     pieces it fetches or needs (Witness, Crab Umbra, Galvanic Alchemist, Seedcradle
+//                                     Witch, Staff), right before Weather the Storm (with WEATHER_LAST) and Stroke.
+//                                     Applied LAST, so it overrides the three arms above that move the Wish. Why: in a
+//                                     wish's continuation the hand holds the fetched piece AND a second Wish; with the
+//                                     Wish ranked first, the second Wish takes the Accomplished Alchemist's one-colour
+//                                     tap (or the lands) and the piece is stranded (ledger, "Re-measurement on current
+//                                     play (2026-10-22)": g700 / g937 Galvanic Alchemist, g472 Staff, at d8 b0)
 // Every other position is unchanged.
+// ONE ARM WITH THE ORDER OFF (DEFAULT OFF, measurement only; inert while MTG_AA_CAST_ORDER is on, whose WEATHER_LAST
+// is its in-order twin): MTG_AA_GENERIC_WEATHER_LAST keeps the generic tiers and moves only the amended order's TAIL --
+// Weather the Storm, then Stroke of Genius, after every other card (generic ranks 21 and 22). The generic tiers tie
+// Weather with Living Wish / Nourish / Feed the Clan / Staff / Crab Umbra at 20 and fall to plan (hand) order, so a
+// Weather earlier in hand is cast first and loses those storm copies (g42 / g837 at d8 b0, the same ledger section).
 // TOTAL (CastOrderTotalByName): two DIFFERENT cards on one rank (only possible among unlisted cards) fall to the
 // name, never to plan order (the USER's 2026-10-14 cross-deck ruling); copies of one card keep plan order.
 // The land drop's slot (0, before every cast) meets DecisionProvider::LandDropCastOrderRank's two conditions:
@@ -43861,7 +43874,7 @@ bool AaCastOrderOn()
     return heurarm::Flag(heurarm::AA_CAST_ORDER, s_env);
 }
 
-// The two amendment arms (DEFAULT OFF; read only while AaCastOrderOn()).
+// The five amendment arms (DEFAULT OFF; read only while AaCastOrderOn()).
 bool AaCastOrderAurasFirst()
 {
     static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_AURAS_FIRST");   // DEFAULT OFF (measurement arm)
@@ -43881,6 +43894,18 @@ bool AaCastOrderLifeFirst()
 {
     static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_LIFE_FIRST");        // DEFAULT OFF (measurement arm)
     return heurarm::Flag(heurarm::AA_CAST_ORDER_LIFE_FIRST, s_env);
+}
+bool AaCastOrderWishLate()
+{
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_WISH_LATE");         // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_CAST_ORDER_WISH_LATE, s_env);
+}
+
+// The one arm read with the order OFF (DEFAULT OFF; inert while AaCastOrderOn()): the generic tiers + the tail.
+bool AaGenericWeatherLast()
+{
+    static const bool s_env = EnvOn("MTG_AA_GENERIC_WEATHER_LAST");         // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_GENERIC_WEATHER_LAST, s_env);
 }
 
 // The rank is position x kAaOrderScale, so an unlisted card's generic rank (0..30) fits under the unlisted position
@@ -43928,8 +43953,8 @@ int AaCastOrderSlot(const CardDefinition& def)
 }
 
 // Position (1..kAaSlots) of every slot under each arm combination (bits: 1 WEATHER_LAST, 2 AURAS_FIRST,
-// 4 WISH_AFTER_LIFE, 8 LIFE_FIRST). Built once.
-constexpr int kAaOrderArms = 16;
+// 4 WISH_AFTER_LIFE, 8 LIFE_FIRST, 16 WISH_LATE). Built once.
+constexpr int kAaOrderArms = 32;
 using AaPosTable = std::array<std::array<int, kAaSlots>, kAaOrderArms>;
 const AaPosTable& AaCastOrderPositions()
 {
@@ -43956,6 +43981,9 @@ const AaPosTable& AaCastOrderPositions()
                 move_after(kAaWish, kAaBoar);
             }
             if (arm & 1) { move_after(kAaWeather, kAaStaff); }      // WEATHER_LAST: after the untappers, before Stroke
+            // WISH_LATE, LAST (after WEATHER_LAST, so the Wish lands between Staff and Weather and stays one more storm
+            // copy; it overrides every earlier Wish move): ..., Staff of Domination, Wish, [Weather,] Stroke.
+            if (arm & 16) { move_after(kAaWish, kAaStaff); }
             for (int i = 0; i < kAaSlots; ++i) { out[arm][seq[i]] = i + 1; }
         }
         return out;
@@ -43966,7 +43994,7 @@ const AaPosTable& AaCastOrderPositions()
 int AaCastOrderArm()
 {
     return (AaCastOrderWeatherLast() ? 1 : 0) + (AaCastOrderAurasFirst() ? 2 : 0)
-         + (AaCastOrderWishAfterLife() ? 4 : 0) + (AaCastOrderLifeFirst() ? 8 : 0);
+         + (AaCastOrderWishAfterLife() ? 4 : 0) + (AaCastOrderLifeFirst() ? 8 : 0) + (AaCastOrderWishLate() ? 16 : 0);
 }
 
 const char* AaCastOrderSlotName(int slot)
@@ -43997,9 +44025,23 @@ const char* AaCastOrderSlotName(int slot)
 }
 }   // namespace
 
+// MTG_AA_GENERIC_WEATHER_LAST's two ranks: just past the generic noncreature tier (20), well before the self-damage
+// tier (30), Weather the Storm then Stroke of Genius.
+constexpr int kAaGenericNoncreatureTier = 20;
+constexpr int kAaGenericWeatherRank     = 21;
+constexpr int kAaGenericStrokeRank      = 22;
+
 int AccomplishedAlchemistProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    if (!AaCastOrderOn()) { return SelesnyaLifegainProvider::CastOrderRank(s, def); }
+    if (!AaCastOrderOn())
+    {
+        const int generic = SelesnyaLifegainProvider::CastOrderRank(s, def);
+        if (generic != kAaGenericNoncreatureTier || !AaGenericWeatherLast()) { return generic; }
+        const int slot = AaCastOrderSlot(def);
+        if (slot == kAaWeather) { return kAaGenericWeatherRank; }
+        if (slot == kAaStroke)  { return kAaGenericStrokeRank; }
+        return generic;
+    }
     const int slot = AaCastOrderSlot(def);
     if (slot >= 0) { return AaCastOrderPositions()[AaCastOrderArm()][slot] * kAaOrderScale; }
     return kAaOrderUnlisted * kAaOrderScale + SelesnyaLifegainProvider::CastOrderRank(s, def);
@@ -44007,7 +44049,12 @@ int AccomplishedAlchemistProvider::CastOrderRank(const GameState& s, const CardD
 
 const char* AccomplishedAlchemistProvider::CastOrderTierName(int rank) const
 {
-    if (!AaCastOrderOn()) { return SelesnyaLifegainProvider::CastOrderTierName(rank); }
+    if (!AaCastOrderOn())
+    {
+        if (AaGenericWeatherLast() && rank == kAaGenericWeatherRank) { return AaCastOrderSlotName(kAaWeather); }
+        if (AaGenericWeatherLast() && rank == kAaGenericStrokeRank)  { return AaCastOrderSlotName(kAaStroke); }
+        return SelesnyaLifegainProvider::CastOrderTierName(rank);
+    }
     if (rank / kAaOrderScale == kAaOrderUnlisted) { return "UNLISTED: after every listed card, in generic tier order"; }
     if (rank % kAaOrderScale != 0) { return nullptr; }
     const std::array<int, kAaSlots>& pos = AaCastOrderPositions()[AaCastOrderArm()];

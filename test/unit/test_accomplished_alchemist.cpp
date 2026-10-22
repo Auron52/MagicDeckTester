@@ -3568,3 +3568,223 @@ TEST_CASE("canon continuation traits: an unapplied Witch untap holds no mana (LO
     rc.cont_canon = true;
     CHECK_FALSE(TurnSolver::ComputeContinuationTraits(s, rc).own_board_hazard);
 }
+
+// ---- MTG_AA_CAST_ORDER_WISH_LATE and MTG_AA_GENERIC_WEATHER_LAST (2026-10-22; both DEFAULT OFF, measurement only) ----
+// Ledger, "Proposed cast order", "Re-measurement on current play (2026-10-22)". WISH_LATE: Living Wish after Staff of
+// Domination (behind the lifegain AND the pieces it fetches or needs), before Weather (with WEATHER_LAST) and Stroke;
+// applied last, so it overrides every other arm's Wish move. GENERIC_WEATHER_LAST: with the order OFF, the generic
+// tiers with Weather the Storm then Stroke of Genius after every other card; inert while the order is on.
+namespace
+{
+// Every cast-order slot at once (-1 unset, 0 off, 1 on).
+struct AaAllOrderArmsAa
+{
+    static constexpr int kN = 7;
+    std::int8_t saved[kN];
+    static constexpr heurarm::Slot kSlots[kN] = { heurarm::AA_CAST_ORDER, heurarm::AA_CAST_ORDER_AURAS_FIRST,
+                                                  heurarm::AA_CAST_ORDER_WISH_AFTER_LIFE,
+                                                  heurarm::AA_CAST_ORDER_LIFE_FIRST,
+                                                  heurarm::AA_CAST_ORDER_WEATHER_LAST,
+                                                  heurarm::AA_CAST_ORDER_WISH_LATE,
+                                                  heurarm::AA_GENERIC_WEATHER_LAST };
+    AaAllOrderArmsAa(int on, int af, int wal, int lf, int wl, int late, int gen)
+    {
+        const int v[kN] = { on, af, wal, lf, wl, late, gen };
+        for (int i = 0; i < kN; ++i)
+        { saved[i] = heurarm::t_arm[kSlots[i]]; heurarm::t_arm[kSlots[i]] = static_cast<std::int8_t>(v[i]); }
+    }
+    ~AaAllOrderArmsAa() { for (int i = 0; i < kN; ++i) { heurarm::t_arm[kSlots[i]] = saved[i]; } }
+};
+
+// The "wlate" arm in full: MTG_AA_CAST_ORDER=1 + _WISH_LATE + _WEATHER_LAST.
+const std::vector<std::string>& AaWishLateOrder()
+{
+    static const std::vector<std::string> v = {
+        "Utopia Sprawl", "Wild Growth", "Elvish Harbinger", "Arbor Elf", "Accomplished Alchemist",
+        "Ezuri, Renegade Leader", "Scholar of Athreos", "Nourish", "Feed the Clan", "Trufflesnout", "Brindle Boar",
+        "Eternal Witness", "Crab Umbra", "Galvanic Alchemist", "Seedcradle Witch", "Staff of Domination",
+        "Living Wish", "Weather the Storm", "Stroke of Genius" };
+    return v;
+}
+
+std::vector<std::string> MovedAfterAa(std::vector<std::string> v, const std::string& card, const std::string& after)
+{
+    v.erase(std::find(v.begin(), v.end(), card));
+    v.insert(std::find(v.begin(), v.end(), after) + 1, card);
+    return v;
+}
+}   // namespace
+
+TEST_CASE("Cast order, WISH_LATE (DEFAULT OFF): every card's position, with and without WEATHER_LAST")
+{
+    GameState g = FreshAa();
+    g.m_provider = &AaProv();
+    const AccomplishedAlchemistProvider& p = AaProv();
+    const std::vector<std::string>& base = AaProposedOrder();
+    std::vector<std::string> rev(base.rbegin(), base.rend());
+    // wlate = order + WISH_LATE + WEATHER_LAST: every card at its OWN position, 1..19, in the listed order.
+    {
+        AaAllOrderArmsAa a(1, 0, 0, 0, 1, 1, 0);
+        int pos = 0;
+        for (const std::string& n : AaWishLateOrder())
+        {
+            CAPTURE(n);
+            const int r = p.CastOrderRank(g, DefAa(n));
+            CHECK(r % 64 == 0);
+            CHECK(r / 64 == ++pos);
+            CHECK(p.CastOrderTierName(r) != nullptr);
+        }
+        CHECK(p.LandDropCastOrderRank() == 0);
+        CHECK(p.CastOrderTotalByName());
+        // The shared comparator realises it from the reversed proposed order and from the hand of g700's T3.
+        CHECK(SortedCastsAa(g, rev) == AaWishLateOrder());
+        CHECK(SortedCastsAa(g, { "Living Wish", "Feed the Clan", "Galvanic Alchemist" })
+              == std::vector<std::string>{ "Feed the Clan", "Galvanic Alchemist", "Living Wish" });
+        CHECK(SortedCastsAa(g, { "Living Wish", "Weather the Storm", "Staff of Domination", "Stroke of Genius" })
+              == std::vector<std::string>{ "Staff of Domination", "Living Wish", "Weather the Storm", "Stroke of Genius" });
+    }
+    // WISH_LATE alone: the Wish after Staff; Weather keeps its proposed slot (after Witness, before Crab Umbra).
+    { AaAllOrderArmsAa a(1, 0, 0, 0, 0, 1, 0); CHECK(SortedCastsAa(g, rev) == MovedAfterAa(base, "Living Wish", "Staff of Domination")); }
+    // It overrides every other arm's Wish move (applied last): AURAS_FIRST / WISH_AFTER_LIFE leave wlate unchanged...
+    { AaAllOrderArmsAa a(1, 1, 0, 0, 1, 1, 0); CHECK(SortedCastsAa(g, rev) == AaWishLateOrder()); }
+    { AaAllOrderArmsAa a(1, 0, 1, 0, 1, 1, 0); CHECK(SortedCastsAa(g, rev) == AaWishLateOrder()); }
+    { AaAllOrderArmsAa a(1, 1, 1, 0, 1, 1, 0); CHECK(SortedCastsAa(g, rev) == AaWishLateOrder()); }
+    // ...and LIFE_FIRST keeps its lifegain move but loses its Wish move.
+    {
+        AaAllOrderArmsAa a(1, 0, 0, 1, 1, 1, 0);
+        const std::vector<std::string> want = {
+            "Utopia Sprawl", "Wild Growth", "Nourish", "Feed the Clan", "Trufflesnout", "Brindle Boar",
+            "Elvish Harbinger", "Arbor Elf", "Accomplished Alchemist", "Ezuri, Renegade Leader", "Scholar of Athreos",
+            "Eternal Witness", "Crab Umbra", "Galvanic Alchemist", "Seedcradle Witch", "Staff of Domination",
+            "Living Wish", "Weather the Storm", "Stroke of Genius" };
+        CHECK(SortedCastsAa(g, rev) == want);
+    }
+    // Every one of the 32 arm combinations keeps one position per card (a permutation of 1..19).
+    for (int m = 0; m < 32; ++m)
+    {
+        CAPTURE(m);
+        AaAllOrderArmsAa a(1, (m >> 1) & 1, (m >> 2) & 1, (m >> 3) & 1, m & 1, (m >> 4) & 1, 0);
+        std::vector<int> seen;
+        for (const std::string& n : base) { seen.push_back(p.CastOrderRank(g, DefAa(n)) / 64); }
+        std::sort(seen.begin(), seen.end());
+        for (int i = 0; i < static_cast<int>(seen.size()); ++i) { CHECK(seen[i] == i + 1); }
+    }
+}
+
+TEST_CASE("Cast order, WISH_LATE: inert with the order off (=0 and unset)")
+{
+    const GameState s = FreshAa();
+    const AccomplishedAlchemistProvider& p = AaProv();
+    const GenericProvider generic;
+    for (int on : { 0, -1 })
+    {
+        if (on == -1 && EnvOn("MTG_AA_CAST_ORDER")) { continue; }
+        AaAllOrderArmsAa a(on, 1, 1, 1, 1, 1, 0);
+        for (const std::string& n : AaProposedOrder())
+        {
+            CAPTURE(n);
+            CHECK(p.CastOrderRank(s, DefAa(n)) == generic.CastOrderRank(s, DefAa(n)));
+            CHECK(p.CastOrderTierName(p.CastOrderRank(s, DefAa(n))) == nullptr);
+        }
+        CHECK(p.LandDropCastOrderRank() == -1);
+        CHECK_FALSE(p.CastOrderTotalByName());
+    }
+}
+
+TEST_CASE("Cast order, GENERIC_WEATHER_LAST (DEFAULT OFF): the generic tiers with Weather, then Stroke, last")
+{
+    GameState g = FreshAa();
+    g.m_provider = &AaProv();
+    const AccomplishedAlchemistProvider& p = AaProv();
+    const GenericProvider generic;
+    // Off (=0, and unset when the env leaves it unset): the generic tiers byte for byte.
+    {
+        AaAllOrderArmsAa a(0, 0, 0, 0, 0, 0, 0);
+        CHECK(p.CastOrderRank(g, DefAa("Weather the Storm")) == 20);
+        CHECK(p.CastOrderRank(g, DefAa("Stroke of Genius")) == 20);
+    }
+    // On: Weather 21, Stroke 22; every other card keeps its generic rank; ties stay in plan order (no name tie).
+    {
+        AaAllOrderArmsAa a(0, 0, 0, 0, 0, 0, 1);
+        for (const std::string& n : AaProposedOrder())
+        {
+            CAPTURE(n);
+            const int r = p.CastOrderRank(g, DefAa(n));
+            if (n == "Weather the Storm")     { CHECK(r == 21); CHECK(p.CastOrderTierName(r) != nullptr); }
+            else if (n == "Stroke of Genius") { CHECK(r == 22); CHECK(p.CastOrderTierName(r) != nullptr); }
+            else                              { CHECK(r == generic.CastOrderRank(g, DefAa(n))); }
+        }
+        CHECK(p.LandDropCastOrderRank() == -1);
+        CHECK_FALSE(p.CastOrderTotalByName());
+        // g42 / g837's shape: Weather first in hand, then the Wish -- the Wish is now cast first (one more storm copy).
+        CHECK(SortedCastsAa(g, { "Weather the Storm", "Living Wish" })
+              == std::vector<std::string>{ "Living Wish", "Weather the Storm" });
+        CHECK(SortedCastsAa(g, { "Stroke of Genius", "Weather the Storm", "Staff of Domination", "Nourish",
+                                 "Seedcradle Witch", "Living Wish", "Wild Growth" })
+              == std::vector<std::string>{ "Wild Growth", "Seedcradle Witch", "Staff of Domination", "Nourish",
+                                           "Living Wish", "Weather the Storm", "Stroke of Genius" });
+    }
+    // Inert while the order is on: every card's rank equals the order's own (alone and as walwl / wlate).
+    for (int late : { 0, 1 })
+    for (int wal : { 0, 1 })
+    for (int wl : { 0, 1 })
+    {
+        CAPTURE(late); CAPTURE(wal); CAPTURE(wl);
+        std::vector<int> want;
+        { AaAllOrderArmsAa a(1, 0, wal, 0, wl, late, 0); for (const std::string& n : AaProposedOrder()) { want.push_back(p.CastOrderRank(g, DefAa(n))); } }
+        AaAllOrderArmsAa a(1, 0, wal, 0, wl, late, 1);
+        int i = 0;
+        for (const std::string& n : AaProposedOrder()) { CAPTURE(n); CHECK(p.CastOrderRank(g, DefAa(n)) == want[i++]); }
+    }
+}
+
+TEST_CASE("Cast order, WISH_LATE: {Living Wish, Galvanic Alchemist} off an Alchemist turn -- the mechanism probe")
+{
+    // A MECHANISM PROBE (ledger, "Re-measurement on current play (2026-10-22)", g700 T3), recorded because its answer
+    // NARROWED the root cause, like the bootstrap probe above. An untapped, non-sick Accomplished Alchemist with 6 life
+    // gained this turn and `forests` untapped Forests; Living Wish {1}{G} + Galvanic Alchemist {2}{U} in hand, the Wish
+    // first in hand; the only blue is the Alchemist's one-colour tap. A plan holding BOTH is realised in every arm, the
+    // Wish-first walwl included (the payment keeps the tap blue even with one Forest), so walwl's g700 / g937 loss is
+    // not a payment failure inside one cast list: it is in the longer turn (Nourish, Wish -> Galvanic, then a second
+    // Wish ranked ahead of the fetched Galvanic in the continuation) and in how that re-prices the search's choices.
+    // Counts, over every enumerated plan, the worlds (rollout, executor) in which BOTH left the hand.
+    auto realised = [](int forests)
+    {
+        GameState s = FreshAa();
+        s.deck_reads_lifegain_in_play = true;
+        s.players[0].life_gained_this_turn = 6;
+        PutAa(s, "Accomplished Alchemist");
+        for (int k = 0; k < forests; ++k) { PutAa(s, "Forest"); }
+        HandAa(s, "Living Wish");
+        HandAa(s, "Galvanic Alchemist");
+        for (const std::string& n : kAaSide) { SideAa(s, n); }
+        s.m_provider = &AaProv();
+        int best = -1;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (CastOfAa(p, "Living Wish") == nullptr || CastOfAa(p, "Galvanic Alchemist") == nullptr) { continue; }
+            const auto [ro, ex] = BothWorldsAa(s, p);
+            int n = 0;
+            for (const GameState* w : { &ro, &ex })
+            {
+                bool held = false;
+                for (const Card& c : w->players[0].hand)
+                { if (c.m_name.str() == "Living Wish" || c.m_name.str() == "Galvanic Alchemist") { held = true; } }
+                if (!held) { ++n; }
+            }
+            best = std::max(best, n);
+        }
+        return best;
+    };
+    for (int forests : { 2, 1 })
+    {
+        int gen = 0, walwl = 0, wlate = 0;
+        { AaAllOrderArmsAa a(0, 0, 0, 0, 0, 0, 0); gen = realised(forests); }
+        { AaAllOrderArmsAa a(1, 0, 1, 0, 1, 0, 0); walwl = realised(forests); }
+        { AaAllOrderArmsAa a(1, 0, 0, 0, 1, 1, 0); wlate = realised(forests); }
+        MESSAGE("forests=" << forests << " both cast, worlds: generic=" << gen << " walwl=" << walwl << " wlate=" << wlate);
+        CHECK(gen == 2);     // generic: the creature (10) before the Wish (20)
+        CHECK(walwl == 2);   // walwl: the Wish first, and still realised -- see above
+        CHECK(wlate == 2);   // WISH_LATE: Galvanic before the Wish
+    }
+}

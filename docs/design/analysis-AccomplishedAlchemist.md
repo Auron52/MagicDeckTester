@@ -2704,6 +2704,105 @@ LIFE_FIRST, which moves them behind it and is a near-tie; (c) g238, the one resi
 10x budget in every arm (T2 Nourish instead of Staff of Domination off Sprawl + Wild Growth -- a valuation shift, no
 order mechanism found); at d8 b0 every arm plays the generic game (T7).
 
+### Re-measurement on current play (2026-10-22) -- WISH_LATE and GENERIC_WEATHER_LAST (both DEFAULT OFF, the USER's call)
+
+Branch `aa-castorder2` (worktree `.claude/worktrees/aa-castorder2`, off `phase-1-2-deck-analyzer` @ ad918e9b6), NOT
+pushed. Scratch `build/scratch/aa/castorder2/` (`ab/` the A/B, `x/` the reruns, `tr/` traces, `mk.py` / `mkx.py` /
+`pool.py` / `tab.py`); the earlier re-measurement is `build/scratch/aa/castab/` (`ab/`, `x/`, `xf/`, `tr/`).
+
+**Re-measurement.** On current play (keep table + leafless sidecar + route collapses; HEAD ad918e9b6 Release), held-out
+base 160001, the amended order walwl vs generic: d0 -0.007 (8 faster / 4 slower), d3 b10 -0.010 (6/1), d5 (play setting,
+value_play depth, b20) +0.002 (4/7). At `--depth 8 --budget-ms 0` walwl loses a turn in g472, g700, g937 and wins one in
+g42, g425 (two), g837.
+
+**The six d8 b0 games -- the mechanism is NOT the Wish's position in g700 / g937 / g472.** WISH_LATE (below) puts the
+Wish behind every engine piece and still loses all three, with the same win turns as walwl. What walwl and wlate share
+and generic does not is the rest of the fixed order:
+* **g700, g937 -- Feed the Clan ahead of Galvanic Alchemist.** In the continuation after Wish -> Galvanic the hand is
+  {Feed the Clan, Galvanic, Wish}. Generic casts the creature first (10 < 20): the Alchemist taps blue, Galvanic resolves,
+  Combo Off. Both fixed orders cast Feed first (lifegain ahead of the untappers), the Alchemist's one-colour tap goes to a
+  non-blue colour and Galvanic is stranded (`MTG_AA_ROUTE_TRACE`, g700 T3: the route's set-up list {Feed, Wish,
+  Galvanic} reaches the same board key as casting Feed alone under wlate, float W5, and as casting Galvanic alone under
+  generic, float U4. g937 wlate T4: Nourish, Wish -> Galvanic, Feed -- Galvanic never cast). The new unit probe shows the two-card shape {Wish, Galvanic} off one Forest +
+  the Alchemist is realised in EVERY arm, so the Wish alone is not the cause.
+* **g472** -- generic's T4 kill (Feed, Nourish, Staff, Wish -> Scholar, Nourish, Crab Umbra, Scholar) is not realised
+  under either order, so the search takes Feed the Clan on T2 instead of Wish -> Alchemist; not the Wish-vs-Staff rank
+  (wlate has Staff first and still loses it). Exact failing step not isolated.
+* **g42, g837 -- Weather the Storm cast first.** Generic ties Weather with the Wish at 20 and falls to hand order, which
+  has Weather first: generic casts a lone Weather on T2 (no storm copy) and the later lines realise Weather ahead of the
+  Wish; WEATHER_LAST casts it after the Wish (g42 walwl T5: Wish -> Scholar, Weather, Combo Off). Mechanism 2, on the
+  generic tiers.
+* **g425 -- the tail moves T4's Stroke (X = 6 -> 5), and generic then hits what looks like an ENGINE DEFECT** (generic
+  arm, i.e. current play, NOT investigated here -- for the USER / a separate fix): on T5 the route logs
+  `combo route: win` with the opponent at 20 and a Seedcradle Witch in play, the same main phase then casts Arbor Elf,
+  the Accomplished Alchemist ends main 1 TAPPED and only Elvish Harbinger attacks (1 damage); the game wins T7. In walwl
+  Stroke drew one card fewer, no Arbor Elf is cast, the Alchemist ends main 1 untapped and attacks for 21 (T5); wlate
+  and gwl also win T5.
+
+**What landed (DEFAULT OFF, measurement only).** `MTG_AA_CAST_ORDER_WISH_LATE` (heurarm `AA_CAST_ORDER_WISH_LATE`;
+inert unless the order is on): Living Wish after Staff of Domination, before Weather (with WEATHER_LAST) and Stroke;
+applied LAST, so it overrides every other arm's Wish move. "wlate" = order + WISH_LATE + WEATHER_LAST: land drop > Sprawl
+> Wild Growth > Harbinger > Arbor Elf > Alchemist > Ezuri > Scholar > Nourish > Feed > Trufflesnout > Brindle Boar >
+Witness > Crab Umbra > Galvanic > Seedcradle Witch > Staff > **Living Wish** > Weather > Stroke. And ONE extra arm, read
+with the order OFF (inert while it is on): `MTG_AA_GENERIC_WEATHER_LAST` (heurarm `AA_GENERIC_WEATHER_LAST`, "gwl"): the
+generic tiers untouched except the amended order's TAIL -- Weather the Storm, then Stroke of Genius, after every other card
+(ranks 21, 22). Why this arm: the traces credit walwl's d8 b0 gains to the tail (g42 / g837 Weather, g425 Stroke) and
+its losses to the body of the fixed order, so the tail alone is the narrowest rule the evidence supports. Unit 1640 / 1640
+(4 new cases: every card's position under wlate and alone, all 32 arm combinations a permutation, WISH_LATE overriding the
+other Wish moves, inert with the order off / unset, gwl's ranks + comparator + inert under the order, the {Wish, Galvanic}
+probe). Scenarios 246 / 246. **Flags unset: the alchemist + alchemist2hg smoke rows are byte-identical to the ad918e9b6
+binary on the same manifest -- 4 / 4 digests, 4 / 4 per-game `.wins`** (both differ from the committed
+alchemist_smoke_d0 GT by the same 3 games -- pre-existing, nothing accepted). Canary: off and walwl on 160001 reproduce
+castab/ab per game, 200 / 200 chunks.
+
+**A/B** -- one pooled batch (20,000 games, 12 threads, box shared: ms not comparable, units are), every arm by heurarm,
+25-game chunks, pairing `seed = base + off`, `game_index = off`, unwon = 9; base 160001 (= castab) and fresh held-out
+170001. d5 = value_play depth, b20. Delta = arm - off; faster / slower paired games; units = searched units vs off:
+
+| arm | base | d5 b20 (1000) | d3 b10 (500) | d0 (1000) |
+|---|---|---|---|---|
+| off (generic) | 160001 / 170001 | 4.9690 / 4.8980 | 5.0520 / 4.9400 | 6.4110 / 6.3290 |
+| walwl | 160001 | +0.002 4/7 1.009x | -0.010 6/1 1.019x | -0.007 8/4 |
+| walwl | 170001 | -0.005 8/4 0.981x | -0.006 3/0 0.908x | -0.011 10/7 |
+| walwl | pooled | -0.0015 12/11 0.995x | -0.008 9/1 0.959x | -0.009 18/11 |
+| wlate | 160001 | +0.002 4/7 1.006x | -0.010 6/1 1.008x | -0.007 8/4 |
+| wlate | 170001 | -0.006 8/3 0.979x | -0.006 3/0 0.908x | -0.008 9/7 |
+| wlate | pooled | -0.002 12/10 0.992x | -0.008 9/1 0.954x | -0.0075 17/11 |
+| **gwl** | 160001 | -0.003 4/2 0.997x | -0.012 6/0 0.998x | -0.011 7/1 |
+| **gwl** | 170001 | -0.005 6/1 0.993x | -0.004 2/0 0.978x | -0.008 4/3 |
+| **gwl** | pooled | **-0.004 10/3 0.995x** | **-0.008 8/0 0.987x** | **-0.0095 11/4** |
+
+Over all 5,000 paired games: walwl net **-29** turns (39 faster / 23 slower, searched units 0.986x), wlate **-27** (38 /
+22, 0.983x), gwl **-35** (29 / 7, 0.993x). gwl also changes far fewer games (play-changed 49-62 at d5, 24-32 at d3, ~50
+at d0, against 184-232 / 89-103 / ~380-410 for the fixed orders). The 170001 d3 units ratio is mostly one 712k-unit off game.
+
+**Every slower game at 10x budget and at d8 b0, every faster game at d8 b0** (both arms; one d8 rerun per deal;
+`tab.py x`). d0 has no budget to multiply, so its slower games go straight to d8 b0. walwl on 160001 is castab/x + xf,
+plus its d0 deals in `x2/` (all eleven play generic's win turn at d8 b0).
+
+| arm | d8 b0 LOST vs generic (persist) | d8 b0 WON | slower deals that recover |
+|---|---|---|---|
+| walwl | **5**: g472, g700, g937 (160001); g335, g731 (170001) | 7: g42, g425 (2 turns), g837; g39, g535, g916, g923 | g83, g251, g507, g524, g914 at 10x; g896 (unwon in both at 10x) at d8 b0; all 11 d0 slower deals at d8 b0 |
+| wlate | **4**: g472, g700, g937; g731 | 7: the same seven | g83, g251, g507, g524, g914 at 10x; g896 at d8 b0; all 11 d0 slower deals (g131 / g240 / g613 / g957; g3 / g72 / g126 / g202 / g464 / g512 / g562) at d8 b0 |
+| **gwl** | **1**: g731 | 7: the same seven | g83 at d8 b0 only (UNWON at 10x, 5 for generic); g896 at d8 b0; d0 g131; g72 / g126 / g202 at d8 b0 |
+
+At 10x every persisting deal is already slower (g472 d5 and d3, g700, g937, g731, g335).
+* **g335 (walwl only) is the brief's shape and WISH_LATE fixes it:** T4 Wish -> Galvanic, then the second Wish ranked
+  ahead of the fetched Galvanic -> Scholar, Galvanic never cast (T5); wlate / generic cast Galvanic, then Combo Off (T4).
+* **g731 (all three arms): Stroke of Genius last.** The hand holds Stroke and no Weather, so gwl's only change there is
+  Stroke's rank. Generic's T4 Combo Off decks the opponent with Stroke; with Stroke last the search fetches Ezuri off
+  Elvish Harbinger on T2 instead and wins T5. Realisation failure not isolated.
+* The 170001 wins: g535, g916 are Weather cast ahead of the lifegain in generic (g535 T3 Nourish, Weather, Nourish vs
+  gwl Nourish, Weather; g916 T3 Weather, Feed, Crab Umbra); g39, g923 a different T2-T4 line (Stroke / Weather ranks),
+  not traced further.
+
+**Recommendation for the USER (nothing adopted; every arm ships OFF).** wlate does what was asked of it in g335 and
+nowhere else; it is a near-tie with walwl. The measurement points past both fixed orders to **gwl**: best net (-35),
+fewest slower games (7, none at d3), cheapest perturbation, and the only arm that keeps g472 / g700 / g937 at unlimited
+budget. It still does not meet the slower-game bar: **g731 loses a turn at d8 b0** (the Stroke move). Next measurement
+if the USER wants this direction: a Weather-only tail (Stroke left in its generic tier) and a root cause for g731;
+separately, the g425 combat-finisher defect above is in current play. Adoption, and which arm, is the USER's decision.
+
 ## Mulligan profile (exhaustive keep table) -- ADOPTED (2026-10-21)
 
 **Generation.** `scripts/mullgen.sh run` (recipe `complete`, R=40) on worktree `aa-land`, play digest
