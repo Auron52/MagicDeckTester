@@ -83264,8 +83264,17 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             {
                 g_hybrid_stats.esc_target[std::clamp(target, 0, 15)].fetch_add(1);
             }
+            // DOOMED-RETRY FOLD (MTG_ESC_RETRY_FOLD, DEFAULT ON; =0 restores the retry for an identity check). A retry
+            // follows an OVERRUN and never climbs (the climb below runs only when the first pass fit), so a retry
+            // below T = take_at[committed] commits a depth the take decision must reject: it is discarded whatever
+            // it finds. Stop the descent there instead (aborted stays true -> hcommitted = 0 -> not taken, the same
+            // verdict). A sound fold, not a prediction: esk_T is set only for the table-driven take rule on a line
+            // with a leaf (a leafless line takes any depth >= 1, and esk_T is -1 there). 2026-10-22, under the 0.5
+            // floor: these retries were ~25-45% of each fell-back escalation's units (Auras 6.2k of 24.2k).
+            static const bool s_esc_retry_fold = EnvOn("MTG_ESC_RETRY_FOLD", true);
             for (; td >= 1; --td)
             {
+                if (s_esc_retry_fold && !first && esk_T > 0 && td < esk_T) { break; }
                 if (esc_budget)
                 {
                     // ESCALATION CEILING = kOverrunBeta x the budget. Unlike the ladder's, this one
