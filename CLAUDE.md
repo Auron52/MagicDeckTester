@@ -293,6 +293,18 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     Then report what you did. `CronDelete` the timer once the chain has finished and its result is
     reported. The timer comes IN ADDITION to a `run_in_background` waiter on the chain's markers (the
     immediate notification), never instead of it. Re-arm the waiter before its 2 h cap.
+  * **"Overnight" is a TIME WINDOW, not a label (USER 2026-10-22, a general rule for every agent).** *"always
+    wait on the process and set an extra waiter when it is overnight. I guess I didn't say that it was, but if
+    it is anywhere in the 5:30 AM - 1:00 PM PDT range you should use the waiter."* So ANY long run whose span
+    touches **5:30 AM - 1:00 PM Pacific (12:30 - 20:00 UTC under PDT, 13:30 - 21:00 UTC under PST)** gets the
+    hourly `CronCreate` timer above, whether or not the user called it overnight -- and EVERY long run, in or
+    out of the window, gets a `run_in_background` waiter. 2026-10-22: a Landfall screen round finished at
+    16:49 UTC with neither working, and the box sat idle ~4.5 h until the user asked "What's going on?".
+  * **A waiter keys on the PID, never on `pgrep -f`.** `while pgrep -f "deck_compare.py spec.json"; do sleep 30;
+    done` matches the WAITER'S OWN command line (the pattern is in it), so it never exits and never notifies --
+    that is exactly how the 2026-10-22 waiters failed silently. Use `while kill -0 <pid> 2>/dev/null; do sleep 30;
+    done` with the run's PID (`$!` right after launching it), or wait on a DONE marker file. Same trap as
+    `pkill -f` killing its own shell.
   * **Test the chain's stop conditions before launching.** Read the code of every tool the chain
     calls for each outcome it can legitimately produce, and dry-run each check against real output;
     "nothing to write" is a result, not a failure. A stop should halt only for a genuine hazard (wrong
