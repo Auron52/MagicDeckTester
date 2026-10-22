@@ -62,6 +62,10 @@ declare -A DECK_FILE=(
   [giants]=decks/Giants/Giants.cod
   [pirates]=decks/Pirates/Pirates.cod
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
+  # selesnyav2: the USER-approved NEW SelesnyaLifegain list (2026-10-22 screen, arm FINAL_hh), generated in
+  # its versioned folder BEFORE promotion (the kitty v3 route). Its OWN key -- ONE KEY PER DECKLIST: the
+  # `selesnya` key stays on the shipped list until that list is archived, and is never repointed.
+  [selesnyav2]=decks/SelesnyaLifegain/v2-bogbeast-heroes/SelesnyaLifegain.cod
   [soldiers]=decks/Soldiers/soldiers.cod
   [pd]="decks/Prevent Damage/Prevent Damage.cod"
   [bruna]=decks/Bruna/Bruna.cod
@@ -100,6 +104,7 @@ declare -A DECK_PROF=(
   [giants]=decks/Giants/Giants.profile.json
   [pirates]=decks/Pirates/Pirates.profile.json
   [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
+  [selesnyav2]=decks/SelesnyaLifegain/v2-bogbeast-heroes/SelesnyaLifegain.profile.json
   [soldiers]=decks/Soldiers/soldiers.profile.json
   [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
   [bruna]=decks/Bruna/Bruna.profile.json
@@ -436,6 +441,18 @@ SMOKE_CASES=(
   "selesnya 0 1001 1000 0"
   "selesnya 3 1001  150 10"
   "selesnya 5 1001   75 20"
+  # selesnyav2: the NEW list (decks/SelesnyaLifegain/v2-bogbeast-heroes, USER-approved 2026-10-22: 18 Elves,
+  # 4 Bogbeast, 2 Heroes' Reunion, 2 Genesis Wave; Alchemist / Wellwisher / Verdant Sun's Avatar / Sanctuary
+  # out). ENTERS at the shipped selesnya rows' gate shape and the overnight ENTRY set; no keep table and no
+  # value leaf yet, so GT WILL move when they land (the overnight rows expand to the FULL set just before the
+  # keep table is adopted). selesnyav22hg: the screen measured std and 2HG as CO-EQUAL formats for this list,
+  # so it carries the vampires entry shape for 2HG (smoke d3, regression d3+d5, overnight d5) rather than a
+  # smoke-only canary. Nothing in the 60 reads opponent heads, but Feed the Clan / Heroes' Reunion are
+  # "target player" gains, and a second head lengthens the race the deck is ranked on.
+  "selesnyav2 0 1001 1000 0"
+  "selesnyav2 3 1001  150 10"
+  "selesnyav2 5 1001   75 20"
+  "selesnyav22hg 3 1001 50 10"
   # soldiers: W/x Human Soldier tribal on Aether Vial (Champion / Thalia's Lieutenant counters, Field
   # Marshal / Kudro / Coppercoat / Darien / Rick lords, Harbin's 5-attacker pump, Beachhead's team
   # pump, Thalia's symmetric noncreature tax). ADDED 2026-10-04 (analysis-soldiers.md) at PIRATES'
@@ -642,6 +659,10 @@ REGRESSION_CASES=(
   "pirates          5 30001  20 0"
   "selesnya         3 30001  20 0"
   "selesnya         5 30001  20 0"
+  # selesnyav2: screened 2026-10-22 over 18 candidate blocks (30001..30341 step 20, d3+d5, 20 games, budget 0,
+  # abandon_units 2000000): 30061 finished every game, the costliest 211k units (~8 s on a loaded box).
+  "selesnyav2       3 30061  20 0"
+  "selesnyav2       5 30061  20 0"
   "slivers          3 30001  20 0"
   "slivers          5 30001  20 0"
   "snow             3 30001   3 0"
@@ -848,6 +869,14 @@ REGRESSION_CASES=(
   "selesnya 3 3003  150 10"
   "selesnya 5 2002   75 20"
   "selesnya 5 3003   75 20"
+  # selesnyav2: see the SMOKE block.
+  "selesnyav2 0 2002 1000 0"
+  "selesnyav2 3 2002  150 10"
+  "selesnyav2 3 3003  150 10"
+  "selesnyav2 5 2002   75 20"
+  "selesnyav2 5 3003   75 20"
+  "selesnyav22hg 3 2002 100 10"
+  "selesnyav22hg 5 2002  50 20"
   # soldiers: see the SMOKE block (pirates' counts).
   "soldiers 0 2002 1000 0"
   "soldiers 3 2002  150 10"
@@ -1014,6 +1043,9 @@ OVERNIGHT_CASES=(
   "pirates          5 30101  20 0"
   "selesnya         3 30301  20 0"
   "selesnya         5 30301  20 0"
+  # selesnyav2: same 2026-10-22 screen; 30161 finished every game, the costliest 169k units (~10 s, loaded box).
+  "selesnyav2       3 30161  20 0"
+  "selesnyav2       5 30161  20 0"
   "slivers          3 30101  20 0"
   "slivers          5 30101  20 0"
   "snow             3 30211   3 0"
@@ -1411,6 +1443,25 @@ OVERNIGHT_CASES=(
   "selesnya 5 5005  500 40"
   "selesnya 5 6006  500 40"
   "selesnya 5 7007  500 40"
+  # selesnyav2: see the SMOKE block. The overnight ENTRY set (regression-testing skill, "Sizing a deck's
+  # overnight rows"): d0 4x2000, d3 4x400 b10, d5 4x300 b20, 2hg d5 4x100 b20 (vampires' entry shape).
+  # Expand to the FULL set just before the keep table is adopted.
+  "selesnyav2 0  4004 2000 0"
+  "selesnyav2 0  6006 2000 0"
+  "selesnyav2 0  8008 2000 0"
+  "selesnyav2 0 10010 2000 0"
+  "selesnyav2 3 4004  400 10"
+  "selesnyav2 3 5005  400 10"
+  "selesnyav2 3 6006  400 10"
+  "selesnyav2 3 7007  400 10"
+  "selesnyav2 5 4004  300 20"
+  "selesnyav2 5 5005  300 20"
+  "selesnyav2 5 6006  300 20"
+  "selesnyav2 5 7007  300 20"
+  "selesnyav22hg 5 4004 100 20"
+  "selesnyav22hg 5 5005 100 20"
+  "selesnyav22hg 5 6006 100 20"
+  "selesnyav22hg 5 7007 100 20"
   # soldiers: see the SMOKE block. Full angels/pirates overnight shape (~1.9 core-h at the measured
   # 0.94 s/game d3 b20 and 1.49 s/game d5 b40).
   "soldiers 0  4004 2000 0"

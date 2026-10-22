@@ -234,6 +234,14 @@
    "total_core_ms": 63636,
    "worst_case": "selesnya_regression_d3_s2002"
   },
+  "selesnyav2": {
+   "cost_per_game_ms": 1025.18,
+   "jobs": 9,
+   "key": "selesnyav2",
+   "tier": "regression",
+   "total_core_ms": 416426,
+   "worst_case": "selesnyav22hg_regression_d5_s2002"
+  },
   "slivers": {
    "cost_per_game_ms": 59.155,
    "jobs": 5,
