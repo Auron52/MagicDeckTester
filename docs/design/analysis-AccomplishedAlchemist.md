@@ -52,6 +52,31 @@ rollout only; `MTG_CANON_CONT_TRAITS` (LOCKSTEP #19) landed DEFAULT ON: 4 of 2,5
 recovers at d8 b0, no d8 b0 loss -- see "Round 3 (2026-10-22)" under "Proposed cast order". Round 3b (rebased onto
 63fc273bc) re-measured the play-setting cell at the shipped d4 b20: the same picture; full smoke + regression byte-identical
 with the flags unset.
+
+**PARKED 2026-10-22 ~13:40 UTC (USER: "Let's park everything for the night. I would like to have another agent work on
+this repository.").** On origin: lockstep #19 (7c3ff8187); the E.7 play setting d4b20 with alchemist smoke + regression
+GT (e27d3f457); the cast-order arms gw / gwf / v2, all DEFAULT OFF (65401bafa). CI is green on all three. Nothing runs
+on the box for this deck.
+In progress, PARKED on branch `aa-strokex` (worktree `.claude/worktrees/aa-strokex`, NOT pushed): the USER's searched
+Stroke of Genius X. When cast at ourselves, X is chosen from EXACTLY these values:
+- max X, always (any X: "sometimes you are just desperate to get a card");
+- max - 4, if it draws >= 3 (Crab Umbra cast + untap, or the Alchemist cast so it taps next turn);
+- max - 6, if it draws >= 3 AND an Accomplished Alchemist that can tap this turn is on our battlefield (Staff + untap);
+- nothing else. This is the USER's anti-clairvoyance rule; the values are judged on inventory, never the library.
+"max" is today's X, sized after the plan's later casts. The branch's own "Searched Stroke X ... PARKED" section lists
+what is built and the remaining steps: tests; an A/B of off / strokeX / v2 / v2+strokeX at d4 b20, d3 b10 and d0;
+slower games at 10x and at d8 b0; DEFAULT ON if it passes the bar.
+**USER decisions open (defaults in force until answered):**
+1. Adopt the cast order: v2 (recommended, -109 turns / 7,500), gwf (-66), or neither (current).
+2. Plan enumeration crediting the Alchemist's post-lifegain mana (USER's Staff line outside the route).
+3. The per-spell payment on Alchemist turns + the colour fix (bundled in gwf / v2).
+4. The Seedcradle Witch paid by the Alchemist rather than Elvish Harbinger (board witch2).
+5. v2's finisher order in the loop's kill choice.
+6. A "cast nothing more" option after a lethal route, or an attack-aware payer tie-break (gi425's T5).
+7. The E.7 TRADES (e.g. d4b40 -0.0086 @ 1.36x, nlesc_d4b40 -0.0144 @ 1.75x).
+8. BASE_ONLY_PLAYOUT (recommended).
+9. HARB_WITCH_FALLBACK_FIRST (recommended); HARB_ALCH_DEFAULT; Ezuri as a wincon in the wish rule.
+10. The 4 discard readings; C.5 sign-off; chunk-P copy-fold d0 slower games (fungusv3 g89, melira g229).
 Open USER items are listed under "Open questions surfaced to USER".
 
 ## The deck
