@@ -55,8 +55,33 @@ Unresolved, all in the existing mana-payment family:
    become unreachable (79516, 79619, 79825, 80443). On 80443, Genesis Wave with X>0 skips whole-turn
    payment and blocks a T4 kill that the search also misses; it won T5.
 
+## Artifacts (2026-10-22, generated at src 35b5cef3d; committed 9537bb50f)
+
+- **Keep table:** `mullgen.sh` fast R=30, K=16 discovered buckets, gen setting d1 / 3 ms. VALIDATION
+  PASSED: keep -0.2978t vs static (4/4 seeds), confounded bottoming -0.0773t (4/4).
+- **Value sidecar:** `valueleaf.sh` E.5 picked shape #3 nlfit (final-depth single pass, LEAFLESS: 0.51x
+  units, delta -0.00025 on 8 x 1000 held-out); E.7 picked play setting **d6 b20** (0.95x, delta 0);
+  E.6 no escalation allowance. The shipped list plays a learned value-leaf table at the built-in d5 b20.
+- **Overnight rows** expanded to the FULL set with both artifacts ABSENT (f6227009b), then the adoption
+  accepted in all three tiers (bc8766e76): 31 keys, all faster, nothing else moved. Keep table
+  attribution 0 unexplained in every tier; the sidecar moved 8 games slower / 4 faster, 7 of the 8 are
+  d3 budget churn, the 8th (2hg overnight d5 s5005 gi6, T8 -> unwon) is unwon without the sidecar too at
+  `--depth 8 --budget-ms 0`.
+
+## v2 vs the shipped list (2026-10-22, HEAD:src ec2de5145, PGO+LTO)
+
+Each arm with its OWN profile, keep table and value sidecar out of its own directory, at its own play
+setting (shipped d5 b20, v2 d6 b20; `provider=SelesnyaLifegain` on all 40 jobs). One pooled batch,
+10 paired blocks x 4,000 games per arm per format (`seed = BASE + off`, `game_index = off`; std BASE
+51,000,000, 2HG 52,000,000), `max_turns` 8 (probe win rates 99.3-100%, so the horizon does not bind).
+Apparatus confound: the numbers cover the list AND its refitted artifacts, including the leafless
+search shape, not the cards alone. Generator + analysis: `logs/selv2_vs_shipped/` (gitignored).
+
+| format | shipped avg(pen=9) | v2 | delta | se | t | blocks better | unwon ship -> v2 | <=T4 | >=T6 | ms/game |
+|---|---|---|---|---|---|---|---|---|---|---|
+| std (20, 1 head) | 5.1341 | 4.5908 | **-0.5433** | 0.0043 | -127 | 10/10 | 0.48% -> 0.20% | 18.59% -> 53.74% | 24.57% -> 9.46% | 123.4 -> 40.6 |
+| 2HG (30, 2 heads) | 5.4255 | 4.8892 | **-0.5363** | 0.0074 | -73 | 10/10 | 0.99% -> 0.48% | 9.02% -> 35.00% | 37.78% -> 17.50% | 216.3 -> 75.4 |
+
 ## Next
 
-`scripts/mullgen.sh run decks/SelesnyaLifegain/v2-bogbeast-heroes`, then
-`scripts/valueleaf.sh run decks/SelesnyaLifegain/v2-bogbeast-heroes`, serially (USER 2026-10-22). Then
-the v2-vs-shipped measurement with each list's own artifacts, then promotion + archive.
+Promotion + archive of the shipped list: the USER's decision.
