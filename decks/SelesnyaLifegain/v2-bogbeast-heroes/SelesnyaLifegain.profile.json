@@ -1,0 +1,85 @@
+{
+  "card_scores": {
+    "Ageless Entity": [
+      -0.09696607947269875,
+      -0.1657984551823244
+    ],
+    "Blighted Steppe": [
+      -0.03564018826241444,
+      -0.3074632600134475
+    ],
+    "Blossoming Bogbeast": [
+      0.2894869215291749,
+      -0.3463806092368156
+    ],
+    "Branchloft Pathway": [
+      -0.0690096185866036,
+      -0.26370757180156623
+    ],
+    "Brushland": [
+      0.08035312007208795,
+      -0.19138198757763902
+    ],
+    "Craterhoof Behemoth": [
+      0.05794315695305752
+    ],
+    "Elvish Archdruid": [
+      0.22429617459737905,
+      -0.05918837497784857
+    ],
+    "Elvish Mystic": [
+      0.32585470085470014,
+      -0.007905982905982434
+    ],
+    "Feed the Clan": [
+      -0.03569545605436364,
+      -0.4229417670682727
+    ],
+    "Forest": [
+      -0.03476095078239183
+    ],
+    "Fyndhorn Elves": [
+      0.2135534591194972
+    ],
+    "Genesis Wave": [
+      -0.17587404834060116
+    ],
+    "Heroes' Reunion": [
+      -0.08941252208872275
+    ],
+    "Horizon Canopy": [
+      0.04808447142437622
+    ],
+    "Llanowar Elves": [
+      0.35595923351025327,
+      -0.11035842908591942
+    ],
+    "Nykthos Paragon": [
+      -0.18150161557942557,
+      -0.2628787878787877
+    ],
+    "Priest of Titania": [
+      0.07567357881866599,
+      -0.2557533651758579
+    ],
+    "Razorverge Thicket": [
+      0.1272689768976898,
+      -0.20018564356435675
+    ],
+    "Wirewood Lodge": [
+      -0.26763327846017404
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
