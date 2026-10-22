@@ -649,6 +649,14 @@ bad hands."*
   not only the average; note that goldfish cannot price removal, so a threat-count arm's real value is
   understated here -- report that, do not fold it away.
 
+## Card screen — Mossborn Hydra, Kessig Wolf Run, threats, lands (2026-10-22, IN PROGRESS)
+The deferred screening stage above, on the USER's 2026-10-22 ask. Full write-up, every round's table and
+the non-clairvoyant brackets: `docs/design/landfall-screen-2026-10-22.md`. Two cards were implemented for it
+(Mossborn Hydra `87965f62d`..`e12d274c6`; Kessig Wolf Run `f1d4c8642`, see the section above; the Hydra
+counts as an "other threat" for the Wolf Run Titan rule, `330aada04`). PROVISIONAL Hydra slots pending the
+USER: cast-order rank 130 (tier 1, tied with Courser, after it by name -- automatic from params); 5i threat
+rank right after Rampaging Baloths. Nothing is adopted; the list is unchanged.
+
 ## Stage 5c2 — horizon-honest tie-break: NO SIGN at this sample (2026-10-16, tree b35f9f0e)
 `leaf_tiebreak_check.py`'s manifest (4 blocks x 250 at PLAY settings d5 b20, both arms per-job, pooled
 with the bottoming A/B): **2 changed games of 1,000 paired (0.2%), both BETTER with the tie-break (net

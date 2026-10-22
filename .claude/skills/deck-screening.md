@@ -348,6 +348,17 @@ python3 scripts/alias_card_into_bucket.py \
 It copies the shipped table and adds the new name to one bucket's member list. **K is unchanged and
 nothing is generated** (seconds, not hours).
 
+**When the new card replaces DIFFERENT cards in different arms, alias per arm** (`deck_compare.py`
+spec key, 2026-10-22): `"arm_alias": {"<tag>": {"<new card>": "<host card>"}}`. Each aliased arm gets its
+own copy of the shipped table with the new name in that arm's host bucket, beside a copy of the same play
+profile; coverage and composition fall-through are computed per arm. The base arm keeps the shipped
+table, and aliasing only adds names base never holds, so base plays identically. Leave `"profile"` at the
+deck's own (the driver builds the per-arm directories); refuses with `--with-floor` and `index_carry`.
+Landfall's screen used it to try Mossborn Hydra in eight different slots in one batch
+(`docs/design/landfall-screen-2026-10-22.md`). A new card that replaces cards in TWO buckets (Hydra 4 for
+Courser 2 + Cultivate 2) can only ride one of them; the other's extra copies show up as composition
+fall-through, which the driver prints and gates with `max_fallback`.
+
 **Why this is sound, not a bodge.** A swap that keeps the bucket total constant makes the arm's
 composition space *identical to base's*: `Anger 3 + Libation 1` occupies the same slot as base's
 `Anger 4`. So every hand in every arm resolves — `use_table` stays true, coverage is exact, the
