@@ -352,6 +352,23 @@ inline bool PayDepletionWasteOn()
     static const bool env_on = EnvOn("MTG_PAY_DEPLETION_WASTE");
     return PayDepletionWasteAnyOn() || heurarm::Flag(heurarm::PAY_DEPLETION_WASTE, env_on);
 }
+// MTG_PAY_DEPLETION_HOLD (2026-10-22; DEFAULT OFF -- the cross-deck A/B and the adoption are the USER's) --
+// the USER's rule for depletion lands: *"The smartest rule for depletion lands would hold the depletion land
+// if it can do so and use it otherwise. At least, it should hold it over non-creature source that are not
+// consumed."* One shared payer, so executor and rollout move together:
+//   * the per-cast greedy (TapForCostSharedOnce) finds, once per payment, the largest set of depletion lands
+//     the REST of the payment plus the REST OF THE LINE (g_line_unpaid_cost) can still be paid without, from
+//     the sources it ranks ahead of them -- colour-exact (Hall) -- and ranks exactly those behind every
+//     plain-tier source (DepletionHoldMask). A depletion land the line needs keeps its old rank, so it pays
+//     first instead of a source the line could otherwise have kept.
+//   * the whole-turn prepay (TurnSolver::BatchPrepayMainCasts) gets the same set as a PARTIAL depletion rung
+//     between "hold every depletion land" and "release them all".
+// An ORDER, never a filter: a held land still pays whenever nothing else can.
+inline bool PayDepletionHoldOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DEPLETION_HOLD");
+    return heurarm::Flag(heurarm::PAY_DEPLETION_HOLD, env_on);
+}
 
 // MTG_NIV_LOOKOUT_NIV_ONLY (DEFAULT OFF): Tandem Lookout's pairing default waits for a Niv
 // (NivMizzetComboProvider::SoulbondPartner); the soulbond twin enumerator (AppendSoulbondDeclineVariants)

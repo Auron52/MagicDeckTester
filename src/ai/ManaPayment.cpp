@@ -906,6 +906,167 @@ static std::uint64_t LineSpareSourceMask(const GameState& state, int active, boo
     return spare;
 }
 
+// ---- MTG_PAY_DEPLETION_HOLD: which depletion lands can the rest be paid WITHOUT? ---------------------------
+//
+// USER 2026-10-22 (NivMizzetCombo seeds 1 and 6): *"Depletion Lands should go late if possible"*, then *"The
+// smartest rule for depletion lands would hold the depletion land if it can do so and use it otherwise. At
+// least, it should hold it over non-creature source that are not consumed."* -- *"I do realize this is
+// difficult to do with good performance, but that will be the goal."*
+//
+// "If it can do so" is a question about the REST, not about one pip: Niv seed 1 ({2}{U} Tandem Lookout off
+// Sandstone Needle on its last counter, Saprazzan Skerry and Spirebluff Canal) wants the Needle held and the
+// Canal spent; the seed-6 shape (a {U} cantrip, then {R}{R} in the same line, off a last-counter Skerry, the
+// Canal and one red source) wants the Skerry SPENT, because the Canal is the line's second {R}. A blanket
+// "depletion lands last" gets seed 6 wrong, and a per-pip "is this tap wasted?" test (MTG_PAY_DEPLETION_WASTE)
+// cannot see the later {R}{R} at all. So the rule asks, once per payment, which lands the remaining demand
+// (this payment's unpaid pips plus the rest of the line) can do without, and only those are held.
+//
+// Why a SET and not a per-land yes/no: with two depletion lands and one Canal, {2}{U} can do without either
+// land but not without both. Holding both makes the greedy spend the Canal AND then a land anyway (four
+// mana for three); the set holds the Needle (its last counter) and leaves the Skerry at its old rank, so the
+// Skerry pays first and the Canal only covers what is left. A held land costs nothing to the payment: the
+// greedy still reaches for it when no source ranked ahead can pay the pip (an order, never a filter).
+//
+// Cost: one pass over the battlefield to build at most 64 small source records, then Hall's condition over
+// the subsets of the DEMANDED colours (at most 31, usually 1-3) per candidate land. Called lazily -- only
+// when the flag is on and a depletion land with counters competes for a pip -- so every other payment, and
+// every board without a depletion land, pays nothing.
+std::uint64_t DepletionHoldMask(const GameState& state, std::uint64_t cand_mask, const int need_in[5],
+                                int need_tot, const ManaPool& credit, std::uint64_t excluded,
+                                bool for_creature, bool plain_tier_only)
+{
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64 || cand_mask == 0) { return 0; }
+    const int active = state.active_player_index;
+    // conv: 0 a plain source; 1 a filter ("{U/R},{T}: add two" -- needs a feed of its colours, else its free
+    // {C}); 2 a ramp filter ("{1},{T}: add {U}{R}" -- needs any feed, no free mode); 3 an any-colour filter
+    // (its fed mode is one-for-one, so only its free {C} counts).
+    struct DhSrc { int idx; int yield; int mask; bool bundle; int conv; bool free_c; };
+    DhSrc src[64];
+    int   ns = 0;
+    int   cand[64];
+    int   ncand = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        if (excluded & (1ull << i)) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        const bool is_src = d->tmpl == CardTemplate::BasicLand
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                         || q.mana_rock || PaySacSpendableNow(state, p, *d);
+        if (!is_src) { continue; }
+        // Restricted mana is left out (conservative: less supply can only hold less): a creature-only unit
+        // for a noncreature payment, a big-spell-only one always.
+        if ((q.creature_mana_only && !for_creature) || BigSpellOnlySource(q)) { continue; }
+        if (!StorageSourceLive(p, *d) || !GraveyardFuelLive(state, active, *d)
+            || !ManaSubtypeGateLive(state, active, *d)) { continue; }
+        if (plain_tier_only)
+        {
+            const int r = ResolveProvider(state).ManaSourceRank(state, *d);
+            if (r < 0 || r >= 60) { continue; }
+        }
+        DhSrc s{ i, 1, 0, false, 0, false };
+        if (IsManaConversionSource(q))
+        {
+            // A conversion source nets ONE unit, and only when something else feeds it (feasible() below
+            // credits it against the plain sources still unheld): counting it as standalone supply would
+            // hold a Skerry that is the Bluffs' only feeder, and the payment would then tap both.
+            s.conv   = q.any_color_filter ? 3 : (q.ramp_filter ? 2 : 1);
+            s.free_c = !q.filter_no_free_colorless && !q.ramp_filter;
+            if (s.conv != 3)
+            { for (Color c : q.produces) { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { s.mask |= 1 << ci; } } }
+        }
+        else
+        {
+            const int y = PermanentManaYield(state, p, *d);
+            s.yield = y >= 0 ? y : ManaProducedPerTap(*d);
+            for (Color c : ProducesForPayment(state, active, *d, for_creature, &p))
+            { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { s.mask |= 1 << ci; } }
+            // Several units over several colours (a Karoo, a domain source) is one of EACH, not a free choice.
+            s.bundle = s.yield > 1 && std::popcount(static_cast<unsigned>(s.mask)) > 1;
+        }
+        if (s.yield <= 0) { continue; }
+        src[ns++] = s;
+        if ((cand_mask & (1ull << i)) && q.enters_tapped_with_depletion > 0 && DepletionCountersOn(p) > 0)
+        { cand[ncand++] = i; }
+    }
+    if (ncand == 0) { return 0; }
+    int need[5];
+    int dm = 0, sum = 0;
+    for (int c = 0; c < 5; ++c)
+    { need[c] = std::max(0, need_in[c]); sum += need[c]; if (need[c] > 0) { dm |= 1 << c; } }
+    need_tot = std::max(need_tot, sum);
+    const int cred[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
+    // The coloured credit the float can feed a filter with (a floating unit of its colour is a feed too).
+    const int cred_mask = (credit.white > 0 ? 1 : 0) | (credit.blue > 0 ? 2 : 0) | (credit.black > 0 ? 4 : 0)
+                        | (credit.red > 0 ? 8 : 0) | (credit.green > 0 ? 16 : 0) | (credit.wild > 0 ? 31 : 0);
+    DhSrc eff[64];
+    auto feasible = [&](std::uint64_t held) -> bool
+    {
+        // The plain sources left unheld, then each conversion source credited against them: a filter one
+        // unit of its colours when one of those colours can feed it (else its free {C}), a ramp filter one
+        // unit when anything can (else nothing), an any-colour filter its free {C}.
+        int ne = 0, feed_mask = cred_mask;
+        bool feed_any = credit.Total() > 0;
+        for (int k = 0; k < ns; ++k)
+        {
+            if (src[k].conv != 0 || (held & (1ull << src[k].idx))) { continue; }
+            eff[ne++] = src[k];
+            feed_mask |= src[k].mask;
+            feed_any = true;
+        }
+        for (int k = 0; k < ns; ++k)
+        {
+            if (src[k].conv == 0 || (held & (1ull << src[k].idx))) { continue; }
+            DhSrc e = src[k];
+            e.bundle = false;
+            if (e.conv == 1 && (feed_mask & e.mask) != 0)  { e.yield = 1; }
+            else if (e.conv == 2 && feed_any)               { e.yield = 1; }
+            else if (e.free_c)                              { e.yield = 1; e.mask = 0; }
+            else                                            { continue; }
+            if (e.conv == 3) { e.mask = 0; }
+            eff[ne++] = e;
+        }
+        int tot = credit.Total();
+        for (int k = 0; k < ne; ++k) { tot += eff[k].yield; }
+        if (tot < need_tot) { return false; }
+        for (unsigned S = static_cast<unsigned>(dm); S != 0; S = (S - 1) & static_cast<unsigned>(dm))
+        {
+            int nd = 0, cv = credit.wild;
+            for (int c = 0; c < 5; ++c) { if (S & (1u << c)) { nd += need[c]; cv += cred[c]; } }
+            for (int k = 0; k < ne && cv < nd; ++k)
+            {
+                const unsigned hit = static_cast<unsigned>(eff[k].mask) & S;
+                if (hit == 0) { continue; }
+                cv += eff[k].bundle ? std::min(eff[k].yield, std::popcount(hit)) : eff[k].yield;
+            }
+            if (cv < nd) { return false; }
+        }
+        return true;
+    };
+    // A demand the board cannot meet at all (a line funded by a mid-line producer, a payment the backtracker
+    // has to chain) says nothing about which land is spare: hold none, i.e. the historical order.
+    if (!feasible(0)) { return 0; }
+    // HOLD order = the reverse of the greedy's spend order among depletion lands.
+    std::sort(cand, cand + ncand, [&](int a, int b)
+    {
+        const int ca = DepletionCountersOn(state.battlefield[static_cast<std::size_t>(a)]);
+        const int cb = DepletionCountersOn(state.battlefield[static_cast<std::size_t>(b)]);
+        if (ca != cb) { return ca < cb; }
+        return a > b;
+    });
+    std::uint64_t held = 0;
+    for (int k = 0; k < ncand; ++k)
+    {
+        const std::uint64_t trial = held | (1ull << cand[k]);
+        if (feasible(trial)) { held = trial; }
+    }
+    return held;
+}
+
 // PREVENT DAMAGE: the pain-aware payment policy (dmgev::PainAwarePay) wraps each payment ATTEMPT --
 // the reservation ladder's held attempts and the unrestricted one alike -- so the damage floor and
 // the cap are computed over the sources THIS attempt may tap. Wrapping the whole ladder instead
@@ -1221,6 +1382,49 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     int  nd_D[6] = { 0, 0, 0, 0, 0, 0 };
     int  nd_S[6] = { 0, 0, 0, 0, 0, 0 };
 
+    // DEPLETION HOLD (MTG_PAY_DEPLETION_HOLD, default OFF -- see DepletionHoldMask): the depletion lands the
+    // rest of this payment and the rest of the line can do without, computed at the first pip a depletion
+    // land with counters is about to WIN against an alternative (so a payment that never reaches for one --
+    // a basic outranks it, or it is the only source -- pays nothing for it) and ranked behind every
+    // plain-tier source by the key block in the scarcity loop. The reservation of THIS attempt (a held
+    // rung's mask, read here before the line-spare rung can widen it) is not supply.
+    const bool dh_on = PayDepletionHoldOn();
+    bool dh_ready = false;
+    std::uint64_t dh_mask = 0;
+    const std::uint64_t dh_reserved = reserved_mask;
+    // `floating` (this payment's produced, unspent units) is declared above; nd_left is the payment's own
+    // unpaid pips, kept by pay() below (the needs lever's ledger, maintained whether or not that lever is on).
+    auto dep_held = [&](int i) -> bool
+    {
+        if (!dh_ready)
+        {
+            dh_ready = true;
+            // The REST OF THE LINE: the line hold carries this cast's whole cost while it is being paid, so
+            // when it evidently holds this payment, take this payment's own cost back out (the remainder of
+            // THIS payment is nd_left). A hold that does not cover this payment (an activation, an outer
+            // line's hold) is owed in full on top -- more demand can only hold fewer lands.
+            const ManaCost& lu = g_line_unpaid_cost;
+            const int lu_p[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+            const int own[5]  = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+            bool holds_this = lu.ManaValue() >= cost_in.ManaValue();
+            for (int c = 0; c < 5 && holds_this; ++c) { if (lu_p[c] < own[c]) { holds_this = false; } }
+            int need[5];
+            int need_tot = 0;
+            for (int c = 0; c < 7; ++c) { need_tot += nd_left[c]; }
+            for (int c = 0; c < 5; ++c) { need[c] = nd_left[c] + (holds_this ? lu_p[c] - own[c] : lu_p[c]); }
+            need_tot += holds_this ? (lu.ManaValue() - cost_in.ManaValue()) : lu.ManaValue();
+            ManaPool credit = floating;
+            credit.AddPool(state.floating_mana);
+            dh_mask = DepletionHoldMask(state, ~0ull, need, need_tot, credit, dh_reserved, for_creature,
+                                        /*plain_tier_only=*/true);
+        }
+        return i >= 0 && i < 64 && ((dh_mask >> i) & 1ull) != 0;
+    };
+    // The band a held depletion land joins: past every plain-tier key[2] (the 0-59 ladder plus the pain band,
+    // kPainBand = 64, so at most 123), still in key[0] == 0 -- i.e. ahead of the 60+ reserve tiers, the
+    // creature band and the sac fodder exactly as before.
+    constexpr int kDepletionHoldBand = 128;
+
     // §2b SAC-FOR-MANA FODDER (MTG_SAC_OUTLET_PAY -- see SacOutletPayEnabled in SpellEffects.h).
     // Resolved ONCE per payment, never per source per pip: the latter is the O(board^2) walk this
     // whole strand exists to delete on a 40-Saproling board. An invalid descriptor makes every
@@ -1437,6 +1641,12 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         // to the legacy path / backtracker, the complete fallback either way.
         if (TapScarcityEnabled())
         {
+            // MTG_PAY_DEPLETION_HOLD re-selection point (see the check after the selection below): the
+            // held-depletion set is computed only once a depletion land is about to WIN a pip against an
+            // alternative, and when that land turns out to be held the selection runs once more with the
+            // band live. Backward jump only (C++ destroys and re-initialises everything declared below it);
+            // at most once per payment, since dh_ready is then true. Flag off -> never taken.
+        dh_reselect:
             const int bn = static_cast<int>(state.battlefield.size());
             int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
             int best_dep = -1;   // depletion tiebreak: more counters tap FIRST (DepletionTapOrderEnabled)
@@ -1566,6 +1776,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // O(board^2) -- measured at +48% CPU on Fungus candidate B before this hoist. Empty
             // whenever MTG_SAC_VICTIM_DOOMED is off, so the default path does not even scan.
             const std::vector<int> pay_doomed = DoomedTokenCreators(state);
+            int dh_ncand = 0;   // MTG_PAY_DEPLETION_HOLD: candidates this pip compared (>1 -> an alternative exists)
             for (int i = 0; i < bn; ++i)
             {
                 Permanent& p = state.battlefield[i];
@@ -1859,8 +2070,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (nddbg)
                     { std::fprintf(stderr, "[nddbg]   filter %s kind=%d rank=%d dep=%d sur=%d (deferred)\n",
                                    def->card.m_name.str().c_str(), kind, rank, dep, sur); }
+                    ++dh_ncand;
                     continue;
                 }
+                ++dh_ncand;
                 if (nddbg)
                 { std::fprintf(stderr, "[nddbg]   cand %s kind=%d rank=%d harm=%d hold=%d dep=%d sur=%d\n",
                                def->card.m_name.str().c_str(), kind, rank, harm, hold, dep, sur); }
@@ -1949,9 +2162,19 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (payable < yield - 1) { waste = 1; }
                     }
                 }
+                // DEPLETION HOLD (MTG_PAY_DEPLETION_HOLD, default OFF): a depletion land the rest of the payment
+                // and of the line can do without (dep_held -> DepletionHoldMask) taps after every plain-tier
+                // source -- the USER's "hold it over non-creature sources that are not consumed". A land the
+                // line needs keeps its old rank (11), so it pays FIRST and the dual it would otherwise have
+                // spared is not tapped as well (seed-6 shape). Off -> dhold is 0 and the key is unchanged.
+                // Read only once the set is known (dh_ready): computing it is deferred to the first pip a
+                // depletion land would actually win (the re-selection check after this loop).
+                const int dhold = (dh_on && dh_ready && kind == 1 && rank >= 0 && rank < 60
+                                   && def->params.enters_tapped_with_depletion > 0
+                                   && DepletionCountersOn(p) > 0 && dep_held(i)) ? kDepletionHoldBand : 0;
                 int key[4];
                 if (kind != 5 && rank >= 0 && rank < 60)
-                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank + ((pain || waste) ? kPainBand : 0);
+                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold;
                   key[3] = (harm % kNdScale) * 2 + broad; }
                 else                                     { key[0] = rank; key[1] = hold; key[2] = harm; key[3] = 0;    }
                 int cmp = 0;
@@ -1978,6 +2201,19 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (better)
                 { best_i = best_f; best_kind = best_f_kind; best_rank = best_f_rank; best_dep = best_f_dep;
                   best_sur = best_f_sur; best_hold = 0; for (int k = 0; k < 4; ++k) { best_key[k] = fkey[k]; } }
+            }
+            // MTG_PAY_DEPLETION_HOLD: a depletion land is about to win this pip over an alternative and the
+            // held set is not known yet -> compute it now (dep_held), and if this very land is one the rest
+            // can do without, select again with the band live. A land the rest needs keeps the pip (no
+            // second pass), and every later pip of this payment reads the set directly.
+            if (dh_on && !dh_ready && best_i >= 0 && best_kind == 1 && dh_ncand > 1
+                && best_rank >= 0 && best_rank < 60)
+            {
+                const Permanent& dp = state.battlefield[best_i];
+                const CardDefinition* dd = dp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(dp.card);
+                if (dd != nullptr && dd->params.enters_tapped_with_depletion > 0 && DepletionCountersOn(dp) > 0
+                    && dep_held(best_i))
+                { goto dh_reselect; }
             }
             if (best_i < 0) { return false; }
             if (nddbg)
@@ -2272,6 +2508,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     { r += kPainBand; }   // ...and an energy-paid colour likewise (MTG_PAY_ENERGY_LAST)
                     // Sac-fodder-first, same bias as the direct-source loop above.
                     if (g_pay_sac_victim != 0 && s.card.m_number == g_pay_sac_victim) { r = -1000; }
+                    // MTG_PAY_DEPLETION_HOLD: a held depletion land feeds last too (the direct loop's band).
+                    if (dh_on && r >= 0 && r < 60 && sd->params.enters_tapped_with_depletion > 0
+                        && DepletionCountersOn(s) > 0 && dep_held(i))
+                    { r += kDepletionHoldBand; }
                     // Same depletion tiebreak as the direct-source loop above.
                     const int sdep = DepletionTapOrderEnabled() ? DepletionCountersOn(s) : 0;
                     if (r < frank || (r == frank && sdep > fdep))
