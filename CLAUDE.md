@@ -453,8 +453,11 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   * **Why it must come FIRST:** a value leaf and a keep table are *fitted to the deck's play*. With no
     suite cases there is no ground truth, so no engine change can ever be shown to have broken that
     play — the hours go into artifacts whose foundation nothing is checking.
-  * **THE 3x COST RULE.** A deck may be added only if its tested cost is **≤ 3x the most expensive deck
-    that already has BOTH a value leaf and a mulligan profile** (often Hinata). Check with
+  * **THE 3x COST RULE.** A deck may be added only if its tested cost is **≤ 3x Hinata's**, the PINNED
+    yardstick, timed in the same run. (It was "3x the most expensive deck with BOTH a value leaf and a
+    mulligan profile", which RATCHETS: a deck admitted near 3x gets its artifacts and lifts the limit to 3x
+    itself. AccomplishedAlchemist did exactly that, 5,366 -> 14,042 ms/game. USER 2026-10-22: *"We
+    shouldn't be arbitrarily increasing the limit."* Only the USER changes the yardstick.) Check with
     `suite_gate.py --cost decks/<Deck>`; the table is `test/suite_cost.json`, refilled by
     `--measure-all` from **one pooled tier run** (never a per-deck loop — that is the "waves are a
     loop" defect). The gated number is per-game core-ms at the deck's worst *searched* case, not total

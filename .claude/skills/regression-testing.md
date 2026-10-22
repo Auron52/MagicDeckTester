@@ -612,8 +612,10 @@ arms by construction.
 
 **This is MANDATORY and it GATES the two expensive stages (user directive, 2026-09-26).**
 `scripts/valueleaf.sh run` and `scripts/mullgen.sh run` both refuse (exit 3) for a deck that is not a
-regression case — see `analyze-deck.md` Stage 5j. And a deck qualifies only if its cost is **≤ 3x the
-most expensive deck that already has both a value leaf and a mulligan profile**:
+regression case — see `analyze-deck.md` Stage 5j. And a deck qualifies only if its cost is **≤ 3x
+Hinata's**, the PINNED yardstick, timed in the same run (USER 2026-10-22: *"We shouldn't be arbitrarily
+increasing the limit"*; the old "most expensive deck with both artifacts" wording ratcheted the limit up
+with every expensive admission):
 
 ```
 python3 scripts/suite_gate.py --cost decks/<Deck>     # the 3x verdict

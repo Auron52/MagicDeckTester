@@ -28,6 +28,16 @@ BOTH a value leaf and a mulligan profile** (in practice that reference deck is o
 decks are the right yardstick because they are the ones that have been through this whole pipeline --
 they define what the suite has already been shown to absorb.
 
+THE YARDSTICK IS PINNED TO HINATA (USER 2026-10-22: "We shouldn't be arbitrarily increasing the
+limit."). Read literally, "the most expensive deck with both artifacts" RATCHETS: a deck admitted near
+3x gets its keep table and value leaf, becomes the new most-expensive deck, and lifts the limit to 3x
+ITSELF -- up to 9x the old yardstick in two steps, with nobody deciding it. It happened: AccomplishedAlchemist,
+admitted at 4,681 ms/game, became the reference and moved the limit from 5,366 to 14,042 ms/game (on a
+number measured BEFORE its own keep table, so not even its real cost). So the reference is the deck the
+rule was written around, Hinata, and it changes only by the USER's decision (REFERENCE_KEY below).
+And the candidate is judged against Hinata measured IN THE SAME RUN (`--cost` runs both keys in one
+pooled tier), never against a cached number from another day, box or binary.
+
 If the candidate is over 3x, the answer is NOT to add it anyway and NOT to skip the suite: it is
 reported to the user, and **making the deck fit becomes the first goal** -- i.e. optimisation work
 comes before the value leaf and the mulligan profile.
@@ -44,6 +54,10 @@ tier. Reasons:
   * It is comparable across decks that ship different budgets, because the budget a deck ships IS part
     of what it costs to test.
   * d0 cases are excluded: they are ~0 ms everywhere and would wash out the comparison.
+  * Budget-0 searched cases (the UNBUDGETED BACKSTOP rows, USER 2026-10-22) are excluded too. They
+    smoke the unbudgeted paths on a few screened games, sized per deck by hand; they are not what the
+    deck ships, so a 15 s backstop game would otherwise set the deck's "searched" cost -- and the
+    yardstick's. Their core-ms still counts in the total.
 
 Total tier core-ms is measured and reported alongside, because it is what consumes the budget -- it is
 just not the gated number.
@@ -74,6 +88,7 @@ CASES = os.path.join(ROOT, "test/regression_cases.sh")
 COST_CACHE = os.path.join(ROOT, "test/suite_cost.json")
 MULTIPLE = 3.0
 TIER = "regression"
+REFERENCE_KEY = "hinata"   # the PINNED yardstick (USER 2026-10-22); see THE YARDSTICK IS PINNED above
 
 
 # --------------------------------------------------------------------------- cases file
@@ -209,6 +224,27 @@ def parse_batch_log(path, key, tier):
     return out
 
 
+def _deck_keys(key, tier=TIER):
+    """-> [key] plus its 2HG key when the tier has one."""
+    keys = [key]
+    if any(c[0] == f"{key}2hg" for c in _cases(tier)):
+        keys.append(f"{key}2hg")
+    return keys
+
+
+def _run_tier(keys, tier=TIER):
+    """ONE pooled tier run filtered to `keys` (regression.sh --deck=a,b,...)."""
+    cmd = ["bash", "test/regression.sh"]
+    if tier != "regression":
+        cmd.append(f"--{tier}")
+    cmd.append("--deck=" + ",".join(keys))
+    print(f"  measuring: {' '.join(shlex.quote(c) for c in cmd)}", flush=True)
+    p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    if p.returncode not in (0, 1):   # 1 = a tier FAIL, which still produced timings
+        sys.stderr.write(p.stdout[-3000:] + p.stderr[-2000:])
+        raise SystemExit(f"regression.sh failed rc={p.returncode} while measuring {','.join(keys)}")
+
+
 def measure(deck_path, key, tier=TIER, run=True):
     """Run the tier FILTERED to this deck and record its cost. -> the cache entry."""
     keys = [key]
@@ -216,23 +252,19 @@ def measure(deck_path, key, tier=TIER, run=True):
         keys.append(f"{key}2hg")
     log = os.path.join(ROOT, f"test/logs/{tier}/batch.log")
     if run:
-        cmd = ["bash", "test/regression.sh"]
-        if tier != "regression":
-            cmd.append(f"--{tier}")
-        cmd.append("--deck=" + ",".join(keys))
-        print(f"  measuring: {' '.join(shlex.quote(c) for c in cmd)}", flush=True)
-        p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
-        if p.returncode not in (0, 1):   # 1 = a tier FAIL, which still produced timings
-            sys.stderr.write(p.stdout[-3000:] + p.stderr[-2000:])
-            raise SystemExit(f"regression.sh failed rc={p.returncode} while measuring {key}")
+        _run_tier(keys, tier)
     jobs = parse_batch_log(log, key, tier)
     if not jobs:
         raise SystemExit(f"no {tier} timings for {key} in {log} -- run "
                          f"`bash test/regression.sh --deck={key}` first")
+    unbudgeted = {(k, d, s) for k, d, s, _g, b in _cases(tier) if b == 0}
     searched = {}
     for name, (games, ms) in jobs.items():
-        m = re.search(r"_d(\d+)_s\d+$", name)
-        if m and int(m.group(1)) > 0 and games:
+        m = re.search(rf"^(\w+?)_{tier}_d(\d+)_s(\d+)$", name)
+        if not m or not games:
+            continue
+        case = (m.group(1), int(m.group(2)), int(m.group(3)))
+        if case[1] > 0 and case not in unbudgeted:
             searched[name] = ms / games
     return {"key": key, "tier": tier,
             "cost_per_game_ms": round(max(searched.values()), 4) if searched else 0.0,
@@ -274,8 +306,8 @@ own regression step for such a deck and still reports PASSED.
 TO UNBLOCK:
   1. Measure the deck's cost and apply the 3x rule:
          python3 scripts/suite_gate.py --cost {deck}
-     A deck may be added only if its cost is <= {mult:g}x the most expensive deck that
-     already has both a value leaf and a mulligan profile.
+     A deck may be added only if its cost is <= {mult:g}x Hinata's (the PINNED yardstick,
+     USER 2026-10-22), timed in the same run.
   2. If it PASSES: add [{guess}] to DECK_FILE and DECK_PROF in
      test/regression_cases.sh, add cases to SMOKE_CASES / REGRESSION_CASES /
      OVERNIGHT_CASES (size from a timing probe; mirror a deck of similar speed),
@@ -304,8 +336,8 @@ list the artifact was fitted to.
 TO UNBLOCK:
   1. Measure this VERSION's cost and apply the 3x rule:
          python3 scripts/suite_gate.py --cost {deck}
-     It may be added only if its cost is <= {mult:g}x the most expensive deck that
-     already has both a value leaf and a mulligan profile.
+     It may be added only if its cost is <= {mult:g}x Hinata's (the PINNED yardstick,
+     USER 2026-10-22), timed in the same run.
   2. If it PASSES: add a *** NEW *** key [{guess}] to DECK_FILE and DECK_PROF in
      test/regression_cases.sh pointing at this version, add its cases to
      SMOKE_CASES / REGRESSION_CASES / OVERNIGHT_CASES (size from a timing probe;
@@ -379,12 +411,22 @@ def mode_require(deck_path):
     return 3
 
 
+def _reference_entry(cache):
+    """-> (key, entry) for the PINNED yardstick, or (key, None) when it is unusable. The reference must
+    still carry both artifacts: if it ever loses one, the rule's premise is gone and the USER decides."""
+    rel = _read_map("DECK_FILE").get(REFERENCE_KEY)
+    p = os.path.join(ROOT, rel) if rel else None
+    if p is None or not os.path.exists(p) or not all(has_both_artifacts(p)):
+        return REFERENCE_KEY, None
+    return REFERENCE_KEY, cache["decks"].get(REFERENCE_KEY)
+
+
 def mode_cost(deck_path, remeasure=True):
     key = deck_key(deck_path)
     stem = os.path.splitext(os.path.basename(deck_path))[0]
     cache = load_cache()
-    print(f"== suite cost gate: {stem} (rule: <= {MULTIPLE:g}x the most expensive deck with BOTH "
-          f"a value leaf and a mulligan profile)\n")
+    print(f"== suite cost gate: {stem} (rule: <= {MULTIPLE:g}x {REFERENCE_KEY}, the PINNED yardstick, "
+          f"measured in the same run)\n")
 
     if key is None:
         # A deck not yet in the suite has no cases to time, which is the chicken-and-egg this rule
@@ -394,26 +436,26 @@ def mode_cost(deck_path, remeasure=True):
         print("   Add provisional cases first (they can be tuned after), or time the deck directly")
         print("   with a pooled batch at the configurations you intend to ship, then re-run --cost.")
     else:
-        ent = measure(deck_path, key, run=remeasure)
+        # Candidate AND reference in ONE pooled run: same binary, same box, same load.
+        if remeasure:
+            _run_tier(_deck_keys(key) + ([] if key == REFERENCE_KEY else _deck_keys(REFERENCE_KEY)))
+        ent = measure(deck_path, key, run=False)
         cache["decks"][key] = ent
+        rel = _read_map("DECK_FILE").get(REFERENCE_KEY)
+        if remeasure and rel and key != REFERENCE_KEY:
+            cache["decks"][REFERENCE_KEY] = measure(os.path.join(ROOT, rel), REFERENCE_KEY, run=False)
         save_cache(cache)
         print(f"   candidate {key}: {ent['cost_per_game_ms']:.3f} ms/game "
               f"(worst searched case {ent['worst_case']}), total {ent['total_core_ms']/1000:.1f} core-s "
               f"over {ent['jobs']} jobs\n")
 
-    q = qualifying_costs(cache, exclude=key)
-    if not q:
-        print("   NO reference deck has both artifacts AND a recorded cost yet.")
-        print("   Record some with:  python3 scripts/suite_gate.py --measure decks/<Deck>")
-        print("   VERDICT: UNGATED -- the rule cannot be applied, so it is not claiming a pass.")
+    ref, rent = _reference_entry(cache)
+    if rent is None:
+        print(f"   The pinned reference {ref} has no recorded cost, or no longer has BOTH a value leaf and")
+        print("   a mulligan profile. The rule cannot be applied: REPORT THIS TO THE USER (the yardstick")
+        print("   is theirs to change). VERDICT: UNGATED -- not claiming a pass.")
         return 0
-
-    ref = max(q, key=lambda k: q[k]["cost_per_game_ms"])
-    refc = q[ref]["cost_per_game_ms"]
-    print(f"   {'deck':<16} {'ms/game':>10}   (decks with BOTH a value leaf and a mulligan profile)")
-    for k in sorted(q, key=lambda k: -q[k]["cost_per_game_ms"]):
-        print(f"   {k:<16} {q[k]['cost_per_game_ms']:>10.3f}" + ("   <- reference" if k == ref else ""))
-    print()
+    refc = rent["cost_per_game_ms"]
     if key is None:
         print(f"   reference: {ref} at {refc:.3f} ms/game -> budget for a new deck is "
               f"{MULTIPLE * refc:.3f} ms/game")
@@ -421,10 +463,12 @@ def mode_cost(deck_path, remeasure=True):
     cand = cache["decks"][key]["cost_per_game_ms"]
     ratio = (cand / refc) if refc else float("inf")
     print(f"   {key} / {ref} = {cand:.3f} / {refc:.3f} = {ratio:.2f}x   (limit {MULTIPLE:g}x)")
+    if not remeasure:
+        print("   (cached numbers -- the verdict that counts is a --cost run, which times both in one batch)")
     if ratio <= MULTIPLE:
         print(f"\n   VERDICT: PASS -- {key} may be added to the suite.")
         return 0
-    print(f"\n   VERDICT: FAIL -- {key} is {ratio:.2f}x the reference, over the {MULTIPLE:g}x limit.")
+    print(f"\n   VERDICT: FAIL -- {key} is {ratio:.2f}x {ref}, over the {MULTIPLE:g}x limit.")
     print("   Do NOT add it and do NOT skip the suite. REPORT THIS TO THE USER: getting this deck")
     print("   into range is the FIRST GOAL, ahead of the value leaf and the mulligan profile.")
     return 4
@@ -500,12 +544,13 @@ def mode_report():
         else:
             print(f"{k:<16} {'-':>10} {'-':>9}  {'Y' if leaf else '-':^4}  {'Y' if prof else '-':^4}"
                   f"   (not measured)")
-    q = qualifying_costs(cache)
-    if q:
-        ref = max(q, key=lambda k: q[k]["cost_per_game_ms"])
-        print(f"\nreference (most expensive with BOTH artifacts): {ref} at "
-              f"{q[ref]['cost_per_game_ms']:.3f} ms/game -> new-deck budget "
-              f"{MULTIPLE * q[ref]['cost_per_game_ms']:.3f} ms/game")
+    ref, rent = _reference_entry(cache)
+    if rent is not None:
+        print(f"\nreference (PINNED, USER 2026-10-22): {ref} at {rent['cost_per_game_ms']:.3f} ms/game -> "
+              f"new-deck budget {MULTIPLE * rent['cost_per_game_ms']:.3f} ms/game. A candidate is judged "
+              f"by --cost, which re-times {ref} in the same run.")
+    else:
+        print(f"\nreference {ref}: unusable (no cost, or not both artifacts) -- the USER's call.")
     return 0
 
 

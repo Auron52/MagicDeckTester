@@ -990,6 +990,11 @@ got skipped. The cost of skipping is quiet and compounding:
 > A deck is added **only if its tested cost is ≤ 3x the most expensive deck that already has BOTH a
 > value leaf and a mulligan profile** (in practice that reference is often Hinata).
 
+**PINNED TO HINATA (USER 2026-10-22: *"We shouldn't be arbitrarily increasing the limit."*).** Read
+literally, the rule above ratchets: an admitted deck near 3x gets its artifacts and lifts the limit to 3x
+itself (AccomplishedAlchemist moved it 5,366 -> 14,042 ms/game). The yardstick is Hinata, timed in the same
+run as the candidate (`suite_gate.py --cost` does both), and only the USER changes it.
+
 Those decks are the right yardstick: they are the ones that have been all the way through this
 pipeline, so they define what the suite has already been shown to absorb.
 
