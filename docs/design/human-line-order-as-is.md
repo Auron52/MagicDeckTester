@@ -410,7 +410,7 @@ The USER ruled on the first three findings; the code follows the rulings, not th
   failed equip.
 * **(6) No future action kind can fall into the orphan rule unnoticed.** `HumanStepVerbFor(Action::Kind)`
   maps every kind to the step verb that claims it (or to "implicit"/"none"), with a `static_assert` on the
-  last enumerator, and a unit test claims one action of every kind through its verb (SacForMana: stays
+  last enumerator (replaced on the rebase below -- it could not see an appended kind), and a unit test claims one action of every kind through its verb (SacForMana: stays
   implicit, no error): a new kind fails to compile until it is classified, and a verb that does not claim
   its kind fails the test. Scenario `kitty_human_seq_cid_gyreturn_claimed` covers a verb whose token names
   the SOURCE rather than the line value (`gyreturn=Cid, Freeflier Pilot`).
@@ -419,6 +419,30 @@ The USER ruled on the first three findings; the code follows the rulings, not th
   repaired / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap / 0 mull-drift / 0
   contract-fail; `viewer_linebuild_check.js` 0 FAIL (3683 lines over 640 refs); `viewer_client_check.js`
   only the pre-existing `equip` / `equip from hand` failures (identical on the base tree).
+
+### Rebase onto upstream beda38614 (2026-10-22)
+
+* **Conflicts.** `src/ai/TurnSolver.h` (upstream's chunk-P / greedy-fold test hooks beside this work's
+  `g_line_order_record` declaration: independent declarations, both kept) and `tools/play/index.html`
+  `toggleActivate` (upstream's armed-untapper board-click mode beside this work's `srcNum` stamping: both
+  kept, and the new untapper arm records `srcNum` too, as the blink arm does).
+* **The kind guard missed upstream's new kind, and is fixed.** Upstream appended `Action::Kind::ActivateUntap`
+  AFTER `AuraSwap`, so `static_assert(AuraSwap == 32)` still held and the rebased tree compiled with the kind
+  unclassified. The guard is now the switch itself: `HumanStepVerbFor` has no `default` and compiles with
+  `-Wswitch` as an ERROR (GCC / Clang pragma; MSVC C4062), so an unhandled kind cannot build (checked on a
+  standalone file). `ActivateUntap` -> `untapact`; `HumanStepMatches` keeps `untapact=` (one activation)
+  and `untaploop=` (chosen_x >= kUntapLoopToNeed) apart, CheckLine's `UntapActAssign` rule; its report
+  label is "untap". The viewer's `sequenceToken` writes an untapper's `untapSrc` / `untapTarget` as
+  `#src@target`, the suffix its line token already carries. Unit test "an untapper's single activation and
+  its LOOP are different steps"; the every-kind test now runs to `ActivateUntap`; JS check for the untapper
+  tokens; scenarios `aa_human_seq_untapact_step` (validates with exactly the stated target) and
+  `aa_human_seq_untapact_commit_order` (queued BEFORE a cast, the untap runs before it).
+* Measurements on the rebased tree: smoke 140/140, **configs changed: 0** vs the beda38614 GT, 0 slower /
+  faster / play-changed; scenarios 284/284; unit 1849/1849; reference replay (650, `--strict`) 227 ok /
+  423 repaired / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap / 0 mull-drift / 0
+  contract-fail; `viewer_linebuild_check.js` 0 FAIL (3726 lines over 650 refs); `check_gt_logs.py` 888
+  consistent / 0 stale / 0 missing; `viewer_client_check.js` only the pre-existing `equip` /
+  `equip from hand` failures.
 
 ## DEFERRED: a dropped board ACTIVATION is silent in the viewer
 
