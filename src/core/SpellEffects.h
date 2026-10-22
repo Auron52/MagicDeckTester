@@ -3122,26 +3122,62 @@ inline int FindBurnKillTarget(const GameState& state, int active, int damage)
 // live battlefield scan, never baked at cast.
 inline int SnowPermanentCount(const GameState&, int controller_index);   // defined below
 
-// Searing Blaze's landfall CONDITION: "If you had a land enter the battlefield under your control this
-// turn". A land PUT onto the battlefield by an effect counts exactly as a played one (the condition is
-// about the zone change, the same event the landfall TRIGGERS watch -- see OnLandEntered). Until
-// 2026-10-15 every reader tested `lands_played_this_turn > 0` alone, which misses a land put by a
-// fetch / land tutor / Genesis Wave on a turn whose drop was not used.
+// The landfall CONDITION of Searing Blaze and Rest for the Weary: "If you had a land enter the
+// battlefield under your control this turn". A land PUT onto the battlefield by an effect counts exactly
+// as a played one (the condition is about the zone change, the same event the landfall TRIGGERS watch
+// -- see OnLandEntered). Until 2026-10-15 every reader tested `lands_played_this_turn > 0` alone, which
+// misses a land put by a fetch / land tutor / Genesis Wave on a turn whose drop was not used.
 //
-// Read off state the engine ALREADY tracks (no new field, nothing new to fold into a state key): a
-// land drop was used, OR a land we control is on the battlefield with entered_this_turn set (both
-// worlds clear that flag at the turn start -- GameEngine::UntapStep / SimulateEndAndStartNextTurn).
-// The one event it cannot see is a land PUT and then gone again the same turn with no drop used; no
-// card in the pool does that today (disclosed rather than tracked).
+// THREE FACTS, ORed. The first two are state the engine always tracked: a land drop was used, or a land
+// we control is on the battlefield with entered_this_turn set (both worlds clear that flag at the turn
+// start -- GameEngine::UntapStep / SimulateEndAndStartNextTurn). The third, Player::
+// land_entered_this_turn (2026-10-22, Rest for the Weary), is the event history: it covers the one
+// entry the board cannot show afterwards, a land PUT and then GONE again the same turn with no drop
+// used. Rest's ruling 3 makes that case count ("It doesn't matter if a land that entered ... is still
+// on the battlefield, is still under your control, or is still a land"), and SelesnyaLifegain reaches
+// it: a Genesis Wave'd Blighted Steppe sacrificed the same turn, or a put Selesnya Sanctuary that is
+// our only land and must return itself. The first two terms are KEPT although the bit subsumes them
+// along every chokepoint route, as the backstop for a land built by hand at a site that calls neither
+// OnLandEntered nor EnterLand.
 //
-// BYTE-IDENTICAL for every existing reader's deck: burn (the only list holding Searing Blaze) puts no
-// land by any effect, so in its games a land entered this turn iff the drop was used.
+// BYTE-IDENTICAL for every pre-existing reader's deck: burn (the only list holding Searing Blaze) puts
+// no land by any effect and sacrifices none, so in its games the bit is set iff the drop was used.
 inline bool LandEnteredUnderControlThisTurn(const GameState& state, int controller)
 {
-    if (state.players[static_cast<std::size_t>(controller)].lands_played_this_turn > 0) { return true; }
+    const Player& pl = state.players[static_cast<std::size_t>(controller)];
+    if (pl.lands_played_this_turn > 0 || pl.land_entered_this_turn) { return true; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index == controller && p.entered_this_turn && p.card.IsLand()) { return true; }
+    }
+    return false;
+}
+
+// The part of the condition above that ONLY the history bit carries: a land entered under
+// `controller`'s control this turn, no drop was used, and none is still on the battlefield as an
+// entered-this-turn land. The state-key fold (TurnSolver's BuildSimKey) folds exactly this, because
+// the other two terms are already in every key (lands_played_this_turn, and each permanent's
+// entered_this_turn) -- folding the raw bit would move every deck's key on every land drop.
+inline bool LandEnteredAndGoneThisTurn(const GameState& state, int controller)
+{
+    const Player& pl = state.players[static_cast<std::size_t>(controller)];
+    if (!pl.land_entered_this_turn || pl.lands_played_this_turn > 0) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.entered_this_turn && p.card.IsLand()) { return false; }
+    }
+    return true;
+}
+
+// Does `controller`'s hand hold a card whose resolution reads the landfall condition (a SAME-TURN
+// reader -- the bit resets at the untap, so only a card cast this turn can see it)? The gate on the
+// state-key fold above; false for every deck without Searing Blaze or Rest for the Weary.
+inline bool HandReadsLandEnteredThisTurn(const Player& p)
+{
+    for (const Card& hc : p.hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd && (hd->params.landfall_damage > 0 || hd->params.cast_lifegain_landfall > 0)) { return true; }
     }
     return false;
 }
@@ -7764,6 +7800,11 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
 inline void OnLandEntered(GameState& state, int controller, int land_number,
                           const std::vector<int>* target_snapshot)
 {
+    // The landfall HISTORY bit (Rest for the Weary / Searing Blaze's "if you had a land enter ... this
+    // turn"), ABOVE the per-game gate: a deck with no landfall TRIGGER can still hold a landfall
+    // CONDITION, and the condition reads the event, not a watcher. Read only through
+    // LandEnteredUnderControlThisTurn, so setting it changes nothing for any deck without one.
+    state.players[static_cast<std::size_t>(controller)].land_entered_this_turn = true;
     if (controller == 0 && !state.deck_has_landfall) { return; }   // per-game gate (see above)
     FireLandfallTriggers(state, controller, land_number, target_snapshot);
 }
@@ -19836,8 +19877,9 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
 }
 
-// "You gain N life" as an UNTARGETED spell's own resolution (Feed the Clan), with the ferocious
-// upgrade. ONE shared resolver, called identically by the executor (EffectHandler::ResolveImpl's
+// "You gain N life" as an UNTARGETED spell's own resolution (Feed the Clan, Heroes' Reunion, Rest for
+// the Weary -- the last two print "target player", which is always us against a passive goldfish
+// opponent, so they are untargeted here), with the ferocious or landfall upgrade. ONE shared resolver, called identically by the executor (EffectHandler::ResolveImpl's
 // non-permanent custom branch) and the rollout (TurnSolver::apply_one) -- the Fungus Frolic
 // ApplyCastCreatesTokens pattern -- so the search cannot predict a different amount than the
 // executor realises. The ferocious board check is therefore lockstep BY CONSTRUCTION rather than by
@@ -19857,7 +19899,15 @@ inline void ApplyCastLifegain(GameState& state, int controller, const CardDefini
     if (!def.card.IsInstant() && !def.card.IsSorcery()) { return; }
     const bool fero = p.cast_lifegain_ferocious > 0
                    && ControlsCreatureWithPower(state, controller, p.ferocious_min_power);
-    const int amount = fero ? p.cast_lifegain_ferocious : p.cast_lifegain;
+    // LANDFALL (Rest for the Weary): the same "instead" shape on a different condition -- a land
+    // entered under our control this turn, read AS IT RESOLVES and counting a put or since-departed
+    // land (LandEnteredUnderControlThisTurn). No card carries both clauses; were one to, the two gates
+    // are independent and either upgrade alone would be the printed reading, so the order here is moot.
+    const bool landfall = !fero && p.cast_lifegain_landfall > 0
+                       && LandEnteredUnderControlThisTurn(state, controller);
+    const int amount = fero ? p.cast_lifegain_ferocious
+                     : landfall ? p.cast_lifegain_landfall
+                     : p.cast_lifegain;
     // ONE GainLife CALL -> ONE life-gain EVENT (CR 119.10) of 5 OR 10 -- never 5 then 5, and never
     // 5+10. The ruling is explicit ("you only get the upgraded effect, not both effects"), and the
     // distinction is MEASURABLE rather than pedantic: two 5-life events fire every "whenever you gain
@@ -19883,7 +19933,8 @@ inline void ApplyCastLifegain(GameState& state, int controller, const CardDefini
     {
         EmitPlayEvent(state.turn_number, "lifegain",
                       "\xE2\x9D\xA4\xEF\xB8\x8F " + def.card.m_name.str() + " -- gain "
-                      + std::to_string(amount) + " life" + (fero ? " (ferocious)" : ""));
+                      + std::to_string(amount) + " life"
+                      + (fero ? " (ferocious)" : landfall ? " (landfall)" : ""));
     }
 }
 
@@ -33848,6 +33899,11 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
         perm.counters.Add(dep);
     }
     state.battlefield.push_back(perm);
+    // The landfall HISTORY bit, set HERE and not only in OnLandEntered, because a put with
+    // fire_landfall=false (Genesis Wave's simultaneous batch) reaches OnLandEntered only when a landfall
+    // watcher exists -- the Wave's legacy order never calls it -- and the condition must see the entry
+    // regardless (Player::land_entered_this_turn).
+    state.players[static_cast<std::size_t>(state.active_player_index)].land_entered_this_turn = true;
     if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
     if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
     // "When this land enters, you get {E}" (Aether Hub). Added here as well as in the land DROP

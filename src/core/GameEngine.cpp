@@ -295,6 +295,7 @@ void GameEngine::UntapStep(GameState& state)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
     ap.equip_activated_this_turn = false;         // Kili's waiver is per TURN (same lockstep)
+    ap.land_entered_this_turn    = false;         // Rest for the Weary's landfall history (same lockstep)
     // DESCEND's baseline (The Mycotyrant). A REBASE, not a reset to 0 -- descend is "this turn", so
     // the snapshot has to follow the graveyard rather than clear (same lockstep w/
     // SimulateEndAndStartNextTurn). It must be refreshed AFTER the previous turn's end step has

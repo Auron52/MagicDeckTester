@@ -3168,7 +3168,8 @@ struct CardParams
     // Scale the Heights: "Put a +1/+1 counter on up to one target creature."
     int  counters_on_target = 0;
     // Scale the Heights: "You gain 2 life." (per resolved copy -- faithful escalation of life.)
-    // REUSED as the BASE amount of an untargeted "you gain N life" spell (Feed the Clan), which is
+    // REUSED as the BASE amount of an untargeted "you gain N life" spell (Feed the Clan; Heroes' Reunion
+    // and Rest for the Weary, whose "target player" is always us in the goldfish), which is
     // the same amount semantics with no target. Safe because every OTHER reader of this field is
     // trick-scoped -- TurnSolver's is inside the `IsSoloTargetTrick` block and DecisionProviders' is
     // MirrorwingProvider::TrickTargetCandidates -- and it is not part of any archetype signature in
@@ -3189,6 +3190,16 @@ struct CardParams
     // default would turn the gate permanently ON and make every cast gain the upgraded amount.
     int  cast_lifegain_ferocious = 0;
     int  ferocious_min_power     = 4;
+    // LANDFALL (Rest for the Weary): "Target player gains 4 life. Landfall -- If you had a land enter
+    // the battlefield under your control this turn, that player gains 8 life INSTEAD." The upgraded
+    // amount; the base is cast_lifegain. The same ability-word shape as ferocious directly above, with
+    // a different CONDITION: LandEnteredUnderControlThisTurn (SpellEffects.h), checked AS THE SPELL
+    // RESOLVES (Scryfall ruling 1) and counting a land PUT by an effect, or one that has since LEFT,
+    // exactly like a played one (ruling 3) -- the condition is about the zone-change event, not the
+    // land drop. NOT a landfall TRIGGER (no DefHasLandfallTrigger term, the landfall_damage precedent):
+    // nothing fires when a land enters; the spell reads history. "Instead" = ONE life-gain event of
+    // either amount (ruling 5), never base+this. 0 = no landfall clause, whole feature inert.
+    int  cast_lifegain_landfall  = 0;
     // Fortifying Draught: "+X/+X where X is the amount of life you gained this turn", computed AT
     // RESOLUTION per copy AFTER that copy's own cast_lifegain (gain first, THEN count -- oracle
     // order), off Player::life_gained_this_turn. So a magnet fan-out escalates: each copy gains its

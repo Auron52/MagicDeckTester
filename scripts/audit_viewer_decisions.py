@@ -1307,6 +1307,16 @@ INERT_PARAMS = {
         "enter-watcher power filter) and equip_min_power (an attach legality gate), both already "
         "classified here"
     ),
+    "cast_lifegain_landfall": (
+        "the LANDFALL amount of an automatic lifegain (Rest for the Weary: 'that player gains 8 life "
+        "instead' if a land entered under your control this turn). Same class as cast_lifegain_ferocious "
+        "above: a CONDITION read at resolution off the turn's history, both amounts printed, no mode, no "
+        "'may', no X. Its 'target player' is always us against the passive goldfish opponent (the "
+        "opponent target only delays our kill and no card in the deck converts an opponent's gain -- a "
+        "disclosed PARTIAL on the card for a list that pairs it with a Tainted Remedy), so it "
+        "is not a targeting choice either. The player's only levers -- whether to cast it, and whether a "
+        "land drop comes first -- are the always-wired main_phase plan"
+    ),
     "grants_extra_land_drop": "automatic bonus land drop (the drop itself is the normal land choice)",
     "token_copy_of_target": "automatic token copy of the chosen target (rides solo_target_trick)",
     "etb_lifegain": "automatic land ETB lifegain (Kazandu Refuge)",

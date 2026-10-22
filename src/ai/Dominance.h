@@ -241,6 +241,15 @@ static_assert(std::is_trivially_copyable_v<Permanent>,
 // future-determining for a deck holding a descend reader: two states differing only in whether a
 // Peat Bog has sacrificed itself make a different number of end-step tokens. The gate is what keeps
 // every other deck byte-identical, and a clear bit PROVES no card in the game reads descend.
+// 200 -> 200 (2026-10-22, Rest for the Weary): Player gained `land_entered_this_turn` (bool, the
+// landfall-condition event history) and THE SIZE DID NOT MOVE -- it fills the byte of padding after
+// the three bools before emblem_team_pump, so this tripwire did NOT fire; logged for the same reason
+// as the two entries above. Classification: a PER-TURN field that is NOT future-determining at this
+// file's boundary and is deliberately NOT folded in Build(). Its only reader is a spell resolving in
+// the SAME turn (LandEnteredUnderControlThisTurn), both untap sites clear it before any next-turn
+// cast, and Build() compares only END-OF-TURN states -- so two end-of-turn siblings differing only in
+// it have identical futures. (Mid-turn identity keys are another matter: TurnSolver's BuildSimKey
+// folds its vanished-land residual, gated on a same-turn reader in hand.)
 static_assert(sizeof(Player) == 200,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

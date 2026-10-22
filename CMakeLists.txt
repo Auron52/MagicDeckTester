@@ -316,6 +316,7 @@ add_executable(mtg-test
     test/unit/test_critter_lifegain.cpp
     test/unit/test_mass_death_sba.cpp
     test/unit/test_selesnya_lifegain.cpp
+    test/unit/test_lifegain_instants.cpp
     test/unit/test_karoo_tap_in_response.cpp
     test/unit/test_karoo_bounce_search.cpp
     test/unit/test_hinata_crackle_count.cpp

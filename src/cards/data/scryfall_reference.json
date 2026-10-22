@@ -2362,6 +2362,15 @@
     "toughness": "4",
     "type_line": "Creature — Human Knight"
   },
+  "Heroes' Reunion": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{W}",
+    "oracle_text": "Target player gains 7 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Hibernation Sliver": {
     "cmc": 2.0,
     "keywords": [],
@@ -4027,6 +4036,17 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Creature — Angel"
+  },
+  "Rest for the Weary": {
+    "cmc": 2.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Target player gains 4 life.\nLandfall — If you had a land enter the battlefield under your control this turn, that player gains 8 life instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Reveillark": {
     "cmc": 5.0,

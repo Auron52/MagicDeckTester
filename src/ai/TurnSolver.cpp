@@ -57370,6 +57370,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
     ap.equip_activated_this_turn = false;          // Kili's waiver is per TURN (same lockstep)
+    ap.land_entered_this_turn    = false;          // Rest for the Weary's landfall history (same lockstep)
     // DESCEND's baseline -- a REBASE, not a reset (lockstep w/ UntapStep; see the note there).
     // PerformEndStepLifegainTokens, which reads it, runs EARLIER IN THIS FUNCTION, so the order is
     // read-then-rebase exactly as in the executor's two separate steps.
@@ -72229,6 +72230,16 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
             if (reads_drawn)
             { Fold(k, 0xD7A3); Fold(k, static_cast<uint64_t>(p.cards_drawn_this_turn)); }
         }
+        // Landfall HISTORY (Player::land_entered_this_turn; Rest for the Weary, Searing Blaze). Only the
+        // VANISHED-LAND residual is folded -- the bit set with no drop used and no entered-this-turn land
+        // still on the battlefield -- because the other two ways the condition holds are already in this
+        // key (lands_played_this_turn just above, and each permanent's entered_this_turn). Without it,
+        // two same-turn states differing only in whether a since-departed land entered would share a
+        // memo entry while a held Rest resolves for 8 in one and 4 in the other. Gated on a SAME-TURN
+        // reader in hand (the bit resets at the untap), so every deck without one keeps its EXACT prior
+        // key, and the residual test runs first so the hand scan is paid only in the vanished case.
+        if (LandEnteredAndGoneThisTurn(state, pi) && HandReadsLandEnteredThisTurn(p))
+        { Fold(k, 0x1A4DF); }
         // Fortifying Draught lifegain-count: identical shape and identical reasoning to the
         // drawn-count fold above -- future-determining only for a SAME-TURN reader, so it is gated
         // on there actually BEING one AND the count being nonzero. Every deck without such a card

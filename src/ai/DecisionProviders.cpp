@@ -34648,6 +34648,11 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         v.push_back(p.cards_cycled_or_discarded_this_turn); v.push_back(p.has_city_blessing); v.push_back(p.has_enduring_story);
         v.push_back(p.equip_activated_this_turn); v.push_back(p.emblem_team_pump); v.push_back(p.poison_counters);
         v.push_back(p.rad_counters); v.push_back(p.energy_counters);
+        // Player::land_entered_this_turn, as the ONE part of it no other element here carries (the
+        // vanished-land residual -- lands_played_this_turn and each permanent's entered_this_turn are
+        // already in the signature). The residual and not the raw bit, so the element is 0 in every
+        // state the engine produced before the field existed and no equality verdict moves.
+        v.push_back(LandEnteredAndGoneThisTurn(s, static_cast<int>(&p - s.players.data())));
         SigCards(v, p.hand);
         v.push_back(static_cast<long long>(p.library.size()));
         for (const Card& c : p.library) { v.push_back(c.m_number); }

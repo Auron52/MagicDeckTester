@@ -116,6 +116,24 @@ struct Player
     // still consumes that turn's first, so tracking it on the permanent would wrongly leave the
     // waiver live. Reset at BOTH untap sites (executor and rollout) or the two worlds diverge.
     bool equip_activated_this_turn = false;
+    // "If you had a land ENTER the battlefield under your control this turn" (Rest for the Weary's
+    // landfall CONDITION; Searing Blaze's too). An EVENT-HISTORY bit, set wherever a land enters under
+    // this player's control -- the landfall chokepoint OnLandEntered (every played land, and every
+    // land a generic put path or a blink routes through the enter cascade) and EnterLand (every land
+    // an effect PUTS, including Genesis Wave's, whose landfall opt-out must not hide the entry from
+    // this bit). It exists for the ONE event the board cannot show afterwards: a land that entered
+    // and is GONE again the same turn with no land drop used -- a Genesis Wave'd Blighted Steppe
+    // sacrificed for its life, a put Selesnya Sanctuary that had to return itself. Scryfall's Rest for
+    // the Weary ruling 3 is explicit that this still counts ("It doesn't matter if a land that entered
+    // ... is still on the battlefield, is still under your control, or is still a land").
+    // Read only through LandEnteredUnderControlThisTurn (SpellEffects.h), which ORs it with the two
+    // facts the engine already tracked, so it can only ever turn a FALSE into a TRUE in that one
+    // vanished-land case. Reset at BOTH untap sites (executor and rollout) or the two worlds diverge.
+    // DECLARED HERE FOR LAYOUT, measured: it sits in the byte of padding after the three bools above
+    // and before emblem_team_pump's 4-byte alignment, so sizeof(Player) stays 200 (Dominance.h's
+    // tripwire). Folded into BuildSimKey only for the vanished case and only while a hand card reads
+    // it, so every existing deck keeps its exact prior key.
+    bool land_entered_this_turn    = false;
     // EMBLEMS granting "Creatures you control get +1/+1" (CR 114; Gideon, Ally of Zendikar -4).
     // Held as a COUNT of stacked emblems rather than a bool: two Gideons each ultimating give
     // +2/+2, and CR 114.3 makes an emblem a permanent-for-the-rest-of-the-game object with no
