@@ -138,3 +138,44 @@ Reading:
 - **Clairvoyance direction.** Every Hydra arm cuts a shuffler or a Phylath, so the arm holds FEWER shuffles
   than base; if the clairvoyant search over-values shuffles, these deltas are, if anything, understated.
   The bracket below tests that.
+
+## Round 2 — around four Hydra (`logs/landfall_screen/r2.json`, seed 7600000)
+
+**From here every round runs on ONE pinned engine** (`logs/landfall_screen/run_pinned.sh`: a copy of the PGO
+build of src tree `ec2de514`, i.e. this branch rebased onto origin at 21:20 UTC, smoke 144/144 byte-identical)
+via `MTG_BIN` / `MTG_ANALYZE_BIN` + `MTG_PGO=0` -- another session kept pushing engine changes, and each pull
+would otherwise have moved the engine between rounds.
+
+20,000 paired games per arm. Base 5.7295 (T7+ 6.69%, T8+ 0.70%, unwon 0.21%). All arms play 4 Hydra.
+
+| arm | Hydra replaces | also | delta | vs h4_phy0 | T7+ | T8+ |
+|---|---|---|---|---|---|---|
+| h4p_wr_elf4_rg0 | 4 Phylath | Elves for Rampant Growth, Wolf Run for Fengraf | **-0.7907** | -0.082 | 2.50% | 0.40% |
+| h4p_elf4_rg0 | 4 Phylath | 4 Llanowar Elves for 4 Rampant Growth | -0.7798 | -0.071 | 3.04% | 0.48% |
+| h4p_elf4_k0 | 4 Phylath | 4 Llanowar Elves for 4 Khalni | -0.7773 | -0.069 | 2.46% | 0.26% |
+| h4_phy2_c0 | 2 Phylath + 2 Courser | | -0.7271 | -0.018 | 2.33% | 0.31% |
+| h4_phy2_bal0 | 2 Phylath + 2 Baloths | | -0.7252 | -0.016 | 2.49% | 0.32% |
+| h4_phy2_tit2 | 2 Phylath + 2 Titan | | -0.7232 | -0.014 | 2.30% | 0.30% |
+| h4p_tt2 | 4 Phylath | 2 Turntimber for 2 Forest | -0.7197 | -0.011 | 2.74% | 0.29% |
+| h4_phy2_ava2 | 2 Phylath + 2 Avenger | | -0.7188 | -0.010 | 2.71% | 0.36% |
+| h4p_wave3_c1 | 4 Phylath | 3rd Wave for 1 Courser | -0.7186 | -0.010 | 2.79% | 0.32% |
+| h4p_wr_feng | 4 Phylath | Wolf Run for Fengraf | -0.7173 | -0.0085 | 2.58% | 0.27% |
+| h4p_wr_font | 4 Phylath | Wolf Run for Fountain | -0.7166 | -0.0077 | 2.60% | 0.29% |
+| h4p_hoof_c1 | 4 Phylath | Craterhoof for 1 Courser | -0.7137 | -0.005 | 2.93% | 0.34% |
+| h4_phy0 | 4 Phylath | | -0.7088 | -- | 3.17% | 0.36% |
+| h4_phy2_wave0 | 2 Phylath + 2 Wave | | -0.7004 | +0.008 | 2.91% | 0.30% |
+| h4_phy2_k2 | 2 Phylath + 2 Khalni | | -0.6546 | +0.054 | 3.06% | 0.40% |
+| h4_wave0_bal0 | 2 Wave + 2 Baloths | | -0.6236 | +0.085 | 3.02% | 0.40% |
+| h4_c0_bal0 | 2 Courser + 2 Baloths | | -0.5880 | +0.121 | 2.79% | 0.36% |
+| h4_c0_wave0 | 2 Courser + 2 Wave | | -0.5646 | +0.144 | 3.40% | 0.43% |
+
+Reading:
+- **Phylath is the slot**: every arm that keeps all four Phylath is 0.09-0.14 t worse. Cutting two Phylath
+  plus two Courser / Baloths / Titan / Avenger is ~0.01-0.02 t better than all four Phylath (a near tie among
+  those four); Khalni is Hydra fuel and should stay (cutting two costs 0.054 t).
+- **Llanowar Elves are a real second upgrade with Hydra (-0.07 t)**: T1 Elves -> T2 Hydra. Over Khalni they
+  trim the T8+ tail more; over Rampant Growth the average a hair more.
+- **Kessig Wolf Run: -0.0109 +- 0.0008 (t = -13.6) on the Hydra + Elves list** (h4p_wr_elf4_rg0 vs
+  h4p_elf4_rg0, a direct paired comparison) -- the USER's "clear 1-of", confirmed on the list it would join.
+- The ~0.01 t add-ons (Turntimber, a 3rd Wave, Craterhoof) are near the noise of the apparatus, and
+  Turntimber's is still the clairvoyance-suspect one.
