@@ -5788,14 +5788,24 @@ struct ScriptedEtbCounter
 };
 
 
-inline bool PayOptionalTriggerCost(GameState& state, const ManaCost& cost)
+// Pay `cost` out of the turn-scoped floating pool ONLY (no source is tapped), the way an activation
+// cost is paid from it: SpendFloatingTowardCost's pip order, then the Generator Servant clamp. False
+// when the pool cannot cover it (CanPay, checked before anything is spent). Shared by the optional-trigger payer below
+// and the viewer's manual tap of a filter (ApplyHumanPreTap: Izzet Signet's {1} comes out of what
+// the human tapped into the pool before it) -- one rule for "this cost is paid from floating mana".
+inline bool PayCostFromFloat(GameState& state, const ManaCost& cost)
 {
-    if (g_etb_optional_payer != nullptr) { return (*g_etb_optional_payer)(cost); }
     if (!state.floating_mana.CanPay(cost)) { return false; }
     ManaCost remaining = cost;
     SpendFloatingTowardCost(state.floating_mana, remaining);
     ClampHasteFloat(state);   // an activation spends the UNTAGGED {C} first (Generator Servant)
     return remaining.ManaValue() == 0;
+}
+
+inline bool PayOptionalTriggerCost(GameState& state, const ManaCost& cost)
+{
+    if (g_etb_optional_payer != nullptr) { return (*g_etb_optional_payer)(cost); }
+    return PayCostFromFloat(state, cost);
 }
 
 // TOKEN-VOLUME COUNTERS (MTG_TOKEN_STATS, diagnosis only; no-op and byte-identical unset).

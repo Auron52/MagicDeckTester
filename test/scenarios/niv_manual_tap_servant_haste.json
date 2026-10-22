@@ -1,0 +1,17 @@
+{
+  "_comment": "MANUAL TAP of a CREATURE source, the accepting side (USER 2026-10-22, NivMizzetCombo: \"Can you also change the Tap Mana feature to allow me to use artifact and creature sources?\"; docs/design/viewer-manual-tap-pay.md, 'Artifact and creature sources'). The human hand-taps Generator Servant ({T}, sacrifice: {C}{C}, haste rider): the pre-tap runs the executor's own ApplySacForMana, CheckLine performs it for real, and grades the rest on the board it produces -- Servant gone, {C}{C} floating haste-tagged. Five lands cannot pay Niv-Mizzet, the Firemind's {2}{U}{U}{R}{R} on their own, so the accept is the float. Fails if the Servant goes back to being refused ('cannot be tapped by hand' -- the first version's engine-owned exclusion) or stops floating its mana. The HASTE that tagged {C} buys is pinned where a single validate cannot see it (a same-line {T}: draw off a just-cast Firemind is not an enumerated line at all, with or without the tap): test/unit/test_manual_tap_sources.cpp, in the rollout and the executor. Rejecting twin: niv_manual_tap_servant_sick.json. #0 is the any-untapped-copy wildcard; MTG_HUMAN_PLAY because the whole pre-tap path is human-play-only.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Mountain" }, { "name": "Mountain" },
+    { "name": "Generator Servant" }
+  ],
+  "hand": [ "Niv-Mizzet, the Firemind" ],
+  "library_filler": "Island", "library_size": 40,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "tap=Generator Servant#0:C;cast=Niv-Mizzet, the Firemind",
+  "expect_verdict": "accept",
+  "depth": 1, "budget_ms": 50, "max_turns": 4
+}

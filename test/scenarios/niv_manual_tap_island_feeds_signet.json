@@ -1,0 +1,13 @@
+{
+  "_comment": "MANUAL TAP of an ARTIFACT filter, the accepting side (USER 2026-10-22; docs/design/viewer-manual-tap-pay.md, 'Artifact and creature sources'). Island first, then Izzet Signet with the multi-letter face ':UR': the Island's {U} pays the Signet's {1} out of the floating pool (PayCostFromFloat, the activation-cost path), the Signet taps through the payer's own TapConversionSource and adds {U}{R}, and Tandem Lookout ({2}{U}) is paid from that float plus the second Island. Twin of niv_manual_tap_signet_unfed.json (same board, no feeder tapped -> illegal). Fails if the ':UR' face stops parsing, if the fed mode stops being offered, or if the feed stops coming from the pool.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 3, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [ { "name": "Island" }, { "name": "Island" }, { "name": "Izzet Signet" } ],
+  "hand": [ "Tandem Lookout" ],
+  "library_filler": "Island", "library_size": 40,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "tap=Island#0:U;tap=Izzet Signet#0:UR;cast=Tandem Lookout",
+  "expect_verdict": "accept",
+  "depth": 1, "budget_ms": 50, "max_turns": 3
+}

@@ -809,8 +809,16 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
 // because the token appears in TWO places (a `--validate-line` spec token and a `--cast-order`
 // full-order entry) and two parsers is two chances for validation and execution to read the same
 // string differently. `#<m_number>` picks WHICH copy (0 = any untapped copy of that name); `<FACE>`
-// is the land's own face to tap for and is mandatory in practice -- an unstated colour parses to -1
-// and is REJECTED by ApplyHumanPreTap rather than guessed.
+// is the face to tap for and is mandatory in practice -- an unstated colour parses to -1 and is
+// REJECTED by ApplyHumanPreTap rather than guessed.
+//
+// `<FACE>` is ONE letter (W U B R G C) for every source that makes one kind of mana per tap -- a
+// land, a rock, a dork, a filter's free {C}, a sacrifice source (Generator Servant `:C` adds its
+// {C}{C}, a Treasure `:U` its one {U}), a one-colour fed mode (Capital City `:U`) -- and SEVERAL
+// letters for a mana-CONVERSION source whose activation adds several units at once: Izzet Signet
+// `:UR`, Cascade Bluffs `:UU` / `:UR` / `:RR` (PreTap::combo; matched as a multiset). Every token
+// recorded before the multi-letter form existed has one letter, and parses and behaves exactly as
+// it did.
 //
 // `+<AURA>` (zero or more, W|U|B|R|G only) is one colour per ANY-COLOUR land Aura attached to the
 // host, in AnyColorLandAuras order: `tap=Brushland#7:W+U` is "tap Brushland for {W}, and take {U}
@@ -822,17 +830,56 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
 bool IsHumanPreTapToken(const std::string& tok);   // cheap discriminator: does it start "tap="?
 bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out);
 
-// Perform one pre-tap on `state` (into state.floating_mana, via TapSourceIntoFloat). Returns "" on
-// success, else a human-readable reason -- an impossible pre-tap is REPORTED, never quietly
-// repaired, because a silently-fixed tap is exactly the mis-allocation this fallback exists to let
-// the human correct. MTG_PRE_TAP_TRACE (default off) prints one stderr line per tap and rejection.
+// Perform one pre-tap on `state` (into state.floating_mana) through the mechanic the payer /
+// executor uses for that source (see HumanPreTapOfferFor's routes). Returns "" on success, else a
+// human-readable reason -- an impossible pre-tap is REPORTED, never quietly repaired, because a
+// silently-fixed tap is exactly the mis-allocation this fallback exists to let the human correct.
+// A filter whose feed the floating pool cannot pay is one such report ("tap a source for the Izzet
+// Signet's {1} first"). MTG_PRE_TAP_TRACE (default off) prints one stderr line per tap and rejection.
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t);
 
-// The faces `p` may legally be pre-tapped for, as the letters the token format uses ("GU"), or ""
-// when the source is not hand-tappable at all. This is the affordance the GUI offers from (the
-// decision JSON's per-permanent `taps`) AND the legality test ApplyHumanPreTap enforces -- one
-// function, so the viewer can never offer a tap the engine will refuse.
+// "{U}" / "{U}{R}" -- the face a pre-tap names, for the play-history line ("manual tap: ... for").
+std::string HumanPreTapFaceText(const TurnSolver::PreTap& t);
+
+// THE legality function: may the human hand-tap `p`, for which faces, and through which mechanic.
+// Everything else here -- the decision JSON's `taps` / `tap_fed` / `tap_feed` / `tap_sac` /
+// `tap_note` / `tap_auras`, and the test ApplyHumanPreTap enforces -- is read off this one answer,
+// so the viewer can never offer a tap the engine will refuse.
+//
+// USER 2026-10-22 (NivMizzetCombo): "Can you also change the Tap Mana feature to allow me to use
+// artifact and creature sources?" That lifted the first version's exclusion of filters, feed-cost
+// sources and one-shot sacrifice sources. Excluded now: tapped / foreign permanents, non-sources, a
+// creature whose {T} is summoning sick, a source whose gate is dead, and RESTRICTED mana
+// (creature_mana_only, big-spell-only, the coloured faces of colored_creature_only) -- the floating
+// pool a hand tap fills carries no spending restriction, so tapping those into it would launder a
+// restricted unit into a general one.
+struct HumanPreTapOffer
+{
+    enum class Route
+    {
+        None,
+        Plain,        // TapSourceIntoFloat: a land / dork / rock (and a scaled land's {C})
+        Conversion,   // a filter: its free {C}, or its FED mode (feed from the float, then the tap)
+        PaySac,       // TapSourceIntoFloat + CommitPaySacSacrifices: Treasure, Eldrazi Spawn
+        SacAction,    // ApplySacForMana: Lotus Bloom, Black Lotus, Generator Servant (haste tag)
+    };
+    Route       route = Route::None;
+    std::string free_faces;              // `taps`: faces needing no feed ("GW", "C"); one letter each
+    std::vector<std::string> fed_faces;  // `tap_fed`: the FED mode's faces ("UR"; "UU","UR","RR"; "W".."G")
+    std::string feed;                    // `tap_feed`: the fed mode's cost, paid from the pool ("{1}", "{U/R}")
+    bool        sacrifice  = false;      // `tap_sac`: the tap sacrifices the permanent
+    int         sac_amount = 0;          // mana one sacrifice adds (Generator Servant 2, Lotus 3)
+    std::string note;                    // `tap_note`: what the tap does, in words (display only)
+    std::string why_not;                 // when nothing is offered: the reason, for the rejection
+};
+HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p);
+
+// The faces `p` may be pre-tapped for WITHOUT a feed, as the letters the token format uses ("GU"),
+// or "" when there are none -- HumanPreTapOfferFor's `free_faces`, published as `taps`. Unchanged
+// for every source the first version of the feature offered.
 std::string HumanPreTapFaces(const GameState& state, const Permanent& p);
+// ...and the faces of a conversion source's FED mode -- `fed_faces`, published as `tap_fed`.
+std::vector<std::string> HumanPreTapFedFaces(const GameState& state, const Permanent& p);
 
 // The ANY-COLOUR land Auras on `p` -- name, m_number and the letters its bonus may be taken as --
 // in the order a `tap=` token's `+<AURA>` suffixes are matched against. Empty for every land with no

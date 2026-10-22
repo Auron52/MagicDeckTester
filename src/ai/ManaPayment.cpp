@@ -617,6 +617,55 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     }
 }
 
+// ---- A CONVERSION source's tap, shared ------------------------------------------------------------
+// The pieces of activating a mana-CONVERSION source (IsManaConversionSource: Cascade Bluffs'
+// is_filter, Izzet Signet / Ferrous Lake's ramp_filter, Capital City / Arcum's Astrolabe's
+// any_color_filter) -- or the free "{T}: Add {C}" mode of one -- that the greedy payer
+// (TapForCostSharedOnceImpl's branches 2-5) and the viewer's manual tap (ApplyHumanPreTap) BOTH
+// perform. Extracted verbatim, on the TapSourceIntoFloat precedent, so a human's hand tap of a filter
+// is the payer's tap of a filter rather than a second copy of it:
+//
+//   * ConsumeHybridFilterFeed -- Cascade Bluffs' "{U/R}" feed: one unit of one of the filter's OWN
+//     colours, tried in `produces` order. A hybrid pip takes neither {C} nor an off-colour unit.
+//   * TapConversionSource -- the source itself goes tapped, with Manabarbs' land-tap mark.
+//   * CreditConversionLandAura -- "whenever enchanted land is tapped for mana": a filter LAND tapped
+//     for mana is still tapped for mana, so its Aura's bonus arrives too (`aura_colors` = the human's
+//     pick per any-colour Aura, as in TapSourceIntoFloat; nullptr = the historical `wild` credit).
+//
+// The YIELD (what the activation adds) stays with each caller: the payer picks it per pip, the human
+// names it in the token. (Only the ramp-filter branch of the greedy credits the Aura today; its free
+// {C}, is_filter and any-colour branches do not, while the backtracker's activate() credits it on
+// every branch -- an inconsistency between the two payers, left byte-identical here because moving it
+// is a play change of its own. The human's tap credits the Aura on every branch, as the rules and
+// the backtracker do.)
+static bool ConsumeHybridFilterFeed(ManaPool& pool, const CardDefinition& def)
+{
+    for (Color c : def.params.produces) { if (ConsumeFloating(pool, c)) { return true; } }
+    return false;
+}
+
+static void TapConversionSource(GameState& state, Permanent& p)
+{
+    p.tapped = true;
+    dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
+}
+
+static void CreditConversionLandAura(GameState& state, const Permanent& p, ManaPool& floating,
+                                     ManaPool* available, const std::vector<int>* aura_colors = nullptr)
+{
+    if (LandAuraBonus(state, p) <= 0) { return; }
+    ManaPool bonus;
+    LandAuraAddToPool(bonus, state, p, aura_colors);
+    floating.AddPool(bonus);
+    if (available)
+    {
+        available->white -= bonus.white; available->blue      -= bonus.blue;
+        available->black -= bonus.black; available->red       -= bonus.red;
+        available->green -= bonus.green; available->colorless -= bonus.colorless;
+        available->wild  -= bonus.wild;
+    }
+}
+
 // THE BURST'S COLOUR UNDER A PENDING ACTIVATION (AccomplishedAlchemist chunk E1; claude-play seed 80019).
 // A single-colour burst source (IsSingleColorBurstSource: Accomplished Alchemist's "X mana of any ONE
 // color") tapped for a GENERIC pip floats its whole surplus in the one colour picked here -- and the
@@ -2283,8 +2332,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (!def || !(def->params.is_filter || def->params.any_color_filter)
                     || def->params.filter_no_free_colorless   // Astrolabe: no free {C} mode
                     || !usable(p, *def)) { continue; }
-                p.tapped = true;
-                dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
+                TapConversionSource(state, p);   // shared with the human pre-tap (see its header)
                 floating.Add(Color::Colorless, 1);
                 if (available)
                 {
@@ -2343,9 +2391,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 }
                 if (!fed) { continue; }  // can't feed this filter; try the next one
             }
-            for (Color c : def->params.produces) { if (ConsumeFloating(floating, c)) { break; } }
-            p.tapped = true;
-            dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
+            ConsumeHybridFilterFeed(floating, *def);   // the {U/R} feed (shared with the pre-tap)
+            TapConversionSource(state, p);
             floating.Add(out, 2);
             if (available && available->wild > 0) { --available->wild; }  // filter counted as 1 wild in the pool
             return true;
@@ -2379,28 +2426,16 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 }
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
-                p.tapped = true;
-                dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
+                TapConversionSource(state, p);   // shared with the human pre-tap (see its header)
                 for (Color c : def->params.produces) { floating.Add(c, 1); }
                 if (available && available->wild > 0) { --available->wild; }  // ramp filter counted as 1 wild
                 // A land Aura on the ramp filter (Wild Growth on Skycloud Expanse): the land WAS
                 // tapped for mana, so the aura's additional mana arrives here too -- exactly as
                 // TapSourceIntoFloat and the backtracker's activate() credit it. This branch was
                 // the one payer site without it (no deck had ever paired the two). AddSourceToPool
-                // credited the same units, so retire them from `available` likewise.
-                if (LandAuraBonus(state, p) > 0)
-                {
-                    ManaPool bonus;
-                    LandAuraAddToPool(bonus, state, p);
-                    floating.AddPool(bonus);
-                    if (available)
-                    {
-                        available->white -= bonus.white; available->blue      -= bonus.blue;
-                        available->black -= bonus.black; available->red       -= bonus.red;
-                        available->green -= bonus.green; available->colorless -= bonus.colorless;
-                        available->wild  -= bonus.wild;
-                    }
-                }
+                // credited the same units, so retire them from `available` likewise. AFTER the
+                // `available->wild` decrement above, as it always was: the two touch the same field.
+                CreditConversionLandAura(state, p, floating, available);
                 return true;
             }
         }
@@ -2430,8 +2465,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 }
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
-                p.tapped = true;
-                dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
+                TapConversionSource(state, p);   // shared with the human pre-tap (see its header)
                 floating.Add(needed, 1);
                 if (available && available->wild > 0) { --available->wild; }   // counted as 1 wild
                 return true;
@@ -6877,6 +6911,21 @@ bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out)
             return hit != nullptr ? static_cast<int>(hit - kPreTapColorLetters) : -1;
         };
         if (!fields.empty()) { t.color = letter_to_color(fields[0]); }
+        // A MULTI-LETTER face is a conversion source's output (`:UR`, `:UU` -- see PreTap::combo).
+        // Every letter must be in the alphabet or the whole face stays unstated (-1, rejected with a
+        // message): "UX" is not "U". A single letter never reaches here, so every token recorded
+        // before this parses exactly as it did.
+        if (!fields.empty() && fields[0].size() >= 2)
+        {
+            std::vector<int> combo;
+            for (char ch : fields[0])
+            {
+                const int c = letter_to_color(std::string(1, ch));
+                if (c < 0) { combo.clear(); break; }
+                combo.push_back(c);
+            }
+            t.combo = std::move(combo);
+        }
         for (std::size_t i = 1; i < fields.size(); ++i)
         { t.aura_colors.push_back(letter_to_color(fields[i])); }
     }
@@ -6889,10 +6938,47 @@ bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out)
     return true;
 }
 
-std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
+// ---- WHICH sources a human may hand-tap, and how (the ONE legality function) --------------------
+// HumanPreTapOfferFor is the single answer to "may the human tap this permanent by hand, for what,
+// and through which mechanic". Every reader derives from it: HumanPreTapFaces (`taps`),
+// HumanPreTapFedFaces (`tap_fed`), HumanPreTapAuraFaces (`tap_auras`), the decision JSON's
+// `tap_feed` / `tap_sac` / `tap_note`, and ApplyHumanPreTap's legality test -- so the viewer can
+// never offer a tap the engine refuses, and no rule is mirrored anywhere to drift.
+//
+// FOUR ROUTES, each the mechanic the payer / executor already uses for that source:
+//   * PLAIN -- a land, an untapped non-sick dork, a rock: TapSourceIntoFloat, the payer's own tap.
+//     This route is UNCHANGED from the first version of the feature (same faces, same code), which
+//     is what keeps every reference ever saved replaying byte-for-byte.
+//   * CONVERSION -- a filter (Cascade Bluffs), a ramp filter (Izzet Signet, Ferrous Lake), an
+//     any-colour filter (Capital City, Arcum's Astrolabe), and a scaled mana land's fed mode (Three
+//     Tree City's "{2},{T}"): the FEED is paid out of the floating pool the human has already
+//     filled (tap the Island, THEN the Signet), and the source taps through the payer's own
+//     TapConversionSource. Its outputs are `fed` faces: a multi-letter combo where the activation
+//     adds several units ("UR"; Cascade Bluffs' "UU"/"UR"/"RR"), a single letter where it adds one
+//     colour of the player's choice (Capital City's fed mode, Three Tree City's N of one colour).
+//     A free "{T}: Add {C}" mode, where the card has one, is a plain `free` face.
+//   * PAY-SAC -- a source the PAYER cracks itself (IsPaySacSource: Treasure, Eldrazi Spawn):
+//     TapSourceIntoFloat then CommitPaySacSacrifices, exactly the payer's crack.
+//   * SAC ACTION -- a one-shot lump the search enumerates as Action::Kind::SacForMana (Lotus Bloom,
+//     Black Lotus, Generator Servant): ApplySacForMana, the executor's own crack -- so Generator
+//     Servant's two {C} land haste-tagged in GameState::floating_haste_c exactly as a normal crack
+//     tags them, and the next creature spell spends one and gains haste.
+//
+// USER, 2026-10-22, hand-playing NivMizzetCombo: "Can you also change the Tap Mana feature to allow
+// me to use artifact and creature sources?" -- which lifted the first version's blanket exclusion of
+// filters, feed-cost sources and one-shot sacrifice sources (it called them "engine-owned"). What
+// STAYS excluded is only what would LAUNDER restricted mana into the unrestricted floating pool:
+// `creature_mana_only` sources, a big-spell-only source (Troyan), and the coloured faces of a
+// `colored_creature_only` land (Cavern of Souls -- its painless {C} mode stays offered). The pool a
+// pre-tap fills carries no spending restriction, so a restricted unit put into it would become a
+// general one. Plus the obvious: a tapped or foreign permanent, a non-source, a creature whose {T}
+// is still summoning sick (CR 302.6), and a source whose gate is dead right now.
+HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
 {
+    HumanPreTapOffer o;
     const int active = state.active_player_index;
-    if (p.controller_index != active || p.tapped) { return std::string(); }
+    if (p.controller_index != active) { o.why_not = "you do not control it"; return o; }
+    if (p.tapped)                     { o.why_not = "it is already tapped";  return o; }
     // Brightcap Badger's grant. This MUST match the payer, not merely approximate it: the viewer's
     // tap legality and the engine's are the same question asked twice, and a human offered fewer
     // faces than the search can use would be shown a board they cannot play.
@@ -6902,40 +6988,167 @@ std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
     // non-viewer caller is ever added, hoist the grant into it -- see the note in
     // BuildNonCreaturePool for what the per-permanent form costs on a 364-permanent board.
     const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
-    if (def == nullptr) { return std::string(); }
+    if (def == nullptr) { o.why_not = "it is not a mana source"; return o; }
     const CardParams& q = def->params;
-    // The same source test the payment's `usable()` applies -- MINUS the classes a hand-driven tap
-    // into the float cannot honestly carry, each excluded for a stated reason rather than by
-    // omission. These stay ENGINE-OWNED and the human simply leaves them to the allocator:
-    //   * PaySacSpendableNow (a Treasure, a Lotus Bloom): the "tap" destroys the permanent, and
-    //     which one-shot source a line spends is a payment decision with its own accounting.
-    //   * mana-CONVERSION sources (Cascade Bluffs, Arcum's Astrolabe, Ferrous Lake): they consume
-    //     a feeder unit per activation, so the tap is a two-source transaction this cannot express.
-    //   * a scaled mana LAND (Three Tree City's "{2},{T}"): the activation has a generic feed cost
-    //     that a pre-tap does not pay, so tapping it here would mint mana the card cannot make.
-    //   * `creature_mana_only` sources, and the COLOURED faces of a `colored_creature_only` land
-    //     (Cavern of Souls / Unclaimed Territory): that mana may be spent only on a creature spell,
-    //     and the float carries no such restriction -- pre-tapping it would launder a restricted
-    //     unit into a general one. Their painless "{T}: Add {C}" mode is fine and stays offered.
-    const bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                     || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                     || q.mana_rock;
-    if (!is_src) { return std::string(); }
-    // Big-spell-only mana (Troyan) is engine-owned for the same laundering reason.
-    if (IsManaConversionSource(q) || IsScaledManaLand(*def) || q.creature_mana_only
-        || BigSpellOnlySource(q))
-    { return std::string(); }
-    if (!StorageSourceLive(p, *def))               { return std::string(); }
-    if (!GraveyardFuelLive(state, active, *def))   { return std::string(); }
-    if (!ManaSubtypeGateLive(state, active, *def)) { return std::string(); }
-    std::string faces;
-    for (Color c : EffectiveProduces(state, active, *def))
+    // The payer's own source test (`usable()`'s template half): a land, a dork, a rock -- a filter
+    // among them is a CONVERSION source -- or, outside those templates, a sacrifice-for-mana source.
+    const bool tmpl_src   = def->tmpl == CardTemplate::BasicLand || def->tmpl == CardTemplate::ManaDork
+                         || q.mana_rock;
+    const bool conversion = tmpl_src && IsManaConversionSource(q);
+    const bool sac_src    = !tmpl_src && q.sac_for_mana_amount > 0;
+    if (!tmpl_src && !sac_src) { o.why_not = "it is not a mana source"; return o; }
+    // RESTRICTED mana: the one class that stays excluded, and why (see the header).
+    if (q.creature_mana_only)
     {
-        if (q.colored_creature_only && c != Color::Colorless) { continue; }
-        const char letter = kPreTapColorLetters[static_cast<int>(c)];
-        if (faces.find(letter) == std::string::npos) { faces.push_back(letter); }
+        o.why_not = "its mana may be spent only on creature spells, and the floating pool a hand tap "
+                    "fills carries no such restriction";
+        return o;
     }
-    return faces;
+    if (BigSpellOnlySource(q))
+    {
+        o.why_not = "its mana may be spent only on a big spell, and the floating pool a hand tap fills "
+                    "carries no such restriction";
+        return o;
+    }
+    // {T} in a CREATURE's cost: summoning sickness binds it (CR 302.6). CanTapNow is true for every
+    // non-creature, so this is the dork / Generator Servant test and nothing else. A sacrifice source
+    // without {T} in its cost (Eldrazi Spawn: "Sacrifice this creature: Add {C}") is not asked. The
+    // PLAIN route asks exactly what it always asked (a ManaDork only), so its faces cannot move.
+    const bool taps_itself = def->tmpl == CardTemplate::ManaDork || conversion
+                          || (sac_src && q.sac_for_mana_requires_tap);
+    if (taps_itself && !CanTapNow(p, state.battlefield))
+    {
+        o.why_not = "it is summoning sick -- a creature's {T} ability cannot be activated the turn it "
+                    "arrives unless it has haste";
+        return o;
+    }
+    if (!StorageSourceLive(p, *def))               { o.why_not = "it has no storage counters";   return o; }
+    if (!GraveyardFuelLive(state, active, *def))   { o.why_not = "it has no graveyard land to exile"; return o; }
+    if (!ManaSubtypeGateLive(state, active, *def)) { o.why_not = "its mana ability has nothing to untap"; return o; }
+    auto letters_of = [](const std::vector<Color>& cs) -> std::string
+    {
+        std::vector<int> v;
+        for (Color c : cs) { v.push_back(static_cast<int>(c)); }
+        std::sort(v.begin(), v.end());   // canonical WUBRGC order: the published face is `UR`, not `RU`
+        std::string s;
+        for (int c : v) { s.push_back(kPreTapColorLetters[c]); }
+        return s;
+    };
+    auto add_free = [&](Color c)
+    {
+        if (q.colored_creature_only && c != Color::Colorless) { return; }
+        const char letter = kPreTapColorLetters[static_cast<int>(c)];
+        if (o.free_faces.find(letter) == std::string::npos) { o.free_faces.push_back(letter); }
+    };
+    auto add_fed = [&](const std::string& face)
+    {
+        if (q.colored_creature_only && face.find_first_not_of('C') != std::string::npos) { return; }
+        if (std::find(o.fed_faces.begin(), o.fed_faces.end(), face) == o.fed_faces.end())
+        { o.fed_faces.push_back(face); }
+    };
+    // ---- SACRIFICE sources -------------------------------------------------------------------
+    if (sac_src)
+    {
+        o.sacrifice = true;
+        o.route     = IsPaySacSource(*def) ? HumanPreTapOffer::Route::PaySac
+                                           : HumanPreTapOffer::Route::SacAction;
+        o.sac_amount = std::max(1, q.sac_for_mana_amount);
+        if (o.route == HumanPreTapOffer::Route::PaySac)
+        {
+            // The payer's own colours for it (EffectiveProduces: a pinned colour, else any colour).
+            for (Color c : EffectiveProducesFor(state, active, *def, &p)) { add_free(c); }
+        }
+        else if (!q.sac_for_mana_color.empty() && std::strchr("WUBRGC", q.sac_for_mana_color[0]) != nullptr)
+        {
+            o.free_faces.push_back(q.sac_for_mana_color[0]);   // pinned (Generator Servant's {C})
+        }
+        else
+        {
+            // "Add N mana of any ONE color" (Lotus Bloom). The search narrows this fan to the
+            // deck's own colours (ChosenFloatColorCandidates) -- a prune, which a human is not
+            // bound by: the rule is any colour.
+            for (Color c : { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green }) { add_free(c); }
+        }
+        // What the tap DOES, in words, for the viewer's dialog and chip (display only).
+        std::string yield;
+        if (o.free_faces.size() == 1)
+        { for (int k = 0; k < o.sac_amount; ++k) { yield += "{" + o.free_faces + "}"; } }
+        else { yield = std::to_string(o.sac_amount) + " mana of one colour you pick"; }
+        const bool tap_cost = q.sac_for_mana_requires_tap || !def->card.IsCreature();
+        o.note = std::string(tap_cost ? "{T}, sacrifice it" : "sacrifice it") + ": adds " + yield
+               + (q.sac_for_mana_grants_haste
+                      ? " -- a creature spell this mana is spent on gains haste" : "");
+        if (o.free_faces.empty()) { o.why_not = "it makes no mana"; }
+        return o;
+    }
+    // ---- CONVERSION sources (filters) ----------------------------------------------------------
+    if (conversion)
+    {
+        o.route = HumanPreTapOffer::Route::Conversion;
+        const std::vector<Color>& prod = q.produces;
+        // The free "{T}: Add {C}" mode -- the payer's branch (2) condition, verbatim.
+        if ((q.is_filter || q.any_color_filter) && !q.filter_no_free_colorless) { add_free(Color::Colorless); }
+        if (!prod.empty())
+        {
+            if (q.is_filter)
+            {
+                // "{U/R},{T}: Add {U}{U}, {U}{R}, or {R}{R}" -- every unordered pair of its colours.
+                o.feed = "{";
+                for (std::size_t i = 0; i < prod.size(); ++i)
+                { if (i) { o.feed += "/"; } o.feed.push_back(kPreTapColorLetters[static_cast<int>(prod[i])]); }
+                o.feed += "}";
+                for (std::size_t i = 0; i < prod.size(); ++i)
+                    for (std::size_t j = i; j < prod.size(); ++j)
+                    { add_fed(letters_of({ prod[i], prod[j] })); }
+            }
+            else if (q.ramp_filter)
+            {
+                // "{1},{T}: Add {U}{R}" -- one of EACH colour, a fixed output (no choice to make).
+                o.feed = "{1}";
+                add_fed(letters_of(prod));
+            }
+            else   // any_color_filter: "{1},{T}: Add one mana of any color"
+            {
+                o.feed = "{1}";
+                for (Color c : prod) { add_fed(std::string(1, kPreTapColorLetters[static_cast<int>(c)])); }
+            }
+        }
+        o.note = o.fed_faces.empty() ? std::string()
+               : "its " + o.feed + " is paid from your floating mana -- tap a source for it first";
+        if (o.free_faces.empty() && o.fed_faces.empty()) { o.why_not = "it makes no mana"; }
+        return o;
+    }
+    // ---- PLAIN sources (the original feature; unchanged) -----------------------------------------
+    o.route = HumanPreTapOffer::Route::Plain;
+    for (Color c : EffectiveProduces(state, active, *def)) { add_free(c); }
+    // A scaled mana LAND (Three Tree City): its "{T}: Add {C}" is the plain face above, and its
+    // "{2},{T}: Add N mana of one colour" (N = creatures you control -- the backtracker's model,
+    // ScaledManaCreatureCount) is a fed face per colour, through the same feed-from-float path as a
+    // filter. Offered only while N >= 1, as the backtracker requires: N = 0 pays {2} for nothing.
+    if (IsScaledManaLand(*def))
+    {
+        const int n = ScaledManaCreatureCount(state);
+        if (n >= 1)
+        {
+            o.feed = "{" + std::to_string(q.mana_per_creature_feeder_generic) + "}";
+            for (Color c : { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green })
+            { add_fed(std::string(1, kPreTapColorLetters[static_cast<int>(c)])); }
+            o.note = "its fed mode pays " + o.feed + " from your floating mana and adds " + std::to_string(n)
+                   + " mana of one colour you pick";
+        }
+    }
+    if (o.free_faces.empty() && o.fed_faces.empty()) { o.why_not = "it makes no mana"; }
+    return o;
+}
+
+std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
+{
+    return HumanPreTapOfferFor(state, p).free_faces;
+}
+
+std::vector<std::string> HumanPreTapFedFaces(const GameState& state, const Permanent& p)
+{
+    return HumanPreTapOfferFor(state, p).fed_faces;
 }
 
 // The ANY-COLOUR land Auras on `p`, (name, legal letters), in AnyColorLandAuras order -- see
@@ -6947,7 +7160,8 @@ std::vector<HumanPreTapAura>
 HumanPreTapAuraFaces(const GameState& state, const Permanent& p)
 {
     std::vector<HumanPreTapAura> out;
-    if (HumanPreTapFaces(state, p).empty()) { return out; }
+    const HumanPreTapOffer offer = HumanPreTapOfferFor(state, p);
+    if (offer.free_faces.empty() && offer.fed_faces.empty()) { return out; }
     for (const Permanent* a : AnyColorLandAuras(state, p))
     { out.push_back({ a->card.m_name.str(), a->card.m_number, "WUBRG" }); }
     return out;
@@ -6963,6 +7177,21 @@ static bool PreTapTraceOn()
     return v;
 }
 
+std::string HumanPreTapFaceText(const TurnSolver::PreTap& t)
+{
+    std::string s;
+    if (!t.combo.empty())
+    {
+        for (int c : t.combo)
+        { s += "{"; s.push_back(kPreTapColorLetters[c >= 0 && c < 6 ? c : 5]); s += "}"; }
+        return s;
+    }
+    s = "{";
+    s.push_back(kPreTapColorLetters[t.color < 0 || t.color > 5 ? 5 : t.color]);
+    s += "}";
+    return s;
+}
+
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
 {
     auto reject = [&](const std::string& why) -> std::string
@@ -6972,12 +7201,22 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
         return why;
     };
     if (t.name.empty()) { return reject("a tap= token names no source"); }
-    if (t.color < 0 || t.color >= 6)
+    const bool combo = !t.combo.empty();
+    if (!combo && (t.color < 0 || t.color >= 6))
     {
         return reject("tap of '" + t.name + "' names no colour -- write "
-                      "tap=<name>#<num>:<W|U|B|R|G|C>");
+                      "tap=<name>#<num>:<W|U|B|R|G|C> (or a filter's output, e.g. :UR)");
     }
-    const char letter = kPreTapColorLetters[t.color];
+    const char letter = combo ? '\0' : kPreTapColorLetters[t.color];
+    // The face as written, canonicalised (WUBRGC order) for the multiset match against `fed_faces`.
+    std::string face;
+    if (combo)
+    {
+        std::vector<int> v = t.combo;
+        std::sort(v.begin(), v.end());
+        for (int c : v) { face.push_back(kPreTapColorLetters[c]); }
+    }
+    else { face.assign(1, letter); }
     const int  active = state.active_player_index;
     Permanent* found = nullptr;
     bool name_seen = false, id_seen = false, tapped_seen = false;
@@ -6998,18 +7237,38 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
         { return reject("you control no copy of '" + t.name + "' with that id"); }
         return reject("you control no untapped '" + t.name + "'");
     }
-    const std::string faces = HumanPreTapFaces(state, *found);
-    if (faces.empty())
+    // THE one legality function (see HumanPreTapOfferFor): the offer the viewer drew from IS the rule.
+    const HumanPreTapOffer offer = HumanPreTapOfferFor(state, *found);
+    const std::string& faces = offer.free_faces;
+    if (faces.empty() && offer.fed_faces.empty())
     {
-        return reject("'" + t.name + "' cannot be tapped by hand -- a filter, a feed-cost source, a "
-                      "one-shot sacrifice source or restricted mana; the engine's payment owns those");
+        return reject("'" + t.name + "' cannot be tapped by hand -- " + offer.why_not);
     }
-    if (faces.find(letter) == std::string::npos)
+    // A face the source makes with NO feed (a land, a rock, a filter's free {C}, a sacrifice) wins
+    // over a fed face spelled the same -- it is what a single letter always meant.
+    const bool free_face = !combo && faces.find(letter) != std::string::npos;
+    const bool fed_face  = !free_face
+                        && std::find(offer.fed_faces.begin(), offer.fed_faces.end(), face) != offer.fed_faces.end();
+    if (!free_face && !fed_face)
     {
-        return reject(std::string("'") + t.name + "' cannot produce {" + letter + "} (it makes {"
-                      + faces + "})");
+        // The plain-source wording is unchanged (references and the checks read it); a filter's fed
+        // outputs are listed after it.
+        std::string makes = "{" + faces + "}";
+        if (!offer.fed_faces.empty())
+        {
+            std::string fed;
+            for (const std::string& f : offer.fed_faces)
+            {
+                if (!fed.empty()) { fed += ", "; }
+                for (char ch : f) { fed += "{"; fed.push_back(ch); fed += "}"; }
+            }
+            makes = (faces.empty() ? std::string() : makes + ", or ") + fed + " for " + offer.feed;
+        }
+        std::string asked;
+        for (char ch : face) { asked += "{"; asked.push_back(ch); asked += "}"; }
+        return reject("'" + t.name + "' cannot produce " + asked + " (it makes " + makes + ")");
     }
-    // THE SAME CHOKEPOINT HumanPreTapFaces JUST USED, not a second raw lookup.
+    // THE SAME CHOKEPOINT HumanPreTapOfferFor JUST USED, not a second raw lookup.
     //
     // USER-REPORTED, twice (candidate-B Fungus, 2026-09-25): "Brightcap Badger turning critters into
     // mana producers is not working", then -- after the grant itself had been verified end to end
@@ -7027,10 +7286,10 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
     // and the OFFER -- and every one of them was and is correct; the executor half had no test at
     // all, and the manual tap is human-play-only so no digest, GT cell or protocol replay reaches it.
     //
-    // `def` is used for exactly one thing below -- TapSourceIntoFloat -- which asks only mana
-    // questions of it (produces, energy, depletion, pay-sac), so the synthetic granted face is the
-    // right answer here. See the ManaDefOf header for the caution that applies to callers which ask
-    // NON-mana questions of the result; this is not one of them.
+    // `def` is used for mana questions only below (TapSourceIntoFloat asks produces, energy,
+    // depletion, pay-sac; the conversion route asks the filter's own params), so the synthetic
+    // granted face is the right answer here. See the ManaDefOf header for the caution that applies to
+    // callers which ask NON-mana questions of the result; this is not one of them.
     const CardDefinition* def = ManaDefOf(state, *found, LiveManaGrant(state, active));
     if (def == nullptr) { return reject("'" + t.name + "' has no card definition"); }
     // ---- the land Aura's colour, when the human stated one ------------------------------------
@@ -7070,19 +7329,97 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
             }
         }
     }
-    TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
-                       state.floating_mana, /*available=*/nullptr, /*for_creature=*/false,
-                       t.aura_colors.empty() ? nullptr : &t.aura_colors);
+    const std::vector<int>* aura_pick = t.aura_colors.empty() ? nullptr : &t.aura_colors;
+    // Captured now: a sacrifice erases the permanent, and `found` with it.
+    const int found_num = found->card.m_number;
+    using Route = HumanPreTapOffer::Route;
+    if (fed_face)
+    {
+        // ---- a CONVERSION source's FED mode: the feed comes out of the floating pool ----------
+        // The human taps the feeder first (it is already in the pool), then the filter -- the
+        // order the rules require, since the feed is part of the filter's activation cost. A pool
+        // that cannot pay it is REJECTED with what to do about it, never quietly topped up by
+        // tapping something on the human's behalf: choosing that source is the engine's
+        // allocation, which is what a hand tap exists to override.
+        const CardParams& q = def->params;
+        const ManaPool float_before = state.floating_mana;
+        const int      haste_before = state.floating_haste_c;
+        bool fed = false;
+        if (q.is_filter)
+        {
+            ManaPool probe = state.floating_mana;
+            if (ConsumeHybridFilterFeed(probe, *def))
+            { fed = ConsumeHybridFilterFeed(state.floating_mana, *def); ClampHasteFloat(state); }
+        }
+        else
+        {
+            ManaCost feed;
+            feed.generic = IsScaledManaLand(*def) ? q.mana_per_creature_feeder_generic : 1;
+            fed = PayCostFromFloat(state, feed);
+        }
+        if (!fed)
+        {
+            state.floating_mana    = float_before;   // nothing half-spent survives a refusal
+            state.floating_haste_c = haste_before;
+            return reject("'" + t.name + "' needs " + offer.feed + " from your floating mana to make "
+                          + HumanPreTapFaceText(t) + " -- tap a source for the " + t.name + "'s "
+                          + offer.feed + " first");
+        }
+        // N for a scaled land, read BEFORE the tap (tapping a land changes no creature count).
+        const int scaled_n = IsScaledManaLand(*def) ? ScaledManaCreatureCount(state) : 0;
+        TapConversionSource(state, *found);
+        if (scaled_n > 0) { state.floating_mana.Add(static_cast<Color>(t.color), scaled_n); }
+        else if (combo)   { for (int c : t.combo) { state.floating_mana.Add(static_cast<Color>(c), 1); } }
+        else              { state.floating_mana.Add(static_cast<Color>(t.color), 1); }
+        CreditConversionLandAura(state, *found, state.floating_mana, nullptr, aura_pick);
+    }
+    else if (offer.route == Route::Conversion)
+    {
+        // A filter's free "{T}: Add {C}" -- the payer's branch (2), credited with the land's Aura.
+        TapConversionSource(state, *found);
+        state.floating_mana.Add(Color::Colorless, 1);
+        CreditConversionLandAura(state, *found, state.floating_mana, nullptr, aura_pick);
+    }
+    else if (offer.route == Route::PaySac)
+    {
+        // The payer's crack of a Treasure / Eldrazi Spawn, verbatim: tap it into the pool (which
+        // flags the crack), then CommitPaySacSacrifices -- the payer's only eraser -- removes it.
+        TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
+                           state.floating_mana, /*available=*/nullptr, /*for_creature=*/false, aura_pick);
+        CommitPaySacSacrifices(state, active);
+    }
+    else if (offer.route == Route::SacAction)
+    {
+        // The executor's crack of a one-shot lump (Lotus Bloom, Generator Servant): the SAME
+        // ApplySacForMana a committed SacForMana action runs -- it taps, floats the chosen colour,
+        // sacrifices through the shared chokepoint, and tags Generator Servant's {C} for haste.
+        const ManaPool float_before = state.floating_mana;
+        ApplySacForMana(state, active, found_num, std::string(1, letter), offer.sac_amount);
+        if (state.floating_mana == float_before)
+        { return reject("'" + t.name + "' could not be sacrificed for mana"); }   // offered, so unreachable
+    }
+    else
+    {
+        TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
+                           state.floating_mana, /*available=*/nullptr, /*for_creature=*/false, aura_pick);
+    }
     if (PreTapTraceOn())
     {
         const ManaPool& f = state.floating_mana;
         std::string extra;
         for (int ac : t.aura_colors)
         { extra += '+'; extra += (ac >= 0 && ac < 6) ? kPreTapColorLetters[ac] : '?'; }
+        std::string as;
+        if (combo) { for (int c : t.combo) { as.push_back(kPreTapColorLetters[c]); } }
+        else       { as.push_back(letter); }
+        // Generator Servant's haste-tagged {C}, when any float (absent otherwise, so every other
+        // deck's trace line is exactly what it always was).
+        const std::string haste = HasteFloatUnits(state) > 0
+            ? " haste{c" + std::to_string(HasteFloatUnits(state)) + "}" : std::string();
         std::fprintf(stderr,
-                     "[pre-tap] tap %s#%d as %c%s -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
-                     t.name.c_str(), found->card.m_number, letter, extra.c_str(),
-                     f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild);
+                     "[pre-tap] tap %s#%d as %s%s -> float{w%d u%d b%d r%d g%d c%d *%d}%s\n",
+                     t.name.c_str(), found_num, as.c_str(), extra.c_str(),
+                     f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild, haste.c_str());
     }
     return std::string();
 }

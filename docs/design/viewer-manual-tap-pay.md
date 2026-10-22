@@ -34,7 +34,12 @@ tap=<card name>#<m_number>:<FACE>[+<AURA>[+<AURA>...]]
   because two copies of one land are not interchangeable once one of them is tapped.
 * `<FACE>` — the **face** to tap for, one of `W U B R G C`. There is no default. An unstated or
   unrecognised colour parses to `-1` and is **rejected with a message**, never guessed — guessing is
-  the failure mode this feature exists to fix.
+  the failure mode this feature exists to fix. For a mana-**conversion** source whose activation
+  adds several units at once, the face is **several letters** — the exact output: Izzet Signet
+  `:UR`, Cascade Bluffs `:UU` / `:UR` / `:RR` (see "Artifact and creature sources" below). A
+  multi-letter face is matched as a multiset (`:RU` = `:UR`); one bad letter makes the whole face
+  unstated (`:UX` is not `:U`). Every token recorded before this has one letter and parses exactly
+  as it did.
 * `+<AURA>` — zero or more, one per **any-colour land Aura** on the host, in `AnyColorLandAuras`
   (battlefield) order. `W U B R G` only. See below.
 
@@ -111,32 +116,94 @@ human line order already makes: *"It's up to me to make sure the order is correc
 
 ## What stays engine-owned
 
-`HumanPreTapFaces` is the single legality test, and the decision JSON publishes its answer per
-permanent as `taps` (e.g. `"GW"`), so the GUI offers exactly what the engine will accept — there is
-no mirrored rule in the viewer to drift. Two companion keys ride beside it, both additive and both
-emitted only when they say something (so no other deck's frame moves):
+`HumanPreTapOfferFor` is the single legality test (`HumanPreTapFaces` / `HumanPreTapFedFaces` /
+`HumanPreTapAuraFaces` are views of it), and the decision JSON publishes its answer per permanent
+as `taps` (e.g. `"GW"`), so the GUI offers exactly what the engine will accept — there is no
+mirrored rule in the viewer to drift. Companion keys ride beside it, all additive and all emitted
+only when they say something (so no other deck's frame moves):
 
 | key | from | what the dialog does with it |
 |---|---|---|
 | `tap_auras: [{name, faces}]` | `HumanPreTapAuraFaces` | asks one more question per any-colour Aura |
 | `tap_energy: <n>` | `energy_per_colored_tap` | says a COLOURED tap costs `{E}` and the `{C}` mode does not |
+| `tap_fed: ["UR"]`, `tap_feed: "{1}"` | the offer's fed faces / feed | offers a filter's outputs (one each, labelled with what it pays); a source whose only option is one face (Izzet Signet) is queued without a question |
+| `tap_sac: true` | a sacrifice source | the chip reads `⛏ sac`, the hint says the permanent is sacrificed |
+| `tap_note: "..."` | the offer | one line, what the tap does ("{T}, sacrifice it: adds {C}{C} -- a creature spell this mana is spent on gains haste"); tooltip and hint only |
 
 `taps` already answers the energy question by itself and always did: `EffectiveProduces` strips the
 coloured modes while the controller cannot pay, so a spent-out Aether Hub publishes `"C"` and a live
 one publishes `"CWUBRG"`. `tap_energy` exists to *explain* that, not to gate it.
 
-It returns `""` (not hand-tappable at all) for:
+It offers nothing (and the rejection says which of these it was) for:
 
-| class | why the engine keeps it |
+| class | why |
 |---|---|
 | a tapped permanent, or an opponent's | not a legal tap |
 | a non-source | nothing to tap for |
-| one-shot sacrifice sources (a Treasure, Lotus Bloom) | the "tap" destroys the permanent; which one-shot a line spends is a payment decision with its own accounting |
-| mana-CONVERSION sources (Cascade Bluffs, Arcum's Astrolabe, Ferrous Lake) | each activation consumes a feeder unit — a two-source transaction the token cannot express |
-| scaled mana lands (Three Tree City's `{2},{T}`) | the activation has a generic feed cost a pre-tap does not pay, so tapping it here would mint mana the card cannot make |
-| `creature_mana_only` sources | that mana can be spent only on a creature spell, and the float carries no such restriction |
+| a creature whose `{T}` is summoning sick (a dork, Generator Servant) | CR 302.6 — haste (`temp_haste`, a lord) lifts it, exactly as `CanTapNow` says for the payer |
+| `creature_mana_only` sources (Somberwald Sage, Giada), big-spell-only sources (Troyan) | that mana can be spent only on a creature / big spell, and the floating pool carries no such restriction — tapping it in would **launder** a restricted unit into a general one |
 | the **coloured** faces of a `colored_creature_only` land (Cavern of Souls, Unclaimed Territory) | same restriction; its painless `{T}: Add {C}` mode **is** offered |
 | a source whose gate is dead (an uncharged storage land, a Deathrite with no graveyard land, an Arbor Elf with no Forest) | it makes no mana at all right now |
+
+## Artifact and creature sources (2026-10-22)
+
+> "Can you also change the Tap Mana feature to allow me to use artifact and creature sources?"
+> — USER, hand-playing NivMizzetCombo, 2026-10-22
+
+Until then the table above also kept three classes "engine-owned": one-shot sacrifice sources,
+mana-conversion sources (filters) and feed-cost lands. In NivMizzetCombo that left Izzet Signet,
+Ferrous Lake, Cascade Bluffs and Generator Servant un-tappable by hand — half the deck's mana — and
+the user overrode it. Each class is now offered through **the mechanic the payer or executor
+already uses for it** (`HumanPreTapOffer::Route`), never a second copy of a mana rule:
+
+| route | sources | the mechanic |
+|---|---|---|
+| **Plain** | lands, untapped non-sick dorks, rocks (Sol Ring) — *unchanged from the first version* — and Three Tree City's `{T}: Add {C}` | `TapSourceIntoFloat`, the payer's tap |
+| **Conversion**, free mode | Cascade Bluffs / Capital City's `{T}: Add {C}` | `TapConversionSource` + the yield, the payer's branch (2) |
+| **Conversion**, fed mode | Izzet Signet / Ferrous Lake / Skycloud Expanse (`ramp_filter`, `:UR`), Cascade Bluffs (`is_filter`, `:UU`/`:UR`/`:RR`), Capital City / Arcum's Astrolabe (`any_color_filter`, `:W`..`:G`), Three Tree City's `{2},{T}` (N of one colour, N = creatures you control, offered while N ≥ 1) | the feed is paid **from the floating pool** — `PayCostFromFloat` (the activation-cost path, shared with `PayOptionalTriggerCost`) for a generic `{1}`/`{2}`, `ConsumeHybridFilterFeed` (the payer's own `{U/R}` rule) for Cascade Bluffs — then `TapConversionSource` and the land Aura's bonus (`CreditConversionLandAura`), both extracted from the greedy payer's filter branches |
+| **Pay-sac** | Treasure, Eldrazi Spawn (`IsPaySacSource`) | `TapSourceIntoFloat` then `CommitPaySacSacrifices` — the payer's own crack |
+| **Sac action** | Lotus Bloom, Black Lotus, Generator Servant | `ApplySacForMana` — the executor's crack of a `SacForMana` action |
+
+**The feed comes from the pool, so ORDER is the human's.** Tap the Island, *then* the Signet: the
+Island's `{U}` pays the Signet's `{1}` and the Signet adds `{U}{R}`. A filter tapped with nothing in
+the pool to feed it is **rejected with what to do** — `'Izzet Signet' needs {1} from your floating
+mana to make {U}{R} -- tap a source for the Izzet Signet's {1} first` — and nothing moves. The
+engine does not tap a feeder on the human's behalf: choosing that source is exactly the allocation a
+hand tap exists to override. Which unit of the pool pays a generic feed is `SpendFloatingTowardCost`'s
+order (wild, then `{C}`, then colours), the same as any payment.
+
+**Generator Servant's haste is the real thing.** The pre-tap runs `ApplySacForMana`, so the two
+`{C}` land in `GameState::floating_haste_c` exactly as a committed crack tags them, the Servant dies
+through the shared sacrifice chokepoint, and the next creature spell's payment spends one tagged
+`{C}` and gains haste (`TakeHasteFloatForCreatureSpell`, both worlds). A sick Servant is refused. The
+existing "activate / sacout" plan chip still works unchanged; the tap is a second way to the same
+crack. One interaction to know: a Signet fed from a Servant's float eats a tagged `{C}` (a `{C}` spent
+on an ability is not spent on a creature spell) — tap the Island for the Signet first if the haste
+matters.
+
+**A hand-tapped sacrifice source REPLACES the plan's implicit crack of it.** A plan pays with a
+one-shot lump through an implicit `SacForMana` action the human never queues (CheckLine matches it as
+a payment detail; the apply cracks it before the first step). Found on the end-to-end walk
+(NivMizzetCombo seed 15, turn 6, two Generator Servants): `tap=Generator Servant#13:C;cast=Niv-Mizzet,
+the Firemind` matched the menu's only Firemind plan, whose implicit crack is Servant **#12** — and the
+commit sacrificed both, `{C}x4` floating, two bodies for one spell. `TurnSolver::AbsorbPreTappedSacrifices`
+removes ONE implicit crack per hand-tapped sacrifice source of the same name (the same copy first), in
+`ApplyHumanSequencePin` (the viewer's `**` commit), the legacy `--cast-order` lift, and CheckLine's trial
+apply, so the verdict and the commit agree. A plain land tap absorbs nothing.
+
+**A sacrifice is offered, not hidden.** The first version's reason ("which one-shot a line spends is
+a payment decision") is the engine's to make *when the human leaves it*; a human who names one has
+made it. The payer's fresh-Treasure hold (`PaySacSpendableNow`'s doctrine) is a payer preference,
+not a rule, so a Treasure that entered this turn is offered to a human like any other.
+
+Still **not** offered, by choice: the sacrifice mode of a *land* that also taps normally (Dwarven
+Ruins, Svyelunite Temple — `{T}: Add {R}` and `{T}, Sacrifice: Add {R}{R}` share the letter `R`, so
+the token would need a mode marker; lands were not part of the request), and a sacrifice OUTLET
+that eats *another* creature for mana (Skirk Prospector, Utopia Mycon — that is a victim choice, not
+a tap of the source). The restricted-mana exclusions above are unchanged: the user asked for
+artifact and creature sources, not for restriction laundering. (The engine does keep
+`floating_creature_mana`, a creature-only reserve, so an honest hand tap of a Somberwald Sage is
+buildable if it is ever wanted.)
 
 Everything else a payment can tap, a human can tap — and it goes through **the same mechanic**:
 `TapSourceIntoFloat` was extracted verbatim from `TapForCostSharedOnce`'s `tap_source` lambda, so a
@@ -181,8 +248,13 @@ history panel — see the play-viewer decision principle).
   from, so "what this line still wants" means one thing in the viewer. It is an *ordering and a
   label*, never an auto-pick: the engine silently choosing is the bug being fixed.
 * The tap becomes a plan chip — `⛏ tap Conservatory → {W}`, or `⛏ tap Brushland → {W} +{U}` when an
-  Aura colour rides along — at its queued position, removable with the chip's `✕` like anything
-  else. Its position among the chips is meaningful.
+  Aura colour rides along, `⛏ tap Izzet Signet → {U}{R}` for a filter, `⛏ sac Generator Servant → {C}`
+  for a sacrifice (the engine's `tap_note` is the tooltip) — at its queued position, removable with
+  the chip's `✕` like anything else. Its position among the chips is meaningful — for a filter it is
+  load-bearing: its feeder's chip must come first.
+* A filter's fed outputs are dialog buttons beside its free face, each labelled with what it pays
+  (`{U}{R} Blue + Red (pays {U/R})`); a source with a single option (Izzet Signet, Generator Servant)
+  queues without a question.
 * The Lands header's `⚡` energy pip renders **whenever the key is present, including at zero**
   (`energy: 0` is grey `⚡0`). See "Energy" below.
 
@@ -254,7 +326,9 @@ The *coloured*-pip half of the doctrine needed no new code: the Hub is a six-fac
 | …its **Trace of Abundance** arm (`claude_s1_gi0` T3: a Hub carrying a Trace *and* a Wild Growth) | the `+` suffix is matched against the ANY-COLOUR aura only, so `:C+R` floats `{r1 g1 c1}`; the Hub publishes `tap_energy` and `energy` even at **zero**; at zero energy only the free `{C}` face is offered and a coloured hand-tap is refused with its reason |
 | …its **energy-vs-generic-pip** arm (seed 13 gi 12, the user's rejection log) | the Overgrowth payment taps the Hub `col=5` (free `{C}`), the counter survives, the Hub still reads `CWUBRG` next turn, **Peregrine Drake validates**, and `MTG_ENERGY_C_MODE=0` reproduces the reported failure |
 | `test/scenarios/edf_manual_tap_*.json` (in `test/scenarios.sh`, gated by `regression.sh`) | the accepting case and the two rejecting ones, on a synthetic board, deterministically |
-| `test/viewer_linebuild_check.js` | `encodeLine` still rebuilds every recorded line (pre-taps are additive; no reference has one), **and** `checkPreTapToken` pins the `+<AURA>` suffix — including that it is absent when there is none, which is the back-compat guarantee no reference can test |
+| `test/viewer_linebuild_check.js` | `encodeLine` still rebuilds every recorded line (pre-taps are additive; no reference has one), **and** `checkPreTapToken` pins the `+<AURA>` suffix — including that it is absent when there is none, which is the back-compat guarantee no reference can test — and the multi-letter face (`tap=Izzet Signet#20:UR`), with the chip's display-only fields kept out of the token |
+| `test/unit/test_manual_tap_sources.cpp` | the artifact / creature sources: Generator Servant floats `{C}{C}` with `floating_haste_c == 2`, dies, and the next creature spell gains haste in the rollout AND the executor; a sick Servant is refused; Izzet Signet is refused with nothing floating and floats `{U}{R}` after an Island; Cascade Bluffs' `:UU`/`:UR`/`:RR` (and `:RU`), its free `{C}`, a `{C}` that cannot pay `{U/R}`; Ferrous Lake; Treasure / Spawn / Lotus Bloom; restricted mana still refused; an old single-letter token unchanged; offer/executor parity over a board of every new class; a hand-tapped Servant absorbing the plan's implicit crack (same copy first) |
+| `test/scenarios/niv_manual_tap_*.json` | through CheckLine on a NivMizzetCombo board: a Servant tap pays a Firemind five lands cannot (`servant_haste`), a sick Servant is refused with its reason (`servant_sick`), a Signet with nothing floating is refused with the feed advice (`signet_unfed`) and accepted after an Island (`island_feeds_signet`). `expect_reason_contains` (new) pins the reason text |
 
 ## Byte-identity
 
@@ -264,6 +338,13 @@ reference are byte-identical by construction. `PreTap` is deliberately absent fr
 and `PlansEqual` for the same reason `human_action_order` is: it is not part of the search's plan
 space, it is a payment instruction riding on top of one.
 
+The 2026-10-22 extension touched shared code in two places, both pure code moves: the greedy
+payer's filter branches now call `ConsumeHybridFilterFeed` / `TapConversionSource` /
+`CreditConversionLandAura` (the bodies they used to inline, in the same order), and
+`PayOptionalTriggerCost`'s float half became `PayCostFromFloat`. `AbsorbPreTappedSacrifices` returns
+at once without a pre-tap, i.e. on every search, rollout and autonomous apply. Smoke at the commit:
+140/140 configs unchanged against ground truth, per-game audit play-changed 0, scenarios 289/289.
+
 ## Deliberately not done
 
 * **Untapping / undoing a tap mid-line.** A committed tap is committed; the chip's `✕` removes it
@@ -272,6 +353,7 @@ space, it is a payment instruction riding on top of one.
   decides the pip order (and its human-play holds — `MTG_HOLD_C_FOR_SINK`, `MTG_HOLD_C_FOR_PIPS` —
   already encode the user's colourless-retention doctrine). Pre-tapping controls *supply*, which is
   where the reported mis-allocations actually were.
-* **A pre-tap of a conversion / feed-cost / one-shot source.** See the table above. Each needs a
-  second permanent or destroys itself, so the token cannot honestly express it; they stay with the
-  allocator and the viewer does not offer them.
+* ~~A pre-tap of a conversion / feed-cost / one-shot source.~~ Done 2026-10-22 at the user's
+  request — see "Artifact and creature sources".
+* **Tapping a feeder automatically for a filter.** A filter whose feed the pool cannot pay is
+  refused, not rescued: picking the feeder is the allocation the human is overriding.

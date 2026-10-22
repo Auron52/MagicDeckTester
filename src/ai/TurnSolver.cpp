@@ -53393,6 +53393,9 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
     plan.human_sequence     = true;
     plan.human_action_order = true;
     plan.searched_order     = true;
+    // A hand-tapped sacrifice source replaces the plan's implicit crack of it (see the function). The
+    // implicit actions are the tail past the named steps, so the steps and their positions are untouched.
+    AbsorbPreTappedSacrifices(plan, named);
 }
 
 // THE WHOLE-TURN PREPAY UNDER A HUMAN'S DECLARED PAYMENT. BatchPrepayMainCasts allocates the mana for
@@ -53442,6 +53445,50 @@ void TurnSolver::EraseHumanSequenceAction(Plan& plan, std::size_t q)
         for (PreTap& t : plan.human_pre_taps) { if (t.position > sq) { --t.position; } }
     }
     plan.actions.erase(plan.actions.begin() + static_cast<std::ptrdiff_t>(q));
+}
+
+// See the header. FOUND on the 2026-10-22 end-to-end walk (NivMizzetCombo seed 15, turn 6: two
+// Generator Servants, Niv-Mizzet, the Firemind in hand): the line "tap=Generator Servant#13:C;
+// cast=Niv-Mizzet, the Firemind" matched the menu's only Firemind plan, whose implicit crack is
+// Servant #12 -- and the commit cracked #12 in the pre-cast pass and THEN the human's #13: {C}x4
+// floating and both bodies gone for one six-mana spell. A pre-tap names its permanent; the implicit
+// action only ever stood for "some crack of this source pays the line", which the human has now made.
+// Only a source the pre-tap route SACRIFICES counts (HumanPreTapOffer::Route::SacAction -- a nonland,
+// non-rock sac-for-mana card; a self-sac LAND such as Dwarven Ruins is hand-tapped for its plain face
+// and its plan crack is left alone), and only a SacForMana with no victim (an outlet that eats ANOTHER
+// creature -- Skirk Prospector -- is never a pre-tap source).
+void TurnSolver::AbsorbPreTappedSacrifices(Plan& plan, std::size_t first)
+{
+    if (plan.human_pre_taps.empty()) { return; }
+    std::vector<const PreTap*> left;
+    for (const PreTap& t : plan.human_pre_taps)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(t.name);
+        if (d == nullptr || d->params.sac_for_mana_amount <= 0) { continue; }
+        if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)
+        { continue; }
+        left.push_back(&t);
+    }
+    if (left.empty()) { return; }
+    std::vector<char> absorb(plan.actions.size(), 0);
+    for (int pass = 0; pass < 2 && !left.empty(); ++pass)   // the same copy first, then any copy
+    {
+        for (std::size_t i = first; i < plan.actions.size() && !left.empty(); ++i)
+        {
+            const Action& a = plan.actions[i];
+            if (absorb[i] != 0 || a.kind != Action::Kind::SacForMana || a.sac_victim_id != 0) { continue; }
+            for (auto it = left.begin(); it != left.end(); ++it)
+            {
+                if ((*it)->name != a.card_name.str()) { continue; }
+                if (pass == 0 && (*it)->num != a.sac_source_id) { continue; }
+                absorb[i] = 1;
+                left.erase(it);
+                break;
+            }
+        }
+    }
+    for (std::size_t i = plan.actions.size(); i-- > first;)
+    { if (absorb[i] != 0) { EraseHumanSequenceAction(plan, i); } }
 }
 
 // See the header. Stable so that equal ranks keep the emitted order exactly as today, and an
@@ -54607,9 +54654,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // tellable apart after the fact instead of both just reading as "tapped".
                 EmitPlayEvent(state.turn_number, "mana",
                               why.empty()
-                                  ? ("manual tap: " + t.name + " for {"
-                                     + std::string(1, "WUBRGC"[t.color < 0 || t.color > 5 ? 5 : t.color])
-                                     + "}")
+                                  ? ("manual tap: " + t.name + " for " + HumanPreTapFaceText(t))
                                   : ("manual tap SKIPPED: " + why));
             }
         }
@@ -96627,6 +96672,20 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     };
     auto plan_pays = [&](int plan_idx) -> bool {
         GameState sc = state;                       // work on a copy (ApplyPlan mutates)
+        // The pre-tapped board already holds the human's taps (above); a hand-tapped SACRIFICE source
+        // replaces the plan's implicit crack of it exactly as the commit's ApplyHumanSequencePin
+        // absorbs it, so the trial apply must not crack a second copy either. A copy only when there
+        // is a pre-tap: every other line trial-applies the menu plan itself, as always.
+        Plan absorbed;
+        const Plan* trial = &plans[plan_idx];
+        if (state_p != &state_in)
+        {
+            absorbed = plans[plan_idx];
+            absorbed.human_pre_taps = spec.pre_taps;
+            AbsorbPreTappedSacrifices(absorbed);
+            absorbed.human_pre_taps.clear();        // already performed on `state`; never twice
+            trial = &absorbed;
+        }
         {
             // Resolve any sub-decisions (Dragonstorm's Dragon put, a tutor target, ...) via AI defaults
             // rather than the live g_play_* choosers -- otherwise the trial-apply would read the choices
@@ -96634,7 +96693,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // chooser and exits 70). RevealLogPause saves+nulls every g_play_* chooser AND the draw/event
             // sinks for the scope, so the trial-apply is fully side-effect-free; it restores on exit.
             RevealLogPause pause_io;
-            ApplyPlan(sc, plans[plan_idx], is_pre_combat);
+            ApplyPlan(sc, *trial, is_pre_combat);
         }
         for (const std::string& nm : spec.casts)
         {

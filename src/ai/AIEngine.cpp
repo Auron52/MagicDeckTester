@@ -245,6 +245,10 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
             plan.human_pre_taps.push_back(std::move(pt));
         }
         order = std::move(names);
+        // A hand-tapped sacrifice source replaces the plan's implicit crack of it (no-op without one;
+        // see TurnSolver::AbsorbPreTappedSacrifices). SacForMana is never a reorder slot here, so the
+        // walk below sees the same slots either way.
+        TurnSolver::AbsorbPreTappedSacrifices(plan);
     }
     // QUEUED-CONTINUATION UNTAP DEMAND (docs/design/viewer-line-macros.md). Lifted out on the same
     // principle as the pre-taps above -- everything below keeps seeing a pure list of card names --

@@ -523,6 +523,13 @@ function checkPreTapToken() {
     [{ name: 'Brushland', num: 6, color: 'C', auraColors: ['R', 'G'] }, 'tap=Brushland#6:C+R+G'],
     // A wildcard copy id still works with the suffix (a hand-written line / a fixture).
     [{ name: 'Aether Hub', num: 0, color: 'C', auraColors: ['R'] }, 'tap=Aether Hub#0:C+R'],
+    // ARTIFACT / CREATURE sources (USER 2026-10-22): a filter's fed output is a MULTI-LETTER face,
+    // written verbatim (`tap_fed`), and the display-only fields a queued entry carries (`sac`, `fed`,
+    // `note`) never reach the token.
+    [{ name: 'Izzet Signet', num: 20, color: 'UR' }, 'tap=Izzet Signet#20:UR'],
+    [{ name: 'Cascade Bluffs', num: 5, color: 'UU', fed: true, note: 'x' }, 'tap=Cascade Bluffs#5:UU'],
+    [{ name: 'Ferrous Lake', num: 6, color: 'UR', auraColors: ['G'] }, 'tap=Ferrous Lake#6:UR+G'],
+    [{ name: 'Generator Servant', num: 10, color: 'C', sac: true, note: 'haste' }, 'tap=Generator Servant#10:C'],
   ];
   for (const [entry, want] of cases) {
     const got = tok(entry);
@@ -1081,7 +1088,7 @@ function main() {
               `(${macroFails.length} FAIL)`);
   const tapFails = checkPreTapToken();
   tapFails.forEach(m => console.log(`  FAIL  pre-tap token: ${m}`));
-  console.log(`Viewer pre-tap token: ${tapFails.length ? 'WRONG' : "the land's face, plus a +<C> per any-colour Aura; absent when none"} ` +
+  console.log(`Viewer pre-tap token: ${tapFails.length ? 'WRONG' : "the source's face (a filter's multi-letter output verbatim), plus a +<C> per any-colour Aura; absent when none"} ` +
               `(${tapFails.length} FAIL)`);
   const topFails = checkLibraryTopLand();
   topFails.forEach(m => console.log(`  FAIL  library-top land: ${m}`));

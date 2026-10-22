@@ -1013,6 +1013,14 @@ public:
     // stated", which keeps today's `wild` credit and is what makes every already-saved reference
     // replay unchanged; a STATED colour that the Aura cannot make is rejected, never guessed, on the
     // same argument as `color` above.
+    //
+    // `combo` is a MULTI-LETTER face (`tap=Izzet Signet#5:UR`, `tap=Cascade Bluffs#9:UU`): the exact
+    // mana a mana-CONVERSION source's fed activation adds (USER 2026-10-22: "change the Tap Mana
+    // feature to allow me to use artifact and creature sources"). A filter's output is several units
+    // at once, and Cascade Bluffs' {U}{U} / {U}{R} / {R}{R} is a choice the rules leave to the
+    // player, so one letter cannot name it. Colours in token order (matched as a MULTISET, so `:RU`
+    // means the same as `:UR`); `color` stays -1 for a combo. EMPTY for every single-letter token --
+    // i.e. every token any reference has ever recorded, which therefore parses exactly as before.
     struct PreTap
     {
         std::string name;        // the permanent's card name (display + the wildcard match key)
@@ -1020,6 +1028,7 @@ public:
         int         color = -1;  // static_cast<int>(Color) of the face to tap for; -1 = unstated
         int         position = 0;// declared ordered entries that precede it (LineSpec leaves it 0)
         std::vector<int> aura_colors;   // one Color-as-int per ANY-COLOUR land Aura on the host
+        std::vector<int> combo;         // a multi-letter face (>= 2 Color-as-int); empty otherwise
         bool operator==(const PreTap&) const = default;
     };
 
@@ -2758,6 +2767,15 @@ public:
     // combat): erase actions[q] and keep human_seq_len, human_land_step and the pre-tap positions
     // naming the same steps. Plain erase for every other plan.
     static void EraseHumanSequenceAction(Plan& plan, std::size_t q);
+    // A HUMAN PRE-TAP OF A SACRIFICE SOURCE IS THE PLAN'S CRACK OF IT (docs/design/viewer-manual-tap-pay.md,
+    // "Artifact and creature sources"). A plan pays with a one-shot lump (Generator Servant, Lotus Bloom)
+    // through an IMPLICIT SacForMana action the human never queues -- CheckLine matches it as a payment
+    // detail and the apply cracks it before the first step. A hand tap of such a source
+    // (`tap=Generator Servant#13:C`) IS the payment that action stood for, so the plan's own crack of a
+    // source of that name must not ALSO run. Removes ONE implicit SacForMana (at index >= `first`) per
+    // such pre-tap in plan.human_pre_taps -- the same copy (sac_source_id == the tap's #num) first, else
+    // any copy of the name. No pre-tap of a sacrifice source (every line but those) -> untouched.
+    static void AbsorbPreTappedSacrifices(Plan& plan, std::size_t first = 0);
     // The verb the viewer's "**" token writes for an action of kind `k` ("" = never a step of a "**"
     // line: a dig, the COMBO OFF route, a breakpoint-only PlayLand). One entry per kind, guarded by a
     // static_assert, so a new kind cannot silently fall into the orphan rule.

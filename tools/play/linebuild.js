@@ -412,7 +412,10 @@
   // A 'pretap' entry is a board mana source the human tapped BY HAND for a specific face, so the
   // engine's payment spends that unit instead of allocating one itself. It is not a play: it never
   // enters the cast multiset, it takes no plan action, and a line with none of them encodes exactly
-  // as it always did. `num` is the PERMANENT's m_number (which copy), `color` one of W U B R G C.
+  // as it always did. `num` is the PERMANENT's m_number (which copy), `color` one of W U B R G C --
+  // or, for a mana-CONVERSION source's fed output, several of them ("UR" for Izzet Signet, "UU" /
+  // "UR" / "RR" for Cascade Bluffs; the engine publishes them as `tap_fed`), written verbatim the
+  // same way: `tap=Izzet Signet#20:UR`. A one-letter face encodes exactly as it always did.
   //
   // The token text is produced HERE and nowhere else, because it is written into two different
   // arguments -- the `--validate-line` spec and the `--cast-order` full-order list -- and the

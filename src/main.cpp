@@ -115,7 +115,15 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
                  int num; bool is_aura; bool is_equip; int attached_to;
                  std::string printed;      // copy-entrant's PRINTED card name ("" = not a copy)
-                 std::string taps;         // MANUAL TAP/PAY faces ("GU"); "" = not hand-tappable
+                 std::string taps;         // MANUAL TAP/PAY faces ("GU"); "" = none needing no feed
+                 // ...and the rest of HumanPreTapOfferFor's answer, for the sources the first version
+                 // did not offer (filters and sacrifice sources; USER 2026-10-22): the FED mode's faces
+                 // ("UR"; "UU","UR","RR"), what that feed costs ("{1}"), whether the tap sacrifices the
+                 // permanent, and a one-line description. All empty for every source offered before.
+                 std::vector<std::string> tap_fed;
+                 std::string tap_feed;
+                 bool tap_sac;
+                 std::string tap_note;
                  // The ANY-COLOUR land Auras riding this source's tap (Fertile Ground / Trace of
                  // Abundance), (name, legal letters), in the order a `tap=` token's `+<AURA>`
                  // suffixes are matched. Empty for every source with no such Aura.
@@ -189,9 +197,9 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // MANUAL TAP/PAY affordance: the faces THIS permanent may be pre-tapped for, straight from
         // the engine's own legality test (HumanPreTapFaces), so the GUI can never offer a tap
         // ApplyHumanPreTap would refuse -- one function, no mirrored rule to drift. Absent (and
-        // therefore un-clickable) for a tapped permanent, an opponent's, a non-source, and every
-        // class the engine keeps for itself (filters, feed-cost lands, one-shot sac sources,
-        // restricted mana). Absent for the whole board when MTG_HUMAN_PRE_TAP=0.
+        // therefore un-clickable) for a tapped permanent, an opponent's, a non-source, a summoning-
+        // sick creature, and restricted mana (creature-only / big-spell-only: the floating pool would
+        // launder it). Absent for the whole board when MTG_HUMAN_PRE_TAP=0.
         std::string taps;
         // ...and, for a land carrying an "adds an additional ONE MANA OF ANY COLOR" Aura (Fertile
         // Ground, Trace of Abundance), the Auras whose colour the human must ALSO choose when they
@@ -199,8 +207,24 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // same one-rule-no-drift reason as `taps` itself. USER, 2026-09-11: "Tap mana doesn't work
         // for Fertile Ground. There should be a choice there."
         std::vector<HumanPreTapAura> tap_auras;
+        // USER 2026-10-22 (NivMizzetCombo): "Can you also change the Tap Mana feature to allow me to
+        // use artifact and creature sources?" -- so a filter (Izzet Signet, Cascade Bluffs, Ferrous
+        // Lake) publishes its FED faces in `tap_fed` with their cost in `tap_feed`, and a sacrifice
+        // source (Generator Servant, a Treasure, Lotus Bloom) publishes `taps` plus `tap_sac`. Same
+        // one function as `taps`, so the offer and the rule still cannot drift.
+        std::vector<std::string> tap_fed;
+        std::string tap_feed, tap_note;
+        bool tap_sac = false;
         if (controller == s.active_player_index && HumanPreTapEnabled())
-        { taps = HumanPreTapFaces(s, p); tap_auras = HumanPreTapAuraFaces(s, p); }
+        {
+            const HumanPreTapOffer offer = HumanPreTapOfferFor(s, p);
+            taps = offer.free_faces;
+            tap_auras = HumanPreTapAuraFaces(s, p);
+            tap_fed = offer.fed_faces;
+            if (!offer.fed_faces.empty()) { tap_feed = offer.feed; }
+            tap_sac = offer.sacrifice && !offer.free_faces.empty();
+            if (!offer.free_faces.empty() || !offer.fed_faces.empty()) { tap_note = offer.note; }
+        }
         // ...and what ONE coloured tap of it costs in energy (Aether Hub's {E}), so the dialog can
         // say which of its two abilities the player is about to use rather than leaving the spend
         // to be discovered afterwards. Absent (0) for every source in every other deck.
@@ -216,7 +240,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         const int  tf     = has_pt ? LethalToughness(p, s) : 0;
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
                          p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str(),
-                         std::move(taps), std::move(tap_auras), tap_energy, yield, has_pt, pw, tf });
+                         std::move(taps), std::move(tap_fed), std::move(tap_feed), tap_sac,
+                         std::move(tap_note), std::move(tap_auras), tap_energy, yield, has_pt, pw, tf });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -250,6 +275,17 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
         if (!rows[i].taps.empty()) { os << ", \"taps\": "; JsonStr(os, rows[i].taps); }
+        // The conversion / sacrifice half of the offer (see Row). Emitted only when it says
+        // something, so every source the first version offered keeps its exact frame.
+        if (!rows[i].tap_fed.empty())
+        {
+            os << ", \"tap_fed\": [";
+            for (size_t j = 0; j < rows[i].tap_fed.size(); ++j)
+            { if (j) { os << ", "; } JsonStr(os, rows[i].tap_fed[j]); }
+            os << "], \"tap_feed\": "; JsonStr(os, rows[i].tap_feed);
+        }
+        if (rows[i].tap_sac) { os << ", \"tap_sac\": true"; }
+        if (!rows[i].tap_note.empty()) { os << ", \"tap_note\": "; JsonStr(os, rows[i].tap_note); }
         // Both additive and both emitted only when they say something: a source with no any-colour
         // Aura and no energy cost publishes neither key, so every other deck's frame is unchanged.
         if (!rows[i].tap_auras.empty())
@@ -4717,8 +4753,9 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         }
         else if (key == "ooze")      { ls.ooze_exiles.push_back(val); }   // Scavenging Ooze exile
         else if (key == "eternalize") { ls.eternalizes.push_back(val); }  // Timeless Witness (graveyard)
-        // "tap=<name>#<m_number>:<W|U|B|R|G|C>": the MANUAL TAP/PAY fallback -- tap this source for
-        // this face into the float before the line's payments run. Parsed by the SHARED reader
+        // "tap=<name>#<m_number>:<W|U|B|R|G|C>" (or a filter's multi-letter output, ":UR"): the MANUAL
+        // TAP/PAY fallback -- tap this source for this face into the float before the line's payments
+        // run. Parsed by the SHARED reader
         // (ManaPayment.h), which is the same one AIEngine's --cast-order full-order walk uses, so
         // one token string cannot mean two different things on the validate and commit paths.
         // A MALFORMED token is pushed anyway (with an empty name) rather than skipped like every

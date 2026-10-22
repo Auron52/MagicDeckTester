@@ -448,6 +448,7 @@ add_executable(mtg-test
     test/unit/test_niv_draw_trigger.cpp
     test/unit/test_sulfur_falls_probe.cpp
     test/unit/test_generator_servant.cpp
+    test/unit/test_manual_tap_sources.cpp
     test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp
     test/unit/test_depletion_sba.cpp

@@ -1788,15 +1788,30 @@ function queueActivation(src, opt, clickedNum){
 // carries `taps` (the faces this permanent may be pre-tapped for) straight from HumanPreTapFaces,
 // the same function ApplyHumanPreTap enforces. So the viewer cannot offer a tap the engine refuses,
 // and it needs no notion of painlands, storage counters, filters or restricted mana of its own.
+//
+// ARTIFACT AND CREATURE SOURCES (USER 2026-10-22, NivMizzetCombo: "Can you also change the Tap Mana
+// feature to allow me to use artifact and creature sources?"). A filter -- Izzet Signet, Ferrous Lake,
+// Cascade Bluffs -- also publishes `tap_fed`: the faces of its FED mode, a multi-letter face where one
+// activation adds several units ("UR"; Cascade Bluffs' "UU" / "UR" / "RR"), with their cost in
+// `tap_feed` ("{1}", "{U/R}"). That cost is paid OUT OF THE FLOATING POOL, so the human taps the feeder
+// first and the filter after it -- the engine refuses the filter, with that advice, otherwise. A
+// sacrifice source (Generator Servant, a Treasure, Lotus Bloom) publishes ordinary `taps` plus
+// `tap_sac`; `tap_note` says in words what either does. All from the same engine function as `taps`.
+function preTapOptions(o){
+  if (!o) return [];
+  return String(o.taps || '').split('').filter(Boolean).concat(o.tap_fed || []);
+}
 function preTapSources(){
   const bf = ((S.decision||{}).me||{}).battlefield || [];
-  return bf.filter(o => o.taps);            // absent => not hand-tappable (see JsonBattlefield)
+  return bf.filter(o => preTapOptions(o).length);   // none => not hand-tappable (see JsonBattlefield)
 }
+// "{U}{R}" for a face of any length -- a one-letter face renders exactly as it always did ("{W}").
+function preTapFaceText(f){ return '{' + String(f || '').split('').join('}{') + '}'; }
 function toggleTapMode(){
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   if (S.tapMode) { S.tapMode = false; S.tapPick = null; renderBoard(); return; }
   if (!preTapSources().length) {
-    flashHint('No untapped mana source you can tap by hand right now. (Filters, feed-cost lands and one-shot sources stay with the engine.)');
+    flashHint('No untapped mana source you can tap by hand right now. (Creature-only and other restricted mana stays with the engine.)');
     return;
   }
   S.tapMode = true; S.leMode = false; S.vialMode = null; S.blinkMode = null; S.actPick = null;
@@ -1835,12 +1850,14 @@ function preTapAt(num){
     if (host) { src = preTapSources().find(o => o.num === host); }
   }
   if (!src) return false;
-  const faces = String(src.taps);
+  // Every face this tap can take: the one-letter `taps`, then a filter's fed outputs (`tap_fed`).
+  // A source with exactly ONE (Izzet Signet's "UR", Generator Servant's "C") needs no question.
+  const faces = preTapOptions(src);
   const auras = preTapAuras(src);
-  if (faces.length === 1 && !auras.length) { queuePreTap(src, faces, []); return true; }
-  S.tapPick = { name:src.name, num:src.num, faces:faces.split(''), auras,
+  if (faces.length === 1 && !auras.length) { queuePreTap(src, faces[0], []); return true; }
+  S.tapPick = { name:src.name, num:src.num, src, faces, auras,
                 energy:src.tap_energy|0, picks:[], step:(faces.length===1?1:0) };
-  if (faces.length === 1) { S.tapPick.picks.push(faces); }   // face settled, ask only the Aura(s)
+  if (faces.length === 1) { S.tapPick.picks.push(faces[0]); }   // face settled, ask only the Aura(s)
   renderBoard();
   return true;
 }
@@ -1851,8 +1868,14 @@ function queuePreTap(src, color, auraColors){
   // the index). So "crack the Clue, tap Kitchen for {G}, then blink" is built by clicking in that
   // order, and is committed as ONE line.
   const ac = (auraColors || []).slice();
-  S.plan.push({ kind:'pretap', name:src.name, num:src.num, color, auraColors:ac });
-  flashHint(`Tapping ${src.name} for {${color}}${ac.length?` (+ {${ac.join('} + {')}} off its Aura${ac.length>1?'s':''})`:''} by hand — it goes into your pool before the rest of this line is paid. ✕ on the chip undoes it.`);
+  // `sac` / `fed` / `note` are DISPLAY only (the chip's verb and tooltip): the token is built from
+  // name / num / color / auraColors alone (LB.preTapToken), so a saved line is unaffected by them.
+  const fed = (src.tap_fed || []).indexOf(color) >= 0 && String(src.taps || '').indexOf(color) < 0;
+  S.plan.push({ kind:'pretap', name:src.name, num:src.num, color, auraColors:ac,
+                sac:!!src.tap_sac, fed, note:src.tap_note || '' });
+  const what = src.tap_sac ? `Sacrificing ${src.name} for ${preTapFaceText(color)}` : `Tapping ${src.name} for ${preTapFaceText(color)}`;
+  const feedTip = fed ? ` Its ${src.tap_feed || 'feed'} comes out of your floating mana, so tap its feeder BEFORE it.` : '';
+  flashHint(`${what}${ac.length?` (+ {${ac.join('} + {')}} off its Aura${ac.length>1?'s':''})`:''} by hand — it goes into your pool before the rest of this line is paid.${feedTip}${src.tap_note?` (${src.tap_note})`:''} ✕ on the chip undoes it.`);
   renderBoard();
 }
 // The colours the human's STILL-QUEUED line wants, as a letter set -- the same notion (and the same
@@ -1868,6 +1891,8 @@ function tapPickerHtml(pick){
   const need = preTapNeededColors();
   const aura = pick.step > 0 ? pick.auras[pick.step - 1] : null;
   let faces, h;
+  const src = pick.src || {};
+  const fedSet = (src.tap_fed || []).filter(f => String(src.taps || '').indexOf(f) < 0);
   if (!aura) {
     faces = pick.faces;
     h = `<h3>${esc(pick.name)} — tap it for which mana?</h3>`;
@@ -1875,6 +1900,10 @@ function tapPickerHtml(pick){
     if (pick.energy > 0) {
       h += ` <b>${esc(pick.name)} pays {E} for a COLOURED tap</b> (you have ${S.decision&&S.decision.me&&S.decision.me.energy!=null?S.decision.me.energy:'?'} energy); its {C} mode is free.`;
     }
+    if (fedSet.length) {
+      h += ` <b>The ${esc(src.tap_feed || 'feed')} options are paid from your floating mana</b> — tap the source that pays it first; the engine refuses the tap otherwise.`;
+    }
+    if (src.tap_note) { h += ` (${esc(src.tap_note)})`; }
     h += `</div>`;
   } else {
     faces = String(aura.faces).split('');
@@ -1882,11 +1911,15 @@ function tapPickerHtml(pick){
     h += `<div class="sub">${esc(aura.name)} on ${esc(pick.name)} adds <b>an additional one mana of any color</b> when that land is tapped, and the colour is yours to choose. Picking {${esc(pick.picks[0]||'?')}} for the land itself does not decide it.</div>`;
   }
   h += `<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
-  // Needed colours first, so the useful answer is under the cursor; the rest keep their order.
-  const ordered = faces.filter(c => need.indexOf(c) >= 0).concat(faces.filter(c => need.indexOf(c) < 0));
+  // Needed colours first, so the useful answer is under the cursor; the rest keep their order. A
+  // multi-letter face (a filter's output) counts as needed when any of its letters is.
+  const wants = c => String(c).split('').some(x => need.indexOf(x) >= 0);
+  const ordered = faces.filter(c => wants(c)).concat(faces.filter(c => !wants(c)));
   ordered.forEach(c=>{
-    const want = need.indexOf(c) >= 0;
-    h += `<button class="${want?'primary':'ghost'}" data-tapface="${esc(c)}">{${esc(c)}} ${esc(NAMES[c]||c)}${want?' — needed':''}</button>`;
+    const want = wants(c);
+    const label = c.length > 1 ? c.split('').map(x => NAMES[x] || x).join(' + ') : (NAMES[c] || c);
+    const fedTag = !aura && fedSet.indexOf(c) >= 0 ? ` (pays ${src.tap_feed || 'its feed'})` : '';
+    h += `<button class="${want?'primary':'ghost'}" data-tapface="${esc(c)}">${esc(preTapFaceText(c))} ${esc(label)}${esc(fedTag)}${want?' — needed':''}</button>`;
   });
   h+=`<button class="ghost" data-tapface="">Cancel</button></div>`;
   return h;
@@ -1903,7 +1936,7 @@ function renderTapPicker(){
       pick.picks.push(c);
       pick.step += 1;
       if (pick.step <= pick.auras.length) { renderBoard(); return; }   // next Aura's colour
-      queuePreTap({ name:pick.name, num:pick.num }, pick.picks[0], pick.picks.slice(1)); };
+      queuePreTap(pick.src || { name:pick.name, num:pick.num }, pick.picks[0], pick.picks.slice(1)); };
   });
 }
 // ---- LINE MACROS (docs/design/viewer-line-macros.md) -----------------------------------------
@@ -2126,9 +2159,11 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   // (JsonBattlefield's `taps`). Carried on EVERY render so wireBoard can arm it, and rendered as a
   // badge only while Tap mana is armed -- a permanent whose only affordance is "you could tap this
   // for mana" must not grow a permanent badge for a fallback most turns never use.
-  const tapAttr = o.taps ? ` data-taps="${esc(o.taps)}"` : '';
-  const tapN = o.taps ? S.plan.filter(p=>p.kind==='pretap'&&p.num===o.num).length : 0;
-  const tapCls = o.taps && S.tapMode ? ' pretap-src' : '';
+  // A filter with no free mode (Izzet Signet) has no `taps`, only `tap_fed` -- preTapOptions is both.
+  const tapOpts = preTapOptions(o);
+  const tapAttr = tapOpts.length ? ` data-taps="${esc(tapOpts.join(' '))}"` : '';
+  const tapN = tapOpts.length ? S.plan.filter(p=>p.kind==='pretap'&&p.num===o.num).length : 0;
+  const tapCls = tapOpts.length && S.tapMode ? ' pretap-src' : '';
   // "EQUIP ALL FREE TO X" board targeting (USER 2026-10-03). While the gesture is armed every LEGAL
   // host lights up and carries the count it would receive, so the player picks against the board
   // they can see rather than against a list of names in a modal.
@@ -2144,7 +2179,7 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     (feqN?`<span class="feqbadge" title="click ${esc(o.name)} to attach all ${feqN} free Equipment to it">⚔ +${feqN} free</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
-    ((o.taps&&S.tapMode)?`<span class="pretapbadge" title="click to tap ${esc(o.name)} yourself for {${esc(String(o.taps).split('').join('} or {'))}}${(o.tap_auras||[]).length?` — you will also pick the colour of ${esc((o.tap_auras||[]).map(a=>a.name).join(' and '))}’s bonus mana`:''}${o.tap_energy?` — a COLOURED tap costs ${o.tap_energy} energy, its {C} mode is free`:''}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
+    ((tapOpts.length&&S.tapMode)?`<span class="pretapbadge" title="click to ${o.tap_sac?'sacrifice':'tap'} ${esc(o.name)} yourself for ${esc(tapOpts.map(preTapFaceText).join(' or '))}${(o.tap_fed||[]).length?` — ${esc(o.tap_feed||'its feed')} comes out of your floating mana, so tap its feeder first`:''}${o.tap_note?` — ${esc(o.tap_note)}`:''}${(o.tap_auras||[]).length?` — you will also pick the colour of ${esc((o.tap_auras||[]).map(a=>a.name).join(' and '))}’s bonus mana`:''}${o.tap_energy?` — a COLOURED tap costs ${o.tap_energy} energy, its {C} mode is free`:''}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
     // Copy-entrant provenance (Sakashima's Protege): the art/name ARE the copied card — without
     // this badge a Protege-copy of Boarding Party is indistinguishable from a real one and the
     // player can't find their Protege on the board (user-reported 2026-09-03).
@@ -2672,9 +2707,11 @@ function renderPlanbar() {
       // The Aura colours are part of what this tap DOES (Fertile Ground's "+ one mana of any
       // color"), so the chip names them: the chip is the only pre-commit surface that says what the
       // human chose, and an unnamed bonus colour is the silent choice this feature removes.
+      // A sacrifice source reads "sac", a filter's fed face lists every unit it adds ({U}{R}); a
+      // one-letter tap renders exactly as it always did. The engine's note rides as the tooltip.
       const ac = (p.auraColors || []);
-      return `<span class="chip pretap"><span class="n">${i+1}</span>`+
-        `<span class="nm" data-name="${esc(p.name)}">⛏ tap ${esc(p.name)} → {${esc(p.color)}}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
+      return `<span class="chip pretap"${p.note?` title="${esc(p.note)}"`:''}><span class="n">${i+1}</span>`+
+        `<span class="nm" data-name="${esc(p.name)}">⛏ ${p.sac?'sac':'tap'} ${esc(p.name)} → ${esc(preTapFaceText(p.color))}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
         `<span class="x" data-rm="${i}">✕</span></span>`;
     }
     const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize')?'act':(p.kind==='land'?'land':'spell');

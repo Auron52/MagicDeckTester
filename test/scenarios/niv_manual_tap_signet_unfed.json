@@ -1,0 +1,14 @@
+{
+  "_comment": "MANUAL TAP of an ARTIFACT filter, the rejecting side (USER 2026-10-22; docs/design/viewer-manual-tap-pay.md, 'Artifact and creature sources'). Izzet Signet's {1} is paid FROM THE FLOATING POOL the human has already filled, and here nothing was tapped before it -- so the line is ILLEGAL with the advice 'tap a source for the Izzet Signet's {1} first', never rescued by the engine tapping an Island on the human's behalf (choosing that feeder is the allocation a hand tap exists to override). The line is otherwise playable: its accepting twin niv_manual_tap_island_feeds_signet.json is the same board with the Island tapped first. MTG_HUMAN_PLAY because the pre-tap path is human-play-only.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 3, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [ { "name": "Island" }, { "name": "Island" }, { "name": "Izzet Signet" } ],
+  "hand": [ "Tandem Lookout" ],
+  "library_filler": "Island", "library_size": 40,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "tap=Izzet Signet#0:UR;cast=Tandem Lookout",
+  "expect_verdict": "illegal",
+  "expect_reason_contains": "tap a source for the Izzet Signet's {1} first",
+  "depth": 1, "budget_ms": 50, "max_turns": 3
+}

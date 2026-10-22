@@ -1,0 +1,18 @@
+{
+  "_comment": "MANUAL TAP of a CREATURE source, the rejecting side (docs/design/viewer-manual-tap-pay.md, 'Artifact and creature sources'). The same board as niv_manual_tap_servant_haste.json with the Generator Servant SUMMONING SICK: its cost includes {T}, so CR 302.6 bars the crack (CanTapNow -- the test ApplySacForMana and the SacForMana enumeration already apply), and the hand tap is ILLEGAL with that reason rather than performed. Fails if a hand tap ever cracks a sick Servant.",
+  "deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1", "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Island" }, { "name": "Island" }, { "name": "Island" },
+    { "name": "Mountain" }, { "name": "Mountain" },
+    { "name": "Generator Servant", "sick": true }
+  ],
+  "hand": [ "Niv-Mizzet, the Firemind" ],
+  "library_filler": "Island", "library_size": 40,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "tap=Generator Servant#0:C;cast=Niv-Mizzet, the Firemind",
+  "expect_verdict": "illegal",
+  "expect_reason_contains": "summoning sick",
+  "depth": 1, "budget_ms": 50, "max_turns": 4
+}
