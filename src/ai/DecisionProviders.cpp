@@ -52362,7 +52362,8 @@ struct NivCensus
     std::array<int, kNivRoleCount> hand{};    // the hand by role (staged cards excluded)
 };
 
-NivCensus BuildNivCensus(const GameState& s)
+// `with_hand` = false: the battlefield only (the Brainstorm put-back values the hand greedily on top of it).
+NivCensus BuildNivCensus(const GameState& s, bool with_hand = true)
 {
     NivCensus c;
     const int me = s.active_player_index;
@@ -52401,6 +52402,7 @@ NivCensus BuildNivCensus(const GameState& s)
     }
     c.avail_now += s.floating_mana.Total();
     c.drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    if (!with_hand) { return c; }
     for (const Card& h : ap.hand)
     {
         if (h.m_is_staged) { continue; }
@@ -52693,6 +52695,141 @@ bool NivMizzetComboProvider::ReorderSingleCandidate(const GameState& s) const
     return NivCantripRulesOn() && NivPonderSingleOn();
 }
 
+// PONDER: SEARCH KEEP vs SHUFFLE, NOT THE ORDER (MTG_NIV_PONDER_KEEP_SHUFFLE). USER 2026-10-22: "My ponder
+// idea was allowing for search between shuffle and keep, but not the order." / "That way we avoid the worst
+// situations and just need to make the reorder relatively smart." The two searched options are KEEP in the
+// rules' order (TopDispositionPick, keep_decision 1) and SHUFFLE; MTG_NIV_PONDER_SINGLE (one option: the
+// rules decide keep vs shuffle too) is the agent's narrower prune, not the USER's.
+static bool NivPonderKeepShuffleOn()
+{
+    static const bool on = EnvOn("MTG_NIV_PONDER_KEEP_SHUFFLE");   // DEFAULT OFF pending its A/B
+    return heurarm::Flag(heurarm::NIV_PONDER_KEEP_SHUFFLE, on);
+}
+bool NivMizzetComboProvider::ReorderKeepShuffleOnly(const GameState& s) const
+{
+    (void)s;
+    return NivCantripRulesOn() && NivPonderKeepShuffleOn();
+}
+
+// ---- BRAINSTORM'S PUT-BACK BY THE SAME BUCKETS (MTG_NIV_BRAINSTORM_RULE; prune MTG_NIV_BRAINSTORM_SINGLE) ----
+// USER 2026-10-22: "Brainstorm put-back should use the same approach we talked about for ponder. You put
+// the cards you need the least first using the same rules, followed by the ones you can't use yet so you
+// can draw them later."
+//
+// READING. The two cards go back one at a time, so the FIRST one put back ends up second from the top
+// (drawn the turn after next) and the LAST one on top (drawn next):
+//   * "the cards you need the least first, using the same rules": the least-needed card by the SAME
+//     buckets (NivWantOf -- Preordain's keep, Ponder's order and the bucket discard all read it) goes back
+//     first, i.e. deepest;
+//   * "followed by the ones you can't use yet so you can draw them later": then a card the hand WANTS but
+//     cannot use this turn (NivTurnsUntilUsable > 0 -- a Niv the mana cannot cast yet, a Curiosity whose
+//     Niv is still in hand, a Lookout one mana short, a second land with this turn's drop spoken for)
+//     goes back on top, so it is the next draw;
+//   * whatever the hand can use now stays.
+// As the hook's ranking, most expendable first (candidate 0 = ranking[1] on TOP of ranking[0]):
+//   1. the hand is valued GREEDILY, the way NivValueLook values a look: the most-wanted card is taken first
+//      and counted as held, the rest re-valued, so of two Firemind one is the Niv and the other the
+//      duplicate (the discard's own-copy rule would call BOTH duplicates);
+//   2. cards under the keep threshold (duplicates, surplus mana, a 4th hand land, a 3rd accelerator) first,
+//      least wanted first;
+//   3. then the wanted cards by Ponder's ORDER tier read backwards (NivOrderTier: 3 the rest, 2 a set-up
+//      card usable next turn or a missing key piece, 1 a set-up card usable now, 0 a key piece usable now),
+//      least wanted first inside a tier, then the later-usable first -- so of two can't-use-yet cards the
+//      more wanted / sooner one ends on top. MTG_NIV_CANTRIP_AMEND applies through NivOrderTier: with it a
+//      cantrip castable this turn is a set-up card usable now and stays; without it the rules file such a
+//      cantrip in tier 3 and it can go back ahead of a next-turn piece.
+//   Hand lands take the drop in greedy order: the k-th land taken is usable in k turns (k+1 when this
+//   turn's drop is spent).
+// The default is read PER CARD (PutBackRankingPerCard), so one copy of a duplicated class can go back
+// without its twin. An ORDER: every distinct put-back is still a searched candidate, unless
+// MTG_NIV_BRAINSTORM_SINGLE prunes the fan to the rule's pick (PutBackSingleCandidate). Human play is
+// never pruned (the rule's pick is only its default).
+static bool NivBrainstormRuleOn()
+{
+    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_RULE");     // DEFAULT OFF pending its A/B and the USER
+    return heurarm::Flag(heurarm::NIV_BRAINSTORM_RULE, on);
+}
+static bool NivBrainstormSingleOn()
+{
+    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_SINGLE");   // DEFAULT OFF pending its A/B
+    return heurarm::Flag(heurarm::NIV_BRAINSTORM_SINGLE, on);
+}
+static bool NivPutBackRuleLive() { return NivCantripRulesOn() && NivBrainstormRuleOn(); }
+
+std::vector<int> NivMizzetComboProvider::PutBackRanking(const GameState& s, int controller) const
+{
+    if (!NivPutBackRuleLive() || controller != s.active_player_index)
+    { return DeckProvider::PutBackRanking(s, controller); }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    const int hn = static_cast<int>(pl.hand.size());
+    const NivCensus full = BuildNivCensus(s);
+    NivCensus c = BuildNivCensus(s, /*with_hand=*/false);
+    std::vector<char> done(static_cast<std::size_t>(hn), 0);
+    int eligible = 0;
+    for (int i = 0; i < hn; ++i)
+    {
+        if (PutBackEligible(pl.hand[static_cast<std::size_t>(i)])) { ++eligible; }
+        else { done[static_cast<std::size_t>(i)] = 1; }
+    }
+    // Greedy valuation, most-wanted first (step = the order taken).
+    std::vector<NivLookVal> vals;
+    std::vector<int> step_of(static_cast<std::size_t>(hn), 0);
+    int lands_taken = 0;
+    for (int step = 0; step < eligible; ++step)
+    {
+        int best = -1, best_w = -1;
+        for (int i = 0; i < hn; ++i)
+        {
+            if (done[static_cast<std::size_t>(i)]) { continue; }
+            const int w = NivWantOf(c, CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(i)]), false);
+            if (w > best_w) { best_w = w; best = i; }
+        }
+        done[static_cast<std::size_t>(best)] = 1;
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(best)]);
+        const NivRole r = NivRoleOf(d);
+        int t_use = 0;
+        if (r == kNivLand) { t_use = std::min(4, full.drop_open ? lands_taken : lands_taken + 1); ++lands_taken; }
+        else               { t_use = NivTurnsUntilUsable(full, d); }
+        vals.push_back({ best, best_w, t_use, r });
+        step_of[static_cast<std::size_t>(best)] = step;
+        ++c.hand[static_cast<std::size_t>(r)];
+        if (NivIsMana(r)) { const NivColours k = NivColoursOf(d); c.col.u += k.u; c.col.r += k.r; c.col.any += k.any; }
+        if (d != nullptr && d->params.ramp_filter) { ++c.filter_hand; }
+    }
+    std::stable_sort(vals.begin(), vals.end(), [&](const NivLookVal& a, const NivLookVal& b)
+    {
+        const bool ua = a.want < kNivKeepThreshold, ub = b.want < kNivKeepThreshold;
+        if (ua != ub) { return ua; }                                    // the least needed go back first
+        const int sa = step_of[static_cast<std::size_t>(a.idx)], sb = step_of[static_cast<std::size_t>(b.idx)];
+        if (ua)
+        {
+            if (a.want != b.want) { return a.want < b.want; }
+            return sa > sb;
+        }
+        const int ta = NivOrderTier(a), tb = NivOrderTier(b);
+        if (ta != tb) { return ta > tb; }                               // then what cannot be used yet
+        if (a.want != b.want) { return a.want < b.want; }
+        if (a.t_use != b.t_use) { return a.t_use > b.t_use; }
+        return sa > sb;
+    });
+    std::vector<int> out;
+    out.reserve(vals.size());
+    for (const NivLookVal& x : vals) { out.push_back(x.idx); }
+    return out;   // ineligible (staged / impulse) cards are omitted: they rank last, in hand order
+}
+
+bool NivMizzetComboProvider::PutBackRankingPerCard(const GameState& s) const
+{
+    (void)s;
+    return NivPutBackRuleLive();
+}
+
+bool NivMizzetComboProvider::PutBackSingleCandidate(const GameState& s) const
+{
+    (void)s;
+    return NivPutBackRuleLive() && NivBrainstormSingleOn();
+}
+
 std::vector<int> NivMizzetComboProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -52739,10 +52876,91 @@ bool NivMizzetComboProvider::CleanupDiscardShedStable() const { return !NivBucke
 // nothing). An ORDER of the default, never a narrowing: the searched twin (Plan::soulbond_decline,
 // AppendSoulbondDeclineVariants) inverts it to "pair anyway" with the base pick, and a human still
 // chooses from the full legal set.
+// TANDEM LOOKOUT PAIRING, THE USER'S RULE (MTG_NIV_LOOKOUT_RULE2; replaces MTG_NIV_LOOKOUT_NIV_ONLY, which
+// measured +0.007 at d5 -- USER: "+0.007 is not quite neutral?"). USER 2026-10-22, final version after a
+// correction: "Niv in hand means wait for it, whereas extra draw sources without niv are what give us
+// permission to try pairing them with something else." (The first, reversed message also said "Otherwise
+// I suppose it could be searched.")
+// READING (the orchestrator's, taken as the default):
+//   * a Niv among the legal partners: pair with it (that pair IS the draw/ping loop);
+//   * otherwise a Niv (either) IN HAND: WAIT -- the twin ("pair anyway") is PRUNED (SoulbondTwinPruned);
+//   * no Niv in hand, but a SPARE draw-on-damage source (another Tandem Lookout or a Curiosity, in hand or
+//     on the battlefield, besides this Lookout): PAIR now -- the "permission" -- and the twin SEARCHES the
+//     wait;
+//   * no Niv in hand, no spare source, a Niv still in the library: WAIT, pruned as in the first case.
+//     OPEN USER QUESTION: with the correction "permission" needs the spare source, so without one the
+//     Lookout waits for a Niv that is not in hand yet -- is that the intent, or should this case be
+//     searched?
+//   * no Niv left in hand or library: pair as before (searched: today's default and twin).
+// "Spare" counts draw-on-damage cards on our battlefield and in hand, this Lookout included, so it holds
+// with two or more. Human play is never pruned: the viewer still offers every legal partner.
+static bool NivLookoutRule2On()
+{
+    static const bool on = EnvOn("MTG_NIV_LOOKOUT_RULE2");   // DEFAULT OFF pending its A/B and the USER
+    return heurarm::Flag(heurarm::NIV_LOOKOUT_RULE2, on);
+}
+struct NivPairCensus { bool niv_hand = false, niv_lib = false; int draw_sources = 0; };
+static NivPairCensus BuildNivPairCensus(const GameState& s, int controller)
+{
+    NivPairCensus c;
+    auto is_niv  = [](const CardDefinition* d) { return d != nullptr && d->params.draw_trigger_damage > 0; };
+    auto is_draw = [](const CardDefinition* d)
+    { return d != nullptr && (d->params.soulbond_damage_trigger_draw || d->params.aura_damage_trigger_draw); };
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& h : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (is_niv(d))  { c.niv_hand = true; }
+        if (is_draw(d)) { ++c.draw_sources; }
+    }
+    for (const Card& l : pl.library) { if (is_niv(CardDatabase::Instance().LookupCached(l))) { c.niv_lib = true; break; } }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        if (is_draw(CardDatabase::Instance().LookupCached(q.card))) { ++c.draw_sources; }
+    }
+    return c;
+}
+// The two WAIT cases (see above): the Lookout waits and the search is not offered the pairing.
+static bool NivLookoutMustWait(const NivPairCensus& c) { return c.niv_hand || (c.draw_sources < 2 && c.niv_lib); }
+
+bool NivMizzetComboProvider::SoulbondTwinPruned(const GameState& s) const
+{
+    if (!NivLookoutRule2On() || !s.deck_has_draw_ping) { return false; }
+    return NivLookoutMustWait(BuildNivPairCensus(s, s.active_player_index));
+}
+
 int NivMizzetComboProvider::SoulbondPartner(const GameState& s, int controller, const Permanent& source,
                                             const std::vector<int>& candidate_bf_indices) const
 {
     const int pick = DecisionProvider::SoulbondPartner(s, controller, source, candidate_bf_indices);
+    if (pick != 0 && NivLookoutRule2On())
+    {
+        const CardDefinition* sd = source.def_absent ? nullptr : CardDatabase::Instance().LookupCached(source.card);
+        if (sd == nullptr || !sd->params.soulbond_damage_trigger_draw) { return pick; }
+        int niv_cand = 0;
+        for (int ci : candidate_bf_indices)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(ci)];
+            const CardDefinition* qd = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+            if (qd != nullptr && qd->params.draw_trigger_damage > 0)
+            { if (niv_cand == 0 || q.card.m_number == pick) { niv_cand = q.card.m_number; } }
+        }
+        const NivPairCensus pc = BuildNivPairCensus(s, controller);
+        // MTG_LOOKOUT_TRACE (diagnostic, print-only, real resolutions only): which case decided -- 1 a Niv
+        // partner, 2 Niv in hand (wait), 3 no spare + Niv in library (wait; the contentious case), 4 spare
+        // (pair, searched), 5 no Niv left (pair).
+        static const bool s_lt = EnvOn("MTG_LOOKOUT_TRACE");
+        if (s_lt && g_real_resolution)
+        {
+            const int cs = niv_cand != 0 ? 1 : pc.niv_hand ? 2 : (pc.draw_sources < 2 && pc.niv_lib) ? 3
+                         : pc.draw_sources >= 2 ? 4 : 5;
+            std::fprintf(stderr, "[lookout-rule2] T%d case=%d draw_sources=%d niv_lib=%d\n",
+                         s.turn_number, cs, pc.draw_sources, pc.niv_lib ? 1 : 0);
+        }
+        if (niv_cand != 0) { return niv_cand; }
+        return NivLookoutMustWait(pc) ? 0 : pick;
+    }
     if (pick == 0 || !NivLookoutNivOnlyOn()) { return pick; }   // DEFAULT OFF pending its A/B and the USER
     const CardDefinition* sd = source.def_absent ? nullptr : CardDatabase::Instance().LookupCached(source.card);
     if (sd == nullptr || !sd->params.soulbond_damage_trigger_draw) { return pick; }

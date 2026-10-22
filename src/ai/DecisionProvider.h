@@ -455,6 +455,13 @@ public:
     // whose provider carries a user-given reorder rule. Human play is never pruned. Default false.
     virtual bool ReorderSingleCandidate(const GameState& s) const { (void)s; return false; }
 
+    // ReorderKeepShuffleOnly -- TRUE narrows a Ponder-style reorder's searched fan from the full disposition
+    // set (every order + the shuffle) to its two SET decisions: KEEP the looked-at cards on top in the
+    // provider's order (TopDispositionPick with keep_decision 1) or SHUFFLE (keep_decision 0). The search
+    // still decides keep vs shuffle; the ORDER of a keep is the provider's rule. Belongs only to a deck
+    // whose provider carries a user-given order rule. Human play is never narrowed. Default false.
+    virtual bool ReorderKeepShuffleOnly(const GameState& s) const { (void)s; return false; }
+
     // KeepReorderTop -- Ponder-style reorder keep-vs-shuffle: a SET decision over the cards looked at
     // (top N). Return true to KEEP them on top (SituationalCardRank then ORDERS them), false to
     // SHUFFLE them all away. Unlike the per-card ScryKeepOnTop gate, this judges the WHOLE set --
@@ -557,6 +564,22 @@ public:
     // provider-owned answer to "which card is least needed in hand now" -- so a deck with authored
     // discard buckets gets a put-back default that agrees with them.
     virtual std::vector<int> PutBackRanking(const GameState& s, int controller) const;
+
+    // PutBackRankingPerCard -- read PutBackRanking per CARD for the put-back DEFAULT (candidate 0): the
+    // two most expendable eligible hand cards by the ranking, the less expendable of them on top, moved
+    // to the FRONT of the otherwise unchanged candidate list (PutBackCandidates / PutBackPickAt in
+    // core/SpellEffects.h). The identity fold ranks a CLASS at its best member, so a class whose copies
+    // differ in need -- a duplicate Niv beside the one being kept, a surplus Island beside two needed
+    // ones -- cannot be candidate 0 without putting back BOTH copies; read per card it names exactly
+    // one. Same candidate set and count, only the order moves. Default false -> byte-identical.
+    virtual bool PutBackRankingPerCard(const GameState& s) const { (void)s; return false; }
+
+    // PutBackSingleCandidate -- TRUE prunes the searched put-back fan (Plan::putback_choice, the
+    // Brainstorm axis in TurnSolver.cpp AppendSubdecisionAxes) to candidate 0, the provider's default:
+    // a provider-owned ONE-OPTION prune, the ReorderSingleCandidate shape, so it belongs only to a deck
+    // whose provider carries a user-given put-back rule. Human play is never pruned (its put-back is
+    // asked at resolution). Default false -> every candidate is searched.
+    virtual bool PutBackSingleCandidate(const GameState& s) const { (void)s; return false; }
 
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
@@ -702,6 +725,13 @@ public:
     virtual int SoulbondPartner(
         const GameState& s, int controller, const Permanent& source,
         const std::vector<int>& candidate_bf_indices) const;
+
+    // SoulbondTwinPruned -- TRUE suppresses the searched soulbond twin (Plan::soulbond_decline, the OTHER
+    // side of SoulbondPartner's default; TurnSolver.cpp AppendSoulbondDeclineVariants) on this board: the
+    // provider's default is then the only option the search sees -- a provider-owned ONE-OPTION prune for
+    // a deck whose provider carries a user-given pairing rule. Human play is never pruned (the viewer
+    // offers every legal partner). Default false -> byte-identical.
+    virtual bool SoulbondTwinPruned(const GameState& s) const { (void)s; return false; }
 
     // LandfallCounterTargetOrder -- a TARGETED landfall trigger ("put four +1/+1 counters on target
     // Plant you control", Phylath, World Sculptor). `class_reps` arrives as battlefield indices, ONE

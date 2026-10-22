@@ -34927,6 +34927,36 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
         }
     }
 
+    // MTG_PONDER_TRACE (diagnostic, print-only, real resolutions only, default off): the look, the order
+    // the line chose, the provider's keep order (TopDispositionPick, keep_decision 1) and the board/hand
+    // it read -- to compare a searched order with the rule's order game by game.
+    {
+        static const bool s_pt = EnvOn("MTG_PONDER_TRACE");
+        if (s_pt && g_real_resolution)
+        {
+            auto names = [&](const std::vector<int>& ord)
+            {
+                std::string o;
+                for (int idx : ord) { if (idx >= 0 && idx < look) { o += looked[static_cast<std::size_t>(idx)].m_name.str() + ","; } }
+                return o;
+            };
+            std::string lk, hand, bf;
+            for (const Card& c : looked) { lk += c.m_name.str() + ","; }
+            for (const Card& c : ap.hand) { hand += c.m_name.str() + ","; }
+            for (const Permanent& pm : state.battlefield)
+            {
+                if (pm.controller_index != state.active_player_index) { continue; }
+                bf += pm.card.m_name.str() + (pm.tapped ? "(T)" : "") + ",";
+            }
+            const TopDisposition rule = ResolveProvider(state).TopDispositionPick(state, looked, LookKind::Reorder, 1);
+            std::fprintf(stderr, "[ponder-trace] T%d keep_decision=%d chose=%s rule_keep=%s looked=[%s] hand=[%s] bf=[%s] float=%d drop_open=%d\n",
+                         state.turn_number, keep_decision,
+                         disp.shuffle ? "SHUFFLE" : ("[" + names(disp.top_order) + "]").c_str(),
+                         ("[" + names(rule.top_order) + "]").c_str(), lk.c_str(), hand.c_str(), bf.c_str(),
+                         state.floating_mana.Total(),
+                         ap.lands_played_this_turn < ap.LandDropsAvailable() ? 1 : 0);
+        }
+    }
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
     ApplyTopDisposition(state, looked, disp, LookKind::Reorder);
 }
@@ -35024,6 +35054,27 @@ inline std::uint64_t PutBackClassKey(const GameState& state, const Card& c)
 }
 inline bool PutBackEligible(const Card& c) { return !c.m_is_staged && !c.m_impulse_no_land; }
 
+// THE PER-CARD DEFAULT (DecisionProvider::PutBackRankingPerCard): the `take` (<= 2) most expendable
+// ELIGIBLE hand cards by `ranking`, most expendable first -- out[0] goes DEEPEST, out[take-1] on top.
+// Hand indices the ranking omits follow in hand order (the ranking contract). Shared by the reference
+// enumeration and the fast path so the two move the same selection to the front.
+inline int PutBackPerCardDefault(const Player& pl, const std::vector<int>& ranking, int take, int out[2])
+{
+    out[0] = out[1] = -1;
+    int got = 0;
+    const int hn = static_cast<int>(pl.hand.size());
+    auto offer = [&](int hi)
+    {
+        if (got >= take || hi < 0 || hi >= hn) { return; }
+        if (!PutBackEligible(pl.hand[static_cast<std::size_t>(hi)])) { return; }
+        for (int j = 0; j < got; ++j) { if (out[j] == hi) { return; } }
+        out[got++] = hi;
+    };
+    for (int hi : ranking) { offer(hi); }
+    for (int hi = 0; hi < hn; ++hi) { offer(hi); }
+    return got;
+}
+
 // Every distinct ordered selection of min(n, eligible) classes, PROVIDER-ORDERED. Each candidate is a
 // list of HAND indices, element 0 = the card that ends on TOP. Index 0 is the default: the classes the
 // provider ranks most expendable, the less expendable of them on top (drawn first). Deterministic.
@@ -35094,6 +35145,26 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
         { if (a.cls[i] != b.cls[i]) { return a.cls[i] > b.cls[i]; } }
         return false;
     });
+    // PER-CARD DEFAULT (DecisionProvider::PutBackRankingPerCard): the two most expendable CARDS, the less
+    // expendable on top, become candidate 0; everything else keeps its place. Same set, same count.
+    if (take <= 2 && sels.size() > 1 && ResolveProvider(state).PutBackRankingPerCard(state))
+    {
+        int def[2];
+        const int got = PutBackPerCardDefault(pl, ranking, take, def);
+        auto cls_of = [&](int hi) -> int
+        {
+            for (std::size_t ci = 0; ci < classes.size(); ++ci)
+            { if (std::find(classes[ci].members.begin(), classes[ci].members.end(), hi) != classes[ci].members.end()) { return static_cast<int>(ci); } }
+            return -1;
+        };
+        if (got == take)
+        {
+            std::vector<int> want;   // element 0 = TOP: the less expendable of the two
+            for (int j = take - 1; j >= 0; --j) { want.push_back(cls_of(def[j])); }
+            auto it = std::find_if(sels.begin(), sels.end(), [&](const Sel& x) { return x.cls == want; });
+            if (it != sels.end() && it != sels.begin()) { std::rotate(sels.begin(), it, it + 1); }
+        }
+    }
     out.reserve(sels.size());
     for (const Sel& s : sels)
     {
@@ -35207,9 +35278,10 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
     // creation order -- PutBackCandidates' stable sort, as an (allocation-free) insertion sort.
     // A one-candidate list has no order to read, so the provider is not consulted for it.
     sc.rank.assign(static_cast<std::size_t>(C), 1 << 20);
+    std::vector<int> ranking;
     if (out.count > 1)
     {
-        const std::vector<int> ranking = ResolveProvider(state).PutBackRanking(state, controller);
+        ranking = ResolveProvider(state).PutBackRanking(state, controller);
         const int hn = static_cast<int>(sc.hand_cls.size());
         for (std::size_t q = 0; q < ranking.size(); ++q)
         {
@@ -35227,8 +35299,40 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
         { sc.ord[static_cast<std::size_t>(j)] = sc.ord[static_cast<std::size_t>(j - 1)]; --j; }
         sc.ord[static_cast<std::size_t>(j)] = c;
     }
-    if (take == 1) { out.idx[0] = sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(r)])]; return out; }
-    int seen = 0;
+    // PER-CARD DEFAULT (DecisionProvider::PutBackRankingPerCard; the reference enumeration's twin): the
+    // two most expendable CARDS become rank 0 and the reference order follows with that one selection
+    // skipped. def_top / def_deep are CLASS ids (-1 = no per-card default).
+    int def_top = -1, def_deep = -1;
+    if (out.count > 1 && ResolveProvider(state).PutBackRankingPerCard(state))
+    {
+        int def[2];
+        if (PutBackPerCardDefault(pl, ranking, take, def) == take)
+        {
+            def_deep = sc.hand_cls[static_cast<std::size_t>(def[0])];
+            def_top  = take == 2 ? sc.hand_cls[static_cast<std::size_t>(def[1])] : def_deep;
+        }
+    }
+    const bool per_card = def_top >= 0;
+    if (take == 1)
+    {
+        if (!per_card) { out.idx[0] = sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(r)])]; return out; }
+        if (r == 0) { out.idx[0] = sc.m0[static_cast<std::size_t>(def_top)]; return out; }
+        int seen1 = 0;
+        for (int q = 0; q < C; ++q)
+        {
+            const int cq = sc.ord[static_cast<std::size_t>(q)];
+            if (cq == def_top) { continue; }
+            if (++seen1 == r) { out.idx[0] = sc.m0[static_cast<std::size_t>(cq)]; return out; }
+        }
+        return out;   // unreachable: r < count
+    }
+    if (per_card && r == 0)
+    {
+        out.idx[0] = sc.m0[static_cast<std::size_t>(def_top)];
+        out.idx[1] = def_top == def_deep ? sc.m1[static_cast<std::size_t>(def_top)] : sc.m0[static_cast<std::size_t>(def_deep)];
+        return out;
+    }
+    int seen = per_card ? 1 : 0;   // rank 0 is the per-card default; the walk fills ranks 1.. around it
     for (int s = 0; s <= 2 * (C - 1); ++s)
     {
         for (int a = std::min(s, C - 1); a >= std::max(0, s - (C - 1)); --a)
@@ -35236,6 +35340,7 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
             const int b  = s - a;
             const int ca = sc.ord[static_cast<std::size_t>(a)];
             if (a == b && sc.cnt[static_cast<std::size_t>(ca)] < 2) { continue; }
+            if (per_card && ca == def_top && sc.ord[static_cast<std::size_t>(b)] == def_deep) { continue; }
             if (seen++ != r) { continue; }
             out.idx[0] = sc.m0[static_cast<std::size_t>(ca)];
             out.idx[1] = a == b ? sc.m1[static_cast<std::size_t>(ca)] : sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(b)])];

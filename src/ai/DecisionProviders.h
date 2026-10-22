@@ -3253,6 +3253,13 @@ public:
     TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
                                       LookKind kind, int keep_decision) const override;
     bool ReorderSingleCandidate(const GameState& s) const override;
+    // Ponder searched as keep-in-the-rule's-order vs shuffle (MTG_NIV_PONDER_KEEP_SHUFFLE, DEFAULT OFF).
+    bool ReorderKeepShuffleOnly(const GameState& s) const override;
+    // Brainstorm's put-back by the same buckets (MTG_NIV_BRAINSTORM_RULE) and its one-option prune
+    // (MTG_NIV_BRAINSTORM_SINGLE). Both DEFAULT OFF, inert unless MTG_NIV_CANTRIP_RULES is on.
+    std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
+    bool PutBackRankingPerCard(const GameState& s) const override;
+    bool PutBackSingleCandidate(const GameState& s) const override;
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
     bool CleanupDiscardShedStable() const override;
@@ -3260,6 +3267,8 @@ public:
     // pairing default; the searched twin inverts it (see the definition).
     int SoulbondPartner(const GameState& s, int controller, const Permanent& source,
                         const std::vector<int>& candidate_bf_indices) const override;
+    // ...and the USER's pairing rule (MTG_NIV_LOOKOUT_RULE2, DEFAULT OFF): which boards prune the twin.
+    bool SoulbondTwinPruned(const GameState& s) const override;
     // The USER's Generator Servant rule (2026-10-22; MTG_NIV_SERVANT_FIREMIND_ONLY, DEFAULT ON): a
     // Servant sacrifice the line does not need for mana is searched only beside a Niv-Mizzet, the
     // Firemind cast. See the .cpp.
