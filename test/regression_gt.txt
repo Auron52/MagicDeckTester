@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 9d3ca8ad9  date 2026-10-22
+# Regression ground truth -- commit 7e7df06f9  date 2026-10-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-20): fungusv3 overnight rows RE-SIZED to the standard FULL set (d3 4x1000 b20, d5 4x500 b40; USER 2026-10-17 'put everything into the latest version'): a resized row re-defines its key, accepted on its own with no play change (d0 rows unchanged 4/4; smoke+regression byte-identical for every non-EDF key).
@@ -145,8 +145,8 @@ colossus_smoke_d0_s1001=4.3610/5b076b322d4ff5e5
 colossus_smoke_d3_s1001=3.2533/3fccee818433ea10
 colossus_smoke_d5_s1001=3.2133/2f155b640caca7f2
 vampires_smoke_d0_s1001=4.5660/b0de2ee24c91dada
-vampires_smoke_d3_s1001=4.2400/115d9233849efb66
-vampires_smoke_d5_s1001=4.2267/6cbbf10b55ae8a17
+vampires_smoke_d3_s1001=4.2333/1df4860613fb2430
+vampires_smoke_d5_s1001=4.2133/0d95bc73dac6513a
 vampires2hg_smoke_d3_s1001=4.9200/e01af5f2e9e2f355
 
 # --- regression ---
@@ -334,12 +334,12 @@ colossus_regression_d3_s3003=3.4933/2b7a842d7a7c5a82
 colossus_regression_d5_s2002=3.4133/13a4d6f6acc3731f
 colossus_regression_d5_s3003=3.4400/fd10158d8dd88d0e
 vampires_regression_d0_s2002=4.5790/cff70d8676cae1dd
-vampires_regression_d3_s2002=4.2400/0ffdc2f2ac6a5654
-vampires_regression_d3_s3003=4.3467/67b7d8c3b0dac7a3
-vampires_regression_d5_s2002=4.2667/e201d4618f690381
-vampires_regression_d5_s3003=4.3600/5c00223f5f495d31
-vampires2hg_regression_d3_s2002=4.9500/4c93e09d084d4e87
-vampires2hg_regression_d5_s2002=4.9800/b62c7b502722ceb3
+vampires_regression_d3_s2002=4.2333/4f11b27600a806b4
+vampires_regression_d3_s3003=4.3400/470917811a7b6cc8
+vampires_regression_d5_s2002=4.2400/e7cae59db45922e8
+vampires_regression_d5_s3003=4.3600/665375844854b97e
+vampires2hg_regression_d3_s2002=4.9300/8a7169c3b7589d48
+vampires2hg_regression_d5_s2002=4.9600/c529d048a80301e8
 
 # --- overnight ---
 fungusv3_overnight_d0_s4004=5.3810/218363fba321b400

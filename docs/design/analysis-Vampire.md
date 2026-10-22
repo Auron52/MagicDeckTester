@@ -265,6 +265,27 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   bottom, or bottom order only); standard rows -0.03..-0.15t, 2HG mixed on small samples. Cost: the worst searched
   row 2,508 -> 348 ms/game (0.12x Galadriel): the bottoming trial games were the deck's cost.
 
+## Value leaf -- generated and ADOPTED (2026-10-22)
+- `valueleaf.sh run decks/Vampires` from `vampires-land2` (frozen 1ed42dcd3, src 208b5152f, PGO), USER-launched
+  10-21 21:48 UTC. Needed `deck_registry` to resolve a folder's unique decklist first (1ed42dcd3: Vampire.cod in
+  decks/Vampires). Phases 0..E0 ran in 16 min; phase E was cut by a HOST hang at 22:06 (C:\ at 3.1 GB free; the
+  path-keyed keep-table cache had grown to 192 GB) and re-ran 10-22 02:48-02:53 after the cleanup, peak 6.3 GB RAM.
+- Rows 10,615 from 2,500 games; held-out RMSE 0.321. Matrix 52/52 cells x 400 games, 0 condemned; C0 leaf K=none;
+  C.5 CLEAN. Trust candidate d5 REJECTED (never engaged: byte-identical on 8/8 seeds). E.6: no escalation-skip
+  allowance (headroom 1.1% < 4%).
+- Phase E, 8 seeds x 1,000 paired games vs live (no sidecar): **staged -0.00300 t (t -6.48, 8/0 seeds), 0.945x
+  units, 0.78x core-s -- ADOPTED**; emul -0.0005 at 0.977x (passes, not picked); leafless nlesc / nlfit 2.20x /
+  2.22x for nothing. The target_depth sweep (d4/d5/d6) read 4.241 on every arm and flagged ZERO VARIANCE --
+  informational, not investigated yet.
+- GT (vampires keys only, leaf installed): smoke 2 faster / 0 slower (d3 4.2400 -> 4.2333, d5 4.2267 -> 4.2133);
+  regression 7 faster / 0 slower (std d3 -0.007 x2, d5 s2002 -0.027, d5 s3003 same score; 2HG d3/d5 -0.02); every
+  d0 row byte-identical. Re-measured after rebasing onto origin 9b319e0b2 (the USER's fresh 0.5 x budget_ms
+  escalation floor, eb0e7d066): every vampires digest byte-identical to the pre-rebase run, so accepted there.
+  Overnight left to the periodic run (no trust moved).
+- The sidecar carries no `value_play`, so the profile's generation keys (d1 b1, K=15) still govern play's K guard;
+  the next `mullgen.sh run` copies them into the sidecar (mullgen.sh "a sidecar's value_play replaces the profile's").
+  The keep table was fitted without the leaf; a regeneration is the USER's call.
+
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
 pre-fix engine (every new test failed there), then fixed:
