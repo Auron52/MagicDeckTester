@@ -2737,9 +2737,16 @@ public:
     // picks the KIND -- a `cast=` is a hand cast, an `act=` a board activation of the same name --
     // and the name the card), lays the matched actions out in queue order, records the land's step
     // and every pre-tap's position in steps, and sets human_sequence / human_action_order /
-    // searched_order. A step that names nothing in the plan is dropped (it counts no position).
+    // searched_order. A step carries what the viewer knows about WHICH play it is
+    // (`[#src][@target][*count][+kicked][+adventure]`) and is matched on all of it; a step that names
+    // nothing in the plan, or that could mean two different plays (`state` tells indistinguishable
+    // permanents apart from distinct ones; null = every distinct permanent is distinct), is NOT
+    // guessed: it is skipped and described in `errors`, which the commit reports and the validation
+    // (main.cpp) turns into an Illegal verdict. Each `le=<land>` unit names the land it discards.
     // Pure (no HumanPlayActive read): the caller gates it, and the unit tests drive it directly.
-    static void ApplyHumanSequencePin(Plan& plan, const std::vector<std::string>& tokens);
+    static void ApplyHumanSequencePin(Plan& plan, const std::vector<std::string>& tokens,
+                                      const GameState* state = nullptr,
+                                      std::vector<std::string>* errors = nullptr);
     // A human-sequence plan losing one action (DeferHumanAuraSwapToCombat moves an Aura swap to
     // combat): erase actions[q] and keep human_seq_len, human_land_step and the pre-tap positions
     // naming the same steps. Plain erase for every other plan.
@@ -2909,6 +2916,9 @@ public:
         // unchanged.
         bool        land_from_top = false;
         std::vector<std::string> casts;      // hand spells to cast, in clicked order
+        // "seq=<step>|...": the "**" whole-sequence pin the commit will use (the viewer's
+        // validationLine). Never a matching key; the validation previews the commit in this order.
+        std::vector<std::string> sequence;
         int         lands_edge = 0;          // discard this many lands to Land's Edge (0 = none)
         std::vector<std::string> vial_deploys;  // creatures put onto the battlefield via Aether
                                                 // Vial (MV == the Vial's charge counters), free
@@ -3505,3 +3515,12 @@ long long AuraLateBindTestCount();
 // g_real_resolution), so a search rollout or a quiet trial apply never writes here. Bound only by the
 // scenario harness's `expect_line_order` (src/main.cpp); null everywhere else, so play never reads it.
 extern thread_local std::vector<std::string>* g_line_order_record;
+// ...and the same lines for a TRIAL apply: bound only by AIEngine's human-commit preview around its
+// quiet trial applies (no sink is bound there, so the recorder above stays silent), so the "your order
+// cannot pay" fallback can report EXACTLY which order it played instead. Top-level apply only.
+extern thread_local std::vector<std::string>* g_line_order_capture;
+// A step of the human's "**" sequence that did not happen where it was queued (a land that could not
+// be played, an activation / discard that found nothing to do or could not be paid, a queued step the
+// committed plan cannot match). Bound by AIEngine's human-commit preview (the validation turns any
+// entry into an Illegal verdict; the commit reports them); null everywhere else.
+extern thread_local std::vector<std::string>* g_human_step_fail_sink;

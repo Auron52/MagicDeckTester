@@ -1,0 +1,28 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "battlefield": [
+    { "name": "Plains", "controller": 0, "tapped": false },
+    { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Bonesplitter", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Kor Duelist", "Temple Garden" ],
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 50,
+  "human_lines": [ "land=Temple Garden;cast=Kor Duelist;equip=Bonesplitter;seq=land=Temple Garden|cast=Kor Duelist|equip=Bonesplitter" ],
+  "human_cast_orders": [ [ "**", "land=Temple Garden", "cast=Kor Duelist", "equip=Bonesplitter" ] ],
+  "expect_line_order": [ "land Temple Garden", "cast Kor Duelist", "activate Bonesplitter" ],
+  "expect_dropped": [],
+  "expect_opponent_life": 14,
+  "expect_active_life": 18,
+  "expect_no_win": true,
+  "comment": "REVIEW 2026-10-22 item 2, the land-first CONTROL (reviewer repro shock_equip_ctrl): Temple Garden first, then Kor Duelist and the equip. The positioned line (kitty_human_seq_shock_land_pays_for_later_equip) must be no worse than this: Garden untapped (20 -> 18), equipped Duelist hits for 6 (20 -> 14)."
+}

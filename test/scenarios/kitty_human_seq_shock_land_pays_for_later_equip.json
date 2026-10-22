@@ -1,0 +1,29 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "battlefield": [
+    { "name": "Plains", "controller": 0, "tapped": false },
+    { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Bonesplitter", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Kor Duelist", "Temple Garden" ],
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 50,
+  "human_lines": [ "landafter=Temple Garden;cast=Kor Duelist;equip=Bonesplitter;seq=cast=Kor Duelist|land=Temple Garden|equip=Bonesplitter" ],
+  "human_cast_orders": [ [ "**", "cast=Kor Duelist", "land=Temple Garden", "equip=Bonesplitter" ] ],
+  "expect_line_order": [ "cast Kor Duelist", "land Temple Garden", "activate Bonesplitter" ],
+  "expect_dropped": [],
+  "expect_history_lacks": [ "was NOT applied" ],
+  "expect_opponent_life": 14,
+  "expect_active_life": 18,
+  "expect_no_win": true,
+  "comment": "REVIEW 2026-10-22 item 2 (reviewer repro shock_equip): 'cast Kor Duelist (off the Plains), play Temple Garden, equip Bonesplitter'. The deferred shock land's pay-2-life rule counted only casts / retraces / digs AFTER the land, so the later PAID equip was missed: the Garden entered tapped, the equip could not be paid and the Duelist attacked for 1. It now counts every mana-spending step after the land (HumanStepSpendsMana): the Garden enters untapped (20 -> 18), pays the equip, and the equipped Duelist hits for 6 (20 -> 14) -- the same as the land-first control (kitty_human_seq_shock_land_first_control)."
+}

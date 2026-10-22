@@ -15,6 +15,7 @@
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "core/Card.h"
+#include "core/GameState.h"
 
 #include <string>
 #include <vector>
@@ -201,4 +202,128 @@ TEST_CASE("human sequence: erasing a step keeps the land and the taps on the ste
     TurnSolver::EraseHumanSequenceAction(r, 0);
     CHECK(Names(r) == std::vector<std::string>{ "B" });
     CHECK(r.human_seq_len == 0);
+}
+
+// ---- REVIEW 2026-10-22: WHICH play, never a guess (items 1, 4, 5) -------------------------------
+
+namespace
+{
+Action ActOn(Action::Kind k, const std::string& name, int src, int victim = 0)
+{
+    Action a = Act(k, name);
+    a.sac_source_id = src;
+    a.sac_victim_id = victim;
+    return a;
+}
+Permanent PermOf(const std::string& name, int number)
+{
+    Permanent p;
+    p.card.m_name      = name;
+    p.card.m_number    = number;
+    p.controller_index = 0;
+    p.owner_index      = 0;
+    return p;
+}
+}   // namespace
+
+TEST_CASE("human sequence: `#src` takes the clicked copy, in click order")
+{
+    TurnSolver::Plan p = PlanOf("", { ActOn(K::TapForTokens, "Krenko, Mob Boss", 5),
+                                      ActOn(K::TapForTokens, "Krenko, Mob Boss", 7) });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "act=Krenko, Mob Boss#7", "act=Krenko, Mob Boss#5" }, nullptr, &errors);
+    CHECK(errors.empty());
+    REQUIRE(p.actions.size() == 2);
+    CHECK(p.actions[0].sac_source_id == 7);
+    CHECK(p.actions[1].sac_source_id == 5);
+}
+
+TEST_CASE("human sequence: a step that could mean two different plays is REFUSED, not picked")
+{
+    // No `#src` and two DIFFERENT Krenkos (one carries a counter): the engine does not choose.
+    GameState s;
+    s.battlefield.push_back(PermOf("Krenko, Mob Boss", 5));
+    s.battlefield.push_back(PermOf("Krenko, Mob Boss", 7));
+    s.battlefield.back().spore_counters = 1;
+    TurnSolver::Plan p = PlanOf("", { ActOn(K::TapForTokens, "Krenko, Mob Boss", 5),
+                                      ActOn(K::TapForTokens, "Krenko, Mob Boss", 7) });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "act=Krenko, Mob Boss" }, &s, &errors);
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].find("could mean 2 different plays") != std::string::npos);
+    CHECK(p.human_seq_len == 0);
+
+    // ...but two INDISTINGUISHABLE permanents are the same play: no choice, no error.
+    s.battlefield.back().spore_counters = 0;
+    TurnSolver::Plan q = PlanOf("", { ActOn(K::TapForTokens, "Krenko, Mob Boss", 5),
+                                      ActOn(K::TapForTokens, "Krenko, Mob Boss", 7) });
+    std::vector<std::string> e2;
+    TurnSolver::ApplyHumanSequencePin(q, { "act=Krenko, Mob Boss", "act=Krenko, Mob Boss" }, &s, &e2);
+    CHECK(e2.empty());
+    CHECK(q.human_seq_len == 2);
+}
+
+TEST_CASE("human sequence: an equip names its Equipment and its host")
+{
+    TurnSolver::Plan p = PlanOf("", { ActOn(K::Equip, "Bonesplitter", 2, 9), ActOn(K::Equip, "Bonesplitter", 3, 9),
+                                      ActOn(K::Equip, "Bonesplitter", 3, 11) });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "equip=Bonesplitter#3@11", "equip=Bonesplitter#2@9" }, nullptr, &errors);
+    CHECK(errors.empty());
+    CHECK(p.actions[0].sac_source_id == 3);
+    CHECK(p.actions[0].sac_victim_id == 11);
+    CHECK(p.actions[1].sac_source_id == 2);
+}
+
+TEST_CASE("human sequence: an Aura cast's `@` is the permanent it enchants")
+{
+    // A cast's target is Action::enchant_target (an activation's is sac_victim_id): Wild Growth dragged
+    // onto the Azorius Chancery being played names the Chancery's number.
+    Action onA = Act(K::CastFromHand, "Wild Growth");
+    onA.enchant_target = 40;
+    Action onB = Act(K::CastFromHand, "Wild Growth");
+    onB.enchant_target = 41;
+    TurnSolver::Plan p = PlanOf("", { onA, onB });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "cast=Wild Growth@41", "cast=Wild Growth@40" }, nullptr, &errors);
+    CHECK(errors.empty());
+    CHECK(p.actions[0].enchant_target == 41);
+    CHECK(p.actions[1].enchant_target == 40);
+}
+
+TEST_CASE("human sequence: kicked and unkicked copies are different steps")
+{
+    Action kicked = Act(K::CastFromHand, "Saproling Migration");
+    kicked.kicked = true;
+    TurnSolver::Plan p = PlanOf("", { Act(K::CastFromHand, "Saproling Migration"), kicked });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "cast=Saproling Migration+kicked", "cast=Saproling Migration" },
+                                      nullptr, &errors);
+    CHECK(errors.empty());
+    CHECK(p.actions[0].kicked);
+    CHECK_FALSE(p.actions[1].kicked);
+}
+
+TEST_CASE("human sequence: an unmatched step is an ERROR, never an implicit action")
+{
+    // Item 5: an unmatched queued step used to become "unqueued" -- an implicit action -- and a convoke
+    // cast laid out that way could have its bodies tapped twice. Now it is reported.
+    TurnSolver::Plan p = PlanOf("Forest", { Act(K::CastFromHand, "A") });
+    std::vector<std::string> errors;
+    TurnSolver::ApplyHumanSequencePin(p, { "act=A", "cast=Nope", "land=Island" }, nullptr, &errors);
+    REQUIRE(errors.size() == 3);
+    CHECK(errors[0].find("matches nothing") != std::string::npos);    // act= is not a hand cast
+    CHECK(errors[2].find("is not the committed plan's land") != std::string::npos);
+}
+
+TEST_CASE("human sequence: each Land's Edge step NAMES the land it discards")
+{
+    Action le = Act(K::DiscardToLandsEdge, "Land's Edge");
+    le.discard_lands = 2;
+    TurnSolver::Plan p = PlanOf("Island", { le });
+    TurnSolver::ApplyHumanSequencePin(p, { "le=Mountain", "land=Island", "le=Forest" });
+    REQUIRE(p.actions.size() == 2);
+    CHECK(p.actions[0].discard_name.str() == "Mountain");
+    CHECK(p.actions[1].discard_name.str() == "Forest");
+    CHECK(p.human_land_step == 1);
 }

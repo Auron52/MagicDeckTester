@@ -4595,6 +4595,18 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
                 ls.land_at_raw  = ls.land_at_cast;   // 0 kept: a Karoo before every cast (Plan::land_slot <= -2)
             }
         }
+        // "seq=<step>|<step>|...": the viewer's "**" whole-sequence pin for THIS line (the committing
+        // segment, one `<verb>=<name>` step per queued entry in queue order -- linebuild.js
+        // validationLine). Not a matching key: CheckLine matches as always, and the validation then
+        // previews the commit in exactly this order (ValidateHumanSequence below) so a step that
+        // cannot be applied where it was queued is rejected HERE, with its reason, instead of being
+        // dropped at the commit. Absent on every line written before 2026-10-22.
+        else if (key == "seq")
+        {
+            std::stringstream ss(val);
+            std::string step;
+            while (std::getline(ss, step, '|')) { if (!step.empty()) { ls.sequence.push_back(step); } }
+        }
         else if (key == "cast")      { ls.casts.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
@@ -4709,6 +4721,66 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "tapdraw")   { ls.tap_draws.push_back(val); }
     }
     return ls;
+}
+
+// THE VALIDATION PREVIEWS THE COMMIT IN THE HUMAN'S ORDER (review of the "**" pin, 2026-10-22: "an
+// unpayable order must be rejected at validation with its reason, not dropped at commit"). A line that
+// carries its "**" sequence (`seq=`, linebuild.js validationLine) is matched by CheckLine as always;
+// then, for the matched plan (or each `choose` variant), the commit is previewed through the SAME body
+// the commit runs (PrepareHumanCommit: the pin, the "your order cannot pay" fallback, one trial apply of
+// what would really be applied). A queued step that matches nothing or could mean two plays, a cast the
+// applied plan drops, or a step that does not happen where it was queued (an equip with no mana yet, a
+// Land's Edge discard of a land not in hand, a land that cannot be played) makes the line ILLEGAL here,
+// with every reason -- the commit would otherwise drop it. A line the fallback rescues (the plan's own
+// order pays) stays accepted; the commit reports what the fallback changed. Human play only; a line
+// without `seq=` (every line written before 2026-10-22, and every one-step line) is untouched.
+static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSolver::LineSpec& spec,
+                                  const std::vector<TurnSolver::Plan>& plans, TurnSolver::LineCheck& chk)
+{
+    using Vd = TurnSolver::LineCheck::Verdict;
+    if (spec.sequence.empty() || !HumanPlayActive()) { return; }
+    if (chk.verdict != Vd::Accept && chk.verdict != Vd::Choose) { return; }
+    std::vector<std::string> ord{ "**" };
+    ord.insert(ord.end(), spec.sequence.begin(), spec.sequence.end());
+    auto problems = [&](int idx) -> std::vector<std::string>
+    {
+        std::vector<std::string> out;
+        if (idx < 0 || idx >= static_cast<int>(plans.size())) { return out; }
+        const HumanCommitPreview pv = PrepareHumanCommit(s, plans[static_cast<std::size_t>(idx)], ord, is_pre, true);
+        out = pv.errors;
+        for (const std::string& d : pv.dropped)
+        { out.push_back("cast " + d + ": it cannot be paid at its position in your order"); }
+        out.insert(out.end(), pv.failed.begin(), pv.failed.end());
+        return out;
+    };
+    auto join = [](const std::vector<std::string>& v) {
+        std::string r;
+        for (const std::string& x : v) { r += (r.empty() ? "" : "; ") + x; }
+        return r;
+    };
+    auto reject = [&](const std::vector<std::string>& why) {
+        chk.verdict       = Vd::Illegal;
+        chk.failed_action = why.empty() ? std::string() : why.front().substr(0, why.front().find(':'));
+        chk.reason        = "your order cannot be played as queued: " + join(why);
+        chk.variants.clear();
+        chk.plan_index    = -1;
+    };
+    if (chk.verdict == Vd::Accept)
+    {
+        const std::vector<std::string> why = problems(chk.plan_index);
+        if (!why.empty()) { reject(why); }
+        return;
+    }
+    std::vector<TurnSolver::LineVariant> keep;
+    std::vector<std::string> first_why;
+    for (const TurnSolver::LineVariant& v : chk.variants)
+    {
+        const std::vector<std::string> why = problems(v.plan_index);
+        if (why.empty()) { keep.push_back(v); }
+        else if (first_why.empty()) { first_why = why; }
+    }
+    if (keep.empty()) { reject(first_why); return; }
+    chk.variants = std::move(keep);
 }
 
 // ---- --claude-play side-channel spec parsers ----------------------------------------------------
@@ -5400,6 +5472,7 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
     // will index when the viewer commits the variant it picks. Without this the two
     // lists disagree and the human's chosen variant applies a different plan.
     TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, is_pre, spec, &plans);
+    ValidateHumanSequence(s, is_pre, spec, plans, chk);   // a `seq=` line: preview the commit in its order
     using Vd = TurnSolver::LineCheck::Verdict;
     const char* vstr =
         chk.verdict == Vd::Accept             ? "accept" :
@@ -8246,7 +8319,14 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         GameState s = state;
         s.turn_number = turn;                 // the main phase OF `turn`, not the step into it
         TurnSolver::LineSpec  spec = ParseLineSpec(j.at("validate_line").get<std::string>());
-        TurnSolver::LineCheck chk  = TurnSolver::CheckLine(s, /*is_pre_combat=*/true, spec);
+        // A `seq=` line is previewed against ONE enumerated menu (its plan indices must name the plans
+        // the preview applies); every other line keeps CheckLine's own enumeration, as always.
+        std::vector<TurnSolver::Plan> vmenu;
+        if (!spec.sequence.empty()) { vmenu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true); }
+        TurnSolver::LineCheck chk  = spec.sequence.empty()
+            ? TurnSolver::CheckLine(s, /*is_pre_combat=*/true, spec)
+            : TurnSolver::CheckLine(s, /*is_pre_combat=*/true, spec, &vmenu);
+        if (!spec.sequence.empty()) { ValidateHumanSequence(s, /*is_pre=*/true, spec, vmenu, chk); }
         using Vd = TurnSolver::LineCheck::Verdict;
         const char* got =
             chk.verdict == Vd::Accept             ? "accept" :
@@ -8507,6 +8587,8 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     //                                              // `tap=`), as the commit's side channel
     //   "expect_line_order": ["cast Sol Ring", ...] // the realised sequence of every committed apply
     //                                              // (TurnSolver's line-order record), EXACTLY
+    //   "expect_dropped": ["...", ...]             // the casts the committed lines dropped, EXACTLY
+    //                                              // ([] = none)
     const std::vector<std::string> human_lines = j.value("human_lines", std::vector<std::string>{});
     const std::vector<std::string> human_variants = j.value("human_variants", std::vector<std::string>{});
     const std::vector<std::vector<std::string>> human_orders =
@@ -8514,6 +8596,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     std::size_t human_next = 0;
     std::vector<std::string> human_summaries;
     std::vector<PlayEvent>   human_events;
+    // The casts a committed human line DROPPED (apply_one's g_play_dropped_cast_sink -- the viewer's
+    // `dropped_casts`), for the optional `"expect_dropped": [...]` assertion (exact, in order).
+    std::vector<std::string> human_dropped;
     // The pin of the line the chooser committed last: AIEngine asks for it right after the chooser
     // returns (keyed by the frame's main ordinal, which a fixture has no reason to know).
     std::vector<std::string> human_cur_order;
@@ -8525,6 +8610,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         { std::cerr << "scenario: \"human_lines\" needs \"env\": {\"MTG_HUMAN_PLAY\": \"1\"}\n"; return 2; }
         g_play_hooks_installed = true;   // before any sink is bound (RevealLogPause's fast path)
         g_play_event_sink      = &human_events;
+        g_play_dropped_cast_sink = &human_dropped;
         if (!human_orders.empty()) { g_play_cast_order_chooser = &human_order_chooser; }
         if (j.contains("expect_line_order")) { g_line_order_record = &human_line_order; }
         ai.SetExternalChooser(
@@ -8536,7 +8622,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 const std::string& want_variant =
                     human_next < human_variants.size() ? human_variants[human_next] : std::string();
                 const std::string& line = human_lines[human_next++];
-                TurnSolver::LineCheck chk = TurnSolver::CheckLine(fs, is_pre, ParseLineSpec(line), &plans);
+                const TurnSolver::LineSpec hspec = ParseLineSpec(line);
+                TurnSolver::LineCheck chk = TurnSolver::CheckLine(fs, is_pre, hspec, &plans);
+                ValidateHumanSequence(fs, is_pre, hspec, plans, chk);
                 int idx = chk.plan_index;
                 if (idx < 0 && !chk.variants.empty())
                 {
@@ -8571,8 +8659,20 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     if (!human_lines.empty())
     {
         g_play_event_sink = nullptr;
+        g_play_dropped_cast_sink = nullptr;
         g_play_cast_order_chooser = nullptr;
         g_line_order_record = nullptr;
+        for (const std::string& d : human_dropped) { std::cout << "scenario: dropped cast " << d << "\n"; }
+        if (j.contains("expect_dropped"))
+        {
+            const std::vector<std::string> want = j.at("expect_dropped").get<std::vector<std::string>>();
+            if (human_dropped != want)
+            {
+                std::cout << "scenario: FAIL dropped casts differ (" << human_dropped.size() << " dropped, expected "
+                          << want.size() << ")\n";
+                return 1;
+            }
+        }
         for (const PlayEvent& e : human_events)
         { std::cout << "scenario:   hist T" << e.turn << " [" << e.kind << "] " << e.text << "\n"; }
         if (j.contains("expect_line_order"))

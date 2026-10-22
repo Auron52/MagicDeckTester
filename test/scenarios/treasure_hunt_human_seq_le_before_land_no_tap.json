@@ -1,0 +1,28 @@
+{
+  "deck": "decks/treasure_hunt/treasure_hunt.txt",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    { "name": "Land's Edge", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Mountain", "Island", "Treasure Hunt" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "land=Island;cast=Treasure Hunt;landsedge=1;seq=le=Mountain|land=Island|cast=Treasure Hunt" ],
+  "human_cast_orders": [ [ "**", "le=Mountain", "land=Island", "cast=Treasure Hunt" ] ],
+  "expect_line_order": [ "landsedge Land's Edge", "land Island", "cast Treasure Hunt" ],
+  "expect_dropped": [],
+  "expect_history_contains": [ "Land's Edge: 2 to opponent" ],
+  "expect_history_lacks": [ "was NOT applied", "cannot pay for every spell" ],
+  "expect_no_win": true,
+  "comment": "REVIEW 2026-10-22 item 1 (reviewer repro le5): the same line without the manual tap. Before, the burned Island made Treasure Hunt unpayable, so AIEngine's 'your order cannot pay' fallback discarded the WHOLE queue (land position included) and its history line described only the casts. With the `le=Mountain` step discarding the Mountain it names, the human's order pays as queued: no fallback, nothing dropped."
+}

@@ -1,0 +1,23 @@
+{
+  "deck": "decks/burn/burn.txt",
+  "turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [],
+  "hand": [ "Mountain", "Sol Ring" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 1,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "land=Mountain;cast=Sol Ring" ],
+  "human_cast_orders": [ [ "**", "cast=Sol Ring", "land=Mountain" ] ],
+  "expect_line_order": [ "land Mountain", "cast Sol Ring" ],
+  "expect_dropped": [],
+  "expect_history_contains": [ "your order (cast Sol Ring, land Mountain) cannot pay for every spell in the line (not paid in that order: Sol Ring), so the WHOLE line was played in the engine's order instead: land Mountain, cast Sol Ring" ],
+  "expect_no_win": true,
+  "comment": "REVIEW 2026-10-22 (c): AIEngine's 'your order cannot pay' fallback (USER 2026-10-08; its existence is the user's call and is untouched) can now replace a WHOLE \"**\" sequence, land position included -- so it must say exactly what it changed. T1, empty board, hand Mountain + Sol Ring, pinned 'Sol Ring, then the Mountain' (committed without the `seq=` preview, which would have rejected it): Sol Ring cannot be paid before the land, the plan's own order pays, and the history names the queued order, what could not be paid, and the order actually played -- read off the trial applies, not reconstructed. (It used to say only 'your cast order (Sol Ring) ... cast in the order Sol Ring'.)"
+}

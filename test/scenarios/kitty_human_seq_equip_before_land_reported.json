@@ -1,0 +1,25 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "battlefield": [
+    { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Bonesplitter", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Plains" ],
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 50,
+  "human_lines": [ "land=Plains;equip=Bonesplitter" ],
+  "human_cast_orders": [ [ "**", "equip=Bonesplitter", "land=Plains" ] ],
+  "expect_line_order": [ "activate Bonesplitter", "land Plains" ],
+  "expect_history_contains": [ "equip Bonesplitter was NOT applied" ],
+  "expect_no_win": true,
+  "comment": "REVIEW 2026-10-22 item 3 (reviewer repro equip_before_land), the COMMIT half: the same order committed WITHOUT the validation preview (an old-style line with no `seq=`). The \"**\" walk applies the equip where it was queued (before the land), it cannot be paid, and it is now REPORTED in the history ('equip Bonesplitter was NOT applied: ...') instead of vanishing -- a failed activation is never silent."
+}

@@ -1,0 +1,28 @@
+{
+  "deck": "decks/treasure_hunt/treasure_hunt.txt",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    { "name": "Land's Edge", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Mountain", "Island", "Treasure Hunt" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "tap=Mountain#2:R;land=Island;cast=Treasure Hunt;landsedge=1;seq=tap=Mountain#2:R|le=Mountain|land=Island|cast=Treasure Hunt" ],
+  "human_cast_orders": [ [ "**", "tap=Mountain#2:R", "le=Mountain", "land=Island", "cast=Treasure Hunt" ] ],
+  "expect_line_order": [ "landsedge Land's Edge", "land Island", "cast Treasure Hunt" ],
+  "expect_dropped": [],
+  "expect_history_contains": [ "Land's Edge: 2 to opponent", "manual tap: Mountain for {R}" ],
+  "expect_history_lacks": [ "was NOT applied" ],
+  "expect_no_win": true,
+  "comment": "REVIEW 2026-10-22 item 1 (reviewer repro le6_2): 'tap the Mountain in play for {R}, discard the MOUNTAIN to Land's Edge, play the Island, cast Treasure Hunt'. The Land's Edge step picked its land by LandsEdgePitchOrder and ignored the land the human named, so it burned the ISLAND -- the land about to be played -- the land play then failed silently and Treasure Hunt ({1}{U}) was dropped on a line that had validated. A `le=<land>` step now discards exactly the land it names (Action::discard_name), so the Island is played and Hunt resolves; nothing is dropped. The line carries its `seq=` sequence, so the validation previews exactly this order too."
+}

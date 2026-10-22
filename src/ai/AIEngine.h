@@ -619,3 +619,24 @@ private:
     // before the single-floor Medallion/Hinata reductions. 1 for every non-spliced cast.
     ManaCost EffectiveCost(const CardDefinition& def, const GameState& state, int copies = 1) const;
 };
+
+// THE HUMAN-PLAY COMMIT OF A CHOSEN PLAN UNDER ITS SIDE-CHANNEL ORDER (--cast-order; "*", a bare cast
+// list, taps only, or the "**" whole sequence). One body for the commit (AIEngine::TakeTurn applies
+// `plan`, reports `errors`, and reports `fallback_message` when the "your order cannot pay" fallback --
+// USER 2026-10-08 -- played the plan's own order instead) and for the line VALIDATION (src/main.cpp),
+// which previews the commit with `trial_result` and rejects a line whose queued steps cannot be
+// applied where they were queued: `errors` (a step the plan cannot match, or could mean two plays),
+// `dropped` (casts the applied plan drops) and `failed` (steps that did not happen).
+struct HumanCommitPreview
+{
+    TurnSolver::Plan         plan;              // what the commit applies
+    bool                     sequence = false;  // the pin was a "**" whole sequence
+    bool                     fallback = false;  // the fallback replaced the human's order
+    std::string              fallback_message;  // its history line (what changed, exactly)
+    std::vector<std::string> errors;            // "**" steps not matched / ambiguous
+    std::vector<std::string> dropped;           // trial_result: casts the applied plan drops
+    std::vector<std::string> failed;            // trial_result: steps that did not happen
+};
+HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::Plan& chosen,
+                                      const std::vector<std::string>& ord, bool is_pre_combat_main,
+                                      bool trial_result);

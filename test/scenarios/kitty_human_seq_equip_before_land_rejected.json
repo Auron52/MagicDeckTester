@@ -1,0 +1,22 @@
+{
+  "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "battlefield": [
+    { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Bonesplitter", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Plains" ],
+  "library_filler": "Plains",
+  "library_size": 20,
+  "depth": 1,
+  "budget_ms": 50,
+  "validate_line": "land=Plains;equip=Bonesplitter#2@1;seq=equip=Bonesplitter#2@1|land=Plains",
+  "expect_verdict": "illegal",
+  "comment": "REVIEW 2026-10-22 item 3 (reviewer repro equip_before_land), the VALIDATION half: 'equip Bonesplitter ({1}), then play the Plains' with no land in play. The line string said land-first (`landPosition` counted only cast=/act= steps), CheckLine accepted the land-first plan, and the commit's \"**\" walk then ran the equip before the land, could not pay it and dropped it silently. The line now carries its exact sequence (`seq=`); the validation previews the commit in that order and rejects it here, with the reason ('equip Bonesplitter ... could not be done at this point of your order')."
+}

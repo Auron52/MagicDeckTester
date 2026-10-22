@@ -181,13 +181,14 @@ static const char* const kFullOrderMarker = "*";
 // a bare cast list or nothing, and replays through exactly the branch it was recorded under.
 static const char* const kSequenceMarker = "**";
 
-static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::string>& order_in)
+static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::string>& order_in,
+                             const GameState* state = nullptr, std::vector<std::string>* errors = nullptr)
 {
     if (order_in.empty()) { return; }
     if (order_in.front() == kSequenceMarker && HumanPlayActive())
     {
         const std::vector<std::string> tokens(order_in.begin() + 1, order_in.end());
-        if (s_human_line_order) { TurnSolver::ApplyHumanSequencePin(plan, tokens); return; }
+        if (s_human_line_order) { TurnSolver::ApplyHumanSequencePin(plan, tokens, state, errors); return; }
         // MTG_HUMAN_LINE_ORDER=0, the documented opt-out: the historical cast-only pin -- the queue's
         // hand casts and Vial puts by name, its taps -- i.e. what the viewer used to send for it.
         std::vector<std::string> legacy;
@@ -304,6 +305,129 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
     // Write the reordered actions back into the same slot positions.
     for (size_t k = 0; k < slots.size(); ++k) { plan.actions[slots[k]] = seq[k]; }
     plan.searched_order = true;
+}
+
+// The human-play commit of `chosen` under the side-channel list `ord` (see AIEngine.h). The body that
+// used to sit inline in TakeTurn, unchanged for every pin form a saved reference carries ("*", a bare
+// cast list, taps only): the same pin, the same two trial applies, the same fallback test and the same
+// message. A "**" whole-sequence list adds three things (review of 2026-10-22):
+//   * the steps ApplyHumanSequencePin could not match / found ambiguous come back in `errors`;
+//   * the fallback's message names the WHOLE queued order and the order actually played instead (both
+//     read off the trial applies through g_line_order_capture) and what failed -- the land position and
+//     every activation included, not just the casts;
+//   * `trial_result` (the validation) applies the plan the commit would apply once more and returns the
+//     casts it drops and the steps that did not happen.
+HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::Plan& chosen,
+                                      const std::vector<std::string>& ord, bool is_pre_combat_main,
+                                      bool trial_result)
+{
+    HumanCommitPreview pv;
+    pv.sequence = s_human_line_order && HumanPlayActive() && !ord.empty() && ord.front() == kSequenceMarker;
+    TurnSolver::Plan pinned = chosen;
+    ReorderPlanCasts(pinned, ord, &state, &pv.errors);
+    // AN ORDER THAT CANNOT PAY FOR THE LINE IS NOT HONOURED AT THE COST OF THE LINE
+    // (USER 2026-10-08, Bruna seed 13 T5: "if I cast Bruna and Glittering Wish in one
+    // step it reverts my line"). The viewer pins the human's queued order; queued as
+    // "Bruna, then Glittering Wish", Bruna's {3}{W}{W}{U} eats the second Azorius
+    // Chancery's {W} and the Wish's {G}{W} is left unpayable -- the Wish was dropped and
+    // the whole line rolled back. Cast Wish first and Chancery #1's surplus {U} floats
+    // into Bruna, which then pays: the SAME casts are payable, just not in the clicked
+    // order. So: when the pinned order would leave a cast unpaid and the plan's own
+    // order pays every one, play the plan's order and say so in the history. Never in
+    // the other direction (a pin that pays is always honoured), and never when the pin
+    // carries the human's own manual taps (`tap=`), which are a payment the human chose.
+    // Trial applies on copies, quiet, choosers nulled -- like the COMBO OFF trial.
+    bool manual_taps = false;
+    for (const std::string& t : ord) { if (t.rfind("tap=", 0) == 0) { manual_taps = true; break; } }
+    // A trial apply on a copy: the casts it drops, and (when asked) the order it realised and the steps
+    // that did not happen. The capture pointers are null for every pin but "**", so the historical
+    // trials are untouched.
+    auto trial = [&](const TurnSolver::Plan& pl, std::vector<std::string>* drops_out,
+                     std::vector<std::string>* seen, std::vector<std::string>* fails) -> std::size_t
+    {
+        GameState g = state;
+        TurnSolver::Plan t = pl;
+        std::vector<std::string> drops;
+        std::vector<std::string>* const prev_sink = g_play_dropped_cast_sink;
+        {
+            ComboOffApplyPause co_quiet;
+            RevealLogPause quiet;
+            g_play_dropped_cast_sink = &drops;
+            g_line_order_capture     = seen;
+            g_human_step_fail_sink   = fails;
+            if (is_pre_combat_main) { TurnSolver::DeferHumanAuraSwapToCombat(g, t, nullptr); }
+            TurnSolver::ApplyPlan(g, t, is_pre_combat_main);
+            g_play_dropped_cast_sink = nullptr;
+            g_line_order_capture     = nullptr;
+            g_human_step_fail_sink   = nullptr;
+        }
+        g_play_dropped_cast_sink = prev_sink;
+        if (drops_out != nullptr) { *drops_out = drops; }
+        return drops.size();
+    };
+    bool fallback = false;
+    std::vector<std::string> pinned_drops_v, pinned_seen, pinned_fails, chosen_seen;
+    if (!ord.empty() && !manual_taps)
+    {
+        const std::size_t pinned_drops = trial(pinned, &pinned_drops_v, pv.sequence ? &pinned_seen : nullptr,
+                                               pv.sequence ? &pinned_fails : nullptr);
+        if (pinned_drops > 0 && trial(chosen, nullptr, pv.sequence ? &chosen_seen : nullptr, nullptr) == 0)
+        { fallback = true; }
+    }
+    if (fallback)
+    {
+        pv.fallback = true;
+        if (pv.sequence)
+        {
+            // EXACTLY WHAT CHANGED: the queued order, as the human queued it; what it could not do; the
+            // order that was played instead, as the trial apply played it.
+            std::string queued;
+            for (std::size_t k = 1; k < ord.size(); ++k)
+            {
+                const std::string& tok = ord[k];
+                if (tok.rfind("tap=", 0) == 0 || tok.rfind("need=", 0) == 0) { continue; }
+                const std::size_t eq = tok.find('=');
+                const std::string w = eq == std::string::npos ? tok : tok.substr(0, eq) + " " + tok.substr(eq + 1);
+                queued += (queued.empty() ? "" : ", ") + w;
+            }
+            auto join = [](const std::vector<std::string>& v) {
+                std::string out;
+                for (const std::string& x : v) { out += (out.empty() ? "" : ", ") + x; }
+                return out;
+            };
+            std::string failed = join(pinned_drops_v);
+            if (!pinned_fails.empty()) { failed += (failed.empty() ? "" : "; ") + join(pinned_fails); }
+            pv.fallback_message = "your order (" + queued + ") cannot pay for every spell in the line "
+                                  "(not paid in that order: " + failed + "), so the WHOLE line was played in "
+                                  "the engine's order instead: " + join(chosen_seen) + ", which pays them all";
+        }
+        else
+        {
+            auto names_of = [](const TurnSolver::Plan& pl) {
+                std::string out;
+                for (const Action& a : pl.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    if (!out.empty()) { out += ", "; }
+                    out += a.card_name.str();
+                }
+                return out;
+            };
+            auto canon_of = [&](const TurnSolver::Plan& pl) {
+                std::string out;
+                for (const std::string& n : TurnSolver::RealisedNonSacCastOrder(state, pl))
+                { if (!out.empty()) { out += ", "; } out += n; }
+                return out.empty() ? names_of(pl) : out;
+            };
+            pv.fallback_message = "your cast order (" + canon_of(pinned) + ") cannot pay for every spell in "
+                                  "the line, so it was cast in the order " + canon_of(chosen) + ", which "
+                                  "pays them all";
+        }
+        pv.plan = chosen;
+    }
+    else { pv.plan = std::move(pinned); }
+    if (trial_result) { trial(pv.plan, &pv.dropped, nullptr, &pv.failed); }
+    return pv;
 }
 
 // Route pre-combat (and second-main) decisions through the full-depth
@@ -3380,69 +3504,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (g_play_cast_order_chooser && this_main_ordinal >= 0)
             {
                 std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
-                TurnSolver::Plan pinned = chosen;
-                ReorderPlanCasts(pinned, ord);
-                // AN ORDER THAT CANNOT PAY FOR THE LINE IS NOT HONOURED AT THE COST OF THE LINE
-                // (USER 2026-10-08, Bruna seed 13 T5: "if I cast Bruna and Glittering Wish in one
-                // step it reverts my line"). The viewer pins the human's queued order; queued as
-                // "Bruna, then Glittering Wish", Bruna's {3}{W}{W}{U} eats the second Azorius
-                // Chancery's {W} and the Wish's {G}{W} is left unpayable -- the Wish was dropped and
-                // the whole line rolled back. Cast Wish first and Chancery #1's surplus {U} floats
-                // into Bruna, which then pays: the SAME casts are payable, just not in the clicked
-                // order. So: when the pinned order would leave a cast unpaid and the plan's own
-                // order pays every one, play the plan's order and say so in the history. Never in
-                // the other direction (a pin that pays is always honoured), and never when the pin
-                // carries the human's own manual taps (`tap=`), which are a payment the human chose.
-                // Trial applies on copies, quiet, choosers nulled -- like the COMBO OFF trial.
-                bool manual_taps = false;
-                for (const std::string& t : ord) { if (t.rfind("tap=", 0) == 0) { manual_taps = true; break; } }
-                bool fallback = false;
-                if (!ord.empty() && !manual_taps)
-                {
-                    auto trial_drops = [&](const TurnSolver::Plan& pl) -> std::size_t
-                    {
-                        GameState g = state;
-                        TurnSolver::Plan t = pl;
-                        std::vector<std::string> drops;
-                        std::vector<std::string>* const prev_sink = g_play_dropped_cast_sink;
-                        {
-                            ComboOffApplyPause co_quiet;
-                            RevealLogPause quiet;
-                            g_play_dropped_cast_sink = &drops;
-                            if (is_pre_combat_main) { TurnSolver::DeferHumanAuraSwapToCombat(g, t, nullptr); }
-                            TurnSolver::ApplyPlan(g, t, is_pre_combat_main);
-                            g_play_dropped_cast_sink = nullptr;
-                        }
-                        g_play_dropped_cast_sink = prev_sink;
-                        return drops.size();
-                    };
-                    const std::size_t pinned_drops = trial_drops(pinned);
-                    if (pinned_drops > 0 && trial_drops(chosen) == 0) { fallback = true; }
-                }
-                if (fallback)
-                {
-                    auto names_of = [](const TurnSolver::Plan& pl) {
-                        std::string out;
-                        for (const Action& a : pl.actions)
-                        {
-                            if (a.kind != Action::Kind::CastFromHand) { continue; }
-                            if (!out.empty()) { out += ", "; }
-                            out += a.card_name.str();
-                        }
-                        return out;
-                    };
-                    auto canon_of = [&](const TurnSolver::Plan& pl) {
-                        std::string out;
-                        for (const std::string& n : TurnSolver::RealisedNonSacCastOrder(state, pl))
-                        { if (!out.empty()) { out += ", "; } out += n; }
-                        return out.empty() ? names_of(pl) : out;
-                    };
-                    EmitPlayEvent(state.turn_number, "cast_order",
-                                  "your cast order (" + canon_of(pinned) + ") cannot pay for every spell in "
-                                  "the line, so it was cast in the order " + canon_of(chosen) + ", which "
-                                  "pays them all");
-                }
-                else { chosen = std::move(pinned); }
+                // The pin, the "your order cannot pay" fallback and what to tell the human: ONE body
+                // (PrepareHumanCommit), shared with the line validation so the order the validation
+                // previews is the order this commit applies.
+                HumanCommitPreview pv = PrepareHumanCommit(state, chosen, ord, is_pre_combat_main, false);
+                for (const std::string& e : pv.errors)
+                { EmitPlayEvent(state.turn_number, "step_dropped", "\xE2\x9A\xA0 " + e + " -- that step was NOT applied"); }
+                if (pv.fallback) { EmitPlayEvent(state.turn_number, "cast_order", pv.fallback_message); }
+                chosen = std::move(pv.plan);
             }
             // HUMAN-PLAY AURA-SWAP TIMING (USER 2026-10-06: "it should be automatically applied in the
             // attack phase rather than the 1st main"). A committed main-phase Arcanum Wings swap that
