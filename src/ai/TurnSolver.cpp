@@ -82022,6 +82022,33 @@ static TurnSolver::SearchLine FSLineWinComplete(const GameState& state, int dept
     }
     return out;
 }
+// The escalation's budget (USER 2026-09-11 "make the fresh escalation budget unconditional"; 2026-10-21 "The
+// escalated shape was meant to always use 0.5"; 2026-10-22 "0.5 floor probably and 0.5 default certainly"):
+// a fresh frac x budget_ms, as a FLOOR over the probe's leftover. Reverted silently twice (2026-09-03,
+// 2026-09-12), so test/unit/test_escalation_budget.cpp pins both functions. The env reads exist for A/B arms
+// only (MTG_ESCALATION_FRESH_FRAC=-1 is the legacy leftover; MTG_ESCALATION_FRESH_FLOOR=0 the flat frac).
+TurnSolver::EscalationBudgetPolicy TurnSolver::DefaultEscalationBudgetPolicy()
+{
+    static const double s_frac = []{ const char* e = std::getenv("MTG_ESCALATION_FRESH_FRAC");
+                                     return (e && *e) ? std::atof(e) : 0.5; }();
+    static const bool   s_floor = EnvOn("MTG_ESCALATION_FRESH_FLOOR", true);
+    return { s_frac, s_floor };
+}
+
+// Fresh: run the escalation on `ms` virtual ms of its own. Not fresh: run it on the decision's shared budget --
+// only for the legacy research arm (frac < 0), an unbudgeted search (budget_ms <= 0), or under the floor when
+// the probe left MORE than the fresh allowance. Held-out 2026-10-22 vs the leftover (logs/tgt/fresh05 in the
+// lf-target work tree, play settings 26 decks x 500, d3 b10 33 decks x 300): flat 0.5 play -0.0011 (15 faster /
+// 4 slower) but d3 +0.0027 (10 / 32); the floor play -0.0012 (14 / 1) and d3 -0.0004 (5 / 1).
+TurnSolver::EscalationBudgetChoice TurnSolver::ChooseEscalationBudget(long long shared_remaining, int budget_ms,
+                                                                      EscalationBudgetPolicy p)
+{
+    if (p.frac < 0.0 || budget_ms <= 0) { return { false, 0, 0 }; }
+    const int ms = std::max(1, static_cast<int>(std::lround(p.frac * budget_ms)));
+    const long long units = SearchBudget::FromVirtualMs(ms).Limit();
+    if (p.floor && shared_remaining > units) { return { false, 0, 0 }; }
+    return { true, ms, units };
+}
 
 // Clamped per-committed-depth crossover lookup: hc*, the shallowest heuristic depth at which the
 // escalation's line beats the value-leaf line committed at `c`. Mirrors MulliganProfile::FallbackTakeAt
@@ -82746,10 +82773,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         //   per-job manifest "esc_fresh_frac" (ValueArm) > MTG_ESCALATION_FRESH_FRAC > 0.5
         //   f >= 0 -> fresh f x budget_ms;  -1 -> LEGACY shared REMAINING budget (the pre-2026-10-21 default)
         //   MTG_ESC_SPLIT set -> reserve: cap probe, dedicated ((1-split)+restore) x budget_ms
-        static const double s_fresh_frac = []{ const char* e = std::getenv("MTG_ESCALATION_FRESH_FRAC");
-                                               return (e && *e) ? std::atof(e) : 0.5; }();
-        const double eff_fresh_frac = (valuearm::t_arm.esc_fresh_frac > -1.5) ? valuearm::t_arm.esc_fresh_frac
-                                                                              : s_fresh_frac;
+        // The policy and the choice live in DefaultEscalationBudgetPolicy / ChooseEscalationBudget, which
+        // test/unit/test_escalation_budget.cpp pins (USER 2026-10-22, after two silent reverts).
+        EscalationBudgetPolicy esc_pol = DefaultEscalationBudgetPolicy();
+        if (valuearm::t_arm.esc_fresh_frac > -1.5) { esc_pol.frac = valuearm::t_arm.esc_fresh_frac; }
+        if (valuearm::t_arm.esc_fresh_floor >= 0)  { esc_pol.floor = (valuearm::t_arm.esc_fresh_floor != 0); }
         static const int    s_esc_single_off = []{ const char* e = std::getenv("MTG_ESC_SINGLE_OFFSET");
                                                    return (e && *e) ? std::atoi(e) : 0; }();
         ForceHeuristicLeafGuard _fh(true);
@@ -82770,20 +82798,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 std::max(1, static_cast<int>(std::lround(frac * budget_ms))));
             esc_budget = &esc_alloc_budget;
         }
-        else if (eff_fresh_frac >= 0.0 && budget_ms > 0)
+        else
         {
-            esc_alloc_budget = SearchBudget::FromVirtualMs(
-                std::max(1, static_cast<int>(std::lround(eff_fresh_frac * budget_ms))));
-            esc_budget = &esc_alloc_budget;
-            // The fresh allowance is a FLOOR (DEFAULT ON; MTG_ESCALATION_FRESH_FLOOR=0 / manifest "esc_fresh_floor":
-            // false gives the flat f): a cheap probe that left MORE than f x budget_ms keeps its leftover. A flat
-            // f under-funds exactly that case. Held-out 2026-10-22 vs the leftover (logs/tgt/fresh05, play
-            // settings 26 decks x 500, d3 b10 33 decks x 300): flat 0.5 play -0.0011 (15 faster / 4 slower) but
-            // d3 +0.0027 (10 / 32); the floor play -0.0012 (14 / 1) and d3 -0.0004 (5 / 1).
-            static const bool s_fresh_floor = EnvOn("MTG_ESCALATION_FRESH_FLOOR", true);
-            const bool floor_on = (valuearm::t_arm.esc_fresh_floor >= 0) ? (valuearm::t_arm.esc_fresh_floor != 0) : s_fresh_floor;
-            if (floor_on && budget && !budget->Unlimited() && budget->Remaining() > esc_alloc_budget.Limit())
-            { esc_budget = budget; }
+            const long long shared_rem = (budget && !budget->Unlimited()) ? budget->Remaining() : -1;
+            const EscalationBudgetChoice ch = ChooseEscalationBudget(shared_rem, budget_ms, esc_pol);
+            if (ch.fresh)
+            {
+                esc_alloc_budget = SearchBudget::FromVirtualMs(ch.ms);
+                esc_budget = &esc_alloc_budget;
+            }
         }
         SearchLine hline;
         // Skip-prototype bookkeeping (EscStats.h): which escalation path ran, its budget at entry, and the

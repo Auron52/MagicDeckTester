@@ -3144,13 +3144,21 @@ public:
     // UNVERIFIED pass shallower than value_min_depth (the per-model trust depth, where the WEAK leaf is
     // unreliable), escalate to ONE heuristic search on the REMAINING budget and take it only if the depth it
     // can afford clears the crossover (heuristic-Hd beats value-leaf-committed iff Hd > committed-3). A
-    // VERIFIED win, or a line at/above the trust depth, is kept as-is. budget_ms is unused (escalation spends
-    // the remaining shared budget). value_min_depth <= 0, or no value model attached/enabled, => identical to
-    // FullSearchLine (no escalation -- pure value leaf). See learned-d0-policy.md.
+    // VERIFIED win, or a line at/above the trust depth, is kept as-is. The escalation runs on a FRESH 0.5 x
+    // budget_ms, as a floor over the probe's leftover (ChooseEscalationBudget below). value_min_depth <= 0, or no
+    // value model attached/enabled, => identical to FullSearchLine (no escalation -- pure value leaf). See
+    // learned-d0-policy.md.
     // value_fallback_take_at: the table-driven per-committed-depth take-crossover (MulliganProfile::
     // value_fallback_take_at, index = committed depth, hc*[c]). When non-empty it REPLACES the uniform
     // "committed-3" crossover: take the escalation iff hcommitted >= hc*[clamp(committed)]. Empty => legacy
     // uniform offset + value_no_fallback.
+    // The escalation's budget -- a USER rule, pinned by test/unit/test_escalation_budget.cpp (see the .cpp).
+    struct EscalationBudgetPolicy { double frac; bool floor; };            // fresh frac x budget_ms; floor => the
+                                                                           // probe's larger leftover is kept
+    struct EscalationBudgetChoice { bool fresh; int ms; long long units; };  // !fresh => the shared budget
+    static EscalationBudgetPolicy DefaultEscalationBudgetPolicy();         // {0.5, true} unless an A/B env overrides
+    static EscalationBudgetChoice ChooseEscalationBudget(long long shared_remaining /* -1 = unlimited */,
+                                                         int budget_ms, EscalationBudgetPolicy p);
     static SearchLine FullSearchLineHybrid(const GameState& state, int depth,
                                            int max_turns, bool second_main,
                                            TranspositionTable* tt, SearchBudget* budget,
