@@ -184,7 +184,9 @@ overrun pass before the retry is the bulk of a fell-back escalation, and that pa
   show the stage paying well.
 * **Extend the stage to single-path decks? (OPEN, 2026-10-22.)** See the floor re-calibration above:
   slivers_vial, Auras and treasure_hunt clear 4% on the single path, where the stage does not look.
-* **Skip, or price the next pass correctly? (OPEN, 2026-10-22.)** Most discards under the floor stop with
+* **Skip, or price the next pass correctly? (RESOLVED 2026-10-22: neither beyond today's lossless skip --
+  forcing to T buys quality only by spending past the 0.5 budget, and a tighter skip loses games; see
+  `search-shape-open-items.md` §3d, "Outcome".)** Most discards under the floor stop with
   more than half of the fresh budget unspent, because the next pass is over-priced. Skipping them saves
   the work. Pricing the pass right would instead let many of them reach T and be taken, which spends the
   budget the floor gives. The two compete for the same escalations: see `search-shape-open-items.md` §3d.

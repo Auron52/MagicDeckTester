@@ -124,7 +124,7 @@ These reduce the knob count without losing measured quality. None is urgent; all
 
 ### 3d. Under the 0.5 floor, the escalation's next pass is over-priced (2026-10-22)
 
-**Status: measured, nothing built. A play change in the direction of MORE work, so it is the user's call.**
+**Status: DECIDED 2026-10-22 -- keep today's shape (see "Outcome" at the end of this section).**
 
 **What the floor cost, and where it went.** At play settings the floor costs, against the old leftover
 budget: Bruna 1.12x units, treasure_hunt 1.11x, Auras 1.11x, slivers_vial 1.08x, Prevent Damage 1.06x,
@@ -174,6 +174,43 @@ pass costs ~1.2k of ~13k units, and the climb refuses d2). The same over-estimat
 Re-pricing is a price, so it is inert at unlimited budget (the budget rule's good shape). It changes
 budgeted play on every hybrid deck, so it needs a held-out A/B per deck. It is likely a trade (better
 play for more work), which makes it the user's call.
+
+**Outcome (2026-10-22).** USER: *"We definitely do not want to do any work on discarded escalations.
+Anything we escalate to should be a depth a which we expect better quality."* Then, on cost: *"if
+anything it should provide a cost savings or do nothing if we already do this."* Three shapes were
+built as research arms and A/B'd at play settings on the 8 ladder-path hybrid decks (Bruna, Prevent
+Damage, Selesnya, Vampires, Fluctuator, Giants, Mirrorwing, Soldiers), 1000 paired games each, seed
+8.3M. The code is NOT in the tree; it is preserved as `logs/tgt/fresh05/esc_to_take_research.patch` in
+the lf-target work tree, with the drivers `totake.py`, `arms.py`, `predict.py` and `rfit` beside it.
+
+| shape | turns vs today | faster / slower | units |
+|---|---|---|---|
+| force to T (the gate may not stop the ladder below T) | -0.0034 | 24 / 0 | 1.199x |
+| predict, then force (cutoff 1.1x budget) | +0.0006 | 13 / 16 | 1.056x |
+| predict, then force (cutoff 2x) | -0.0024 | 20 / 3 | 1.150x |
+| predict and skip, no forcing (cutoff 1.1x) | +0.0025 | 1 / 17 | 0.967x |
+| predict and skip, no forcing (cutoff 1.5x) | +0.0010 | 1 / 7 | 0.979x |
+| predict and skip, no forcing (cutoff 2x) | +0.0005 | 1 / 4 | 0.988x |
+
+The predictor is the sum over passes 1..T of probe_cost[d] + R_d x probe_leaves[d], with R_d the
+deck's median per-depth rollout cost fitted on the E.6 probe (seed 7.1M).
+
+* **Forcing removes discards, but by spending past the budget.** Forced escalations spend 2-21x the 0.5
+  allowance, and 29 of the first run's 31 faster games (22 decks, seed 8.1M: -0.0014 pooled, 31 / 4,
+  1.113x) contain one of them. So its quality gain means "more escalation budget helps Bruna and
+  Prevent Damage". It does not mean the gate mispriced the pass: the gate's refusals were mostly right.
+  On the single-depth path forcing turned discards into overruns at T, which is still waste.
+* **Skipping saves work but is lossy.** The per-decision cost of reaching T cannot be predicted well
+  enough: the model is right ~80-93% of the time, so any skip rule also drops escalations that would have
+  reached T and changed the game.
+* **Today's up-front skip already is this, tuned to the lossless edge.** That is the fleet R = 0 plus the
+  E.6 per-deck allowances, re-fitted under the floor the same day with a no-slower-game bar. USER: *"I
+  think it's okay not to force it if we are already doing something like this."* Nothing adopted. The
+  remaining discarded work (3.5-7% on these decks) is the price of prediction error. Shrinking it
+  losslessly needs a better predictor (features beyond the probe's tree size), not a different shape.
+* **Open, not ruled on:** Bruna and Prevent Damage measurably gain from a larger escalation budget
+  (forced: -0.011 and -0.012 turns, 10 / 0 and 11 / 0). That is a per-deck budget-setting question. It
+  is not about the escalation's shape.
 
 ---
 
