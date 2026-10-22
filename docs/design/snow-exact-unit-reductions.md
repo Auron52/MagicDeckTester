@@ -171,6 +171,24 @@ slower / 201 same-score; d0 unchanged; references 580 with 0 drift. Every slower
 larger budget, or (Fluctuator d3 gi7, gi21) matches OLD at unlimited budget at d3 and d8. The full
 list is in the GT notes.
 
+**Does the re-spent depth pay? (2026-10-22, settings follow-up.)** Bruna and FiveColour at their play
+depth (d5 and d6), with budgets of 20 (shipped), 14 and 10 ms. The run used `d3a269ba4`, three held-out
+seeds (502002, 503003, 504004) and 450 / 600 games per arm, paired against b20:
+
+| deck | arm | turns vs b20 | paired t | faster / slower | units vs b20 |
+|---|---|---|---|---|---|
+| Bruna | b14 | +0.0022 | 1.00 | 0 / 1 | 0.83x |
+| Bruna | b10 | +0.0044 | 0.71 | 3 / 5 | 0.69x |
+| FiveColour | b14 | +0.0050 | 1.34 | 1 / 4 | 0.82x |
+| FiveColour | b10 | +0.0117 | 2.34 | 1 / 8 | 0.72x |
+
+Neither lower budget is net <= 0, so the depth the cuts admit does buy quality and both decks keep b20.
+Most of the 10-15 premium is also gone on this tree. Per game, b20 now spends about 1.1x the pre-cut
+units on both decks (Bruna about 110k vs 100k units per game, FiveColour about 24k vs 23k), where the
+10-15 run measured about 2x. This is an approximate cross-binary comparison over overlapping game
+sets. Melira was left out: its budget was re-chosen on 10-21 (the emulated ladder at b60, with b33
+and b45 measured) on a tree that already had the cuts.
+
 Before the latch was dropped, the unbudgeted-only shape was measured inert under a budget: Snow
 d3/b10, 60 games (seed 701000), pre-change binary vs all-on vs all-`=0` gave identical per-game
 digests and identical units (1,841,101) in all three.
