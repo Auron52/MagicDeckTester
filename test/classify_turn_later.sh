@@ -16,8 +16,8 @@
 #                                                                   same-draws slowdown -- diff the
 #                                                                   two lines with --log-dir to tell)
 #
-# Cost: two single-game runs per turn-later game (dozens, not thousands). Deterministic virtual
-# budget, so results are reproducible. See docs/design/auto-audit-integration.md and the
+# Cost: two single-game runs per turn-later game, pooled into ONE `mtg --batch` (see below).
+# Deterministic virtual budget, so results are reproducible. See docs/design/auto-audit-integration.md and the
 # "MANDATORY before --accept" section of .claude/skills/regression-testing.md.
 #
 # Usage: bash test/classify_turn_later.sh <smoke|regression|overnight>
@@ -74,19 +74,74 @@ if [ -z "$list" ]; then
   exit 0
 fi
 
+
 # Single game: reproduce game <gi> of a case by seeding at base_seed+gi and shifting the spawn
-# pattern with --game-index gi (see GoldFishRunner::Run -- SetupGame(base_seed+gi), spawn uses
-# base_game_index+gi). MTG_DUMP_WINS prints "[win] gi=0 wt=<N>" without perturbing play.
-run_wt() { # deck_file game_seed gi depth budget -> win turn (or -1 loss)
-  # --ignore-play-profile: replay at the EXPLICIT depth/budget past the deck's enabled value_play depth-lock
-  # (the classifier deliberately re-runs the case's own depth at 4x/16x budget).
-  MTG_DUMP_WINS=1 "$BIN" "$1" --seed "$2" --game-index "$3" --games 1 --depth "$4" --budget-ms "$5" \
-    --ignore-play-profile 2>&1 | grep -oP 'wt=\K-?[0-9]+' | head -1
-}
+# pattern by gi (see GoldFishRunner::Run -- SetupGame(base_seed+gi), spawn uses base_game_index+gi).
+# In a manifest that is a one-game CHUNK: "seed": base_seed+gi, "game_index": gi (BatchRunner
+# Job::game_index), which plays exactly the game `--seed base+gi --game-index gi --games 1` plays.
+#
+# ALL the re-runs go into ONE pooled `mtg --batch` (two one-game jobs per slower game, at 4x and 16x
+# the case budget). This used to be a serial loop of single-game processes, one core for the whole
+# step: the 2026-10-22 overnight rebaseline's 706 slower games took ~35 min on 1 of 24 cores. Pooled,
+# the step is one batch with one tail (CLAUDE.md: long / multi-item runs batch into ONE queue).
+#
+# ignore_play_profile: replay at the EXPLICIT depth/budget past the deck's enabled value_play
+# depth-lock (the classifier deliberately re-runs the case's own depth at 4x/16x budget).
+WORK="$ROOT/test/logs/$MODE/classify"
+mkdir -p "$WORK"
+rm -f "$WORK"/wins/*.wins 2>/dev/null
+MANIFEST="$WORK/manifest.json"
+INDEX="$WORK/index.tsv"     # job_stem key gi old new deck  (one line per slower game, audit order)
+: > "$INDEX"
+{
+  echo '{ "jobs": ['
+  first=1
+  while read -r key gi_field old_new; do
+    gi=${gi_field#gi}; gi=${gi%:}
+    old=${old_new%%->*}; new=${old_new##*->}
+    spec="${CASE_OF[$key]:-}"
+    if [ -z "$spec" ]; then
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "-" "$key" "$gi" "$old" "$new" "-" >> "$INDEX"
+      continue
+    fi
+    # shellcheck disable=SC2086
+    set -- $spec; deck=$1; depth=$2; seed=$3; budget=$5
+    # "<deck>2hg" 2HG variant cases (see regression_cases.sh): same deck file, but the repro must
+    # match the case's game setup -- starting_life 30 + opponent_heads 2 -- or the re-run plays a
+    # different game and the churn/PERSISTS verdict is meaningless.
+    base=$deck; extra=""
+    # A budget-0 case (the UNBUDGETED BACKSTOP rows) re-runs at 0 x 4 = 0 x 16 = unlimited, so its
+    # re-run gets the same deterministic per-game ceiling regression.sh gives the case: a game that
+    # turned degenerate is abandoned (no win line -> scored unwon -> PERSISTS), never left to hang.
+    [ "$budget" -eq 0 ] && extra='"abandon_units": 2000000, '
+    if [[ "$deck" == *2hg ]]; then
+      base=${deck%2hg}; extra="${extra}\"starting_life\": 30, \"opponent_heads\": 2, "
+    fi
+    file=${DECK_FILE[$base]}
+    stem="${key}_gi${gi}"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$stem" "$key" "$gi" "$old" "$new" "$deck" >> "$INDEX"
+    for x in 4 16; do
+      [ $first -eq 1 ] && first=0 || printf ',\n'
+      printf '  { "name": "%s_x%s", "deck": "%s", %s"games": 1, "seed": %s, "game_index": %s, "depth": %s, "budget_ms": %s, "ignore_play_profile": true }' \
+        "$stem" "$x" "$file" "$extra" "$(( seed + gi ))" "$gi" "$depth" "$(( budget * x ))"
+    done
+  done <<< "$list"
+  printf '\n] }\n'
+} > "$MANIFEST"
+
+"$BIN" --batch "$MANIFEST" --threads "${THREADS:-0}" --game-log-dir "$WORK/wins" \
+  > "$WORK/batch.out" 2> "$WORK/batch.err"
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "classify batch FAILED (rc=$rc) -- see $WORK/batch.err" >&2
+  exit 1
+fi
+
+# Win turn of a one-game job from its per-game log ("<gi> <wt> [digest]"); empty if it did not run.
+wt_of() { awk 'NR==1{print $2}' "$WORK/wins/$1.wins" 2>/dev/null; }
 
 echo "=== classify searched slower games ($MODE) -- re-run each at 4x and 16x its case budget ==="
 printf '%-40s %-5s %-5s  %s\n' "GAME" "OLD" "NEW" "CLASSIFICATION"
-churn=0; persist=0
 # Loss-penalized ORDER key, matching audit_changed_games.py / audit_cells.py: a won game scores its
 # win turn, anything unwon ("loss", "-1", empty) ranks worse than every win. Only the ordering is
 # used, so the sentinel just has to sit above any plausible win turn.
@@ -97,31 +152,12 @@ score_of() {
     *)           echo "$1"  ;;
   esac
 }
-printf '%s\n' "$list" | while read -r key gi_field old_new; do
-  gi=${gi_field#gi}; gi=${gi%:}
-  old=${old_new%%->*}; new=${old_new##*->}
-  spec="${CASE_OF[$key]:-}"
-  if [ -z "$spec" ]; then
+while IFS=$'\t' read -r stem key gi old new deck; do
+  if [ "$stem" = "-" ]; then
     printf '%-40s %-5s %-5s  %s\n' "$key gi$gi" "$old" "$new" "?? no case row for key"
     continue
   fi
-  # shellcheck disable=SC2086
-  set -- $spec; deck=$1; depth=$2; seed=$3; budget=$5
-  # "<deck>2hg" 2HG variant cases (see regression_cases.sh): same deck file, but the repro must
-  # match the case's game setup -- starting_life 30 + opponent_heads 2 -- or the re-run plays a
-  # different game and the churn/PERSISTS verdict is meaningless. Exported (and unset for
-  # non-2hg keys, since this while-loop subshell carries exports across iterations).
-  base=$deck
-  if [[ "$deck" == *2hg ]]; then
-    base=${deck%2hg}; export MTG_START_LIFE=30 MTG_OPPONENT_HEADS=2
-  else
-    unset MTG_START_LIFE MTG_OPPONENT_HEADS
-  fi
-  file=${DECK_FILE[$base]}
-  gseed=$(( seed + gi ))
-  b4=$(( budget * 4 )); b16=$(( budget * 16 ))
-  wt4=$(run_wt "$file" "$gseed" "$gi" "$depth" "$b4")
-  wt16=$(run_wt "$file" "$gseed" "$gi" "$depth" "$b16")
+  wt4=$(wt_of "${stem}_x4"); wt16=$(wt_of "${stem}_x16")
   # SCORE the re-runs, don't string-compare them. The old test was `wt == old`, which asks
   # "did it come back to exactly the baseline turn" -- so a re-run that lands BETTER than the
   # baseline failed it and got reported as PERSISTS, i.e. as the very thing it is the opposite
@@ -141,4 +177,4 @@ printf '%s\n' "$list" | while read -r key gi_field old_new; do
     cls="PERSISTS (4x=$wt4 16x=$wt16) -- variance if $deck shuffles, else same-draws slowdown"
   fi
   printf '%-40s %-5s %-5s  %s\n' "$key gi$gi" "$old" "$new" "$cls"
-done
+done < "$INDEX"
