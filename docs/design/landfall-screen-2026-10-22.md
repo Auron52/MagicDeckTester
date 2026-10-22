@@ -179,3 +179,32 @@ Reading:
   h4p_elf4_rg0, a direct paired comparison) -- the USER's "clear 1-of", confirmed on the list it would join.
 - The ~0.01 t add-ons (Turntimber, a 3rd Wave, Craterhoof) are near the noise of the apparatus, and
   Turntimber's is still the clairvoyance-suspect one.
+
+## Round 3 — combining the round-2 winners (`logs/landfall_screen/r3.json`, seed 7900000)
+
+Anchor `F0` = 4 Phylath -> 4 Hydra, 4 Rampant Growth -> 4 Llanowar Elves, Haunted Fengraf -> Kessig Wolf Run.
+20,000 paired games; base 5.7257; F0 4.9387 (**-0.7870**; T7+ 6.62% -> 2.38%, T8+ 0.65% -> 0.27%).
+Deltas below are PAIRED AGAINST F0 (negative = better than F0).
+
+| arm | change vs F0 | vs F0 | se | T7+ | T8+ |
+|---|---|---|---|---|---|
+| F_b | Hydra for 2 Phylath + 2 Baloths (keeps 2 Phylath) | **-0.0244** | 0.0056 | 1.92% | 0.26% |
+| F_rg2k2 | Elves for 2 Rampant Growth + 2 Khalni | **-0.0194** | 0.0036 | 1.82% | 0.24% |
+| F_c | Hydra for 2 Phylath + 2 Courser | -0.0118 | 0.0056 | 2.04% | 0.34% |
+| F_c_k | ... + Elves for Khalni | -0.0112 | 0.0062 | 1.70% | 0.19% |
+| F_hoof | Craterhoof for 1 Courser | **-0.0104** | 0.0011 | 2.36% | 0.30% |
+| F_wave3 | 3rd Genesis Wave for 1 Courser | -0.0095 | 0.0016 | 2.30% | 0.27% |
+| F_p1c | Hydra for 3 Phylath + 1 Courser | -0.0062 | 0.0042 | 2.14% | 0.28% |
+| F_t | Hydra for 2 Phylath + 2 Titan | -0.0049 | 0.0057 | 1.99% | 0.26% |
+| F_c_bop2elf2 | F_c with 2 Birds + 2 Elves | -0.0035 | 0.0056 | 2.15% | 0.33% |
+| F_wr2 | a 2nd Wolf Run for Radiant Fountain | -0.0024 | 0.0004 | 2.37% | 0.27% |
+| F_8dork | + 4 Birds for 4 Khalni | -0.0008 | 0.0029 | 2.22% | 0.24% |
+| F_k | Elves for Khalni instead of Rampant Growth | +0.0043 | 0.0035 | 1.88% | 0.18% |
+| F_bop2elf2 | 2 Birds + 2 Elves | +0.0088 | 0.0009 | 2.52% | 0.30% |
+| F_bop | 4 Birds instead of 4 Elves | +0.0172 | 0.0012 | 2.71% | 0.33% |
+
+Reading: Llanowar Elves beat Birds of Paradise (the deck's red is easy; Birds' colour is not worth its
+fragility -- here simply the same {G} at the same cost, and a 0/1 vs a 1/1 attacker). Splitting the Elves
+cut across Rampant Growth and Khalni is better than either alone. With Hydra and Elves, the two Baloths are
+now the most cuttable threat slot after Phylath. Craterhoof and a 3rd Wave each take ~0.01 t from a Courser.
+Round 4 combines these on HELD-OUT seeds.
