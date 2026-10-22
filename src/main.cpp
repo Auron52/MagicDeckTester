@@ -3486,7 +3486,14 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // Worded as "this ability", not "this loyalty ability": the same board-click chooser serves a
     // triggered ability's target too (Heliod, Sun-Crowned's "put a +1/+1 counter on target creature
     // or enchantment you control" -- the 5d sweep read the old wording as a mislabel, gi=14).
-    if (!loyalty_desc.empty())
+    // "TARGET PLAYER gains N life": its own wording. It used to fall through to the burn template
+    // ("Each chosen target takes 7 damage ... (face)") -- the GUI words it from `lifegain`, but the
+    // claude-play note misled sweep agents (SelesnyaLifegain v2 sweep, 8 of 16 agents, 2026-10-22).
+    // `per_target_damage` still carries the amount for the historic layout; nothing is damaged.
+    if (!lifegain_desc.empty())
+    { d.Note("reply an option index -- the PLAYER who " + lifegain_desc + " (no damage is dealt). "
+             "Default = the AI's pick (heuristic_default)."); }
+    else if (!loyalty_desc.empty())
     { d.Note("reply an option index -- the permanent this ability (" + source + ") targets. It is "
              + loyalty_desc + ". Default = the AI's pick."); }
     else if (!pump_desc.empty())

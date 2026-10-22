@@ -480,6 +480,33 @@ TEST_CASE("Genesis Wave: a put Selesnya Sanctuary DOES bounce (mandatory), and n
     CHECK(s.players[0].lands_played_this_turn == 1);
 }
 
+TEST_CASE("Genesis Wave: a put fastland ignores the lands entering BESIDE it (CR 614.12)")
+{
+    // SelesnyaLifegain v2 claude-play sweep, seed 79722: on two lands, a Wave putting Forest + Branchloft
+    // + Razorverge Thicket put the Thicket TAPPED -- each land was judged inside the put loop, so the
+    // Thicket counted the two lands placed before it. Fastland ruling (2023-02-04): lands entering at
+    // the same time are not taken into consideration. So the count is the two lands already here.
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Forest", 0, 1);
+    Put(s, "Blighted Steppe", 0, 2);
+    Stack(s, 0, { "Forest", "Branchloft Pathway", "Razorverge Thicket" }, 101);
+
+    PerformGenesisWave(s, 0, 3, "Genesis Wave");
+
+    CHECK(CountOnBoard(s, "Razorverge Thicket", 0) == 1);
+    CHECK_FALSE(ByNumber(s, 103).tapped);   // 2 other lands BEFORE the event: <= 2 -> untapped
+
+    // ...and the pre-event count still binds: with THREE lands already out, it enters tapped.
+    GameState t = Fresh();
+    Put(t, "Forest", 0, 1);
+    Put(t, "Forest", 0, 2);
+    Put(t, "Blighted Steppe", 0, 3);
+    Stack(t, 0, { "Razorverge Thicket" }, 101);
+    PerformGenesisWave(t, 0, 1, "Genesis Wave");
+    CHECK(ByNumber(t, 101).tapped);
+}
+
 TEST_CASE("Genesis Wave: nonpermanents are always milled, and a short library caps the reveal")
 {
     EnsureCardsLoaded();

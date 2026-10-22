@@ -35841,12 +35841,23 @@ inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& de
 // the land enters tapped either way). A strongly-typed enum rather than a bool so a positional call
 // can never be confused with resolve_full_etb / fire_landfall. Natural (the default) keeps every
 // existing caller byte-identical.
-enum class LandEntryTap : std::uint8_t { Natural, ForcedTapped };
+//
+// `PreDecidedUntapped` / `PreDecidedTapped` (2026-10-22) carry an enters-tapped answer the CALLER already
+// took from LandEntersTapped against an EARLIER state -- for a SIMULTANEOUS multi-put (Genesis Wave),
+// whose lands must each be judged against the battlefield as it was BEFORE the event (CR 614.12: an
+// enters-tapped-unless condition checks the game state before the permanent enters). Judged one by one
+// inside the put loop, a fastland counted the lands entering beside it: a Wave putting Forest +
+// Razorverge Thicket onto two lands put the Thicket TAPPED (Scryfall ruling 2023-02-04 on the
+// fastlands: lands entering at the same time are not taken into consideration). Found by the
+// SelesnyaLifegain v2 claude-play sweep, seed 79722.
+enum class LandEntryTap : std::uint8_t { Natural, ForcedTapped, PreDecidedUntapped, PreDecidedTapped };
 inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
                       bool resolve_full_etb = false, bool fire_landfall = true,
                       LandEntryTap entry_tap = LandEntryTap::Natural)
 {
-    bool tapped = entry_tap == LandEntryTap::ForcedTapped ? true : LandEntersTapped(state, def);
+    bool tapped = (entry_tap == LandEntryTap::ForcedTapped || entry_tap == LandEntryTap::PreDecidedTapped)
+                ? true
+                : entry_tap == LandEntryTap::PreDecidedUntapped ? false : LandEntersTapped(state, def);
     Permanent perm;
     perm.card              = def.card;
     if (card_number >= 0) { perm.card.m_number = card_number; }

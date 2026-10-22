@@ -856,6 +856,20 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
     }
 
     // ---- PASS 1: every selected permanent enters SIMULTANEOUSLY (no triggers yet) ----------------
+    // Each land's enters-tapped condition is judged against the battlefield BEFORE any of the Wave's
+    // permanents arrive (CR 614.12; the fastland ruling: lands entering at the same time are not
+    // counted). Decided up front, in reveal order, then handed to EnterLand as a pre-decided answer.
+    // Byte-identical for every land whose entry ignores the board (basics, plain tapped lands, Karoos,
+    // pathways): their answer cannot depend on what else entered. LandEntersTapped's own side effect
+    // (a shock land's life payment) still happens once per land, in the same order.
+    std::vector<signed char> pre_tapped(revealed.size(), -1);   // -1 = not a put land
+    for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
+    {
+        if (!put_flag[static_cast<std::size_t>(i)]) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        pre_tapped[static_cast<std::size_t>(i)] = LandEntersTapped(state, *d) ? 1 : 0;
+    }
     struct Placed { InternedName name; int number; const CardDefinition* def; bool is_land; };
     std::vector<Placed> placed;
     placed.reserve(picks.size());
@@ -873,7 +887,9 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
             // fire_landfall FALSE for the same reason: landfall is a trigger too, and it fires in
             // PASS 3 below, once every entrant is on the battlefield and their enter triggers have
             // resolved (header note 4).
-            EnterLand(state, *d, raw.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/false);
+            EnterLand(state, *d, raw.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/false,
+                      pre_tapped[static_cast<std::size_t>(i)] == 1 ? LandEntryTap::PreDecidedTapped
+                                                                     : LandEntryTap::PreDecidedUntapped);
         }
         else
         {
