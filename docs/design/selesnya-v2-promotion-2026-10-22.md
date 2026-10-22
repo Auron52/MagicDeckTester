@@ -83,13 +83,14 @@ Neither decklist changed, so every key had to reproduce its GT byte-identically 
 
 | gate | result |
 |---|---|
-| smoke | 144 passed, 0 failed, 0 new; AUDIT configs changed 0 / unchanged 144 |
-| regression | 276 passed, 0 failed, 0 new; AUDIT configs changed 0 / unchanged 276 |
-| references (`viewer_protocol_check.py --strict`, in the regression tier) | 651 refs: 228 ok, 423 repaired, 0 play-drift / shuffle-dead / board-diverged / enum-gap / mull-drift / contract-fail; all 10 v1 references resolve under `SelesnyaLifegain/v1-avatar-alchemist/` |
-| scenarios | 302 passed, 0 failed (the five repointed `selesnya_*` scenarios reproduce their recorded outcomes) |
+| smoke | 144 passed, configs changed 0 / unchanged 144; re-run after rebasing onto 1aa6cc32a (engine changes upstream): 148 passed, configs changed 0 / unchanged 148 |
+| regression | 276 passed, configs changed 0 / unchanged 276; after the rebase: 282 passed, configs changed 0 / unchanged 282 |
+| references (`viewer_protocol_check.py --strict`, in the regression tier) | 651 refs (656 after the rebase: +5 NivMizzetCombo): 228 ok (233), 423 repaired, 0 play-drift / shuffle-dead / board-diverged / enum-gap / mull-drift / contract-fail; all 10 v1 references resolve under `SelesnyaLifegain/v1-avatar-alchemist/` |
+| scenarios | 302 passed (306 after the rebase), 0 failed (the five repointed `selesnya_*` scenarios reproduce their recorded outcomes) |
 | unit (`mtg-test`) | 1884 test cases, 3,516,576 assertions, SUCCESS (incl. the provider-routing pin, now on v2) |
-| `test/check_gt_logs.py` | consistent 991, STALE 0, missing 0 |
-| `scripts/check_references_safe.py` | OK, before and after |
+| `test/check_gt_logs.py` | consistent 991 (1017 after the rebase), STALE 0, missing 0 |
+| `scripts/check_references_safe.py` | OK, before and after the push |
+| CI (run 39825637387) | ubuntu success, windows success, Linux/Windows determinism parity success |
 | `ref_bench.py` on the archive | 10 refs, human 5.600, search 5.400, 0/10 short |
 | viewer `listDecks()` | `SelesnyaLifegain` (refs 0, keep table + value sidecar present) and `SelesnyaLifegain  —  v1-avatar-alchemist` (refs 10) |
 
