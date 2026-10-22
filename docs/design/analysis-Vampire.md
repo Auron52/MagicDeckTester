@@ -285,6 +285,17 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
 - The sidecar carries no `value_play`, so the profile's generation keys (d1 b1, K=15) still govern play's K guard;
   the next `mullgen.sh run` copies them into the sidecar (mullgen.sh "a sidecar's value_play replaces the profile's").
   The keep table was fitted without the leaf; a regeneration is the USER's call.
+- **Play setting decided by the new phase E.7** (USER 2026-10-22: *"The leaf should have a stage that decides."*;
+  `valueleaf.sh playset decks/Vampires`, scripts/play_setting_stage.py). The leaf had shipped with no enabled block
+  (built-in d5 / 20). Grid on the live leaf, 8 x 1000 paired games per arm (units vs live / delta t):
+  d4: b10 1.012x +0.0004, b20 1.182x +0.0001, b40 1.386x -0.0001; d5: b10 0.912x +0.0003, b40 1.087x 0.0000;
+  d6: b10 **0.911x +0.0001**, b20 0.999x -0.0001, b40 1.085x -0.0001. Quality flat everywhere; cost not monotone
+  (d4 dearest). **ADOPTED d6 / budget 10** (cheapest of 3 passing arms, -8.9% units). A first run forced
+  escalation_cap on every arm (the old sweep's convention), which alone cost 1.05x at identical quality; it was
+  discarded before any commit and the stage now changes depth x budget only.
+  GT (vampires keys): 0 slower / 0 faster. The suite's d5 rows now run d6 at their own budget 20 (block depth + case
+  budget) and stayed byte-identical; the d3 rows changed lines at the same scores because an enabled block turns
+  the escalation beam on at every depth (AIEngine.cpp vp_beam, "measured neutral+faster").
 
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
