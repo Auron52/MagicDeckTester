@@ -1527,7 +1527,9 @@ phase_skipcal() {
 # USER 2026-10-22: "The leaf should have a stage that decides." The documented route to an enabled block was a
 # manual recommend -> accept exercise that nothing performed any more, so most leaves shipped with none and played
 # the built-in d5 / 20 undecided. All of it is in scripts/play_setting_stage.py: ONE pooled batch per run, the live
-# sidecar against an enabled depth {d-1,d,d+1} x budget {b/2,b,2b} grid, 8 held-out seeds x 1000 paired games;
+# sidecar against an enabled depth {d-1,d,d+1} x budget {b/2,b,2b} grid -- and the same grid for every phase-E
+# shape still in the running (passed E.5 but not installed, or dearer but notably better: a budget is part of a
+# shape) -- 8 held-out seeds x 1000 paired games;
 # adopted by the E.5 rule (vlq_adopt_pick.py: the cheapest arm not notably worse; a dearer-but-better arm is a
 # TRADE recorded for the user), installed in the live sidecar IN THIS TREE, every outcome in DECISIONS.txt.
 #   * LAST, after E.5 and E.6: it measures the leaf and skip allowance that ship, and the setting it picks changes
@@ -1535,7 +1537,7 @@ phase_skipcal() {
 phase_playset() {
     done_p E7_playset && return 0
     log "PHASE E.7: play setting (depth x budget grid on the live leaf -> the E.5 adoption rule)"
-    local row key dir stem mkey base games skipped="" dirs=()
+    local row key dir stem mkey base games skipped="" dirs=() shapes=()
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         [ -s "logs/eval/$stem.value.STAGED.json" ] || continue
@@ -1544,9 +1546,12 @@ phase_playset() {
             skipped="$skipped $stem"; continue
         fi
         dirs+=("$dir")
+        # Phase E judged the shapes at ONE budget; the ones still in the running get the same grid (USER
+        # 2026-10-22, play_setting_stage.py "THE OTHER PHASE-E SHAPES").
+        [ -s "$VLQ/m_${key}_shape.log" ] && shapes+=(--phase-e "$key=$VLQ/m_${key}_shape.log")
     done
     if [ ${#dirs[@]} -gt 0 ]; then
-        python3 scripts/play_setting_stage.py "${dirs[@]}" --work "$VLQ/playset" --decisions "$DECISIONS" --write 2>&1 \
+        python3 scripts/play_setting_stage.py "${dirs[@]}" "${shapes[@]}" --work "$VLQ/playset" --decisions "$DECISIONS" --write 2>&1 \
             | tee -a "$VLQ/driver.log"
         [ "${PIPESTATUS[0]}" -eq 0 ] || { log "  PHASE E.7: FAILED -- NOT marked done; a re-run reuses a finished batch"; return 1; }
     fi

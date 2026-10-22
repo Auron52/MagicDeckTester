@@ -262,7 +262,7 @@ run's rows, table or markers.
 | E measure | staged-vs-live A/B + shape arms + **trust acceptance (ON vs OFF)** | yes — one pooled batch |
 | E.5 adopt | install the picked leaf / shape in this tree | no |
 | E.6 skip allowance | the deck's escalation-skip allowance on the live leaf | yes — up to three short batches |
-| E.7 play setting | **decide** the live sidecar's enabled `value_play` (depth x budget grid) | yes — one pooled batch |
+| E.7 play setting | **decide** the live sidecar's enabled `value_play` (depth x budget grid, over every phase-E shape still in the running) | yes — one pooled batch |
 
 Every batch is a barrier that returns only when its slowest game finishes, so what matters is **how
 many times you pay that tail**, not how big each batch is. Three is the floor and phase C now sits at
@@ -354,19 +354,31 @@ and E.6, because it measures the leaf and allowance that ship, and what it picks
   blocks over depth {d-1, d, d+1} x budget {b/2, b, 2b}, each on the sidecar route (exactly the file that would be
   installed) in a symlinked variant folder, so all arms share the keep table's cache entry. 8 held-out seeds x 1000
   paired games per arm, the leaf A/B's size.
+* **The other phase-E shapes get the same grid** (USER 2026-10-22: *"My biggest concern is actually that it didn't
+  happen automatically for this deck"*). Phase E judges staged / nlesc / nlfit / emul at ONE budget, but a budget is
+  part of a shape (the 2026-10-21 fleet screen's equal-cost curves: KittyEquipment's emulated ladder won at b14,
+  Melira Pod's at b60; `docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md` s1, s8). So `run` passes the
+  queue's shape log (`--phase-e`), and every shape still in the running is gridded at the same points, its centre
+  included: each one E.5 passed but did not install, and each dearer one that was NOTABLY better than live. An
+  adopted shape arm (`emul_d5b10`, ...) replaces the whole live sidecar; the previous one is kept in the work dir.
+  `--live KEY=FILE` replays the stage as if FILE were live (a what-if; never with `--write`).
 * **Rule:** E.5's, through `vlq_adopt_pick.py` unchanged: the CHEAPEST arm in work units whose quality is not
   notably worse than live (not: delta > 0.002 t at paired t > +2), unless a passing arm is notably better than it.
   A dearer-but-better arm is a TRADE, recorded for the USER and never adopted, so E.7 can only keep or lower cost.
 * **Block:** target_depth, budget_ms, enabled -- nothing else changes: every other key of an existing block (shape,
   `escalation_cap`, `emul_r`, ...) is kept, so the grid isolates depth x budget. (The old sweep also forced
   `escalation_cap = min(depth, max H)` on every arm; on Vampires that cap alone cost 1.05x units at identical quality
-  and skewed every cell -- the cap is a shape question.) The arm equal to the baseline's numbers is not run. The profile's
+  and skewed every cell -- the cap is a shape question.) The arm equal to the baseline's numbers is not run when
+  live's block is enabled; with NO enabled block the enabled d5 / 20 arm can still differ from live (an enabled block
+  arms the static W20 beam on every depth-3 search; the d5 beam stays off unless the block sets `beam_width`), so it
+  is run like any other (Vampires: byte-identical). The profile's
   mulligan-generation keys (`mull_gen_*`, `expected_buckets`) copied in, because a sidecar's `value_play` replaces
   the profile's and losing `expected_buckets` would disarm the keep table's K guard. The install appends to the
   block's `note` (a changelog).
 * **Cost is not monotone in budget:** a smaller budget can verify fewer leaf lines and escalate more, so it is
   measured, never assumed. In the suite an enabled block sets the d5 cases' DEPTH only (their budget is the
-  case's), and the d0/d3 cases pin depth with `ignore_play_profile`.
+  case's), and the d0/d3 cases pin depth with `ignore_play_profile` -- but an enabled block arms the static d3 beam
+  whatever the depth, so enabling a block on a deck that had none moves its d3 rows too.
 
 `bash scripts/valueleaf.sh playset [decks/<Deck> ...]` runs it alone for leaves that are already live (the backfill
 of the undecided ones). An adopted setting is committed like a leaf, with the deck's smoke and regression GT

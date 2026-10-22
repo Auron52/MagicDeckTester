@@ -294,8 +294,20 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   escalation_cap on every arm (the old sweep's convention), which alone cost 1.05x at identical quality; it was
   discarded before any commit and the stage now changes depth x budget only.
   GT (vampires keys): 0 slower / 0 faster. The suite's d5 rows now run d6 at their own budget 20 (block depth + case
-  budget) and stayed byte-identical; the d3 rows changed lines at the same scores because an enabled block turns
-  the escalation beam on at every depth (AIEngine.cpp vp_beam, "measured neutral+faster").
+  budget) and stayed byte-identical; the d3 rows changed lines at the same scores because an enabled block arms the
+  static W20 escalation beam on depth-3 searches (TurnSolver.cpp's depth-adaptive beam regime, "measured
+  neutral+faster"; the d5 beam stays off, the block sets no `beam_width`).
+- **The other phase-E shape was never budget-curved -- now it is, automatically** (USER 2026-10-22: *"My biggest
+  concern is actually that it didn't happen automatically for this deck"*). Phase E judged staged / nlesc / nlfit /
+  emul at b20 only, and the first E.7 gridded only the installed leaf, so the emulated ladder (which passed E.5:
+  0.977x, -0.0005) never saw another budget -- the 2026-10-21 fleet screen's equal-cost curves (Kitty b14, Melira
+  b60) had entered the pipeline as one arm at one budget. E.7 now grids every phase-E shape still in the running at
+  the same points. Replayed from the state E.5 left (`--live vampires=logs/eval/Vampire.value.STAGED.json`
+  `--phase-e vampires=logs/vlq_vampires/m_vampires_shape.log`, 19 arms x 8 x 1000, `logs/vlq_vampires/
+  playset_shapes_whatif/`): the leaf arms reproduced the first run digit for digit; the enabled d5 / 20 centre arm was
+  byte-identical to the block-less leaf; emul (units vs live, delta): b10 0.88-0.89x **+0.0034 (t +6.3, 7/8 seeds
+  worse)**, b20 1.02-1.05x +0.0015 (t +2.7), b40 1.15-1.19x +0.0005 -- the same at d4/d5/d6 (its frozen emul_r sets
+  the committing depth). The emulated ladder never reaches the leaf's quality at any budget. **Same pick, d6 / 10.**
 
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the

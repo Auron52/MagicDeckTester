@@ -2,9 +2,10 @@
 """Value-leaf pipeline phase E.7: decide each deck's PLAY SETTING (the live sidecar's enabled `value_play`).
 
     python3 scripts/play_setting_stage.py decks/<Deck> [decks/<Deck2> ...] [--work DIR] [--decisions FILE] [--write]
+                                          [--phase-e KEY=<queue>/m_<key>_shape.log ...] [--live KEY=FILE ...]
 
-Normally run by `bash scripts/valueleaf.sh run` (after E.5 installs the leaf and E.6 its skip allowance) or alone
-by `bash scripts/valueleaf.sh playset [decks/<Deck> ...]` for leaves that are already live.
+Normally run by `bash scripts/valueleaf.sh run` (after E.5 installs the leaf and E.6 its skip allowance; it passes
+--phase-e) or alone by `bash scripts/valueleaf.sh playset [decks/<Deck> ...]` for leaves that are already live.
 
 WHY (USER 2026-10-22: "The leaf should have a stage that decides."). A value_play block drives play only when it is
 ENABLED, and the documented route to one was a manual recommend -> accept exercise (MulliganProfile.h, ValuePlay).
@@ -19,7 +20,24 @@ target_depth {d-1, d, d+1} (>= 3) x budget_ms {b/2, b, 2b}. Each arm is built on
 plus the block: exactly the file that would be installed) in a variant deck folder whose other files are symlinks to
 the real ones, so every arm shares the keep table's cache entry (the cache is keyed by the canonical path). 8
 held-out seeds x 1000 paired games per arm, the leaf-adoption A/B's size. The arm whose depth and budget equal
-the baseline's IS the baseline and is not run.
+the baseline's IS the baseline and is not run -- but only when live's block is ENABLED: with no enabled block, the
+enabled block at d5 / 20 can still differ from live (an enabled block arms the static W20 beam on every depth-3
+search, TurnSolver.cpp's depth-adaptive beam regime; the d5 beam stays off unless the block sets beam_width), so it
+is an arm like any other. (Vampires 2026-10-22: byte-identical to live.) `live` itself is a variant folder too, built from the sidecar as read at
+the start, so the measurement cannot change if the real file does mid-run.
+
+THE OTHER PHASE-E SHAPES (--phase-e; USER 2026-10-22: "My biggest concern is actually that it didn't happen
+automatically for this deck"). Phase E judges every shape (staged leaf, nlesc, nlfit, emul) at ONE budget, the
+deck's play budget, and E.5 installs one of them; but a budget is part of a shape -- they do not spend one alike
+(docs/design/leaf-vs-heuristic-asymmetries-2026-10-20.md s1, s8: KittyEquipment's emulated ladder won at b14,
+Melira Pod's at b60, in the 2026-10-21 fleet screen's equal-cost curves). So every shape phase E measured that is
+still in the running gets the SAME grid, its centre included: each one E.5's rule passed but did not install, and
+each dearer one that was NOTABLY BETTER than live (a quality edge a lower budget can turn into a saving). They are
+re-derived from the queue's shape log by vlq_adopt_pick.py, the same rule on the same games. An adopted shape arm
+replaces the whole live sidecar (its model and shape keys too); the previous one is kept in --work.
+
+--live KEY=FILE measures as if FILE were the deck's live sidecar (a what-if, e.g. replaying the stage from the
+state an earlier E.5 left; refused with --write).
 
 WHAT IT DECIDES: the leaf adoption's rule (USER 2026-10-11), through scripts/vlq_adopt_pick.py unchanged. ADOPT the
 CHEAPEST arm (work units, never wall-clock) whose quality is NOT NOTABLY WORSE than live (not: delta > 0.002 turns at
@@ -53,6 +71,7 @@ SEEDS = [7_505_000 + 10_000 * i for i in range(8)]
 GAMES = 1000
 TOL = 0.002
 GEN_KEYS = ("mull_gen_depth", "mull_gen_budget_ms", "expected_buckets")
+PICK = os.path.join(HERE, 'vlq_adopt_pick.py')
 
 
 def now():
@@ -98,6 +117,35 @@ def variant(deck, arm, doc, root):
     return os.path.join(dest, os.path.basename(deck.deck_file)), os.path.join(dest, deck.stem + ".profile.json")
 
 
+def phase_e_shapes(deck, shape_log):
+    """[(arm, sidecar path, reason)]: the phase-E shapes still in the running (module doc), from the E.5 verdicts."""
+    r = subprocess.run([sys.executable, PICK, shape_log, '--tol', str(TOL)], capture_output=True, text=True)
+    if r.returncode not in (0, 2):
+        raise RuntimeError(f"vlq_adopt_pick failed on {shape_log}:\n{r.stdout}{r.stderr}")
+    m = re.search(r'^PICK arm=(\S+)', r.stdout, re.M)
+    picked = m.group(1) if m else 'none'
+    qdir, out = os.path.dirname(shape_log), []
+    for ln in r.stdout.splitlines():
+        if not ln.startswith('VERDICT'):
+            continue
+        f = dict(re.findall(r"(\w+)=([^ ]+)", ln.split(" why=")[0]))
+        arm, delta, t = f['arm'], float(f['delta']), float(f['t'])
+        if arm == picked:
+            continue                                       # installed by E.5: it IS live
+        if f.get('adopt') == '1':
+            why = f"passed E.5's rule at the play budget ({f.get('cost')} vs live, delta {delta:+.5f}) but was not installed"
+        elif delta < -TOL and t < -2.0:
+            why = f"dearer at the play budget ({f.get('cost')}) but notably better (delta {delta:+.5f}, t {t:+.2f})"
+        else:
+            continue
+        path = (os.path.join('logs', 'eval', f"{deck.stem}.value.STAGED.json") if arm == 'staged'
+                else os.path.join(qdir, f"{deck.stem}.value.{arm.upper()}.json"))
+        if not os.path.exists(path):
+            raise RuntimeError(f"{deck.key}: phase-E shape {arm} {why}, but {path} is missing")
+        out.append((arm, path, why))
+    return out
+
+
 def run_batch(mtg, work, label, jobs):
     """ONE pooled batch; a finished one whose manifest AND input contents are unchanged is reused (resume)."""
     man = os.path.join(work, label + '.manifest.json')
@@ -122,11 +170,10 @@ def run_batch(mtg, work, label, jobs):
     return log
 
 
-def install(path, vp):
-    """Set the sidecar's value_play (position kept when it exists), preserving one-line vs indented layout."""
+def install(path, doc):
+    """Write the adopted sidecar (value_play position kept), preserving the live file's one-line vs indented layout."""
     raw = open(path).read()
-    doc = json.loads(raw)
-    doc["value_play"] = vp
+    vp = doc["value_play"]
     out = json.dumps(doc, indent=1 if raw.count("\n") > 2 else None) + ("\n" if raw.endswith("\n") else "")
     # derive_mullgen_setting finds the block by a TEXT search for "value_play": it must be the only occurrence.
     if out.count('"value_play"') != 1:
@@ -142,7 +189,15 @@ def main():
     ap.add_argument('--work', help='scratch dir (default logs/play_stage/<keys>)')
     ap.add_argument('--decisions', help='append every verdict here (valueleaf.sh passes <queue>/DECISIONS.txt)')
     ap.add_argument('--write', action='store_true', help='install an adopted setting into the live sidecar')
+    ap.add_argument('--phase-e', action='append', default=[], metavar='KEY=SHAPELOG',
+                    help="the deck's phase-E shape log (<queue>/m_<key>_shape.log): grid its other shapes too")
+    ap.add_argument('--live', action='append', default=[], metavar='KEY=FILE',
+                    help='measure as if FILE were the live sidecar (a what-if; refused with --write)')
     a = ap.parse_args()
+    shape_logs = dict(x.split('=', 1) for x in a.phase_e)
+    live_over = dict(x.split('=', 1) for x in a.live)
+    if live_over and a.write:
+        sys.exit("--live is a what-if: it cannot be combined with --write")
 
     reg = {os.path.normpath(d.dir): d for d in deck_registry.discover().values()}
     decks = []
@@ -151,37 +206,53 @@ def main():
         if d is None:
             sys.exit(f"no registry entry for {dd} (needs a decklist AND a profile)")
         decks.append(d)
+    for k in list(shape_logs) + list(live_over):
+        if k not in {d.key for d in decks}:
+            sys.exit(f"--phase-e / --live names {k}, which is not one of the decks given")
     work = a.work or os.path.join('logs', 'play_stage', '+'.join(sorted(d.key for d in decks)))
     os.makedirs(work, exist_ok=True)
+    vroot = os.path.join(work, 'variants')
     mtg = engine_bin('mtg')
     notes, report, plan = [], [], {}
 
     for d in decks:
-        if not os.path.exists(d.value):
-            notes.append(f"PHASE E.7: {d.key} skipped -- no live value sidecar ({d.value})")
+        live_path = live_over.get(d.key, d.value)
+        if not os.path.exists(live_path):
+            notes.append(f"PHASE E.7: {d.key} skipped -- no live value sidecar ({live_path})")
             report.append((d.key, 'skipped: no live leaf'))
             continue
-        live_doc, prof_doc = json.load(open(d.value)), json.load(open(d.profile))
-        d0, b0, src = current(live_doc.get("value_play") or {})
+        live_doc, prof_doc = json.load(open(live_path)), json.load(open(d.profile))
+        live_vp = live_doc.get("value_play") or {}
+        d0, b0, src = current(live_vp)
+        centre_is_live = bool(live_vp.get("enabled") and live_vp.get("target_depth"))
         arms = {}
         for dd, bb in grid(d0, b0):
-            if (dd, bb) == (d0, b0):
-                continue                                   # that arm IS the baseline (same depth, budget, shape)
+            if (dd, bb) == (d0, b0) and centre_is_live:
+                continue                                   # that arm IS the baseline (same block, same shape)
             vp = block(live_doc, prof_doc, dd, bb)
-            arms[f"d{dd}b{bb}"] = (vp, variant(d, f"d{dd}b{bb}", dict(live_doc, value_play=vp), os.path.join(work, 'variants')))
-        plan[d.key] = dict(deck=d, d0=d0, b0=b0, src=src, arms=arms)
+            doc = dict(live_doc, value_play=vp)
+            arms[f"d{dd}b{bb}"] = dict(doc=doc, shape=None, paths=variant(d, f"d{dd}b{bb}", doc, vroot))
+        shapes = phase_e_shapes(d, shape_logs[d.key]) if d.key in shape_logs else []
+        for name, path, why in shapes:
+            sdoc = json.load(open(path))
+            for dd, bb in grid(d0, b0):
+                arm = f"{name}_d{dd}b{bb}"
+                vp = block(sdoc, prof_doc, dd, bb)
+                doc = dict(sdoc, value_play=vp)
+                arms[arm] = dict(doc=doc, shape=(name, path, why), paths=variant(d, arm, doc, vroot))
+        plan[d.key] = dict(deck=d, d0=d0, b0=b0, src=src, arms=arms, shapes=shapes,
+                           live=variant(d, 'live', live_doc, vroot), live_path=live_path)
 
     if plan:
         jobs = []
         for k, p in plan.items():
-            d = p['deck']
             for s in SEEDS:
-                jobs.append(dict(name=f"{k}-live_s{s}", deck=d.deck_file, profile=d.profile, games=GAMES, seed=s))
-                for arm, (_, (vdeck, vprof)) in p['arms'].items():
-                    jobs.append(dict(name=f"{k}-{arm}_s{s}", deck=vdeck, profile=vprof, games=GAMES, seed=s))
+                jobs.append(dict(name=f"{k}-live_s{s}", deck=p['live'][0], profile=p['live'][1], games=GAMES, seed=s))
+                for arm, x in p['arms'].items():
+                    jobs.append(dict(name=f"{k}-{arm}_s{s}", deck=x['paths'][0], profile=x['paths'][1], games=GAMES, seed=s))
         # The dearest arms first (bigger budget, then deeper), so the batch ends on a short tail.
         def dearest_first(j):
-            m = re.search(r'-d(\d+)b(\d+)_s', j['name'])
+            m = re.search(r'[-_]d(\d+)b(\d+)_s', j['name'])
             return (-int(m.group(2)), -int(m.group(1))) if m else (0, 0)
         jobs.sort(key=dearest_first)
         log = run_batch(mtg, work, 'grid', jobs)
@@ -195,7 +266,7 @@ def main():
                         fo.write(ln[len(k) + 1:] + "\n")
             table = subprocess.run([sys.executable, os.path.join(HERE, 'vlq_ab_report.py'), klog, 'live'],
                                    capture_output=True, text=True).stdout
-            pick = subprocess.run([sys.executable, os.path.join(HERE, 'vlq_adopt_pick.py'), klog, '--tol', str(TOL),
+            pick = subprocess.run([sys.executable, PICK, klog, '--tol', str(TOL),
                                    '--candidates', *p['arms']], capture_output=True, text=True)
             if pick.returncode not in (0, 2):
                 raise RuntimeError(f"vlq_adopt_pick failed for {k}:\n{pick.stdout}{pick.stderr}")
@@ -204,19 +275,31 @@ def main():
             arm, why = (m.group(1), m.group(2)) if m else ('none', 'no PICK line')
             print(f"=== {k}: play setting -- live ({p['src']}: d{p['d0']} / {p['b0']}) vs the enabled grid ===")
             print(table.rstrip())
-            head = (f"live = {p['src']}: d{p['d0']} / budget {p['b0']}; grid {', '.join(p['arms'])}; "
-                    f"{len(SEEDS)} seeds x {GAMES} paired games (seeds {SEEDS[0]}..)")
+            sh = "".join(f"\n    shape {n} ({pth}) gridded too: {w}" for n, pth, w in p['shapes'])
+            what_if = f" [WHAT-IF: live read from {p['live_path']}]" if p['live_path'] != d.value else ""
+            head = (f"live = {p['src']}: d{p['d0']} / budget {p['b0']}{what_if}; grid {', '.join(p['arms'])}; "
+                    f"{len(SEEDS)} seeds x {GAMES} paired games (seeds {SEEDS[0]}..){sh}")
             body = "\n    ".join(verdicts)
             tree = "this tree, NOT committed" if a.write else "NOT applied (run without --write)"
             if pick.returncode == 0 and arm in p['arms']:
-                vp = dict(p['arms'][arm][0])
-                stamp = (f"E.7 play-setting stage {now()[:10]}: {arm} adopted over {p['src']} (d{p['d0']}/{p['b0']}); "
-                         f"{why}")
+                x = p['arms'][arm]
+                doc = dict(x['doc'])
+                vp = dict(doc['value_play'])
+                shape_txt = (f"; the phase-E shape {x['shape'][0]} ({x['shape'][1]}) REPLACES the live sidecar"
+                             if x['shape'] else "")
+                stamp = (f"E.7 play-setting stage {now()[:10]}: {arm} adopted over {p['src']} (d{p['d0']}/{p['b0']})"
+                         f"{shape_txt}; {why}")
                 vp["note"] = (vp["note"] + " | " + stamp) if vp.get("note") else stamp
+                doc['value_play'] = vp
+                prev = ""
                 if a.write:
-                    install(d.value, vp)
+                    if x['shape']:
+                        prev = os.path.join(work, f"{d.stem}.value.PREV.json")
+                        shutil.copyfile(d.value, prev)
+                        prev = f"\n    previous live sidecar kept as {prev}"
+                    install(d.value, doc)
                 notes.append(f"PHASE E.7: ADOPTED {k} play setting {arm} (target_depth {vp['target_depth']}, budget_ms "
-                             f"{vp['budget_ms']}) -- {tree}\n    {head}\n    {body}\n"
+                             f"{vp['budget_ms']}{shape_txt}) -- {tree}\n    {head}\n    {body}{prev}\n"
                              f"    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).")
                 report.append((k, f"ADOPTED {arm} ({why})"))
             else:
