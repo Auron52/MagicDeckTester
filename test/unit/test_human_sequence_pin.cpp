@@ -488,7 +488,9 @@ TEST_CASE("human sequence: EVERY action kind is claimable by the token the viewe
     // TurnSolver::HumanStepVerbFor is one entry per kind behind a static_assert on the enum's end, so a
     // new kind cannot reach a "**" line without a verb; this claims one action of every kind through it,
     // so a verb that does not actually claim its kind (the orphan rule would drop it) fails here.
-    for (int ki = 0; ki <= static_cast<int>(K::AuraSwap); ++ki)
+    // The LAST enumerator (ActivateUntap, appended after AuraSwap upstream): a new kind already fails to
+    // compile in HumanStepVerbFor (-Wswitch is an error there); extend this bound with it.
+    for (int ki = 0; ki <= static_cast<int>(K::ActivateUntap); ++ki)
     {
         const K k = static_cast<K>(ki);
         const std::string verb = TurnSolver::HumanStepVerbFor(k);
@@ -515,5 +517,32 @@ TEST_CASE("human sequence: EVERY action kind is claimable by the token the viewe
         TurnSolver::ApplyHumanSequencePin(p, { verb == "le" ? std::string("le=Mountain") : verb + "=X" }, nullptr, &errors);
         CHECK(errors.empty());
         CHECK(p.human_seq_len == 1);
+    }
+}
+
+TEST_CASE("human sequence: an untapper's single activation and its LOOP are different steps")
+{
+    // untapact= is one activation, untaploop= the closed-form loop (chosen_x >= kUntapLoopToNeed) -- the
+    // CheckLine rule, so a click on one never claims the other.
+    Action one = ActOn(K::ActivateUntap, "Staff of Domination", 4, 9);
+    one.chosen_x = 1;
+    Action loop = ActOn(K::ActivateUntap, "Staff of Domination", 4, 9);
+    loop.chosen_x = kUntapLoopToNeed;
+    {
+        TurnSolver::Plan p = PlanOf("", { loop });
+        std::vector<std::string> errors;
+        TurnSolver::ApplyHumanSequencePin(p, { "untapact=Staff of Domination#4@9" }, nullptr, &errors);
+        CHECK(!errors.empty());
+        CHECK(p.human_seq_len == 0);
+    }
+    {
+        TurnSolver::Plan p = PlanOf("", { one, loop });
+        std::vector<std::string> errors;
+        TurnSolver::ApplyHumanSequencePin(p, { "untaploop=Staff of Domination#4@9", "untapact=Staff of Domination#4@9" },
+                                          nullptr, &errors);
+        CHECK(errors.empty());
+        REQUIRE(p.human_seq_len == 2);
+        CHECK(p.actions[0].chosen_x == kUntapLoopToNeed);
+        CHECK(p.actions[1].chosen_x == 1);
     }
 }

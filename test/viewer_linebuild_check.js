@@ -957,6 +957,12 @@ function checkSequenceTokens() {
   if (LB.encodeLine(q) !== 'cast=Lightning Bolt;suspend=Lotus Bloom') fails.push(`suspend-only line -> ${LB.encodeLine(q)}`);
   q = LB.queueCard(dLotus, q, 'Lotus Bloom', 'permanent');   // one copy: a second click queues nothing more
   if (q.filter(p => p.name === 'Lotus Bloom').length !== 1) fails.push('suspend-only thumb over-queued');
+  // An activated untapper's step names its source and target (untapSrc / untapTarget), as its line token does.
+  const staff = { name: 'Staff of Domination', src: 'Staff of Domination', kind: 'activate', verb: 'untapact',
+                  untapSrc: 4, untapTarget: 9 };
+  const staffLoop = Object.assign({}, staff, { untapLoop: true });
+  if (!eq(LB.sequenceTokens([staff, staffLoop]), ['untapact=Staff of Domination#4@9', 'untaploop=Staff of Domination#4@9']))
+    fails.push(`untapper tokens -> ${JSON.stringify(LB.sequenceTokens([staff, staffLoop]))}`);
   // ...and the continuation's `need=` the commit pin carries rides the previewed sequence too.
   if (LB.validationLine(one, 'need=G') !== 'cast=Sol Ring;seq=cast=Sol Ring|need=G')
     fails.push(`validationLine(one step + need) -> ${LB.validationLine(one, 'need=G')}`);

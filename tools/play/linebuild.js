@@ -516,9 +516,12 @@
     if (p.kind === 'retrace') return 'retrace=' + p.name;
     const v = lineVerb(p);
     const card = (v === 'gyreturn' || v === 'pod' || v === 'ooze') ? (p.src || p.name) : p.name;
-    const target = p.target || p.blinkTarget || (v === 'equipallfree' ? p.hostNum : 0);
+    // An activated untapper (untapact= / untaploop=) carries its source and target as untapSrc /
+    // untapTarget -- the same `#src@target` its line token writes (untapIds).
+    const target = p.target || p.blinkTarget || p.untapTarget || (v === 'equipallfree' ? p.hostNum : 0);
+    const srcNum = p.untapSrc || p.srcNum || 0;
     return v + '=' + card
-         + (p.srcNum ? '#' + p.srcNum : '')
+         + (srcNum ? '#' + srcNum : '')
          + (target ? '@' + target : '')
          + (v === 'blink' && p.blinkCount > 0 ? '*' + p.blinkCount : '')
          + (p.kicked ? '+kicked' : '')

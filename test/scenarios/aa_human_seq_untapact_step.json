@@ -1,0 +1,52 @@
+{
+  "_comment": [
+    "REBASE 2026-10-22 (upstream's new Action::Kind::ActivateUntap): an activated untapper is a \"**\" step",
+    "`untapact=<source>#<src>@<target>` (HumanStepVerbFor; the viewer's sequenceToken writes untapSrc/untapTarget, the",
+    "same suffix as its line token). Staff of Domination #5 untaps the tapped Arbor Elf #7 after the hand Arbor Elf is",
+    "cast: the sequence validates with exactly that variant."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Staff of Domination"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "tapped": true
+    },
+    {
+      "name": "Arbor Elf",
+      "tapped": true
+    }
+  ],
+  "hand": [
+    "Arbor Elf"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "validate_line": "cast=Arbor Elf;untapact=Staff of Domination#5@7;seq=cast=Arbor Elf|untapact=Staff of Domination#5@7",
+  "expect_verdict": "accept"
+}

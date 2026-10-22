@@ -52752,6 +52752,7 @@ static const char* HumanStepLabel(const Action& a)
         case K::Eternalize:        return "eternalize";
         case K::ActivatePod:       return "Pod";
         case K::TapForTokens:      return "tap";
+        case K::ActivateUntap:     return "untap";
         default:                   return "activate";
     }
 }
@@ -52919,6 +52920,10 @@ static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const Ga
     }
     if (st.count > 0 && a.kind == Action::Kind::ActivateBlink && std::max(1, a.chosen_x) != st.count)
     { return false; }
+    // `untaploop=` is the closed-form LOOP, `untapact=` one activation (CheckLine's UntapActAssign rule).
+    if (a.kind == Action::Kind::ActivateUntap && (st.verb == "untapact" || st.verb == "untaploop")
+        && (a.chosen_x >= kUntapLoopToNeed) != (st.verb == "untaploop"))
+    { return false; }
     return true;
 }
 
@@ -52946,11 +52951,20 @@ static bool HumanStepAmbiguous(const HumanStepToken& st, const std::vector<std::
 
 // See the header. EVERY Action::Kind, and the token the viewer writes for it (so no kind can fall into the
 // orphan rule unnoticed: test_human_sequence_pin.cpp claims one action of every kind through its verb).
+// A NEW KIND FAILS TO COMPILE HERE: the switch has no `default`, and -Wswitch is an ERROR inside this
+// function (GCC / Clang; MSVC's C4062 likewise). Give the kind its verb below, or it is an orphan in every
+// "**" line. (A static_assert on the last enumerator's value was the first guard; it missed ActivateUntap,
+// appended AFTER that enumerator, on the 2026-10-22 rebase -- a value check cannot see an append.)
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic error "-Wswitch"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(error : 4062)
+#endif
 const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
 {
     using K = Action::Kind;
-    // A NEW KIND fails this assert: give it its verb below, or it is an orphan in every "**" line.
-    static_assert(static_cast<int>(K::AuraSwap) == 32, "Action::Kind changed: update HumanStepVerbFor");
     switch (k)
     {
         case K::CastFromHand:           return "cast";
@@ -52983,6 +52997,9 @@ const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
         case K::GraveyardExileGrow:
         case K::AttachAllFreeEquipment:
         case K::AuraSwap:               return "act";      // (or its own board verb: equip=, blink=, ...)
+        // The activated untapper (AccomplishedAlchemist): `untapact=<source>#<src>@<target>`, its closed-form
+        // LOOP `untaploop=` (chosen_x >= kUntapLoopToNeed) -- never matched to each other.
+        case K::ActivateUntap:          return "untapact";
         // Never a step of a "**" line: a dig is committed alone (fireDig clears the queue), the COMBO OFF
         // route alone (its button), and a PlayLand action exists only in breakpoint records.
         case K::DigDraw:
@@ -52991,6 +53008,11 @@ const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
     }
     return "";
 }
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 // See the header. THE IMPLICIT-ACTION RULE (an action of the matched plan that no queued step names --
 // in practice a self-sacrifice mana source the viewer deliberately does not offer as a click, Dwarven

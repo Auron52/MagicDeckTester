@@ -1,0 +1,66 @@
+{
+  "_comment": [
+    "REBASE 2026-10-22: the untapper committed AT ITS QUEUE POSITION under the \"**\" pin -- queued BEFORE the",
+    "Arbor Elf cast, it runs before it (an ActivateUntap otherwise applies in the trailing pass, after the casts);",
+    "nothing is reported as NOT applied."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Staff of Domination"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "tapped": true
+    },
+    {
+      "name": "Arbor Elf",
+      "tapped": true
+    }
+  ],
+  "hand": [
+    "Arbor Elf"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "human_lines": [
+    "cast=Arbor Elf;untapact=Staff of Domination#5@7;seq=untapact=Staff of Domination#5@7|cast=Arbor Elf"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "untapact=Staff of Domination#5@7",
+      "cast=Arbor Elf"
+    ]
+  ],
+  "expect_history_lacks": [
+    "NOT applied"
+  ],
+  "expect_line_order": [
+    "activate Staff of Domination",
+    "cast Arbor Elf"
+  ]
+}
