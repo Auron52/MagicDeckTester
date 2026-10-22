@@ -906,11 +906,61 @@ function checkSequenceTokens() {
   ];
   const want = ['act=Krenko, Mob Boss', 'land=Forest', 'tap=Forest#7:G', 'cast=Shard Volley', 'le=Mountain',
                 'vial=Goblin Lackey', 'retrace=Throes of Chaos', 'sacout=Skirk Prospector', 'suspend=Lotus Bloom',
-                'pod=Birthing Pod', 'blink=Emiel the Blessed', 'landtop=Forest'];
+                'pod=Birthing Pod', 'blink=Emiel the Blessed@42*1', 'landtop=Forest'];
   const got = LB.sequenceTokens(seg);
   if (!eq(got, want)) fails.push(`sequenceTokens -> ${JSON.stringify(got)}`);
   if (LB.sequenceSteps(seg) !== seg.length - 1) fails.push(`sequenceSteps -> ${LB.sequenceSteps(seg)} (a tap is not a step)`);
   if (LB.sequenceSteps([]) !== 0) fails.push('sequenceSteps([]) != 0');
+  // WHICH play (review 2026-10-22): the clicked permanent, the equip host, the kicker / adventure mode
+  // ride on the step, so two same-named candidates are never taken in plan-vector order.
+  const ids = [
+    { name: 'Krenko, Mob Boss', src: 'Krenko, Mob Boss', kind: 'activate', verb: 'cast', srcNum: 17 },
+    { name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip', srcNum: 5, target: 9 },
+    { name: 'Saproling Migration', kind: 'nonpermanent', kicked: true },
+    { name: 'Brightcap Badger', kind: 'permanent', adventure: true },
+    { name: 'Kor Duelist', kind: 'activate', verb: 'equipallfree', hostNum: 12 },
+  ];
+  const wantIds = ['act=Krenko, Mob Boss#17', 'equip=Bonesplitter#5@9', 'cast=Saproling Migration+kicked',
+                   'cast=Brightcap Badger+adventure', 'equipallfree=Kor Duelist@12'];
+  if (!eq(LB.sequenceTokens(ids), wantIds)) fails.push(`identity tokens -> ${JSON.stringify(LB.sequenceTokens(ids))}`);
+  // The VALIDATED line carries the sequence (`seq=`) exactly when the commit will pin it.
+  const two = [{ name: 'Sol Ring', kind: 'permanent' }, { name: 'Forest', kind: 'land' }];
+  if (LB.validationLine(two) !== 'landafter=Forest;cast=Sol Ring;seq=cast=Sol Ring|land=Forest')
+    fails.push(`validationLine(two steps) -> ${LB.validationLine(two)}`);
+  const one = [{ name: 'Sol Ring', kind: 'permanent' }];
+  if (LB.validationLine(one) !== 'cast=Sol Ring') fails.push(`validationLine(one step) -> ${LB.validationLine(one)}`);
+  const tapped = [{ kind: 'pretap', name: 'Forest', num: 3, color: 'G' }, { name: 'Llanowar Elves', kind: 'permanent' }];
+  if (LB.validationLine(tapped) !== 'tap=Forest#3:G;cast=Llanowar Elves;seq=tap=Forest#3:G|cast=Llanowar Elves')
+    fails.push(`validationLine(tap + one step) -> ${LB.validationLine(tapped)}`);
+  if (LB.validationLine([]) !== 'pass') fails.push(`validationLine([]) -> ${LB.validationLine([])}`);
+  return fails;
+}
+
+// SEGMENTS KEEP QUEUE ORDER (review 2026-10-22). A new segment starts where an entry cannot join the
+// one being built -- a second land drop, a repeat of a repeatable source, a deferred entry -- and every
+// entry stays where the human queued it. Before: extra land drops were lifted AHEAD of the line and a
+// repeated activation was pushed behind the whole segment.
+function checkSegmentOrder() {
+  const fails = [];
+  const names = parts => parts.map(seg => seg.map(p => p.name));
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const A = { name: 'A', kind: 'nonpermanent' }, B = { name: 'B', kind: 'nonpermanent' };
+  const L1 = { name: 'Forest', kind: 'land' }, L2 = { name: 'Island', kind: 'land' };
+  let got = names(LB.segmentParts([A, L1, L2, B]));
+  if (!eq(got, [['A', 'Forest'], ['Island', 'B']])) fails.push(`cast, land, bonus land, cast -> ${JSON.stringify(got)}`);
+  got = names(LB.segmentParts([L1, L2, A]));
+  if (!eq(got, [['Forest'], ['Island', 'A']])) fails.push(`land, land, cast -> ${JSON.stringify(got)}`);
+  const blink = () => ({ name: 'Emiel', src: 'Emiel', kind: 'activate', verb: 'blink', repeatable: true });
+  const b1 = blink(), b2 = blink();
+  got = names(LB.segmentParts([b1, b2, A]));
+  if (!eq(got, [['Emiel'], ['Emiel', 'A']])) fails.push(`blink, blink, cast -> ${JSON.stringify(got)}`);
+  got = names(LB.segmentParts([A, b1, B, b2]));
+  if (!eq(got, [['A', 'Emiel', 'B'], ['Emiel']])) fails.push(`cast, blink, cast, blink -> ${JSON.stringify(got)}`);
+  if (!eq(LB.segmentParts([]), [[]])) fails.push('an empty plan is one empty segment');
+  // The concatenated segments ARE the queue, entry for entry and in order.
+  const q = [A, L1, b1, B, L2, b2];
+  const flat = [].concat(...LB.segmentParts(q));
+  if (flat.length !== q.length || flat.some((p, i) => p !== q[i])) fails.push('segments do not concatenate back to the queue');
   return fails;
 }
 
@@ -1012,6 +1062,10 @@ function main() {
   seqFails.forEach(m => console.log(`  FAIL  sequence tokens: ${m}`));
   console.log(`Viewer whole-sequence pin: ${seqFails.length ? 'WRONG' : 'every queued entry is one <verb>=<name> step in queue order'} ` +
               `(${seqFails.length} FAIL)`);
+  const segFails = checkSegmentOrder();
+  segFails.forEach(m => console.log(`  FAIL  segment order: ${m}`));
+  console.log(`Viewer segment order: ${segFails.length ? 'WRONG' : 'segments cut where needed, every entry in queue order'} ` +
+              `(${segFails.length} FAIL)`);
   const shrinkFails = checkShrinkingIndices();
   shrinkFails.forEach(m => console.log(`  FAIL  click-order picks: ${m}`));
   console.log(`Viewer click-order picks: ${shrinkFails.length ? 'WRONG' : 'discard / bottom picks go in click order, re-based'} ` +
@@ -1027,7 +1081,7 @@ function main() {
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
-          + karooFails.length + seqFails.length + shrinkFails.length) ? 1 : 0;
+          + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 
 process.exit(main());

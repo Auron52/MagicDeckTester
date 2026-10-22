@@ -171,37 +171,29 @@
   // this feature carries one, so every recorded line partitions exactly as it always did.
   function isDeferred(p) { return !!p.defer; }
 
+  // IN QUEUE ORDER, ALWAYS (USER 2026-10-22: "The viewer should use exactly the order I give."). A new
+  // segment starts exactly where an entry cannot join the one being built -- a DEFERRED entry, a repeat
+  // of a repeatable source the segment already activates, a second land drop -- and every entry stays
+  // where the human put it. This used to lift every extra land drop into a land-only segment AHEAD of
+  // the line ("cast, land, bonus land" played both lands first) and to push every repeat of a source
+  // behind the WHOLE segment ("blink, blink, cast X" ran X before the second blink).
+  // A deferred entry at position 0 is the head of its own segment, so it starts nothing new (the old
+  // recursion's "scan starts at 1"). Every returned entry is IDENTICAL (by object identity) to the one
+  // in `plan` -- dropFirstSegment peels by identity. An empty plan is one empty segment ('pass').
   function segmentParts(plan) {
-    const seen = {}, main = [], extras = [];
-    // Everything from the first deferred entry onward is held back and partitioned separately, so
-    // a deferred entry carries the whole block behind it (a macro iteration), not just itself.
-    //
-    // The scan starts at 1, NOT 0, and that is load-bearing rather than tidy: a deferred entry at
-    // position 0 is already the head of the segment being built, so nothing precedes it to split
-    // from. Scanning from 0 cut there, produced an EMPTY first segment, and dropFirstSegment --
-    // which peels by removing exactly the entries segmentParts()[0] names -- then removed nothing
-    // and the commit chain spun forever on the second macro iteration.
-    let cut = -1;
-    for (let i = 1; i < plan.length; ++i) { if (isDeferred(plan[i])) { cut = i; break; } }
-    const head = cut < 0 ? plan : plan.slice(0, cut);
-    const tail = cut < 0 ? []   : plan.slice(cut);
-    for (const p of head) {
+    const parts = [];
+    let cur = [], seen = {}, hasLand = false;
+    const flush = () => { if (cur.length) { parts.push(cur); } cur = []; seen = {}; hasLand = false; };
+    (plan || []).forEach((p, i) => {
       const k = (p.kind === 'activate' && p.repeatable) ? (p.src || p.name) : null;
-      if (k && seen[k]) { extras.push([p]); continue; }
+      const cut = (i > 0 && isDeferred(p)) || (k && seen[k]) || (p.kind === 'land' && hasLand);
+      if (cut) { flush(); }
       if (k) { seen[k] = true; }
-      main.push(p);
-    }
-    const lands = planLands(main);
-    const parts = lands.length <= 1
-      ? [main]
-      : lands.slice(0, -1).map(l => [l])
-             .concat([main.filter(p => p.kind !== 'land' || p === lands[lands.length - 1])]);
-    // The tail recurses AS-IS -- no copy, no flag clearing. Its own first entry is the one that
-    // caused the cut, and the scan above already ignores position 0, so the recursion makes
-    // progress on its own. Not copying is what keeps every returned entry IDENTICAL (by object
-    // identity) to the one in `plan`, which is the contract dropFirstSegment's filter relies on.
-    const rest = tail.length ? segmentParts(tail) : [];
-    return parts.concat(extras).concat(rest);
+      if (p.kind === 'land') { hasLand = true; }
+      cur.push(p);
+    });
+    flush();
+    return parts.length ? parts : [[]];
   }
 
   // Repeat plan entries [from, to) `n` times in total (n=1 is a no-op), returning the new plan.
@@ -505,6 +497,12 @@
   // in place. The name is the plan ACTION's card -- the line value, except for the verbs whose value
   // names a TARGET (gyreturn / pod / ooze name the returned / fetched / exiled card; the action is the
   // source's).
+  // ...and WHICH play the entry is, in every detail the viewer knows, so the engine never has to pick
+  // between two same-named candidates (review 2026-10-22): `#<n>` the permanent the activation was
+  // clicked on / the Equipment (srcNum), `@<n>` the equip host / the blinked creature / the
+  // equip-all host, `*<n>` a blink's count, `+kicked` / `+adventure` a cast's mode. The engine
+  // (TurnSolver::ApplyHumanSequencePin) matches on all of it, and REFUSES a step that still could mean
+  // two different plays rather than guess. No MTG card name contains '#', '@' or '*'.
   function sequenceToken(p) {
     if (isPreTap(p)) return preTapToken(p);
     if (p.kind === 'land') return (p.fromTop ? 'landtop=' : 'land=') + p.name;
@@ -513,7 +511,13 @@
     if (p.kind === 'retrace') return 'retrace=' + p.name;
     const v = lineVerb(p);
     const card = (v === 'gyreturn' || v === 'pod' || v === 'ooze') ? (p.src || p.name) : p.name;
-    return v + '=' + card;
+    const target = p.target || p.blinkTarget || (v === 'equipallfree' ? p.hostNum : 0);
+    return v + '=' + card
+         + (p.srcNum ? '#' + p.srcNum : '')
+         + (target ? '@' + target : '')
+         + (v === 'blink' && p.blinkCount > 0 ? '*' + p.blinkCount : '')
+         + (p.kicked ? '+kicked' : '')
+         + (p.adventure ? '+adventure' : '');
   }
   function sequenceTokens(seg) { return (seg || []).map(sequenceToken); }
 
@@ -536,6 +540,17 @@
   // How many STEPS a segment holds (every entry but a manual tap, which is a payment, not a step). The
   // viewer pins a segment of two or more: a single step has no order to keep.
   function sequenceSteps(seg) { return (seg || []).filter(p => !isPreTap(p)).length; }
+  // Does a committing segment carry a "**" pin? Two or more steps (an order to keep), or a manual tap
+  // (a payment with a position). index.html adds the continuation's `need=` on top.
+  function sequencePinned(seg) { return sequenceSteps(seg) >= 2 || (seg || []).some(isPreTap); }
+  // The line a segment is VALIDATED with: encodeLine's line plus, when the segment is pinned, its "**"
+  // sequence as `seq=<step>|<step>|...` -- so the engine previews the commit in exactly the order it will
+  // apply (src/main.cpp ValidateHumanSequence) and rejects a step that cannot be done where it was
+  // queued, with its reason, instead of the commit dropping it. Tokens never contain ';' or '|'.
+  function validationLine(seg) {
+    const line = encodeLine(seg || []);
+    return sequencePinned(seg) ? line + ';seq=' + sequenceTokens(seg).join('|') : line;
+  }
 
   // THE LIBRARY TOP AS A LAND SOURCE (engine Plan::land_from_top, Courser of Kruphix, 2026-10-15).
   // The engine publishes me.library_top ONLY while a revealer is ours; `playable_land` says the top may
@@ -807,7 +822,7 @@
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            toggleKicker,
            offersLandAfter, topLandOffered, landPosition, karooPositionsOffered,
-           sequenceToken, sequenceTokens, sequenceSteps, shrinkingIndices,
+           sequenceToken, sequenceTokens, sequenceSteps, sequencePinned, validationLine, shrinkingIndices,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.

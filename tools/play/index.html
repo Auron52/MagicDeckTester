@@ -1601,7 +1601,11 @@ function clickActivateCount(name){
 // `which` names the click TARGET: 'sac' when the sacrifice tag at the bottom of the card was
 // clicked, otherwise the card body. It only matters for a permanent whose abilities split both ways
 // (see splitActivationOptions); everything else behaves exactly as it did.
-function toggleActivate(name, which){
+// `num` = the m_number of the permanent THUMB that was clicked (0 = unknown). It rides on the queued
+// entry as `srcNum` when the engine's actions name that copy (actionSourceNum), so two same-named
+// sources -- two Krenkos, two Kor Duelists -- are told apart in the "**" pin rather than taken in
+// plan-vector order (review 2026-10-22: "carry the identifying detail ... rather than pick").
+function toggleActivate(name, which, num){
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   hideVerdict();
   // Clicking the armed outlet again disarms it (the Vial's cancel gesture, verbatim).
@@ -1645,7 +1649,7 @@ function toggleActivate(name, which){
   // click the outlet to arm it, click the target to commit. Only when the targets genuinely differ
   // -- one option needs no picker at all and falls through to the direct queue below.
   if (opts.length > 1 && opts.every(o=>o.verb==='blink')) {
-    S.blinkMode = { src:name, opts };
+    S.blinkMode = { src:name, opts, srcNum:num||0 };
     S.leMode=false; S.vialMode=null; S.actPick=null;
     flashHint(`${name} armed — click the creature on your board to blink. Click ${name} again to cancel.`);
     renderBoard();
@@ -1658,14 +1662,14 @@ function toggleActivate(name, which){
   // click could not tell them apart: with one on offer the ordinary picker lists every option instead.
   if (opts.length > 1 && opts.every(o=>o.verb==='untapact' && !o.untapLoop)
       && new Set(opts.map(o=>o.untapTarget)).size > 1) {
-    S.blinkMode = { src:name, opts };
+    S.blinkMode = { src:name, opts, srcNum:num||0 };
     S.leMode=false; S.vialMode=null; S.actPick=null;
     flashHint(`${name} armed — click the creature on the board to ${opts.some(o=>o.untapShape===4)?'pump and untap':'untap'}. Click ${name} again to cancel.`);
     renderBoard();
     return;
   }
-  if (opts.length > 1) { S.actPick = { src:name, opts }; renderBoard(); return; }
-  queueActivation(name, opts[0]);
+  if (opts.length > 1) { S.actPick = { src:name, opts, srcNum:num||0 }; renderBoard(); return; }
+  queueActivation(name, opts[0], num);
 }
 // Commit the armed blink against the permanent the human clicked (m_number). Returns false when
 // that permanent is not a legal target for this outlet, so the caller can fall through.
@@ -1678,12 +1682,22 @@ function blinkAtTarget(num){
   // (they commit as consecutive segments; see LB.segmentParts). Click the outlet to disarm.
   // A non-repeatable blink disarms after its one use, which is all it has.
   if (!opt.repeatable) { S.blinkMode = null; }
-  queueActivation(bm.src, opt);
+  queueActivation(bm.src, opt, bm.srcNum);
   return true;
 }
 // Commit one chosen activation into the plan. `src` is the permanent clicked; `opt` says which verb
 // the line writes and what it names. Kept apart from toggleActivate so the picker can call it.
-function queueActivation(src, opt){
+// The clicked copy's m_number when some enumerated action of this source names exactly that copy
+// (main.cpp's `src_num` = Action::sac_source_id), else 0 -- a number the engine would not recognise is
+// never stamped, so a line can only gain precision from it.
+function actionSourceNum(src, num){
+  if (!(num > 0)) return 0;
+  const d = S.decision;
+  const hit = ((d && d.plans) || []).some(p => (p.actions||[]).some(a =>
+    a && a.activate && (a.activate_source || a.card) === src && a.src_num === num));
+  return hit ? num : 0;
+}
+function queueActivation(src, opt, clickedNum){
   // PER-OPTION, NOT PER-SOURCE. This used to read isSacOutletSource(src) -- "does this PERMANENT
   // have a sac outlet at all" -- which was fine while a permanent had at most one activated
   // ability. Utopia Mycon has two ("remove three spore counters: create a Saproling" and
@@ -1714,8 +1728,9 @@ function queueActivation(src, opt){
   }
   // A sac outlet's verb is sacout=, whatever the action said — the engine only tags `verb` on the
   // kinds with a dedicated one, and `sacout` predates that field.
+  const srcNum = actionSourceNum(src, clickedNum);
   S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
-                mode:opt.mode, sacout: sac || undefined,
+                mode:opt.mode, sacout: sac || undefined, srcNum: srcNum || undefined,
                 // Stackable: repeats of this entry commit as their own consecutive segments.
                 repeatable: opt.repeatable || undefined,
                 // The blinked creature's m_number, so the line can write `blink=<outlet>@<num>` and
@@ -2995,12 +3010,13 @@ function wireBoard() {
   // click a permanent with an activated ability (Krenko's token tap, a Goblin sac outlet) to queue
   // one activation into this phase's line; clicking past the cap removes the last one.
   $('board').querySelectorAll('.thumb[data-activate]').forEach(t =>
-    t.onclick = e => { e.stopPropagation(); toggleActivate(t.dataset.activate); });
+    t.onclick = e => { e.stopPropagation(); toggleActivate(t.dataset.activate, undefined, +(t.dataset.num||0)); });
   // ...and the SAC TAG is its own click target on the same thumb: the card body means the primary
   // ability, the tag means the sacrifice. Wired AFTER data-activate and stopping propagation, so a
   // click that lands on the tag does not also fire the body handler underneath it.
   $('board').querySelectorAll('[data-sacact]').forEach(t =>
-    t.onclick = e => { e.stopPropagation(); toggleActivate(t.dataset.sacact, 'sac'); });
+    t.onclick = e => { e.stopPropagation();
+      const th = t.closest('.thumb'); toggleActivate(t.dataset.sacact, 'sac', +((th && th.dataset.num)||0)); });
   // ARMED BLINK: every legal target lights up and takes the click, so the choice is made on the
   // board. Wired LAST so it wins over the data-activate handler above -- a legal target can itself
   // be an activatable permanent (blinking your own Essence Depleter is a real play), and while the
@@ -3241,9 +3257,12 @@ async function commitLine() {
   // cast" is expressible -- it just takes two commits. Send the first land alone here; applyAccepted
   // leaves the rest of the plan queued and advanceTo re-fires this for the next segment (viewer
   // issue #7: the second land used to silently REPLACE the first).
+  // Each segment validates WITH its "**" sequence (`seq=`, LB.validationLine), so the engine previews
+  // the commit in exactly the order it will apply and rejects a step that cannot be done where it was
+  // queued, with its reason -- instead of the commit dropping it.
   const segs = LB.encodeSegments(S.plan);
   S.segmentsLeft = segs.length - 1;
-  const line = segs[0];
+  const line = LB.validationLine(LB.segmentParts(S.plan)[0] || []);
   const res=await post('/api/validate', cfg({ line }));
   S.busy=false;
   if (res.kind==='validation') return handleVerdict(res, line);
@@ -4136,7 +4155,7 @@ function renderActivationPicker(){
   panel.querySelectorAll('[data-actopt]').forEach(el=>{
     el.onclick=()=>{ const i=+el.dataset.actopt;
       if (i<0) { S.actPick=null; renderBoard(); return; }
-      queueActivation(pick.src, pick.opts[i]); };
+      queueActivation(pick.src, pick.opts[i], pick.srcNum); };
   });
 }
 

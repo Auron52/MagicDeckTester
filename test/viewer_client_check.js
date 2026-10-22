@@ -1143,12 +1143,14 @@ async function testPastCapOrderPin() {
   const pin = (st.castOrder || {})['62'] || null;
   chk(!!pin, 'NO cast-order pin was emitted for a plan past the emit cap -- the human\'s declared '
            + 'order reverts to enumerator order (viewer-pass-guard.md, "what is still open")');
-  chk(JSON.stringify(pin) === JSON.stringify(['**', 'blink=Emiel the Blessed', 'cast=Overgrowth']),
-      `the pin is ${JSON.stringify(pin)}, not the queued ['**','blink=Emiel the Blessed','cast=Overgrowth']`);
+  // (The blink step names its target and count -- WHICH blink -- since the 2026-10-22 review.)
+  const blinkTok = `blink=Emiel the Blessed@${cloud.num}*1`;
+  chk(JSON.stringify(pin) === JSON.stringify(['**', blinkTok, 'cast=Overgrowth']),
+      `the pin is ${JSON.stringify(pin)}, not the queued ['**','${blinkTok}','cast=Overgrowth']`);
   // ...and it really reaches the engine: the same argv builder the live server spawns with.
   const argv = server.buildArgs(win.cfg({}), null, null, false);
   const at = argv.indexOf('--cast-order');
-  chk(at > 0 && argv[at + 1] === '62:**|blink=Emiel the Blessed|cast=Overgrowth',
+  chk(at > 0 && argv[at + 1] === `62:**|${blinkTok}|cast=Overgrowth`,
       `the pin does not reach argv (--cast-order ${at > 0 ? argv[at + 1] : 'ABSENT'})`);
   // Undo must drop it, like every other pin (the `co` step marker) -- a pin left behind describes a
   // decision that no longer happened, and would reorder whatever is committed there next.
@@ -1862,7 +1864,8 @@ async function testOneStepLineNoSilentRevert() {
     chk(st.choices.length > n0, 'the one-step line was rolled back (no choice survived the commit)');
     chk(bf.includes('Bruna, Light of Alabaster'),
         `Bruna is not on the battlefield after "Thicket; Bruna; Glittering Wish" (bf: ${bf.join(', ')})`);
-    const said = (st.history || []).some(h => /cast order/.test(h.label || ''));
+    // (A "**" line's fallback names the whole queued order: "your order (...) cannot pay ...".)
+    const said = (st.history || []).some(h => /your (cast )?order .*cannot pay/.test(h.label || ''));
     chk(said, 'the history does not say the line was cast in a different order than queued');
   }
   // B. a real drop under Commit turn keeps its explanation on screen.
