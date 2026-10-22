@@ -3443,6 +3443,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the plan's r-th cast-section action that TurnSolver::KarooSlotCounts (exec_karoo_pre_hook), else
     // after the main cast loop. 0 = the after-the-casts default.
     int         exec_karoo_slot     = 0;
+    bool        exec_karoo_every    = false;   // the plan's counting rule (TurnSolver::KarooSlotEvery)
     int         exec_karoo_seen     = 0;
     // SEARCHED LAND POSITION (Plan::land_slot != 0) -- lockstep twin of ApplyPlanDirect's
     // land_after_deferred: an ordinary land the committed plan scored as played AFTER a cast rides the
@@ -4096,7 +4097,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
                     karoo_from_top  = plan.land_from_top;
-                    exec_karoo_slot = TurnSolver::KarooSlotOrdinal(plan.land_slot);
+                    exec_karoo_slot  = TurnSolver::KarooSlotOrdinal(plan.land_slot);
+                    exec_karoo_every = TurnSolver::KarooSlotEvery(plan.land_slot);
                 }
                 else if (plan.land_slot != 0)
                 {
@@ -6868,7 +6870,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     auto exec_karoo_pre_hook = [&](const Action& a)
     {
         if (exec_karoo_slot <= 0 || !karoo_deferred) { return; }
-        if (!TurnSolver::KarooSlotCounts(state, a)) { return; }
+        if (!TurnSolver::KarooSlotCounts(state, a, exec_karoo_every)) { return; }
         if (++exec_karoo_seen == exec_karoo_slot) { exec_play_deferred_karoo(); }
     };
     // ...and the plan's land-search activations at a position (Plan::land_search_act_slot >= 1), on

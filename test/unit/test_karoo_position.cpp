@@ -220,6 +220,12 @@ TEST_CASE("Karoo position: the encoding round-trips and never collides with the 
     CHECK(TurnSolver::KarooSlotOrdinal(TurnSolver::KarooSlotBefore(1)) == 1);
     CHECK(TurnSolver::KarooSlotOrdinal(TurnSolver::KarooSlotBefore(TurnSolver::kKarooSlotMax))
           == TurnSolver::kKarooSlotMax);
+    CHECK_FALSE(TurnSolver::KarooSlotEvery(TurnSolver::KarooSlotBefore(1)));
+    CHECK(TurnSolver::KarooSlotEvery(TurnSolver::KarooSlotBefore(1, true)));
+    CHECK(TurnSolver::KarooSlotOrdinal(TurnSolver::KarooSlotBefore(1, true)) == 1);
+    CHECK(TurnSolver::KarooSlotOrdinal(TurnSolver::KarooSlotBefore(TurnSolver::kKarooSlotMax, true))
+          == TurnSolver::kKarooSlotMax);
+    CHECK(TurnSolver::KarooSlotBefore(TurnSolver::kKarooSlotMax) > TurnSolver::KarooSlotBefore(1, true));
     CHECK(TurnSolver::KarooSlotOrdinal(0) == 0);
     CHECK(TurnSolver::KarooSlotOrdinal(TurnSolver::kLandSlotAfterCasts) == 0);
     CHECK(TurnSolver::KarooSlotOrdinal(3) == 0);

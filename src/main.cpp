@@ -511,13 +511,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                                                     : after_name) << ")";
         }
         // A KAROO at an earlier position (Plan::land_slot <= -2, MTG_KAROO_POSITION): played right
-        // before the r-th counted cast. Human play counts every hand cast / graveyard cast / Vial put
-        // (TurnSolver::KarooSlotCounts), so the label names that card in the plan's own order.
+        // before the r-th counted cast. A plan that counts EVERY hand cast / graveyard cast / Vial put
+        // (TurnSolver::KarooSlotEvery: the human menu's rule) names that card in the plan's own order.
         else if (plan.land_slot <= -2)
         {
             const int r = TurnSolver::KarooSlotOrdinal(plan.land_slot);
             int seen = 0; std::string before_name;
-            if (HumanPlayActive())
+            if (TurnSolver::KarooSlotEvery(plan.land_slot))
             {
                 for (const Action& a : plan.actions)
                 {

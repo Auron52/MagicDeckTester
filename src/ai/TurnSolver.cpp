@@ -27758,18 +27758,23 @@ void TurnSolver::LandSlotWatchersFirst(const std::vector<Action>& acts, std::vec
                           [&acts](int i) { return PutsLandfallWatcher(acts[static_cast<std::size_t>(i)]); });
 }
 
-bool TurnSolver::KarooSlotCounts(const GameState& state, const Action& a)
+bool TurnSolver::KarooSlotCounts(const GameState& state, const Action& a, bool every)
 {
     // The actions the cast sections DISPATCH one at a time (the ones slot_hook / exec_slot_hook see):
     // a hand cast (any cost route), a graveyard cast, a Vial put. Board activations run in the trailing
     // pass, after the default Karoo point already.
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
         && a.kind != Action::Kind::ActivateVial) { return false; }
-    // Human play offers EVERY legal point (the viewer never narrows), and so does the unpruned audit.
-    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::LandPick)) { return true; }
+    if (every) { return true; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     if (d == nullptr) { return true; }   // unknown card: count it (never prune what we cannot read)
     return ResolveProvider(state).KarooEntryObserver(state, *d);
+}
+
+bool TurnSolver::KarooSlotEveryMode()
+{
+    // Human play offers EVERY legal point (the viewer never narrows), and so does the unpruned audit.
+    return HumanPlayActive() || DecisionUnpruned(UnprunedGate::LandPick);
 }
 
 bool TurnSolver::PlanCastsEnumeratedPostDrop(const Plan& p)
@@ -51047,6 +51052,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // 0 = the after-the-casts default. An r never reached plays at the default point (never lost).
     // Lockstep twin: AIEngine::TakeTurn's exec_karoo_slot / exec_karoo_seen.
     int         deferred_karoo_slot = 0;
+    bool        deferred_karoo_every = false;   // the plan's counting rule (TurnSolver::KarooSlotEvery)
     int         karoo_slot_seen     = 0;
     // SEARCHED LAND POSITION (Plan::land_slot != 0, 2026-10-15): the SAME deferral as the Karoo's --
     // `karoo_deferred` reserves the drop and every breakpoint guard that keys on it applies unchanged
@@ -51139,7 +51145,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;
                     karoo_from_top  = plan.land_from_top;
-                    deferred_karoo_slot = TurnSolver::KarooSlotOrdinal(plan.land_slot);
+                    deferred_karoo_slot  = TurnSolver::KarooSlotOrdinal(plan.land_slot);
+                    deferred_karoo_every = TurnSolver::KarooSlotEvery(plan.land_slot);
                 }
                 else if (plan.land_slot != 0)
                 {
@@ -54642,7 +54649,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         auto karoo_pre_hook = [&](const Action& a)
         {
             if (deferred_karoo_slot <= 0 || !slot_top || !karoo_deferred || bp_truncate) { return; }
-            if (!TurnSolver::KarooSlotCounts(state, a)) { return; }
+            if (!TurnSolver::KarooSlotCounts(state, a, deferred_karoo_every)) { return; }
             if (++karoo_slot_seen == deferred_karoo_slot) { play_deferred_karoo(); }
         };
         // ...and a position plan's tied-rank watchers go first (TurnSolver::LandSlotWatchersFirst) --
@@ -70889,6 +70896,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // Rides MTG_NO_KAROO_DEFER: with the deferral off every Karoo is land-first and there is no axis.
     std::vector<TurnSolver::Plan> karoo_pos;
     const bool karoo_pos_on = (KarooPositionSearchOn() || HumanPlayActive()) && g_bp_enum_depth == 0;
+    const bool karoo_pos_every = TurnSolver::KarooSlotEveryMode();
 
     // Every (land, fetch target, face) the land-first enumeration below actually OFFERED (its legality
     // probe passed), Karoos excluded -- a Karoo is always played after the casts already. The
@@ -70980,12 +70988,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             if (karoo_drop && karoo_pos_on && !p.actions.empty() && p.land_slot == 0)
             {
                 int n = 0;
-                for (const Action& a : p.actions) { if (TurnSolver::KarooSlotCounts(state, a)) { ++n; } }
+                for (const Action& a : p.actions)
+                { if (TurnSolver::KarooSlotCounts(state, a, karoo_pos_every)) { ++n; } }
                 n = std::min(n, TurnSolver::kKarooSlotMax);
                 for (int r = 1; r <= n; ++r)
                 {
                     TurnSolver::Plan v = p;
-                    v.land_slot = TurnSolver::KarooSlotBefore(r);
+                    v.land_slot = TurnSolver::KarooSlotBefore(r, karoo_pos_every);
                     karoo_pos.push_back(std::move(v));
                 }
             }
@@ -90477,10 +90486,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     // A KAROO's position (Plan::land_slot <= -2, MTG_KAROO_POSITION) is its own encoding: its plans are
     // played AFTER the casts by default (land_slot 0 -- what `land=` / `landafter=` / `landat=all` all
     // mean for a Karoo), and `landat=<k>` (k = the casts queued before it, 0 = before every cast) is
-    // "right before the line's (k+1)-th cast" -- KarooSlotBefore(k+1), counting the line's HAND casts
-    // (`act=` board activations are not dispatched in the cast section, so they are not counted; human
-    // play counts every dispatched cast, TurnSolver::KarooSlotCounts). A `landat=<k>` with no hand cast
-    // after it is the after-the-casts default.
+    // "right before the line's (k+1)-th cast", counting the line's HAND casts (`act=` board activations
+    // are not dispatched in the cast section, so they are not counted) under the rule this menu was
+    // enumerated with (KarooSlotEveryMode: every cast in human play; otherwise the observers, and then
+    // the cast it precedes must itself be one or no plan has that position). A `landat=<k>` with no
+    // hand cast after it is the after-the-casts default.
     if (spec.has_land)
     {
         static const bool s_karoo_defer_cl = !EnvOn("MTG_NO_KAROO_DEFER");
@@ -90490,17 +90500,24 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             wantSlot = 0;
             if (spec.land_slot != kLandSlotAfterCasts && spec.land_at_raw >= 0)
             {
+                const bool every = KarooSlotEveryMode();
                 std::map<std::string, int> acts_left;
                 for (const std::string& b : spec.board_acts) { ++acts_left[b]; }
-                int before = 0, total = 0;
+                int before = 0;         // counted casts queued before the Karoo
+                int next   = -1;        // the first hand cast queued after it: is it counted?
                 for (int i = 0; i < static_cast<int>(spec.casts.size()); ++i)
                 {
                     auto it = acts_left.find(spec.casts[static_cast<std::size_t>(i)]);
                     if (it != acts_left.end() && it->second > 0) { --it->second; continue; }
-                    ++total;
-                    if (i < spec.land_at_raw) { ++before; }
+                    Action probe;
+                    probe.kind      = Action::Kind::CastFromHand;
+                    probe.card_name = spec.casts[static_cast<std::size_t>(i)];
+                    const bool counted = KarooSlotCounts(state, probe, every);
+                    if (i < spec.land_at_raw) { if (counted) { ++before; } }
+                    else if (next < 0) { next = counted ? 1 : 0; }
                 }
-                if (before < total) { wantSlot = KarooSlotBefore(std::min(before + 1, kKarooSlotMax)); }
+                if (next == 1)      { wantSlot = KarooSlotBefore(std::min(before + 1, kKarooSlotMax), every); }
+                else if (next == 0) { wantSlot = std::numeric_limits<int8_t>::max(); }   // not an offered point
             }
         }
     }

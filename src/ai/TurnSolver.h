@@ -1888,19 +1888,29 @@ public:
     static constexpr int8_t kLandSlotAfterCasts = -1;   // after ALL the main casts (`landafter=`)
     // ---- THE KAROO DROP'S POSITION (Plan::land_slot <= -2, MTG_KAROO_POSITION, 2026-10-22) ----------
     // A Karoo (etb_bounce_land) is played after the casts by default (karoo_deferred) and its plans keep
-    // land_slot 0 for that. land_slot = KarooSlotBefore(r), r >= 1, plays it right BEFORE the r-th
-    // dispatched action of the plan's own cast section that KarooSlotCounts -- in human play every hand
-    // cast / graveyard cast / Vial put, in autonomous search only the observers of a land entering
-    // (DecisionProvider::KarooEntryObserver). A position whose r-th action never comes falls back to
-    // after the casts (never lost). Meaningful on a Karoo plan only; no other land ever carries <= -2.
-    static constexpr int8_t KarooSlotBefore(int r) { return static_cast<int8_t>(-1 - r); }
-    static constexpr int    KarooSlotOrdinal(int8_t land_slot) { return land_slot <= -2 ? -1 - land_slot : 0; }
-    static constexpr int    kKarooSlotMax = 126;   // KarooSlotBefore(126) == -127, inside int8_t
-    // Does dispatching `a` count toward a Karoo position? ONE predicate for the enumeration (how many
-    // positions a plan has) and both applies' pre-dispatch hooks (ApplyPlanDirect's karoo_pre_hook,
-    // AIEngine::TakeTurn's twin), so position r is one point in every world. Reads only the action's
-    // definition, process constants and per-game deck stamps (see KarooEntryObserver).
-    static bool KarooSlotCounts(const GameState& state, const Action& a);
+    // land_slot 0 for that. land_slot = KarooSlotBefore(r, every), r >= 1, plays it right BEFORE the
+    // r-th dispatched action of the plan's own cast section that KarooSlotCounts(.., every) -- EVERY hand
+    // cast / graveyard cast / Vial put (`every`: human play, MTG_UNPRUNE=landpick), or only the
+    // OBSERVERS of a land entering (DecisionProvider::KarooEntryObserver: autonomous search). The
+    // counting rule is CARRIED IN THE VALUE (observer r -> -1-r in [-2, -63], every r -> -64-r in
+    // [-65, -126]) rather than re-derived from the mode at apply time, so a plan means one point in every
+    // world whatever mode applies it (a menu enumerated under ExecutorMenuScope, a human plan scored by
+    // a suppressed rollout). A position whose r-th action never comes falls back to after the casts
+    // (never lost). Meaningful on a Karoo plan only; no other land ever carries <= -2.
+    static constexpr int    kKarooSlotMax = 62;
+    static constexpr int8_t KarooSlotBefore(int r, bool every = false)
+    { return static_cast<int8_t>(every ? -64 - r : -1 - r); }
+    static constexpr int    KarooSlotOrdinal(int8_t land_slot)
+    { return land_slot <= -65 ? -64 - land_slot : (land_slot <= -2 && land_slot >= -63 ? -1 - land_slot : 0); }
+    static constexpr bool   KarooSlotEvery(int8_t land_slot) { return land_slot <= -65; }
+    // Does dispatching `a` count toward a Karoo position under the given rule? ONE predicate for the
+    // enumeration (how many positions a plan has) and both applies' pre-dispatch hooks (ApplyPlanDirect's
+    // karoo_pre_hook, AIEngine::TakeTurn's twin), so position r is one point in every world. Reads only
+    // the action's definition and per-game deck stamps (see KarooEntryObserver).
+    static bool KarooSlotCounts(const GameState& state, const Action& a, bool every);
+    // The rule the ENUMERATION offers positions under on this node: every action in human play and the
+    // landpick unprune, the observers otherwise.
+    static bool KarooSlotEveryMode();
     // Does this action put a LANDFALL WATCHER onto the battlefield -- a cast / graveyard cast / Vial
     // put of a card with a landfall trigger (CardDefinition::landfall_watcher), or a mass put that
     // can put one (Genesis Wave, reveal_x_put_permanents)? THE ONE predicate the position axis is
