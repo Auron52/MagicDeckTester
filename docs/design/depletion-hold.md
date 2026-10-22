@@ -106,3 +106,81 @@ construction (the search is untouched; units move only through the different pay
   orders the drop only among EQUALLY-scored plans and keys on whether the drop is played up front, not on
   WHICH land; a provider could use it (it sees the plan's actions) to prefer a non-depletion land on a
   tie, but that is a provider tie-break the USER would have to ask for -- not built.
+
+## The cross-deck A/B and Mirrorwing's slower games (2026-10-22)
+
+The A/B ran (581,400 games, report `logs/depletion_hold_ab/report.txt` in the niv-deplete worktree). Every
+deck is net <= 0 except **Mirrorwing: +0.0003 (t +1.41)** -- d3 8 faster / 13 slower, play 10 faster / 16
+slower, every one by exactly one turn. Scratch for what follows: `build/scratch/niv/agent_mirrorwing_hold/`.
+
+**All 29 slower games replay exactly** (single-game chunks, digests equal to the A/B's `.wins`).
+
+**Mechanism (27 of 29): a cantrip paid off green to keep the red-only Sandstone Needle.** Every trick this
+deck casts on its kill turn draws (Fists of Flame {1}{R}, Ancestral Anger {R}, Oracle's Restoration {G}), so
+the line hold names the cantrip and nothing after it; the rest of the turn is the cards it draws, and they
+are as often green (Ignoble Hierarch, Gold Rush, Fortifying Draught, Elvish Mystic) as red.
+`DepletionHoldMask` sees a payable {1}{R} without the Needle and holds it; the cantrip is paid with Game
+Trail / Forest / Rootbound Crag, and the drawn green spell then finds only the Needle's {R}{R} (or must tap
+an attacking dork). Executor traces, identical board in both arms:
+* play gi=16230 T4 -- OFF: `Fists of Flame tapped: Sandstone Needle` -> Hierarch (Forest) -> Gold Rush
+  (Game Trail + Forest), kill. ON: `Fists of Flame tapped: Game Trail Forest`, then
+  `Gold Rush tapped: Ignoble Hierarch Sandstone Needle float{r1}` (the Needle's last counter spent anyway,
+  one {R} wasted, the Hierarch tapped), the second Hierarch paid with a Treasure -> no kill, T5.
+* play gi=16349 T5 -- OFF: `Ancestral Anger tapped: Sandstone Needle float{r1}` -> Restoration (Game
+  Trail) -> the drawn Elvish Mystic (the dork). ON: `Ancestral Anger tapped: Game Trail` -> Restoration
+  (Elvish Mystic) -> no green for the drawn Mystic. T7 -> T8.
+
+**It is not budget churn.** A `--scenario` built from the OFF arm's own board at the start of its win turn
+(`mkscn.py`): the OFF payer wins that turn at `--budget-ms 0`, the ON payer proves no win at any budget in
+26 of 29; from the diverging turn's board, 27 of 29 (the other two, d3 9592 and d3 19294, recover at budget
+0 from the diverging board -- budget churn). Whole games at 4x budget (d3 b40 / play b80): 2 of 29 recover
+(d3 19294, play 16087).
+
+**Treasures are not involved** (the USER's Gold Rush hypothesis): in all 29 slower games, both arms, no
+payment cracks a Treasure while a Sandstone Needle stays untapped, and the amendment below -- which never
+touches the Treasure order -- recovers all 29 byte-identical to OFF. The one Treasure spent in a slower game
+(16230's second Hierarch) is downstream of the green shortage.
+
+**The 18 faster games are the mirror image**: from the ON arm's board, the ON payer wins its turn at
+budget 0 and the OFF payer cannot in 14 of 18 -- the hold paid an early cantrip with a one-mana land and
+kept the Needle's {R}{R} for a RED spell later in the same turn (d3 7459: Restoration (Forest), Anger
+(Crag), Fists (Needle)). Which order wins depends on the colour of cards not yet drawn; a board-only payer
+cannot know it.
+
+## Amendments (prototype, niv-deplete2; every flag DEFAULT OFF and inert without MTG_PAY_DEPLETION_HOLD)
+
+* `MTG_PAY_DEPLETION_HOLD_UNSEEN` (all decks) and its per-deck form, the provider hook
+  `DecisionProvider::DepletionHoldNeutralWhenUnseen` -- Mirrorwing opts in via `MTG_MW_DEPLETION_UNSEEN`.
+  While the applying line casts a breakpoint opener (`g_line_opens_unseen`, the classifier the float guard
+  already uses), the pips a held land could have paid (generic + its own colours) must be covered by sources
+  making no colour the land cannot make (a Mountain for the Needle) -- the hold may move a red pip between
+  red sources, never spend a dual's or a Forest's other colour on it. A line with no opener is unchanged.
+  Mirrorwing: all 29 slower games AND all 18 faster games become byte-identical to OFF (126 / 93 turns vs
+  ON's 155 / 74); a random 40 of the games the hold moved without changing the win turn: 37 back to OFF's
+  digest, 3 stay ON's. So for Mirrorwing the amendment is the hold switched off in practice -- its lines
+  almost always contain a cantrip and it has two Mountains. For NivMizzetCombo it would answer seed 6 the
+  opposite way from the USER's ask (a Brainstorm, the Canal's {R} is a colour the Skerry cannot make), which
+  is why the per-deck form exists; seed 1 (no opener) keeps T6.
+* `MTG_PAY_DEPLETION_FULL_YIELD` (the USER's refinement: *"spend the depletion first if you need both of its
+  mana"*, *"primarily for Treasures or other expendable resources"*): a held land whose whole yield this
+  payment uses ranks ahead of pay-sac one-shots (`IsPaySacSource`). Mirrorwing: fixes none of the 29 slower
+  games (no Treasure contention there) and turns one faster game back to OFF -- play gi=1654 T3, where the
+  hold cracked the two fresh Gold Rush Treasures for Fists of Flame and kept the Needle's {R}{R} for the two
+  Ancestral Angers Fists drew; with the refinement (and with OFF) that T3 kill is unfindable from the board
+  at budget 0 and depth 2/3/5, though the mana is the same -- reason not isolated (owed).
+* `MTG_PAY_DEPLETION_HOLD_RETRY` (the USER's strict-dominance retry): a held land that paid anyway with mana
+  floating at payment end -> re-pay once with it unheld, keep that only if the spent set is a strict subset
+  (`DepletionRetryDominates`). Mirrorwing's 47 games: the trigger never fires (0, search included). Niv seeds
+  1/6: fires 389-2766 times per game inside the search, 48-100% of retries taken; never in a real payment;
+  win turns unchanged (T6 / T5). The shape (`MTG_PAY_DEPLETION_HOLD_TRACE=2`, seed 1, inside the search):
+  `cost {2} ... leftover{r1} tapped: Sandstone Needle Spirebluff Canal | untapped: ... Izzet Signet` -- the
+  Hall check counted Izzet Signet fed by the Canal as the Needle's replacement, the greedy spent the Canal
+  directly on the first {1} and then reached for the held Needle, floating its second {R}; the Needle alone
+  pays {2}.
+* `MTG_PAY_DEPLETION_HOLD_TRACE=1` prints each real payment's held set (`[dhold]`) and the counters at exit
+  (`[dhold-count]`); `=2` also prints the first float triggers anywhere (`[dhold-float]`).
+
+Not built (USER-deferred): the full-yield rule against LANDS ("float the extra"). Of the 27 mechanism games,
+13 open the kill with Fists of Flame paid by the Needle (11 of them exactly, {R}{R} for {1}{R}) -- the shape
+that rule targets; 12 open with Ancestral Anger {R}, where the Needle's second {R} floats into a later
+spell's generic, which a this-payment full-yield test would not see; 2 are other shapes.

@@ -333,3 +333,150 @@ TEST_CASE("depletion hold: the whole-turn prepay's partial rung keeps the Needle
     const GameState off = run(false);
     CHECK(TappedDh(off) == std::vector<bool>{ true, true, false, false });
 }
+
+// MTG_PAY_DEPLETION_HOLD_UNSEEN -- the amendment (Mirrorwing, cross-deck A/B 2026-10-22: 27 of its 29 slower
+// games). While the line casts a breakpoint opener the line hold is a LOWER bound, so the hold may not
+// spend a colour the depletion land cannot make on a pip the land would have paid. Board of play gi=16230
+// T4 (lands only): Fists of Flame {1}{R} -- a cantrip, the line names nothing after it -- off Game Trail,
+// a last-counter Sandstone Needle and two Forests. The drawn Ignoble Hierarch + Gold Rush then want
+// {G} + {1}{G}: holding the Needle spends Game Trail + a Forest and leaves {R}{R} + one Forest.
+namespace
+{
+struct UnseenArm
+{
+    std::int8_t prev;
+    explicit UnseenArm(bool on) : prev(heurarm::t_arm[heurarm::PAY_DEPLETION_HOLD_UNSEEN])
+    { heurarm::t_arm[heurarm::PAY_DEPLETION_HOLD_UNSEEN] = on ? 1 : 0; }
+    ~UnseenArm() { heurarm::t_arm[heurarm::PAY_DEPLETION_HOLD_UNSEEN] = prev; }
+    UnseenArm(const UnseenArm&)            = delete;
+    UnseenArm& operator=(const UnseenArm&) = delete;
+};
+}   // namespace
+
+TEST_CASE("depletion hold, unseen amendment: a cantrip's {1}{R} spends the Needle, not Game Trail + a Forest")
+{
+    EnsureCardsDh();
+    const GameState board = BoardDh({ LandDh("Game Trail"), LandDh("Sandstone Needle", 1), LandDh("Forest"),
+                                      LandDh("Forest") });
+    const ManaCost fists = CostDh(1, 0, /*r=*/1);
+    HoldArm hold(true);
+    for (int arm = 0; arm < 3; ++arm)
+    {
+        // 0: amendment off, line opens unseen   1: amendment on, line opens unseen   2: on, no opener
+        CAPTURE(arm);
+        UnseenArm un(arm != 0);
+        LineOpensUnseenScope _lou(arm != 2);
+        bool ok = false;
+        const GameState end = PayBoth(board, fists, /*for_creature=*/false, fists, &ok);
+        CHECK(ok);
+        const bool needle_spent = end.battlefield[1].tapped;
+        const int  green_spent  = (end.battlefield[0].tapped ? 1 : 0) + (end.battlefield[2].tapped ? 1 : 0)
+                                + (end.battlefield[3].tapped ? 1 : 0);
+        if (arm == 1)
+        {   // the Needle's {R}{R} pays the {1}{R}; every green source stays up for the drawn cards
+            CHECK(needle_spent);
+            CHECK(green_spent == 0);
+            CHECK(DepletionCountersOn(end.battlefield[1]) == 0);
+        }
+        else
+        {   // the USER's rule as written: the Needle is held, two green-capable lands pay
+            CHECK_FALSE(needle_spent);
+            CHECK(green_spent == 2);
+            CHECK(DepletionCountersOn(end.battlefield[1]) == 1);
+        }
+    }
+}
+
+TEST_CASE("depletion hold, unseen amendment: a colour-NEUTRAL hold (two Mountains for a Needle) still holds")
+{
+    EnsureCardsDh();
+    const GameState board = BoardDh({ LandDh("Mountain"), LandDh("Sandstone Needle", 1), LandDh("Mountain"),
+                                      LandDh("Forest") });
+    const ManaCost fists = CostDh(1, 0, /*r=*/1);
+    HoldArm hold(true);
+    UnseenArm un(true);
+    LineOpensUnseenScope _lou(true);
+    bool ok = false;
+    const GameState end = PayBoth(board, fists, /*for_creature=*/false, fists, &ok);
+    CHECK(ok);
+    CHECK_FALSE(end.battlefield[1].tapped);                     // the Needle is held...
+    CHECK(DepletionCountersOn(end.battlefield[1]) == 1);
+    CHECK(end.battlefield[0].tapped);                           // ...the two Mountains pay...
+    CHECK(end.battlefield[2].tapped);
+    CHECK_FALSE(end.battlefield[3].tapped);                     // ...and the Forest's green stays up
+}
+
+// MTG_PAY_DEPLETION_FULL_YIELD -- the USER's refinement (2026-10-22): "I would also spend the depletion first if
+// you need both of its mana to avoid using both unnecessarily" -- "primarily for Treasures or other expendable
+// resources". {1}{R} off a last-counter Sandstone Needle, a Treasure and a Forest: the hold as written cracks
+// the Treasure for the {R} (and taps the Forest) to keep the Needle; with the refinement the Needle's {R}{R}
+// pays the whole cost and the Treasure survives. A {R} alone would use only half the Needle: Treasure first.
+namespace
+{
+struct FullYieldArm
+{
+    std::int8_t prev;
+    explicit FullYieldArm(bool on) : prev(heurarm::t_arm[heurarm::PAY_DEPLETION_FULL_YIELD])
+    { heurarm::t_arm[heurarm::PAY_DEPLETION_FULL_YIELD] = on ? 1 : 0; }
+    ~FullYieldArm() { heurarm::t_arm[heurarm::PAY_DEPLETION_FULL_YIELD] = prev; }
+    FullYieldArm(const FullYieldArm&)            = delete;
+    FullYieldArm& operator=(const FullYieldArm&) = delete;
+};
+int CountUntappedDh(const GameState& s, const std::string& name)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (!p.tapped && p.card.m_name.str() == name) { ++n; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("depletion hold, full yield: the Needle's {R}{R} pays a {1}{R} ahead of a Treasure; a {R} does not")
+{
+    EnsureCardsDh();
+    const GameState board = BoardDh({ LandDh("Sandstone Needle", 1), LandDh("Treasure Token"), LandDh("Forest") });
+    HoldArm hold(true);
+    for (bool fy : { false, true })
+    {
+        CAPTURE(fy);
+        FullYieldArm arm(fy);
+        bool ok = false;
+        const GameState end = PayBoth(board, CostDh(1, 0, /*r=*/1), false, CostDh(1, 0, 1), &ok);
+        CHECK(ok);
+        if (fy)
+        {
+            CHECK(CountUntappedDh(end, "Treasure Token") == 1);    // the expendable source survives
+            CHECK(CountUntappedDh(end, "Sandstone Needle") == 0);  // both of the Needle's units used
+        }
+        else
+        {
+            CHECK(CountUntappedDh(end, "Treasure Token") == 0);    // the hold as written: Treasure cracked
+            CHECK(CountUntappedDh(end, "Sandstone Needle") == 1);
+        }
+    }
+    {   // half the Needle: the Treasure still pays first
+        FullYieldArm arm(true);
+        bool ok = false;
+        const GameState end = PayBoth(board, CostDh(0, 0, /*r=*/1), false, CostDh(0, 0, 1), &ok);
+        CHECK(ok);
+        CHECK(CountUntappedDh(end, "Sandstone Needle") == 1);
+        CHECK(CountUntappedDh(end, "Treasure Token") == 0);
+    }
+}
+
+// MTG_PAY_DEPLETION_HOLD_RETRY's acceptance test -- the USER's strict dominance: "if it saves tapping a land
+// that is strictly better", "Even a mountain or a dual land that taps for red would be better than floating
+// red", "Otherwise I would probably keep it as-is, since we might need the colour later."
+TEST_CASE("depletion hold retry: taken only when it spends the held land and a strict subset (a Mountain saved)")
+{
+    const int needle = 54, mountain = 47, forest = 13, trail = 29;
+    // first payment: Mountain + the Needle (its second {R} floating); re-payment: the Needle alone -> taken
+    CHECK(DepletionRetryDominates({ mountain, needle }, { needle }, needle));
+    // a dual saved likewise
+    CHECK(DepletionRetryDominates({ trail, needle }, { needle }, needle));
+    // the re-payment spends something the first did not (a Forest's green) -> keep the first
+    CHECK_FALSE(DepletionRetryDominates({ mountain, needle }, { forest, needle }, needle));
+    // the same number of sources -> no gain -> keep the first ("we might need the colour later")
+    CHECK_FALSE(DepletionRetryDominates({ mountain, needle }, { mountain, needle }, needle));
+    // the re-payment does not even spend the land -> not this retry's shape
+    CHECK_FALSE(DepletionRetryDominates({ forest, mountain, needle }, { mountain }, needle));
+}

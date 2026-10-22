@@ -654,6 +654,10 @@ enum Slot : int
     PAY_DEPLETION_WASTE,      // MTG_PAY_DEPLETION_WASTE  the shared payer ranks a DEPLETION land's tap behind every painless plain source (the pain band) when it would spend the land's LAST counter on mana this payment and the rest of the line cannot use (Niv seed 1, 2026-10-22: Skerry + the Needle's last counter paid {2}{U}, floated {R}, the Needle died and the Canal stayed untapped; T6 -> T7). An order, never a filter. DEFAULT OFF pending its A/B
     PAY_DEPLETION_WASTE_ANY,  // MTG_PAY_DEPLETION_WASTE_ANY  ...the same for ANY counter (a wasted counter on a 2-counter land is the same lost mana). Implies the above. DEFAULT OFF pending its A/B
     PAY_DEPLETION_HOLD,       // MTG_PAY_DEPLETION_HOLD  the USER's depletion rule (2026-10-22: "hold the depletion land if it can do so and use it otherwise. At least, it should hold it over non-creature source that are not consumed"): the shared payer ranks the largest set of depletion lands the rest of the payment AND the rest of the line can be paid without (colour-exact) behind every plain-tier source (lands, rocks, filters); a land the line needs keeps its old rank; the whole-turn prepay gets the same set as a partial depletion rung. An order, never a filter. DEFAULT OFF pending the cross-deck A/B and the USER
+    PAY_DEPLETION_HOLD_UNSEEN, // MTG_PAY_DEPLETION_HOLD_UNSEEN  amendment to MTG_PAY_DEPLETION_HOLD (inert without it): while the applying line casts a breakpoint opener (g_line_opens_unseen -- a cantrip, so the line hold is only a LOWER bound on what the turn owes), a depletion land is held only if the pips it could have paid (generic + its own colours) are covered by sources making none of the colours it cannot make (a Mountain for a Sandstone Needle) -- the hold may not spend a dual's or a Forest's green on red the land would have paid. Mirrorwing A/B 2026-10-22: 27 of 29 slower games were a cantrip's {1}{R}/{R} paid off Game Trail/Forest to keep a Needle, the drawn green spells then short. DEFAULT OFF pending its A/B and the USER
+    MW_DEPLETION_UNSEEN,       // MTG_MW_DEPLETION_UNSEEN  Mirrorwing's provider opts in to the MTG_PAY_DEPLETION_HOLD_UNSEEN amendment (DepletionHoldNeutralWhenUnseen): under a line that casts a cantrip, the Sandstone Needle is held only over colour-neutral sources. Inert without MTG_PAY_DEPLETION_HOLD. DEFAULT OFF pending the USER
+    PAY_DEPLETION_FULL_YIELD,  // MTG_PAY_DEPLETION_FULL_YIELD  amendment to MTG_PAY_DEPLETION_HOLD (inert without it), the USER's 2026-10-22 refinement: "I would also spend the depletion first if you need both of its mana to avoid using both unnecessarily" -- "primarily for Treasures or other expendable resources". A held depletion land whose WHOLE yield this payment uses ranks ahead of pay-sac one-shots (a Treasure); against lands and rocks the hold is unchanged. DEFAULT OFF pending its A/B and the USER
+    PAY_DEPLETION_HOLD_RETRY,  // MTG_PAY_DEPLETION_HOLD_RETRY  amendment to MTG_PAY_DEPLETION_HOLD (inert without it), the USER's strict-dominance retry: a held depletion land that paid anyway with mana left floating -> re-pay once with it unheld, keep that only if it spends the same land and ONE source fewer (any source -- "Even a mountain or a dual land that taps for red would be better than floating red"); else the first payment stands ("we might need the colour later"). DEFAULT OFF pending its A/B and the USER
     NIV_BUCKET_DISCARD,       // MTG_NIV_BUCKET_DISCARD  NivMizzetCombo: cleanup discard by the same buckets (Niv / draw-on-damage / go-off / mana to 6 with <= 3 hand lands / draw / a 7th source if space). DEFAULT OFF pending its A/B and the USER
     COUNT
 };
@@ -1259,6 +1263,10 @@ inline const char* Name(int slot)
         "MTG_PAY_DEPLETION_WASTE",
         "MTG_PAY_DEPLETION_WASTE_ANY",
         "MTG_PAY_DEPLETION_HOLD",
+        "MTG_PAY_DEPLETION_HOLD_UNSEEN",
+        "MTG_MW_DEPLETION_UNSEEN",
+        "MTG_PAY_DEPLETION_FULL_YIELD",
+        "MTG_PAY_DEPLETION_HOLD_RETRY",
         "MTG_NIV_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

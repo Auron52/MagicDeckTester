@@ -623,6 +623,12 @@ std::uint64_t DepletionHoldMask(const GameState& state, std::uint64_t cand_mask,
                                 int need_tot, const ManaPool& credit, std::uint64_t excluded,
                                 bool for_creature, bool plain_tier_only);
 
+// MTG_PAY_DEPLETION_HOLD_RETRY's acceptance test (the USER's strict dominance, 2026-10-22): the re-payment with
+// the held depletion land UNHELD is taken only if its spent set (card numbers, sorted) contains that land and is
+// a STRICT subset of the first payment's (with a two-mana land: one source fewer) -- any source, of any rank.
+bool DepletionRetryDominates(const std::vector<int>& first_spent, const std::vector<int>& second_spent,
+                             int land_num);
+
 // ACTIVATION LINE PAY STATE -- what ActLineHoldMask must NOT hold for. The mask's colour half is
 // built from PlanTraits::act_pips, the SUMMED pips of every activation the plan carries, and that
 // sum is static for the whole apply. Two things make it over-hold:

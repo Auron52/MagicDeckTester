@@ -9730,7 +9730,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     // ...and whether the walked order casts a breakpoint opener (the twin of both apply paths' scope).
     LineOpensUnseenScope _lou([&]
     {
-        if (!LineFloatUnseenGuardOn()) { return false; }
+        if (!LineFloatUnseenGuardOn() && !PayDepletionHoldUnseenOn()
+            && !(PayDepletionHoldOn() && ResolveProvider(cp).DepletionHoldNeutralWhenUnseen(cp))) { return false; }
         for (int j : ord) { if (CastOpensUnseen(cp, cands[j])) { return true; } }
         return false;
     }());
@@ -52566,7 +52567,11 @@ bool CastOpensUnseen(const GameState& state, const Action& a)
 
 bool LineOpensUnseenCasts(const GameState& state, const std::vector<Action>& acts)
 {
-    if (!LineFloatUnseenGuardOn()) { return false; }
+    // Two readers: the float rung's guard (MTG_LINE_FLOAT_UNSEEN_GUARD, which re-checks its own flag at
+    // the read) and the depletion hold's amendment (MTG_PAY_DEPLETION_HOLD_UNSEEN, or a deck's provider
+    // opting in through DepletionHoldNeutralWhenUnseen -- Mirrorwing's MTG_MW_DEPLETION_UNSEEN).
+    if (!LineFloatUnseenGuardOn() && !PayDepletionHoldUnseenOn()
+        && !(PayDepletionHoldOn() && ResolveProvider(state).DepletionHoldNeutralWhenUnseen(state))) { return false; }
     for (const Action& a : acts) { if (CastOpensUnseen(state, a)) { return true; } }
     return false;
 }

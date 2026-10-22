@@ -2658,6 +2658,16 @@ public:
     virtual bool SpendOneShotsFreely(const GameState& /*s*/, const PlanTraits& t) const
     { return t.bodies_are_multipliers; }
 
+    // DepletionHoldNeutralWhenUnseen -- a per-deck amendment to MTG_PAY_DEPLETION_HOLD (inert while that is
+    // off). The USER's rule holds a depletion land when the REST of the line can be paid without it; while
+    // the applying line casts a breakpoint opener (g_line_opens_unseen: a cantrip) that rest is only a lower
+    // bound, because the drawn cards are cast this turn too. True = in that case hold the land only if the
+    // pips it could have paid (generic + its own colours) are covered by sources making NO colour it cannot
+    // make (a Mountain for a Sandstone Needle) -- never spend a dual's or a Forest's other colour to save it.
+    // Base: false (the rule as written; the USER wants Niv's Skerry held over Spirebluff Canal on a
+    // Brainstorm, seed 6). The general form for every deck is MTG_PAY_DEPLETION_HOLD_UNSEEN.
+    virtual bool DepletionHoldNeutralWhenUnseen(const GameState& /*s*/) const { return false; }
+
     // OpponentLifegainUseful -- is making the OPPONENT gain life USEFUL to us right now? A
     // Grove-of-the-Burnwillows- style drip land (tap_opponent_lifegain) normally GIFTS the opponent life -- a
     // downside -- so the engine dodges the drip: a generic pip uses Grove's painless {C} mode and leftover

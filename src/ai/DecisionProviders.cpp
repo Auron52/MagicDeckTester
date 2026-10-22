@@ -23261,6 +23261,9 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
 // which multiplied the searched-breakpoint fan-out for nothing (the 2026-08-12 label-path
 // profile: 63.5M wave candidates, improved=0). Game-understanding filter, not a width cap;
 // MTG_UNPRUNE=treasuretrickcast restores the ungated enumeration.
+// MTG_PAY_DEPLETION_HOLD's Mirrorwing exception -- see the declaration (MTG_MW_DEPLETION_UNSEEN, DEFAULT OFF).
+bool MirrorwingProvider::DepletionHoldNeutralWhenUnseen(const GameState&) const { return MwDepletionUnseenOn(); }
+
 bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
                                            const CardDefinition& def) const
 {

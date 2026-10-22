@@ -369,6 +369,53 @@ inline bool PayDepletionHoldOn()
     static const bool env_on = EnvOn("MTG_PAY_DEPLETION_HOLD");
     return heurarm::Flag(heurarm::PAY_DEPLETION_HOLD, env_on);
 }
+// MTG_PAY_DEPLETION_HOLD_UNSEEN (2026-10-22; DEFAULT OFF -- an amendment to the USER's rule above, inert
+// without it; the A/B and the adoption are the USER's). "If it can do so" is asked of the rest of the line,
+// and while the line casts a breakpoint opener (g_line_opens_unseen: a cantrip, an impulse draw, a tutor)
+// that rest is only a LOWER bound -- the cards it draws are cast this turn and their pips are invisible to
+// the hold. Mirrorwing (cross-deck A/B 2026-10-22, the only deck net > 0): 27 of its 29 slower games were
+// one shape -- Fists of Flame {1}{R} / Ancestral Anger {R} paid off Game Trail + Forest to keep a Sandstone
+// Needle (RR), the drawn Ignoble Hierarch / Gold Rush / Fortifying Draught then one green short (the Needle
+// was spent anyway, on a green spell's generic). From the OFF arm's own board the kill was unfindable at
+// --budget-ms 0. So under an unseen line a depletion land is held only if the pips it could have paid
+// (the generic and its own colours) are covered by sources that make NO colour the land cannot make (a
+// Mountain for the Needle, an Island for a Skerry) -- the hold may move a red pip between red sources, never
+// spend a dual's or a Forest's green on it. A line with no opener keeps the rule exactly (its demand is
+// known). The flag also turns on the unseen scan (LineOpensUnseenCasts) when the float guard is off.
+inline bool PayDepletionHoldUnseenOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DEPLETION_HOLD_UNSEEN");
+    return PayDepletionHoldOn() && heurarm::Flag(heurarm::PAY_DEPLETION_HOLD_UNSEEN, env_on);
+}
+// MTG_MW_DEPLETION_UNSEEN (DEFAULT OFF): Mirrorwing's provider opts in to the amendment above
+// (MirrorwingProvider::DepletionHoldNeutralWhenUnseen) -- the per-deck form, byte-identical for every other
+// deck. Inert without MTG_PAY_DEPLETION_HOLD.
+inline bool MwDepletionUnseenOn()
+{
+    static const bool env_on = EnvOn("MTG_MW_DEPLETION_UNSEEN");
+    return PayDepletionHoldOn() && heurarm::Flag(heurarm::MW_DEPLETION_UNSEEN, env_on);
+}
+// MTG_PAY_DEPLETION_FULL_YIELD (DEFAULT OFF; inert without MTG_PAY_DEPLETION_HOLD) -- the USER's refinement
+// (2026-10-22): *"I would also spend the depletion first if you need both of its mana to avoid using both
+// unnecessarily"*, *"That was primarily for Treasures or other expendable resources. There might be an
+// argument to leave other things untapped and spend the extra floating, but we can add that if we need
+// it."* So a HELD depletion land whose whole yield this payment uses (Sandstone Needle's {R}{R} on a {1}{R})
+// ranks ahead of pay-sac one-shots (IsPaySacSource: a Treasure); against lands and rocks the hold is
+// unchanged (they untap, the counter does not come back). The "float the extra against lands" variant is
+// deferred by the USER.
+// MTG_PAY_DEPLETION_HOLD_RETRY (DEFAULT OFF; inert without MTG_PAY_DEPLETION_HOLD) -- the strict-dominance
+// re-payment (ImplWithDepletionRetry in ManaPayment.cpp): a held depletion land that paid anyway with mana left
+// floating -> re-pay once with it unheld, keep that only if it spends the same land and one source fewer.
+inline bool PayDepletionHoldRetryOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DEPLETION_HOLD_RETRY");
+    return PayDepletionHoldOn() && heurarm::Flag(heurarm::PAY_DEPLETION_HOLD_RETRY, env_on);
+}
+inline bool PayDepletionFullYieldOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DEPLETION_FULL_YIELD");
+    return PayDepletionHoldOn() && heurarm::Flag(heurarm::PAY_DEPLETION_FULL_YIELD, env_on);
+}
 
 inline bool PayPainLastOn()
 {

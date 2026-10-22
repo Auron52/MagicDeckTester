@@ -1881,6 +1881,13 @@ public:
     // (d) redundancy (>=2 GR in hand + a board: "no point holding back").
     // MTG_UNPRUNE=treasuretrickcast opens it for audit.
     bool TrickCastSensible(const GameState&, int, const CardDefinition&) const override;
+    // MTG_PAY_DEPLETION_HOLD's Mirrorwing exception (MTG_MW_DEPLETION_UNSEEN, DEFAULT OFF -- the USER's call):
+    // every trick this deck casts before its kill draws (Fists of Flame, Ancestral Anger, Oracle's
+    // Restoration), and the drawn cards are as often green (Ignoble Hierarch, Gold Rush, Fortifying
+    // Draught) as red. Holding the red-only Sandstone Needle for a cantrip's {1}{R} spends Game Trail /
+    // Forest / Rootbound Crag and leaves the drawn green one short: 27 of the 29 slower games of the
+    // 2026-10-22 cross-deck A/B, the kill unfindable at --budget-ms 0 from the OFF arm's own board.
+    bool DepletionHoldNeutralWhenUnseen(const GameState&) const override;
     // (The copy-magnet ReserveCreatureHold and the bodies-are-multipliers SpendOneShotsFreely
     // overrides that used to live here were generalised into the DecisionProvider base on
     // 2026-09-02 -- both conditions are param-keyed and deck-agnostic, so any magnet deck now
