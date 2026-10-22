@@ -158,6 +158,7 @@ pipeline; the REQUIREMENT stops a shipped deck from silently riding that default
 
 * `alpha` -> relaxed whenever leafless (8/8; strict = "stops one depth short of the win")
 * `escalation_fresh_frac` -> 0.5 always (7/7; OFF caused the melira defect). Measurement in flight.
+  **DONE 2026-10-22** (reverted by an agent 2026-09-12 in between; restored on the USER's word) -- as a floor, see `search-shape-open-items.md` §3.
 * `escalation_cap` -> unconditional, ceiling `target_depth` (see the corrected row above; test the 2
   exceptions for inertness first)
 * `beam_width` 3 / `beam_leafdepth` 2 (4/4) -- needs a digest check on the 16 decks that lack them

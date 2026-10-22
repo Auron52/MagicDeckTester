@@ -135,6 +135,10 @@ struct Arm
     std::array<double, 8> esc_skip_rv{};
     int         esc_skip_rv_n     = 0;
     int         esc_skip_single   = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SKIP_SINGLE)
+    // Escalation budget A/B arm (manifest "esc_fresh_frac"): f >= 0 => fresh f x budget_ms, -1 => the legacy
+    // shared remaining budget. A research arm only -- play always runs 0.5 (MTG_ESCALATION_FRESH_FRAC).
+    double      esc_fresh_frac    = -2.0;   // <= -1.5 unset => env => 0.5
+    int         esc_fresh_floor   = -1;     // -1 unset => env (default ON) | 0 flat | 1 floor: the fresh allowance as a minimum
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // GREEDY-WALK CHARGE WEIGHT (MTG_SOLVE_CHARGE_W): visits per charged unit, >=1. NOT a value-leaf
     // setting -- it lives here because this struct is the per-job NUMERIC arm (heurarm::Arm is

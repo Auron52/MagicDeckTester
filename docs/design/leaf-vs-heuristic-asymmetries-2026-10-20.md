@@ -356,6 +356,8 @@ it is noticeably better on a large set we should"*; fresh seeds 884000-891000 ad
 | Creature Giving | not adopted | emulated b8 -0.005 at 1.17x vs shipped b30 -0.008 at 1.19x; its larger gains cost 1.75x+ |
 | Hinata2, Prevent Damage | not adopted | shipped better at equal cost (table above) |
 
+**Re-measured against the FIXED hybrid (2026-10-22).** Those comparisons ran the shipped hybrid with its escalation on the probe's leftover budget -- neither deck set `escalation_fresh_frac`, so Kitty's escalation committed depth 1 in 149 of 195 cases and Melira skipped 322 of 608 (`logs/tgt/escdiag`). With the escalation's fresh 0.5 floor now unconditional, held-out 500 games each (seeds 894000/895000, `logs/tgt/fresh05`): emulated vs hybrid Kitty -0.006 (6 faster / 4 slower) at 0.82x units, Melira -0.008 (6 / 2) at 0.77x. The adoptions stand -- level or better at ~20% less work -- but most of their quality margin was the starved escalation.
+
 Each adoption is a strict improvement on both axes at the deck's new play budget (a budget is part of the shape here:
 the emulated ladder spends a budget differently). Suite d5 cells pin budget 20, so ground truth exercises the
 adopted shapes at b20.

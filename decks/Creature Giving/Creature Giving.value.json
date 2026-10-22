@@ -124,8 +124,7 @@
   "escalation_cap": 5,
   "beam_width": 3,
   "beam_leafdepth": 2,
-  "escalation_r": 21.0,
-  "escalation_fresh_frac": 0.5
+  "escalation_r": 21.0
  },
  "eval_model": {
   "intercept": 4797,

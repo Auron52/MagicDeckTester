@@ -81998,7 +81998,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int value_min_depth, int budget_ms,
                                                         bool value_no_fallback,
                                                         const std::vector<int>& value_fallback_take_at,
-                                                        double escalation_fresh_frac,
                                                         int beam_width, int beam_leafdepth,
                                                         int escalation_cap,
                                                         double escalation_r)
@@ -82143,7 +82142,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     static const int s_esc_beam_leafdepth = []{ const char* e = std::getenv("MTG_ESC_BEAM_LEAFDEPTH");
                                                 return (e && *e) ? std::atoi(e) : 2147483647; }();
     static const bool s_esc_beam_static = EnvOn("MTG_ESC_BEAM_STATIC");  // prune by static order
-    // DEPTH-ADAPTIVE BEAM (per-deck path). Precedence (mirrors escalation_fresh_frac): an EXPLICITLY-SET
+    // DEPTH-ADAPTIVE BEAM (per-deck path). Precedence: an EXPLICITLY-SET
     // MTG_ESC_BEAM env wins (keeps env A/B working + its literal uniform-beam semantics -- a research tool, no
     // depth adaptation). Else the per-deck value_play beam (beam_width >= 0 whenever an enabled block drives,
     // passed at ANY depth; beam_width < 0 => no block => off => byte-identical).
@@ -82681,30 +82680,25 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 return line;   // skip: trust the value-leaf line, save the full re-search
             }
         }
-        // Escalation budget source. DEFAULT IS OFF (-1 == legacy shared REMAINING budget) so this refactor is
-        // BYTE-IDENTICAL to the committed regression GT with no env set. The FRESH-FULL budget below is an
-        // UNADOPTED candidate: it fixes the value-leaf budget-exhaustion regression (the probe spends most of
-        // the shared decision budget reaching committed depth, starving the heuristic re-search to ~d1 so it
-        // mis-commits a hair shallower on knife-edge games -> antilife regression, overnight-audit-2026-07-11)
-        // and a fresh budget recovers those wins. But it is a genuine QUALITY *and* PERFORMANCE tradeoff, not a
-        // free win: single-seed A/B shows antilife/hinata better (+~0.01-0.02 LP) BUT TH slightly worse
-        // (4.11037->4.11371) and ~+16% wall on hinata. Adopting it requires a full-regression A/B (train+held-
-        // out) + perf measurement + user approval + a deliberate GT rebaseline -- do NOT flip the default back
-        // to 1.0 without that. Turn it on for that A/B with MTG_ESCALATION_FRESH_FRAC=1.0. See hinata-
-        // escalation-budget-restore + docs/design/escalation-refactor-drift.md. Overrides:
-        //   MTG_ESC_SPLIT set              -> reserve: cap probe, dedicated ((1-split)+restore)*budget_ms
-        //   MTG_ESCALATION_FRESH_FRAC=f>=0 -> fresh f*budget_ms (f=1.0 == full fresh budget, the candidate)
-        //   MTG_ESCALATION_FRESH_FRAC=-1   -> LEGACY shared REMAINING budget (DEFAULT; == committed GT)
-        static const bool   s_fresh_frac_env_set = EnvSet("MTG_ESCALATION_FRESH_FRAC");
+        // Escalation budget source: a FRESH 0.5 x budget_ms AT LEAST (the leftover when larger, see the floor
+        // below), UNCONDITIONALLY -- every deck, every depth (USER
+        // 2026-09-11: "Delete the knob instead: make the fresh escalation budget unconditional"; restated
+        // 2026-10-21: "The escalated shape was meant to always use 0.5", and the escalation running on the
+        // probe's leftovers "should not be reachable"). The per-deck value_play.escalation_fresh_frac key is
+        // DELETED: its ABSENCE meant the legacy shared REMAINING budget, which is what every deck without the
+        // key ran (Kitty and Melira included), and the 7 decks that set it got it only on-policy (vp_here), so
+        // their d3 / off-target searches ran starved too. Starved, the probe leaves the escalation little or
+        // nothing (Melira 2026-10-21: under 10% of the decision budget left in 244 of 608 escalations; Kitty
+        // 84 of 227) and the escalation commits depth 1 or is skipped. 0.5 was hardcoded once before and
+        // reverted 2026-09-12 by an agent over treasure_hunt's on-policy cost rejection (1.083x units) -- a
+        // trade that was the USER's call, never surfaced. Research overrides only (A/B arms, never a deck key):
+        //   per-job manifest "esc_fresh_frac" (ValueArm) > MTG_ESCALATION_FRESH_FRAC > 0.5
+        //   f >= 0 -> fresh f x budget_ms;  -1 -> LEGACY shared REMAINING budget (the pre-2026-10-21 default)
+        //   MTG_ESC_SPLIT set -> reserve: cap probe, dedicated ((1-split)+restore) x budget_ms
         static const double s_fresh_frac = []{ const char* e = std::getenv("MTG_ESCALATION_FRESH_FRAC");
-                                               return (e && *e) ? std::atof(e) : -1.0; }();  // default OFF (legacy)
-        // Precedence: an EXPLICITLY-SET env (MTG_ESCALATION_FRESH_FRAC, the experiment/A-B override) wins over
-        // everything -- needed so the env-based A/B still works once a deck ships an enabled value_play block
-        // carrying its own escalation_fresh_frac. Else the per-deck value_play value (a real number, i.e. not
-        // the -2.0 sentinel) wins; else legacy -1. Env UNSET + block sentinel/-1 => -1 == byte-identical.
-        const double eff_fresh_frac = s_fresh_frac_env_set
-                                    ? s_fresh_frac
-                                    : (escalation_fresh_frac <= -1.5 ? s_fresh_frac : escalation_fresh_frac);
+                                               return (e && *e) ? std::atof(e) : 0.5; }();
+        const double eff_fresh_frac = (valuearm::t_arm.esc_fresh_frac > -1.5) ? valuearm::t_arm.esc_fresh_frac
+                                                                              : s_fresh_frac;
         static const int    s_esc_single_off = []{ const char* e = std::getenv("MTG_ESC_SINGLE_OFFSET");
                                                    return (e && *e) ? std::atoi(e) : 0; }();
         ForceHeuristicLeafGuard _fh(true);
@@ -82730,6 +82724,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             esc_alloc_budget = SearchBudget::FromVirtualMs(
                 std::max(1, static_cast<int>(std::lround(eff_fresh_frac * budget_ms))));
             esc_budget = &esc_alloc_budget;
+            // The fresh allowance is a FLOOR (DEFAULT ON; MTG_ESCALATION_FRESH_FLOOR=0 / manifest "esc_fresh_floor":
+            // false gives the flat f): a cheap probe that left MORE than f x budget_ms keeps its leftover. A flat
+            // f under-funds exactly that case. Held-out 2026-10-22 vs the leftover (logs/tgt/fresh05, play
+            // settings 26 decks x 500, d3 b10 33 decks x 300): flat 0.5 play -0.0011 (15 faster / 4 slower) but
+            // d3 +0.0027 (10 / 32); the floor play -0.0012 (14 / 1) and d3 -0.0004 (5 / 1).
+            static const bool s_fresh_floor = EnvOn("MTG_ESCALATION_FRESH_FLOOR", true);
+            const bool floor_on = (valuearm::t_arm.esc_fresh_floor >= 0) ? (valuearm::t_arm.esc_fresh_floor != 0) : s_fresh_floor;
+            if (floor_on && budget && !budget->Unlimited() && budget->Remaining() > esc_alloc_budget.Limit())
+            { esc_budget = budget; }
         }
         SearchLine hline;
         // Skip-prototype bookkeeping (EscStats.h): which escalation path ran, its budget at entry, and the

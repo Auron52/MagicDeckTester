@@ -1,15 +1,13 @@
-# Regression ground truth -- commit 496638bd0  date 2026-10-21
+# Regression ground truth -- commit 9d3ca8ad9  date 2026-10-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-19): Periodic overnight rebaseline 2026-10-19 (PGO+LTO, 14m18s makespan, 32/32 workers): 379 moved + 12 NEW fungusv2 keys (its first overnight GT); searched 2993 faster / 1229 slower, d0 12427 faster / 3505 slower. Every deck net faster or flat EXCEPT galadriel (+0.040t searched) / galadriel2hg (+0.049t): that is the USER's ScryVerdict scry prune (5c85e812), whose CLAIRVOYANT cost was measured at +0.0476t (24x1000 d5 b20) while it is -0.0108t on the honest non-clairvoyant bar -- the suite rows were accepted on smoke+regression for the same reason. colossus -0.39t is the keep-table + nlfit adoption on the table-absent FULL-set baseline (074c93a6): 0 unexplained of 10040 changed games, d0 reproduces both sides. classify_turn_later at accept time: 73 churn / 1094 PERSISTS of the searched SLOWER (run still finishing, logs/overnight_20261019/classify.log). Prior overnight notes dropped deliberately: every cell re-measured, none carried a standing USER cell ruling.
 # accepted-with-regressions (overnight, 2026-10-20): fungusv3 overnight rows RE-SIZED to the standard FULL set (d3 4x1000 b20, d5 4x500 b40; USER 2026-10-17 'put everything into the latest version'): a resized row re-defines its key, accepted on its own with no play change (d0 rows unchanged 4/4; smoke+regression byte-identical for every non-EDF key).
 # accepted-with-regressions (overnight, 2026-10-20): EDF re-baselined TABLE-ABSENT on the rebased engine (origin 2026-10-20 + this batch, which is byte-identical for every other key): upstream play changes since the 2026-10-18 EDF accept move its cells; overnight searched 28 faster / 2 slower, d0 avg unchanged; smoke edf2hg -0.067; regression one d3 cell +0.025 (1 game of 40). Accepted on its own so the keep-table adoption that follows is like-for-like.
 # accepted-with-regressions (overnight, 2026-10-21): EDF exhaustive keep table ADOPTED (K=19, 386,945 entries, R=30 fast, flip_eps 0.10, generated d1 b1 on PGO src 78628a77): mullgen keep A/B -0.250t (t -20.1, 5/5 seed pairs, early stop); confounded bottoming A/B -0.100t (t -18.5, 14/14 complete seed pairs, 14,000 paired games; the run's last 2 lookahead games still running at accept time). Every EDF cell faster in all three tiers (overnight d0 -0.17..-0.20, searched -0.08..-0.25); keep_adoption_attribution: 0 unexplained, both replays reproduce their baselines, in smoke/regression/overnight.
-# accepted-with-regressions (smoke, 2026-10-21): EDF value sidecar ADOPTED by valueleaf.sh phase E.5 (frozen 9accfb5e1): shape #3 nlfit = final-depth single pass, leafless (value_play ladder single, leaf none, alpha relaxed); held-out 8 seeds x 1000: -0.00575 t (t -3.45) at 0.818x units vs the sidecar-less default. Moves only EDF (sidecar presence). Smoke: edf d3/d5 + edf2hg d3 same scores, 4 searched line changes; refs 630 / 0 drift. CARRIED: Vampires LANDING (vampires-int rebased onto origin 1ccda665c; Q27 resolved by the combat_damage_steps recording rule; MTG_PLAN_SIG_FAST carries the Vampires pins; MTG_PAY_ENERGY_LAST amends pain-last for Aether Hub): Vampires rows added (gate re-measured below). Three-way per-game attribution (origin base / origin now / the old-base accept): searched 0 slower / 23 faster, d0 2 slower / 70 faster; every moved non-Vampires game repeats its old-base verdict (critter/angels CR 510.4 two-step faster; antilife d3 gi213, bruna d5 gi21, fivecolour2hg, bruna2hg R+B; mirrorwing, soldiers B; soldiers d0 gi49 5->6 / gi817 4->5 payer levers, held-out net 0) except NEW interactions: fivecolour d3 gi69 6->5 (faster), EDF d3 / edf2hg d3 gi12 same score (B's MTG_BP_PO_W0_FOLD, =0 restores; verify 0 mismatches). EDF d0 byte-identical to origin with MTG_PAY_ENERGY_LAST (held-out EDF A/B 2,250 games: 0 slower / 0 faster vs origin's payer). Every Vampires game keeps its old-base kill turn. Carried (origin 2026-10-21): KittyEquipment + Melira Pod ship the emulated-ladder value leaf (USER 2026-10-21: switch the clear improvements). Only kitty*/melira* cells move. Smoke: 6 slower / 6 faster, all 6 slower churn (recover at 16x). Regression: 4 slower / 6 faster, all 4 slower churn (Melira gi1/gi64/gi1/gi14 recover at 4x). Held-out (logs/tgt/fleet/curve2-4, fresh seeds 884000-891000): Kitty b14 3,000 games -0.019 at ~0.93x units, Ir/unit equal (callgrind); Melira b60 3,000 games -0.019 (t -5.2) at 0.86x units.  
-# accepted-with-regressions (regression, 2026-10-21): EDF value sidecar ADOPTED by valueleaf.sh phase E.5 (frozen 9accfb5e1): shape #3 nlfit = final-depth single pass, leafless (value_play ladder single, leaf none, alpha relaxed); held-out 8 seeds x 1000: -0.00575 t (t -3.45) at 0.818x units vs the sidecar-less default. Moves only EDF (sidecar presence). Regression: d3 s2002 4.0000->4.0250 (gi4 5->6), d3 s3003 4.2500->4.2250 (gi10 4->5, two faster), d5 s2002/s3003 same scores; net 0 on the suite (2 slower / 2 faster), the gate's 8,000 held-out games are the adoption evidence; refs 630 / 0 drift. CARRIED: Vampires LANDING (vampires-int rebased onto origin 1ccda665c; Q27 RESOLVED: reference gate 630 refs 0 play-drift via the combat_damage_steps recording rule; MTG_PLAN_SIG_FAST carries the Vampires pins; MTG_PAY_ENERGY_LAST amends pain-last for Aether Hub): Vampires rows added. Three-way per-game attribution: searched 1 slower / 50 faster, d0 1 slower / 84 faster; every moved non-Vampires game repeats its old-base verdict -- hinata d3 s3003 gi26 8->loss is B's MTG_BP_PO_W0_FOLD at b10, budget churn (both arms win T7 at b20/b40/b80); pirates d0 gi628 5->6 payer levers (held-out net -2); fungusv3 d3 s3003 gi99 5->4 (R) -- plus EDF d0 gi46/gi354/gi490 same score (payment order; held-out EDF A/B net 0). Every Vampires game keeps its old-base kill turn. Carried (origin 2026-10-21): KittyEquipment + Melira Pod ship the emulated-ladder value leaf (USER 2026-10-21: switch the clear improvements). Only kitty*/melira* cells move. Smoke: 6 slower / 6 faster, all 6 slower churn (recover at 16x). Regression: 4 slower / 6 faster, all 4 slower churn (Melira gi1/gi64/gi1/gi14 recover at 4x). Held-out (logs/tgt/fleet/curve2-4, fresh seeds 884000-891000): Kitty b14 3,000 games -0.019 at ~0.93x units, Ir/unit equal (callgrind); Melira b60 3,000 games -0.019 (t -5.2) at 0.86x units.  
 # accepted-with-regressions (overnight, 2026-10-21): vampires overnight rows RE-SIZED from the ENTRY set to the FULL set (d3 4x1000 b20, d5 4x500 b40, 2HG d5 4x150 b40) just before the keep table's adoption, accepted with the table ABSENT (regression-testing.md 'Sizing a deck's overnight rows'): a resized row re-defines its key; d0 rows unchanged 4/4; no play change.
-# accepted-with-regressions (smoke, 2026-10-21): Vampires exhaustive keep table ADOPTED (K=15, 161,724 size-7 entries, R40 complete, adaptive keep mean R 7.66, bottoming sub cells all R40; generated d1 b1 on PGO src 208b5152 / eeb55d83a): mullgen keep A/B -0.159t, confounded bottoming A/B -0.0297t (6/6, mean/se -11.7). keep_adoption_attribution.py, every tier and both keys: baselines reproduced on both sides, 0 unexplained (smoke 542 mulligan-count / 137 bottom / 5 order-only; regression 702 / 116 / 6; overnight 6425 / 1281 / 55). Standard rows -0.03..-0.15t; 2HG rows mixed on small samples (regression d3 +0.020 / d5 +0.100, overnight d5 -0.053/0/-0.067/-0.100): every change a keep/bottom decision, the standard metric still credits the old lookahead bottomer's library peek.
-# accepted-with-regressions (regression, 2026-10-21): Vampires exhaustive keep table ADOPTED (K=15, 161,724 size-7 entries, R40 complete, adaptive keep mean R 7.66, bottoming sub cells all R40; generated d1 b1 on PGO src 208b5152 / eeb55d83a): mullgen keep A/B -0.159t, confounded bottoming A/B -0.0297t (6/6, mean/se -11.7). keep_adoption_attribution.py, every tier and both keys: baselines reproduced on both sides, 0 unexplained (smoke 542 mulligan-count / 137 bottom / 5 order-only; regression 702 / 116 / 6; overnight 6425 / 1281 / 55). Standard rows -0.03..-0.15t; 2HG rows mixed on small samples (regression d3 +0.020 / d5 +0.100, overnight d5 -0.053/0/-0.067/-0.100): every change a keep/bottom decision, the standard metric still credits the old lookahead bottomer's library peek.
 # accepted-with-regressions (overnight, 2026-10-21): Vampires exhaustive keep table ADOPTED (K=15, 161,724 size-7 entries, R40 complete, adaptive keep mean R 7.66, bottoming sub cells all R40; generated d1 b1 on PGO src 208b5152 / eeb55d83a): mullgen keep A/B -0.159t, confounded bottoming A/B -0.0297t (6/6, mean/se -11.7). keep_adoption_attribution.py, every tier and both keys: baselines reproduced on both sides, 0 unexplained (smoke 542 mulligan-count / 137 bottom / 5 order-only; regression 702 / 116 / 6; overnight 6425 / 1281 / 55). Standard rows -0.03..-0.15t; 2HG rows mixed on small samples (regression d3 +0.020 / d5 +0.100, overnight d5 -0.053/0/-0.067/-0.100): every change a keep/bottom decision, the standard metric still credits the old lookahead bottomer's library peek.
+# accepted-with-regressions (smoke, 2026-10-22): (rebased onto 1e8c63dba) Escalation budget: fresh 0.5 x budget_ms as a FLOOR, unconditional; per-deck escalation_fresh_frac DELETED (USER 2026-09-11 'make the fresh escalation budget unconditional', restated 2026-10-21 'The escalated shape was meant to always use 0.5'). Smoke 8 cells 0 slower / 4 faster. Regression 12 cells 4 slower / 5 faster: hinata d3 x3 churn (4x/16x), creature_giving d5 s3003 gi194 6->7 PERSISTS -- held-out CG play floor vs flat 1 faster / 0 slower. Held-out vs the leftover (logs/tgt/fresh05): play 26 decks x 500 -0.0012 (14/1); d3 b10 33 decks x 300 -0.0004 (5/1); the 7 keyed decks floor vs flat 0.5 at play 3500 games 1/0.
+# accepted-with-regressions (regression, 2026-10-22): (rebased onto 1e8c63dba) Escalation budget: fresh 0.5 x budget_ms as a FLOOR, unconditional; per-deck escalation_fresh_frac DELETED (USER 2026-09-11 'make the fresh escalation budget unconditional', restated 2026-10-21 'The escalated shape was meant to always use 0.5'). Smoke 8 cells 0 slower / 4 faster. Regression 12 cells 4 slower / 5 faster: hinata d3 x3 churn (4x/16x), creature_giving d5 s3003 gi194 6->7 PERSISTS -- held-out CG play floor vs flat 1 faster / 0 slower. Held-out vs the leftover (logs/tgt/fresh05): play 26 decks x 500 -0.0012 (14/1); d3 b10 33 decks x 300 -0.0004 (5/1); the 7 keyed decks floor vs flat 0.5 at play 3500 games 1/0.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -37,8 +35,8 @@ antilife_smoke_d0_s1001=4.8920/c0982042fca8bf38
 antilife_smoke_d3_s1001=4.1840/7d31a0f0a3ec268c
 antilife_smoke_d5_s1001=4.1800/bd1e3ec24a50ecf6
 hinata_smoke_d0_s1001=6.7830/0b80ac146283b4df
-hinata_smoke_d3_s1001=5.6600/0892287cf15dc424
-hinata_smoke_d5_s1001=5.7867/3cb15d3b8668c17b
+hinata_smoke_d3_s1001=5.6600/b444848e07b89aec
+hinata_smoke_d5_s1001=5.7867/72941eb67942460d
 dragonstorm_smoke_d0_s1001=4.9950/f3832104d01eaa97
 dragonstorm_smoke_d3_s1001=4.4800/3ca5c91582814b05
 dragonstorm_smoke_d5_s1001=4.4667/ea80f3d1e28cc559
@@ -56,7 +54,7 @@ mirrorwing_smoke_d3_s1001=4.2067/4f62c17e70d74525
 mirrorwing_smoke_d5_s1001=4.2933/1ee0b9edf410b41b
 fivecolour_smoke_d0_s1001=5.4720/bbd8b3358c286cdd
 fivecolour_smoke_d3_s1001=4.8267/26fa543888b41690
-fivecolour_smoke_d5_s1001=4.8933/2f4f52130f0d31fe
+fivecolour_smoke_d5_s1001=4.8800/1235548b72d1c3da
 stompy_smoke_d0_s1001=4.8370/a0166060c77c1b0f
 stompy_smoke_d3_s1001=4.0267/af05fbe1e8e12d8b
 stompy_smoke_d5_s1001=4.0133/3f06eca243261b9e
@@ -81,7 +79,7 @@ melira_smoke_d5_s1001=4.7600/6be17c8841419e97
 angels_smoke_d0_s1001=5.2170/8e85db517c38302a
 angels_smoke_d3_s1001=4.6280/4da305efe98b0ab4
 angels_smoke_d5_s1001=4.5867/c396e4704f07cd3b
-hinata2hg_smoke_d3_s1001=5.5867/4db0338d4dadd760
+hinata2hg_smoke_d3_s1001=5.5733/7509bb31c65ae114
 antilife2hg_smoke_d3_s1001=3.9600/88558bfc7def1327
 minotaur2hg_smoke_d3_s1001=5.3500/e360fe2ca8b7b5c4
 goblins2hg_smoke_d3_s1001=4.0400/097f3b408bda91fc
@@ -123,12 +121,12 @@ soldiers_smoke_d0_s1001=4.4200/fc7466d94d7302b9
 soldiers_smoke_d3_s1001=4.2800/1947dc3aa73d51a2
 soldiers_smoke_d5_s1001=4.2933/37828cd762bc4c96
 pd_smoke_d0_s1001=7.3020/78dee9f01e7fbe96
-pd_smoke_d3_s1001=5.3600/12a8d118275be0da
+pd_smoke_d3_s1001=5.3600/d9e7e511ba11a394
 pd_smoke_d5_s1001=5.3333/f3240f4fb1a52bf0
-bruna2hg_smoke_d3_s1001=5.4000/cdb742502e5d8d6b
+bruna2hg_smoke_d3_s1001=5.3800/0af9fde54d7e7cbb
 bruna_smoke_d0_s1001=6.1460/a35da4523e8d5492
 bruna_smoke_d3_s1001=4.8400/eb4323d0b3d79a92
-bruna_smoke_d5_s1001=4.9067/3bdffdb221d77e7c
+bruna_smoke_d5_s1001=4.9067/958a3b0229c3a25e
 edf2hg_smoke_d3_s1001=4.0667/e7a0d3439ba247b5
 edf_smoke_d0_s1001=5.3160/9f82e633caecdf4b
 edf_smoke_d3_s1001=4.0000/b40717ad3b658efd
@@ -160,7 +158,7 @@ fungusv3_regression_d5_s3003=4.6100/a5dc6a95fb07b404
 slivers_regression_d0_s2002=4.6880/f65eab993476143d
 slivers_regression_d3_s2002=4.2200/d778c5895eaeb859
 slivers_regression_d3_s3003=4.2500/6fe7929d27e49cce
-slivers_regression_d5_s2002=4.2267/c62169045a06615a
+slivers_regression_d5_s2002=4.2267/db18f91ca539dbef
 slivers_regression_d5_s3003=4.2567/8cc2b34f1a3970d9
 burn_regression_d0_s2002=4.4150/076897f339eaae1a
 burn_regression_d3_s2002=4.3360/7e041fe08b6bbe70
@@ -169,8 +167,8 @@ burn_regression_d5_s2002=4.3360/65340bf4d999767e
 burn_regression_d5_s3003=4.2360/c7ed855fc6423ee8
 th_regression_d0_s2002=5.5100/d185fca8198fc715
 th_regression_d3_s2002=4.1420/2ead3832e7a00b7a
-th_regression_d3_s3003=3.9780/d5ccac890a173400
-th_regression_d5_s2002=4.0600/846a02d2c2d988a3
+th_regression_d3_s3003=3.9760/4383f7f35aa85aee
+th_regression_d5_s2002=4.0600/e66b0999c81cf9fb
 th_regression_d5_s3003=3.9833/1ea7b250655ee414
 knights_regression_d0_s2002=4.5610/f227b6e9ca727150
 knights_regression_d3_s2002=4.2967/e7da708de116691d
@@ -188,8 +186,8 @@ antilife_regression_d3_s3003=4.2000/fd54a5a9bc94220f
 antilife_regression_d5_s2002=4.3000/53f8917ef79d1820
 antilife_regression_d5_s3003=4.1880/6d2c199776bf0a66
 hinata_regression_d0_s2002=6.8470/297e0148af67319b
-hinata_regression_d3_s2002=5.5700/0610a946e3a21ba6
-hinata_regression_d3_s3003=5.6150/76f5f80e26210c72
+hinata_regression_d3_s2002=5.5650/290b3dc5fe1207d0
+hinata_regression_d3_s3003=5.6150/fae53585e8f0d7b8
 hinata_regression_d5_s2002=5.6600/8edaaf049152fb34
 hinata_regression_d5_s3003=5.6300/e3a4a793e282677f
 dragonstorm_regression_d0_s2002=5.0120/cde74120c7eb5150
@@ -211,17 +209,17 @@ creature_giving_regression_d0_s2002=5.5670/ae336c1f7c0e098f
 creature_giving_regression_d3_s2002=4.6167/181b60ab87a80841
 creature_giving_regression_d3_s3003=4.6467/8925b555da90ae7b
 creature_giving_regression_d5_s2002=4.6120/70ca057c340aea15
-creature_giving_regression_d5_s3003=4.6520/dd9fec21f4145e53
+creature_giving_regression_d5_s3003=4.6560/54c5bfd657e4efbb
 mirrorwing_regression_d0_s2002=5.8890/310c6b848e05e6ad
 mirrorwing_regression_d3_s2002=4.2450/9592c72054aa7ede
 mirrorwing_regression_d3_s3003=4.1100/37b0dddbe89d2515
-mirrorwing_regression_d5_s2002=4.2500/fbc85ac4140f6e49
+mirrorwing_regression_d5_s2002=4.2500/37128356815601b0
 mirrorwing_regression_d5_s3003=4.1100/1f0c61fe57802f82
 fivecolour_regression_d0_s2002=5.5560/807651a6fa93a1da
 fivecolour_regression_d3_s2002=4.8650/225575c32b1159b3
 fivecolour_regression_d3_s3003=4.8050/ae5e1e69ef8b4b30
 fivecolour_regression_d5_s2002=4.7700/68a61e439aca1e22
-fivecolour_regression_d5_s3003=4.8300/1116d0251a087865
+fivecolour_regression_d5_s3003=4.8300/e389745a934cc7bb
 stompy_regression_d0_s2002=4.8650/2e09bd05d0abd877
 stompy_regression_d3_s2002=4.1667/987fbe7bc1fae882
 stompy_regression_d3_s3003=4.1033/39d4d7ba7363b63e
@@ -262,7 +260,7 @@ angels_regression_d3_s2002=4.5700/d8f89a2ca6ce75be
 angels_regression_d3_s3003=4.6767/6e1f041a3cbc14fa
 angels_regression_d5_s2002=4.5640/b8bff1353e40bbc1
 angels_regression_d5_s3003=4.6560/bb0691f3009c96b4
-hinata2hg_regression_d3_s2002=5.4600/68b67ccac6a59d70
+hinata2hg_regression_d3_s2002=5.4600/1479dad9ff95cc35
 hinata2hg_regression_d5_s2002=5.5400/edcc89199b2438e4
 antilife2hg_regression_d3_s2002=4.3133/d367358aafe83679
 minotaur2hg_regression_d3_s2002=5.3733/683462ef030fe6c1
@@ -299,14 +297,14 @@ soldiers_regression_d3_s3003=4.2600/775540986f16742a
 soldiers_regression_d5_s2002=4.2400/0a5bdd38065367ab
 soldiers_regression_d5_s3003=4.2800/361c3bbb02f9e3fb
 pd_regression_d0_s2002=7.3600/fadc96d7946ba4c9
-pd_regression_d3_s2002=5.6250/46e7f389bcab9abd
-pd_regression_d3_s3003=5.5000/5f581878b0c1c5cf
+pd_regression_d3_s2002=5.6250/1817cbef95c39151
+pd_regression_d3_s3003=5.5000/2d6da7e05cb22c21
 pd_regression_d5_s2002=5.7200/e1db8e672d70ba87
 pd_regression_d5_s3003=5.3600/64d8710930c63000
 bruna_regression_d0_s2002=6.1890/88f8a4c701e01bf0
-bruna_regression_d3_s2002=5.1400/6ecb314a54b9fd12
+bruna_regression_d3_s2002=5.1400/1022f4b2a3dcdf94
 bruna_regression_d3_s3003=5.0400/a094a32e8d24a1f0
-bruna_regression_d5_s2002=5.0533/0b2cc8f7ff43ec31
+bruna_regression_d5_s2002=5.0400/4572e0718af5e41f
 bruna_regression_d5_s3003=5.0933/a50ef14d725afc9a
 edf_regression_d0_s2002=5.3410/4299637e4510e34d
 edf_regression_d3_s2002=4.0250/e90ccc7119a86611

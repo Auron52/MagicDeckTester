@@ -46,7 +46,7 @@ These are the levers the shape screen was about. "Tier" is the activation gate:
 | `beam_leafdepth` | `drives()` | how near the leaf the beam applies | same 4 decks (all 2) |
 | `escalation_cap` | `vp_here` | single-pass predicted-affordable escalation, capped | 12 decks (5 or 6) |
 | `escalation_r` | `vp_here` | frozen heuristic cost-per-probe-leaf for that walk | 7 decks (16…240) |
-| `escalation_fresh_frac` | `vp_here` | escalation budget renewal. −1 = legacy shared remaining | 7 decks, all 0.5 |
+| ~~`escalation_fresh_frac`~~ | — | **DELETED 2026-10-22 (USER)**: the escalation always gets a fresh 0.5 x budget_ms as a floor | — |
 | `regime` | — | **informative only**, never read at runtime | 10 decks |
 | `leaf_cost_ms` / `heur_cost_ms` | — | **informative only** — lets `target_depth` be re-derived | a few |
 
@@ -57,7 +57,9 @@ them did not survive the 2026-09-12 rebase (§11h); they are kept as the instrum
 is *provably inert* under `ladder: single`, so on dragons and minotaur it is a key that looks set and
 does nothing.
 
-**`escalation_fresh_frac` is the cautionary tale.** Collapsing it to a constant 0.5 was recommended,
+**SUPERSEDED 2026-10-22 (USER: *"The escalated shape was meant to always use 0.5"*; the 2026-09-11 ruling was "make the fresh escalation budget unconditional").** The key is DELETED and the escalation always runs on a fresh 0.5 x budget_ms **as a floor** (the probe's leftover when larger), every deck, every depth. The 2026-09-12 revert below settled a cost trade (treasure_hunt 1.083x units, z +0.71) that was the USER's to make and was never surfaced; meanwhile every deck without the key escalated on leftovers (Kitty, Melira: the escalation committed depth 1 or was skipped). Held-out 2026-10-22 vs the leftover (`logs/tgt/fresh05` in the lf-target work tree): play settings, 26 decks x 500, floor -0.0012 (14 faster / 1 slower), flat 0.5 -0.0011 (15 / 4); d3 b10, 33 decks x 300, floor -0.0004 (5 / 1), flat 0.5 +0.0027 (10 / 32) -- a flat allowance under-funds the escalation after a cheap probe, hence the floor.
+
+The earlier reading, kept for the record: **`escalation_fresh_frac` is the cautionary tale.** Collapsing it to a constant 0.5 was recommended,
 implemented, and reverted within a day — it silently overrode `treasure_hunt`'s own later on-policy
 measurement, which records 0.5 as *rejected* at 1.083x units. See §3a. That is the general hazard of
 turning a lever into a constant: it overrules every deck that measured the other way, and it does so

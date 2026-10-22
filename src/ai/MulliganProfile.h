@@ -74,15 +74,9 @@ struct ValuePlay
     std::vector<double> emul_r;
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
-    // Budget renewal for the escalation, PER-DECK. Stays -1 (legacy shared remaining budget) by default.
-    // A 0.5 default was tried and REVERTED 2026-09-12: the fleet screen behind it (sheet SS3) measured
-    // "free or better on all 13 decks that lack the key", but treasure_hunt's own, LATER, on-policy
-    // re-screen records 0.5 as REJECTED at 1.083x units -- so a 0.5 default silently overrides a
-    // deck-specific rejection. Confirmed by isolation: forcing -1 restores the committed GT digests for
-    // auras_regression_d5_s3003 and th_regression_d5_s2002 byte-for-byte. The 7 decks measured to want
-    // it carry it explicitly; anything else must be measured on-policy first.
-    // NOTE 0.0 is NOT off: it means a fresh budget of max(1, round(0 x budget_ms)) == 1ms, a sliver.
-    double escalation_fresh_frac = -1.0;
+    // (No escalation budget key: the escalation always runs on a fresh 0.5 x budget_ms -- USER 2026-09-11 /
+    // 2026-10-21. The deleted escalation_fresh_frac key's ABSENCE meant the probe's leftovers; see the
+    // escalation in TurnSolver.cpp.)
     // Multiplier on FIT's affordability gate (see ValueArm.h t_deck_fit_alpha). 0 = unset => 1.0 = the
     // strict 1.10x-remaining gate. Melira ships 4.0.
     double fit_alpha = 0.0;

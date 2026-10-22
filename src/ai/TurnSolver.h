@@ -3146,10 +3146,8 @@ public:
                                            int value_min_depth, int budget_ms,
                                            bool value_no_fallback = false,
                                            const std::vector<int>& value_fallback_take_at = {},
-                                           // Per-deck escalation budget renewal (value_play.escalation_fresh_frac).
-                                           // Sentinel <= -1.5 (default) => use the MTG_ESCALATION_FRESH_FRAC env
-                                           // static (byte-identical). -1 => legacy shared budget; >=0 => fresh frac.
-                                           double escalation_fresh_frac = -2.0,
+                                           // (The escalation's budget is a fresh 0.5 x budget_ms for every deck --
+                                           // no per-deck parameter; see the escalation in TurnSolver.cpp.)
                                            // Per-deck escalation beam (value_play.beam_width / beam_leafdepth).
                                            // beam_width < 0 (default) => use the MTG_ESC_BEAM env static (byte-
                                            // identical). 0 => off; >0 => keep top-N value-ranked plans near the
