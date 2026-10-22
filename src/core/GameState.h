@@ -203,6 +203,11 @@ struct StackEntry
                                         // the enter cascade EnterBattlefield self-sacrifices the permanent
                                         // through the shared cascade (the LTB fires as on any leave).
                                         // Stamped from Action::evoke at the cast site.
+    int                 player_target  = 0;         // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest
+                                        // for the Weary): 0 = the caster, 1 = the opponent. Stamped by the
+                                        // executor's cast site from the CastRiders rider (Action::
+                                        // player_target); read by EffectHandler's ApplyCastLifegain call.
+                                        // The rollout twin is apply_one's rider. 0 for every other spell.
     bool                haste_from_mana = false;    // GENERATOR SERVANT: this creature spell's payment
                                         // spent a haste-tagged {C} (GameState::floating_haste_c) -- "it
                                         // gains haste until end of turn". Stamped by the executor's cast

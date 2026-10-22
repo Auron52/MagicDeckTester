@@ -19,9 +19,11 @@
 
 #include "ai/AIEngine.h"
 #include "ai/TurnSolver.h"
+#include "ai/DecisionProviders.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
 #include "core/GameSetup.h"
+#include "core/GameLogger.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
@@ -202,6 +204,7 @@ TEST_CASE("Heroes' Reunion / Rest for the Weary: the card data is the printed ca
     CHECK(hr.params.cast_lifegain == 7);
     CHECK(hr.params.cast_lifegain_landfall == 0);
     CHECK(hr.params.cast_lifegain_ferocious == 0);
+    CHECK(hr.params.cast_lifegain_target_player);   // "TARGET PLAYER gains" -- a real target
 
     const CardDefinition& rw = DefLi("Rest for the Weary");
     CHECK(rw.card.IsInstant());
@@ -211,6 +214,7 @@ TEST_CASE("Heroes' Reunion / Rest for the Weary: the card data is the printed ca
     CHECK(rw.params.cast_lifegain == 4);
     CHECK(rw.params.cast_lifegain_landfall == 8);
     CHECK(rw.params.cast_lifegain_ferocious == 0);
+    CHECK(rw.params.cast_lifegain_target_player);
     // A CONDITION, not a landfall TRIGGER: it must not flip the per-definition watcher byte (which
     // would switch Genesis Wave to its landfall trigger order and arm the landfall dispatch walk).
     CHECK_FALSE(rw.landfall_watcher);
@@ -375,4 +379,181 @@ TEST_CASE("Rest for the Weary: executor and rollout agree on 4 / 8 in every land
         REQUIRE(LandEnteredAndGoneThisTurn(s, 0));
         CheckBothWorlds(s, PlanLi(s, "Rest for the Weary"), "Rest for the Weary", 8);
     }
+}
+
+// ---- "TARGET PLAYER": a real choice, searched then pruned (USER 2026-10-22) ------------------------
+//  5. The opponent target gives the OPPONENT the life, through the opponent-gain lane: it is not OUR
+//     life-gain event (no life_gained_this_turn, no Paragon), the landfall condition still reads the
+//     CASTER's lands, a Tainted Remedy flips it to a loss, and in 2HG the shared team total rises ONCE.
+//  6. Both worlds resolve the opponent variant identically (Action::player_target -> CastRiders).
+//  7. The ENGINE enumerates both targets; the default provider PRUNES the opponent one; a provider that
+//     admits it gets the variant back. 8. A human is asked at resolution, default = the plan's target.
+
+namespace
+{
+// A deck provider that admits the opponent target (the shape a Tainted Remedy deck would override).
+struct AdmitOppLifegainProvider : GenericProvider
+{
+    bool OffersLifegainOpponentTarget(const GameState&, const CardDefinition&) const override { return true; }
+};
+
+int CountPlansCasting(const std::vector<TurnSolver::Plan>& plans, const std::string& spell, int player_target)
+{
+    int n = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == spell
+                && a.player_target == player_target) { ++n; break; }
+        }
+    }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("Target player = the OPPONENT: their life, not our life-gain event")
+{
+    SUBCASE("Heroes' Reunion: the opponent gains 7; we gain nothing and no watcher of ours fires")
+    {
+        GameState s = BoardWithSpell("Heroes' Reunion");
+        const int us0 = s.players[0].life, opp0 = s.players[1].life;
+        ApplyCastLifegain(s, 0, DefLi("Heroes' Reunion"), /*player_target=*/1);
+        CHECK(s.players[1].life == opp0 + 7);
+        CHECK(s.players[0].life == us0);
+        CHECK(s.players[0].life_gained_this_turn == 0);
+        CHECK(PlusCountersLi(s, 10) == 0);   // Nykthos Paragon watches OUR gains only
+    }
+    SUBCASE("Rest for the Weary: the landfall condition reads the CASTER's lands -- 8 to the opponent")
+    {
+        GameState s = BoardWithSpell("Rest for the Weary");
+        s.players[0].lands_played_this_turn = 1;
+        const int opp0 = s.players[1].life;
+        ApplyCastLifegain(s, 0, DefLi("Rest for the Weary"), 1);
+        CHECK(s.players[1].life == opp0 + 8);
+        CHECK(s.players[0].life_gained_this_turn == 0);
+    }
+    SUBCASE("...and 4 when WE had no land enter, whatever the opponent's lands did")
+    {
+        GameState s = BoardWithSpell("Rest for the Weary");
+        s.players[1].land_entered_this_turn = true;
+        const int opp0 = s.players[1].life;
+        ApplyCastLifegain(s, 0, DefLi("Rest for the Weary"), 1);
+        CHECK(s.players[1].life == opp0 + 4);
+    }
+    SUBCASE("a Tainted Remedy flips the opponent's gain into a LOSS (the OpponentGainsLife lane)")
+    {
+        GameState s = BoardWithSpell("Heroes' Reunion");
+        PutLi(s, "Tainted Remedy", 30);
+        const int opp0 = s.players[1].life;
+        ApplyCastLifegain(s, 0, DefLi("Heroes' Reunion"), 1);
+        CHECK(s.players[1].life == opp0 - 7);
+    }
+    SUBCASE("Two-Headed Giant: ONE player gains, the shared team total rises by 7 -- not x heads")
+    {
+        const gamesetup::Setup saved = gamesetup::t_setup;
+        gamesetup::t_setup.opponent_heads = 2;
+        gamesetup::t_setup.starting_life  = 30;
+        REQUIRE(gamesetup::OpponentHeads() == 2);
+        GameState s = BoardWithSpell("Heroes' Reunion");
+        s.players[1].life = 30;
+        ApplyCastLifegain(s, 0, DefLi("Heroes' Reunion"), 1);
+        CHECK(s.players[1].life == 37);
+        gamesetup::t_setup = saved;
+    }
+    SUBCASE("a 'you gain' card ignores the target channel entirely (Feed the Clan)")
+    {
+        GameState s = BoardWithSpell("Feed the Clan");
+        const int opp0 = s.players[1].life;
+        ApplyCastLifegain(s, 0, DefLi("Feed the Clan"), 1);
+        CHECK(s.players[1].life == opp0);
+        CHECK(s.players[0].life_gained_this_turn == 10);   // ferocious: the 4/6 Paragon
+    }
+}
+
+TEST_CASE("Target player = the opponent: executor and rollout resolve the variant identically")
+{
+    for (const char* spell : { "Heroes' Reunion", "Rest for the Weary" })
+    {
+        CAPTURE(spell);
+        GameState s = BoardWithSpell(spell);
+        s.players[0].lands_played_this_turn = 1;   // Rest: landfall on -> 8
+        TurnSolver::Plan p = PlanLi(s, spell);
+        p.actions[0].player_target = 1;
+        const int expect = std::string(spell) == "Heroes' Reunion" ? 7 : 8;
+        for (int world = 0; world < 2; ++world)
+        {
+            CAPTURE(world);
+            const GameState t = world == 0 ? RollLi(s, p) : ExecLi(s, p);
+            REQUIRE(InGraveyardLi(t, spell));
+            CHECK(t.players[1].life == s.players[1].life + expect);
+            CHECK(t.players[0].life == s.players[0].life);
+            CHECK(t.players[0].life_gained_this_turn == 0);
+            CHECK(PlusCountersLi(t, 10) == 0);
+        }
+    }
+}
+
+TEST_CASE("Target player: the ENGINE enumerates both targets; the default provider prunes to self")
+{
+    GameState s = BoardWithSpell("Heroes' Reunion");
+    s.players[0].lands_played_this_turn = 1;
+
+    SUBCASE("default (GenericProvider): only the self-target cast is offered")
+    {
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(CountPlansCasting(plans, "Heroes' Reunion", 0) >= 1);
+        CHECK(CountPlansCasting(plans, "Heroes' Reunion", 1) == 0);
+        CHECK_FALSE(GenericProvider().OffersLifegainOpponentTarget(s, DefLi("Heroes' Reunion")));
+    }
+    SUBCASE("a provider that admits the opponent gets BOTH targets, as distinct plans")
+    {
+        static const AdmitOppLifegainProvider admit;
+        s.m_provider = &admit;
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(CountPlansCasting(plans, "Heroes' Reunion", 0) >= 1);
+        CHECK(CountPlansCasting(plans, "Heroes' Reunion", 1) >= 1);
+    }
+}
+
+TEST_CASE("Target player: a HUMAN is asked at resolution over both players, default = the plan's target")
+{
+    int asked = 0, asked_max = -1, asked_amount = -1;
+    std::vector<ChosenTarget> asked_default;
+    int answer_player = 1;   // the human picks the opponent
+    TargetChooser chooser = [&](const GameState&, const CardDefinition& d, int controller, int max_targets,
+                                int per_target, const std::vector<ChosenTarget>& heur) -> std::vector<ChosenTarget>
+    {
+        ++asked; asked_max = max_targets; asked_amount = per_target; asked_default = heur;
+        CHECK(d.params.cast_lifegain_target_player);
+        CHECK(controller == 0);
+        return { ChosenTarget{ 0, answer_player, 0 } };
+    };
+    TargetChooser* const saved = g_play_target_chooser;
+    g_play_target_chooser = &chooser;
+
+    GameState s = BoardWithSpell("Rest for the Weary");
+    s.players[0].lands_played_this_turn = 1;
+    const int opp0 = s.players[1].life;
+    ApplyCastLifegain(s, 0, DefLi("Rest for the Weary"), /*player_target=*/0);
+    CHECK(asked == 1);
+    CHECK(asked_max == 1);
+    CHECK(asked_amount == 8);                          // the prompt reads "gains 8 life"
+    REQUIRE(asked_default.size() == 1);
+    CHECK(asked_default[0].kind == 0);
+    CHECK(asked_default[0].index == 0);                // the plan's target: us
+    CHECK(s.players[1].life == opp0 + 8);              // ...and the human's pick is honoured
+    CHECK(s.players[0].life_gained_this_turn == 0);
+
+    // Picking ourselves gains us the life as our own event; a "you gain" card is never asked.
+    answer_player = 0;
+    GameState u = BoardWithSpell("Heroes' Reunion");
+    ApplyCastLifegain(u, 0, DefLi("Heroes' Reunion"), 0);
+    CHECK(u.players[0].life_gained_this_turn == 7);
+    const int before = asked;
+    GameState f = BoardWithSpell("Feed the Clan");
+    ApplyCastLifegain(f, 0, DefLi("Feed the Clan"), 0);
+    CHECK(asked == before);
+
+    g_play_target_chooser = saved;
 }

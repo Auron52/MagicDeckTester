@@ -4837,6 +4837,16 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
       `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
   }
+  // "TARGET PLAYER gains N life" (Heroes' Reunion / Rest for the Weary): d.lifegain = "gains 7 life".
+  // The legal set is the two PLAYERS (labels "You (self)" / "Opponent", so faceTarget's matching makes
+  // both life totals clickable); nothing is damaged, so the generic "N damage" wording must not show.
+  // The AI's pick (you -- the autonomous search prunes the opponent target) is preselected.
+  if (d.lifegain){
+    return `<h3>Target player — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">The chosen player <b>${esc(d.lifegain)}</b> · pick 1. Click your own life total or the opponent's on the board. The AI's pick (you) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
+      `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
+  }
   // "player or planeswalker" spells (Skullcrack) have no creature in their legal targets, so don't
   // offer creatures in the prompt; any-target burn (Lightning Bolt) does.
   const hasCreature=(d.legal_targets||[]).some(t=>t.kind==='permanent');

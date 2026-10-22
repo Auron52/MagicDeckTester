@@ -1812,6 +1812,31 @@ public:
         return true;
     }
 
+    // OffersLifegainOpponentTarget -- whether the AUTONOMOUS search enumerates the OPPONENT-target
+    // variant of a "target player gains N life" spell (CardParams::cast_lifegain_target_player:
+    // Heroes' Reunion, Rest for the Weary). The engine treats the target as a real two-way choice --
+    // Action::player_target, one cast variant per admitted player, resolved identically in both worlds
+    // by ApplyCastLifegain -- and this hook only RESTRICTS that set: the self variant is always
+    // emitted, the opponent variant only when this returns true (or under MTG_UNPRUNED).
+    //
+    // DEFAULT false: a provider PRUNE, inherited by GenericProvider and every deck provider (USER
+    // 2026-10-22: "allow either and heuristically prune the target to be yourself"). WHY it is safe
+    // in the goldfish: targeting ourselves is WEAKLY DOMINANT here. The opponent's life is the clock,
+    // so giving it life only delays our own kill, while our gain is either neutral or feeds a
+    // lifegain watcher (Ageless Entity, Nykthos Paragon, Accomplished Alchemist's mana); and no shipped
+    // list holds anything that rewards an OPPONENT gaining life. IT STOPS BEING DOMINANT the day a list
+    // pairs one of these cards with an opponent-lifegain payoff: a Tainted Remedy / Plague Drone flip
+    // (RemedyActive -- OpponentGainsLife turns the gain into a LOSS, i.e. 7 damage), or a "whenever an
+    // opponent gains life" watcher. A provider for such a deck overrides this to admit the opponent
+    // (e.g. when RemedyActiveOrInHand), so the search weighs both; the default would silently hide
+    // that line. Human play never asks: the human is offered both players at resolution (the
+    // `target` decision in ApplyCastLifegain), the Path to Exile shape.
+    virtual bool OffersLifegainOpponentTarget(const GameState& s, const CardDefinition& def) const
+    {
+        (void)s; (void)def;
+        return false;
+    }
+
     // OffersJitteNonCombatModes -- whether the AUTONOMOUS search enumerates an equipment's
     // non-combat charge modes (Umezawa's Jitte -1/-1, gain 2). DEFAULT false, a provider PRUNE (USER
     // doctrine 2026-08-14: "always use it for +2/+2 ... no reason to use any other mode in

@@ -461,6 +461,14 @@ struct Action
     // 0 for every other action (and every other deck).
     std::int8_t convoke_plan_pip   = 0;
     std::int8_t convoke_plan_other = 0;
+    // "TARGET PLAYER gains N life" (CardParams::cast_lifegain_target_player -- Heroes' Reunion, Rest
+    // for the Weary): WHICH player this cast targets. 0 = us (the caster -- the only variant the
+    // default prune keeps, and the value of every other action), 1 = the opponent. A SEARCHED axis:
+    // CollectActions emits the opponent variant when DecisionProvider::OffersLifegainOpponentTarget
+    // (or MTG_UNPRUNED) admits it; it rides CastRiders to apply_one and to the executor's StackEntry,
+    // and is folded into plan_signature / ActionFoldSig only when nonzero, so every other key is
+    // unchanged. In the padding after the int8 block above (sizeof(Action) unchanged).
+    std::int8_t player_target      = 0;
     int         gy_exile_mode  = 0;    // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
                                        // loses N (Deathrite {B}); 2 = exile creature -> gain N ({G}).
     int         loyalty_ability = -1;  // ActivateLoyalty: index into the walker's loyalty_abilities.
@@ -855,6 +863,9 @@ struct CastRiders
                                         // and spends at the same point in CastSpellFromHand)
     InternedName remand_by;             // Action::remand_by: answer this cast with a Remand of that name
                                         // (the rollout's apply_one and the executor's CastSpellFromHand)
+    int      player_target   = 0;       // Action::player_target (Heroes' Reunion / Rest for the Weary:
+                                        // 0 = we gain, 1 = the opponent gains) -- read at resolution by
+                                        // ApplyCastLifegain in both worlds
 
     static CastRiders Of(const Action& a)
     {
@@ -866,6 +877,7 @@ struct CastRiders
         r.land_put        = a.rock_mana;
         r.free_cast       = a.free_cast;
         r.remand_by       = a.remand_by;
+        r.player_target   = a.player_target;
         return r;
     }
     // Copy out and reset: the ONLY way a cast reads them.

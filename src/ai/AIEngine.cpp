@@ -8335,6 +8335,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // the executor devours exactly what the scored line devoured (a consume-once rider, taken by the
     // caller). Unset for every other spell -> no other deck's entries move.
     if (riders.devour_count > 0) { entry.devour_count = riders.devour_count; }
+    // "Target player gains N life": the searched player target (0 = us). Read at resolution by
+    // ApplyCastLifegain (EffectHandler) -- the rollout twin passes apply_one's rider.
+    if (riders.player_target != 0) { entry.player_target = riders.player_target; }
     // Magnetic Theft: the searched Equipment target, read at resolution by the shared
     // ResolveAttachTargetEquipment (the creature target is entry.enchant_target). Param-gated, so no
     // other deck's stack entries move.

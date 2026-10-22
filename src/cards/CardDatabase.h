@@ -3169,7 +3169,7 @@ struct CardParams
     int  counters_on_target = 0;
     // Scale the Heights: "You gain 2 life." (per resolved copy -- faithful escalation of life.)
     // REUSED as the BASE amount of an untargeted "you gain N life" spell (Feed the Clan; Heroes' Reunion
-    // and Rest for the Weary, whose "target player" is always us in the goldfish), which is
+    // and Rest for the Weary, which print "target player" -- see cast_lifegain_target_player), which is
     // the same amount semantics with no target. Safe because every OTHER reader of this field is
     // trick-scoped -- TurnSolver's is inside the `IsSoloTargetTrick` block and DecisionProviders' is
     // MirrorwingProvider::TrickTargetCandidates -- and it is not part of any archetype signature in
@@ -3200,6 +3200,14 @@ struct CardParams
     // nothing fires when a land enters; the spell reads history. "Instead" = ONE life-gain event of
     // either amount (ruling 5), never base+this. 0 = no landfall clause, whole feature inert.
     int  cast_lifegain_landfall  = 0;
+    // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest for the Weary) rather than Feed the Clan's
+    // "YOU gain". The target is a real two-way choice -- us, or the opponent -- carried on
+    // Action::player_target (0 = us, 1 = the opponent) through CastRiders to both resolution sites,
+    // and resolved by ApplyCastLifegain. The ENGINE enumerates both; DecisionProvider::
+    // OffersLifegainOpponentTarget is the PRUNE that drops the opponent variant (default: dropped).
+    // Human play is offered both, as a `target` decision at resolution (the Path to Exile shape).
+    // false = "you gain": no target, nothing to choose, every existing card byte-identical.
+    bool cast_lifegain_target_player = false;
     // Fortifying Draught: "+X/+X where X is the amount of life you gained this turn", computed AT
     // RESOLUTION per copy AFTER that copy's own cast_lifegain (gain first, THEN count -- oracle
     // order), off Player::life_gained_this_turn. So a magnet fan-out escalates: each copy gains its

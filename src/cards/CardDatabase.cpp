@@ -1581,6 +1581,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_lifegain_ferocious     = params.value("cast_lifegain_ferocious", 0);
     p.ferocious_min_power         = params.value("ferocious_min_power", 4);   // see CardParams: 4, not 0
     p.cast_lifegain_landfall      = params.value("cast_lifegain_landfall", 0);
+    p.cast_lifegain_target_player = params.value("cast_lifegain_target_player", false);
     p.pump_per_life_gained_power  = params.value("pump_per_life_gained_power", 0);
     p.pump_per_life_gained_tough  = params.value("pump_per_life_gained_tough", 0);
     p.pump_per_x_power            = params.value("pump_per_x_power", 0);

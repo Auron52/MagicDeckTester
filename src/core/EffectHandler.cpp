@@ -445,7 +445,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 // "You gain N life" as an untargeted spell's resolution (Feed the Clan), with the
                 // ferocious upgrade decided off the board AS IT RESOLVES. Lockstep twin of the
                 // rollout's apply_one ApplyCastLifegain call -- same function, both worlds.
-                ApplyCastLifegain(state, entry.controller_index, def);
+                ApplyCastLifegain(state, entry.controller_index, def, entry.player_target);
                 // LAND SEARCH (Rampant Growth, Search for Tomorrow, Cultivate; core/LandSearch.h).
                 // Lockstep twin of the rollout's apply_one call: same helper, same pin consumer
                 // (the executor installs Plan::land_search_pins around the plan it is executing).

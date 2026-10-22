@@ -8548,6 +8548,7 @@ inline std::uint64_t ActSig(const Action& a)
             | (static_cast<std::uint64_t>(a.evoke) << 2) | (static_cast<std::uint64_t>(a.kicked) << 3)
             | (static_cast<std::uint64_t>(a.sacrifice_land) << 4));
     MixA(h, static_cast<std::uint64_t>(a.rock_mana.Total()) * 7 + static_cast<std::uint64_t>(a.splice_count));
+    if (a.player_target != 0) { MixA(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }   // set -> folded
     return h;
 }
 struct Seen { const GameState* obj; bool verdict; };
@@ -11124,7 +11125,7 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
         const Action& a = cands[static_cast<std::size_t>(j)];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
-        if (life) { ApplyCastLifegain(t, active, *d); }   // instants / sorceries only (inside)
+        if (life) { ApplyCastLifegain(t, active, *d, a.player_target); }   // instants / sorceries only (inside)
         if (d->card.IsLand() || d->card.IsInstant() || d->card.IsSorcery()) { continue; }
         const bool body = d->card.IsCreature()
                        || (life && (LifegainAttackWatcher(d->params) || EnterLifegainWatcher(d->params)));
@@ -16225,6 +16226,9 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
+    // "Target player gains N life": the searched player target (folded only when set, so every
+    // other action's signature -- the self-target cast included -- is byte-identical).
+    if (a.player_target != 0) { FoldMix(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }
     // Vampires A2: the searched discard pin, the Blood cost variant and a discard-cost outlet's
     // same-plan victim. Folded only when set, so every other deck's signature is byte-identical.
     if (!a.discard_name.empty())
@@ -40190,6 +40194,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // TARGET-PLAYER LIFEGAIN post-pass (CardParams::cast_lifegain_target_player: Heroes' Reunion, Rest
+    // for the Weary -- "Target player gains N life"). The target is a real two-way choice, us or the
+    // opponent, carried on Action::player_target (0 = us, the base cast every enumeration already
+    // emitted; 1 = the opponent) and resolved identically in both worlds by ApplyCastLifegain via
+    // CastRiders. The ENGINE offers both; the provider only RESTRICTS: the opponent variant is emitted
+    // only when DecisionProvider::OffersLifegainOpponentTarget admits it (default: pruned -- self is
+    // weakly dominant in the goldfish; see the hook) or under MTG_UNPRUNED (the global form: the
+    // 32-bit UnprunedGate mask is full). HUMAN PLAY: no variant -- the human is asked at resolution
+    // over both players (the `target` decision inside ApplyCastLifegain), the Path to Exile shape, so
+    // nothing is asked twice. With the default prune this pass appends nothing, so every deck's
+    // enumeration -- the new cards' included -- is exactly what it was.
+    {
+        const std::size_t pt_n = actions.size();
+        for (std::size_t i = 0; i < pt_n && !HumanPlayActive(); ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].def->params.cast_lifegain_target_player
+                || actions[i].player_target != 0) { continue; }
+            if (!DecisionUnpruned()
+                && !ResolveProvider(state).OffersLifegainOpponentTarget(state, *actions[i].def)) { continue; }
+            Action v = actions[i];                   // copy BEFORE push_back (reallocation)
+            v.player_target = 1;
+            v.eval          = std::min(v.eval, 0);  // never the greedy runner's preferred cast
+            actions.push_back(std::move(v));
+        }
+    }
+
     // REMAND post-pass (CardParams::counters_target_spell_to_hand; Remand -- Hinata2, Unpredictable
     // Cyclone, NivMizzetCombo). Remand's only legal target is one of OUR OWN spells on the stack (the
     // passive opponent never casts; CR 115.1), so it has no cast of its own (the hand loop skips it,
@@ -52042,6 +52073,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // below, after the cast-legality returns, and voided there when it cannot be cast (no copy in
         // hand, the Irencrag budget) -- then X is cast plainly, as the executor's CastSpellFromHand does.
         const InternedName cast_remand = riders.remand_by;
+        const int      cast_player_target = riders.player_target;   // "target player gains N life"
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
@@ -52780,6 +52812,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.adventure          = adventure;
             rec.kicked             = kicked;
             rec.devour_count       = cast_devour;
+            rec.player_target      = static_cast<std::int8_t>(cast_player_target);
             rec.twobrid_colored    = cast_twobrid;
             rec.rock_mana          = cast_put_credit;
             rec.loyalty_ability    = cast_loyalty;
@@ -54353,7 +54386,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // upgrade. Here for the same reason the token call above is: BEFORE the zone move below,
         // which is the order the real game resolves in -- and the gain must land before anything
         // reads life_gained_this_turn. Executor twin: EffectHandler::ResolveImpl.
-        if (!remand_countered) { ApplyCastLifegain(state, state.active_player_index, def); }
+        if (!remand_countered) { ApplyCastLifegain(state, state.active_player_index, def, cast_player_target); }
 
         // LAND SEARCH as an instant/sorcery's resolution (Rampant Growth, Search for Tomorrow,
         // Cultivate; core/LandSearch.h). Before the zone move below, and before the put-in-hand
@@ -58926,6 +58959,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.bestow_cost.has_value() && !legacy_bestow_sig) { w.Put(act.bestow ? "#B1" : "#B0"); }
                 if (d && !d->params.adventure_face_name.empty()) { w.Put(act.adventure ? "#A1" : "#A0"); }
                 if (d && d->params.kicker_cost.has_value()) { w.Put(act.kicked ? "#KI1" : "#KI0"); }
+                if (act.player_target != 0) { w.Put("#PT"); w.Int(act.player_target); }   // target player
                 if (d && (d->params.convoke || d->params.tutor_mv_max_is_x))
                 {
                     w.Put("#X"); w.Int(act.chosen_x); w.Put("#T"); w.Put(act.tutor_target);
@@ -62520,6 +62554,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // a kicker card moves a signature.
                         + ((act.def && act.def->params.kicker_cost.has_value())
                            ? (act.kicked ? "#KI1" : "#KI0") : "")
+                        // TARGET PLAYER ("target player gains N life": Heroes' Reunion / Rest for the
+                        // Weary). The kicker case once more -- both targets share one card name, so
+                        // without a marker the dedup would keep one of them and the opponent variant
+                        // the enumeration emitted would never be weighed. VALUE-gated (only the
+                        // opponent variant carries it), so the self cast keeps the bare-name signature.
+                        + (act.player_target != 0 ? "#PT" + std::to_string(act.player_target) : std::string())
                         // Chord of Calling: X, the fetch target AND the convoke tap counts are all
                         // real decisions (core invariant; the MTG_SIG_X_AUDIT class -- without the
                         // gate the autonomous dedup collapses the X axis). Gated on the params so

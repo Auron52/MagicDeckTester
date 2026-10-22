@@ -994,6 +994,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         // because declining to devour is a real and frequently-correct choice.
         if (a.devour_count >= 0)
         { tag += " (devour " + std::to_string(a.devour_count) + ")"; }
+        // "Target player gains N life" aimed at the OPPONENT (Action::player_target 1). Human play never
+        // carries the variant (the person picks the player at resolution), but an unpruned autonomous
+        // menu does, and it must not read like the self cast.
+        if (a.player_target == 1) { tag += " (target: opponent)"; }
         if (a.discard_lands)  { tag += " +discard" + std::to_string(a.discard_lands); }
         casts.push_back(tag);
         vial_tag.push_back(a.kind == Action::Kind::ActivateVial ? 1
@@ -1850,6 +1854,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                  + (a.attach_equip_id != 0 ? "|mt" + std::to_string(a.attach_equip_id) : std::string())
                  // REMAND rider: "cast X" and "cast X, Remand it" are different payloads.
                  + (a.remand_by.empty() ? std::string() : "|rm" + a.remand_by.str())
+                 // "Target player gains N life" at the opponent: a different payload (set -> keyed).
+                 + (a.player_target != 0 ? "|pt" + std::to_string(a.player_target) : std::string())
                  // A creature-spell convoke arm (Markov Baron; Vampires item D) is a payload too: two
                  // arms are two lines. Gated on such an arm, so every other key is unchanged.
                  + (((a.convoke_green > 0 || a.convoke_other > 0) && ConvokeTapsAtCast(a.def))
@@ -3245,10 +3251,15 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::string& pump_desc = "", const std::string& remove_desc = "",
                                     int min_targets = 1, bool random_damage = false,
                                     const std::string& loyalty_desc = "",
-                                    const std::string& copy_desc = "")
+                                    const std::string& copy_desc = "",
+                                    const std::string& lifegain_desc = "")
 {
     DecisionJson d(os, decision_index);
     d.Type("target").Source(source).Turn(s.turn_number);
+    // A non-empty lifegain_desc (e.g. "gains 7 life") flags this as a "TARGET PLAYER gains N life"
+    // spell (Heroes' Reunion / Rest for the Weary): the legal set is the two PLAYERS, nothing is
+    // damaged, and the viewer must word it as life gained, not "N damage".
+    if (!lifegain_desc.empty()) { d.Str("lifegain", lifegain_desc); }
     // A non-empty loyalty_desc (e.g. "turned into a green 3/3 Elk with no abilities") flags this as
     // a PLANESWALKER LOYALTY ability's target: no damage number, and the legal set is whatever that
     // ability's printed restriction allows (artifacts and lands included), so the viewer must not
@@ -5612,8 +5623,19 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const bool copy_entrant = def.params.enter_as_copy_of_entrant;
             const std::string copy_desc = copy_entrant
                 ? std::string("enters as a copy of the chosen this-turn entrant") : std::string();
+            // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest for the Weary; ApplyCastLifegain asks
+            // at resolution with per_target_damage = the amount): the legal set is BOTH players --
+            // human play is never pruned, so the autonomous self-target prune does not apply here.
+            const bool lifegain_player = def.params.cast_lifegain_target_player;
+            const std::string lifegain_desc = lifegain_player
+                ? ("gains " + std::to_string(per_target_damage) + " life") : std::string();
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (copy_entrant)
+            if (lifegain_player)
+            {
+                legal.push_back({ 0, controller, 0 });     legal_labels.push_back("You (self)");
+                legal.push_back({ 0, 1 - controller, 0 }); legal_labels.push_back("Opponent");
+            }
+            else if (copy_entrant)
             {
                 for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
                 {
@@ -5741,14 +5763,14 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             if (AwaitMoreChoices()) { goto claude_retry_8; }

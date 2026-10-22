@@ -19877,14 +19877,21 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
 }
 
-// "You gain N life" as an UNTARGETED spell's own resolution (Feed the Clan, Heroes' Reunion, Rest for
-// the Weary -- the last two print "target player", which is always us against a passive goldfish
-// opponent, so they are untargeted here), with the ferocious or landfall upgrade. ONE shared resolver, called identically by the executor (EffectHandler::ResolveImpl's
-// non-permanent custom branch) and the rollout (TurnSolver::apply_one) -- the Fungus Frolic
-// ApplyCastCreatesTokens pattern -- so the search cannot predict a different amount than the
-// executor realises. The ferocious board check is therefore lockstep BY CONSTRUCTION rather than by
-// convention: both worlds run this same function.
-inline void ApplyCastLifegain(GameState& state, int controller, const CardDefinition& def)
+// "You gain N life" / "TARGET PLAYER gains N life" as a spell's own resolution (Feed the Clan; Heroes'
+// Reunion and Rest for the Weary, CardParams::cast_lifegain_target_player), with the ferocious or
+// landfall upgrade. ONE shared resolver, called identically by the executor (EffectHandler::ResolveImpl's
+// non-permanent custom branch, with StackEntry::player_target) and the rollout (TurnSolver::apply_one,
+// with the CastRiders rider) -- the Fungus Frolic ApplyCastCreatesTokens pattern -- so the search
+// cannot predict a different amount, or a different recipient, than the executor realises. The
+// ferocious / landfall checks are therefore lockstep BY CONSTRUCTION rather than by convention.
+//
+// `player_target` (Action::player_target): 0 = the caster, 1 = the opponent. Meaningful only for a
+// "target player" card; a "you gain" card ignores it. The search branches over it where the provider
+// admits the opponent (DecisionProvider::OffersLifegainOpponentTarget -- pruned by default); a human
+// is asked HERE, at resolution, through the shared `target` decision with the plan's target as the
+// default (the Path to Exile shape: one cast, the click picks).
+inline void ApplyCastLifegain(GameState& state, int controller, const CardDefinition& def,
+                              int player_target = 0)
 {
     const CardParams& p = def.params;
     if (p.cast_lifegain <= 0) { return; }
@@ -19908,6 +19915,29 @@ inline void ApplyCastLifegain(GameState& state, int controller, const CardDefini
     const int amount = fero ? p.cast_lifegain_ferocious
                      : landfall ? p.cast_lifegain_landfall
                      : p.cast_lifegain;
+    // WHO GAINS. Both conditions above read the CASTER's board -- Rest's "If YOU had a land enter ...,
+    // THAT PLAYER gains 8 life instead" -- so the target changes the recipient, never the amount.
+    bool to_opponent = p.cast_lifegain_target_player && player_target == 1;
+    if (p.cast_lifegain_target_player && g_play_target_chooser != nullptr)   // real human resolution only
+    {
+        const int opp = 1 - controller;
+        const std::vector<ChosenTarget> heur = { ChosenTarget{ 0, to_opponent ? opp : controller, 0 } };
+        const std::vector<ChosenTarget> picked =
+            (*g_play_target_chooser)(state, def, controller, 1, amount, heur);
+        if (!picked.empty() && picked[0].kind == 0) { to_opponent = (picked[0].index == opp); }
+    }
+    if (to_opponent)
+    {
+        // THE OPPONENT GAINS, through the one opponent-gain lane, OpponentGainsLife -- which applies a
+        // Tainted Remedy / Plague Drone flip (CR 614.12) exactly as for every other opponent gain -- and
+        // NOT through GainLife: it is not OUR life-gain event, so it bumps none of our
+        // life_gained_this_turn and fires none of our "whenever you gain life" watchers.
+        // ONE call, NOT multiplied by gamesetup::OpponentHeads(): "target player" is ONE player, and in
+        // Two-Headed Giant the team shares one life total (CR 810.9a), so one head gaining 7 raises the
+        // shared total by 7 -- contrast etb_opponent_lifegain ("EACH opponent"), which is per head.
+        OpponentGainsLife(state, controller, amount, def.card.m_name.str());
+        return;
+    }
     // ONE GainLife CALL -> ONE life-gain EVENT (CR 119.10) of 5 OR 10 -- never 5 then 5, and never
     // 5+10. The ruling is explicit ("you only get the upgraded effect, not both effects"), and the
     // distinction is MEASURABLE rather than pedantic: two 5-life events fire every "whenever you gain

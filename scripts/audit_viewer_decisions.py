@@ -241,6 +241,12 @@ MANIFEST = {
     # `target` board-click decision -- no new type.
     "lifegain_target_own_counter": ("target",          truthy),   # "put a +1/+1 counter on target creature or enchantment you control"
     "lifelink_grant_cost":   ("target",               truthy),   # "{1}{W}: Another target creature gains lifelink" (which creature)
+    # SelesnyaLifegain screen (2026-10-22): Heroes' Reunion / Rest for the Weary, "TARGET PLAYER gains N
+    # life". WHICH player is a real choice: the autonomous search branches over Action::player_target
+    # (the opponent variant pruned by DecisionProvider::OffersLifegainOpponentTarget by default); a human
+    # is asked at resolution over BOTH players through the shared `target` decision (ApplyCastLifegain ->
+    # g_play_target_chooser, a `lifegain` prompt) -- no new type, the Path to Exile shape.
+    "cast_lifegain_target_player": ("target",          truthy),
     # Kaldring: WHICH graveyard snow permanent is played -- one main_phase plan variant per
     # legal name (GYP# in the plan signature, gyplay= verb), the Haven convention.
     "gy_play_cost":          ("main_phase",           truthy),
@@ -1311,11 +1317,10 @@ INERT_PARAMS = {
         "the LANDFALL amount of an automatic lifegain (Rest for the Weary: 'that player gains 8 life "
         "instead' if a land entered under your control this turn). Same class as cast_lifegain_ferocious "
         "above: a CONDITION read at resolution off the turn's history, both amounts printed, no mode, no "
-        "'may', no X. Its 'target player' is always us against the passive goldfish opponent (the "
-        "opponent target only delays our kill and no card in the deck converts an opponent's gain -- a "
-        "disclosed PARTIAL on the card for a list that pairs it with a Tainted Remedy), so it "
-        "is not a targeting choice either. The player's only levers -- whether to cast it, and whether a "
-        "land drop comes first -- are the always-wired main_phase plan"
+        "'may', no X. Its 'target player' choice is a separate param, cast_lifegain_target_player, "
+        "mapped to the `target` decision above; the amount itself is never elected. The remaining "
+        "levers -- whether to cast it, and whether a land drop comes first -- are the always-wired "
+        "main_phase plan"
     ),
     "grants_extra_land_drop": "automatic bonus land drop (the drop itself is the normal land choice)",
     "token_copy_of_target": "automatic token copy of the chosen target (rides solo_target_trick)",
