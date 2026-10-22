@@ -261,8 +261,9 @@ run's rows, table or markers.
 | E0 emul R | the emulated ladder's rollout cost per leaf (`emul_r`), per deck, on the staged model at its final play settings | yes — one pooled batch, play-settings games (short tail) |
 | E measure | staged-vs-live A/B + shape arms + **trust acceptance (ON vs OFF)** | yes — one pooled batch |
 | E.5 adopt | install the picked leaf / shape in this tree | no |
-| E.6 skip allowance | the deck's escalation-skip allowance on the live leaf | yes — up to three short batches |
 | E.7 play setting | **decide** the live sidecar's enabled `value_play` (depth x budget grid, over every phase-E shape still in the running) | yes — one pooled batch |
+| E.7b trust re-check | phase E's trust acceptance again, on the live sidecar, for a deck whose setting E.7 moved | yes — one pooled batch, only when needed |
+| E.6 skip allowance | the deck's escalation-skip allowance on the live leaf, at the setting and trust that ship | yes — up to three short batches |
 
 Every batch is a barrier that returns only when its slowest game finishes, so what matters is **how
 many times you pay that tail**, not how big each batch is. Three is the floor and phase C now sits at
@@ -328,8 +329,10 @@ the check in the value-leaf."*).
   for `emul` is worth a callgrind check before committing it.
 
 **Phase E.6 decides the deck's escalation-skip allowance** (`escalation_skip_r`, USER 2026-10-13).
-It runs between E.5 and F: the allowance is a measurement of the leaf now live, and it can change play,
-which F and the mulligan stage are fitted to. `scripts/esc_skip_stage.py` does it in three pooled batches.
+It runs LAST, after E.5, E.7 and E.7b (USER 2026-10-22; it used to run before E.7): the allowance is a measurement
+of the probe that ships -- the leaf now live, at the play setting and trust that ship (Vampires' E.6 had run at d5
+before E.7 moved play to d6) -- and it can change play, which the mulligan stage is fitted to. (The run order is
+E.5 -> E.7 -> E.7b -> E.6; a queue that finished them in the old order resumes fine, each has its own marker.) `scripts/esc_skip_stage.py` does it in three pooled batches.
 * **Probe:** 1200 games at R = 0. It gives up below **4% headroom** (discarded ladder-escalation work as a
   share of all work), which is most decks, and costs seconds.
 * **A/B:** a held-out paired A/B of the fitted q10 per-depth vector against R = 0.
@@ -348,8 +351,8 @@ A `value_play` block drives play only when it is `enabled`, and the route to ena
 recommend -> accept exercise that nothing performed any more: 18 of the 30 live sidecars had no enabled block, so
 those decks played the built-in d5 / 20 without anything having decided it. Phase E's old target_depth sweep (d-1,
 d, d+1, all at budget 20) only printed a table and is gone; on Vampires every depth tied because the budget binds,
-so depth alone was the wrong axis. `scripts/play_setting_stage.py` does it in ONE pooled batch, LAST (after E.5
-and E.6, because it measures the leaf and allowance that ship, and what it picks changes play).
+so depth alone was the wrong axis. `scripts/play_setting_stage.py` does it in ONE pooled batch, right after E.5
+(it measures the leaf that ships) and before E.7b and E.6, which are measurements AT a play setting.
 * **Arms:** the live sidecar as it stands (`live`: its enabled block, or the built-in d5 / 20) against enabled
   blocks over depth {d-1, d, d+1} x budget {b, 1.5b, 2b}, each on the sidecar route (exactly the file that would be
   installed) in a symlinked variant folder, so all arms share the keep table's cache entry. 8 held-out seeds x 1000
@@ -385,6 +388,13 @@ and E.6, because it measures the leaf and allowance that ship, and what it picks
   measured, never assumed. In the suite an enabled block sets the d5 cases' DEPTH only (their budget is the
   case's), and the d0/d3 cases pin depth with `ignore_play_profile` -- but an enabled block arms the static d3 beam
   whatever the depth, so enabling a block on a deck that had none moves its d3 rows too.
+
+**Phase E.7b re-checks TRUST when E.7 moved the setting** (USER 2026-10-22). Phase E decides trust at the staged
+model's setting, and which unverified lines `value_trust_depth` spares depends on the depth and budget played.
+`scripts/trust_recheck_stage.py` re-runs phase E's acceptance (same arms, same seeds, `vlq_trust_accept.py`
+unchanged) on the live sidecar for each deck whose setting moved and that has a trust candidate or depth; accepted
+-> the depth is installed, rejected -> none (failing safe). Nothing to do for a deck E.7 left alone. Vampires: the
+d5 candidate never engaged at d5 / 20 nor at d6 / 20.
 
 `bash scripts/valueleaf.sh playset [decks/<Deck> ...]` runs it alone for leaves that are already live (the backfill
 of the undecided ones). An adopted setting is committed like a leaf, with the deck's smoke and regression GT

@@ -1478,7 +1478,7 @@ phase_adopt() {
                printf '%s\n' "$v" | sed 's/^/    /'
                echo "    the staged model stays at $staged; nothing in $dir changed. To adopt a candidate anyway:"
                echo "    cp '$staged' '$dir/$stem.value.json' (or $VLQ/$stem.value.NLESC.json / .NLFIT.json for a"
-               echo "    leafless shape, .EMUL.json for the emulated ladder), delete the E6_skipcal and E7_playset markers, and re-run."
+               echo "    leafless shape, .EMUL.json for the emulated ladder), delete the E7_playset, E7b_trust and E6_skipcal markers, and re-run."
                echo; } >> "$DECISIONS" ;;
           *) log "  $stem: verdict FAILED (rc=$rc) -- see $alog"; printf '%s\n' "$v" | while IFS= read -r l; do log "    $l"; done
              return 1 ;;
@@ -1493,8 +1493,9 @@ phase_adopt() {
 # scripts/esc_skip_stage.py (three pooled batches over every deck: a 1200-game R = 0 probe that gives up below
 # 4% headroom, a held-out paired A/B, and a one-game isolation replay of every moved game; adopt only with no
 # real slower game). Design and evidence: docs/design/escalation-skip-calibration-stage.md.
-#   * AFTER E.5, because the allowance is a measurement OF the probe -- the leaf now live. A regeneration used to
-#     carry the old key over unchanged, fitted to the previous leaf.
+#   * AFTER E.5, E.7 and E.7b, because the allowance is a measurement OF the probe -- the leaf now live, at the
+#     play setting and trust that ship (USER 2026-10-22: Vampires' E.6 had run at d5 before E.7 moved play to d6).
+#     A regeneration used to carry the old key over unchanged, fitted to the previous leaf.
 #   * BEFORE F, because it can change play, and F (and every mulligan generation after it) is fitted to play.
 # Like E.5 it installs into the live sidecar IN THIS TREE, commits nothing, never stops to ask, and records
 # every outcome in DECISIONS.txt. A deck that already has a key gets it as a third A/B arm and the bar picks
@@ -1533,8 +1534,8 @@ phase_skipcal() {
 # shape) -- 8 held-out seeds x 1000 paired games;
 # adopted by the E.5 rule (vlq_adopt_pick.py: the cheapest arm not notably worse; a dearer-but-better arm is a
 # TRADE recorded for the user), installed in the live sidecar IN THIS TREE, every outcome in DECISIONS.txt.
-#   * LAST, after E.5 and E.6: it measures the leaf and skip allowance that ship, and the setting it picks changes
-#     play, which the deck's GT (and any later mulligan generation) must then be fitted to.
+#   * After E.5 (it measures the leaf that ships) and BEFORE E.7b and E.6 (USER 2026-10-22): trust and the skip
+#     allowance are measurements AT a play setting, so they are taken at the one this phase picks.
 phase_playset() {
     done_p E7_playset && return 0
     log "PHASE E.7: play setting (depth x budget grid on the live leaf -> the E.5 adoption rule)"
@@ -1558,6 +1559,28 @@ phase_playset() {
     fi
     [ -n "$skipped" ] && { log "  PHASE E.7: NOT marked done (skipped:$skipped) -- nothing is pending on it in this run"; return 0; }
     mark E7_playset
+}
+
+# ------------- PHASE E.7b: TRUST re-checked at the play setting E.7 picked
+# Phase E decides trust (ON vs OFF, vlq_trust_accept.py) at the staged model's setting; E.7 can move it, and which
+# unverified lines trust spares depends on the depth and budget played (USER 2026-10-22, "Do we need to make any other
+# changes in line with what you mentioned?"). scripts/trust_recheck_stage.py re-runs the same acceptance on the live
+# sidecar for each deck whose setting moved and that has a trust candidate or depth; nothing to do otherwise.
+phase_trustre() {
+    done_p E7b_trust && return 0
+    log "PHASE E.7b: trust re-check at the play setting E.7 picked"
+    local row key dir stem mkey base games dirs=() staged=()
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        [ -s "logs/eval/$stem.value.STAGED.json" ] && [ -e "$dir/$stem.value.json" ] || continue
+        dirs+=("$dir"); staged+=(--staged "$key=logs/eval/$stem.value.STAGED.json")
+    done
+    if [ ${#dirs[@]} -gt 0 ]; then
+        python3 scripts/trust_recheck_stage.py "${dirs[@]}" "${staged[@]}" --work "$VLQ/trustre" --decisions "$DECISIONS" \
+            --write 2>&1 | tee -a "$VLQ/driver.log"
+        [ "${PIPESTATUS[0]}" -eq 0 ] || { log "  PHASE E.7b: FAILED -- NOT marked done; a re-run reuses a finished batch"; return 1; }
+    fi
+    mark E7b_trust
 }
 
 # ------------- (PHASE F, the mulligan-generation setting screen, MOVED to scripts/mullgen.sh run, USER
@@ -1588,7 +1611,7 @@ finish|run)
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
     _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
     for ph in phase_freeze phase_rows phase_split phase_train phase_leafcal phase_matrix phase_riskgate \
-              phase_meta phase_emulcal phase_measure phase_adopt phase_skipcal phase_playset; do
+              phase_meta phase_emulcal phase_measure phase_adopt phase_playset phase_trustre phase_skipcal; do
         check_freeze || exit 1
         check_decks  || exit 1
         check_leaf_keys || exit 1
@@ -1609,7 +1632,8 @@ status)
         E_measure)  echo "E measure     ";;
         E_adopt)   echo "E.5 adopt     ";;
         E6_skipcal) echo "E.6 skip allow";;
-        E7_playset) echo "E.7 play set  ";; esac; }
+        E7_playset) echo "E.7 play set  ";;
+        E7b_trust)  echo "E.7b trust    ";; esac; }
     echo "queue dir  : $VLQ"
     echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
     now=$(src_fingerprint); frz=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
@@ -1625,7 +1649,7 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E0_emulcal E_measure E_adopt E6_skipcal E7_playset; do
+    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E0_emulcal E_measure E_adopt E7_playset E7b_trust E6_skipcal; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done

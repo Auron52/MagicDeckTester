@@ -317,6 +317,12 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   and it is exactly what the suite's d5 rows already ran, so no GT key moves. The E.7 grid is now {b, 1.5b, 2b}.
   Note for a keep-table regeneration: equivalence DISCOVERY reads value_play target_depth / budget_ms
   (`src/analyzer/main.cpp`), so it would now discover at d6 / b20 (the table was discovered at d5 / 20; K=15 guarded).
+- **Trust and the skip allowance re-measured at d6 / b20** (USER 2026-10-22: *"Do we need to make any other changes in
+  line with what you mentioned?"* -- both had been decided at d5 / 20, before E.7 moved the depth; E.6 also before the
+  0.5 escalation floor). Trust ON vs OFF (candidate 5, seeds 620000.., 8 x 1000): byte-identical on 8/8 seeds, 1.00x
+  -> still NEVER ENGAGED, stays unset. E.6 (`valueleaf.sh skipcal`, PGO at origin bda6c46f8): gave up, headroom 3.7% <
+  4% (was 1.1%), projected -0.0% -> still no allowance. Nothing changes; the pipeline now runs E.7 -> E.7b (trust
+  re-check, `scripts/trust_recheck_stage.py`) -> E.6, so the next deck gets both at the setting that ships.
 
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the
