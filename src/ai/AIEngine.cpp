@@ -5960,7 +5960,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-            if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
+            if (d != nullptr && _p.ActivationOrderRankForAction(state, *d, a) != 0) { _any = true; break; }
         }
         if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
         if (_any)

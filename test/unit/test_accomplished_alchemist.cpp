@@ -3861,3 +3861,358 @@ TEST_CASE("Cast order, GENERIC_WEATHER_ONLY_LAST (DEFAULT OFF): the generic tier
         for (const std::string& n : AaProposedOrder()) { CAPTURE(n); CHECK(p.CastOrderRank(g, DefAa(n)) == want[i++]); }
     }
 }
+
+// ---- THE USER'S WEATHER RULE (2026-10-22): MTG_AA_GENERIC_WEATHER_FLEX / MTG_AA_CAST_ORDER_V2 (both DEFAULT OFF) ----
+// USER: "Weather the Storm needs to be flexible. For example, a common play would be spell, Weather the Storm + tap
+// alchemist for 6 using that to play Staff of Domination and untap Alchemist. You cannot do that with it just at the
+// end. I would say the untappers should be possible to do before or after it (depending on mana)." Ledger, "Round 3".
+namespace
+{
+struct FlexArmsAa
+{
+    static constexpr int kN = 4;
+    std::int8_t saved[kN];
+    static constexpr heurarm::Slot kSlots[kN] = { heurarm::AA_CAST_ORDER, heurarm::AA_GENERIC_WEATHER_ONLY_LAST,
+                                                  heurarm::AA_GENERIC_WEATHER_FLEX, heurarm::AA_CAST_ORDER_V2 };
+    FlexArmsAa(int order, int gw, int gwf, int v2)
+    {
+        const int v[kN] = { order, gw, gwf, v2 };
+        for (int i = 0; i < kN; ++i)
+        { saved[i] = heurarm::t_arm[kSlots[i]]; heurarm::t_arm[kSlots[i]] = static_cast<std::int8_t>(v[i]); }
+    }
+    ~FlexArmsAa() { for (int i = 0; i < kN; ++i) { heurarm::t_arm[kSlots[i]] = saved[i]; } }
+};
+
+Action PaidCastAa(const std::string& name)
+{
+    Action a;
+    a.kind      = Action::Kind::CastFromHand;
+    a.card_name = name;
+    a.def       = &DefAa(name);
+    a.cost      = DefAa(name).card.m_mana_cost;
+    return a;
+}
+
+// The realised order of a cast list: the shared comparator, then the deck's arrangement -- what both apply
+// worlds do (ApplyPlanDirect / AIEngine::TakeTurn).
+std::vector<std::string> ArrangedCastsAa(const GameState& s, const std::vector<std::string>& hand_order)
+{
+    std::vector<Action> acts;
+    for (const std::string& n : hand_order) { acts.push_back(PaidCastAa(n)); }
+    std::vector<int> ord;
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i) { ord.push_back(i); }
+    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y) { return CastOrderLess(s, acts[x], acts[y]); });
+    ApplyDeckCastArrangement(s, acts, ord);
+    std::vector<std::string> out;
+    for (int i : ord) { out.push_back(acts[i].card_name.str()); }
+    return out;
+}
+
+int WalkAa(const GameState& s, const std::vector<std::string>& order, bool* early)
+{
+    std::vector<Action> acts;
+    std::vector<int> ord;
+    for (const std::string& n : order) { ord.push_back(static_cast<int>(acts.size())); acts.push_back(PaidCastAa(n)); }
+    return LifeScaledOrderWalk(s, acts, ord, early);
+}
+
+// 3 Forests + an untapped, unsick Accomplished Alchemist: the USER's "spell, Weather" board.
+GameState FlexBoardAa(int forests)
+{
+    GameState s = FreshAa();
+    for (int k = 0; k < forests; ++k) { PutAa(s, "Forest"); }
+    PutAa(s, "Accomplished Alchemist");
+    s.m_provider = &AaProv();
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Weather flex: the exact walk credits the Alchemist late, for the life gained by then (storm copies included)")
+{
+    // Crab Umbra {U} on three Forests: only the Alchemist makes blue.
+    GameState s = FlexBoardAa(3);
+    bool early = false;
+    // Umbra ahead of Weather: the Alchemist taps for 1 blue BEFORE the life -- pays, but early.
+    CHECK(WalkAa(s, { "Arbor Elf", "Crab Umbra", "Weather the Storm" }, &early) < 0);
+    CHECK(early);
+    // Umbra behind Weather: Arbor Elf + Weather off the Forests (storm 2 -> 6 life), the Alchemist taps for six blue.
+    CHECK(WalkAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" }, &early) < 0);
+    CHECK_FALSE(early);
+    // Staff of Domination {3}: payable ONLY off the Alchemist's six (Forests 3: Arbor 1 + Weather 2).
+    CHECK(WalkAa(s, { "Arbor Elf", "Weather the Storm", "Staff of Domination" }, &early) < 0);
+    CHECK_FALSE(early);
+    CHECK(WalkAa(s, { "Arbor Elf", "Staff of Domination", "Weather the Storm" }, &early) >= 0);   // Alchemist 1 + 2 Forests, Weather short
+    // Weather ALONE first: storm 1 -> X = 3 -> Staff exactly; two Forests left over for nothing.
+    {
+        GameState t = FlexBoardAa(2);
+        CHECK(WalkAa(t, { "Weather the Storm", "Staff of Domination" }, &early) < 0);
+        CHECK_FALSE(early);
+        CHECK(WalkAa(t, { "Weather the Storm", "Galvanic Alchemist" }, &early) < 0);   // X = 3 blue: {2}{U}
+        CHECK(WalkAa(t, { "Weather the Storm", "Stroke of Genius" }, &early) < 0);     // printed {2}{U} (X = 0)
+    }
+    // Life already gained this turn counts, and a plain lifegain spell adds to it: Nourish (6) + Weather (storm 2:
+    // 6) = 12 -> Staff (3) and Galvanic (3) both off one tap.
+    {
+        GameState t = FlexBoardAa(4);
+        CHECK(WalkAa(t, { "Nourish", "Weather the Storm", "Staff of Domination", "Galvanic Alchemist" }, &early) < 0);
+        CHECK_FALSE(early);
+    }
+    // No Alchemist on the board: the walk is the plain exact walk (nothing is held, nothing credited).
+    {
+        GameState t = FreshAa();
+        for (int k = 0; k < 3; ++k) { PutAa(t, "Forest"); }
+        t.m_provider = &AaProv();
+        CHECK(WalkAa(t, { "Arbor Elf", "Weather the Storm", "Crab Umbra" }, &early) >= 0);
+        CHECK_FALSE(early);
+    }
+    // A SICK Alchemist cannot tap: held nowhere, credited nowhere.
+    {
+        GameState t = FreshAa();
+        for (int k = 0; k < 3; ++k) { PutAa(t, "Forest"); }
+        PutAa(t, "Accomplished Alchemist", /*sick=*/true);
+        t.m_provider = &AaProv();
+        CHECK(WalkAa(t, { "Arbor Elf", "Weather the Storm", "Crab Umbra" }, &early) >= 0);
+    }
+}
+
+TEST_CASE("Weather flex (DEFAULT OFF): Weather preferred last; an untapper moves behind it only when the mana needs it")
+{
+    // Off / gw: the plain ranks. gw puts Crab Umbra ahead of Weather and the Alchemist burns for one blue.
+    {
+        GameState s = FlexBoardAa(3);
+        FlexArmsAa a(0, 1, 0, 0);
+        CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" })
+              == std::vector<std::string>{ "Arbor Elf", "Crab Umbra", "Weather the Storm" });
+    }
+    // gwf: the same rank (Weather 21) ...
+    {
+        GameState s = FlexBoardAa(3);
+        FlexArmsAa a(0, 0, 1, 0);
+        CHECK(AaProv().CastOrderRank(s, DefAa("Weather the Storm")) == 21);
+        CHECK(AaProv().CastOrderRank(s, DefAa("Crab Umbra")) == 20);
+        CHECK(AaProv().CastOrderTierName(21) != nullptr);
+        // ... and the ladder: Umbra needs the Alchemist's blue, so it goes behind Weather and is paid from its six.
+        CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" })
+              == std::vector<std::string>{ "Arbor Elf", "Weather the Storm", "Crab Umbra" });
+        CHECK(ArrangedCastsAa(s, { "Crab Umbra", "Weather the Storm", "Arbor Elf" })
+              == std::vector<std::string>{ "Arbor Elf", "Weather the Storm", "Crab Umbra" });
+        // Galvanic Alchemist (a creature, generic tier 10: ahead of Weather in EVERY generic arm) the same way.
+        GameState g = FlexBoardAa(5);
+        CHECK(ArrangedCastsAa(g, { "Arbor Elf", "Weather the Storm", "Galvanic Alchemist" })
+              == std::vector<std::string>{ "Arbor Elf", "Weather the Storm", "Galvanic Alchemist" });
+    }
+    // gwf, the mana is THERE (an Island pays the Umbra): the preferred order stands -- Umbra stays a storm copy.
+    {
+        GameState s = FlexBoardAa(3);
+        PutAa(s, "Island");
+        FlexArmsAa a(0, 0, 1, 0);
+        CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" })
+              == std::vector<std::string>{ "Arbor Elf", "Crab Umbra", "Weather the Storm" });
+    }
+    // gwf, two untappers, only ONE needs the Alchemist: the fewest move. Staff {3} off Forests, Umbra off the six.
+    {
+        GameState s = FlexBoardAa(6);
+        FlexArmsAa a(0, 0, 1, 0);
+        CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Staff of Domination", "Crab Umbra" })
+              == std::vector<std::string>{ "Arbor Elf", "Staff of Domination", "Weather the Storm", "Crab Umbra" });
+        CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra", "Staff of Domination" })
+              == std::vector<std::string>{ "Arbor Elf", "Staff of Domination", "Weather the Storm", "Crab Umbra" });
+    }
+    // gwf, no Alchemist: nothing to fund, nothing moves.
+    {
+        GameState s = FreshAa();
+        for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
+        s.m_provider = &AaProv();
+        FlexArmsAa a(0, 0, 1, 0);
+        CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" })
+              == std::vector<std::string>{ "Arbor Elf", "Crab Umbra", "Weather the Storm" });
+    }
+    // Inert with the flag off (=0 and unset): the arrangement is the identity, the walk hook off.
+    for (int v : { 0, -1 })
+    {
+        if (v == -1 && (EnvOn("MTG_AA_GENERIC_WEATHER_FLEX") || EnvOn("MTG_AA_CAST_ORDER_V2"))) { continue; }
+        GameState s = FlexBoardAa(3);
+        FlexArmsAa a(0, 1, v, v);
+        CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" })
+              == std::vector<std::string>{ "Arbor Elf", "Crab Umbra", "Weather the Storm" });
+        CHECK_FALSE(AaProv().LifeScaledManaInOrderWalk());
+        CHECK_FALSE(AaProv().ExactOrderWalk());
+    }
+}
+
+TEST_CASE("Weather flex: the USER's line realised as ONE cast list -- spell, Weather, the Alchemist's six blue for Crab Umbra, then the loop kills (both worlds)")
+{
+    // 3 Forests + Alchemist; hand Arbor Elf, Weather, Crab Umbra, Stroke; the opponent's library is 30. The plan
+    // {Arbor Elf, Weather, Umbra -> Alchemist} is enumerated in every arm (3 Forests + the Alchemist's 1 = 4 mana).
+    // gw realises Umbra first (the Alchemist burns for one blue before the life): no loop, no kill this turn.
+    // gwf realises Weather first (storm 2 -> 6 life), the Alchemist taps for six blue, Umbra resolves on it with five
+    // floating, and the site-9 continuation loops the Umbra to Stroke's lethal X -- in BOTH worlds.
+    GameState s = FlexBoardAa(3);
+    HandAa(s, "Arbor Elf");
+    HandAa(s, "Weather the Storm");
+    HandAa(s, "Crab Umbra");
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 30);
+    auto wins = [&](int& n_plans) -> int
+    {
+        int best = 0;
+        n_plans = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (CastOfAa(p, "Arbor Elf") == nullptr || CastOfAa(p, "Weather the Storm") == nullptr
+                || CastOfAa(p, "Crab Umbra") == nullptr) { continue; }
+            bool route = false;
+            for (const Action& a : p.actions) { if (a.kind == Action::Kind::ComboRoute) { route = true; } }
+            if (route) { continue; }   // the cast LIST's own line, not the Combo Off route's walk
+            ++n_plans;
+            const auto [ro, ex] = BothWorldsAa(s, p);
+            best = std::max(best, (OpponentHasLost(ro) ? 1 : 0) + (OpponentHasLost(ex) ? 1 : 0));
+        }
+        return best;
+    };
+    int n_gw = 0, n_gwf = 0;
+    int gw = 0, gwf = 0;
+    { FlexArmsAa a(0, 1, 0, 0); gw = wins(n_gw); }
+    { FlexArmsAa a(0, 0, 1, 0); gwf = wins(n_gwf); }
+    MESSAGE("plans " << n_gw << "/" << n_gwf << " worlds won: gw=" << gw << " gwf=" << gwf);
+    REQUIRE(n_gw > 0);
+    REQUIRE(n_gwf > 0);
+    CHECK(gw == 0);
+    CHECK(gwf == 2);
+}
+
+TEST_CASE("Cast order V2 (DEFAULT OFF): one position per card, the land drop first, Stroke at the opponent after every cast")
+{
+    GameState g = FreshAa();
+    g.m_provider = &AaProv();
+    const AccomplishedAlchemistProvider& p = AaProv();
+    const std::vector<std::string> v2 = {
+        "Utopia Sprawl", "Wild Growth", "Arbor Elf", "Elvish Harbinger", "Accomplished Alchemist", "Galvanic Alchemist",
+        "Seedcradle Witch", "Ezuri, Renegade Leader", "Scholar of Athreos", "Trufflesnout", "Brindle Boar", "Living Wish",
+        "Nourish", "Feed the Clan", "Eternal Witness", "Stroke of Genius", "Crab Umbra", "Staff of Domination",
+        "Weather the Storm" };
+    {
+        FlexArmsAa a(0, 0, 0, 1);
+        CHECK(p.LandDropCastOrderRank() == 64);
+        int pos = 1;
+        for (const std::string& n : v2)
+        {
+            CAPTURE(n);
+            const int r = p.CastOrderRank(g, DefAa(n));
+            CHECK(r == ++pos * 64);
+            CHECK(p.CastOrderTierName(r) != nullptr);
+        }
+        CHECK(p.CastOrderTotalByName());
+        std::vector<std::string> rev(v2.rbegin(), v2.rend());
+        CHECK(SortedCastsAa(g, rev) == v2);
+        // V2 overrides the PROPOSED order and the generic arms.
+        { FlexArmsAa b(1, 1, 1, 1); CHECK(SortedCastsAa(g, rev) == v2); }
+        // Stroke at the opponent: the kill, after every cast (Weather included); as a dig, its own slot.
+        Action dig = PaidCastAa("Stroke of Genius");
+        Action kill = dig;
+        kill.draw_target = 1;
+        const int stroke = p.CastOrderRank(g, DefAa("Stroke of Genius"));
+        CHECK(p.CastOrderActionRank(g, dig, stroke) == stroke);
+        CHECK(p.CastOrderActionRank(g, kill, stroke) == 28 * 64);
+        CHECK(p.CastOrderActionRank(g, kill, stroke) > p.CastOrderRank(g, DefAa("Weather the Storm")));
+        CHECK(p.CastOrderTierName(28 * 64) != nullptr);
+    }
+    // Off: the generic tiers, and the action rank untouched.
+    {
+        FlexArmsAa a(0, 0, 0, 0);
+        const GenericProvider generic;
+        for (const std::string& n : v2) { CAPTURE(n); CHECK(p.CastOrderRank(g, DefAa(n)) == generic.CastOrderRank(g, DefAa(n))); }
+        Action kill = PaidCastAa("Stroke of Genius");
+        kill.draw_target = 1;
+        CHECK(p.CastOrderActionRank(g, kill, 20) == 20);
+        CHECK(p.LandDropCastOrderRank() == -1);
+    }
+}
+
+TEST_CASE("Cast order V2: the board activations -- life, then untap the Alchemist cheapest first, then finish, then combat pumps")
+{
+    GameState s = FreshAa();
+    s.m_provider = &AaProv();
+    const int alch = PutAa(s, "Accomplished Alchemist");
+    const int harb = PutAa(s, "Elvish Harbinger");
+    auto act = [&](const std::string& card, Action::Kind k, int shape, int target, Action::AbilityMode m)
+    {
+        Action a;
+        a.kind          = k;
+        a.card_name     = card;
+        a.def           = &DefAa(card);
+        a.gy_exile_mode = shape;
+        a.sac_victim_id = target;
+        a.ability_mode  = m;
+        return a;
+    };
+    using K = Action::Kind;
+    using M = Action::AbilityMode;
+    const Action boar   = act("Brindle Boar", K::SacCreatureOutlet, 0, 0, M::None);
+    const Action sgain  = act("Staff of Domination", K::ActivatePermAbility, 0, 0, M::TapLifegain);
+    const Action umbra  = act("Crab Umbra", K::ActivateUntap, 1, alch, M::None);
+    const Action galv   = act("Galvanic Alchemist", K::ActivateUntap, 2, alch, M::None);
+    const Action suntap = act("Staff of Domination", K::ActivateUntap, 3, alch, M::None);
+    const Action witch  = act("Seedcradle Witch", K::ActivateUntap, 4, alch, M::None);
+    const Action wpump  = act("Seedcradle Witch", K::ActivateUntap, 4, harb, M::None);
+    const Action drain  = act("Scholar of Athreos", K::ActivatePermAbility, 0, 0, M::Drain);
+    const Action sdraw  = act("Staff of Domination", K::ActivatePermAbility, 0, 0, M::TapDraw);
+    const Action ezuri  = act("Ezuri, Renegade Leader", K::ActivatePump, 0, 0, M::None);
+    const AccomplishedAlchemistProvider& p = AaProv();
+    auto r = [&](const Action& a) { return p.ActivationOrderRankForAction(s, *a.def, a); };
+    {
+        FlexArmsAa on(0, 0, 0, 1);
+        CHECK(r(boar) == 21);
+        CHECK(r(sgain) == 22);
+        CHECK(r(umbra) == 24);
+        CHECK(r(galv) == 25);
+        CHECK(r(suntap) == 26);
+        CHECK(r(witch) == 27);
+        CHECK(r(drain) == 29);
+        CHECK(r(sdraw) == 31);
+        CHECK(r(ezuri) == 32);
+        CHECK(r(wpump) == 33);
+        // Both trailing passes sort by it (one shared definition): a shuffled pass comes out in the numbering.
+        std::vector<Action> pass = { wpump, ezuri, sdraw, drain, witch, suntap, galv, umbra, sgain, boar };
+        TurnSolver::OrderTrailingActivations(s, pass);
+        std::vector<int> got;
+        for (const Action& a : pass) { got.push_back(r(a)); }
+        CHECK(std::is_sorted(got.begin(), got.end()));
+    }
+    {
+        FlexArmsAa off(0, 0, 0, 0);
+        for (const Action* a : { &boar, &sgain, &umbra, &galv, &suntap, &witch, &wpump, &drain, &sdraw, &ezuri })
+        { CHECK(r(*a) == 0); }
+    }
+}
+
+TEST_CASE("Weather flex: the Alchemist's six float the colour of the untapper the line casts (Galvanic + an Island, both worlds)")
+{
+    // 4 Forests + an Island + the Alchemist; hand Arbor Elf, Weather, Galvanic Alchemist, Stroke; the opponent's
+    // library is 30. The ladder casts Galvanic after Weather; the payer pays its {U} with the Island and its {2} with
+    // a Forest and the Alchemist's six. Before the fix the surplus floated WHITE (prod[0]) and the granted {2}{U}
+    // untap had no blue: no loop. Now the burst floats the colour Galvanic's untap needs, and the plan kills this
+    // turn in BOTH worlds.
+    GameState s = FlexBoardAa(4);
+    PutAa(s, "Island");
+    HandAa(s, "Arbor Elf");
+    HandAa(s, "Weather the Storm");
+    HandAa(s, "Galvanic Alchemist");
+    HandAa(s, "Stroke of Genius");
+    DealOppAa(s, 30);
+    FlexArmsAa a(0, 0, 1, 0);
+    int n = 0, best = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        if (CastOfAa(p, "Arbor Elf") == nullptr || CastOfAa(p, "Weather the Storm") == nullptr
+            || CastOfAa(p, "Galvanic Alchemist") == nullptr) { continue; }
+        bool route = false;
+        for (const Action& x : p.actions) { if (x.kind == Action::Kind::ComboRoute) { route = true; } }
+        if (route) { continue; }
+        ++n;
+        const auto [ro, ex] = BothWorldsAa(s, p);
+        best = std::max(best, (OpponentHasLost(ro) ? 1 : 0) + (OpponentHasLost(ex) ? 1 : 0));
+    }
+    REQUIRE(n > 0);
+    CHECK(best == 2);
+}

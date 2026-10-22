@@ -1078,6 +1078,17 @@ public:
     // fallback does not undo an arranged order its own cruder walk misjudges. Default false.
     virtual bool ExactOrderWalk() const { return false; }
 
+    // LifeScaledManaInOrderWalk -- the exact order walk (ExactOrderFirstUnpayable / ExactOrderPaidMask /
+    // LifeScaledOrderWalk, ManaPayment.h) credits a mana_per_life_gained source (Accomplished Alchemist:
+    // "{T}: Add X mana of any one color, where X is the amount of life you gained this turn") EXACTLY:
+    // each untapped, able-to-tap such source is taken out of the aggregate pool (AvailableManaPool books it
+    // at max(1, life gained so far) wild) and tapped LATE -- only when a cast cannot otherwise be paid --
+    // for max(1, life gained by then) of one colour, where the walk adds every earlier cast's lifegain
+    // (cast_lifegain with its ferocious rider, Weather the Storm's storm copies, Trufflesnout's life mode).
+    // Without it the walk cannot tell "the untapper is paid off the Alchemist's 6 after Weather" from "the
+    // untapper burns the Alchemist for 1 before Weather". Default false -> every walk byte-identical.
+    virtual bool LifeScaledManaInOrderWalk() const { return false; }
+
     // CastOrderingCandidates -- the deck's OWN candidate orderings for the cast-ordering search
     // (WantsCastOrderingSearch). `reorder` is the plan's non-sacrifice hand casts (`plan_actions` the
     // whole plan, for its pre-cast sacrifices); fill `out` with index orderings over `reorder` and
@@ -1323,6 +1334,14 @@ public:
     // the default defers to the per-card rank, so a deck that overrides neither is byte-identical.
     virtual int ActivationOrderRankFor(const GameState& s, const CardDefinition& d, int /*act_class*/) const
     { return ActivationOrderRank(s, d); }
+    // ...the same, told the whole ACTION, for a deck whose one card carries several abilities of ONE class
+    // (Staff of Domination: gain 1 life, untap target creature, draw -- every one an act_class 0) or whose
+    // position depends on the activation's target (Seedcradle Witch: untapping the Accomplished Alchemist
+    // is the loop, pumping an attacker is a combat finish). EVERY trailing-order consumer calls this one
+    // (OrderTrailingActivations / TrailingRunsBefore / TrailingRunsFirst and both passes' no-opinion
+    // early-outs, executor and rollout alike); the default defers to the class rank, so a deck that
+    // overrides none of the three is byte-identical.
+    virtual int ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const;
 
     // CastOrderFallbackRanks -- the FUNDING ladder for a cast whose ideal position is LATE but
     // whose output (Treasures, ritual float) may be needed earlier to pay for the line. Returns

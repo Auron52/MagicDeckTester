@@ -370,6 +370,15 @@ int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& 
 // in hand) and the walk goes on. `paid[k]` = 1 when order position k is made. Returns the first failure.
 int ExactOrderPaidMask(const GameState& state, const std::vector<Action>& actions,
                        const std::vector<int>& order, std::vector<char>& paid);
+// The same exact walk with LIFE-SCALED sources credited exactly whatever the provider says
+// (DecisionProvider::LifeScaledManaInOrderWalk -- ExactOrderFirstUnpayable / ExactOrderPaidMask read the
+// hook): every untapped mana_per_life_gained source (Accomplished Alchemist) is held out of the pool and
+// tapped LATE, only when a cast cannot otherwise be paid, for max(1, life gained by then) of one colour,
+// the walk adding each earlier cast's lifegain (storm copies included). `scaled_early` (may be null) is
+// set when such a source had to tap at or before the order's LAST lifegain cast. Returns the first
+// unpayable position, -1 when every cast pays.
+int LifeScaledOrderWalk(const GameState& state, const std::vector<Action>& actions, const std::vector<int>& order,
+                        bool* scaled_early);
 
 // BREAKPOINT LEFTOVERS (DecisionProvider::MergesBreakpointLeftovers; docs/design/dragonstorm-user-cast-
 // order.md). When a breakpoint fires in the middle of a cast list, the list's remaining casts (the

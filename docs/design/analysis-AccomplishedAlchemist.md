@@ -46,6 +46,10 @@ USER's call -- see "Why the Combo Off route gets stuck (2026-10-21/22)".
 payment split, not a route defect -- an unbranched-canon continuation's never-applied Witch activation held mana in the
 rollout only; `MTG_CANON_CONT_TRAITS` (LOCKSTEP #19) landed DEFAULT ON: 4 of 2,500 games faster, 0 slower, smoke
 140/140 byte-identical -- see "Combo Off "win", then the attack lost: s160426 gi425 (2026-10-22)".
+2026-10-22 (branch `aa-castorder2`, NOT pushed): the USER rejected Weather-strictly-last; round 3 built the USER's
+"Weather flexible around the untappers" rule as `MTG_AA_GENERIC_WEATHER_FLEX` and the proposed total order
+`MTG_AA_CAST_ORDER_V2` (both DEFAULT OFF): net -66 / -109 over 7,500 paired games (gw -53), every slower game
+recovers at d8 b0, no d8 b0 loss -- see "Round 3 (2026-10-22)" under "Proposed cast order".
 Open USER items are listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -2869,6 +2873,239 @@ at unlimited budget, it never trails at d3 or at d5 on 170001 / 180001, and it i
 wins g425 rides a generic-arm defect. The Stroke move is a coin flip worth separate work: a searched X for Stroke as a
 dig (or a hold-back variant in the route) would remove g731's dependence on the order and might keep g535's gain. Also
 for the USER: the g425 combat-finisher defect (round 1) is in current play. Adoption is the USER's decision.
+
+### Round 3 (2026-10-22) -- Weather flexible around the untappers (USER 2026-10-22)
+
+Branch `aa-castorder2` + the cherry-picked lockstep #19 fix (286e6a421 -> c127ac90d, `MTG_CANON_CONT_TRAITS`), NOT
+pushed. Scratch `build/scratch/aa/castorder3/` (`scen/` the fact boards, `f4/` the fact matrix, `ab3/` the A/B, `xr3/`
+the reruns; `mk3.py`, `mkx3.py`, `pool3.py`, `tab3.py`, `runfacts.sh`, `showlog.py`).
+
+**The USER (2026-10-22, verbatim).** *"Weather the Storm needs to be flexible. For example, a common play would be
+spell, Weather the Storm + tap alchemist for 6 using that to play Staff of Domination and untap Alchemist. You cannot
+do that with it just at the end. I would say the untappers should be possible to do before or after it (depending on
+mana)."* -- *"But it is correct that it is relatively happy to go at the end. Trying to put it there is not wrong.
+What is wrong is not considering alternatives when that doesn't work mana-wise."* -- *"Plus we do need to ensure that
+we can still go off immediately after. I can see issues with that if we aren't careful. I guess the abilities need to
+go at the end."* gw (Weather strictly last, round 2's recommendation) is rejected as written.
+
+#### 1. The facts: where the USER's line lives in the engine, and where it becomes unfindable
+
+Nineteen hand-built T4 main-1 boards (`scen/`; Forests + an untapped Accomplished Alchemist, the opponent's library 30,
+hand = a spell + Weather + an untapper + a finisher), every arm at `--depth 8 --budget-ms 0`, with the Combo Off
+route on (as shipped) and off (`MTG_AA_COMBO_ROUTE=0`, to see what the cast list alone realises). T4 = the kill this
+turn:
+
+| board (T4, main 1) | hand (+ board extras) | route ON: off / gw / gwf / v2 | route OFF: off / gw / gwf / v2 |
+|---|---|---|---|
+| staff3, staff3_sw (3 Forests) -- **the USER's example** | Arbor Elf, Weather, Staff, Stroke (both hand orders) | 4 / 4 / 4 / 4 | 5 / 5 / 5 / 5 |
+| staff4 (4 Forests) | same | 4 / 4 / 4 / 4 | 5 / 5 / 5 / 5 |
+| staff5 / staff5_sw (5 Forests) | same | 4 / 4 / 4 / 4 | 5 / 4 / 4 / 4 ; 4 / 4 / 4 / 4 |
+| umbra3, umbra3_sw (3 Forests) | Arbor Elf, Weather, Crab Umbra, Stroke | 4 / 4 / 4 / 4 | 5 / 5 / **4** / **4** |
+| galv5 (5 Forests) | Arbor Elf, Weather, Galvanic, Stroke | 4 / 4 / 4 / 4 | 5 / 5 / **4** / **4** |
+| galv_island4 (4 Forests + Island) | same | 4 / 4 / 4 / 4 | 5 / 5 / **4** / **4** |
+| galv3 (3 Forests) | same | 4 / 4 / 4 / 4 | 5 / 5 / 5 / 5 |
+| nourish_umbra4 (4 Forests) | Nourish, Weather, Crab Umbra, Stroke | 4 / 4 / 4 / 4 | 5 / 5 / **4** / **4** |
+| nourish_galv5 (5 Forests) | Nourish, Weather, Galvanic, Stroke | 4 / 4 / 4 / 4 | 5 / 5 / 5 / 5 |
+| staff_umbra4 / staff_umbra6 | Arbor Elf, Weather, Staff, Crab Umbra, Stroke | 4 / 4 / 4 / 4 | 5 / 5 / **4** / **4** ; 4 / 5 / 4 / 4 |
+| staffbf_umbra3 (Staff already in play) | Arbor Elf, Weather, Crab Umbra, Stroke | 4 / 4 / 4 / 4 | 4 / 4 / 4 / 4 |
+| umbra_wish3 | Arbor Elf, Weather, Crab Umbra, Living Wish | 4 / 4 / 4 / 4 | 4 / 4 / 4 / 4 |
+| witch3 / witch_h4 (+ Elvish Harbinger) | Arbor Elf, Weather, Seedcradle Witch, Stroke | 4 / 4 / 4 / 4 | 4 / 4 / 4 / 4 |
+| witch2 (2 Forests + Harbinger) | same | 5 / 5 / 5 / 5 | 5 / 5 / 5 / 5 |
+
+Route on: every arm kills on turn 4 on all 18 winnable boards (witch2: no arm, see 3). Route off -- what the cast list
+itself realises -- off 6 / gw 6 / gwf 13 / v2 13 of 19; the five that no arm's cast list reaches are mechanism 1.
+No `[fd-diverge]` line in any of the 152 runs (`MTG_FD_ORACLE=1`).
+
+What decides each cell -- four mechanisms, and the cast order is the smallest of them:
+
+1. **Enumeration never admits the USER's exact example as a cast list, in ANY arm.** The flat mana gate prices an
+   Alchemist at its plan-start yield (`AvailableManaPool` -> `ScaledDorkCount` = max(1, life gained so far)), so a
+   subset whose casts only the post-lifegain X pays is never a plan. "Arbor Elf + Weather off three Forests, Staff off
+   the Alchemist's six" costs 6 against a plan-start pool of 4 (staff3, staff4, galv3, nourish_galv5).
+2. **When the list does fit the plan-start pool, the whole-turn prepay burns the Alchemist WHATEVER the order.**
+   `BatchPrepayMainCasts` pays every cast jointly from the plan-start board before the first one resolves. umbra3
+   ({Arbor Elf, Weather, Crab Umbra} on three Forests: the Umbra's {U} needs the Alchemist): all 7 such plans were
+   PREPAID (`MTG_PREPAY_PROBE`), the Alchemist tapped for ONE blue, life gained 9 (storm 3), nothing loops -- in
+   generic, gw and the reverse order alike. So in generic / gw the order of Weather against an untapper does not
+   decide the Alchemist's X on a prepaid turn at all, only the storm count (it matters only on a turn the prepay
+   declines: an X spell, a producer, a float).
+3. **The lifegain continuation cannot carry it.** After [spell, Weather] the site-9 continuation may cast the untapper
+   (an old card: `MTG_BP_NEW_ONLY` drops such a continuation unless it carries an unkeyed activation) but cannot
+   activate it in the same apply (a second post-entry re-plan; chunk C2a's "site 9 opens once per apply"). Route off
+   + `MTG_BP_NEW_ONLY=0` on staff3 / umbra3: still T5.
+4. **The Combo Off route realises it, in every arm.** The main plan casts [Arbor Elf, Weather] (storm 2: 6 life); the
+   lifegain continuation is the route, whose walk applies link by link -- `link0 SETUP cast: Staff of Domination ->
+   float 3 ... life_gained 6`, `link1 LOOP ... untap Accomplished Alchemist`, `link2 KILL cast: Stroke of Genius ->
+   lost=1` (`MTG_AA_ROUTE_TRACE`, `aa_weather_flex_user_line_staff`). Its setup walk already tries BOTH placements
+   (untapper-first for Weather's storm, life-first for a {U} untapper off the Alchemist's tap; the 2026-10-20 sweep) --
+   the USER's rule, at the link level. It exists only when a kill is provable THIS turn.
+
+**So, the answer for the USER.** Under gw -- and under generic -- the USER's line is FOUND at d8 b0 whenever the turn
+has a provable kill (the route, 18 of 18 winnable boards). As ONE CAST LIST it is unfindable in both, for reasons the
+order alone cannot fix: the enumeration's plan-start price of the Alchemist (1) and the prepay (2). gw additionally
+casts every coloured untapper ahead of Weather; generic does too for the creatures (Galvanic, the Witch: tier 10).
+
+#### 2. What landed (all DEFAULT OFF -- adoption is the USER's)
+
+**`MTG_AA_GENERIC_WEATHER_FLEX`** (heurarm `AA_GENERIC_WEATHER_FLEX`, "gwf"): gw's ranks (Weather 21, after every other
+card) plus three pieces that make "consider the alternatives when it doesn't work mana-wise" real:
+* **The mana ladder** (`AccomplishedAlchemistProvider::ArrangeCastOrder`, applied at every cast-order site of both
+  worlds and the enumeration walk through `ApplyDeckCastArrangement`): the preferred order stands whenever it WORKS --
+  every cast pays without tapping an Alchemist at or before the list's last lifegain. Otherwise the FEWEST untappers
+  (Crab Umbra, Staff, Seedcradle Witch, Galvanic -- `AaIsUntapper` / `AaIsWitch`) move to right after the list's last
+  Weather, latest first within a count, keeping their relative order; the first moved order that works is taken; none
+  works -> the first that merely pays; none pays -> the preferred order. Shape (A), the funding-ladder spirit: a
+  preference with mana-driven alternatives, never a 50/50.
+* **The exact projection** (`LifeScaledOrderWalk`; `DecisionProvider::LifeScaledManaInOrderWalk` arms it inside the
+  exact walk, so `ExactOrderFirstUnpayable` / `ExactOrderPaidMask` and the payable fallback read the same one): each
+  untapped, able-to-tap Alchemist is held out of the pool (its exact contribution, differenced) and tapped LATE --
+  only when a cast cannot otherwise pay -- for max(1, life gained by then) of one colour, the walk adding every
+  earlier cast's lifegain (`cast_lifegain` with Feed's ferocious rider, Weather x storm instances counting this
+  turn's earlier spells, Trufflesnout's life mode). Unit-pinned: Umbra behind Weather is paid by six blue, Staff off
+  the six, Weather alone first gives X = 3, Nourish + Weather gives 12.
+* **The payment** (`BatchPrepayMainCasts`, new decline `PP_LIFE_SCALED`): when the batch gains life and the board
+  WITHOUT the life-scaled sources cannot pay it, the prepay declines and the per-cast payer pays in the ladder's order,
+  so the Alchemist taps when a cast needs it, for the life gained by then. When the rest of the board pays, the joint
+  prepay runs as before (its dork-reserve rung holds the Alchemist).
+* **The colour of the surplus** (`BurstPendingActColour`): an Alchemist burst paying a generic pip floats the colour
+  the line's CAST untapper will spend on its untap (its activation lives in the post-entry continuation, outside the
+  plan's pending pips) instead of prod[0] = white. Found by the go-off check below (galv_island4).
+
+**`MTG_AA_CAST_ORDER_V2`** (heurarm `AA_CAST_ORDER_V2`, "v2"; overrides `MTG_AA_CAST_ORDER` and the generic arms): the
+coordinator's total order, ONE array to edit (`kAaV2Order`): land drop 1, Utopia Sprawl 2, Wild Growth 3, Arbor Elf 4,
+Elvish Harbinger 5, Accomplished Alchemist 6, Galvanic Alchemist 7, Seedcradle Witch 8, Ezuri 9, Scholar 10,
+Trufflesnout 11, Brindle Boar 12, Living Wish 13, Nourish 14, Feed the Clan 15, Eternal Witness 16, Stroke of Genius
+17 (a dig; AT THE OPPONENT it is 28, after every cast -- `CastOrderActionRank`), Crab Umbra 18, Staff of Domination
+19, Weather the Storm 20; `CastOrderTotalByName`; the same ladder / projection / payment / colour as gwf (the
+untappers' latest-first order is Staff, Umbra, Witch, Galvanic). Plus the ABILITIES:
+
+| # | the proposal | what the engine had | what changed (V2 only) |
+|---|---|---|---|
+| 21-22 | Brindle Boar sac (life), Staff {2},{T}: gain 1 | trailing pass in battlefield-index order (no AA rank) | `ActivationOrderRankForAction` 21 / 22 |
+| 23 | the Alchemist's {T}: X, as late as possible | payment, not an action: the payer taps it when a cost needs it; the closed-form loop taps it per iteration | (the gwf payment change above) |
+| 24-27 | untap the Alchemist cheapest first: Umbra, Galvanic, Staff, Witch | one closed-form loop action per (untapper, target) (`ApplyUntapLoop`, the Staff's gain bootstrap inside it -- "22 repeats in the loop" already); several in one pass ran in battlefield order; the route's loop candidates ranked by lifegain then size | ranks 24-27 (the Witch 27 on a life-scaled target, else 33); the route's loop order gets a cheapest-untapper key after the lifegain (an order over the same candidates) |
+| 28-31 | FINISH: Stroke at the opponent, Scholar drain, Wish -> Scholar, Staff draw to a Stroke | the kill fold (`kActUntapLoopFunded`) sizes the loop to the CHEAPEST this-turn kill (`ComputeUntapLoopNeed`) and the continuation is that proven kill only | drain 29 / Staff draw 31 in the trailing pass; the kill fold UNCHANGED: every finisher ends the game this turn and the loop is unbounded, so the choice among kills is outcome-equivalent and the cheapest needs the fewest iterations |
+| 32-33 | combat-only kills last: Ezuri pump, Witch pump | the route proves main-phase kills only; the pumps stay the search's | 32 / 33 |
+
+Mechanism: a new hook `ActivationOrderRankForAction(state, def, action)` (default = the class rank, so every other deck
+is byte-identical); every trailing-order consumer now calls it (both passes' sorts and no-opinion early-outs,
+`TrailingRunsBefore`, `TrailingRunsFirst`). A trailing plan holds one activation per source family, so the Staff's
+three modes never meet in one pass -- the rank orders the Staff against the OTHER sources.
+
+**Shape (B) was not built.** Completeness: when the preferred order WORKS, moving an untapper behind Weather buys the
+cast list nothing (the Alchemist is untapped after Weather either way) and costs a storm copy -- 3 life, i.e. 3 mana of
+X on every later tap -- so the alternative is dominated for the casts AND for every activation after them (Staff's
+untap, the loop, a Stroke: the preferred order reaches the loop with the same lands spent and a bigger X). The
+alternative is taken exactly when the preferred order needs the Alchemist before the life. The one place this argument
+needs a payer to cooperate is colour (a two-colour Witch untap, a second blue source): those are payment choices, not
+orders (below). The lines the ladder cannot reach are the ones the enumeration never admits (mechanism 1) -- a
+pre-existing gap in every arm, reachable today only through the route.
+
+#### 3. Can we still go off immediately after? (the USER's third message)
+
+Checked on the boards above (route on and off, every arm, d8 b0) and in the unit tests:
+* **An untap activation between casts:** cannot happen in autonomous play -- every board activation runs in the
+  trailing pass, after every cast of the plan (the ladder orders casts only). V2 additionally orders that pass
+  (life -> untap loop -> finish -> combat pumps).
+* **The Alchemist tapped to fund the untapper, leaving the loop short:** the moved order taps it AFTER Weather for X
+  (six on these boards) and the loop runs off the surplus: umbra3 / galv5 / staff_umbra4 / nourish_umbra4 kill on T4
+  as one cast list under gwf / v2 (route off), in BOTH worlds (unit case for umbra3). ONE colour defect found and
+  fixed inside the arm: galv_island4 -- the payer spent the Island on Galvanic's {U} and the Alchemist's six on the
+  generic, floating WHITE (prod[0]), so the granted {2}{U} untap had no blue (unit probe: every such plan W5, no loop).
+  Now the burst floats the colour of the untap the line's cast untapper needs (`BurstPendingActColour`, hook-gated):
+  T4 in both worlds (unit case) and in the scenario.
+* **A lifegain continuation that re-plans without reaching the route:** with the route on, every winnable board kills
+  on T4 in every arm -- the route is reached after [spell, Weather] (trace above) and after the ladder's lists.
+* **The act-line hold:** staffbf_umbra3 (Staff already in play, so its untap is a TRAILING activation of the same
+  plan as the casts) kills on T4 in every arm, route on and off.
+* **Lockstep #19 (the cherry-picked canon-continuation traits):** its scenario passes (`aa_canon_cont_traits_g425_t5`,
+  T6 as pinned); no fd-diverge anywhere above; the A/B below is the wider check.
+* **Residual, every arm (not a move of Weather):** witch2 -- two Forests + Harbinger: the Witch's {G/W} is paid by
+  the Harbinger, the Alchemist alone then makes ONE colour per tap and the {2}{G}{W} loop starves; the route's
+  pre-tap does not reach it either. A payer choice (the Witch off the Alchemist would keep the Harbinger for the
+  second colour), surfaced, not changed.
+* **Moving Weather broke going off in NO case found.**
+
+#### 4. Validation
+
+Unit **1836 / 1836** (6 new cases: the life-scaled walk -- late tap, storm copies, Nourish + Weather = 12, no / sick
+Alchemist; the ladder -- gwf moves Umbra and Galvanic behind Weather only when the Alchemist would burn early, keeps the
+order when an Island pays, moves the FEWEST of two untappers, does nothing without an Alchemist, inert at =0 and
+unset; the USER's line as one cast list in both worlds -- gw 0 worlds win, gwf 2; Galvanic + an Island in both worlds;
+V2 -- one position per card, overrides the other orders, Stroke at the opponent after every cast, generic when off;
+V2's activation numbering through `OrderTrailingActivations`). Scenarios **257 / 257** (5 new:
+`aa_weather_flex_user_line_staff` and `aa_cast_order_v2_user_line_staff` -- the USER's exact line kills on T4 at d8 b0
+under each arm; `aa_weather_flex_galvanic_one_list` / `aa_weather_flex_umbra_one_list` -- route OFF, the cast list
+itself kills on T4 under gwf; `aa_weather_gw_galvanic_one_list_no_t4` -- its gw twin, no win by T4). **Flags unset:
+the alchemist + alchemist2hg smoke rows are byte-identical to the c127ac90d binary AND to the committed smoke GT --
+4 / 4 digests, 4 / 4 `gt_logs` `.wins`** (hand manifest `castorder3/smoke.json`, `smk_new2/`; no harness tier was run:
+the value-leaf generation on the box reads `test/results/`).
+
+#### 5. A/B
+
+One pooled batch (30,000 games, 6 threads, box shared with the value-leaf generation: ms not comparable, units are),
+arms by heurarm, 25-game chunks, `seed = base + off`, `game_index = off`, unwon = 9; round 2's bases 160001, 170001,
+180001. d5 = value_play depth, b20 (the play setting); d3 b10 and d0 with `ignore_play_profile`. Delta = arm - off;
+faster / slower paired games; searched units vs off. off: 160001 4.9670 / 5.0480 / 6.4110, 170001 4.8980 / 4.9400 /
+6.3290, 180001 4.9260 / 4.9220 / 6.3080 (d5 / d3 / d0; the lockstep #19 fix moved off's 160001 d5 by -2 turns, gi425).
+gw reproduces round 2 to the game count (net -53, 35 / 4, 0.993x). Measured on this branch as it stands (bda6c46f8 +
+the lockstep #19 pick; NOT rebased): origin 63fc273bc's E.7 play setting for this deck (value_play d4 b20, landed while
+this ran) is NOT measured here -- the d5 b20 cell is round 2's play setting.
+
+| arm | base | d5 b20 (1000) | d3 b10 (500) | d0 (1000) |
+|---|---|---|---|---|
+| gw | 160001 / 170001 / 180001 | -0.001 2/1 1.000x / -0.004 4/0 0.987x / -0.006 5/0 0.992x | -0.010 5/0 / -0.002 1/0 / -0.008 3/0 | -0.012 7/0 / -0.008 4/3 / -0.012 4/0 |
+| gw | pooled | -0.0037 11/1 0.993x | -0.0067 9/0 0.993x | -0.0107 15/3 |
+| **gwf** | 160001 / 170001 / 180001 | -0.005 4/3 0.994x / -0.003 5/1 0.991x / -0.009 6/1 1.016x | -0.006 5/1 / -0.002 2/1 / -0.012 4/0 | -0.017 11/0 / -0.010 9/2 / -0.012 11/9 |
+| **gwf** | pooled | **-0.0057 15/5 1.000x** | **-0.0067 11/2 1.000x** | **-0.0130 31/11** |
+| **v2** | 160001 / 170001 / 180001 | -0.009 10/5 0.991x / -0.009 13/3 0.994x / -0.010 10/1 0.995x | -0.008 8/3 / -0.010 6/1 / -0.018 7/0 | -0.026 20/5 / -0.009 12/6 / -0.028 18/12 |
+| **v2** | pooled | **-0.0093 33/9 0.993x** | **-0.0120 21/4 0.976x** | **-0.0210 50/23** |
+
+Over all 7,500 paired games: **gw net -53** (35 faster / 4 slower, searched units 0.993x); **gwf net -66** (57 / 18,
+1.000x); **v2 net -109** (104 / 36, 0.989x). Every cell is <= 0 for all three arms.
+
+**Every slower game at 10x and at d8 b0, every faster game at d8 b0** (`xr3/`, 384 single-game jobs; one d8 rerun
+per deal, both arms):
+
+| arm | slower (d5 / d3 / d0) | recover at 10x | recover at d8 b0 | d8 b0 LOST vs generic | d8 b0 WON (deals) |
+|---|---|---|---|---|---|
+| gw | 4 (1 / 0 / 3) | g83 | **4 / 4** | **0** | 9: g42, g837; g39, g916, g923; g98, g643, g895, g969 |
+| **gwf** | 18 (5 / 2 / 11) | g83, g672, g914, g500 (d5); g17, g439 (d3; g439 7 vs 7) | **18 / 18** | **0** | 9: g42, g837; g39, g916, g923; g21, g98, g643, g895 |
+| **v2** | 36 (9 / 4 / 23) | d5 g83, g452, g672, g624, g914, g654; d3 g17, g415, g439 | **36 / 36** | **0** | 21: g42, g414, g425, g736, g837; g39, g379, g444, g535, g735, g916, g923, g984; g21, g98, g219, g340, g643, g670, g730, g895 |
+
+Persisting at 10x, recovering only at d8 b0: gwf d5 g945 (8 vs unwon at 10x; 8 = 8 at d8 b0); v2 d5 g945 (same),
+g328 (d5 and d3: 5 vs 6 at 10x), g833 (5 vs 6). The d0 slower games are the greedy runner meeting the payment
+change: with the prepay declined on an Alchemist turn the Alchemist taps after the life, the greedy has more mana and
+casts more, and its later picks differ (gwf 170001 g735: T4 adds a Brindle Boar, T5 pairs Galvanic with the Harbinger
+instead of going off; off goes off T5) -- every one plays generic's turn or better at d8 b0.
+
+#### 6. Recommendation and open questions for the USER
+
+**Both new arms meet the adoption bar on this sample** (CLAUDE.md: every slower game recovers at d8 b0, net <= 0):
+gwf 18 / 18 and v2 36 / 36 recover, NO deal loses a turn at d8 b0 in any arm, every cell is <= 0.
+* **gwf is the USER's Weather rule, and only that**, on the generic tiers: net -66 against gw's -53, units 1.000x, the
+  same nine d8 b0 wins as gw -- and it makes the cast list itself realise "spell, Weather, the Alchemist's X for the
+  untapper" (route off: 13 of 19 fact boards on T4 against gw's 6) without costing the route anything (route on: 18
+  of 18 in every arm).
+* **v2 is the best measured arm**: net **-109** (twice gw), units 0.989x, 21 d8 b0 deal wins, 0 losses; its 36 slower
+  games are mostly the greedy runner (23 at d0), all 36 recover at d8 b0. It is the coordinator's proposed numbering,
+  for the USER to amend (one array, `kAaV2Order`).
+* **Recommendation:** v2, if the USER accepts its numbering; otherwise gwf. Nothing adopted -- every arm ships OFF.
+
+**Open for the USER (defaults taken, nothing adopted):**
+(a) adopt nothing / gwf / v2 -- default: nothing.
+(b) **The enumeration gap (mechanism 1).** The USER's own example (Staff off the Alchemist's six on three Forests) is
+    never a cast list in any arm; it is found only through the Combo Off route, i.e. only on a turn with a provable
+    kill. Should the enumerator credit the Alchemist's post-lifegain X (admit a subset the life-scaled walk pays), so
+    the line is also a plan on a setup turn? Not built: a search-space change that needs its own A/B.
+(c) Both arms include the payment half (the prepay declines on an Alchemist turn that needs the Alchemist, and its
+    surplus floats the cast untapper's untap colour). It is what makes the order matter at all; it is also why the
+    d0 greedy plays differently.
+(d) A payer residual in every arm (route included): witch2 -- the Seedcradle Witch's {G/W} paid by Elvish Harbinger
+    leaves a one-colour Alchemist and the {2}{G}{W} loop starves.
+(e) V2's FINISH numbering (28-31) is not wired into the kill fold: every finisher ends the game this turn and the
+    fold sizes the loop to the cheapest one (outcome-equivalent, fewest iterations). Say so if the USER wants the
+    preference order there anyway.
 
 ## Mulligan profile (exhaustive keep table) -- ADOPTED (2026-10-21)
 

@@ -710,6 +710,13 @@ int DecisionProvider::EtbDestroyK(const GameState& s, int controller, const Card
     return ::ProjectEtbDestroyK(s, controller, def);
 }
 
+// The action-aware trailing rank (see the hook in DecisionProvider.h): the class rank, exactly as every
+// consumer read it before this hook existed -- byte-identical for every deck that does not override it.
+int DecisionProvider::ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const
+{
+    return ActivationOrderRankFor(s, d, TurnSolver::ActivationClass(a.kind));
+}
+
 int DecisionProvider::SacExpendabilityRank(const GameState& s, const Permanent& v, int source_id,
                                            const std::vector<int>* doomed_creators) const
 {
@@ -43916,6 +43923,20 @@ bool AaGenericWeatherOnlyLast()
     static const bool s_env = EnvOn("MTG_AA_GENERIC_WEATHER_ONLY_LAST");    // DEFAULT OFF (measurement arm)
     return heurarm::Flag(heurarm::AA_GENERIC_WEATHER_ONLY_LAST, s_env);
 }
+// MTG_AA_GENERIC_WEATHER_FLEX (DEFAULT OFF; read with the order OFF): gw's placement (Weather the Storm after
+// every other card, rank 21) plus the mana ladder (AccomplishedAlchemistProvider::ArrangeCastOrder).
+bool AaGenericWeatherFlex()
+{
+    static const bool s_env = EnvOn("MTG_AA_GENERIC_WEATHER_FLEX");         // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_GENERIC_WEATHER_FLEX, s_env);
+}
+// MTG_AA_CAST_ORDER_V2 (DEFAULT OFF): the proposed total order (kAaV2Order below) + the same mana ladder + the
+// board-activation order. Overrides MTG_AA_CAST_ORDER and the generic arms while on.
+bool AaCastOrderV2On()
+{
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_V2");                // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_CAST_ORDER_V2, s_env);
+}
 
 // The rank is position x kAaOrderScale, so an unlisted card's generic rank (0..30) fits under the unlisted position
 // without touching a listed slot.
@@ -44032,6 +44053,35 @@ const char* AaCastOrderSlotName(int slot)
         default:            return nullptr;
     }
 }
+
+// ---- MTG_AA_CAST_ORDER_V2: THE PROPOSED TOTAL ORDER (2026-10-22, for the USER's review) -------------------
+// THE ONE ARRAY TO EDIT: the casts in order. Position = index + 2 (position 1 is the land drop); one position
+// per card, so no two different cards ever tie (CastOrderTotalByName is on as well). A Stroke of Genius aimed
+// at the OPPONENT is the kill and goes after every cast (kAaV2StrokeAtOpp, CastOrderActionRank); aimed at
+// ourselves it is a dig at its listed position. Unlisted cards (none of the 75) go after everything, in their
+// generic tier order. The reasons the coordinator gave, per card:
+//   Galvanic Alchemist after the Accomplished Alchemist (soulbond pairs with it); Living Wish after every
+//   creature (a fetched creature never waits behind a second Wish) and before the lifegain (Galvanic gets the
+//   Alchemist's blue ahead of Feed the Clan -- the g700 / g937 mechanism); Eternal Witness after the spells it
+//   can return; Stroke as a dig before the untappers (the g731 reservation); Weather the Storm the preferred
+//   LAST cast, with the mana ladder moving an untapper behind it when the line needs the Alchemist's X.
+constexpr AaOrderSlot kAaV2Order[] = {
+    kAaSprawl, kAaWildGrowth, kAaArbor, kAaHarbinger, kAaAlchemist, kAaGalvanic, kAaWitch, kAaEzuri, kAaScholar,
+    kAaTruffle, kAaBoar, kAaWish, kAaNourish, kAaFeed, kAaWitness, kAaStroke, kAaUmbra, kAaStaff, kAaWeather };
+static_assert(sizeof(kAaV2Order) / sizeof(kAaV2Order[0]) == static_cast<std::size_t>(kAaSlots),
+              "MTG_AA_CAST_ORDER_V2: every order slot exactly once");
+constexpr int kAaV2LandDrop    = 1;    // position 1
+constexpr int kAaV2StrokeAtOpp = 28;   // the ability block's FINISH 28: Stroke at the opponent, after every cast
+constexpr int kAaV2Unlisted    = 40;   // after every listed card and the kill
+
+int AaV2Position(int slot)
+{
+    for (int i = 0; i < kAaSlots; ++i) { if (kAaV2Order[i] == slot) { return i + 2; } }
+    return -1;
+}
+
+// The mana ladder runs under either arm that asks for it.
+bool AaWeatherFlexActive() { return AaCastOrderV2On() || (!AaCastOrderOn() && AaGenericWeatherFlex()); }
 }   // namespace
 
 // MTG_AA_GENERIC_WEATHER_LAST's two ranks: just past the generic noncreature tier (20), well before the self-damage
@@ -44042,12 +44092,18 @@ constexpr int kAaGenericStrokeRank      = 22;
 
 int AccomplishedAlchemistProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
+    if (AaCastOrderV2On())
+    {
+        const int pos = AaV2Position(AaCastOrderSlot(def));
+        if (pos > 0) { return pos * kAaOrderScale; }
+        return kAaV2Unlisted * kAaOrderScale + SelesnyaLifegainProvider::CastOrderRank(s, def);
+    }
     if (!AaCastOrderOn())
     {
         const int generic = SelesnyaLifegainProvider::CastOrderRank(s, def);
         if (generic != kAaGenericNoncreatureTier) { return generic; }
         const bool tail = AaGenericWeatherLast();
-        if (!tail && !AaGenericWeatherOnlyLast()) { return generic; }
+        if (!tail && !AaGenericWeatherOnlyLast() && !AaGenericWeatherFlex()) { return generic; }
         const int slot = AaCastOrderSlot(def);
         if (slot == kAaWeather)         { return kAaGenericWeatherRank; }
         if (slot == kAaStroke && tail)  { return kAaGenericStrokeRank; }
@@ -44060,10 +44116,33 @@ int AccomplishedAlchemistProvider::CastOrderRank(const GameState& s, const CardD
 
 const char* AccomplishedAlchemistProvider::CastOrderTierName(int rank) const
 {
+    if (AaCastOrderV2On())
+    {
+        if (rank / kAaOrderScale >= kAaV2Unlisted) { return "UNLISTED: after every listed card, in generic tier order"; }
+        if (rank % kAaOrderScale != 0) { return nullptr; }
+        const int pos = rank / kAaOrderScale;
+        if (pos == kAaV2StrokeAtOpp) { return "STROKE OF GENIUS AT THE OPPONENT: the kill, after every cast"; }
+        if (pos >= 2 && pos < 2 + kAaSlots)
+        {
+            const int slot = kAaV2Order[pos - 2];
+            switch (slot)
+            {
+                case kAaWeather:  return "WEATHER THE STORM: the preferred LAST cast (an untapper moves behind it when the line needs the Alchemist's X)";
+                case kAaStroke:   return "STROKE OF GENIUS as a dig: before the untappers (the g731 reservation)";
+                case kAaGalvanic: return "GALVANIC ALCHEMIST: after the Accomplished Alchemist, so soulbond pairs with it";
+                case kAaWish:     return "LIVING WISH: after every creature, before the lifegain (Galvanic gets the Alchemist's blue first)";
+                case kAaWitness:  return "ETERNAL WITNESS: after the spells it can return";
+                case kAaUmbra:    return "CRAB UMBRA: an untapper -- ahead of Weather unless the line needs the Alchemist's X";
+                case kAaStaff:    return "STAFF OF DOMINATION: an untapper -- ahead of Weather unless the line needs the Alchemist's X";
+                default:          return AaCastOrderSlotName(slot);
+            }
+        }
+        return nullptr;
+    }
     if (!AaCastOrderOn())
     {
         const bool tail = AaGenericWeatherLast();
-        if ((tail || AaGenericWeatherOnlyLast()) && rank == kAaGenericWeatherRank) { return AaCastOrderSlotName(kAaWeather); }
+        if ((tail || AaGenericWeatherOnlyLast() || AaGenericWeatherFlex()) && rank == kAaGenericWeatherRank) { return AaCastOrderSlotName(kAaWeather); }
         if (tail && rank == kAaGenericStrokeRank) { return AaCastOrderSlotName(kAaStroke); }
         return SelesnyaLifegainProvider::CastOrderTierName(rank);
     }
@@ -44074,9 +44153,195 @@ const char* AccomplishedAlchemistProvider::CastOrderTierName(int rank) const
     return nullptr;
 }
 
-bool AccomplishedAlchemistProvider::CastOrderTotalByName() const { return AaCastOrderOn(); }
+bool AccomplishedAlchemistProvider::CastOrderTotalByName() const { return AaCastOrderOn() || AaCastOrderV2On(); }
 
-int AccomplishedAlchemistProvider::LandDropCastOrderRank() const { return AaCastOrderOn() ? 0 : -1; }
+int AccomplishedAlchemistProvider::LandDropCastOrderRank() const
+{
+    if (AaCastOrderV2On()) { return kAaV2LandDrop * kAaOrderScale; }
+    return AaCastOrderOn() ? 0 : -1;
+}
+
+// V2: a Stroke of Genius aimed at the OPPONENT is the kill -- after every cast (its own card's position is the
+// dig's). Every other cast, and every arm but V2, keeps its card's rank.
+int AccomplishedAlchemistProvider::CastOrderActionRank(const GameState& s, const Action& a, int rank) const
+{
+    if (!AaCastOrderV2On() || a.draw_target != 1) { return SelesnyaLifegainProvider::CastOrderActionRank(s, a, rank); }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d != nullptr && AaCastOrderSlot(*d) == kAaStroke) { return kAaV2StrokeAtOpp * kAaOrderScale; }
+    return SelesnyaLifegainProvider::CastOrderActionRank(s, a, rank);
+}
+
+// ---- THE USER'S WEATHER RULE: the MANA LADDER (MTG_AA_GENERIC_WEATHER_FLEX / MTG_AA_CAST_ORDER_V2) ----------
+// USER 2026-10-22: "Weather the Storm needs to be flexible. For example, a common play would be spell, Weather the
+// Storm + tap alchemist for 6 using that to play Staff of Domination and untap Alchemist. You cannot do that with
+// it just at the end. I would say the untappers should be possible to do before or after it (depending on
+// mana)." -- and: "it is correct that it is relatively happy to go at the end. Trying to put it there is not
+// wrong. What is wrong is not considering alternatives when that doesn't work mana-wise."
+//
+// So Weather's PREFERRED place is where the rank put it (last: every earlier cast is a storm copy), and the
+// alternatives are the untappers (Crab Umbra, Staff of Domination, Seedcradle Witch, Galvanic Alchemist --
+// AaIsUntapper / AaIsWitch) moved to right AFTER the list's last Weather, paid from the Accomplished Alchemist's
+// X. "Doesn't work mana-wise" is judged by the exact order walk with the Alchemist credited exactly
+// (LifeScaledOrderWalk: held out of the pool, tapped late for the life gained BY THEN, storm copies included):
+// an order WORKS when every cast pays without tapping an Alchemist at or before the list's last lifegain cast.
+// The preferred order is kept whenever it works -- moving an untapper behind Weather then buys nothing (the
+// Alchemist is untapped after Weather either way) and costs a storm copy. Otherwise the FEWEST untappers move
+// (latest first within a count: Staff before Umbra before the Witch before Galvanic under V2), keeping their
+// relative order behind Weather; the first moved order that works is taken. When none works, the first order
+// that merely PAYS (the preferred one first); when none pays, the preferred order stands and the payable
+// fallback / the executor's skip handle it as before. An ORDER over the plan's own casts (the set is the plan's;
+// nothing is added or dropped), applied through ApplyDeckCastArrangement at every site that realises or projects
+// a cast order -- both apply worlds, the enumeration's walk -- so executor and rollout agree by construction.
+namespace
+{
+bool AaIsUntapperCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && (AaIsUntapper(d->params) || AaIsWitch(d->params));
+}
+bool AaIsStormLifegainCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.cast_lifegain > 0 && d->params.storm;
+}
+bool AaHasTappableAlchemist(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.mana_per_life_gained && CanTapNow(p, s.battlefield)) { return true; }
+    }
+    return false;
+}
+// MTG_AA_FLEX_TRACE (DIAGNOSTIC, print-only, default off): one line per ladder decision that moved anything.
+bool AaFlexTraceOn() { static const bool on = EnvOn("MTG_AA_FLEX_TRACE"); return on; }
+}   // namespace
+
+void AccomplishedAlchemistProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                                     std::vector<int>& order) const
+{
+    if (order.size() < 2 || !AaWeatherFlexActive()) { return; }
+    int anchor = -1;
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    { if (AaIsStormLifegainCast(acts[static_cast<std::size_t>(order[pos])])) { anchor = pos; } }
+    if (anchor < 1) { return; }
+    std::vector<int> upos;   // the untappers ahead of the anchor, in order
+    for (int pos = 0; pos < anchor; ++pos)
+    { if (AaIsUntapperCast(acts[static_cast<std::size_t>(order[pos])])) { upos.push_back(pos); } }
+    if (upos.empty() || !AaHasTappableAlchemist(s)) { return; }
+    bool early = false;
+    const int f0 = LifeScaledOrderWalk(s, acts, order, &early);
+    if (f0 < 0 && !early) { return; }   // the preferred order works
+    // Masks over the LAST n untappers ahead of Weather: bit i <-> upos[off + i], a higher bit is a LATER
+    // untapper. Fewest moved first; within a count the larger mask (the later untappers) first.
+    const int n   = std::min<int>(static_cast<int>(upos.size()), 6);
+    const int off = static_cast<int>(upos.size()) - n;
+    std::vector<unsigned> masks;
+    for (unsigned m = 1; m < (1u << n); ++m) { masks.push_back(m); }
+    std::stable_sort(masks.begin(), masks.end(), [](unsigned x, unsigned y)
+    {
+        const int px = std::popcount(x), py = std::popcount(y);
+        return px != py ? px < py : x > y;
+    });
+    std::vector<int> pay_first;
+    bool have_pay = f0 < 0;
+    std::vector<int> trial;
+    for (unsigned m : masks)
+    {
+        std::vector<char> moved(order.size(), 0);
+        for (int i = 0; i < n; ++i) { if (m & (1u << i)) { moved[static_cast<std::size_t>(upos[off + i])] = 1; } }
+        trial.clear();
+        for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+        {
+            if (moved[static_cast<std::size_t>(pos)]) { continue; }
+            trial.push_back(order[static_cast<std::size_t>(pos)]);
+            if (pos == anchor)
+            {
+                for (int q = 0; q < anchor; ++q)
+                { if (moved[static_cast<std::size_t>(q)]) { trial.push_back(order[static_cast<std::size_t>(q)]); } }
+            }
+        }
+        bool e = false;
+        const int f = LifeScaledOrderWalk(s, acts, trial, &e);
+        if (f < 0 && !e)
+        {
+            if (AaFlexTraceOn())
+            {
+                std::string from, to;
+                for (int i : order) { from += acts[static_cast<std::size_t>(i)].card_name.str() + ","; }
+                for (int i : trial) { to += acts[static_cast<std::size_t>(i)].card_name.str() + ","; }
+                std::fprintf(stderr, "[aa-flex] t%d works: [%s] -> [%s] (preferred %s)\n", s.turn_number, from.c_str(),
+                             to.c_str(), f0 < 0 ? "paid, Alchemist tapped early" : "unpayable");
+            }
+            order = trial;
+            return;
+        }
+        if (f < 0 && !have_pay) { pay_first = trial; have_pay = true; }
+    }
+    if (f0 >= 0 && have_pay)
+    {
+        if (AaFlexTraceOn()) { std::fprintf(stderr, "[aa-flex] t%d no order works; the first that pays\n", s.turn_number); }
+        order = pay_first;
+    }
+}
+
+bool AccomplishedAlchemistProvider::ExactOrderWalk() const { return AaWeatherFlexActive(); }
+bool AccomplishedAlchemistProvider::LifeScaledManaInOrderWalk() const { return AaWeatherFlexActive(); }
+
+// V2's BOARD ACTIVATIONS, after every cast (USER: "the abilities need to go at the end"), in the coordinator's
+// numbering: LIFE (21 Brindle Boar's sacrifice, 22 Staff of Domination's {2},{T}: gain 1), the Alchemist's tap
+// (23, a mana ability -- payment, not a position), UNTAP THE ALCHEMIST cheapest per iteration first (24 Crab
+// Umbra {2}{U}, 25 Galvanic's granted {2}{U}, 26 Staff {3},{T} + {1}, 27 Seedcradle Witch {2}{G}{W} -- on a
+// target that is not a life-scaled mana creature the Witch is a combat pump, 33), FINISH (29 Scholar's drain,
+// 31 the Staff's {5},{T} draw), combat pumps (32 Ezuri). A trailing plan holds one activation per source family,
+// so the Staff's three modes never meet in one pass; the rank orders it against the OTHER sources. Anything
+// else trails at 40. Not V2 -> the inherited rank (byte-identical).
+int AccomplishedAlchemistProvider::ActivationOrderRankForAction(const GameState& s, const CardDefinition& d,
+                                                                const Action& a) const
+{
+    if (!AaCastOrderV2On()) { return SelesnyaLifegainProvider::ActivationOrderRankForAction(s, d, a); }
+    const CardParams& p = d.params;
+    switch (a.kind)
+    {
+        case Action::Kind::SacCreatureOutlet:
+            if (p.sac_outlet_lifegain > 0) { return 21; }
+            break;
+        case Action::Kind::ActivatePermAbility:
+            if (a.ability_mode == Action::AbilityMode::TapLifegain) { return 22; }
+            if (a.ability_mode == Action::AbilityMode::Drain)       { return 29; }
+            if (a.ability_mode == Action::AbilityMode::TapDraw)     { return 31; }
+            break;
+        case Action::Kind::ActivateUntap:
+        {
+            switch (a.gy_exile_mode)
+            {
+                case 1: return 24;   // Crab Umbra
+                case 2: return 25;   // Galvanic Alchemist's granted untap
+                case 3: return 26;   // Staff of Domination
+                case 4:
+                {
+                    for (const Permanent& t : s.battlefield)
+                    {
+                        if (t.card.m_number != a.sac_victim_id || t.def_absent) { continue; }
+                        const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
+                        return (td != nullptr && td->params.mana_per_life_gained) ? 27 : 33;
+                    }
+                    return 33;
+                }
+                default: break;
+            }
+            break;
+        }
+        case Action::Kind::ActivatePump:
+            if (p.team_pump_cost.has_value()) { return 32; }
+            break;
+        default: break;
+    }
+    return 40;
+}
 
 // ---- AccomplishedAlchemistProvider: the closed-form untap loop and its payoffs (chunk C2b) ---------
 std::vector<int> AccomplishedAlchemistProvider::UntapActivationCounts(const GameState& s, const Permanent& source,
@@ -45470,12 +45735,19 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
     // the untapper is stage 2's piece and casting it first costs nothing, while Weather the Storm's storm
     // count wants the casts before it (sweep S-0afa777170: four Weather-first setups used the width, X = 3,
     // and "Crab Umbra, then Weather + loop" at X = 6 was never tried).
-    struct Ranked { int finisher; int no_untapper; int neg_life; int size; int idx; };
+    // MTG_AA_CAST_ORDER_V2 adds ONE key to the loop order, after the lifegain: the untapper cheapest per
+    // iteration first (Crab Umbra {2}{U}, Galvanic's {2}{U}, Staff {3}+{1}, Seedcradle Witch {2}{G}{W} -- the
+    // proposed ability numbering 24-27). An order over the same candidates; nothing is added or dropped.
+    // 0 for every loop with V2 off -> the order is byte-identical.
+    struct Ranked { int finisher; int no_untapper; int neg_life; int v2_loop; int size; int idx; };
+    const bool v2_loop_order = AaCastOrderV2On();
     auto rank_of = [&](const TurnSolver::Plan& p, int i)
     {
-        Ranked r{ 0, 1, 0, static_cast<int>(p.actions.size()) + (p.land_to_play.empty() ? 0 : 1), i };
+        Ranked r{ 0, 1, 0, 0, static_cast<int>(p.actions.size()) + (p.land_to_play.empty() ? 0 : 1), i };
         for (const Action& a : p.actions)
         {
+            if (v2_loop_order && a.kind == Action::Kind::ActivateUntap)
+            { r.v2_loop = std::max(r.v2_loop, a.gy_exile_mode >= 1 && a.gy_exile_mode <= 4 ? a.gy_exile_mode : 5); }
             // The Staff's "{2},{T}: gain 1 life" raises X for every later iteration (engine frame X-2c3a62c84b:
             // Feed the Clan + one gain made the dig to a Stroke fit; without it the loop hit its ceiling).
             if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapLifegain)
@@ -45507,7 +45779,10 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         else if (IsSetupPlan(p)) { setups.push_back(rank_of(p, i)); }
     }
     auto by_rank = [](const Ranked& x, const Ranked& y)
-    { return std::tie(x.finisher, x.neg_life, x.size, x.idx) < std::tie(y.finisher, y.neg_life, y.size, y.idx); };
+    {
+        return std::tie(x.finisher, x.neg_life, x.v2_loop, x.size, x.idx)
+             < std::tie(y.finisher, y.neg_life, y.v2_loop, y.size, y.idx);
+    };
     auto by_setup = [](const Ranked& x, const Ranked& y)
     {
         return std::tie(x.finisher, x.no_untapper, x.neg_life, x.size, x.idx)

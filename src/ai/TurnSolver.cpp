@@ -18918,7 +18918,7 @@ static bool TrailingRunsFirst(const GameState& state, const std::vector<Action>&
     auto rank_of = [&](const Action& a) -> int
     {
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
-        return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
+        return d != nullptr ? prov.ActivationOrderRankForAction(state, *d, a) : 0;
     };
     const int rx = rank_of(cands[static_cast<std::size_t>(sel[px])]);
     const int ry = rank_of(cands[static_cast<std::size_t>(sel[py])]);
@@ -50352,7 +50352,7 @@ namespace
 {
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
-                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_N };
+                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -50362,7 +50362,8 @@ const char* const kPrepayName[PP_N] = {
     "PREPAID mixed two-stage (MTG_PREPAY_MIXED)",
     "declined: every hold failed on a mint line (MTG_MINT_CREDIT_EXACT)",
     "declined: big-spell-only mana + a non-qualifying cast (Troyan)",
-    "declined: an earlier cast grows the pain chain (MTG_PD_BATCH_TIMING)" };
+    "declined: an earlier cast grows the pain chain (MTG_PD_BATCH_TIMING)",
+    "declined: a life-scaled source the batch's lifegain grows (LifeScaledManaInOrderWalk)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -51086,6 +51087,52 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
         if (possible < 2) { return Pp(PP_FEW_CASTS); }
     }
+    // LIFE-SCALED SOURCE GROWN BY THE BATCH (DecisionProvider::LifeScaledManaInOrderWalk -- false for every
+    // provider but AccomplishedAlchemist under MTG_AA_GENERIC_WEATHER_FLEX / MTG_AA_CAST_ORDER_V2, so every
+    // other turn is byte-identical). The prepay pays EVERY cast jointly from the plan-start board before the
+    // first one resolves, so an Accomplished Alchemist the joint solve needs is tapped for the life gained
+    // BEFORE the plan -- whatever the cast order (AccomplishedAlchemist ledger, "Round 3": {Arbor Elf, Weather
+    // the Storm, Crab Umbra} on three Forests prepaid the Alchemist's ONE blue in every order, so the USER's
+    // "spell, Weather + tap alchemist for 6 ... play Staff of Domination and untap Alchemist" could never be one
+    // cast list). Armed here (the batch holds a cast that gains life and an untapped, able-to-tap
+    // mana_per_life_gained source is ours); judged once `combined` is known, below: when the board WITHOUT those
+    // sources cannot pay the batch, decline, and the per-cast payer pays in the realised order (the deck's mana
+    // ladder, ArrangeCastOrder, chose it with the Alchemist tapped late), so the Alchemist taps when a cast needs
+    // it, for the life gained BY THEN. When the rest of the board pays, the joint prepay runs as before (its
+    // dork-reserve rung holds the Alchemist). The same function serves both apply worlds -> lockstep.
+    bool life_scaled_armed = false;
+    ManaPool life_scaled_rest;
+    if (ResolveProvider(state).LifeScaledManaInOrderWalk())
+    {
+        bool gains = false;
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d != nullptr && (d->params.cast_lifegain > 0 || (d->params.etb_modal_lifegain > 0 && a.chosen_x == 2)))
+            { gains = true; break; }
+        }
+        if (gains)
+        {
+            const ManaPool full = AvailableManaPool(state);
+            life_scaled_rest = full;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (pd == nullptr || !pd->params.mana_per_life_gained || !CanTapNow(p, state.battlefield)) { continue; }
+                const ManaPool without = AvailableManaPool(state, &p);
+                life_scaled_rest.white     -= full.white     - without.white;
+                life_scaled_rest.blue      -= full.blue      - without.blue;
+                life_scaled_rest.black     -= full.black     - without.black;
+                life_scaled_rest.red       -= full.red       - without.red;
+                life_scaled_rest.green     -= full.green     - without.green;
+                life_scaled_rest.colorless -= full.colorless - without.colorless;
+                life_scaled_rest.wild      -= full.wild      - without.wild;
+                life_scaled_armed = true;
+            }
+        }
+    }
     // DRAW-SAFE: decline the whole-turn prepay on a FLOOD-ENGINE turn. The prepay assumes `acts` IS
     // the turn's cast set. That is FALSE after a dig: Treasure Hunt DRAWS the cards cast later the
     // same turn at a post-draw breakpoint (recorded in Action::breakpoint_casts). Prepaying only the
@@ -51314,6 +51361,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
+    // The life-scaled decline armed above: the batch needs the Alchemist -> pay per cast, in order.
+    if (life_scaled_armed && !life_scaled_rest.CanPay(combined)) { return Pp(PP_LIFE_SCALED); }
     // PREVENT DAMAGE: paying the whole plan now would deal a later cast's pain before an earlier cast
     // that grows the gain chain has resolved -- a dominated timing (dmgev::BatchTimingEnabled). The
     // casts then pay one at a time, each on the board the casts before it left. Armed boards only.
@@ -53273,7 +53322,7 @@ static int TrailingRankOf(const DecisionProvider& prov, const GameState& state, 
 {
     if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
-    return d != nullptr ? prov.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) : 0;
+    return d != nullptr ? prov.ActivationOrderRankForAction(state, *d, a) : 0;
 }
 static int TrailingBandOf(const Action& a)
 {
@@ -58572,7 +58621,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
-            if (d != nullptr && _p.ActivationOrderRankFor(state, *d, TurnSolver::ActivationClass(a.kind)) != 0) { _any = true; break; }
+            if (d != nullptr && _p.ActivationOrderRankForAction(state, *d, a) != 0) { _any = true; break; }
         }
         if (!_any) { _any = TurnSolver::TrailingHasCountBands(trailing_acts_in); }   // Vampires B count bands
         if (_any)

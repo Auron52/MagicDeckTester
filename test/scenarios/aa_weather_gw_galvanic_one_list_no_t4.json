@@ -1,0 +1,53 @@
+{
+  "_comment": [
+    "NEGATIVE TWIN of aa_weather_flex_galvanic_one_list.json: the same board under MTG_AA_GENERIC_WEATHER_ONLY_LAST (gw:",
+    "Weather strictly last), Combo Off route OFF. Galvanic Alchemist is cast ahead of Weather and its {U} burns the",
+    "Alchemist for one blue before the life, so the cast list cannot go off: no win by turn 4 even at --depth 8",
+    "--budget-ms 0. (With the route ON, gw still kills on turn 4 through the route's link-by-link walk -- the USER's",
+    "line is found there; this pins only what the cast list itself can realise.)"
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 30,
+  "resume_at": "main1",
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 8,
+  "budget_ms": 0,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Arbor Elf",
+    "Weather the Storm",
+    "Galvanic Alchemist",
+    "Stroke of Genius"
+  ],
+  "env": {
+    "MTG_AA_GENERIC_WEATHER_ONLY_LAST": "1",
+    "MTG_AA_COMBO_ROUTE": "0"
+  },
+  "max_turns": 4,
+  "expect_no_win": true
+}

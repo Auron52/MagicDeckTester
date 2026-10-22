@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Crab Umbra twin of aa_weather_flex_galvanic_one_list.json (MTG_AA_GENERIC_WEATHER_FLEX, route OFF): three Forests +",
+    "an untapped Accomplished Alchemist; hand Arbor Elf, Weather the Storm, Crab Umbra, Stroke of Genius. gw casts the",
+    "Umbra ahead of Weather off the Alchemist's one blue; the ladder casts it after Weather off the Alchemist's six",
+    "blue (five floating), and the Umbra loop funds Stroke's lethal X: turn 4 at --depth 8 --budget-ms 0."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 30,
+  "resume_at": "main1",
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 8,
+  "budget_ms": 0,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Arbor Elf",
+    "Weather the Storm",
+    "Crab Umbra",
+    "Stroke of Genius"
+  ],
+  "env": {
+    "MTG_AA_GENERIC_WEATHER_FLEX": "1",
+    "MTG_AA_COMBO_ROUTE": "0"
+  },
+  "max_turns": 6,
+  "expect_win_turn": 4
+}

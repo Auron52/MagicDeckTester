@@ -3202,6 +3202,19 @@ public:
     const char* CastOrderTierName(int rank) const override;
     bool        CastOrderTotalByName() const override;
     int         LandDropCastOrderRank() const override;
+    // THE USER'S WEATHER RULE (2026-10-22) -- MTG_AA_GENERIC_WEATHER_FLEX and MTG_AA_CAST_ORDER_V2, both DEFAULT
+    // OFF: Weather the Storm is preferred LAST; when the list cannot pay with the untappers ahead of it without
+    // tapping an Accomplished Alchemist before the list's last lifegain, the fewest untappers (latest first) move
+    // to right after Weather, paid from the Alchemist's X. Judged by the exact order walk crediting the
+    // Alchemist exactly (LifeScaledManaInOrderWalk). See the .cpp.
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
+    bool ExactOrderWalk() const override;
+    bool LifeScaledManaInOrderWalk() const override;
+    // MTG_AA_CAST_ORDER_V2: the proposed total order (one array, kAaV2Order); Stroke of Genius at the opponent
+    // after every cast; the board activations life -> untap loop (cheapest first) -> finish -> combat pumps.
+    int  CastOrderActionRank(const GameState& s, const Action& a, int rank) const override;
+    int  ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const override;
 };
 
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval

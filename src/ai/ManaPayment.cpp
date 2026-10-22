@@ -649,6 +649,34 @@ static Color BurstPendingActColour(const GameState& state, const CardDefinition&
         const int shortfall = pt->act_pips[ci] - paid[ci] - have[ci];
         if (shortfall > best_short) { best_short = shortfall; best = c; }
     }
+    if (best_short > 0 || !def.params.mana_per_life_gained || !ResolveProvider(state).LifeScaledManaInOrderWalk())
+    { return best; }
+    // THE UNTAPPER THE LINE CASTS (DecisionProvider::LifeScaledManaInOrderWalk -- AccomplishedAlchemist's
+    // MTG_AA_GENERIC_WEATHER_FLEX / MTG_AA_CAST_ORDER_V2 only; false everywhere else -> `best`, byte-identical).
+    // An untapper the plan CASTS is activated in the post-entry continuation, so its untap cost is no pending
+    // act pip here -- and a life-scaled burst paying a generic pip floated prod[0] (white): with an Island on
+    // Galvanic Alchemist's {U}, the Alchemist's six went to the generic {2} as W5 and the granted {2}{U} untap
+    // never had a blue (ledger "Round 3", board galv_island4). Float the colour the line's untapper will spend
+    // instead (first coloured pip of its untap cost that this source makes, W/U/B/R/G order). A mana-payment
+    // choice: it decides only which colour a surplus carries.
+    for (int k = 0; k < pt->cast_name_count; ++k)
+    {
+        if (pt->cast_names[k] == nullptr) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(*pt->cast_names[k]);
+        if (cd == nullptr) { continue; }
+        const CardParams& q = cd->params;
+        const std::optional<ManaCost>* uc = q.untap_enchanted_cost ? &q.untap_enchanted_cost
+                                          : q.soulbond_grants_untap_self_cost ? &q.soulbond_grants_untap_self_cost
+                                          : q.untap_pump_cost ? &q.untap_pump_cost : nullptr;
+        if (uc == nullptr) { continue; }
+        const ManaCost& c = **uc;
+        const int pips[5] = { c.white, c.blue, c.black, c.red, c.green };
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (pips[ci] <= 0) { continue; }
+            for (Color pc : prod) { if (static_cast<int>(pc) == ci) { return pc; } }
+        }
+    }
     return best;
 }
 
@@ -3385,12 +3413,106 @@ static bool ExactWalkCcoOn()
     return heurarm::Flag(heurarm::EXACT_WALK_CCO, on);
 }
 
+// ---- LIFE-SCALED SOURCES in the exact walk (DecisionProvider::LifeScaledManaInOrderWalk) -------------
+// The life a cast in a walked order gains on resolution: cast_lifegain (its ferocious rider read off the
+// live board -- ApplyCastLifegain's own test), x the storm instances (max(1, spells cast this turn
+// INCLUDING this one -- the counter ApplyCastLifegain reads is ++'d at the spell's own cast), and an
+// etb_modal_lifegain creature cast in its LIFE mode (the ETB choice axis: chosen_x 2). Every other cast
+// gains nothing. `storm_count` = this cast's own value of spells_cast_this_turn.
+static int WalkCastLifegain(const GameState& state, const Action& a, const CardDefinition* d, int storm_count)
+{
+    if (d == nullptr || a.kind != Action::Kind::CastFromHand) { return 0; }
+    const CardParams& p = d->params;
+    int life = 0;
+    if (p.cast_lifegain > 0)
+    {
+        life = p.cast_lifegain;
+        if (p.cast_lifegain_ferocious > 0
+            && ControlsCreatureWithPower(state, state.active_player_index, p.ferocious_min_power))
+        { life = p.cast_lifegain_ferocious; }
+        if (p.storm) { life *= std::max(1, storm_count); }
+    }
+    if (p.etb_modal_lifegain > 0 && a.chosen_x == 2) { life += p.etb_modal_lifegain; }
+    return life;
+}
+
+// Pick the ONE colour a life-scaled burst of `x` is tapped for, to pay `cost` from `pool`: a colour whose
+// x units make the cost payable, preferring the colour the rest of the line (`future` pips) is shortest
+// of; else (no single colour pays it) the cost's most-short pip colour. G when nothing else decides.
+static Color WalkBurstColour(const ManaPool& pool, const ManaCost& cost, const ManaCost& future, int x)
+{
+    static const Color kCols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+    const int have[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
+    const int need[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+    const int fut[5]  = { future.white, future.blue, future.black, future.red, future.green };
+    int best = -1, best_key = -1;
+    for (int k = 0; k < 5; ++k)
+    {
+        ManaPool trial = pool;
+        trial.Add(kCols[k], x);
+        if (!trial.CanPay(cost)) { continue; }
+        const int key = std::max(0, fut[k] + need[k] - have[k]) * 2 + (k == 4 ? 1 : 0);   // G breaks ties
+        if (key > best_key) { best_key = key; best = k; }
+    }
+    if (best >= 0) { return kCols[best]; }
+    int most = 4, most_short = 0;
+    for (int k = 0; k < 5; ++k)
+    {
+        const int sh = need[k] - have[k];
+        if (sh > most_short) { most_short = sh; most = k; }
+    }
+    return kCols[most];
+}
+
 static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>& acts,
-                              const std::vector<int>& order, std::vector<char>* paid)
+                              const std::vector<int>& order, std::vector<char>* paid,
+                              bool life_scaled = false, bool* scaled_early = nullptr)
 {
     if (paid != nullptr) { paid->assign(order.size(), 0); }
+    if (scaled_early != nullptr) { *scaled_early = false; }
     int first_fail = -1;
     ManaPool pool = AvailableManaPool(state);   // already includes the turn-scoped float
+    // LIFE-SCALED SOURCES (LifeScaledManaInOrderWalk; false -> none of this runs). Each untapped,
+    // able-to-tap mana_per_life_gained source is taken OUT of the pool (its exact contribution: the pool
+    // with it skipped, differenced) and held for a LATE tap: only when a cast cannot otherwise be paid is
+    // one tapped, for max(1, life gained by then) of one colour (WalkBurstColour). `life_gained` follows
+    // the walk (WalkCastLifegain per cast), so a source tapped after Weather the Storm yields the storm
+    // copies' life. A tap at or before the order's LAST lifegain cast is reported (`scaled_early`): the
+    // source fired before the life it converts was all gained.
+    int scaled_left = 0, life_gained = 0, storm_seen = 0, last_life_pos = -1;
+    if (life_scaled)
+    {
+        const int me = state.active_player_index;
+        const ManaPool full = pool;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || p.tapped || p.def_absent) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd == nullptr || !pd->params.mana_per_life_gained || !CanTapNow(p, state.battlefield)) { continue; }
+            const ManaPool without = AvailableManaPool(state, &p);
+            pool.white     -= full.white     - without.white;
+            pool.blue      -= full.blue      - without.blue;
+            pool.black     -= full.black     - without.black;
+            pool.red       -= full.red       - without.red;
+            pool.green     -= full.green     - without.green;
+            pool.colorless -= full.colorless - without.colorless;
+            pool.wild      -= full.wild      - without.wild;
+            ++scaled_left;
+        }
+        if (scaled_left > 0)
+        {
+            life_gained = state.players[static_cast<std::size_t>(me)].life_gained_this_turn;
+            storm_seen  = state.spells_cast_this_turn;
+            int sc = storm_seen;
+            for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+            {
+                const Action& a = acts[order[pos]];
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                ++sc;
+                if (WalkCastLifegain(state, a, d, sc) > 0) { last_life_pos = pos; }
+            }
+        }
+    }
     // Units of untapped colored_creature_only sources (booked as wild above): {C} for a noncreature cast.
     int cco = 0;
     if (ExactWalkCcoOn())
@@ -3451,6 +3573,14 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             const bool creature = d != nullptr && d->card.IsCreature();
             const int  restrict = (!creature && cco > 0) ? std::min(cco, pool.wild) : 0;
             if (restrict > 0) { pool.wild -= restrict; pool.colorless += restrict; }
+            // A held life-scaled source taps now, only because this cast cannot be paid without it.
+            while (scaled_left > 0 && !pool.CanPay(cost))
+            {
+                const int x = std::max(1, life_gained);
+                pool.Add(WalkBurstColour(pool, cost, future, x), x);
+                --scaled_left;
+                if (scaled_early != nullptr && pos <= last_life_pos) { *scaled_early = true; }
+            }
             if (!pool.CanPay(cost))
             {
                 if (restrict > 0) { pool.colorless -= restrict; pool.wild += restrict; }
@@ -3470,6 +3600,7 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             cco = std::min(cco, pool.wild);
         }
         CreditCastOutput(state, acts, a, pool);
+        if (life_scaled) { ++storm_seen; life_gained += WalkCastLifegain(state, a, d, storm_seen); }
         if (d != nullptr)
         {
             if (d->params.ritual_float_gy_self_bonus && !a.alt_cost)
@@ -3505,13 +3636,19 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
 int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& acts,
                              const std::vector<int>& order)
 {
-    return ExactOrderWalkImpl(state, acts, order, nullptr);
+    return ExactOrderWalkImpl(state, acts, order, nullptr, ResolveProvider(state).LifeScaledManaInOrderWalk());
 }
 
 int ExactOrderPaidMask(const GameState& state, const std::vector<Action>& acts,
                        const std::vector<int>& order, std::vector<char>& paid)
 {
-    return ExactOrderWalkImpl(state, acts, order, &paid);
+    return ExactOrderWalkImpl(state, acts, order, &paid, ResolveProvider(state).LifeScaledManaInOrderWalk());
+}
+
+int LifeScaledOrderWalk(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& order,
+                        bool* scaled_early)
+{
+    return ExactOrderWalkImpl(state, acts, order, nullptr, /*life_scaled=*/true, scaled_early);
 }
 
 bool MergeBreakpointLeftovers(const GameState& state, std::vector<Action>& cont, bool& cont_searched,

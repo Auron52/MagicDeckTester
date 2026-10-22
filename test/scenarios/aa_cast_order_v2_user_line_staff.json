@@ -1,0 +1,44 @@
+{
+  "_comment": [
+    "The same board as aa_weather_flex_user_line_staff.json under MTG_AA_CAST_ORDER_V2 (the proposed total order + the",
+    "same mana ladder + the board-activation order): spell, Weather, the Alchemist's six for Staff of Domination, the",
+    "Staff untaps the Alchemist, loop to Stroke's lethal X -- the kill THIS turn at --depth 8 --budget-ms 0."
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 30,
+  "resume_at": "main1",
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 8,
+  "budget_ms": 0,
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Arbor Elf",
+    "Weather the Storm",
+    "Staff of Domination",
+    "Stroke of Genius"
+  ],
+  "env": {
+    "MTG_AA_CAST_ORDER_V2": "1"
+  },
+  "max_turns": 6,
+  "expect_win_turn": 4
+}
