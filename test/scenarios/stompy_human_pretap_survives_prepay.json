@@ -1,0 +1,27 @@
+{
+  "deck": "decks/StompySurprise/StompySurprise.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Llanowar Elves", "Llanowar Elves" ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "tap=Forest#1:G;cast=Llanowar Elves;cast=Llanowar Elves" ],
+  "human_cast_orders": [ [ "**", "tap=Forest#1:G", "cast=Llanowar Elves", "cast=Llanowar Elves" ] ],
+  "expect_history_contains": [ "manual tap: Forest for {G}" ],
+  "expect_history_lacks": [ "manual tap SKIPPED" ],
+  "expect_no_win": true,
+  "comment": "(D) THE WHOLE-TURN PREPAY MUST NOT EAT A MANUAL TAP (USER 2026-10-22: 'The viewer should use exactly the order I give.'). T3, three untapped Forests (#1-#3), hand two Llanowar Elves. The human declares 'tap Forest #1 for {G}, then cast both Elves'. Before the fix BatchPrepayMainCasts ran ahead of the ordered walk and paid both Elves from Forests #1 and #2 (lowest numbers first), so the human's tap of #1 found it already tapped -- 'manual tap SKIPPED' -- and the engine's allocation replaced the declared one. The human's pre-tap must run; nothing may be skipped."
+}

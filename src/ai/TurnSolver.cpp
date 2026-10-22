@@ -52834,17 +52834,27 @@ void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string
     plan.searched_order     = true;
 }
 
-// THE WHOLE-TURN PREPAY UNDER A HUMAN SEQUENCE. BatchPrepayMainCasts allocates the mana for every cast
-// of the line from the board as it stands BEFORE the first step. That is exact only when no queued step
-// changes what pays for a later one. When a step is itself a mana source the human placed -- a declared
-// sac-for-mana or other mana-floating activation, a pre-pass convoke (Chord of Calling's bodies tap at
-// its own step now) -- the prepay would pay the later casts before that source exists, and the source
-// the human queued to pay them would float unused. Such a line pays as it goes: the per-cast payer
-// spends the float first, which is the human's order. false for every apply that is not a human sequence.
+// THE WHOLE-TURN PREPAY UNDER A HUMAN'S DECLARED PAYMENT. BatchPrepayMainCasts allocates the mana for
+// every cast of the line from the board as it stands BEFORE the first step. That is exact only when the
+// human declared nothing about how the line is paid. Two things the human can declare make it wrong:
+//   * a MANUAL TAP (`tap=`, docs/design/viewer-manual-tap-pay.md). The taps fire at their positions in
+//     the ordered walk, which runs AFTER the prepay -- so the prepay could tap the very land the human
+//     named (for whatever colour the joint solve wanted) and the human's tap then failed: "manual tap
+//     SKIPPED: 'Forest' is already tapped" (test/scenarios/stompy_human_pretap_survives_prepay.json,
+//     measured before this guard; the "*" and taps-only pins show the same thing);
+//   * a step that is itself a mana source the human placed in the whole sequence -- a declared
+//     sac-for-mana or other mana-floating activation, a pre-pass convoke (Chord of Calling's bodies tap
+//     at its own step now): the prepay would pay the later casts before that source exists, and the
+//     source the human queued to pay them would float unused.
+// Such a line pays as it goes: the per-cast payer spends the float (the human's taps) first, which is
+// the human's allocation. ONLY for the "**" whole sequence (human_v2): a "*" / cast-only / taps-only pin
+// is what a reference saved before 2026-10-22 carries, and it replays with the payment it was played
+// with (the new viewer sends "**" for every line, so no new game takes the old route). false for every
+// search, rollout and autonomous apply.
 static bool HumanLinePaysAsItGoes(const TurnSolver::Plan& plan, bool human_v2, bool human_pre_taps)
 {
-    (void)human_pre_taps;
     if (!human_v2) { return false; }
+    if (human_pre_taps) { return true; }
     const std::size_t n = std::min<std::size_t>(plan.human_seq_len, plan.actions.size());
     for (std::size_t i = 0; i < n; ++i)
     {
