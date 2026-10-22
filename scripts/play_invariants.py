@@ -66,6 +66,12 @@ KNOWN_TYPES = {
     # (Other emitted types still absent here -- attack_mode, echo, jitte, revive, ... -- have not
     # been checked for single-int shape; add each with its reply rule when a deck reaches it.)
     "attach_host",
+    # Nykthos Paragon's "you may put that many +1/+1 counters" (main.cpp
+    # WriteLifegainCountersDecisionJson): reply = how many unused copies to spend (0..copies_unused),
+    # the engine's count exposed as heuristic_default -- the generic fallback follows it. Missing here,
+    # every SelesnyaLifegain game that cast a Paragon and gained life FAILED the gate as "unknown
+    # decision type" (found on the v2 list's verify_deck run, 2026-10-22).
+    "lifegain_counters",
 }
 D_START, D_END = "<<<CLAUDE_DECISION>>>", "<<<END_DECISION>>>"
 R_START, R_END = "<<<CLAUDE_RESULT>>>", "<<<END_RESULT>>>"

@@ -611,7 +611,20 @@ LEDGER_END = "<!-- verify_deck:end -->"
 
 
 def ledger_path(deck_path):
-    return ROOT / "docs/design" / f"analysis-{deck_stem(deck_path)}.md"
+    """docs/design/analysis-<stem>.md for a shipping list (decks/<Name>/<stem>.cod), and
+    docs/design/analysis-<stem>-<variant>.md for a VERSIONED list (decks/<Name>/<variant>/<stem>.cod).
+
+    A variant's files are named after the PARENT stem (server.js listDecks, the engine's sidecar
+    resolution), so a stem-keyed ledger made a candidate list read its parent's ledger: the
+    claude_sweep gate passed on a sweep played on a DIFFERENT decklist, and the parent's sign-offs
+    applied to cards the variant may not even hold. Same naming as the existing
+    analysis-KittyEquipment-v2-puresteel-hammer.md. (2026-10-22, SelesnyaLifegain v2.)"""
+    p = Path(deck_path).resolve()
+    stem = deck_stem(deck_path)
+    decks = (ROOT / "decks").resolve()
+    if p.parent.parent != decks and p.parent.parent.parent == decks:
+        return ROOT / "docs/design" / f"analysis-{stem}-{p.parent.name}.md"
+    return ROOT / "docs/design" / f"analysis-{stem}.md"
 
 
 def read_approved(deck_path):
