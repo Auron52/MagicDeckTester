@@ -448,6 +448,13 @@ public:
     // is never pruned. Default false -> every k is searched.
     virtual bool ScryChainSingleCandidate(const GameState& s) const { (void)s; return false; }
 
+    // ReorderSingleCandidate -- a Ponder-style reorder (cast_reorder) normally fans the search over its
+    // full disposition set (every order of the looked-at cards plus the shuffle; TurnSolver.cpp
+    // PonderOrderAxis). TRUE prunes that fan to the provider's own disposition (TopDispositionPick): a
+    // provider-owned ONE-OPTION prune, the ScryChainSingleCandidate shape, so it belongs only to a deck
+    // whose provider carries a user-given reorder rule. Human play is never pruned. Default false.
+    virtual bool ReorderSingleCandidate(const GameState& s) const { (void)s; return false; }
+
     // KeepReorderTop -- Ponder-style reorder keep-vs-shuffle: a SET decision over the cards looked at
     // (top N). Return true to KEEP them on top (SituationalCardRank then ORDERS them), false to
     // SHUFFLE them all away. Unlike the per-card ScryKeepOnTop gate, this judges the WHOLE set --

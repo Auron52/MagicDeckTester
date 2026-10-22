@@ -3243,6 +3243,19 @@ public:
                "Nivs out, and must call a live loop lethal whenever the library holds at least the "
                "opponent's remaining life." }; }
     const char* Name() const override { return "NivMizzetCombo"; }
+    // The USER's bucket categories (2026-10-22), one classifier shared by three consumers (see the
+    // NivMizzetCombo block in DecisionProviders.cpp): Preordain's keep/bottom and Ponder's
+    // keep/shuffle + order (MTG_NIV_CANTRIP_RULES), Ponder's search prune to that pick
+    // (MTG_NIV_PONDER_SINGLE), and the cleanup discard (MTG_NIV_BUCKET_DISCARD). All DEFAULT OFF.
+    bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
+    int SituationalCardRank(const GameState& s, const Card& card) const override;
+    bool KeepReorderTop(const GameState& s, const std::vector<Card>& top) const override;
+    TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                      LookKind kind, int keep_decision) const override;
+    bool ReorderSingleCandidate(const GameState& s) const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
 };
 
 // Galadriel (Galadriel of Lothlorien + 52 scry lands + Sol Ring, Crackle with Power as the finisher;

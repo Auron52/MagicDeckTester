@@ -51975,3 +51975,451 @@ std::vector<int> ColossusHammerProvider::CleanupDiscardCandidates(
 // ONE index per consultation, and the next one moves with the hand (the colour coverage and the
 // castability factor read the kept lands): a multi-card shed re-asks after every shed.
 bool ColossusHammerProvider::CleanupDiscardShedStable() const { return !ColossusBucketDiscardEnabled(); }
+
+// =============================================================================================
+// NivMizzetCombo -- the USER's bucket categories (2026-10-22), ONE classifier with three consumers:
+// Preordain's keep/bottom and Ponder's keep/shuffle + order (MTG_NIV_CANTRIP_RULES), Ponder's search
+// prune to that pick (MTG_NIV_PONDER_SINGLE), and the cleanup discard (MTG_NIV_BUCKET_DISCARD).
+//
+// USER: "We should probably create some rules for Preordain and Ponder to help decide what we bottom
+// and how we order the top 3. Searching every option is too expensive." / "It essentially comes down
+// to having the mana for Niv + the combo pieces Niv himself and curiousity/Tandem lookout. Even better
+// if we have a way to go off immediately like haste or Gitaxian probe." / "For the discard rule you
+// would bucket them based on the same categories."
+//
+// THE BUCKETS, in keep priority (a bucket is filled by the battlefield first, then the hand):
+//   1. Niv -- one. "You would keep Niv-Mizzet Firemind for the Niv bucket if you have both."
+//   2. Draw-on-damage -- one. "I usually prefer Tandem Lookout because it can be played before Niv."
+//   3. Go off now -- "Generator Servant is great if you have Firemind, not Parun because it
+//      accelerates and gives it haste. With parun I would rather keep draw." Gitaxian Probe is the
+//      other route ("more common is going off the turn Niv drops from Generator Servant or Gitaxian
+//      because of mana constraints"); a normal cantrip qualifies only with lots of mana out.
+//   4. Mana -- "enough to cast Niv (whichever we have) and maybe Curiosity if that is in hand.
+//      Ideally both on the same turn": 6 sources (lands + accelerators, board INCLUDED; "often we can
+//      get away with 6"), 7 with Curiosity as the enabler, and colours for that Niv (Firemind UU RR,
+//      Parun UUU RRR, +U for Curiosity) -- "colors can be an issue in this deck". In hand at most 3
+//      lands ("Lands should be 2-3 maximum") and 1-2 accelerators ("Accelerators can and should take
+//      1-2 spots"), a mix: two lands and the accelerators before a third land. Sol Ring is an
+//      auto-keep ("Especially Sol Ring is an auto-keep generally") unless the total is met or a
+//      colour is short ("that is the one other case sol ring would fall short").
+//   5. Draw -- "keep draw beyond that".
+//   6. A 7th source -- "7 is really just, if you have space"; never more ("cap at 7 total in any
+//      situation").
+//   Below them: duplicate pieces, then surplus mana.
+//
+// ORDER (Ponder, Preordain's kept cards) is by WHEN a card is usable, not by its bucket: "in something
+// like ponder you would take lands or such you can drop this turn before you draw niv or a
+// curiousity/tandem lookout you cannot play yet" / "reorder them based on what is useful immediately or
+// next turn, followed by what we want to keep" / "you want something that helps set up our combo and
+// can be played this turn if possible. If not, you want one that can be played next turn or is a key
+// piece we are missing" / "A key piece that we can use immediately beats everything else." Tiers:
+//   0  a KEY piece usable now (a missing Niv / Lookout / Curiosity, or the draw that goes off)
+//   1  a SET-UP card usable now (a land we can drop, an accelerator, Servant, Lookout, Niv)
+//   2  a set-up card usable next turn, or a key piece we are missing
+//   3  the rest of what we keep, by bucket value
+// with the bucket value, then the turn it becomes usable, ordering inside a tier.
+// =============================================================================================
+namespace
+{
+enum NivRole
+{
+    kNivOther, kNivFiremind, kNivParun, kNivLookout, kNivCuriosity, kNivServant, kNivProbe,
+    kNivCantrip, kNivRemand, kNivLand, kNivSolRing, kNivRock, kNivRoleCount
+};
+
+NivRole NivRoleOf(const CardDefinition* d)
+{
+    if (d == nullptr) { return kNivOther; }
+    const CardParams& p = d->params;
+    if (d->card.IsLand())                   { return kNivLand; }
+    if (p.draw_trigger_damage > 0)          { return p.cast_trigger_instant_sorcery_draw > 0 ? kNivParun : kNivFiremind; }
+    if (p.soulbond_damage_trigger_draw)     { return kNivLookout; }
+    if (p.aura_damage_trigger_draw)         { return kNivCuriosity; }
+    if (p.sac_for_mana_grants_haste)        { return kNivServant; }
+    if (p.mana_rock)                        { return p.produces_amount >= 2 ? kNivSolRing : kNivRock; }
+    if (p.counters_target_spell_to_hand)    { return kNivRemand; }
+    if (p.draw > 0 && d->card.m_mana_cost.phyrexian_count > 0) { return kNivProbe; }
+    if (p.draw > 0 || p.cast_reorder > 0 || p.cast_scry > 0 || p.put_back_from_hand > 0) { return kNivCantrip; }
+    return kNivOther;
+}
+bool NivIsAccel(NivRole r) { return r == kNivSolRing || r == kNivRock || r == kNivServant; }
+bool NivIsMana(NivRole r)  { return r == kNivLand || NivIsAccel(r); }
+bool NivIsDraw(NivRole r)  { return r == kNivProbe || r == kNivCantrip || r == kNivRemand; }
+
+// Colour supply of one source toward Niv's pips: a source making only {U} (Island; Skerry's UU), only
+// {R} (Needle's RR), or EITHER (a dual, a filter). A ramp filter (Izzet Signet, Ferrous Lake: "{1},
+// {T}: Add {U}{R}") makes BOTH, one of each, off any generic feeder -- which is why "Sol Ring + Izzet
+// Signet is a great keep, since the Sol Ring can play and benefit from the fixing of the signet" (USER).
+// Colourless (Sol Ring, Servant) is none.
+struct NivColours { int u = 0, r = 0, any = 0; };
+NivColours NivColoursOf(const CardDefinition* d)
+{
+    NivColours c;
+    if (d == nullptr) { return c; }
+    bool mu = false, mr = false;
+    for (Color col : d->params.produces) { mu |= col == Color::Blue; mr |= col == Color::Red; }
+    const int amt = d->params.produces_amount > 0 ? d->params.produces_amount : 1;
+    if (mu && mr && d->params.ramp_filter) { c.u = 1; c.r = 1; }
+    else if (mu && mr) { c.any = 1; }       // one pip of either per tap
+    else if (mu)  { c.u = amt; }
+    else if (mr)  { c.r = amt; }
+    return c;
+}
+// Pips still missing for (need_u, need_r) given the supply: per colour, then in total.
+int NivColourDeficit(const NivColours& c, int need_u, int need_r)
+{
+    return std::max(0, need_u - (c.u + c.any)) + std::max(0, need_r - (c.r + c.any))
+         + std::max(0, need_u + need_r - (c.u + c.r + c.any));
+}
+
+struct NivCensus
+{
+    bool fire_bf = false, parun_bf = false;   // a Niv of that kind on OUR battlefield
+    bool lookout_bf = false;                  // a Tandem Lookout on the battlefield
+    bool curiosity_on_niv = false;            // a Curiosity enchanting one of our Nivs
+    bool servant_bf = false;
+    bool sol_bf = false;                      // a Sol Ring on the battlefield
+    int  filter_bf = 0;                       // ramp filters on the battlefield (Izzet Signet, Ferrous Lake)
+    int  filter_hand = 0;                     // ...and in hand
+    int  mana_bf = 0;                         // lands + accelerators on the battlefield (cards)
+    int  mana_amt_bf = 0;                     // the mana they make a turn (Sol Ring 2, Skerry 2, ...)
+    int  avail_now = 0;                       // mana still makeable THIS turn: untapped sources + floating
+    bool drop_open = false;
+    NivColours col;                           // colour supply: battlefield + hand sources
+    std::array<int, kNivRoleCount> hand{};    // the hand by role (staged cards excluded)
+};
+
+NivCensus BuildNivCensus(const GameState& s)
+{
+    NivCensus c;
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    auto add_col = [&](const CardDefinition* d)
+    { const NivColours k = NivColoursOf(d); c.col.u += k.u; c.col.r += k.r; c.col.any += k.any; };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const NivRole r = NivRoleOf(d);
+        if (r == kNivFiremind) { c.fire_bf = true; }
+        if (r == kNivParun)    { c.parun_bf = true; }
+        if (r == kNivLookout)  { c.lookout_bf = true; }
+        if (r == kNivServant)  { c.servant_bf = true; }
+        if (r == kNivSolRing)  { c.sol_bf = true; }
+        if (d != nullptr && d->params.ramp_filter) { ++c.filter_bf; }
+        if (r == kNivCuriosity && p.aura_attached_to != 0)
+        {
+            for (const Permanent& h : s.battlefield)
+            {
+                if (h.card.m_number != p.aura_attached_to) { continue; }
+                const NivRole hr = NivRoleOf(CardDatabase::Instance().LookupCached(h.card));
+                c.curiosity_on_niv |= hr == kNivFiremind || hr == kNivParun;
+            }
+        }
+        if (!NivIsMana(r)) { continue; }
+        ++c.mana_bf;
+        int amt = 1;
+        if (r == kNivServant)                 { amt = 2; }   // sacrificed for {C}{C}
+        else if (d != nullptr && r != kNivRock) { amt = d->params.produces_amount > 0 ? d->params.produces_amount : 1; }
+        c.mana_amt_bf += amt;
+        const bool usable_now = !p.tapped && (r != kNivServant || !p.entered_this_turn);
+        if (usable_now) { c.avail_now += amt; }
+        add_col(d);
+    }
+    c.avail_now += s.floating_mana.Total();
+    c.drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    for (const Card& h : ap.hand)
+    {
+        if (h.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        const NivRole r = NivRoleOf(d);
+        ++c.hand[static_cast<std::size_t>(r)];
+        if (NivIsMana(r)) { add_col(d); }
+        if (d != nullptr && d->params.ramp_filter) { ++c.filter_hand; }
+    }
+    return c;
+}
+
+// Bucket values (higher = kept longer). The TIER ORDER is the USER's; the numbers only separate tiers.
+enum NivWant
+{
+    kNivWantSurplus     = 150,   // mana past the cap, a 4th hand land, a 3rd accelerator
+    kNivWantDupCuri     = 220,   // a second draw-on-damage card (Curiosity sheds before Lookout)
+    kNivWantDupLookout  = 230,
+    kNivWantDupParun    = 240,   // a second Niv (Parun sheds before Firemind)
+    kNivWantDupFire     = 260,
+    kNivKeepThreshold   = 300,   // ScryKeepOnTop / Ponder's keep-vs-shuffle: wanted iff >= this
+    kNivWantSeventh     = 320,   // a 7th source -- "if you have space"
+    kNivWantRemand      = 450,   // draw: Remand (two mana, needs a spell) under the cantrips
+    kNivWantDraw        = 500,   // draw
+    kNivWantProbeDraw   = 520,
+    kNivWantUpLookout   = 580,   // a Lookout while only a Curiosity is held: the preferred enabler
+    kNivWantUpFire      = 600,   // a Firemind while only a Parun is held: the preferred Niv
+    kNivWantLand3       = 680,   // a THIRD hand land toward the target: after the accelerators
+    kNivWantSolColour   = 700,   // Sol Ring while a colour is short ("the one other case")
+    kNivWantAccel       = 790,   // an accelerator toward the target
+    kNivWantLand        = 800,   // one of the first two hand lands toward the target
+    kNivWantColour      = 820,   // a source of a colour the Niv (+ Curiosity) is still short of
+    kNivWantSignetSol   = 830,   // a ramp filter next to a Sol Ring: the Ring feeds the Signet's fixing
+    kNivWantSolRing     = 840,   // Sol Ring: the auto-keep
+    kNivWantGoOffDraw   = 840,   // a cantrip as the go-off draw, with lots of mana out
+    kNivWantGoOffParun  = 845,   // the Parun line keeps draw for its go-off
+    kNivWantGoOff       = 860,   // Servant on the Firemind line / Probe as the go-off draw
+    kNivWantCuriosity   = 870,   // the enabler bucket, empty
+    kNivWantLookout     = 880,
+    kNivWantParun       = 890,   // the Niv bucket, empty
+    kNivWantFire        = 900,
+};
+
+// The bucket value of card `d` against the census, with ONE copy of its role taken out of the hand
+// when it is itself a hand card (`in_hand`), so a duplicate reads as a duplicate.
+int NivWantOf(const NivCensus& c0, const CardDefinition* d, bool in_hand)
+{
+    const NivRole role = NivRoleOf(d);
+    std::array<int, kNivRoleCount> h = c0.hand;
+    NivColours col = c0.col;
+    const bool is_filter = d != nullptr && d->params.ramp_filter;
+    int filters_h = c0.filter_hand;
+    if (in_hand)
+    {
+        int& n = h[static_cast<std::size_t>(role)];
+        if (n > 0) { --n; }
+        if (NivIsMana(role)) { const NivColours k = NivColoursOf(d); col.u -= k.u; col.r -= k.r; col.any -= k.any; }
+        if (is_filter && filters_h > 0) { --filters_h; }
+    }
+    auto hn = [&](NivRole r) { return h[static_cast<std::size_t>(r)]; };
+    const bool fire  = c0.fire_bf  || hn(kNivFiremind) > 0;
+    const bool parun = c0.parun_bf || hn(kNivParun) > 0;
+    const bool have_niv = fire || parun;
+    const bool parun_line = parun && !fire;              // the Niv we would cast is Parun
+    const bool lookout = c0.lookout_bf || hn(kNivLookout) > 0;
+    const bool enabler = lookout || c0.curiosity_on_niv || hn(kNivCuriosity) > 0;
+    const bool curiosity_route = !lookout && !c0.curiosity_on_niv && hn(kNivCuriosity) > 0;
+    const bool servant = c0.servant_bf || hn(kNivServant) > 0;
+    const int  draws   = hn(kNivProbe) + hn(kNivCantrip) + hn(kNivRemand);
+    const int  lands_h = hn(kNivLand);
+    const int  accel_h = hn(kNivSolRing) + hn(kNivRock) + hn(kNivServant);
+    const int  mana    = c0.mana_bf + lands_h + accel_h;                    // the USER's count, board included
+    const int  target  = 6 + (curiosity_route ? 1 : 0);                     // Niv, and Curiosity the same turn
+    const int  need_u  = (parun_line ? 3 : 2) + (curiosity_route ? 1 : 0);
+    const int  need_r  = parun_line ? 3 : 2;
+    const int  deficit = NivColourDeficit(col, need_u, need_r);
+    const bool combo   = have_niv && enabler;
+    const bool sol     = c0.sol_bf || hn(kNivSolRing) > 0;
+    const bool filter  = c0.filter_bf > 0 || filters_h > 0;
+
+    switch (role)
+    {
+    case kNivFiremind:  return !have_niv ? kNivWantFire : parun_line ? kNivWantUpFire : kNivWantDupFire;
+    case kNivParun:     return !have_niv ? kNivWantParun : kNivWantDupParun;
+    case kNivLookout:   return !enabler ? kNivWantLookout : !lookout ? kNivWantUpLookout : kNivWantDupLookout;
+    case kNivCuriosity: return !enabler ? kNivWantCuriosity : kNivWantDupCuri;
+    case kNivProbe:
+        if (draws == 0 && (parun_line || (combo && !servant))) { return kNivWantGoOff; }
+        return kNivWantProbeDraw;
+    case kNivCantrip:
+    case kNivRemand:
+        if (draws == 0 && parun_line) { return kNivWantGoOffParun; }
+        if (draws == 0 && combo && mana >= target + (role == kNivRemand ? 2 : 1)) { return kNivWantGoOffDraw; }
+        return role == kNivRemand ? kNivWantRemand : kNivWantDraw;
+    case kNivServant:
+        if (!parun_line && !servant) { return kNivWantGoOff; }
+        break;                                                              // otherwise: an accelerator
+    case kNivOther:     return 100;
+    default: break;
+    }
+    // ---- mana: lands and accelerators ----------------------------------------------------------------
+    if (mana >= 7) { return kNivWantSurplus; }                              // the cap, in any situation
+    if (role == kNivLand && lands_h >= 3) { return kNivWantSurplus; }       // "2-3 maximum"
+    if (NivIsAccel(role) && accel_h >= 2) { return kNivWantSurplus; }       // "1-2 spots"
+    NivColours with = col;
+    { const NivColours k = NivColoursOf(d); with.u += k.u; with.r += k.r; with.any += k.any; }
+    const bool helps_colour = deficit > 0 && NivColourDeficit(with, need_u, need_r) < deficit;
+    if (role == kNivRock && is_filter && sol && mana < target) { return kNivWantSignetSol; }
+    if (helps_colour) { return kNivWantColour; }
+    if (mana >= target) { return kNivWantSeventh; }
+    // Sol Ring: the auto-keep, unless a colour is short and nothing can turn its {C} into colour.
+    if (role == kNivSolRing) { return (deficit > 0 && !filter) ? kNivWantSolColour : kNivWantSolRing; }
+    if (role == kNivLand) { return lands_h < 2 ? kNivWantLand : kNivWantLand3; }
+    return kNivWantAccel;
+}
+
+// How many turns until card `d` can be USED (0 = this turn), for ORDERING looked-at cards. Capped at 4.
+int NivTurnsUntilUsable(const NivCensus& c, const CardDefinition* d)
+{
+    const NivRole role = NivRoleOf(d);
+    const int lands_h = c.hand[static_cast<std::size_t>(kNivLand)];
+    if (role == kNivLand)
+    {
+        const int t = c.drop_open ? lands_h : lands_h + 1;   // the hand's lands go first, one per turn
+        return std::min(t, 4);
+    }
+    auto t_cast = [&](int cost) -> int
+    {
+        if (c.avail_now >= cost) { return 0; }
+        for (int t = 1; t <= 3; ++t) { if (c.mana_amt_bf + std::min(t, lands_h) >= cost) { return t; } }
+        return 4;
+    };
+    if (d == nullptr) { return 4; }
+    const int cost = std::max(0, d->card.m_mana_cost.ManaValue() - static_cast<int>(d->card.m_mana_cost.phyrexian_count));
+    if (role == kNivCuriosity)
+    {
+        if (c.fire_bf || c.parun_bf) { return t_cast(cost); }
+        // "Curiousity is only optimally usable right away if Niv is out already" (USER): with the Niv
+        // still in hand it is never a usable-NOW card, even with the mana for both this turn.
+        const bool niv_in_hand = c.hand[static_cast<std::size_t>(kNivFiremind)] + c.hand[static_cast<std::size_t>(kNivParun)] > 0;
+        return niv_in_hand ? std::max(1, std::min(t_cast(7), t_cast(6) + 1)) : 4;
+    }
+    return t_cast(cost);
+}
+
+bool NivCantripRulesOn()
+{
+    static const bool on = EnvOn("MTG_NIV_CANTRIP_RULES");   // DEFAULT OFF pending its A/B and the USER
+    return heurarm::Flag(heurarm::NIV_CANTRIP_RULES, on);
+}
+bool NivPonderSingleOn()
+{
+    static const bool on = EnvOn("MTG_NIV_PONDER_SINGLE");   // DEFAULT OFF pending its A/B
+    return heurarm::Flag(heurarm::NIV_PONDER_SINGLE, on);
+}
+bool NivBucketDiscardOn()
+{
+    static const bool on = EnvOn("MTG_NIV_BUCKET_DISCARD");  // DEFAULT OFF pending its A/B and the USER
+    return heurarm::Flag(heurarm::NIV_BUCKET_DISCARD, on);
+}
+
+// Value every looked-at card GREEDILY: take the most-wanted one, count it as held, re-value the rest.
+// Two Nivs in one look are then one Niv and one duplicate, exactly as the discard buckets read a hand.
+struct NivLookVal { int idx; int want; int t_use; NivRole role; };
+
+// The ORDER tier of a kept card (see the block comment at the top of this section).
+int NivOrderTier(const NivLookVal& x)
+{
+    const bool key   = x.want >= kNivWantCuriosity || (NivIsDraw(x.role) && x.want >= kNivWantGoOffDraw);
+    const bool setup = key || x.role == kNivLand || NivIsAccel(x.role) || x.role == kNivLookout
+                    || x.role == kNivCuriosity || x.role == kNivFiremind || x.role == kNivParun;
+    if (key && x.t_use == 0)   { return 0; }
+    if (setup && x.t_use == 0) { return 1; }
+    if (key || (setup && x.t_use == 1)) { return 2; }
+    return 3;
+}
+std::vector<NivLookVal> NivValueLook(const GameState& s, const std::vector<Card>& looked)
+{
+    NivCensus c = BuildNivCensus(s);
+    const NivCensus base = c;
+    std::vector<NivLookVal> out;
+    std::vector<char> done(looked.size(), 0);
+    for (std::size_t step = 0; step < looked.size(); ++step)
+    {
+        int best = -1, best_w = -1;
+        for (std::size_t i = 0; i < looked.size(); ++i)
+        {
+            if (done[i]) { continue; }
+            const int w = NivWantOf(c, CardDatabase::Instance().LookupCached(looked[i]), false);
+            if (w > best_w) { best_w = w; best = static_cast<int>(i); }
+        }
+        done[static_cast<std::size_t>(best)] = 1;
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(looked[static_cast<std::size_t>(best)]);
+        const NivRole r = NivRoleOf(d);
+        out.push_back({ best, best_w, NivTurnsUntilUsable(base, d), r });
+        ++c.hand[static_cast<std::size_t>(r)];
+        if (NivIsMana(r)) { const NivColours k = NivColoursOf(d); c.col.u += k.u; c.col.r += k.r; c.col.any += k.any; }
+    }
+    return out;
+}
+}   // namespace
+
+bool NivMizzetComboProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    if (!NivCantripRulesOn()) { return DeckProvider::ScryKeepOnTop(s, top_card); }
+    return NivWantOf(BuildNivCensus(s), CardDatabase::Instance().LookupCached(top_card), false) >= kNivKeepThreshold;
+}
+
+int NivMizzetComboProvider::SituationalCardRank(const GameState& s, const Card& card) const
+{
+    if (!NivCantripRulesOn()) { return DeckProvider::SituationalCardRank(s, card); }
+    return NivWantOf(BuildNivCensus(s), CardDatabase::Instance().LookupCached(card), false);
+}
+
+bool NivMizzetComboProvider::KeepReorderTop(const GameState& s, const std::vector<Card>& top) const
+{
+    if (!NivCantripRulesOn()) { return DeckProvider::KeepReorderTop(s, top); }
+    // Shuffle only a top with nothing worth drawing: the greedy valuation's first pick is its best card.
+    const std::vector<NivLookVal> v = NivValueLook(s, top);
+    return !v.empty() && v.front().want >= kNivKeepThreshold;
+}
+
+TopDisposition NivMizzetComboProvider::TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                                          LookKind kind, int keep_decision) const
+{
+    if (!NivCantripRulesOn()) { return DeckProvider::TopDispositionPick(s, looked, kind, keep_decision); }
+    TopDisposition disp;
+    const std::vector<NivLookVal> v = NivValueLook(s, looked);
+    std::vector<NivLookVal> wanted, rest;
+    for (const NivLookVal& x : v) { (x.want >= kNivKeepThreshold ? wanted : rest).push_back(x); }
+    if (kind == LookKind::Reorder && (keep_decision == 0 || (keep_decision == -1 && wanted.empty())))
+    {
+        disp.shuffle = true;
+        return disp;
+    }
+    // By tier (useful now > next turn / missing key piece > the rest); bucket value, then the turn it
+    // becomes usable, inside a tier.
+    std::stable_sort(wanted.begin(), wanted.end(), [](const NivLookVal& a, const NivLookVal& b)
+    {
+        const int ta = NivOrderTier(a), tb = NivOrderTier(b);
+        if (ta != tb) { return ta < tb; }
+        if (a.want != b.want) { return a.want > b.want; }
+        return a.t_use < b.t_use;
+    });
+    for (const NivLookVal& x : wanted) { disp.top_order.push_back(x.idx); }
+    if (kind == LookKind::Reorder || kind == LookKind::ReorderNoShuffle)
+    {
+        // A reorder cannot bottom: the unwanted cards stay under the wanted ones, best first.
+        for (const NivLookVal& x : rest) { disp.top_order.push_back(x.idx); }
+    }
+    return disp;
+}
+
+bool NivMizzetComboProvider::ReorderSingleCandidate(const GameState& s) const
+{
+    (void)s;
+    return NivCantripRulesOn() && NivPonderSingleOn();
+}
+
+std::vector<int> NivMizzetComboProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!NivBucketDiscardOn()) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const NivCensus c = BuildNivCensus(s);
+    // Each card valued against the rest of the hand (its own copy taken out), lowest bucket shed first.
+    // Within a bucket: a land that adds no missing colour and enters tapped sheds before the others.
+    struct Cand { int idx; int key; };
+    std::vector<Cand> cands;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        int key = NivWantOf(c, d, true) * 8;
+        if (d != nullptr && NivRoleOf(d) == kNivLand)
+        {
+            const NivColours k = NivColoursOf(d);
+            if (k.any > 0)                { key += 4; }
+            else if (k.r > 0)             { key += 2; }   // red is the scarce colour in this list
+            if (!d->params.enters_tapped) { key += 1; }
+        }
+        cands.push_back({ i, key });
+    }
+    std::stable_sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b) { return a.key < b.key; });
+    std::vector<int> shed;
+    for (const Cand& x : cands) { shed.push_back(x.idx); }
+    std::vector<int> ranked = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    if (ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
+// Shedding moves the answer (the survivor of two Nivs stops being a duplicate), so re-ask per shed.
+bool NivMizzetComboProvider::CleanupDiscardShedStable() const { return !NivBucketDiscardOn(); }

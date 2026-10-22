@@ -71872,7 +71872,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // size: emit the two pinned alternatives and let the base plan carry the heuristic. One of the
     // two duplicates whatever the heuristic resolves to; a duplicate scores identically and the
     // search tie-breaks to the base plan, so it costs a variant but cannot change the answer.
-    if (PonderAxisEnabled() && !HumanPlayActive())
+    // A provider that owns a reorder rule may prune the fan to that rule (ReorderSingleCandidate): the
+    // base plan already resolves the Ponder through the provider, so skipping the variants leaves it.
+    if (PonderAxisEnabled() && !HumanPlayActive() && !ResolveProvider(state).ReorderSingleCandidate(state))
     {
         std::vector<TurnSolver::Plan> extra;
         // THE CANON FRONT DERIVATION reads only front(), which is never a Ponder clone (the put-back
