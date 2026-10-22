@@ -80998,6 +80998,23 @@ static inline bool FsStrictCutO1On()
     static const bool env = EnvOn("MTG_FS_STRICT_CUT_O1", true);
     return heurarm::Flag(heurarm::FS_STRICT_CUT_O1, env);
 }
+// MTG_PROBE_INCLUSIVE_CUT (heurarm PROBE_INCLUSIVE_CUT) -- DEFAULT ON (2026-10-22). The value-leaf PROBE is a
+// MEASUREMENT as well as a pass: while g_probe_recording is set, FullSearchLine snapshots its per-depth leaf
+// counts and costs into g_probe_leaves / g_probe_cost, and the escalation prices a heuristic re-run from them as
+// chat[d] = cost[d] + R x leaves[d] (R per-deck escalation_r, or the frozen prior). R was fitted on the probe's
+// INCLUSIVE tree. MTG_FS_STRICT_CUT_O1 refuses the O(1) leaves at the incumbent's turn, so on a deck whose value
+// leaf hands back many estimated wins at T the probe evaluates a small fraction of the leaves the rollout pass will
+// face. FiveColour d6 b20, 300 games: probe units per leaf 1.46 -> 240, escalations taken 123 -> 166 and their units
+// 0.56M -> 1.35M with more of them falling short of the user depth, deck +0.0053 turns (2HG +0.0217) at 1.09-1.19x
+// units. So the probe keeps the inclusive cut there: same answer (both cuts are exact), the tree R describes.
+// Every other O(1)-leaf search keeps the strict cut, including unbudgeted play, where its memo saving was measured.
+// It mirrors the g_probe_val_recording exclusion below, which exists for the same reason (a recording pass's
+// numbers feed a later decision). =0 -> the strict cut in the probe too (the 2026-10-21 behaviour).
+static inline bool ProbeInclusiveCutOn()
+{
+    static const bool env = EnvOn("MTG_PROBE_INCLUSIVE_CUT", true);
+    return heurarm::Flag(heurarm::PROBE_INCLUSIVE_CUT, env);
+}
 // The horizon leaf below this node is O(1): mirrors the leaf selection in FSLineWin's horizon (the no-leaf
 // constant applies with or without a model; the value model unless the heuristic leaf is forced).
 static inline bool FsLeafIsO1(const GameState& s)
@@ -81010,7 +81027,7 @@ static inline int FsChildCut(const GameState& s, int cutoff, int best_win, int m
 {
     (void)budget;   // no longer read: the cut is budget-independent (see above)
     if (best_win <= max_turns && FsStrictCutOn() && !g_probe_val_recording && !DomActive()
-        && (FsStrictCutO1On() || !FsLeafIsO1(s)))
+        && ((FsStrictCutO1On() && !(g_probe_recording && ProbeInclusiveCutOn())) || !FsLeafIsO1(s)))
     { return std::min(cutoff, best_win - 1); }
     return std::min(cutoff, best_win);
 }
