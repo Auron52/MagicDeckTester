@@ -1110,6 +1110,27 @@ class Spec:
                     raise SystemExit(f"\"replace\" {tag}: {src} is not reduced, so it frees nothing")
                 if self.arms[tag].get(dst, 0) <= self.counts.get(dst, 0):
                     raise SystemExit(f"\"replace\" {tag}: {dst} is not increased, so it needs nothing")
+        # PER-ARM ALIAS ("arm_alias": {"<tag>": {"<introduced card>": "<host card>"}}). The approved
+        # no-regeneration route for a card the shipped table does not bucket is to alias it into the
+        # bucket of the card it replaces (scripts/alias_card_into_bucket.py). One aliased table serves
+        # a whole spec only while every introduced card has ONE host across all arms; a screen that
+        # tries a new card in several slots (Hydra for Courser in one arm, for Cultivate in another)
+        # needs the host to differ PER ARM. So each arm with an alias map gets its own copy of the
+        # shipped table with the new names added to its hosts' buckets, beside its own copy of the
+        # play profile. The base arm keeps the unaliased table, and since aliasing only adds names
+        # the base never holds, base plays under any of these tables exactly as under the shipped one.
+        self.arm_alias = s.get("arm_alias") or {}
+        for tag, m in self.arm_alias.items():
+            if tag not in self.arms or tag == "base":
+                raise SystemExit(f"\"arm_alias\" names no such combination: {tag}")
+            for new, host in m.items():
+                if new in self.counts:
+                    raise SystemExit(f"\"arm_alias\" {tag}: {new} is in the base deck, so it is "
+                                     "already bucketed")
+                if self.arms[tag].get(new, 0) <= 0:
+                    raise SystemExit(f"\"arm_alias\" {tag}: the arm does not play {new}")
+                if host not in self.counts:
+                    raise SystemExit(f"\"arm_alias\" {tag}: host {host} is not in the base deck")
         # Resolve the apparatus the way the ENGINE would if it were left to auto-detect: sibling of
         # the decklist, by stem. Leaving these to the spec made the load-bearing thing optional, and
         # an omitted `profile` reads exactly like a deliberate one (it is not -- see the header).
@@ -1615,11 +1636,35 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         verify_table_for_deck(ek, spec.counts, "the shipped keep table", tpath)
     bkts = None if ek is None else ek["buckets"]
     tbl = None if bkts is None else {n for b in bkts for n in b}
-    all_cards = {c for a in spec.arms.values() for c in a}
-    uncovered = sorted(all_cards - tbl) if tbl is not None else []
+    if spec.arm_alias and bkts is None:
+        raise SystemExit("\"arm_alias\" needs a shipped keep table to alias into")
+    if spec.arm_alias and with_floor:
+        raise SystemExit("\"arm_alias\" and --with-floor do not combine: the bracket builds its own "
+                         "per-arm tables, which is generation (the alias route exists to avoid it)")
+    if spec.arm_alias and spec.index_carry:
+        raise SystemExit("\"arm_alias\" and index_carry do not combine (an aliased arm plays under its "
+                         "own table, so the base cell's masks do not describe it)")
+
+    def arm_buckets(tag):
+        """The buckets this arm plays under: the shipped ones, plus its alias map's new names."""
+        m = spec.arm_alias.get(tag) or {}
+        if not m:
+            return bkts
+        out = [list(b) for b in bkts]
+        for new, host in m.items():
+            hit = [i for i, b in enumerate(out) if host in b]
+            if not hit:
+                raise SystemExit(f"\"arm_alias\" {tag}: host {host} is in no bucket of the table")
+            out[hit[0]] = sorted(out[hit[0]] + [new])
+        return out
+
+    # An introduced card is covered for an arm when that arm's own (aliased) buckets hold it.
+    uncovered = (sorted({c for t, a in spec.arms.items() for c in a
+                         if c not in {n for b in arm_buckets(t) for n in b}})
+                 if tbl is not None else [])
     # Composition coverage, the second cliff (see fallback_rate). Only meaningful once every card is
     # bucketed -- an unbucketed card already drops the table below.
-    fb = ({t: fallback_rate(bkts, spec.counts, c) for t, c in spec.arms.items()}
+    fb = ({t: fallback_rate(arm_buckets(t), spec.counts, c) for t, c in spec.arms.items()}
           if tbl is not None and not uncovered else {})
     worst = max((r for r, _ in fb.values()), default=0.0)
     # The threshold is a bias budget, not a taste: a table is worth ~0.063t (measured), so a
@@ -1750,6 +1795,47 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     if use_table and (table_src or profile is not spec.profile):
         profile = apparatus_dir(spec.out, "pool", spec.name, profile, table_src or shipped_table(spec.profile))
 
+    # "arm_alias": each aliased arm gets the shipped table with its new names in their hosts' buckets,
+    # beside a copy of the SAME play profile every other arm gets (pooled card scores included).
+    arm_profiles, arm_tables = {}, {}
+    if spec.arm_alias:
+        if not use_table or table_src is not None:
+            raise SystemExit("\"arm_alias\" needs the shipped table to be the shared apparatus (it was "
+                             + ("dropped" if not use_table else "replaced by a pool table") + ")")
+        src = shipped_table(spec.profile)
+        adir = os.path.join(spec.out, "alias_tables")
+        os.makedirs(adir, exist_ok=True)
+        print("  arm alias      the introduced cards ride their hosts' buckets, per arm "
+              "(K unchanged, nothing generated):")
+        built = {}
+        for tag in spec.arms:
+            m = spec.arm_alias.get(tag)
+            if not m:
+                continue
+            key = json.dumps(sorted(m.items()))
+            if key not in built:
+                h = hashlib.sha1(key.encode()).hexdigest()[:10]
+                tpath_a = os.path.join(adir, f"{h}.keepmodel.exhaustive.profile.json.gz")
+                want = arm_buckets(tag)
+                have = None
+                if os.path.exists(tpath_a):
+                    try:
+                        have = json.load(gzip.open(tpath_a, "rt"))["exhaustive_keep"]["buckets"]
+                    except Exception:
+                        have = None
+                if have != want:
+                    d = json.load(gzip.open(src, "rt"))
+                    d["exhaustive_keep"]["buckets"] = want
+                    tmp = tpath_a + ".tmp"
+                    with gzip.open(tmp, "wt") as f:
+                        json.dump(d, f)
+                    os.replace(tmp, tpath_a)
+                built[key] = apparatus_dir(spec.out, "alias_" + h, spec.name, profile, tpath_a)
+                arm_tables[key] = tpath_a
+            arm_profiles[tag] = built[key]
+            print(f"                   {tag:20s} " + ", ".join(f"{n} -> [{h}]" for n, h in sorted(m.items()))
+                  + f"   ({os.path.relpath(arm_tables[key], ROOT)})")
+
     # What the two blocks of a --confirm must agree on. Comparing a screen against a held-out block
     # is only meaningful if the APPARATUS was identical: same arms (the pool table is built from all
     # of them), same profile CONTENT, same table bytes, same play settings. Editing the spec between
@@ -1773,7 +1859,8 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         dp, np_ = spec.write_arm(tag, os.path.join(spec.out, tag))
         decks[tag] = (dp, np_)
         for fmt in spec.formats:
-            j = spec.job(spec.jname(fmt, tag), dp, np_, profile, seed=seed, fmt=fmt, tag=tag)
+            j = spec.job(spec.jname(fmt, tag), dp, np_, arm_profiles.get(tag, profile), seed=seed,
+                         fmt=fmt, tag=tag)
             # Driver-only, stripped before the manifest (see run_with_carry): the index carry has to
             # map a job name back to its ARM (which cards changed) and its FORMAT (whose base cell's
             # masks apply). Re-deriving either by parsing the job NAME would break the moment a tag
@@ -1818,7 +1905,10 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                     jobs.append(spec.job(f"{d}__{key}", decks[d][0], decks[d][1], own_app[key],
                                          seed=seed))
         fmeta = (ftags, route, per_arm, base_key, R, cell_name)
-    json.dump({"arms": spec.arms, "arm_flags": spec.arm_flags,
+    # Only present when used, so a spec without aliases fingerprints exactly as before.
+    alias_fp = ({"arm_alias": spec.arm_alias,
+                 "arm_tables": {k: stamp(v) for k, v in arm_tables.items()}} if spec.arm_alias else {})
+    json.dump({**alias_fp, "arms": spec.arms, "arm_flags": spec.arm_flags,
                "games": spec.games, "depth": spec.depth,
                "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
                # Recorded but INFORMATIONAL (see confirm's `informational` set): it changes which
