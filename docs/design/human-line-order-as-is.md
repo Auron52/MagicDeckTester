@@ -370,6 +370,56 @@ Only a NEW game sends `"**"`.
   contract-fail; `viewer_linebuild_check.js` 0 FAIL; `viewer_client_check.js` only the two pre-existing
   `equip` failures.
 
+### Third-review fixes, with the USER's rulings (2026-10-22)
+
+The USER ruled on the first three findings; the code follows the rulings, not the review's proposals.
+
+* **(1) A MANA sac outlet's clicks are payment, not steps; a non-mana outlet's clicks are units of its
+  action.** USER: Skirk Prospector's sacrifices are mana -- they pay for the casts, so they carry no order
+  of their own. The engine stamps `"sac_mana": true` on a SacForMana action's JSON (main.cpp); the viewer
+  copies it onto the queued activation (`sacMana`) and `sequenceToken` writes NO token for it, so the
+  `"**"` sequence holds only the casts (the line keeps its `sacout=` for CheckLine). The plan's ONE
+  SacForMana burst (`sac_count` 2) stays implicit and runs before the first step, so its mana pays.
+  An older sequence that still carries Skirk `sacout=` steps has them absorbed (`ApplyHumanSequencePin`,
+  `if (mana) { continue; }`). Carrion Feeder (Melira's persist loop) is NOT mana: it is a real action,
+  and the USER's rule is that repeated `sacout=` clicks of one non-mana source claim units of its single
+  looped / burst action. The first click claims a step; a further click first claims any separate action
+  of the same source still unclaimed (the Melira plan holds the loop AND a single sac), and only when the
+  source has nothing left does it fold into the loop it already claimed -- a loop absorbs any number of
+  clicks (its K is the variant's), a burst only `sac_count - 1` more. The whole burst runs at its first
+  click; it is not split across steps. Scenarios `goblins_human_seq_skirk_burst_two_clicks` (was Illegal,
+  "matches nothing"), `melira_human_seq_feeder_loop_clicks`, `melira_human_seq_feeder_loop_commit`.
+* **(2) `cast=Remand` claims Remand's rider.** A spell cast with Remand riding it (`remand_by`) is claimed
+  by the `cast=Remand` step, so it is not reported as unqueued and not dropped. Low priority per the USER;
+  checked not to regress. Scenarios `hinata2_human_seq_remand_rider_claimed`,
+  `hinata2_human_seq_remand_rider_commit`.
+* **(3) A suspend-only card is not castable without suspend -- the fix is in the VIEWER.** USER: Lotus
+  Bloom cannot be cast, so the viewer must not write `cast=Lotus Bloom`. The engine stamps `"suspend_only":
+  true` on such a hand card; `queueCard` (linebuild.js) turns its thumb into the suspend. No
+  `cast=`->Suspend match was added to the engine: a `cast=Lotus Bloom` step is rejected with its reason
+  (scenario `dragonstorm_human_seq_lotus_cast_token_rejected`), and a recorded legacy line without a
+  sequence still validates by name, unchanged (the reference sweep below).
+* **(4) The twin test is conservative.** Two permanents are twins (`HumanTwinPermanents`) only when every
+  per-object field that can affect play agrees -- counter CONTENTS (not just the count), P/T, temporary
+  grants (haste, exile-at-end), chosen colour, and the rest. A false twin would play the wrong permanent;
+  a false non-twin only asks the viewer for a `#src`, which it always writes. Unit test "the twin test is
+  conservative".
+* **(5) The equip effect check works without the id.** An equip is judged attached by the Equipment's id
+  when the action names one; a cast-and-equip from hand (no id yet) is judged by counting that
+  Equipment's copies on the host before and after, so a second copy already attached cannot hide a
+  failed equip.
+* **(6) No future action kind can fall into the orphan rule unnoticed.** `HumanStepVerbFor(Action::Kind)`
+  maps every kind to the step verb that claims it (or to "implicit"/"none"), with a `static_assert` on the
+  last enumerator, and a unit test claims one action of every kind through its verb (SacForMana: stays
+  implicit, no error): a new kind fails to compile until it is classified, and a verb that does not claim
+  its kind fails the test. Scenario `kitty_human_seq_cid_gyreturn_claimed` covers a verb whose token names
+  the SOURCE rather than the line value (`gyreturn=Cid, Freeflier Pilot`).
+* Measurements after the third-review fixes: smoke 136/136, **configs changed: 0**, 0 slower / faster /
+  play-changed; scenarios 266/266; unit 1734/1734; reference replay (640, `--strict`) 222 ok / 418
+  repaired / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap / 0 mull-drift / 0
+  contract-fail; `viewer_linebuild_check.js` 0 FAIL (3683 lines over 640 refs); `viewer_client_check.js`
+  only the pre-existing `equip` / `equip from hand` failures (identical on the base tree).
+
 ## DEFERRED: a dropped board ACTIVATION is silent in the viewer
 
 *(2026-10-22: closed for `"**"` lines -- each step is dispatched alone, so "the state did not change" IS a failed step and is reported; see "Review fixes" above. What follows still describes the `"*"` route and the autonomous trailing pass.)*
