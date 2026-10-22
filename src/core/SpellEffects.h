@@ -8270,6 +8270,13 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                 {
                     Permanent& src = state.battlefield[src_idx];
                     if (SoulbondPartnerIndex(src, state) >= 0) { return false; }   // already paired
+                    // ...or already CLAIMED as another soulbond creature's partner. The link lives on
+                    // the claiming side only, so a soulbond creature picked as a partner still reads
+                    // paired_with == 0 on its own side; without this test its Trigger B ("if this
+                    // creature is unpaired") fired again and put it in two pairs at once (CR 702.46b:
+                    // one pair per creature). Two Tandem Lookouts, or a Lookout chosen by a Silverblade
+                    // Paladin, then paired with the next creature to enter as well.
+                    if (SoulbondNumberIsClaimed(state, src.controller_index, src.card.m_number)) { return false; }
                     std::vector<int> cands = legal_partners(src.controller_index, src.card.m_number);
                     if (only_idx >= 0)
                     {

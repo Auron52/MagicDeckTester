@@ -390,6 +390,26 @@ TEST_CASE("soulbond trigger B: one entrant can only complete ONE pair")
     CHECK(CreatureHasDoubleStrike(ByNumber(s, 3), s));   // the entrant is in a pair either way
 }
 
+TEST_CASE("soulbond trigger B: a soulbond creature CLAIMED as a partner is not unpaired")
+{
+    // REGRESSION (2026-10-22, NivMizzetCombo soulbond review). The pair link is stored on the
+    // claiming side only, so a soulbond creature chosen as ANOTHER soulbond creature's partner reads
+    // paired_with == 0 on its own side. Trigger B ("if this creature is unpaired") tested only that
+    // field, so it paired a second time with the next entrant and sat in two pairs at once.
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Silverblade Paladin", 0, 1);              // unpaired, no trigger A
+    Enter(s, "Silverblade Paladin", 0, 2);            // trigger A claims #1, the only creature out
+    REQUIRE(ByNumber(s, 2).paired_with == 1);
+    REQUIRE(ByNumber(s, 1).paired_with == 0);         // the link lives on #2's side
+
+    Enter(s, "Venerable Knight", 0, 3);               // trigger B must not fire for #1 (paired)
+
+    CHECK(ByNumber(s, 1).paired_with == 0);
+    CHECK(ByNumber(s, 2).paired_with == 1);           // the first pair is undisturbed
+    CHECK_FALSE(CreatureHasDoubleStrike(ByNumber(s, 3), s));   // the entrant joined no pair
+}
+
 TEST_CASE("soulbond: the pair breaks when the partner leaves, with no detach bookkeeping")
 {
     EnsureCardsLoaded();
