@@ -1,0 +1,319 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 38, "name": "Preordain" }, { "num": 46, "name": "Sandstone Needle" }, { "num": 57, "name": "Tandem Lookout" }, { "num": 30, "name": "Niv-Mizzet, the Firemind" }, { "num": 47, "name": "Sandstone Needle" }, { "num": 12, "name": "Generator Servant" }, { "num": 18, "name": "Island" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Remand" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 12, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Preordain", "land": "Island", "casts": ["Preordain"], "actions": [{ "card": "Preordain" }] },
+    { "index": 1, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 47, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 47, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Island" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 0, "num": 46, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 47, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Tandem Lookout", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Generator Servant, Preordain", "land": "Island", "casts": ["Generator Servant", "Preordain"], "cast_order_canonical": ["Generator Servant", "Preordain"], "actions": [{ "card": "Generator Servant" }, { "card": "Preordain" }] },
+    { "index": 1, "summary": "land=Island; cast: Tandem Lookout", "land": "Island", "casts": ["Tandem Lookout"], "actions": [{ "card": "Tandem Lookout" }] },
+    { "index": 2, "summary": "land=Island; cast: Generator Servant", "land": "Island", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 3, "summary": "land=Sandstone Needle; cast: Generator Servant", "land": "Sandstone Needle", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 4, "summary": "land=none; cast: Generator Servant", "land": null, "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 5, "summary": "land=Island; cast: Preordain", "land": "Island", "casts": ["Preordain"], "actions": [{ "card": "Preordain" }] },
+    { "index": 6, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Tandem Lookout", "idx": 2, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 47, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Tandem Lookout", "idx": 2, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 47, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Generator Servant", "Preordain"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Niv-Mizzet, the Firemind" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 1, "num": 18, "is_land": true, "taps": "U" }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Tandem Lookout", "idx": 2, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Generator Servant", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 47, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sandstone Needle; cast: Generator Servant, Preordain", "land": "Sandstone Needle", "casts": ["Generator Servant", "Preordain"], "cast_order_canonical": ["Generator Servant", "Preordain"], "actions": [{ "card": "Generator Servant" }, { "card": "Preordain" }] },
+    { "index": 1, "summary": "land=Island; cast: Generator Servant, Preordain", "land": "Island", "casts": ["Generator Servant", "Preordain"], "cast_order_canonical": ["Generator Servant", "Preordain"], "actions": [{ "card": "Generator Servant" }, { "card": "Preordain" }] },
+    { "index": 2, "summary": "land=none; cast: Generator Servant, Preordain", "land": null, "casts": ["Generator Servant", "Preordain"], "cast_order_canonical": ["Generator Servant", "Preordain"], "actions": [{ "card": "Generator Servant" }, { "card": "Preordain" }] },
+    { "index": 3, "summary": "land=Sandstone Needle; cast: Generator Servant", "land": "Sandstone Needle", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 4, "summary": "land=Island; cast: Generator Servant", "land": "Island", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 5, "summary": "land=none; cast: Generator Servant", "land": null, "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant" }] },
+    { "index": 6, "summary": "land=Sandstone Needle; cast: Preordain", "land": "Sandstone Needle", "casts": ["Preordain"], "actions": [{ "card": "Preordain" }] },
+    { "index": 7, "summary": "land=Island; cast: Preordain", "land": "Island", "casts": ["Preordain"], "actions": [{ "card": "Preordain" }] },
+    { "index": 8, "summary": "land=Island; cast: Preordain + Remand on it (back to hand; draw a card)", "land": "Island", "casts": ["Preordain", "Remand"], "actions": [{ "card": "Preordain", "remand_by": "Remand", "remand_slot": 4 }] },
+    { "index": 9, "summary": "land=Island; cast: Generator Servant + Remand on it (back to hand; draw a card)", "land": "Island", "casts": ["Generator Servant", "Remand"], "actions": [{ "card": "Generator Servant", "remand_by": "Remand", "remand_slot": 4 }] },
+    { "index": 10, "summary": "land=none; cast: Preordain", "land": null, "casts": ["Preordain"], "actions": [{ "card": "Preordain" }] },
+    { "index": 11, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "attach_host",
+  "source": "Tandem Lookout",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 6, "num": 12, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 47, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Tandem Lookout", "idx": 2, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Preordain", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "floating_mana": {"U": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "perm_index": 6, "name": "Generator Servant", "label": "Generator Servant" }],
+  "soulbond": true,
+  "note": "reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), or -1 to decline the pairing. While paired, both creatures keep the bonus for as long as you control both. Default = the AI's pick (highest effective power)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "scry",
+  "source": "Scry",
+  "turn": 3,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 6, "num": 12, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 1, "num": 18, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 47, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Tandem Lookout", "idx": 2, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "looked": [{ "name": "Niv-Mizzet, Parun", "is_land": false }, { "name": "Brainstorm", "is_land": false }],
+  "heuristic_default": 3,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Niv-Mizzet, Parun", "Brainstorm"] }, { "index": 1, "label": "Top: Niv-Mizzet, Parun  (rest to bottom)", "shuffle": false, "top": ["Niv-Mizzet, Parun"], "away": ["Brainstorm"] }, { "index": 2, "label": "Top: Brainstorm  (rest to bottom)", "shuffle": false, "top": ["Brainstorm"], "away": ["Niv-Mizzet, Parun"] }, { "index": 3, "label": "Top: Niv-Mizzet, Parun, Brainstorm", "shuffle": false, "top": ["Niv-Mizzet, Parun", "Brainstorm"], "away": [] }, { "index": 4, "label": "Top: Brainstorm, Niv-Mizzet, Parun", "shuffle": false, "top": ["Brainstorm", "Niv-Mizzet, Parun"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Izzet Signet" }],
+  "reveals": [{ "turn": 3, "source": "Scry", "cards": [{ "name": "Niv-Mizzet, Parun", "disposition": "to the bottom" }, { "name": "Brainstorm", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 0, "num": 18, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 4, "num": 47, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Tandem Lookout", "idx": 1, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Izzet Signet", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Preordain", "Sandstone Needle"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Tandem Lookout (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 0, "num": 18, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 4, "num": 47, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Tandem Lookout", "idx": 1, "num": 57, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Izzet Signet", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Preordain", "Sandstone Needle"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Curiosity" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Generator Servant", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Island", "idx": 0, "num": 18, "is_land": true, "taps": "U" }, { "name": "Sandstone Needle", "idx": 4, "num": 47, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Tandem Lookout", "idx": 1, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Curiosity", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Izzet Signet", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 30, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Preordain", "Sandstone Needle"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Niv-Mizzet, the Firemind, Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Niv-Mizzet, the Firemind", "Generator Servant"], "actions": [{ "card": "Niv-Mizzet, the Firemind" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 1, "summary": "land=Island; cast: Curiosity → Tandem Lookout, Izzet Signet", "land": "Island", "casts": ["Curiosity", "Izzet Signet"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet" }] },
+    { "index": 2, "summary": "land=Island; cast: Izzet Signet, Curiosity → Tandem Lookout", "land": "Island", "casts": ["Izzet Signet", "Curiosity"], "cast_order_canonical": ["Izzet Signet", "Curiosity"], "actions": [{ "card": "Izzet Signet" }, { "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }] },
+    { "index": 3, "summary": "land=Island; cast: Curiosity → Tandem Lookout, Izzet Signet, Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Curiosity", "Izzet Signet", "Generator Servant"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 4, "summary": "land=Island; cast: Izzet Signet, Curiosity → Tandem Lookout, Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Izzet Signet", "Curiosity", "Generator Servant"], "cast_order_canonical": ["Izzet Signet", "Curiosity"], "actions": [{ "card": "Izzet Signet" }, { "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 5, "summary": "land=Island; cast: Curiosity → Generator Servant, Izzet Signet", "land": "Island", "casts": ["Curiosity", "Izzet Signet"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 12, "enchant_target_name": "Generator Servant" }, { "card": "Izzet Signet" }] },
+    { "index": 6, "summary": "land=Island; cast: Izzet Signet, Curiosity → Generator Servant", "land": "Island", "casts": ["Izzet Signet", "Curiosity"], "cast_order_canonical": ["Izzet Signet", "Curiosity"], "actions": [{ "card": "Izzet Signet" }, { "card": "Curiosity", "enchant_target": 12, "enchant_target_name": "Generator Servant" }] },
+    { "index": 7, "summary": "land=Island; cast: Curiosity → Tandem Lookout, Izzet Signet + Remand on it (back to hand; draw a card), Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Curiosity", "Izzet Signet", "Remand", "Generator Servant"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet", "remand_by": "Remand", "remand_slot": 1 }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 8, "summary": "land=Island; cast: Curiosity → Tandem Lookout + Remand on it (back to hand; draw a card), Izzet Signet", "land": "Island", "drops": ["Izzet Signet"], "casts": ["Curiosity", "Remand", "Izzet Signet"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "remand_by": "Remand", "remand_slot": 1, "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet" }] },
+    { "index": 9, "summary": "land=Island; cast: Izzet Signet, Curiosity → Tandem Lookout + Remand on it (back to hand; draw a card)", "land": "Island", "drops": ["Curiosity"], "casts": ["Izzet Signet", "Curiosity", "Remand"], "cast_order_canonical": ["Izzet Signet", "Curiosity"], "actions": [{ "card": "Izzet Signet" }, { "card": "Curiosity", "remand_by": "Remand", "remand_slot": 1, "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }] },
+    { "index": 10, "summary": "land=Island; cast: Curiosity → Tandem Lookout + Remand on it (back to hand; draw a card), Izzet Signet, Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Curiosity", "Remand", "Izzet Signet", "Generator Servant"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "remand_by": "Remand", "remand_slot": 1, "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 11, "summary": "land=none; cast: Curiosity → Tandem Lookout, Izzet Signet", "land": null, "casts": ["Curiosity", "Izzet Signet"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet" }] },
+    { "index": 12, "summary": "land=none; cast: Izzet Signet, Curiosity → Tandem Lookout", "land": null, "casts": ["Izzet Signet", "Curiosity"], "cast_order_canonical": ["Izzet Signet", "Curiosity"], "actions": [{ "card": "Izzet Signet" }, { "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }] },
+    { "index": 13, "summary": "land=none; cast: Curiosity → Tandem Lookout, Izzet Signet, Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Curiosity", "Izzet Signet", "Generator Servant"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 14, "summary": "land=none; cast: Izzet Signet, Curiosity → Tandem Lookout, Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Izzet Signet", "Curiosity", "Generator Servant"], "cast_order_canonical": ["Izzet Signet", "Curiosity"], "actions": [{ "card": "Izzet Signet" }, { "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 15, "summary": "land=none; cast: Curiosity → Generator Servant, Izzet Signet", "land": null, "casts": ["Curiosity", "Izzet Signet"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 12, "enchant_target_name": "Generator Servant" }, { "card": "Izzet Signet" }] },
+    { "index": 16, "summary": "land=none; cast: Izzet Signet, Curiosity → Generator Servant", "land": null, "casts": ["Izzet Signet", "Curiosity"], "cast_order_canonical": ["Izzet Signet", "Curiosity"], "actions": [{ "card": "Izzet Signet" }, { "card": "Curiosity", "enchant_target": 12, "enchant_target_name": "Generator Servant" }] },
+    { "index": 17, "summary": "land=none; cast: Curiosity → Tandem Lookout, Izzet Signet + Remand on it (back to hand; draw a card), Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Curiosity", "Izzet Signet", "Remand", "Generator Servant"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet", "remand_by": "Remand", "remand_slot": 1 }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 18, "summary": "land=none; cast: Curiosity → Tandem Lookout + Remand on it (back to hand; draw a card), Izzet Signet, Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Curiosity", "Remand", "Izzet Signet", "Generator Servant"], "cast_order_canonical": ["Curiosity", "Izzet Signet"], "actions": [{ "card": "Curiosity", "remand_by": "Remand", "remand_slot": 1, "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Izzet Signet" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 19, "summary": "land=Island; cast: Izzet Signet", "land": "Island", "casts": ["Izzet Signet"], "actions": [{ "card": "Izzet Signet" }] },
+    { "index": 20, "summary": "land=Island; cast: Izzet Signet, Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Izzet Signet", "Generator Servant"], "actions": [{ "card": "Izzet Signet" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 21, "summary": "land=Island; cast: Curiosity → Tandem Lookout", "land": "Island", "casts": ["Curiosity"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }] },
+    { "index": 22, "summary": "land=Island; cast: Curiosity → Tandem Lookout, Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Curiosity", "Generator Servant"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 23, "summary": "land=Island; cast: Curiosity → Generator Servant", "land": "Island", "casts": ["Curiosity"], "actions": [{ "card": "Curiosity", "enchant_target": 12, "enchant_target_name": "Generator Servant" }] },
+    { "index": 24, "summary": "land=Island; cast: Izzet Signet + Remand on it (back to hand; draw a card)", "land": "Island", "casts": ["Izzet Signet", "Remand"], "actions": [{ "card": "Izzet Signet", "remand_by": "Remand", "remand_slot": 1 }] },
+    { "index": 25, "summary": "land=Island; cast: Izzet Signet + Remand on it (back to hand; draw a card), Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Izzet Signet", "Remand", "Generator Servant"], "actions": [{ "card": "Izzet Signet", "remand_by": "Remand", "remand_slot": 1 }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 26, "summary": "land=Island; cast: Curiosity → Tandem Lookout + Remand on it (back to hand; draw a card)", "land": "Island", "casts": ["Curiosity", "Remand"], "actions": [{ "card": "Curiosity", "remand_by": "Remand", "remand_slot": 1, "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }] },
+    { "index": 27, "summary": "land=Island; cast: Curiosity → Tandem Lookout + Remand on it (back to hand; draw a card), Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Curiosity", "Remand", "Generator Servant"], "actions": [{ "card": "Curiosity", "remand_by": "Remand", "remand_slot": 1, "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 28, "summary": "land=none; cast: Izzet Signet", "land": null, "casts": ["Izzet Signet"], "actions": [{ "card": "Izzet Signet" }] },
+    { "index": 29, "summary": "land=none; cast: Izzet Signet, Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Izzet Signet", "Generator Servant"], "actions": [{ "card": "Izzet Signet" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 30, "summary": "land=none; cast: Curiosity → Tandem Lookout", "land": null, "casts": ["Curiosity"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }] },
+    { "index": 31, "summary": "land=none; cast: Curiosity → Tandem Lookout, Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Curiosity", "Generator Servant"], "actions": [{ "card": "Curiosity", "enchant_target": 57, "enchant_target_name": "Tandem Lookout" }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 32, "summary": "land=none; cast: Curiosity → Generator Servant", "land": null, "casts": ["Curiosity"], "actions": [{ "card": "Curiosity", "enchant_target": 12, "enchant_target_name": "Generator Servant" }] },
+    { "index": 33, "summary": "land=none; cast: Izzet Signet + Remand on it (back to hand; draw a card), Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Izzet Signet", "Remand", "Generator Servant"], "actions": [{ "card": "Izzet Signet", "remand_by": "Remand", "remand_slot": 1 }, { "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 34, "summary": "land=Island; cast: (nothing)", "land": "Island", "casts": [], "actions": [] },
+    { "index": 35, "summary": "land=Island; cast: Generator Servant: sacrifice for {C}×2", "land": "Island", "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 12, "float_color": "C" }] },
+    { "index": 36, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 37, "summary": "land=none; cast: Generator Servant: sacrifice for {C}×2", "land": null, "casts": ["Generator Servant"], "actions": [{ "card": "Generator Servant", "src_num": 12, "float_color": "C" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "type": "attach_host",
+  "source": "Tandem Lookout",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 0, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 5, "num": 19, "tapped": true, "is_land": true }, { "name": "Niv-Mizzet, the Firemind", "idx": 6, "num": 30, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Sandstone Needle", "idx": 4, "num": 47, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Tandem Lookout", "idx": 1, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Curiosity", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 24, "name": "Izzet Signet", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Generator Servant", "Preordain", "Sandstone Needle"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "perm_index": 6, "name": "Niv-Mizzet, the Firemind", "label": "Niv-Mizzet, the Firemind" }],
+  "soulbond": true,
+  "note": "reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), or -1 to decline the pairing. While paired, both creatures keep the bonus for as long as you control both. Default = the AI's pick (highest effective power)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "mana", "text": "🪷 Generator Servant -- sacrifice: add 2 C (a creature spell it pays for gains haste)" }, { "turn": 4, "kind": "trigger", "text": "Tandem Lookout: soulbond → paired with Niv-Mizzet, the Firemind" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 0, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 5, "num": 19, "tapped": true, "is_land": true }, { "name": "Niv-Mizzet, the Firemind", "idx": 6, "num": 30, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Sandstone Needle", "idx": 4, "num": 47, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Tandem Lookout", "idx": 1, "num": 57, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 7, "name": "Curiosity", "cost": "{U}", "mv": 1, "kind": "permanent" }, { "num": 24, "name": "Izzet Signet", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Niv-Mizzet, the Firemind", "cost": "{2}{U}{U}{R}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Remand", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Generator Servant", "Preordain", "Sandstone Needle"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Niv-Mizzet, the Firemind: draw a card", "land": null, "casts": ["Niv-Mizzet, the Firemind"], "actions": [{ "card": "Niv-Mizzet, the Firemind", "src_num": 30, "activate": true, "act_label": "draw a card", "x": 1 }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "damage", "text": "🔥 Niv-Mizzet, the Firemind (whenever you draw): 18 pings to opponent (18→0) -- lethal" },
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Tandem Lookout (2) — 2 to opponent (0→-2)" }
+  ]
+}
