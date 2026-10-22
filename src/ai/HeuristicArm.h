@@ -655,6 +655,7 @@ enum Slot : int
     PAY_DEPLETION_WASTE,      // MTG_PAY_DEPLETION_WASTE  the shared payer ranks a DEPLETION land's tap behind every painless plain source (the pain band) when it would spend the land's LAST counter on mana this payment and the rest of the line cannot use (Niv seed 1, 2026-10-22: Skerry + the Needle's last counter paid {2}{U}, floated {R}, the Needle died and the Canal stayed untapped; T6 -> T7). An order, never a filter. DEFAULT OFF pending its A/B
     PAY_DEPLETION_WASTE_ANY,  // MTG_PAY_DEPLETION_WASTE_ANY  ...the same for ANY counter (a wasted counter on a 2-counter land is the same lost mana). Implies the above. DEFAULT OFF pending its A/B
     NIV_BUCKET_DISCARD,       // MTG_NIV_BUCKET_DISCARD  NivMizzetCombo: cleanup discard by the same buckets (Niv / draw-on-damage / go-off / mana to 6 with <= 3 hand lands / draw / a 7th source if space). DEFAULT OFF pending its A/B and the USER
+    NIV_CANTRIP_AMEND,        // MTG_NIV_CANTRIP_AMEND  amendment arm of MTG_NIV_CANTRIP_RULES (inert unless that is on), from the 2026-10-22 attribution of the Ponder prune's slower games: (1) ORDER -- a draw spell castable with this turn's leftover mana is usable NOW and goes ahead of lands that cannot be played until next turn (g4); (2) KEEP -- Ponder keeps the top three only if they supply something the hand LACKS (an empty Niv / enabler bucket, a go-off draw, Sol Ring, a missing colour, a land with none in hand) or hold two wanted non-draw cards; one good card beside two dead ones is a shuffle, and draw alone never keeps (g14, g125, g134, d5 g20). DEFAULT OFF pending its A/B and the USER
     COUNT
 };
 
@@ -1260,6 +1261,7 @@ inline const char* Name(int slot)
         "MTG_PAY_DEPLETION_WASTE",
         "MTG_PAY_DEPLETION_WASTE_ANY",
         "MTG_NIV_BUCKET_DISCARD",
+        "MTG_NIV_CANTRIP_AMEND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

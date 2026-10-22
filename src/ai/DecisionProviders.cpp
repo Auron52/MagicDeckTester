@@ -52561,6 +52561,13 @@ bool NivBucketDiscardOn()
     static const bool on = EnvOn("MTG_NIV_BUCKET_DISCARD");  // DEFAULT OFF pending its A/B and the USER
     return heurarm::Flag(heurarm::NIV_BUCKET_DISCARD, on);
 }
+// The amendment arm (see HeuristicArm.h NIV_CANTRIP_AMEND): the two rule gaps the 2026-10-22 attribution
+// of the Ponder prune's slower games found on VISIBLE information. Inert unless the rules are on.
+bool NivCantripAmendOn()
+{
+    static const bool on = EnvOn("MTG_NIV_CANTRIP_AMEND");   // DEFAULT OFF pending its A/B and the USER
+    return heurarm::Flag(heurarm::NIV_CANTRIP_AMEND, on);
+}
 
 // Value every looked-at card GREEDILY: take the most-wanted one, count it as held, re-value the rest.
 // Two Nivs in one look are then one Niv and one duplicate, exactly as the discard buckets read a hand.
@@ -52571,7 +52578,11 @@ int NivOrderTier(const NivLookVal& x)
 {
     const bool key   = x.want >= kNivWantCuriosity || (NivIsDraw(x.role) && x.want >= kNivWantGoOffDraw);
     const bool setup = key || x.role == kNivLand || NivIsAccel(x.role) || x.role == kNivLookout
-                    || x.role == kNivCuriosity || x.role == kNivFiremind || x.role == kNivParun;
+                    || x.role == kNivCuriosity || x.role == kNivFiremind || x.role == kNivParun
+                    // AMEND (g4): a draw spell castable with this turn's leftover mana digs toward the
+                    // combo NOW, so it goes ahead of a land that cannot be dropped until next turn
+                    // (Preordain on top with the spare {U}, rather than under two Islands).
+                    || (NivIsDraw(x.role) && x.t_use == 0 && NivCantripAmendOn());
     if (key && x.t_use == 0)   { return 0; }
     if (setup && x.t_use == 0) { return 1; }
     if (key || (setup && x.t_use == 1)) { return 2; }
@@ -52603,6 +52614,28 @@ std::vector<NivLookVal> NivValueLook(const GameState& s, const std::vector<Card>
 }
 }   // namespace
 
+// Ponder's keep-vs-shuffle. The rules alone keep whenever the single best card is wanted. AMEND
+// (g14, g125, g134, d5 g20 -- base shuffled all four, rightly on what it could see): keep only if the
+// three supply something the hand LACKS -- an empty Niv or enabler bucket, the go-off piece, Sol Ring,
+// a missing colour (every bucket value from kNivWantColour up), or a land when the hand has none for
+// the next drop -- or hold at least TWO wanted non-draw cards. One good card beside two dead ones is a
+// shuffle, and draw (Remand, cantrips) alone never justifies a keep.
+static bool NivKeepLook(const GameState& s, const std::vector<NivLookVal>& v)
+{
+    if (v.empty()) { return false; }
+    if (!NivCantripAmendOn()) { return v.front().want >= kNivKeepThreshold; }
+    const int lands_h = BuildNivCensus(s).hand[static_cast<std::size_t>(kNivLand)];
+    int wanted_nondraw = 0;
+    for (const NivLookVal& x : v)
+    {
+        if (x.want < kNivKeepThreshold) { continue; }
+        if (x.want >= kNivWantColour) { return true; }
+        if (x.role == kNivLand && lands_h == 0) { return true; }
+        if (!NivIsDraw(x.role)) { ++wanted_nondraw; }
+    }
+    return wanted_nondraw >= 2;
+}
+
 bool NivMizzetComboProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
     if (!NivCantripRulesOn()) { return DeckProvider::ScryKeepOnTop(s, top_card); }
@@ -52618,9 +52651,9 @@ int NivMizzetComboProvider::SituationalCardRank(const GameState& s, const Card& 
 bool NivMizzetComboProvider::KeepReorderTop(const GameState& s, const std::vector<Card>& top) const
 {
     if (!NivCantripRulesOn()) { return DeckProvider::KeepReorderTop(s, top); }
-    // Shuffle only a top with nothing worth drawing: the greedy valuation's first pick is its best card.
-    const std::vector<NivLookVal> v = NivValueLook(s, top);
-    return !v.empty() && v.front().want >= kNivKeepThreshold;
+    // Shuffle only a top with nothing worth drawing: the greedy valuation's first pick is its best card
+    // (amended: NivKeepLook).
+    return NivKeepLook(s, NivValueLook(s, top));
 }
 
 TopDisposition NivMizzetComboProvider::TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
@@ -52631,7 +52664,7 @@ TopDisposition NivMizzetComboProvider::TopDispositionPick(const GameState& s, co
     const std::vector<NivLookVal> v = NivValueLook(s, looked);
     std::vector<NivLookVal> wanted, rest;
     for (const NivLookVal& x : v) { (x.want >= kNivKeepThreshold ? wanted : rest).push_back(x); }
-    if (kind == LookKind::Reorder && (keep_decision == 0 || (keep_decision == -1 && wanted.empty())))
+    if (kind == LookKind::Reorder && (keep_decision == 0 || (keep_decision == -1 && !NivKeepLook(s, v))))
     {
         disp.shuffle = true;
         return disp;
