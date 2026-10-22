@@ -2877,3 +2877,130 @@ at 10x (5 / 7) and at d8 b0 (identical units). GT accepted deck-scoped.
 **Note:** the sidecar's `value_play` replaces the profile's generation keys (K 15, mull_gen_depth 1,
 mull_gen_budget_ms 1) wholesale. A later `mullgen.sh run` copies the profile-screened setting into the sidecar;
 nothing in play reads them.
+## Why the Combo Off route "gets stuck" (2026-10-21/22) -- not phase A's hour; two sound walk collapses landed DEFAULT ON; the near-linear walk is the USER's call
+
+Branch `aa-walkroot` (worktree `.claude/worktrees/aa-walkroot`, off `phase-1-2-deck-analyzer` @ 644530764), NOT pushed.
+Scratch `/workspaces/MagicDeckTester/build/scratch/aa-walkroot/` (`d1/` the instrumented phase-A games, `perf_*` the
+Profile-build call graphs, `ver/` the verdict tallies, `ab/` the pooled A/B, `gen_list_*` the gen-setting replays, `g102/`
+the one slower regression game, `pa*/` the phase-A before/after). Every single game below ran alone on one thread
+(`run1.sh` = `valueleaf.sh phase_rows`'s exact env: `MTG_DUMP_VALUE_ROWS`, `MTG_EVAL_ROWS_K=3`,
+`MTG_EVAL_ROWS_ROLLOUT=0`, d5 b20) on a box shared with the value-leaf batch, so wall is +-20%; units are exact.
+
+**The question.** USER: *"It doesn't make much sense that our combo off route can get stuck"* and *"We shouldn't be
+branching heavily or anything."* Tonight's value-leaf phase A had ~25 label games run 2 to 6+ hours; the premise was that
+the route walk (90% of the slow keep-rollouts at the gen setting, see "Slow rollouts at the gen setting") was the cause.
+
+### 1. In phase A the hours are NOT the route -- they are the label search
+
+| game (batch: wall, units) | where the time goes, solo | route walk share |
+|---|---|---|
+| 900887 gi137 (6 h+, still running) | 28 min solo still inside **t1 LABEL k=0**; perf: 98% `FSLineWin`, route functions < 0.2% | **0 walks** |
+| 900459 gi209 (4.65 h, cut, 61 M) | t1 LABEL **k=1: 1,616 s, 43.8 M work, earliest = 9** (no win by T8: the ladder refutes every horizon) | 2.8 s of 3,600 s (0.08%) |
+| 900981 gi231 (4.0 h, cut, 376 M) | 28 min solo inside t2 LABEL k=0 | 3 walks |
+| 900448 gi198 (4.0 h, cut, 10.3 M) | 1 h solo inside t1 LABEL k=0; perf: 79.5% `BpEnumEntryFor`, half of it the canon front (`BpUnbranchedCanon`) | 3.4% (153 k walks, **0 wins**) |
+| 900123 gi123 (51 min, 102 M) | t2 LABEL k=0: 667 s, 15.6 M work, earliest = 7 | 6.0% (347 k walks, 30 wins) |
+| 902370 gi120 (53 min, 1.8 M) | 425 s solo; t3 LABEL 418 s | 7.6% (30.7 k walks, 674 wins) |
+| 902190 gi190 (46 min, 9.6 M) | 402 s solo; t2 LABEL 225 s | 0.1% |
+
+* **The mechanism is the unbounded label search** (`EnumerateEarliestWins`, K = 3 reshuffles, the horizon ladder) on
+  early-turn positions whose reshuffled future wins LATE or NEVER: earliest = 7..9 means every horizon up to T8 is refuted
+  exhaustively. Its time is `FSLineWin`/`FSLineTail`, breakpoint continuation derivations (20-80%), the subset odometer and
+  mana payability (perf: `perf_900887_children.txt`, `perf_900448_children.txt`). The label budget
+  (`MTG_VALUE_LABEL_BUDGET_MS` = 1e6 virtual ms = 9e8 units) never binds: 43.8 M units is 5% of it.
+* **The batch multiplies wall by ~7x at identical units**: 902370 3,168 s vs 425 s solo, 902190 2,754 s vs 402 s (32
+  workers on 32 hardware threads, and the plan pool shared 3.2 GB / 32: 902370 at a 100 MB pool,
+  `MTG_PLAN_CACHE_KB=102400`, was still inside t3 LABEL at 13 min).
+* So the loops that run for hours are `FSLineWin`'s, not the route's. Note for the wall-cap work (aa-wallcap): the abandon
+  flag reaches the label search only through `SearchBudget::Overrun()`; 900459 overran the 4 h cap by 2,343 s.
+* Nothing nests: the offer refuses inside a walk (`t_in_route`; 309,755 such refusals in the gen list run), derivations
+  never nest (depth 1 only, `MTG_BP_DERIVE_STATS`), and the 128-apply cap is per walk (one `Walk` per `WalkPass`; a trial is
+  one pass with `MTG_AA_ROUTE_MAIN_FIRST` off), never multiplied.
+
+### 2. Where the walk IS the cost (the gen setting, d1 b1) -- why a "mechanical" route costs that much
+
+The gen's 59 slowest keep-rollouts + 300 ordinary ones (`MTG_KEEP_REPLAY_LIST`, HEAD play): 903.6 s, of which **the walk is
+813.7 s (90%)**. The walk is not mechanical: it is a bounded DFS (6 links, 3 loop + 6 setup children per node, 32 nodes, 128
+applies) over the engine's whole plan menu, and that menu holds each breakpoint-opening cast about SEVEN times --
+
+* base, `bp_choice` 0, 1, the EMPTY arm (`kBpEmptyChoice`, identical to the base inside the walk), a second 0 / 1 pair and
+  the chain slot (`kBpChainChoice`, which resolved to the same continuation as 0) -- each with and without the land drop
+  (trace `tr/g2b.err`, `MTG_AA_ROUTE_TRACE=2`: 14 applies of "cast: Ezuri" for 4 distinct boards);
+* every variant apply derives the WHOLE continuation list at its breakpoint from the UNRESTRICTED menu (the route menu
+  filter covers only the walk's own enumeration) -- every affordable hand subset after a lifegain, up to 62,724 plans --
+  to read entry 0 or 1, i.e. "this cast, then the search's k-th best general continuation" as ONE macro link;
+* 74% of applies land on a board a sibling already produced (1.64 M of 2.22 M), 77% of applies are variants;
+* most walks FAIL (the rule table fires aggressively; 31% win here, 0-2% inside label searches) and a failing walk runs to
+  its bounds: 38% of walks use 65+ applies, 3,275 hit 128, 7,063 hit 32 nodes; 193 walks took 1-10 s each.
+
+| link | nodes | applies / node | new children / node |
+|---|---|---|---|
+| 0 | 42,339 | 10.3 | 3.4 |
+| 1 | 139,340 | 5.4 | 1.3 |
+| 2 | 172,372 | 3.2 | 0.82 |
+| 3 | 136,485 | 2.4 | 0.56 |
+| 4 | 73,878 | 1.8 | 0.39 |
+| 5 | 27,731 | 1.4 | 0.39 |
+
+14 nodes and 53 applies per walk on average; the fan-out is at links 0-1, and it is the variants and their duplicates.
+36-43% of walks are on a board already walked in the same game up to the library ORDER (label reshuffles, search
+shuffles); the verdict differs on 0.3-0.4% of those, so a library-blind memo would be lossy (not built).
+
+### 3. What landed: two SOUND collapses of the walk, DEFAULT ON (heurarm slots; `=0` restores)
+
+* **`MTG_AA_ROUTE_TT`** -- a walk-wide transposition fold: a child board (the route memo's exact `Fingerprint`) whose subtree
+  already FAILED COMPLETELY in this walk with at least as many links left is not walked again. Proof (in the code): a
+  subtree is a function of the board and the links left; a recorded failure finished with both bounds unspent, so it was
+  exhaustive, and fewer links explore a subset.
+* **`MTG_AA_ROUTE_LEAF_KILL`** -- at the link bound the walk still tries the kill fold's own kill plans, free of the node /
+  apply bounds (a variant packs "loop, then the kill" into one link; a walk that took the loop as its sixth link could not
+  take the kill). Proof: it runs only where the walk used to return 0, spends nothing, and changes nothing unless it wins.
+* Both can only ADD a proven route, never remove one. **Measured, `MTG_AA_ROUTE_VERIFY_SOUND=1`** (every walk walked again
+  with both off): d3 b10 and d5 b20, 100 games each, 26,925 walks -- **old only 0**, new only 51; applies -3%.
+* **Gen setting** (same 360 rollouts): **903.6 s -> 541.2 s (0.60x)**; the 59 slowest 799.7 s -> 453.5 s (max 527.9 s ->
+  212.9 s), the 300 ordinary 0.84x; win turn 2 faster / 0 slower. The fold skipped 64,556 transposed failed boards; 261
+  leaf kills won. The d1/b1 battery play digest is unchanged (2b5092fdcc42af58).
+* **Held-out A/B** (seed 260001, 400 games per cell, ONE pooled batch of 2,400 with the `bo` arm below, 5 threads):
+  d3 b10 4.9300 = 4.9300 (0 / 0), d5 b20 4.9125 = 4.9125 (0 / 0); 30 of 32 job digests byte-identical (2 differ in units
+  only); wall 1.01x. The suite cells barely meet the fold (walks are small there).
+* **Phase A** (902370): 5:51 vs 5:57, identical play and units -- as section 1 says, the route is not where that time is.
+* **Smoke** (4 threads): 135 / 136, **every non-alchemist row byte-identical**; alchemist d3 / d5 / 2HG byte-identical;
+  **alchemist d0 6.3310 -> 6.3250 (3624703b1738e51b): 3 faster (gi139 unwon -> 8, gi685 unwon -> 5, gi755 8 -> 7), 0
+  slower**, gi478 play-changed at the same turn. **Regression** (`--deck=alchemist`): d3 s3003 and both d5 byte-identical;
+  d0 s2002 6.3470 -> 6.3450 (adb9f46f2284e3e1; gi102 8 -> 6); **d3 s2002 4.9133 -> 4.9200 (4333b4914597b227; gi102 5 -> 6,
+  the one slower game)** -- a T2 valuation shift at b10 (Elvish Harbinger fetches the Alchemist to the top instead of
+  nothing); **at 10x (b100) both arms T5, at d8 b0 both arms T5: it recovers.** GT not accepted (not on this branch).
+* mtg-test 1631 / 1631; scenarios 246 / 246; combo-off fixtures 50 / 50 (also with `MTG_AA_ROUTE_BASE_ONLY=1`).
+
+### 4. The near-linear walk -- `MTG_AA_ROUTE_BASE_ONLY` (exists, DEFAULT OFF) -- for the USER
+
+The walk without breakpoint variants is the structural "near-linear, not a search" shape: each link is one engine plan, a
+continuation is the next link, and the walk derives NO continuation list. On HEAD play (+ the two collapses):
+
+* **Shape** (d3 b10, 100 games): applies 411,758 -> 137,695 (38 -> 13.5 per walk, max 72, never the 128 cap), duplicate applies 71% -> 14%, walk time 0.53x. **Gen setting: 903.6 s -> 95.7 s (0.106x); the 59 slowest 799.7 s
+  -> 38.8 s (0.048x, max 527.9 s -> 5.2 s)**, the 300 ordinary 0.55x; win turn 7 faster / 4 slower of 359.
+* **Held-out A/B** (same batch): d3 b10 4.9300 = 4.9300 (1 faster / 1 slower), d5 b20 4.9125 = 4.9125 (0 / 0); wall
+  0.87x / 0.93x.
+* **Not the same kills** (`MTG_AA_ROUTE_BASE_ONLY_VERIFY=2`, d3 b10, both walks with the collapses): both win 5,838,
+  both no 3,894, **full only 51 (0.5%)**, base only 697 (6.7%). What the full-only routes need is the macro link's access
+  to the FULL menu: "Feed the Clan x2 + Nourish, then [Stroke of Genius at ourselves for cards, Living Wish]" -> Crab Umbra
+  -> loop -> Wish -> Scholar -> drain; "Brindle Boar sac, then [Staff: untap Arbor Elf x3, ...]". A raised link bound
+  (8) with the leaf kill closed only 69 -> 58 of them: the gap is menu access, not depth.
+* **A phase-A CAVEAT that argues against the everywhere form:** 902370 with `BASE_ONLY` spent **> 16.5 min in t3 LABEL
+  k=0 alone vs 315 s** with the full walk (the label search's derivations grow when the walk misses the routes it used to
+  prove; see the rerun note below). `MTG_AA_ROUTE_BASE_ONLY_PLAYOUT` (the narrowing only where `greedywindow::t_depth == 0`)
+  leaves the label search's walks alone: 902370 5:09, the same label work (1,197,821 units at t3 k=0).
+
+**For the USER (nothing adopted; both stay OFF):** the route can be made near-linear only by giving up the macro links,
+which is a narrowing (0.5% of walks lose their route, 6.7% gain one; the search still finds every such line itself at a
+large budget, since the route only ADDS a candidate). Measured choice: `BASE_ONLY_PLAYOUT` cuts the generation's tail
+10-20x and does not touch the label search; `BASE_ONLY` everywhere is quality-neutral at the suite cells but slowed one
+phase-A label search 3x+. Recommendation: `BASE_ONLY_PLAYOUT` if the USER wants the walk near-linear; neither changes the
+phase-A tail, which is the label search's refutation cost (section 1).
+
+**Diagnostics added (count/print-only):** `MTG_AA_ROUTE_STATS` now also prints the walk's shape (nodes, menus,
+branching by link, applies / wall per walk, caps, nesting, transposition and library-blind repeats; `[aa-route-shape]`) and,
+with `MTG_DECISION_PROGRESS`, a cumulative route/derivation line on every `[dprog]` line, plus a per-K label line;
+`MTG_AA_ROUTE_STATS_EVERY_S=<s>` a watchdog heartbeat (the only view into a decision that runs for hours);
+`MTG_AA_ROUTE_SLOW_MS=<ms>` one line per slow walk; `MTG_AA_ROUTE_TRACE=1` now marks each apply NEW / DUP / STILL with its
+`bp_choice` (=2: the variant's resolved continuation); `MTG_AA_ROUTE_BASE_ONLY_VERIFY=2` prints the full-only routes;
+`MTG_AA_ROUTE_VERIFY_SOUND=1` the collapse tally; `MTG_BP_DERIVE_STATS` the derivation nesting depth.

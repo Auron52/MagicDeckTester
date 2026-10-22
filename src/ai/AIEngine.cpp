@@ -53,6 +53,7 @@
 // Cost when off: one cached `static const bool` test per top-level decision (a handful per turn),
 // nothing on any inner loop. Play is byte-identical -- this only reads counters and prints.
 static const bool s_decision_progress = EnvOn("MTG_DECISION_PROGRESS");
+std::string AlchemistComboRouteStatsBrief();   // DecisionProviders.cpp (MTG_AA_ROUTE_STATS; "" when off)
 
 // ---- WHAT DOES LONDON BOTTOMING ACTUALLY COST? (MTG_ROLLOUT_STATS; counters only) -------------
 //
@@ -629,10 +630,19 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         // report.earliest alone, eval rows read every candidate. With BOTH dumps on, the eval rows
         // win and we pay the unpruned price -- a bounded candidate silently mislabels its row.
         const bool earliest_only = s_value_label_bnb && s_value_rows_path && !s_eval_rows_path;
+        const auto k_t0 = s_decision_progress ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        const long long k_w0 = gamework::t_used;
         const TurnSolver::EarliestWinReport rep =
             TurnSolver::EnumerateEarliestWins(s, max_turns, second_main, s_eval_rows_rollout,
                                               s_eval_rollout_depth, s_eval_rows_honest,
                                               earliest_only);
+        if (s_decision_progress)
+        {
+            std::fprintf(stderr, "[dprog] t%d LABEL k=%d ms=%.0f work=%lld earliest=%d truncated=%d %s\n", state.turn_number, k,
+                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - k_t0).count(),
+                         gamework::t_used - k_w0, rep.earliest, rep.truncated ? 1 : 0, AlchemistComboRouteStatsBrief().c_str());
+            std::fflush(stderr);
+        }
         // TRUNCATED => DISCARD, never salvage. A budget-cut search reports max_turns+1, which is
         // byte-identical to "this position is unwinnable" -- so keeping the number would teach the
         // model that a position we could not AFFORD to solve is a position we cannot WIN from, and
@@ -2875,11 +2885,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         EmitEvalRows(state, m_max_turns, m_search_post_combat);
         if (s_decision_progress)
         {
-            std::fprintf(stderr, "[dprog] t%d LABEL ms=%.0f work=%lld game_work=%lld\n",
+            std::fprintf(stderr, "[dprog] t%d LABEL ms=%.0f work=%lld game_work=%lld %s\n",
                          state.turn_number,
                          std::chrono::duration<double, std::milli>(
                              std::chrono::steady_clock::now() - lp_t0).count(),
-                         gamework::t_used - lp_work0, gamework::t_used);
+                         gamework::t_used - lp_work0, gamework::t_used, AlchemistComboRouteStatsBrief().c_str());
             std::fflush(stderr);
         }
     }
@@ -4088,10 +4098,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                    : m_in_rollout ? "roll"
                                                   : "real";
                 std::fprintf(stderr,
-                             "[dprog] %s t%d %s ms=%.0f units=%lld work=%lld game_work=%lld\n",
+                             "[dprog] %s t%d %s ms=%.0f units=%lld work=%lld game_work=%lld %s\n",
                              dp_tag, state.turn_number, is_pre_combat_main ? "pre " : "post",
                              dp_ms, static_cast<long long>(budget.Used()),
-                             gamework::t_used - dp_work0, gamework::t_used);
+                             gamework::t_used - dp_work0, gamework::t_used, AlchemistComboRouteStatsBrief().c_str());
                 std::fflush(stderr);
             }
             // Committed-depth telemetry (MTG_ROLLOUT_STATS): what iterative deepening actually

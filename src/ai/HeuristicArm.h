@@ -641,6 +641,8 @@ enum Slot : int
     AA_CAST_ORDER_WISH_AFTER_LIFE, // MTG_AA_CAST_ORDER_WISH_AFTER_LIFE amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): Living Wish moves AFTER the lifegain block (Nourish, Feed the Clan, Trufflesnout, Brindle Boar)
     AA_CAST_ORDER_LIFE_FIRST,   // MTG_AA_CAST_ORDER_LIFE_FIRST  amendment arm of MTG_AA_CAST_ORDER (DEFAULT OFF, measurement only; inert unless that order is on): the lifegain block moves right after the land Auras, then Living Wish, then Harbinger / Arbor Elf / the Alchemist / Ezuri / Scholar (an Alchemist in play taps for the life gained THIS turn, so a cast ahead of the first lifegain spends the lands it needs)
     AA_ROUTE_KEY_GY_NAMES,    // MTG_AA_ROUTE_KEY_GY_NAMES  AccomplishedAlchemist COMBO OFF route memo key: the graveyard by card NAME, not card number -- a spell resolved inside the search reaches the graveyard numbered 0, so a route proven on a searched board missed the memo on the identical live board and the apply's own bounded walk could not re-find it (a committed proven route played as a no-op). DEFAULT ON (a key fix; the apply still verifies every path by replay); =0 -> the old key
+    AA_ROUTE_TT,              // MTG_AA_ROUTE_TT  AccomplishedAlchemist COMBO OFF walk: a walk-wide TRANSPOSITION fold -- a child board (the route memo's exact Fingerprint) whose subtree already FAILED completely in this walk with at least as many links left is not re-explored (a board re-reached by another link order cannot win with fewer links; the bounds were not hit, so the earlier exploration was exhaustive). Sound: every route the walk found is still found (the freed applies only reach more boards). DEFAULT ON; =0 -> re-explore
+    AA_ROUTE_LEAF_KILL,       // MTG_AA_ROUTE_LEAF_KILL  AccomplishedAlchemist COMBO OFF walk: at the LINK bound, still try the kill fold's own kill plans (UntapLoopKillPlans), free of the node / apply bounds -- every node the walk explored before is explored identically, so the verdict can only gain a win (a 6-link setup whose 7th link is the Stroke). DEFAULT ON; =0 -> stop at the bound
     COUNT
 };
 
@@ -1232,6 +1234,8 @@ inline const char* Name(int slot)
         "MTG_AA_CAST_ORDER_WISH_AFTER_LIFE",
         "MTG_AA_CAST_ORDER_LIFE_FIRST",
         "MTG_AA_ROUTE_KEY_GY_NAMES",
+        "MTG_AA_ROUTE_TT",
+        "MTG_AA_ROUTE_LEAF_KILL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

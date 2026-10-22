@@ -18,6 +18,7 @@
 #include <mutex>
 #include <set>         // MTG_TUTOR_RANK_DUMP situation dedupe (diagnostic only)
 #include <chrono>
+#include <thread>
 #include <unordered_map>  // ProvenWinlessThisTurn's per-definition pool memo
 #include "DecisionProviders.h"
 
@@ -28,6 +29,7 @@
 #include "PlanContext.h"            // CurrentPlanContext / PlanContextRest
 #include "EngineFlags.h"            // TutorAxisResolveEnabled (capacity-anchored deploy read)
 #include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
+#include "GameWorkMeter.h"          // gamework::t_used (MTG_AA_ROUTE_STATS: the work a route walk runs)
 
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
 // the search-narrowing heuristics return their MAXIMALLY-PERMISSIVE value so the general
@@ -44686,10 +44688,15 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
 //           Wish), fewest actions first -- the untapper cast this link is activatable on the next.
 // A bounded DFS (kLinks deep, kNodes applies), memoised per decision on the full board. Inside it the
 // loop funds MAIN-PHASE kills only (g_untap_loop_no_pump): a combat kill cannot be proved before combat.
+// MTG_BP_DERIVE_STATS's per-THREAD running totals (TurnSolver.cpp; all zero unless that flag is on): continuation
+// derivations, their plans, their wall, and the largest list -- read around each route walk (MTG_AA_ROUTE_STATS).
+void BpDeriveThreadCounters(std::uint64_t* n, std::uint64_t* plans, std::uint64_t* us, std::uint64_t* max_list);
+void BpDeriveGlobalCounters(int ctx, std::uint64_t* n, std::uint64_t* plans, std::uint64_t* us);
 namespace aaroute
 {
 inline thread_local int t_in_route = 0;
 struct Guard { Guard() { ++t_in_route; } ~Guard() { --t_in_route; } };
+inline std::atomic<std::uint64_t> g_route_depth_max{0};   // MTG_AA_ROUTE_STATS: deepest t_in_route seen
 
 // THE WALK'S TWO PASSES (MTG_AA_ROUTE_MAIN_FIRST, heurarm AA_ROUTE_MAIN_FIRST, DEFAULT OFF -- see the end). With the combat
 // finishers on, the walk first runs its MAIN-PHASE pass -- the walk MTG_AA_COMBO_COMBAT=0 runs, exactly: no pump
@@ -44777,6 +44784,7 @@ inline std::atomic<std::uint64_t> g_ap_calls[4]{}, g_ap_noroute[4]{}, g_ap_probe
                                   g_ap_live_fail[4]{}, g_ap_proven_used[4]{}, g_ap_tape_unclean[4]{},
                                   g_ap_noroute_combined[4]{}, g_ap_noroute_land[4]{};
 inline thread_local int t_apply_other_actions = 0;   // set by the rollout's trailing pass (stats only)
+inline void StatsShapeDump();   // the walk's SHAPE (defined with its counters, below)
 struct StatsDumper
 {
     ~StatsDumper()
@@ -44796,6 +44804,7 @@ struct StatsDumper
                      (unsigned long long)g_walks_dt[2].load(), g_walk_us_dt[2].load() / 1000.0,
                      (unsigned long long)g_walks_dt[3].load(), g_walk_us_dt[3].load() / 1000.0,
                      (unsigned long long)g_cut_walks.load());
+        StatsShapeDump();
         for (int a = 0; a < 4; ++a)
         {
             if (g_ap_calls[a].load() == 0) { continue; }
@@ -44819,6 +44828,58 @@ constexpr int kLoopWidth  = 3;
 constexpr int kSetupWidth = 6;
 constexpr int kNodes      = 32;  // DISTINCT children per walk -- SAFETY bound, the common walk is 2-4
 constexpr int kApplies    = 128; // every apply, duplicates included -- the hard cost bound
+
+// THE WALK'S SHAPE (MTG_AA_ROUTE_STATS, count-only; 2026-10-21 aa-walkroot -- "why does a mechanical route take
+// hours"): per enumerating node the menu it saw and the children it made, per walk its applies, wall, and the
+// continuation derivations its applies ran (TurnSolver's per-thread counters), and the library-blind repeat rate
+// (a walk on a board walked before in this game but for the library order). Printed at exit and, cumulative, on
+// every MTG_DECISION_PROGRESS line (AlchemistComboRouteStatsBrief), so a decision's share is a difference.
+inline std::atomic<std::uint64_t> g_nodes{0}, g_kill_nodes{0}, g_menu_plans{0}, g_menu_var{0}, g_cand_loop{0},
+                                  g_cand_setup{0}, g_child_applies{0}, g_child_moved{0}, g_child_dup{0},
+                                  g_child_new{0}, g_cap_applies{0}, g_cap_nodes{0}, g_offer_nested{0};
+inline std::atomic<std::uint64_t> g_nodes_link[kLinks + 1]{}, g_new_link[kLinks + 1]{}, g_applies_link[kLinks + 1]{};
+inline std::atomic<std::uint64_t> g_leaf_kill_tries{0}, g_leaf_kill_wins{0}, g_tt_would_skip{0}, g_tt_would_skip_applies{0};
+inline std::atomic<std::uint64_t> g_walk_app_hist[6]{}, g_walk_us_hist[6]{};
+inline std::atomic<std::uint64_t> g_walk_max_us{0}, g_walk_max_applies{0}, g_walk_derivs{0}, g_walk_dplans{0},
+                                  g_walk_dus{0}, g_walk_work{0}, g_walk_max_dplans{0};
+inline std::atomic<std::uint64_t> g_blind_rep_same{0}, g_blind_rep_diff{0}, g_blind_new{0};
+inline thread_local std::unordered_map<std::uint64_t, int> t_blind_seen;   // library-blind key -> verdict (per game)
+inline void AtomicMax(std::atomic<std::uint64_t>& a, std::uint64_t v)
+{
+    std::uint64_t m = a.load(std::memory_order_relaxed);
+    while (v > m && !a.compare_exchange_weak(m, v, std::memory_order_relaxed)) {}
+}
+inline int Bucket6(std::uint64_t v, std::uint64_t b0, std::uint64_t b1, std::uint64_t b2, std::uint64_t b3, std::uint64_t b4)
+{
+    return v < b0 ? 0 : v < b1 ? 1 : v < b2 ? 2 : v < b3 ? 3 : v < b4 ? 4 : 5;
+}
+inline void StatsShapeDump()
+{
+    auto L = [](const std::atomic<std::uint64_t>& a) { return (unsigned long long)a.load(); };
+    std::fprintf(stderr, "[aa-route-shape] nodes %llu (kill nodes %llu) menu plans %llu (variants %llu) loop cands %llu setup cands"
+                 " %llu | child applies %llu moved %llu dup %llu new %llu | walks capped at %d applies %llu, at %d nodes %llu |"
+                 " offers inside a walk %llu, deepest route nesting %llu\n",
+                 L(g_nodes), L(g_kill_nodes), L(g_menu_plans), L(g_menu_var), L(g_cand_loop), L(g_cand_setup),
+                 L(g_child_applies), L(g_child_moved), L(g_child_dup), L(g_child_new), kApplies, L(g_cap_applies), kNodes,
+                 L(g_cap_nodes), L(g_offer_nested), L(g_route_depth_max));
+    std::fprintf(stderr, "[aa-route-shape] by link (nodes / applies / new children):");
+    for (int i = 0; i <= kLinks; ++i)
+    {
+        if (L(g_nodes_link[i]) == 0 && L(g_applies_link[i]) == 0) { continue; }
+        std::fprintf(stderr, " L%d %llu/%llu/%llu", i, L(g_nodes_link[i]), L(g_applies_link[i]), L(g_new_link[i]));
+    }
+    std::fprintf(stderr, " | leaf kills tried %llu won %llu | transposed failed boards re-entered %llu (their subtree applies %llu)",
+                 L(g_leaf_kill_tries), L(g_leaf_kill_wins), L(g_tt_would_skip), L(g_tt_would_skip_applies));
+    std::fprintf(stderr, "\n[aa-route-shape] applies per walk: 0 %llu | 1-4 %llu | 5-16 %llu | 17-64 %llu | 65-127 %llu | 128 %llu ;"
+                 " wall per walk: <1ms %llu | <10ms %llu | <100ms %llu | <1s %llu | <10s %llu | >=10s %llu ; max %.1f ms, max applies %llu\n",
+                 L(g_walk_app_hist[0]), L(g_walk_app_hist[1]), L(g_walk_app_hist[2]), L(g_walk_app_hist[3]), L(g_walk_app_hist[4]),
+                 L(g_walk_app_hist[5]), L(g_walk_us_hist[0]), L(g_walk_us_hist[1]), L(g_walk_us_hist[2]), L(g_walk_us_hist[3]),
+                 L(g_walk_us_hist[4]), L(g_walk_us_hist[5]), g_walk_max_us.load() / 1000.0, L(g_walk_max_applies));
+    std::fprintf(stderr, "[aa-route-shape] inside walks: derivations %llu plans %llu (max per walk %llu) derive_ms %.1f work %llu |"
+                 " library-blind repeats: new %llu, repeat same verdict %llu, repeat other verdict %llu\n",
+                 L(g_walk_derivs), L(g_walk_dplans), L(g_walk_max_dplans), g_walk_dus.load() / 1000.0, L(g_walk_work),
+                 L(g_blind_new), L(g_blind_rep_same), L(g_blind_rep_diff));
+}
 
 // One link: an engine plan, optionally preceded by tapping a mana_per_life_gained creature for ONE colour
 // (see PreTapColour -- the route's own mana-payment choice, the standing exemption).
@@ -44855,6 +44916,12 @@ struct Walk
 {
     int nodes_left   = kNodes;
     int applies_left = kApplies;
+    int links_total  = kLinks;    // the link bound this walk started with
+    bool leaf_kill   = false;     // MTG_AA_ROUTE_LEAF_KILL: at the link bound, still try the kill fold (free)
+    bool tt          = false;     // MTG_AA_ROUTE_TT: skip a child board whose subtree already failed (see TtOn)
+    // Exact boards (the route memo's Fingerprint) whose subtree FAILED COMPLETELY in this walk, with the links it had
+    // (MTG_AA_ROUTE_TT; also filled for the MTG_AA_ROUTE_STATS census with the fold off).
+    std::unordered_map<std::uint64_t, int> failed_exact;
     std::vector<Link> path;   // the links, as the PLANS themselves (see Replay)
     int applies = 0;
     // THE PER-APPLY PRICE (MTG_AA_ROUTE_NODE_UNITS; see NodeUnits). `budget` is the decision's
@@ -44928,7 +44995,49 @@ inline bool BaseOnlyOn()
 // two verdicts are tallied -- the measurement of how often dropping the variants changes what the walk
 // can prove (win vs no win), which is the whole quality question for the lever.
 inline bool BaseOnlyVerifyOn() { static const bool v = EnvOn("MTG_AA_ROUTE_BASE_ONLY_VERIFY"); return v; }
+// TWO SOUND COLLAPSES OF THE WALK (2026-10-21 aa-walkroot, "why does a mechanical route take hours"; both heurarm slots,
+// DEFAULT ON). Each can only ADD a proven route on a given board, never remove one -- see the proofs at their uses in
+// Dfs -- so they are identity folds of wasted work (CLAUDE.md, COLLAPSE WASTED SEARCH), not narrowings.
+//   MTG_AA_ROUTE_TT        the walk-wide transposition fold: a child board whose subtree already failed COMPLETELY in this
+//                          walk with at least as many links left is not walked again.
+//   MTG_AA_ROUTE_LEAF_KILL the free kill at the link bound: a node with no links left still tries the kill fold's own kill
+//                          plans, outside the node / apply bounds (a breakpoint variant packs "loop, then the kill" into one
+//                          link; a walk that took the loop as its own sixth link could not take the kill).
+inline bool TtOn()
+{
+    static const bool env = EnvOn("MTG_AA_ROUTE_TT", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::AA_ROUTE_TT, env);
+}
+inline bool LeafKillOn()
+{
+    static const bool env = EnvOn("MTG_AA_ROUTE_LEAF_KILL", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::AA_ROUTE_LEAF_KILL, env);
+}
+inline void ConfigureWalk(Walk& w)
+{
+    w.links_total = kLinks;
+    w.leaf_kill   = LeafKillOn();
+    w.tt          = TtOn();
+}
 inline std::atomic<std::uint64_t> g_bov[4]{}, g_bov_applies[2]{}, g_bov_us[2]{};   // [full,base]
+// MTG_AA_ROUTE_VERIFY_SOUND=1 (DIAGNOSTIC; the extra walk warms caches, so play may move): every trial walk is walked a
+// SECOND time with the two sound collapses OFF (MTG_AA_ROUTE_TT, MTG_AA_ROUTE_LEAF_KILL) and the verdicts tallied. The
+// proofs say "old only" is 0 -- this is the check that they hold on real boards.
+inline bool VerifySoundOn() { static const bool v = EnvOn("MTG_AA_ROUTE_VERIFY_SOUND"); return v; }
+inline std::atomic<std::uint64_t> g_vs[4]{}, g_vs_applies[2]{};   // both win / both no / new only / old only ; [new, old]
+struct VsDumper
+{
+    ~VsDumper()
+    {
+        if (!VerifySoundOn()) { return; }
+        std::fprintf(stderr, "[aa-route-verify-sound] collapses on vs off: both win %llu | both no %llu | new only %llu |"
+                     " OLD ONLY %llu ; applies new %llu old %llu\n",
+                     (unsigned long long)g_vs[0].load(), (unsigned long long)g_vs[1].load(),
+                     (unsigned long long)g_vs[2].load(), (unsigned long long)g_vs[3].load(),
+                     (unsigned long long)g_vs_applies[0].load(), (unsigned long long)g_vs_applies[1].load());
+    }
+};
+inline VsDumper g_vs_dumper;
 struct BovDumper
 {
     ~BovDumper()
@@ -45197,6 +45306,37 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
 {
     // A combat-lethal ROOT is not a route (nothing for the route to play): only a link can make the verdict.
     if (OpponentHasLost(s) || (!w.path.empty() && RouteWon(s, me))) { return 1; }
+    if (links_left <= 0 && w.leaf_kill && !w.cut)
+    {
+        // THE FREE KILL AT THE BOUND (MTG_AA_ROUTE_LEAF_KILL). PROOF that it can only add a route: it runs only where the
+        // walk used to return 0 at once (no links left), it spends none of the node / apply bounds and leaves `s` and
+        // the path untouched unless a kill lands, so every node the walk explored before is explored identically and in
+        // the same order; the only change is that such a leaf may now end the walk with a WIN. The kill plans are the
+        // kill fold's own list (TurnSolver::UntapLoopKillPlans), the list the walk already tries at any node with links.
+        std::vector<TurnSolver::Plan> lk = TurnSolver::UntapLoopKillPlans(s, /*is_pre_combat=*/true);
+        const int n = std::min<int>(kKillWidth, static_cast<int>(lk.size()));
+        for (int i = 0; i < n; ++i)
+        {
+            if (StatsOn()) { g_leaf_kill_tries.fetch_add(1, std::memory_order_relaxed); }
+            GameState child = s;
+            Link rec_link{ lk[static_cast<std::size_t>(i)], 0, -1 };
+            {
+                rec_link.taped = TapeOn();
+                TurnSolver::RouteTapeScope _tape(rec_link.taped ? 1 : 0, &rec_link.bps, &rec_link.tutors);
+                TurnSolver::ApplyPlan(child, lk[static_cast<std::size_t>(i)], /*is_pre_combat=*/true);
+            }
+            ++w.applies;
+            if (OpponentHasLost(child) || RouteWon(child, me))
+            {
+                if (StatsOn()) { g_leaf_kill_wins.fetch_add(1, std::memory_order_relaxed); }
+                if (TraceOn()) { rec_link.proof_board = BoardText(child, me); }
+                w.path.push_back(std::move(rec_link));
+                s = std::move(child);
+                return 1;
+            }
+        }
+        return 0;
+    }
     if (links_left <= 0 || w.nodes_left <= 0 || w.applies_left <= 0) { return 0; }
     // THE PRICE'S CUT, before this node's enumerations too (they are most of a node's cost when nothing
     // is cached): a spent budget stops the walk here. Inert with the price off or no budget.
@@ -45216,12 +45356,13 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
         for (const Card& c : s.players[me].hand) { hd += c.m_name.str() + ","; }
         const UntapLoopNeed nd = ComputeUntapLoopNeed(s, me);
         std::fprintf(stderr, "[aa-route] t%d NODE link%d bf=[%s] hand=[%s] float=%d gained=%d opp=%d need{pay=%d mv=%d n=%d} kills=%zu\n",
-                     s.turn_number, kLinks - links_left, bf.c_str(), hd.c_str(), (int)s.floating_mana.Total(),
+                     s.turn_number, w.links_total - links_left, bf.c_str(), hd.c_str(), (int)s.floating_mana.Total(),
                      s.players[me].life_gained_this_turn, s.players[1 - me].life, nd.payoff, nd.cost.ManaValue(),
                      nd.count, kills.size());
     }
     if (!kills.empty())
     {
+        if (StatsOn()) { g_kill_nodes.fetch_add(1, std::memory_order_relaxed); }
         const int n = std::min<int>(kKillWidth, static_cast<int>(kills.size()));
         for (int i = 0; i < n && w.nodes_left > 0 && w.applies_left > 0; ++i)
         {
@@ -45237,7 +45378,7 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             if (TraceOn())
             {
                 std::fprintf(stderr, "[aa-route] t%d link%d KILL #%d %s -> opp life %d lib %zu lost=%d\n",
-                             s.turn_number, kLinks - links_left, i,
+                             s.turn_number, w.links_total - links_left, i,
                              TurnSolver::PlanLineSummary(kills[static_cast<std::size_t>(i)], s).c_str(),
                              child.players[1 - me].life, child.players[1 - me].library.size(),
                              OpponentHasLost(child) ? 1 : 0);
@@ -45343,6 +45484,18 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
     { cand.push_back(loops[k]); cand_is_loop.push_back(1); }
     for (std::size_t k = 0; k < setups.size() && k < static_cast<std::size_t>(kSetupWidth) * 4; ++k)
     { cand.push_back(setups[k]); cand_is_loop.push_back(0); }
+    const int stat_link = std::max(0, std::min(kLinks, w.links_total - links_left));
+    if (StatsOn())
+    {
+        g_nodes.fetch_add(1, std::memory_order_relaxed);
+        g_nodes_link[stat_link].fetch_add(1, std::memory_order_relaxed);
+        g_menu_plans.fetch_add(plans.size(), std::memory_order_relaxed);
+        std::uint64_t nv = 0;
+        for (const TurnSolver::Plan& p : plans) { if (p.bp_choice >= 0) { ++nv; } }
+        g_menu_var.fetch_add(nv, std::memory_order_relaxed);
+        g_cand_loop.fetch_add(loops.size(), std::memory_order_relaxed);
+        g_cand_setup.fetch_add(setups.size(), std::memory_order_relaxed);
+    }
     // WIDTH counts links that MOVED the board: an apply that changes nothing (a loop offered on life the plan
     // does not gain, a cast the payment drops) is not a branch, it only spends the node bound.
     int tried_loop = 0, tried_setup = 0;
@@ -45375,19 +45528,47 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             }
             --w.applies_left; ++w.applies;
             if (StatsOn() && plan.bp_choice >= 0) { g_applies_var.fetch_add(1, std::memory_order_relaxed); }
+            if (StatsOn())
+            {
+                g_child_applies.fetch_add(1, std::memory_order_relaxed);
+                g_applies_link[stat_link].fetch_add(1, std::memory_order_relaxed);
+            }
             if (TraceOn())
             {
                 const ManaPool& f = child.floating_mana;
-                std::fprintf(stderr, "[aa-route] t%d link%d %s #%d%s %s -> float %d (W%d U%d B%d R%d G%d C%d *%d) life_gained %d need %d\n",
-                             s.turn_number, kLinks - links_left, is_loop ? "LOOP" : "SETUP", idx,
+                std::fprintf(stderr, "[aa-route] t%d link%d %s #%d%s %s -> float %d (W%d U%d B%d R%d G%d C%d *%d) life_gained %d need %d"
+                             " | bp=%d at=%d tut=%d land_slot=%d ck=%016llx%s\n",
+                             s.turn_number, w.links_total - links_left, is_loop ? "LOOP" : "SETUP", idx,
                              variant == 0 ? " (pre-tap)" : "", TurnSolver::PlanLineSummary(plan, s).c_str(),
                              (int)f.Total(), f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
-                             child.players[me].life_gained_this_turn, ComputeUntapLoopNeed(child, me).payoff);
+                             child.players[me].life_gained_this_turn, ComputeUntapLoopNeed(child, me).payoff,
+                             plan.bp_choice, plan.bp_at, plan.tutor_choice, (int)plan.land_slot,
+                             (unsigned long long)ChildKey(child, me),
+                             !Moved(s, child, me) ? " STILL"
+                             : (std::find(seen_children.begin(), seen_children.end(), ChildKey(child, me)) != seen_children.end() ? " DUP" : " NEW"));
+                if (TraceBoardOn())
+                {
+                    for (std::size_t q = 0; q < rec_link.bps.outs.size(); ++q)
+                    {
+                        std::fprintf(stderr, "[aa-route]      bp site %d by_plan %d -> %s\n", (int)rec_link.bps.site[q],
+                                     (int)rec_link.bps.by_plan[q], TurnSolver::PlanLineSummary(rec_link.bps.outs[q], s).c_str());
+                    }
+                }
             }
             if (!Moved(s, child, me)) { continue; }
+            if (StatsOn()) { g_child_moved.fetch_add(1, std::memory_order_relaxed); }
             const std::uint64_t ck = ChildKey(child, me);
-            if (std::find(seen_children.begin(), seen_children.end(), ck) != seen_children.end()) { continue; }
+            if (std::find(seen_children.begin(), seen_children.end(), ck) != seen_children.end())
+            {
+                if (StatsOn()) { g_child_dup.fetch_add(1, std::memory_order_relaxed); }
+                continue;
+            }
             seen_children.push_back(ck);
+            if (StatsOn())
+            {
+                g_child_new.fetch_add(1, std::memory_order_relaxed);
+                g_new_link[stat_link].fetch_add(1, std::memory_order_relaxed);
+            }
             // A DUPLICATE costs an apply, not a node: the first cut charged every apply to the node bound, and
             // a Galvanic Alchemist's partner / payment variants (identical boards) spent it before the kill
             // link was reached -- s70001 gi118 T4, the executor's walk ran out at the loop and its committed
@@ -45396,7 +45577,40 @@ static int Dfs(GameState& s, int me, int links_left, Walk& w)
             ++tried;
             if (TraceOn()) { rec_link.proof_board = BoardText(child, me); }
             w.path.push_back(std::move(rec_link));
+            // THE TRANSPOSITION FOLD (MTG_AA_ROUTE_TT). PROOF that it can only add a route: a board's subtree is a
+            // function of the board and the links left (the menu, the order, the kill fold and every apply read the
+            // board; the pass is fixed for the walk; `path` is only tested for emptiness, and it is never empty below the
+            // root). A subtree recorded here FAILED and finished with both bounds unspent (a spent bound ends the whole
+            // walk, so nothing after it is ever skipped), i.e. it was explored exhaustively; with no more links the same
+            // board explores a subset of that and fails too. Skipping it therefore loses nothing, and the applies it
+            // saves only let later siblings be tried before the bound -- the walk can end with a win it used to miss.
+            // Keyed on the route memo's own exact key (Fingerprint: the full mid-turn state + the library order).
+            const bool tt_track = w.tt || StatsOn();
+            std::uint64_t fp_child = 0;
+            int applies_before = 0;
+            bool tt_hit = false;
+            if (tt_track)
+            {
+                fp_child = Fingerprint(child, me);
+                const auto it = w.failed_exact.find(fp_child);
+                tt_hit = it != w.failed_exact.end() && it->second >= links_left - 1;
+                if (tt_hit && StatsOn()) { g_tt_would_skip.fetch_add(1, std::memory_order_relaxed); }
+                applies_before = w.applies;
+            }
+            if (tt_hit && w.tt) { w.path.pop_back(); continue; }
+            const bool child_cut0 = w.cut;
             if (Dfs(child, me, links_left - 1, w) == 1) { s = std::move(child); return 1; }
+            if (tt_track)
+            {
+                if (tt_hit && StatsOn())
+                { g_tt_would_skip_applies.fetch_add(static_cast<std::uint64_t>(w.applies - applies_before), std::memory_order_relaxed); }
+                // Recorded only for a COMPLETE failure: not cut for budget, bounds not exhausted inside it.
+                if (!child_cut0 && !w.cut && w.nodes_left > 0 && w.applies_left > 0)
+                {
+                    int& m = w.failed_exact[fp_child];
+                    m = std::max(m, links_left - 1);
+                }
+            }
             w.path.pop_back();
         }
     }
@@ -45511,8 +45725,73 @@ static Verdict WalkPass(const GameState& s, int me, bool priced)
             w.cut_ok = w.budget != nullptr && s.turn_number > TurnSolver::DecisionRootTurn();
         }
         if (TraceOn()) { v.root_board = BoardText(s, me); }
-        v.r = Dfs(copy, me, kLinks, w);
+        std::uint64_t d_n0 = 0, d_pl0 = 0, d_us0 = 0, d_max0 = 0;
+        const long long work0 = gamework::t_used;
+        if (StatsOn())
+        {
+            BpDeriveThreadCounters(&d_n0, &d_pl0, &d_us0, &d_max0);
+            AtomicMax(g_route_depth_max, static_cast<std::uint64_t>(t_in_route));
+        }
+        ConfigureWalk(w);
+        v.r = Dfs(copy, me, w.links_total, w);
         if (v.r == 1 && w.path.empty()) { v.r = 0; }   // already won / lethal before any link: not a route
+        if (StatsOn())
+        {
+            std::uint64_t d_n1 = 0, d_pl1 = 0, d_us1 = 0, d_max1 = 0;
+            BpDeriveThreadCounters(&d_n1, &d_pl1, &d_us1, &d_max1);
+            const std::uint64_t us = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                         std::chrono::steady_clock::now() - t0).count());
+            g_walk_derivs.fetch_add(d_n1 - d_n0, std::memory_order_relaxed);
+            g_walk_dplans.fetch_add(d_pl1 - d_pl0, std::memory_order_relaxed);
+            g_walk_dus.fetch_add(d_us1 - d_us0, std::memory_order_relaxed);
+            g_walk_work.fetch_add(static_cast<std::uint64_t>(gamework::t_used - work0), std::memory_order_relaxed);
+            AtomicMax(g_walk_max_dplans, d_pl1 - d_pl0);
+            AtomicMax(g_walk_max_us, us);
+            AtomicMax(g_walk_max_applies, static_cast<std::uint64_t>(w.applies));
+            g_walk_app_hist[Bucket6(static_cast<std::uint64_t>(w.applies), 1, 5, 17, 65, 128)].fetch_add(1, std::memory_order_relaxed);
+            g_walk_us_hist[Bucket6(us, 1000, 10000, 100000, 1000000, 10000000)].fetch_add(1, std::memory_order_relaxed);
+            if (w.applies_left <= 0) { g_cap_applies.fetch_add(1, std::memory_order_relaxed); }
+            if (w.nodes_left <= 0)   { g_cap_nodes.fetch_add(1, std::memory_order_relaxed); }
+            // THE LIBRARY-BLIND REPEAT: the same board up to relabelling (ChildKey -- no library order, no graveyard),
+            // turn and pass, walked before in this game. An upper bound on what a library-blind verdict memo could reuse.
+            std::uint64_t bk = ChildKey(s, me);
+            comboroute::Mix(bk, static_cast<std::uint64_t>(s.turn_number) * 7 + (t_main_pass ? 1 : 0));
+            if (t_blind_seen.size() > (1u << 18)) { t_blind_seen.clear(); }
+            const auto bit = t_blind_seen.find(bk);
+            if (bit == t_blind_seen.end()) { t_blind_seen.emplace(bk, v.r); g_blind_new.fetch_add(1, std::memory_order_relaxed); }
+            else if (bit->second == v.r) { g_blind_rep_same.fetch_add(1, std::memory_order_relaxed); }
+            else { g_blind_rep_diff.fetch_add(1, std::memory_order_relaxed); }
+            static const int s_slow_ms = EnvInt("MTG_AA_ROUTE_SLOW_MS", 0);
+            if (s_slow_ms > 0 && us >= static_cast<std::uint64_t>(s_slow_ms) * 1000)
+            {
+                std::fprintf(stderr, "[aa-route-slow] t%d root_turn=%d window=%d rollout=%d %s ms=%.0f applies=%d nodes_used=%d"
+                             " derivations=%llu plans=%llu (max list so far %llu) derive_ms=%.0f work=%lld path=%zu\n   root %s\n",
+                             s.turn_number, TurnSolver::DecisionRootTurn(), greedywindow::t_depth,
+                             TurnSolver::InRolloutPlayout() ? 1 : 0, v.r == 1 ? "WIN" : "no", us / 1000.0, w.applies,
+                             kNodes - w.nodes_left, (unsigned long long)(d_n1 - d_n0), (unsigned long long)(d_pl1 - d_pl0),
+                             (unsigned long long)d_max1, (d_us1 - d_us0) / 1000.0, gamework::t_used - work0, w.path.size(),
+                             BoardText(s, me).c_str());
+            }
+        }
+        if (VerifySoundOn() && !w.cut)
+        {
+            GameState copy3 = s;
+            Walk w3;
+            ConfigureWalk(w3);
+            w3.tt = false;
+            w3.leaf_kill = false;
+            int r3 = Dfs(copy3, me, w3.links_total, w3);
+            if (r3 == 1 && w3.path.empty()) { r3 = 0; }
+            const int nr = v.r;
+            g_vs[(nr == 1 && r3 == 1) ? 0 : (nr != 1 && r3 != 1) ? 1 : (nr == 1) ? 2 : 3].fetch_add(1, std::memory_order_relaxed);
+            g_vs_applies[0].fetch_add(static_cast<std::uint64_t>(w.applies), std::memory_order_relaxed);
+            g_vs_applies[1].fetch_add(static_cast<std::uint64_t>(w3.applies), std::memory_order_relaxed);
+            if (nr != 1 && r3 == 1)
+            {
+                std::fprintf(stderr, "[aa-route-verify-sound] !! OLD ONLY t%d window=%d: %s\n", s.turn_number, greedywindow::t_depth,
+                             BoardText(s, me).c_str());
+            }
+        }
         if (BaseOnlyVerifyOn() && !w.cut)
         {
             const bool prim_base = BaseOnlyOn();
@@ -45522,7 +45801,8 @@ static Verdict WalkPass(const GameState& s, int me, bool priced)
             t_base_only_force = prim_base ? 0 : 1;
             GameState copy2 = s;
             Walk w2;
-            int r2 = Dfs(copy2, me, kLinks, w2);
+            ConfigureWalk(w2);
+            int r2 = Dfs(copy2, me, w2.links_total, w2);
             if (r2 == 1 && w2.path.empty()) { r2 = 0; }
             t_base_only_force = -1;
             const std::uint64_t alt_us = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
@@ -45530,6 +45810,28 @@ static Verdict WalkPass(const GameState& s, int me, bool priced)
             const int full_r = prim_base ? r2 : v.r, base_r = prim_base ? v.r : r2;
             g_bov[(full_r == 1 && base_r == 1) ? 0 : (full_r != 1 && base_r != 1) ? 1 : (full_r == 1) ? 2 : 3]
                 .fetch_add(1, std::memory_order_relaxed);
+            // MTG_AA_ROUTE_BASE_ONLY_VERIFY=2: print what a FULL-ONLY win needed -- each link's plan, whether it is a
+            // breakpoint variant, and the continuation(s) its apply resolved (the tape) -- the first 40 such boards.
+            static const int s_bov_lvl = EnvInt("MTG_AA_ROUTE_BASE_ONLY_VERIFY", 0);
+            static std::atomic<int> s_bov_printed{0};
+            if (s_bov_lvl >= 2 && full_r == 1 && base_r != 1 && s_bov_printed.fetch_add(1) < 40)
+            {
+                const std::vector<Link>& fp = prim_base ? w2.path : w.path;
+                std::fprintf(stderr, "[aa-route-fullonly] t%d window=%d %zu link(s); full applies %d, base applies %d\n   root %s\n",
+                             s.turn_number, greedywindow::t_depth, fp.size(), prim_base ? w2.applies : w.applies,
+                             prim_base ? w.applies : w2.applies, BoardText(s, me).c_str());
+                for (const Link& l : fp)
+                {
+                    std::fprintf(stderr, "   link bp=%d tap=%d: %s\n", l.plan.bp_choice, l.tap_num,
+                                 TurnSolver::PlanLineSummary(l.plan, s).c_str());
+                    for (std::size_t q = 0; q < l.bps.outs.size(); ++q)
+                    {
+                        std::fprintf(stderr, "      bp site %d by_plan %d -> %s\n", (int)l.bps.site[q], (int)l.bps.by_plan[q],
+                                     TurnSolver::PlanLineSummary(l.bps.outs[q], s).c_str());
+                    }
+                    for (const std::string& t : l.tutors) { std::fprintf(stderr, "      tutor -> %s\n", t.c_str()); }
+                }
+            }
             g_bov_applies[prim_base ? 1 : 0].fetch_add(static_cast<std::uint64_t>(w.applies), std::memory_order_relaxed);
             g_bov_applies[prim_base ? 0 : 1].fetch_add(static_cast<std::uint64_t>(w2.applies), std::memory_order_relaxed);
             g_bov_us[prim_base ? 1 : 0].fetch_add(prim_us, std::memory_order_relaxed);
@@ -45651,13 +45953,63 @@ bool AlchemistComboRouteOn()
 }
 bool AlchemistComboRouteInProgress() { return aaroute::t_in_route > 0; }
 std::uint64_t AlchemistComboRouteCuts() { return aaroute::t_cuts; }
-void AlchemistComboRouteClearMemo() { aaroute::TheMemo().m.clear(); aaroute::TheMemo().epoch = ~0ULL; }
+void AlchemistComboRouteClearMemo() { aaroute::TheMemo().m.clear(); aaroute::TheMemo().epoch = ~0ULL; aaroute::t_blind_seen.clear(); }
+std::string AlchemistComboRouteStatsBrief();
+// MTG_AA_ROUTE_STATS_EVERY_S=<s> (diagnostic, print-only; needs MTG_AA_ROUTE_STATS): a watchdog thread prints the
+// cumulative brief every <s> seconds -- the only view into a label search that runs for hours inside ONE decision.
+namespace aaroute
+{
+struct Heartbeat
+{
+    Heartbeat()
+    {
+        const int every = EnvInt("MTG_AA_ROUTE_STATS_EVERY_S", 0);
+        if (every <= 0 || !EnvOn("MTG_AA_ROUTE_STATS")) { return; }
+        std::thread([every]()
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            for (;;)
+            {
+                std::this_thread::sleep_for(std::chrono::seconds(every));
+                const double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                std::fprintf(stderr, "[aa-route-hb] t=%.0fs %s\n", el, AlchemistComboRouteStatsBrief().c_str());
+                std::fflush(stderr);
+            }
+        }).detach();
+    }
+};
+inline Heartbeat g_heartbeat;
+}
+// MTG_AA_ROUTE_STATS: the cumulative counters in one line (MTG_DECISION_PROGRESS prints it per decision).
+std::string AlchemistComboRouteStatsBrief()
+{
+    if (!aaroute::StatsOn()) { return std::string(); }
+    std::uint64_t dn = 0, dp = 0, du = 0, rn = 0, rp = 0, ru = 0;
+    BpDeriveGlobalCounters(0, &dn, &dp, &du);
+    BpDeriveGlobalCounters(1, &rn, &rp, &ru);
+    dn += rn; dp += rp; du += ru;
+    char b[512];
+    std::snprintf(b, sizeof b, "walks=%llu wins=%llu applies=%llu var=%llu walk_ms=%.0f nodes=%llu new=%llu wderiv=%llu wplans=%llu"
+                  " wderive_ms=%.0f wwork=%llu | all derivs=%llu plans=%llu derive_ms=%.0f",
+                  (unsigned long long)aaroute::g_walks.load(), (unsigned long long)aaroute::g_wins.load(),
+                  (unsigned long long)aaroute::g_applies.load(), (unsigned long long)aaroute::g_applies_var.load(),
+                  aaroute::g_walk_us.load() / 1000.0, (unsigned long long)aaroute::g_nodes.load(),
+                  (unsigned long long)aaroute::g_child_new.load(), (unsigned long long)aaroute::g_walk_derivs.load(),
+                  (unsigned long long)aaroute::g_walk_dplans.load(), aaroute::g_walk_dus.load() / 1000.0,
+                  (unsigned long long)aaroute::g_walk_work.load(), (unsigned long long)dn, (unsigned long long)dp, du / 1000.0);
+    return std::string(b);
+}
 
 bool AccomplishedAlchemistProvider::UntapLoopRouteEnabled() const { return AlchemistComboRouteOn(); }
 
 int AlchemistComboRouteOffer(const GameState& s, int me)
 {
-    if (!AlchemistComboRouteOn() || aaroute::t_in_route > 0) { return 0; }
+    if (!AlchemistComboRouteOn()) { return 0; }
+    if (aaroute::t_in_route > 0)
+    {
+        if (aaroute::StatsOn()) { aaroute::g_offer_nested.fetch_add(1, std::memory_order_relaxed); }
+        return 0;
+    }
     const DecisionProvider& prov = ResolveProvider(s);
     // THE RULE IS THE PRE-FILTER: microseconds on every board that cannot go off, so the trial (several
     // enumerations and applies) is paid only where the inventory says a go-off exists.

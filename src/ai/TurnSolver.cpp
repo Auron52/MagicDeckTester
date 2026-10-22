@@ -92489,11 +92489,22 @@ inline std::atomic<unsigned long long> g_n[2], g_plans[2], g_us[2], g_uncached[2
 // What the derivations were made of (see t_bpd_pre_axes): the enumeration's base list, the list before the
 // new-only filter, the axes' time, and how many derivations had no base count (the kill fold's lists).
 inline std::atomic<unsigned long long> g_pre_axes[2], g_prefilter[2], g_axes_us[2], g_no_base[2];
+// Per-THREAD running totals (read around each route walk by MTG_AA_ROUTE_STATS -- BpDeriveThreadCounters) and the
+// derivation NESTING depth: a derivation whose enumeration applies a plan that opens a breakpoint derives again.
+inline thread_local unsigned long long t_n = 0, t_plans = 0, t_us = 0, t_max = 0;
+inline thread_local int t_depth = 0;
+inline std::atomic<unsigned long long> g_depth_n[2][4], g_depth_max[2];
 struct Dumper
 {
     ~Dumper()
     {
         if (!On()) { return; }
+        for (int c = 0; c < 2; ++c)
+        {
+            std::fprintf(stderr, "[bp-derive] ctx=%s nesting: depth1 %llu depth2 %llu depth3 %llu depth4+ %llu (deepest %llu)\n",
+                         c ? "route" : "other", g_depth_n[c][0].load(), g_depth_n[c][1].load(), g_depth_n[c][2].load(),
+                         g_depth_n[c][3].load(), g_depth_max[c].load());
+        }
         for (int c = 0; c < 2; ++c)
         {
             std::fprintf(stderr, "[bp-derive] ctx=%s lookups=%llu derivations=%llu plans=%llu (mean %.0f, max %llu,"
@@ -92509,6 +92520,15 @@ struct Dumper
     }
 };
 inline Dumper g_dumper;
+}
+
+void BpDeriveThreadCounters(std::uint64_t* n, std::uint64_t* plans, std::uint64_t* us, std::uint64_t* max_list)
+{
+    *n = bpderive::t_n; *plans = bpderive::t_plans; *us = bpderive::t_us; *max_list = bpderive::t_max;
+}
+void BpDeriveGlobalCounters(int ctx, std::uint64_t* n, std::uint64_t* plans, std::uint64_t* us)
+{
+    *n = bpderive::g_n[ctx].load(); *plans = bpderive::g_plans[ctx].load(); *us = bpderive::g_us[ctx].load();
 }
 
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
@@ -92765,9 +92785,19 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // stored, so no later decision is handed a budget-truncated continuation. 0 moves with the price off.
     const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();
     const unsigned long long bpd_axes0 = t_bpd_axes_ns;
+    if (bpderive::On())
+    {
+        ++bpderive::t_depth;
+        const int dd = std::min(bpderive::t_depth, 4) - 1;
+        bpderive::g_depth_n[bpd_ctx][dd].fetch_add(1, std::memory_order_relaxed);
+        unsigned long long dm = bpderive::g_depth_max[bpd_ctx].load(std::memory_order_relaxed);
+        const unsigned long long dv = static_cast<unsigned long long>(bpderive::t_depth);
+        while (dv > dm && !bpderive::g_depth_max[bpd_ctx].compare_exchange_weak(dm, dv, std::memory_order_relaxed)) {}
+    }
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted);
+    if (bpderive::On()) { --bpderive::t_depth; }
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (bpuse::On())
     {
@@ -92786,9 +92816,11 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         bpderive::g_n[bpd_ctx].fetch_add(1, std::memory_order_relaxed);
         bpderive::g_plans[bpd_ctx].fetch_add(n, std::memory_order_relaxed);
         if (n >= 10000) { bpderive::g_big[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
-        bpderive::g_us[bpd_ctx].fetch_add(static_cast<unsigned long long>(
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - bpd_t0).count()),
-            std::memory_order_relaxed);
+        const unsigned long long bpd_us = static_cast<unsigned long long>(
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - bpd_t0).count());
+        bpderive::g_us[bpd_ctx].fetch_add(bpd_us, std::memory_order_relaxed);
+        ++bpderive::t_n; bpderive::t_plans += n; bpderive::t_us += bpd_us;
+        if (n > bpderive::t_max) { bpderive::t_max = n; }
         unsigned long long m = bpderive::g_max[bpd_ctx].load(std::memory_order_relaxed);
         while (n > m && !bpderive::g_max[bpd_ctx].compare_exchange_weak(m, n, std::memory_order_relaxed)) {}
     }
