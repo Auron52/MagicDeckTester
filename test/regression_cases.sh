@@ -71,6 +71,7 @@ declare -A DECK_FILE=(
   [bruna]=decks/Bruna/Bruna.cod
   [landfall]=decks/Landfall/Landfall.cod
   [galadriel]=decks/Galadriel/Galadriel.cod
+  [niv]=decks/NivMizzetCombo/NivMizzetCombo.cod
   [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
   [vampires]=decks/Vampires/Vampire.cod
@@ -110,6 +111,7 @@ declare -A DECK_PROF=(
   [bruna]=decks/Bruna/Bruna.profile.json
   [landfall]=decks/Landfall/Landfall.profile.json
   [galadriel]=decks/Galadriel/Galadriel.profile.json
+  [niv]=decks/NivMizzetCombo/NivMizzetCombo.profile.json
   [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
   [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
   [vampires]=decks/Vampires/Vampire.profile.json
@@ -547,6 +549,15 @@ SMOKE_CASES=(
   "galadriel 3 1001  150 10"
   "galadriel 5 1001   75 20"
   "galadriel2hg 3 1001 75 10"
+  # niv: ADDED 2026-10-18 (docs/design/analysis-NivMizzetCombo.md), all three tiers at once, at Landfall's /
+  # Galadriel's pre-keep-table admission shape (d3 30/40, d5 15/20; overnight d3 4x250, d5 4x150) -- grow
+  # at the keep-table adoption. No value leaf and no keep table yet, so GT WILL move when they land. 2HG
+  # rows: Niv-Mizzet's "any target" ping is single-target (x1 whatever the heads), so a 30-life team
+  # needs a longer draw/ping loop -- and Tandem Lookout's draws are MANDATORY.
+  "niv 0 1001 1000 0"
+  "niv 3 1001   30 10"
+  "niv 5 1001   15 20"
+  "niv2hg 3 1001 30 10"
   # colossus: ADDED 2026-10-17 by the analysis (docs/design/analysis-Colossus Hammer.md), all three tiers
   # at once (the all-or-none rule), at the pirates / soldiers gate shape and the overnight ENTRY set.
   # Colossus Hammer (+10/+10) on a double striker through five equip cheats; most games end T3-T5. No
@@ -647,6 +658,10 @@ REGRESSION_CASES=(
   "knights          5 30001  20 0"
   "landfall         3 30311  10 0"
   "landfall         5 30311  10 0"
+  # niv: NO backstop block yet (2026-10-22, owed). The screen (5-game blocks at 30401-30471, d3 and d5) abandoned
+  # 1-3 games in EVERY block, and the games that finished spent ~30-70 s each on work the unit meter does not count,
+  # so abandon_units cannot bound them. The deck entered the budgeted tiers without it so its mulligan generation
+  # (USER 2026-10-22) has GT under it; the block lands with the uncharged-work fix (docs/design/analysis-NivMizzetCombo.md).
   "melira           3 30001  20 0"
   "melira           5 30001  20 0"
   "minotaur         3 30001  20 0"
@@ -926,6 +941,13 @@ REGRESSION_CASES=(
   "galadriel 5 3003   75 20"
   "galadriel2hg 3 2002 100 10"
   "galadriel2hg 5 2002  50 20"
+  # niv: see the SMOKE block.
+  "niv 0 2002 1000 0"
+  "niv 3 2002   40 10"
+  "niv 3 3003   40 10"
+  "niv 5 2002   20 20"
+  "niv 5 3003   20 20"
+  "niv2hg 3 2002 40 10"
   # colossus: see the SMOKE block.
   "colossus 0 2002 1000 0"
   "colossus 3 2002  150 10"
@@ -1031,6 +1053,10 @@ OVERNIGHT_CASES=(
   "knights          5 30101  20 0"
   "landfall         3 30341  10 0"
   "landfall         5 30341  10 0"
+  # niv: NO backstop block yet (2026-10-22, owed). The screen (5-game blocks at 30401-30471, d3 and d5) abandoned
+  # 1-3 games in EVERY block, and the games that finished spent ~30-70 s each on work the unit meter does not count,
+  # so abandon_units cannot bound them. The deck entered the budgeted tiers without it so its mulligan generation
+  # (USER 2026-10-22) has GT under it; the block lands with the uncharged-work fix (docs/design/analysis-NivMizzetCombo.md).
   "melira           3 30101  20 0"
   "melira           5 30101  20 0"
   "minotaur         3 30101  20 0"
@@ -1670,6 +1696,23 @@ OVERNIGHT_CASES=(
   "galadriel2hg 5 5005 170 40"
   "galadriel2hg 5 6006 170 40"
   "galadriel2hg 5 7007 170 40"
+  # niv: see the SMOKE block. Landfall's smaller-than-entry set until the keep table (expand then).
+  "niv 0 4004 2000 0"
+  "niv 0 6006 2000 0"
+  "niv 0 8008 2000 0"
+  "niv 0 10010 2000 0"
+  "niv 3 4004  250 10"
+  "niv 3 5005  250 10"
+  "niv 3 6006  250 10"
+  "niv 3 7007  250 10"
+  "niv 5 4004  150 20"
+  "niv 5 5005  150 20"
+  "niv 5 6006  150 20"
+  "niv 5 7007  150 20"
+  "niv2hg 5 4004  50 20"
+  "niv2hg 5 5005  50 20"
+  "niv2hg 5 6006  50 20"
+  "niv2hg 5 7007  50 20"
   # colossus: see the SMOKE block. FULL set (standard shape) since the 2026-10-19 keep-table adoption,
   # resized from the ENTRY set (4x400 b10 / 4x300 b20) and accepted table-ABSENT first (regression-testing.md
   # "Sizing a deck's overnight rows"). ~7 ms/game in the regression tier vs galadriel's 79 on this shape.

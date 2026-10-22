@@ -1,0 +1,25 @@
+{
+ "merge": [
+  {
+   "cards": [
+    "Spirebluff Canal",
+    "Sulfur Falls"
+   ],
+   "why": "AGENT RULING 2026-10-22 under the USER's delegation ('I see K=19. Arguably something may be mergeable like some dual lands. I'll leave that up to you to figure out.'). Both are untapped {U}/{R} duals in the turns a keep decides: the Canal enters untapped with two or fewer other lands, the Falls with an Island in play (6 Islands). The 1-of Falls was a whole hand dimension on its own. With the two merges below, K 19 -> 16: 498,548 hand cells -> 204,246 (size 7: 353,706 -> 138,537); this one alone is 19 -> 18, 384,101 cells."
+  },
+  {
+   "cards": [
+    "Cascade Bluffs",
+    "Ferrous Lake"
+   ],
+   "why": "AGENT RULING 2026-10-22 under the same USER delegation. Both are filter lands that turn one fed mana into two coloured ({U}{R} for the Lake, any of {U}{U}/{U}{R}/{R}{R} for the Bluffs). The Bluffs can also tap alone for {C} and the Lake cannot, so a hand whose only land is the 1-of Lake reads a little too well. That error is bounded by the Lake's frequency, and it costs a whole hand dimension. Not merged with Izzet Signet, whose ability is identical: the Signet is a 2-mana spell, not a land drop."
+  },
+  {
+   "cards": [
+    "Ponder",
+    "Preordain"
+   ],
+   "why": "AGENT RULING 2026-10-22 under the same USER delegation. Both are one-mana blue sorceries that see about three cards deep, then draw: Ponder looks at the top three and reorders or shuffles, Preordain scries 2. For a KEEP decision they are the same slot, 'a one-mana dig', and the generator samples which member fills each slot from a fresh shuffle, so a merged cell is the deck-weighted mix of the two. Play still tells them apart: the USER's in-play bucket rules (MTG_NIV_CANTRIP_RULES) are untouched. Merging two 4-ofs saves 30% of the cells (K 17 -> 16, 294,106 -> 204,246), and Niv is the suite's most expensive deck per game. NOT merged: Brainstorm (instant, draw three and put two back) and Gitaxian Probe (free, no selection), and the depletion pair Saprazzan Skerry / Sandstone Needle ({U}{U} vs {R}{R}: the colour is the point)."
+  }
+ ]
+}
