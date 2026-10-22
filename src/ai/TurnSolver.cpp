@@ -53624,6 +53624,47 @@ static std::vector<std::uint64_t> PrePlanAvailKeys(PrePlanShare* sh, const GameS
     return sh->acts;
 }
 
+// ---- DEPLETION SBA LOCKSTEP (MTG_DEPLETION_SBA, default ON; =0 restores the end-of-apply sweep) ----
+// "{T}, Remove a depletion counter: Add {U}{U}. If there are no depletion counters on it, sacrifice
+// it." (Saprazzan Skerry, Sandstone Needle). The EXECUTOR sacrifices the emptied land at once:
+// GameEngine::CheckStateBasedActions runs SacrificeDepletedLands after every resolution. This apply
+// swept only ONCE, at the end of ApplyPlanDirect, so every later cast of the same plan resolved
+// against a board that still held the dead land -- and a resolution that READS the board then
+// diverged from the real game. Seed 6 NivMizzetCombo T3 (claude_s6 hand-off "0,1,0,2,0,0,4,0,0"):
+// Izzet Signet spent the Skerry's last counter, then Preordain's scry (GenericProvider::
+// ScryKeepOnTop: "keep a land only while fewer than two lands are in play") counted the dead Skerry
+// as the second land and BOTTOMED Island + Cascade Bluffs in the apply, while the executor (Skerry
+// already gone) KEPT them. The search scored a world that drew Niv, Saprazzan Skerry and Sandstone
+// Needle and recorded the continuation "play Saprazzan Skerry"; the executor drew Island, Bluffs,
+// Niv, could not replay a land it did not hold, played NO land, and the committed T5 line realised
+// T7. Same rule, same class of fix as the karoo sweep (SpellEffects.cpp, BounceKarooLand) and
+// MTG_FB_SBA (combat): sweep where the executor sweeps -- before each cast (the previous cast has
+// resolved, its SBA ran) and before a breakpoint's continuation is derived.
+// NOT while a cast is resolving ON THE SAME STATE (t_resolving): a nested cast (cascade, a free recast)
+// or an inline continuation applied to that state runs inside a parent resolution whose frames may
+// hold battlefield references, and the executor's SBA likewise waits for the parent to resolve. A
+// search or rollout nested inside a resolution works on its own COPY of the state, so it sweeps.
+static bool DepletionSbaOn()
+{
+    static const bool on = EnvOn("MTG_DEPLETION_SBA", true);
+    return heurarm::Flag(heurarm::DEPLETION_SBA, on);
+}
+static thread_local std::vector<const GameState*> t_resolving;   // states with an apply_one in progress
+static bool ResolvingOn(const GameState& st)
+{
+    for (const GameState* r : t_resolving) { if (r == &st) { return true; } }
+    return false;
+}
+static void DepletionSbaSweep(GameState& st)
+{
+    if (DepletionSbaOn() && !ResolvingOn(st)) { SacrificeDepletedLands(st); }
+}
+struct ResolvingScope
+{
+    explicit ResolvingScope(const GameState& st) { t_resolving.push_back(&st); }
+    ~ResolvingScope() { t_resolving.pop_back(); }
+};
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
@@ -55288,6 +55329,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
         // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
         if (bp_truncate) { return; }
+        // DEPLETION SBA LOCKSTEP (see DepletionSbaOn): the previous cast has resolved; the
+        // executor's CheckStateBasedActions has already sacrificed any land it emptied.
+        DepletionSbaSweep(state);
+        ResolvingScope _rs(state);
         // Diagnostic only (default OFF -> byte-identical), and deliberately BEFORE the karoo hold
         // below so the trace records every cast that ENTERS apply_one, including one the hold defers.
         if (EquipRouteTraceOn() && EquipRouteInProgress() && !s_human_play)   // search frames only
@@ -60075,6 +60120,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         top_first_pass    = false;
         deferred_top_rearm = false;
+        // DEPLETION SBA LOCKSTEP (see DepletionSbaOn): the cantrip has resolved, so the executor's
+        // SBA has run before it derives / replays this continuation.
+        DepletionSbaSweep(state);
         // PREFIX-RESUME capture: this apply's varied breakpoint is the deferred one (the running
         // bp_seen equals plan.bp_at and the class is enabled), so the state RIGHT HERE -- every
         // main cast applied, Karoo played, pre-continuation -- is the shared prefix of every rank

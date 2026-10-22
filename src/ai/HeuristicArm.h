@@ -657,6 +657,7 @@ enum Slot : int
     NIV_BUCKET_DISCARD,       // MTG_NIV_BUCKET_DISCARD  NivMizzetCombo: cleanup discard by the same buckets (Niv / draw-on-damage / go-off / mana to 6 with <= 3 hand lands / draw / a 7th source if space). DEFAULT OFF pending its A/B and the USER
     NIV_CANTRIP_AMEND,        // MTG_NIV_CANTRIP_AMEND  amendment arm of MTG_NIV_CANTRIP_RULES (inert unless that is on), from the 2026-10-22 attribution of the Ponder prune's slower games: (1) ORDER -- a draw spell castable with this turn's leftover mana is usable NOW and goes ahead of lands that cannot be played until next turn (g4); (2) KEEP -- Ponder keeps the top three only if they supply something the hand LACKS (an empty Niv / enabler bucket, a go-off draw, Sol Ring, a missing colour, a land with none in hand) or hold two wanted non-draw cards; one good card beside two dead ones is a shuffle, and draw alone never keeps (g14, g125, g134, d5 g20). DEFAULT OFF pending its A/B and the USER
     NIV_LOOKOUT_NIV_ONLY,     // MTG_NIV_LOOKOUT_NIV_ONLY  NivMizzetCombo: Tandem Lookout's soulbond DEFAULT is to pair only with a Niv -- with a non-Niv partner offered it WAITS while a Niv can still arrive (hand or library), and pairs as before once none can. USER 2026-10-22: "most of the time you don't want to if not with Niv". The searched soulbond twin (Plan::soulbond_decline) INVERTS the default, so "pair anyway" stays findable (completeness). DEFAULT OFF pending its A/B and the USER
+    DEPLETION_SBA,            // MTG_DEPLETION_SBA  the apply (TurnSolver::ApplyPlanDirect, rollout + search) sacrifices a depletion land whose last counter was spent BEFORE THE NEXT CAST and before a breakpoint continuation, where the executor's CheckStateBasedActions does -- not once at the end of the plan. A mid-plan resolution read a dead Saprazzan Skerry as a land in play: NivMizzetCombo seed 6 T3, Preordain's ScryKeepOnTop bottomed Island + Cascade Bluffs in the search while the executor kept them, the recorded continuation (play Saprazzan Skerry) could not replay, no land was played and the committed T5 realised T7. Rollout only (the executor already sweeps). DEFAULT ON; =0 -> the end-of-plan sweep
     COUNT
 };
 
@@ -1264,6 +1265,7 @@ inline const char* Name(int slot)
         "MTG_NIV_BUCKET_DISCARD",
         "MTG_NIV_CANTRIP_AMEND",
         "MTG_NIV_LOOKOUT_NIV_ONLY",
+        "MTG_DEPLETION_SBA",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
