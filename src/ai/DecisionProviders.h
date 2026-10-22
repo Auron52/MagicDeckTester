@@ -3256,6 +3256,10 @@ public:
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
     bool CleanupDiscardShedStable() const override;
+    // Tandem Lookout pairs only with a Niv (MTG_NIV_LOOKOUT_NIV_ONLY, DEFAULT OFF): an ORDER of the
+    // pairing default; the searched twin inverts it (see the definition).
+    int SoulbondPartner(const GameState& s, int controller, const Permanent& source,
+                        const std::vector<int>& candidate_bf_indices) const override;
 };
 
 // Galadriel (Galadriel of Lothlorien + 52 scry lands + Sol Ring, Crackle with Power as the finisher;

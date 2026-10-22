@@ -52729,3 +52729,32 @@ std::vector<int> NivMizzetComboProvider::CleanupDiscardCandidates(
 
 // Shedding moves the answer (the survivor of two Nivs stops being a duplicate), so re-ask per shed.
 bool NivMizzetComboProvider::CleanupDiscardShedStable() const { return !NivBucketDiscardOn(); }
+
+// TANDEM LOOKOUT PAIRS ONLY WITH A NIV (MTG_NIV_LOOKOUT_NIV_ONLY). USER 2026-10-22: "I'm not sure what
+// the AI is recommending for pairing, but most of the time you don't want to if not with Niv." The pair
+// IS the draw/ping loop only with a Niv; any other partner (a Generator Servant, a second Lookout) locks
+// the Lookout away from the Niv that arrives later (CR 702.46b: only an UNPAIRED Lookout pairs with the
+// next creature to enter). So with no Niv among the candidates the DEFAULT waits -- while a Niv can still
+// arrive, i.e. one is in hand or library -- and pairs as before once none can (then pairing forecloses
+// nothing). An ORDER of the default, never a narrowing: the searched twin (Plan::soulbond_decline,
+// AppendSoulbondDeclineVariants) inverts it to "pair anyway" with the base pick, and a human still
+// chooses from the full legal set.
+int NivMizzetComboProvider::SoulbondPartner(const GameState& s, int controller, const Permanent& source,
+                                            const std::vector<int>& candidate_bf_indices) const
+{
+    const int pick = DecisionProvider::SoulbondPartner(s, controller, source, candidate_bf_indices);
+    if (pick == 0 || !NivLookoutNivOnlyOn()) { return pick; }   // DEFAULT OFF pending its A/B and the USER
+    const CardDefinition* sd = source.def_absent ? nullptr : CardDatabase::Instance().LookupCached(source.card);
+    if (sd == nullptr || !sd->params.soulbond_damage_trigger_draw) { return pick; }
+    auto is_niv = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->params.draw_trigger_damage > 0;
+    };
+    for (const Permanent& q : s.battlefield)
+    { if (q.card.m_number == pick) { if (!q.def_absent && is_niv(q.card)) { return pick; } break; } }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& h : pl.hand)    { if (is_niv(h)) { return 0; } }
+    for (const Card& l : pl.library) { if (is_niv(l)) { return 0; } }
+    return pick;
+}

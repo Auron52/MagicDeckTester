@@ -74323,6 +74323,11 @@ static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<Tu
             scan_board();
             if (casts_dd_soulbond && !niv_up && (board_legal > 0 || casts_other)) { want = true; }   // (a)
             if (free_lookout_on_bf && !niv_on_bf)                                 { want = true; }   // (b)
+            // (b') MTG_NIV_LOOKOUT_NIV_ONLY: the Lookout's DEFAULT now waits for a Niv still to come
+            // even with one already on the battlefield (that one can never pair with it), so the
+            // twin -- here "pair with the entrant anyway" -- is needed there too, or the pairing
+            // would be unfindable. Rare: a free Lookout beside an unpaired Niv.
+            if (free_lookout_on_bf && niv_on_bf && NivLookoutNivOnlyOn())         { want = true; }
         }
         if (!want) { continue; }
         TurnSolver::Plan v = p;
@@ -94487,8 +94492,22 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         for (size_t i = 0; i < cast_names.size(); ++i) { if (i) s += ", "; s += cast_names[i]; }
     }
     if (le_count > 0) { s += "; Land's Edge x" + std::to_string(le_count); }
-    if (p.soulbond_decline) { s += "; no pairing"; }
+    if (p.soulbond_decline) { s += SoulbondTwinLabel(st); }
     return s;
+}
+
+const char* SoulbondTwinLabel(const GameState* s)
+{
+    if (s == nullptr || !s->deck_has_draw_ping || !NivLookoutNivOnlyOn()) { return "; no pairing"; }
+    auto is_niv = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->params.draw_trigger_damage > 0;
+    };
+    const Player& pl = s->players[static_cast<std::size_t>(s->active_player_index)];
+    for (const Card& h : pl.hand)    { if (is_niv(h)) { return "; pair the Lookout anyway"; } }
+    for (const Card& l : pl.library) { if (is_niv(l)) { return "; pair the Lookout anyway"; } }
+    return "; no pairing";
 }
 
 // Deduct a KNOWN-PAYABLE cost from an accounting pool (caller checks CanPay first).

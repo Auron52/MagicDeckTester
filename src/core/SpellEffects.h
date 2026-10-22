@@ -8289,6 +8289,9 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                     if (cands.empty()) { return false; }
                     int want = ResolveProvider(state).SoulbondPartner(
                         state, src.controller_index, src, cands);
+                    // cands is non-empty here, so 0 is the provider's own "wait" (NivMizzetCombo's
+                    // Lookout-pairs-only-with-a-Niv rule), never "no partner".
+                    const bool provider_waits = want == 0;
                     // SEARCHED PARTNER (g_soulbond_partner_pin): Trigger A of the entering soulbond
                     // card only (only_idx < 0); the human chooser below still overrides it.
                     if (g_soulbond_partner_pin != 0 && only_idx < 0 && g_play_attach_host_chooser == nullptr)
@@ -8300,10 +8303,21 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                             { if (state.battlefield[ci].card.m_number == g_soulbond_partner_pin) { want = g_soulbond_partner_pin; break; } }
                         }
                     }
-                    // SEARCHED DECLINE (Plan::soulbond_decline): the plan being applied scored "do
-                    // not pair"; the human chooser below still overrides it in the viewer.
+                    // SEARCHED TWIN (Plan::soulbond_decline): the plan being applied scored the
+                    // OTHER side of the provider's default -- "do not pair" where the default pairs,
+                    // and "pair anyway" (the base power-ranked pick) where the provider waits, so a
+                    // waiting default never makes the pairing unfindable. Every provider but
+                    // NivMizzetCombo's (flag on) always pairs, so for them this is the old decline.
+                    // The human chooser below still overrides it in the viewer.
                     if (g_plan_soulbond_decline && g_play_attach_host_chooser == nullptr)
-                    { want = 0; g_soulbond_decline_applied.fetch_add(1, std::memory_order_relaxed); }
+                    {
+                        if (provider_waits && g_soulbond_partner_pin == 0)
+                        {
+                            want = ResolveProvider(state).DecisionProvider::SoulbondPartner(
+                                state, src.controller_index, src, cands);
+                        }
+                        else { want = 0; g_soulbond_decline_applied.fetch_add(1, std::memory_order_relaxed); }
+                    }
                     // HUMAN PLAY: the same board-click decision type the Skyhunter attach uses --
                     // the full rules-legal set with the heuristic pick preselected, and -1 declines
                     // (the printed "you MAY pair"). The chooser never sees a narrowed list.

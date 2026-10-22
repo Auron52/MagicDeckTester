@@ -3495,6 +3495,11 @@ public:
 // unification. Not part of the solver's interface: src/ code outside TurnSolver.cpp must keep
 // paying costs through AIEngine::TapForCost (executor) or plan application (rollout).
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+
+// The plan label for Plan::soulbond_decline, which is the OTHER side of the pairing default: "no
+// pairing" -- or, where NivMizzetCombo's Tandem Lookout default waits for a Niv still to come
+// (MTG_NIV_LOOKOUT_NIV_ONLY), "pair anyway". `s` may be null (then the plain decline label).
+const char* SoulbondTwinLabel(const GameState* s);
 // Vampires A1: the rollout's madness payer (a creature-SPELL payment through TapForCostDirect) -- what
 // the trailing pass and the rollout cleanup install with MadnessHostScope. Exposed for the unit tests.
 const std::function<bool(GameState&, const ManaCost&)>& RolloutMadnessPayer();

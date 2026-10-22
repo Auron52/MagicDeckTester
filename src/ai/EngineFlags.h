@@ -353,6 +353,15 @@ inline bool PayDepletionWasteOn()
     return PayDepletionWasteAnyOn() || heurarm::Flag(heurarm::PAY_DEPLETION_WASTE, env_on);
 }
 
+// MTG_NIV_LOOKOUT_NIV_ONLY (DEFAULT OFF): Tandem Lookout's pairing default waits for a Niv
+// (NivMizzetComboProvider::SoulbondPartner); the soulbond twin enumerator (AppendSoulbondDeclineVariants)
+// reads the same flag to offer "pair anyway" wherever that default waits.
+inline bool NivLookoutNivOnlyOn()
+{
+    static const bool env_on = EnvOn("MTG_NIV_LOOKOUT_NIV_ONLY");
+    return heurarm::Flag(heurarm::NIV_LOOKOUT_NIV_ONLY, env_on);
+}
+
 inline bool PayPainLastOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_PAIN_LAST", true);

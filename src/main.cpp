@@ -1139,7 +1139,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         os << "cast: ";
         for (size_t i = 0; i < casts.size(); ++i) { if (i) os << ", "; os << casts[i]; }
     }
-    if (plan.soulbond_decline) { os << "; no pairing"; }
+    if (plan.soulbond_decline) { os << SoulbondTwinLabel(&s); }
     return os.str();
 }
 
