@@ -38,6 +38,10 @@ clause (the Harbinger fallback order); a PROPOSED amendment (`MTG_AA_HARB_WITCH_
 2026-10-21 (branch `aa-discardmana`, at 846135c7, NOT pushed): the USER's discard MANA CAP (mana useful up to 6, then a
 second real wincon / untapper, land Auras ahead of Arbor Elf) landed DEFAULT ON -- -0.005 / -0.005 / -0.002 with zero
 slower games; see "USER: the discard mana cap (2026-10-21)".
+2026-10-22 (branch `aa-walkroot`, NOT pushed): phase A's 2-6 h label games are the unbounded label search, not the
+Combo Off walk (0-8% of their wall); the walk's own cost (90% of the gen-setting tail) is its breakpoint-variant fan-out.
+Two sound walk collapses landed DEFAULT ON (`MTG_AA_ROUTE_TT`, `MTG_AA_ROUTE_LEAF_KILL`); the near-linear walk stays the
+USER's call -- see "Why the Combo Off route gets stuck (2026-10-21/22)".
 Open USER items are listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -2985,16 +2989,20 @@ continuation is the next link, and the walk derives NO continuation list. On HEA
   to the FULL menu: "Feed the Clan x2 + Nourish, then [Stroke of Genius at ourselves for cards, Living Wish]" -> Crab Umbra
   -> loop -> Wish -> Scholar -> drain; "Brindle Boar sac, then [Staff: untap Arbor Elf x3, ...]". A raised link bound
   (8) with the leaf kill closed only 69 -> 58 of them: the gap is menu access, not depth.
-* **A phase-A CAVEAT that argues against the everywhere form:** 902370 with `BASE_ONLY` spent **> 16.5 min in t3 LABEL
-  k=0 alone vs 315 s** with the full walk (the label search's derivations grow when the walk misses the routes it used to
-  prove; see the rerun note below). `MTG_AA_ROUTE_BASE_ONLY_PLAYOUT` (the narrowing only where `greedywindow::t_depth == 0`)
-  leaves the label search's walks alone: 902370 5:09, the same label work (1,197,821 units at t3 k=0).
+* **A phase-A CAVEAT that argues against the everywhere form -- it changes LABELS.** 902370 gi120, t3 LABEL k=0: the full
+  walk gives **earliest = 6** in 315 s / 1,197,821 units; `BASE_ONLY` gives **earliest = 7** in 1,273 s / 7,515,111 units
+  (6.3x the work: the T6 horizon is now refuted exhaustively). The label search did not find that T6 kill by itself
+  (its breakpoint continuations are ranked and width-bounded, the walk chains them link after link), so without the macro
+  links the value-leaf row is a turn late. Not traced further; one of two games measured. 900123 gi123: identical labels and work in all three arms
+  (t1 723,555 units; t2 k=0 15,601,713 units, earliest 7). `MTG_AA_ROUTE_BASE_ONLY_PLAYOUT` (the narrowing only where
+  `greedywindow::t_depth == 0`) leaves the label search's walks alone: 902370 5:09 with the full walk's labels and work.
+  So any narrowing of the walk has to be judged on the LABELS too, not only on the suite cells.
 
 **For the USER (nothing adopted; both stay OFF):** the route can be made near-linear only by giving up the macro links,
 which is a narrowing (0.5% of walks lose their route, 6.7% gain one; the search still finds every such line itself at a
 large budget, since the route only ADDS a candidate). Measured choice: `BASE_ONLY_PLAYOUT` cuts the generation's tail
-10-20x and does not touch the label search; `BASE_ONLY` everywhere is quality-neutral at the suite cells but slowed one
-phase-A label search 3x+. Recommendation: `BASE_ONLY_PLAYOUT` if the USER wants the walk near-linear; neither changes the
+10-20x and does not touch the label search; `BASE_ONLY` everywhere is quality-neutral at the suite cells but moved one of
+two phase-A labels a turn later (6.3x its work). Recommendation: `BASE_ONLY_PLAYOUT` if the USER wants the walk near-linear; neither changes the
 phase-A tail, which is the label search's refutation cost (section 1).
 
 **Diagnostics added (count/print-only):** `MTG_AA_ROUTE_STATS` now also prints the walk's shape (nodes, menus,
