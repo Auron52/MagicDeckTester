@@ -49,7 +49,9 @@ rollout only; `MTG_CANON_CONT_TRAITS` (LOCKSTEP #19) landed DEFAULT ON: 4 of 2,5
 2026-10-22 (branch `aa-castorder2`, NOT pushed): the USER rejected Weather-strictly-last; round 3 built the USER's
 "Weather flexible around the untappers" rule as `MTG_AA_GENERIC_WEATHER_FLEX` and the proposed total order
 `MTG_AA_CAST_ORDER_V2` (both DEFAULT OFF): net -66 / -109 over 7,500 paired games (gw -53), every slower game
-recovers at d8 b0, no d8 b0 loss -- see "Round 3 (2026-10-22)" under "Proposed cast order".
+recovers at d8 b0, no d8 b0 loss -- see "Round 3 (2026-10-22)" under "Proposed cast order". Round 3b (rebased onto
+63fc273bc) re-measured the play-setting cell at the shipped d4 b20: the same picture; full smoke + regression byte-identical
+with the flags unset.
 Open USER items are listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -3106,6 +3108,46 @@ gwf 18 / 18 and v2 36 / 36 recover, NO deal loses a turn at d8 b0 in any arm, ev
 (e) V2's FINISH numbering (28-31) is not wired into the kill fold: every finisher ends the game this turn and the
     fold sizes the loop to the cheapest one (outcome-equivalent, fewest iterations). Say so if the USER wants the
     preference order there anyway.
+
+### Round 3b (2026-10-22) -- the play-setting cell at the shipped d4 b20
+
+`aa-castorder2` rebased onto origin 63fc273bc (NOT pushed). Origin already carries the lockstep #19 fix as 7c3ff8187,
+so the round-3 cherry-pick (c127ac90d) was dropped -- it had re-added only its unit test, now present once. Round 3's
+commit is b8c484082 after the rebase. Binary `castorder3/mtg3b.bin`; batches `ab3b/` (A/B + canary) and `xr3b/` (reruns);
+`mk3b.py`, `mkx3b.py`.
+
+**Did the rebase change play?** No. The canary is 30 off chunks of the d3 b10 and d0 cells (5 + 5 per base), and all
+30 reproduce round 3's ab3 digests. So the d3 b10 / d0 rows of round 3 stand and were not re-run. The new value.json
+`value_play` block (`target_depth 4`, `budget_ms 20`) makes the play-setting cell **d4 b20**
+(`[play] ... depth=4 budget=20ms source=value_play(depth)+cli(budget)`).
+
+**A/B, d4 b20** (one pooled batch, 28 threads, 12,000 games + the canary; same pairing and bases). off: 160001 4.9670,
+170001 4.8990, 180001 4.9230. Round 3's d5 b20 row is repeated for comparison:
+
+| arm | 160001 | 170001 | 180001 | pooled d4 b20 (3,000) | round 3 pooled d5 b20 |
+|---|---|---|---|---|---|
+| gw | -0.001 2/1 0.999x | -0.004 4/0 0.991x | -0.006 5/0 0.990x | **-0.0037 11/1 0.994x** (net -11) | -0.0037 11/1 0.993x |
+| gwf | -0.006 4/2 0.990x | -0.005 5/0 0.991x | -0.006 5/1 1.019x | **-0.0057 14/3 0.999x** (net -17) | -0.0057 15/5 1.000x |
+| v2 | -0.009 10/4 0.990x | -0.012 14/2 0.992x | -0.007 9/1 1.000x | **-0.0093 33/7 0.994x** (net -28) | -0.0093 33/9 0.993x |
+
+**Slower games at 10x (d4 b200) and d8 b0, plus every faster deal at d8 b0** (`xr3b/`, 132 single-game jobs):
+
+| arm | slower | recover at 10x | recover at d8 b0 | d8 b0 deals LOST | d8 b0 deals WON |
+|---|---|---|---|---|---|
+| gw | 1 (g83) | 1 | **1 / 1** | **0** | 9: g42, g837; g39, g916, g923; g98, g643, g895, g969 |
+| gwf | 3 (g83, g672; g500) | 3 | **3 / 3** | **0** | 9: g42, g837; g39, g916, g923; g21, g98, g643, g895 |
+| v2 | 7 (g83, g328, g672, g793; g624, g833; g654) | 5 (g328 and g833 still 5 vs 6) | **7 / 7** | **0** | 21: g42, g414, g425, g736, g837; g39, g379, g444, g535, g735, g916, g923, g984; g21, g98, g219, g340, g643, g670, g730, g895 |
+
+At the shipped setting the picture is round 3's: every cell is <= 0, every slower game recovers at d8 b0, and no deal
+loses a turn at d8 b0. Combining d4 b20 with round 3's unchanged d3 b10 / d0 rows over 7,500 paired games: gw -53 (35 faster /
+4 slower), gwf -66 (56 / 16), v2 -109 (104 / 34). The recommendation is unchanged: v2 if the USER accepts its numbering, otherwise gwf; nothing adopted.
+
+**Flags unset, the FULL tiers in the worktree** (the new `ActivationOrderRankForAction` hook and the payment-path code
+touch shared files). The binary is the rebased b8c484082 Release build. **Smoke: 140 / 140 pass, per-game audit
+searched 0 slower / 0 faster / 0 play-changed, d0 the same. Regression: 267 / 267 pass**, including the 72 unbudgeted
+backstop rows (the alchemist d3 / d5 s30211 rows among them). Its audit: 267 configs unchanged; searched and d0 both
+0 slower / 0 faster / 0 play-changed. Viewer-protocol `--strict` on 650 references: 0 play-drift, 0 board-diverged,
+0 enum-gap. Unit 1861 / 1861, scenarios 290 / 290. Nothing accepted (nothing moves).
 
 ## Mulligan profile (exhaustive keep table) -- ADOPTED (2026-10-21)
 
