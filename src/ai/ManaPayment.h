@@ -607,6 +607,22 @@ std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost
 // pre-payment as well as the per-cast greedy. See ActLineHoldEnabled for the measured drop rates.
 std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost);
 
+// DEPLETION HOLD set (MTG_PAY_DEPLETION_HOLD -- see PayDepletionHoldOn in EngineFlags.h): the largest set
+// of the active player's untapped depletion lands (battlefield-index bits, restricted to `cand_mask`) that a
+// demand of `need` coloured pips (W,U,B,R,G) and `need_tot` mana in all can still be paid WITHOUT, from
+// `credit` plus the active player's other untapped mana sources outside `excluded`. Colour-exact: Hall's
+// condition over the demanded colours, each source credited its colours and its per-tap yield (a Karoo one
+// of each). Built in HOLD order -- fewest counters first (a last counter is the land), then the later
+// battlefield slot -- the exact reverse of the greedy's spend order (more counters first, earlier slot), so
+// the lands it leaves out are the ones the payment spends anyway. `plain_tier_only`: supply is only what
+// the scarcity greedy ranks AHEAD of a held land (ManaSourceRank 0..59 -- lands, rocks, filters, a
+// Treasure; never the creature band or the 60+ reserve tiers), and a depletion land outside that tier is
+// no candidate; false for the whole-turn prepay, whose joint solve may tap anything its rung leaves
+// unreserved. Returns 0 with more than 64 permanents.
+std::uint64_t DepletionHoldMask(const GameState& state, std::uint64_t cand_mask, const int need[5],
+                                int need_tot, const ManaPool& credit, std::uint64_t excluded,
+                                bool for_creature, bool plain_tier_only);
+
 // ACTIVATION LINE PAY STATE -- what ActLineHoldMask must NOT hold for. The mask's colour half is
 // built from PlanTraits::act_pips, the SUMMED pips of every activation the plan carries, and that
 // sum is static for the whole apply. Two things make it over-hold:

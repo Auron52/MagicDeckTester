@@ -51687,6 +51687,23 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     { push(reserved | reserved_c | reserved_a); push(reserved | reserved_a); push(reserved_a); }
     if (reserved_c) { push(reserved | reserved_c); push(reserved_c); }   // line {C} hold rungs
     push(reserved);                                    // hold everything reservable
+    // PARTIAL DEPLETION RUNG (MTG_PAY_DEPLETION_HOLD, default OFF; USER 2026-10-22 "hold the depletion land
+    // if it can do so and use it otherwise"). The depletion class is otherwise all-or-nothing: when the turn
+    // cannot be paid holding EVERY depletion land, the next rung releases them all and the joint solve taps
+    // them in battlefield order -- {Tandem Lookout, Brainstorm} off a last-counter Needle, a Skerry, the Canal
+    // and an Island paid with the Needle and the Skerry and left both lands up. This rung holds the largest
+    // set the combined bill can do without (DepletionHoldMask, colour-exact, against the sources the rung
+    // leaves the solve: creatures and one-shots stay held, so "creatures > one-shots > depletion" is kept).
+    // One extra solve only where the full hold already failed, and it replaces the release rung whenever it
+    // pays. Equal to `reserved` or empty -> push() drops it.
+    if (reserved_depl != 0 && PayDepletionHoldOn())
+    {
+        const int pips[5] = { combined.white, combined.blue, combined.black, combined.red, combined.green };
+        const std::uint64_t part = DepletionHoldMask(state, reserved_depl, pips, combined.ManaValue(), bt_start,
+                                                     reserved_crea | reserved_shot, all_creatures,
+                                                     /*plain_tier_only=*/false);
+        if (part != 0) { push(reserved_crea | reserved_shot | part); }
+    }
     if (DorkReserveEnabled())
     {
         // Class priority creatures > one-shots > depletion: release the lowest class first.

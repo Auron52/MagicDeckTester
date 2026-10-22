@@ -653,6 +653,7 @@ enum Slot : int
     NIV_PONDER_SINGLE,        // MTG_NIV_PONDER_SINGLE  NivMizzetCombo: Ponder's searched disposition fan is pruned to the rule's pick alone (ReorderSingleCandidate; USER 2026-10-22: "Searching every option is too expensive"). Inert unless MTG_NIV_CANTRIP_RULES is on. DEFAULT OFF pending its A/B
     PAY_DEPLETION_WASTE,      // MTG_PAY_DEPLETION_WASTE  the shared payer ranks a DEPLETION land's tap behind every painless plain source (the pain band) when it would spend the land's LAST counter on mana this payment and the rest of the line cannot use (Niv seed 1, 2026-10-22: Skerry + the Needle's last counter paid {2}{U}, floated {R}, the Needle died and the Canal stayed untapped; T6 -> T7). An order, never a filter. DEFAULT OFF pending its A/B
     PAY_DEPLETION_WASTE_ANY,  // MTG_PAY_DEPLETION_WASTE_ANY  ...the same for ANY counter (a wasted counter on a 2-counter land is the same lost mana). Implies the above. DEFAULT OFF pending its A/B
+    PAY_DEPLETION_HOLD,       // MTG_PAY_DEPLETION_HOLD  the USER's depletion rule (2026-10-22: "hold the depletion land if it can do so and use it otherwise. At least, it should hold it over non-creature source that are not consumed"): the shared payer ranks the largest set of depletion lands the rest of the payment AND the rest of the line can be paid without (colour-exact) behind every plain-tier source (lands, rocks, filters); a land the line needs keeps its old rank; the whole-turn prepay gets the same set as a partial depletion rung. An order, never a filter. DEFAULT OFF pending the cross-deck A/B and the USER
     NIV_BUCKET_DISCARD,       // MTG_NIV_BUCKET_DISCARD  NivMizzetCombo: cleanup discard by the same buckets (Niv / draw-on-damage / go-off / mana to 6 with <= 3 hand lands / draw / a 7th source if space). DEFAULT OFF pending its A/B and the USER
     COUNT
 };
@@ -1257,6 +1258,7 @@ inline const char* Name(int slot)
         "MTG_NIV_PONDER_SINGLE",
         "MTG_PAY_DEPLETION_WASTE",
         "MTG_PAY_DEPLETION_WASTE_ANY",
+        "MTG_PAY_DEPLETION_HOLD",
         "MTG_NIV_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

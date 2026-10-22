@@ -449,6 +449,7 @@ add_executable(mtg-test
     test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp
     test/unit/test_izzet_mana_fidelity.cpp
+    test/unit/test_depletion_hold.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism
