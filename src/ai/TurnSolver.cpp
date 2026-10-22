@@ -9452,6 +9452,38 @@ static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vecto
     return r;
 }
 
+// A SACRIFICE-FOR-MANA THE LINE DOES NOT NEED (DecisionProvider::SacForManaOnlyIfNeeded; the USER's
+// Generator Servant rule for NivMizzetCombo, MTG_NIV_SERVANT_FIREMIND_ONLY). True = drop the subset:
+// some selected SacForMana the deck's provider holds is UNNEEDED -- every other selected action pays
+// without it, paid the way the executor pays (SubsetPayableAsExecuted: the whole-turn prepay, then the
+// per-cast walk). The subset without it (same casts, source kept) is offered by the same walk: the
+// walks' mana gates never reject a subset the executor can pay (their soundness invariant), so the
+// drop removes the sacrifice and never a cast. A sacrifice whose mana the line needs is kept, whoever
+// the provider names. Asked by EnumeratePlans' walk (the search's menu) of a subset that passed every
+// other gate and does not win this turn; never in human play (the viewer's menu is never narrowed).
+// NOT asked by Solve::consider (the d0 runner / horizon playout): its argmax cannot pick such a subset
+// anyway -- the sacrifice adds no value (SacForMana eval 0, the same casts, and the projection credits
+// no Servant haste) and the sibling without it scores the same with a strictly smaller mask, which wins
+// the tie -- so a check there only costs wall (Niv d3 profile: half the helper's samples, for nothing;
+// the rule-ON arm's digests are byte-identical with and without it). The exact payer runs only for a
+// sacrifice the provider holds, so a deck whose provider holds nothing pays one virtual call per
+// selected SacForMana and nothing else.
+static bool SubsetSpendsUnneededSacForMana(const GameState& state, const std::vector<Action>& cands,
+                                           const std::vector<int>& sel)
+{
+    const DecisionProvider& prov = ResolveProvider(state);
+    for (int j : sel)
+    {
+        if (cands[static_cast<std::size_t>(j)].kind != Action::Kind::SacForMana) { continue; }
+        if (!prov.SacForManaOnlyIfNeeded(state, cands, sel, j)) { continue; }
+        std::vector<int> rest;
+        rest.reserve(sel.size());
+        for (int k : sel) { if (k != j) { rest.push_back(k); } }
+        if (SubsetPayableAsExecuted(state, cands, rest)) { return true; }
+    }
+    return false;
+}
+
 // MTG_COLOR_EXACT_PROBE -- the soundness instrument for the colour-exact gate. The gate may only
 // ever reject a subset the board GENUINELY cannot pay, so every rejection is re-tested against the
 // real payment path (the same tap-for-real simulation the filter fallback uses, which is the
@@ -63387,6 +63419,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     bool any_colour_ritual = false;
     if (any_ritual && RitualFloatColorExactOn())
     { for (const Action& ra : cands) { if (RitualFloatColorIndex(ra) >= 0) { any_colour_ritual = true; break; } } }
+    // SubsetSpendsUnneededSacForMana's scope: a SacForMana candidate exists and this is not human play.
+    // One scan; false for every deck without one.
+    bool sac_mana_held_scope = false;
+    if (!HumanPlayActive())
+    { for (const Action& ra : cands) { if (ra.kind == Action::Kind::SacForMana) { sac_mana_held_scope = true; break; } } }
     // Dragonstorm go-off lethal model present? (mirrors Solve) Gates the storm go-off short-circuit below.
     const bool has_extra_lethal = ResolveProvider(state).HasExtraLethalModel();
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
@@ -65451,6 +65488,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // HoldCastUnlessLethal (mirrors Solve::consider): a held cast only in a subset that wins now.
         if (any_held && !wins)
         { for (int j : sel) { if (cand_held[j]) { _ct.label = "hold-unless-lethal"; return; } } }
+        // A sacrifice-for-mana the deck holds unless the line needs it (the provider's
+        // SacForManaOnlyIfNeeded -- NivMizzetCombo's Generator Servant rule). The sibling subset with the
+        // source kept is offered by this walk. Not asked by Solve::consider -- see the helper.
+        if (sac_mana_held_scope && !wins && SubsetSpendsUnneededSacForMana(state, cands, sel))
+        { _ct.label = "sac-unneeded"; return; }
         _ct.label = "OFFERED";
         {
             static const int s_dbg_multi_off = EnvInt("MTG_DBG_MULTI", 0);

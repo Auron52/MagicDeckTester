@@ -25,6 +25,8 @@
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 #include "ai/AIEngine.h"
+#include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "mtg_test_seam.h"
@@ -396,4 +398,153 @@ TEST_CASE("An Aura / soulbond host the SAME plan sacrifices for mana is never a 
         TurnSolver::ApplyPlan(r, p, /*is_pre_combat=*/true);
     }
     CHECK(g_enchant_retargets.load() == before);
+}
+
+// ---- THE USER's GENERATOR SERVANT RULE (2026-10-22, MTG_NIV_SERVANT_FIREMIND_ONLY, DEFAULT ON) --------
+// "That one maybe should be specified by the search in cases where we have sufficient mana to cast it
+//  otherwise. But we should only use it for Niv-mizzet the firemind in that case."
+// NivMizzetComboProvider::SacForManaOnlyIfNeeded names the Servant; the engine's subset walks drop a
+// non-winning plan whose Servant sacrifice is UNNEEDED (every other action pays without it, as the
+// executor pays) unless that plan casts Niv-Mizzet, the Firemind. Pinned on the search's own menu
+// (EnumerateMainPlans): the Firemind keeps both branches; any other spell the lands pay keeps only the
+// no-sacrifice plan; a spell that NEEDS the {C}{C} keeps the sacrifice (ramp); the lever's =0 arm and
+// every other deck's provider keep the full menu. (Human play is never pruned -- HumanPlayActive() is a
+// process-static env read a unit test cannot switch on; the call sites gate it.)
+namespace
+{
+const NivMizzetComboProvider& NivProvGs()
+{
+    static const NivMizzetComboProvider p;
+    return p;
+}
+
+// Has some plan cast exactly `casts` (by name) with the Servant `src` sacrificed (sac) or kept (!sac)?
+bool OfferedGs(const std::vector<TurnSolver::Plan>& plans, int src, bool sac,
+               const std::vector<std::string>& casts)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (!p.land_to_play.empty() || HasSacOf(p, src) != sac) { continue; }
+        if (CastCount(p) != static_cast<int>(casts.size())) { continue; }
+        bool all = true;
+        for (const std::string& n : casts) { if (!CastsGs(p, n)) { all = false; break; } }
+        if (all) { return true; }
+    }
+    return false;
+}
+
+struct ArmGs
+{
+    ArmGs(heurarm::Slot s, bool on) { heurarm::t_arm[static_cast<int>(s)] = on ? 1 : 0; }
+    ~ArmGs() { heurarm::Clear(); }
+};
+}   // namespace
+
+TEST_CASE("Niv Servant rule: the Firemind payable WITHOUT the Servant -- both branches are searched")
+{
+    // {2}{U}{U}{R}{R} off two Islands, two Mountains and Sol Ring: the Servant's {C}{C} is not needed, but
+    // its haste lets the Firemind {T}: draw the turn it lands (the Lookout / Curiosity kill).
+    GameState s = FreshGs();
+    s.m_provider = &NivProvGs();
+    PutGs(s, "Island", 1);
+    PutGs(s, "Island", 2);
+    PutGs(s, "Mountain", 3);
+    PutGs(s, "Mountain", 4);
+    PutGs(s, "Sol Ring", 5);
+    PutGs(s, kGs, 10);
+    HandGs(s, "Niv-Mizzet, the Firemind", 31);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    CHECK(OfferedGs(plans, 10, /*sac=*/false, { "Niv-Mizzet, the Firemind" }));
+    CHECK(OfferedGs(plans, 10, /*sac=*/true,  { "Niv-Mizzet, the Firemind" }));
+    // A sacrifice that pays for nothing is not a Firemind line: gone.
+    CHECK_FALSE(OfferedGs(plans, 10, /*sac=*/true, {}));
+}
+
+TEST_CASE("Niv Servant rule: a Tandem Lookout the lands pay -- no sacrifice branch (and no other one)")
+{
+    GameState s = FreshGs();
+    s.m_provider = &NivProvGs();
+    PutGs(s, "Island", 1);
+    PutGs(s, "Island", 2);
+    PutGs(s, "Island", 3);
+    PutGs(s, kGs, 10);
+    HandGs(s, "Tandem Lookout", 32);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    CHECK(OfferedGs(plans, 10, /*sac=*/false, { "Tandem Lookout" }));
+    CHECK_FALSE(OfferedGs(plans, 10, /*sac=*/true, { "Tandem Lookout" }));
+    CHECK_FALSE(AnySacOf(plans, 10));   // no unneeded sacrifice survives anywhere on this menu
+
+    // The lever's =0 arm restores the full menu (the A/B's control)...
+    {
+        ArmGs off(heurarm::NIV_SERVANT_FIREMIND_ONLY, false);
+        const std::vector<TurnSolver::Plan> all = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(OfferedGs(all, 10, /*sac=*/true, { "Tandem Lookout" }));
+    }
+    // ...and so does every other deck's provider: the rule is NivMizzetCombo's alone.
+    {
+        GameState g = s;
+        g.m_provider = nullptr;
+        CHECK(OfferedGs(TurnSolver::EnumerateMainPlans(g, true), 10, /*sac=*/true, { "Tandem Lookout" }));
+    }
+}
+
+TEST_CASE("Niv Servant rule: a spell NOT payable without the Servant still spends it (ramp is untouched)")
+{
+    // {2}{U} off one Island: only the Servant's {C}{C} makes the Lookout castable.
+    GameState s = FreshGs();
+    s.m_provider = &NivProvGs();
+    PutGs(s, "Island", 1);
+    PutGs(s, kGs, 10);
+    HandGs(s, "Tandem Lookout", 32);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = FindPlanGs(plans, 10, { "Tandem Lookout" });
+    REQUIRE(p != nullptr);
+    // ...and it really resolves: the Lookout is on the battlefield, the Servant in the graveyard.
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *p, true);
+    CHECK(FindGs(roll, 32) != nullptr);
+    CHECK(InGyGs(roll, 10));
+    // The Firemind needing the Servant (one Mountain short) is kept as well, of course.
+    GameState t = FreshGs();
+    t.m_provider = &NivProvGs();
+    PutGs(t, "Island", 1);
+    PutGs(t, "Island", 2);
+    PutGs(t, "Mountain", 3);
+    PutGs(t, "Mountain", 4);
+    PutGs(t, kGs, 10);
+    HandGs(t, "Niv-Mizzet, the Firemind", 31);
+    const std::vector<TurnSolver::Plan> tplans = TurnSolver::EnumerateMainPlans(t, true);
+    CHECK(OfferedGs(tplans, 10, /*sac=*/true, { "Niv-Mizzet, the Firemind" }));
+    CHECK_FALSE(OfferedGs(tplans, 10, /*sac=*/false, { "Niv-Mizzet, the Firemind" }));   // unpayable without
+}
+
+TEST_CASE("Niv Servant rule amendment (MTG_NIV_SERVANT_UNPAIR, DEFAULT OFF): a Servant holding a Lookout's pair")
+{
+    // A Tandem Lookout paired with the Servant cannot pair with an entering Niv-Mizzet, Parun; sacrificing
+    // the Servant (its {C}{C} pays nothing of {U}{U}{U}{R}{R}{R}) breaks the pair so the Lookout pairs with
+    // the Niv. The rule prunes that sacrifice; the amendment arm searches it.
+    GameState s = FreshGs();
+    s.m_provider = &NivProvGs();
+    for (int k = 1; k <= 3; ++k) { PutGs(s, "Island", k); }
+    for (int k = 4; k <= 6; ++k) { PutGs(s, "Mountain", k); }
+    PutGs(s, kGs, 10);
+    const int li = PutGs(s, "Tandem Lookout", 57);
+    s.battlefield[li].paired_with = 10;
+    REQUIRE(SoulbondPartnerIndex(s.battlefield[li], s) >= 0);
+    HandGs(s, "Niv-Mizzet, Parun", 33);
+    {
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(OfferedGs(plans, 10, /*sac=*/false, { "Niv-Mizzet, Parun" }));
+        CHECK_FALSE(OfferedGs(plans, 10, /*sac=*/true, { "Niv-Mizzet, Parun" }));   // the rule as shipped
+    }
+    {
+        ArmGs amend(heurarm::NIV_SERVANT_UNPAIR, true);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(OfferedGs(plans, 10, /*sac=*/true, { "Niv-Mizzet, Parun" }));
+        CHECK(OfferedGs(plans, 10, /*sac=*/false, { "Niv-Mizzet, Parun" }));
+        // ...and only while the Servant really holds the pair.
+        GameState u = s;
+        for (Permanent& p : u.battlefield) { if (p.card.m_number == 57) { p.paired_with = 0; } }
+        CHECK_FALSE(OfferedGs(TurnSolver::EnumerateMainPlans(u, true), 10, /*sac=*/true, { "Niv-Mizzet, Parun" }));
+    }
 }

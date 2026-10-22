@@ -2924,6 +2924,22 @@ public:
                                   const std::vector<int>& /*sel*/, bool* /*rescued_by_exception*/) const
     { return false; }
 
+    // SacForManaOnlyIfNeeded -- the deck's hold on a battlefield sacrifice-for-mana (cands[j], a
+    // SacForMana: Generator Servant, Lotus Bloom) that the subset's own casts do not NEED. Asked by the
+    // search's subset walk (EnumeratePlans) for each selected SacForMana of a subset that passed every
+    // other gate and does NOT win this turn (the walk's own projection; a winning plan is never
+    // dropped). Solve's greedy never picks such a subset over its no-sacrifice sibling, so it does not
+    // ask (see SubsetSpendsUnneededSacForMana). True asks the engine to drop the subset when every OTHER selected
+    // action stays payable without that sacrifice, paid the way the executor pays it
+    // (SubsetPayableAsExecuted). The provider names only WHICH sacrifice it holds; "needed" is the
+    // engine's payer's answer, so a sacrifice that funds the line (ramp) is never touched, and the
+    // sibling subset -- the same casts with the source kept -- is enumerated beside it. Never asked in
+    // human play (the viewer's menu keeps every plan). Base false -> every deck byte-identical.
+    // NivMizzetComboProvider: the USER's Generator Servant rule (MTG_NIV_SERVANT_FIREMIND_ONLY).
+    virtual bool SacForManaOnlyIfNeeded(const GameState& /*s*/, const std::vector<Action>& /*cands*/,
+                                        const std::vector<int>& /*sel*/, int /*j*/) const
+    { return false; }
+
     // RestrictorSubsetWasted -- the deck's prune on a cast RESTRICTOR (a card with max_casts_after:
     // Irencrag Feat, "you can cast only one more spell this turn"). Asked by BOTH subset walks for each
     // restrictor cands[j] in a subset that is already legal (no more followers than allowed); true marks

@@ -3260,6 +3260,11 @@ public:
     // pairing default; the searched twin inverts it (see the definition).
     int SoulbondPartner(const GameState& s, int controller, const Permanent& source,
                         const std::vector<int>& candidate_bf_indices) const override;
+    // The USER's Generator Servant rule (2026-10-22; MTG_NIV_SERVANT_FIREMIND_ONLY, DEFAULT ON): a
+    // Servant sacrifice the line does not need for mana is searched only beside a Niv-Mizzet, the
+    // Firemind cast. See the .cpp.
+    bool SacForManaOnlyIfNeeded(const GameState& s, const std::vector<Action>& cands,
+                                const std::vector<int>& sel, int j) const override;
 };
 
 // Galadriel (Galadriel of Lothlorien + 52 scry lands + Sol Ring, Crackle with Power as the finisher;

@@ -52758,3 +52758,70 @@ int NivMizzetComboProvider::SoulbondPartner(const GameState& s, int controller, 
     for (const Card& l : pl.library) { if (is_niv(l)) { return 0; } }
     return pick;
 }
+
+// THE GENERATOR SERVANT RULE (USER 2026-10-22, after seed 10's T5: Niv-Mizzet, the Firemind cast off
+// lands and Sol Ring with the Servant kept, where the haste line goes off that turn): "That one maybe
+// should be specified by the search in cases where we have sufficient mana to cast it otherwise. But
+// we should only use it for Niv-mizzet the firemind in that case."
+//   - The line NEEDS the Servant's {C}{C} (the rest is unpayable without it): untouched -- it is ramp,
+//     and it may pay for anything. The ENGINE decides "needed", with the executor's own payer.
+//   - It does not need it: the sacrifice is searched (both branches) only when the subset casts the
+//     Firemind -- its haste is what lets it {T}: draw the turn it lands, i.e. the Lookout / Curiosity
+//     kill. Any other plan holding an unneeded sacrifice is pruned; its sibling with the Servant kept
+//     (same casts) stays on the menu, and a later breakpoint continuation can still crack it.
+// Niv-Mizzet, Parun ({U}{U}{U}{R}{R}{R}) has no generic pip for the {C} to pay, so it never gains haste
+// from it and is not exempt. The Lookout's haste (a 2-power attack the turn it lands) is NOT exempt
+// either: the USER named the Firemind alone. A plan that wins this turn is never dropped (the walk
+// asks only of non-winning subsets). Human play is never pruned.
+static bool NivServantFiremindOnlyOn()
+{
+    static const bool on = EnvOn("MTG_NIV_SERVANT_FIREMIND_ONLY", true);   // DEFAULT ON (the USER's rule); =0 disables
+    return heurarm::Flag(heurarm::NIV_SERVANT_FIREMIND_ONLY, on);
+}
+// AMENDMENT (MTG_NIV_SERVANT_UNPAIR, DEFAULT OFF -- proposed to the USER, not adopted): the rule's A/B
+// found the one thing an unneeded sacrifice buys besides haste. A Tandem Lookout paired with the
+// Servant stays paired with it when a Niv enters (CR 702.46: a paired creature cannot pair again), so
+// the Niv's pings draw nothing; sacrificing the Servant breaks the pair and the Lookout pairs with the
+// entering Niv, whose every ping then draws (held-out d3 seed 67072: the sacrifice before Niv-Mizzet,
+// Parun wins T4; with it pruned the Lookout stays on the Servant and the game goes to T5, at 4x budget
+// too). Either Niv: this is the draw-on-damage pairing, not the haste.
+static bool NivServantUnpairOn()
+{
+    static const bool on = EnvOn("MTG_NIV_SERVANT_UNPAIR");   // DEFAULT OFF pending the USER; =1 enables
+    return heurarm::Flag(heurarm::NIV_SERVANT_UNPAIR, on);
+}
+// Is the battlefield permanent numbered `num` the live soulbond partner of a Tandem Lookout?
+static bool NivServantPairedWithLookout(const GameState& s, int num)
+{
+    if (num == 0) { return false; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.paired_with != num) { continue; }
+        if (NivRoleOf(CardDatabase::Instance().LookupCached(p.card)) != kNivLookout) { continue; }
+        if (SoulbondPartnerIndex(p, s) >= 0) { return true; }
+    }
+    return false;
+}
+
+bool NivMizzetComboProvider::SacForManaOnlyIfNeeded(const GameState& s, const std::vector<Action>& cands,
+                                                    const std::vector<int>& sel, int j) const
+{
+    if (!NivServantFiremindOnlyOn()) { return false; }
+    const Action& a = cands[static_cast<std::size_t>(j)];
+    if (a.kind != Action::Kind::SacForMana) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (NivRoleOf(d) != kNivServant) { return false; }
+    bool casts_parun = false;
+    for (int k : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(k)];
+        if (c.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name);
+        const NivRole r = NivRoleOf(cd);
+        if (r == kNivFiremind) { return false; }   // the haste line: searched
+        if (r == kNivParun)    { casts_parun = true; }
+    }
+    // The amendment: a Parun cast (a Firemind one already returned) re-pairs a Lookout the sacrifice frees.
+    if (casts_parun && NivServantUnpairOn() && NivServantPairedWithLookout(s, a.sac_source_id)) { return false; }
+    return true;
+}

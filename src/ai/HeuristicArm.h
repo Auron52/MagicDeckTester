@@ -659,6 +659,8 @@ enum Slot : int
     NIV_CANTRIP_AMEND,        // MTG_NIV_CANTRIP_AMEND  amendment arm of MTG_NIV_CANTRIP_RULES (inert unless that is on), from the 2026-10-22 attribution of the Ponder prune's slower games: (1) ORDER -- a draw spell castable with this turn's leftover mana is usable NOW and goes ahead of lands that cannot be played until next turn (g4); (2) KEEP -- Ponder keeps the top three only if they supply something the hand LACKS (an empty Niv / enabler bucket, a go-off draw, Sol Ring, a missing colour, a land with none in hand) or hold two wanted non-draw cards; one good card beside two dead ones is a shuffle, and draw alone never keeps (g14, g125, g134, d5 g20). DEFAULT OFF pending its A/B and the USER
     NIV_LOOKOUT_NIV_ONLY,     // MTG_NIV_LOOKOUT_NIV_ONLY  NivMizzetCombo: Tandem Lookout's soulbond DEFAULT is to pair only with a Niv -- with a non-Niv partner offered it WAITS while a Niv can still arrive (hand or library), and pairs as before once none can. USER 2026-10-22: "most of the time you don't want to if not with Niv". The searched soulbond twin (Plan::soulbond_decline) INVERTS the default, so "pair anyway" stays findable (completeness). DEFAULT OFF pending its A/B and the USER
     DEPLETION_SBA,            // MTG_DEPLETION_SBA  the apply (TurnSolver::ApplyPlanDirect, rollout + search) sacrifices a depletion land whose last counter was spent at the EXECUTOR's SBA point -- when an outermost committed cast has RESOLVED -- not once at the end of the plan, and never earlier (a land the whole-turn prepay empties before the first cast is still there when that cast resolves). A mid-plan resolution read a dead Saprazzan Skerry as a land in play: NivMizzetCombo seed 6 T3, Preordain's ScryKeepOnTop bottomed Island + Cascade Bluffs in the search while the executor kept them, the recorded continuation (play Saprazzan Skerry) could not replay, no land was played and the committed T5 realised T7. Rollout only (the executor already sweeps). DEFAULT ON; =0 -> the end-of-plan sweep
+    NIV_SERVANT_FIREMIND_ONLY,// MTG_NIV_SERVANT_FIREMIND_ONLY  NivMizzetCombo: a Generator Servant sacrifice the line does NOT need for mana is searched only beside a Niv-Mizzet, the Firemind cast (its haste = {T}: draw the turn it lands); any other plan holding an unneeded sacrifice is pruned (NivMizzetComboProvider::SacForManaOnlyIfNeeded; USER 2026-10-22: "we should only use it for Niv-mizzet the firemind in that case"). A Servant the line needs (ramp) is untouched; human play is never pruned. DEFAULT ON (the USER's rule, Niv-only); =0 -> every Servant plan searched
+    NIV_SERVANT_UNPAIR,       // MTG_NIV_SERVANT_UNPAIR  NivMizzetCombo: amendment to the Servant rule (DEFAULT OFF, the USER's call): an unneeded Servant sacrifice is ALSO searched when the Servant is a Tandem Lookout's live soulbond partner and the plan casts either Niv-Mizzet -- the sacrifice breaks the pair so the Lookout pairs with the entering Niv, and every ping draws (held-out d3 s67072: sac -> Parun paired -> T4 kill; the rule's prune -> T5, at 4x budget too). Inert unless MTG_NIV_SERVANT_FIREMIND_ONLY is on
     COUNT
 };
 
@@ -1268,6 +1270,8 @@ inline const char* Name(int slot)
         "MTG_NIV_CANTRIP_AMEND",
         "MTG_NIV_LOOKOUT_NIV_ONLY",
         "MTG_DEPLETION_SBA",
+        "MTG_NIV_SERVANT_FIREMIND_ONLY",
+        "MTG_NIV_SERVANT_UNPAIR",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
