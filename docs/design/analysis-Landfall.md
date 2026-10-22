@@ -565,6 +565,34 @@ with a distinct number in case we choose to do condemnation later"*.
   - USER 2026-10-17 ("that sounds sensible"): the gate ON, the mana lever deleted. Courser's place in the rank
     (last, the gate's usual shed) is CONFIRMED by the USER 2026-10-17: "Courser last is fine for landfall".
 
+## Kessig Wolf Run — implemented for screening as a 1-of (2026-10-22; interpretations PENDING the USER)
+USER: *"we should also try Kessig Wolf Run. My suspicion is that it is a clear 1-of (since it can be fetched by
+Primeval Titan. We should add that to the heuristic."* and *"It's a very good option if you don't have other
+threats."* The card (`PermAbilityMode::TapTargetPump`, `tap_target_pump_*`; the list itself is unchanged -- the
+screen is the next step) and the provider rules below are inert unless a Wolf Run is in the game, so the
+current list plays byte-identically.
+- **The pump (searched).** Engine: one plan variant per (target identity class, X), X every affordable value;
+  the land's own {C} never pays (the {T} is paid first, its mana debited from the pool). LandfallProvider
+  narrows by two SOUND folds only, each checked on the live board (`TapTargetPumpTargets` /
+  `TapTargetPumpXCandidates`): targets = creatures that can attack this turn, main 1 only, and ONE of them
+  (the largest) -- nothing in this pool reads power but combat damage, and +X on any connecting attacker adds
+  the same X; X = every mana left (`kTapTargetPumpXAll`, run last in the trailing pass) -- no second main, no
+  combat mana sink, no attacking mana creature, so the leftover buys nothing. `MTG_UNPRUNE=xspell` opens both.
+- **Titan pick (the agent's reading, REPORTED):** with a Wolf Run in the library and none on our battlefield,
+  the picks "Wolf Run + a land the rule would pick" (Gruul Turf when the rule makes Turf automatic; otherwise
+  each Wilds-class / Myriad land of the rule's picks) are ADMITTED and SEARCHED beside the rule's own; in the
+  out-of-basics order Wolf Run's best pick is the searched alternative. With **no other threat** the Wolf Run
+  picks go first (a tie takes the Wolf Run), otherwise after the rule's (a tie keeps the rule's). "Other
+  threat" = a creature we control other than a Titan with power >= 4 or a landfall payoff that makes tokens
+  or counters, such a creature card in hand, or a Genesis Wave in hand. Memo key bits 18-19.
+- **Karoo bounce (reading inside the USER's rule):** Wolf Run is colourless (bounced first by the rule) but
+  ranks LAST among the colourless lands. **Fetch colours:** it makes only {C}, so g / r ignore it.
+  **5i discard:** it is a colourless utility land -- the Radiant Fountain / Haunted Fengraf value (4 when an
+  untapped drop is needed, else 1 late / 2 early) and its own land kind; no change.
+- Fixtures: `wolfrun_pump_exact_lethal` (+ `_control`), `wolfrun_spell_beats_pump`,
+  `wolfrun_titan_fetches_wolfrun_no_threat` (+ `_control`), `wolfrun_human_choose_target_and_x`; unit tests
+  `test/unit/test_kessig_wolf_run.cpp`.
+
 ## Hand-played references s1-s10 — bench before the value leaf (2026-10-16, de730cadf)
 `ref_bench.py` at the shipped play setting (d5 b20, no value leaf, no keep table): human 6.000, search
 **5.800**; 1 short (s5 gi4, T6 -> T7), 3 faster (s2, s6, s7), 6 equal. Protocol replay: 9 ok, s6 repaired
