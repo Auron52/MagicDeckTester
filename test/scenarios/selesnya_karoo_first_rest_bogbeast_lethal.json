@@ -1,0 +1,36 @@
+{
+  "deck": "decks/SelesnyaLifegain/SelesnyaLifegain.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 12,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Plains",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Blossoming Bogbeast",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Selesnya Sanctuary",
+    "Rest for the Weary"
+  ],
+  "library_filler": "Craterhoof Behemoth",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "comment": "THE KAROO DROP'S SEARCHED POSITION (MTG_KAROO_POSITION, USER 2026-10-22: 'We should allow the sanctuary to be played at the end of the phase at latest'). T5: Forest + Plains untapped (exactly Rest for the Weary's {1}{W}), a non-sick Blossoming Bogbeast, hand Selesnya Sanctuary + Rest for the Weary, opponent at 12. The Bogbeast's attack trigger gains 2 and then pumps the team by X = the life gained this turn. Sanctuary FIRST (its bounce returns an untapped basic, tapped for mana in response), then Rest for 8 (a land entered) -> X = 10, a 13/13 swing: lethal. Rest first then the Sanctuary (the old fixed placement) gains 4 -> X = 6, 9 damage; Rest after combat helps nothing. No other land is in hand, so the T5 kill exists only at the earlier Karoo position. Searched (autonomous) arm: the search must find it.",
+  "expect_win_turn": 5
+}
