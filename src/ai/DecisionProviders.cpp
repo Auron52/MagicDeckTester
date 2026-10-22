@@ -43855,11 +43855,14 @@ std::vector<int> AccomplishedAlchemistProvider::CleanupDiscardShedOrder(
 //                                     tap (or the lands) and the piece is stranded (ledger, "Re-measurement on current
 //                                     play (2026-10-22)": g700 / g937 Galvanic Alchemist, g472 Staff, at d8 b0)
 // Every other position is unchanged.
-// ONE ARM WITH THE ORDER OFF (DEFAULT OFF, measurement only; inert while MTG_AA_CAST_ORDER is on, whose WEATHER_LAST
-// is its in-order twin): MTG_AA_GENERIC_WEATHER_LAST keeps the generic tiers and moves only the amended order's TAIL --
+// TWO ARMS WITH THE ORDER OFF (DEFAULT OFF, measurement only; inert while MTG_AA_CAST_ORDER is on, whose WEATHER_LAST
+// is their in-order twin): MTG_AA_GENERIC_WEATHER_LAST keeps the generic tiers and moves only the amended order's TAIL --
 // Weather the Storm, then Stroke of Genius, after every other card (generic ranks 21 and 22). The generic tiers tie
 // Weather with Living Wish / Nourish / Feed the Clan / Staff / Crab Umbra at 20 and fall to plan (hand) order, so a
 // Weather earlier in hand is cast first and loses those storm copies (g42 / g837 at d8 b0, the same ledger section).
+// MTG_AA_GENERIC_WEATHER_ONLY_LAST moves ONLY Weather the Storm (rank 21, after every other card, Stroke included);
+// Stroke of Genius keeps its generic tier (20, plan order) -- moving Stroke last cost g731 a turn at d8 b0. With both
+// on, WEATHER_LAST (the superset) wins.
 // TOTAL (CastOrderTotalByName): two DIFFERENT cards on one rank (only possible among unlisted cards) fall to the
 // name, never to plan order (the USER's 2026-10-14 cross-deck ruling); copies of one card keep plan order.
 // The land drop's slot (0, before every cast) meets DecisionProvider::LandDropCastOrderRank's two conditions:
@@ -43901,11 +43904,17 @@ bool AaCastOrderWishLate()
     return heurarm::Flag(heurarm::AA_CAST_ORDER_WISH_LATE, s_env);
 }
 
-// The one arm read with the order OFF (DEFAULT OFF; inert while AaCastOrderOn()): the generic tiers + the tail.
+// The two arms read with the order OFF (DEFAULT OFF; inert while AaCastOrderOn()): the generic tiers + the tail
+// (Weather, then Stroke), and the generic tiers + Weather alone.
 bool AaGenericWeatherLast()
 {
     static const bool s_env = EnvOn("MTG_AA_GENERIC_WEATHER_LAST");         // DEFAULT OFF (measurement arm)
     return heurarm::Flag(heurarm::AA_GENERIC_WEATHER_LAST, s_env);
+}
+bool AaGenericWeatherOnlyLast()
+{
+    static const bool s_env = EnvOn("MTG_AA_GENERIC_WEATHER_ONLY_LAST");    // DEFAULT OFF (measurement arm)
+    return heurarm::Flag(heurarm::AA_GENERIC_WEATHER_ONLY_LAST, s_env);
 }
 
 // The rank is position x kAaOrderScale, so an unlisted card's generic rank (0..30) fits under the unlisted position
@@ -44026,7 +44035,7 @@ const char* AaCastOrderSlotName(int slot)
 }   // namespace
 
 // MTG_AA_GENERIC_WEATHER_LAST's two ranks: just past the generic noncreature tier (20), well before the self-damage
-// tier (30), Weather the Storm then Stroke of Genius.
+// tier (30), Weather the Storm then Stroke of Genius. MTG_AA_GENERIC_WEATHER_ONLY_LAST uses the first alone.
 constexpr int kAaGenericNoncreatureTier = 20;
 constexpr int kAaGenericWeatherRank     = 21;
 constexpr int kAaGenericStrokeRank      = 22;
@@ -44036,10 +44045,12 @@ int AccomplishedAlchemistProvider::CastOrderRank(const GameState& s, const CardD
     if (!AaCastOrderOn())
     {
         const int generic = SelesnyaLifegainProvider::CastOrderRank(s, def);
-        if (generic != kAaGenericNoncreatureTier || !AaGenericWeatherLast()) { return generic; }
+        if (generic != kAaGenericNoncreatureTier) { return generic; }
+        const bool tail = AaGenericWeatherLast();
+        if (!tail && !AaGenericWeatherOnlyLast()) { return generic; }
         const int slot = AaCastOrderSlot(def);
-        if (slot == kAaWeather) { return kAaGenericWeatherRank; }
-        if (slot == kAaStroke)  { return kAaGenericStrokeRank; }
+        if (slot == kAaWeather)         { return kAaGenericWeatherRank; }
+        if (slot == kAaStroke && tail)  { return kAaGenericStrokeRank; }
         return generic;
     }
     const int slot = AaCastOrderSlot(def);
@@ -44051,8 +44062,9 @@ const char* AccomplishedAlchemistProvider::CastOrderTierName(int rank) const
 {
     if (!AaCastOrderOn())
     {
-        if (AaGenericWeatherLast() && rank == kAaGenericWeatherRank) { return AaCastOrderSlotName(kAaWeather); }
-        if (AaGenericWeatherLast() && rank == kAaGenericStrokeRank)  { return AaCastOrderSlotName(kAaStroke); }
+        const bool tail = AaGenericWeatherLast();
+        if ((tail || AaGenericWeatherOnlyLast()) && rank == kAaGenericWeatherRank) { return AaCastOrderSlotName(kAaWeather); }
+        if (tail && rank == kAaGenericStrokeRank) { return AaCastOrderSlotName(kAaStroke); }
         return SelesnyaLifegainProvider::CastOrderTierName(rank);
     }
     if (rank / kAaOrderScale == kAaOrderUnlisted) { return "UNLISTED: after every listed card, in generic tier order"; }

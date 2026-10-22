@@ -3788,3 +3788,76 @@ TEST_CASE("Cast order, WISH_LATE: {Living Wish, Galvanic Alchemist} off an Alche
         CHECK(wlate == 2);   // WISH_LATE: Galvanic before the Wish
     }
 }
+
+TEST_CASE("Cast order, GENERIC_WEATHER_ONLY_LAST (DEFAULT OFF): the generic tiers with Weather alone last; Stroke stays")
+{
+    struct GwArmAa
+    {
+        std::int8_t saved;
+        explicit GwArmAa(int v) : saved(heurarm::t_arm[heurarm::AA_GENERIC_WEATHER_ONLY_LAST])
+        { heurarm::t_arm[heurarm::AA_GENERIC_WEATHER_ONLY_LAST] = static_cast<std::int8_t>(v); }
+        ~GwArmAa() { heurarm::t_arm[heurarm::AA_GENERIC_WEATHER_ONLY_LAST] = saved; }
+    };
+    GameState g = FreshAa();
+    g.m_provider = &AaProv();
+    const AccomplishedAlchemistProvider& p = AaProv();
+    const GenericProvider generic;
+    // Off (=0, and unset when the env leaves it unset): the generic tiers byte for byte.
+    for (int v : { 0, -1 })
+    {
+        if (v == -1 && EnvOn("MTG_AA_GENERIC_WEATHER_ONLY_LAST")) { continue; }
+        AaAllOrderArmsAa a(0, 0, 0, 0, 0, 0, 0);
+        GwArmAa w(v);
+        for (const std::string& n : AaProposedOrder())
+        { CAPTURE(n); CHECK(p.CastOrderRank(g, DefAa(n)) == generic.CastOrderRank(g, DefAa(n))); }
+    }
+    // On: Weather 21; Stroke keeps 20; every other card keeps its generic rank; ties stay in plan order.
+    {
+        AaAllOrderArmsAa a(0, 0, 0, 0, 0, 0, 0);
+        GwArmAa w(1);
+        for (const std::string& n : AaProposedOrder())
+        {
+            CAPTURE(n);
+            const int r = p.CastOrderRank(g, DefAa(n));
+            if (n == "Weather the Storm") { CHECK(r == 21); CHECK(p.CastOrderTierName(r) != nullptr); }
+            else                          { CHECK(r == generic.CastOrderRank(g, DefAa(n))); }
+        }
+        CHECK(p.CastOrderRank(g, DefAa("Stroke of Genius")) == 20);
+        CHECK(p.CastOrderTierName(22) == nullptr);
+        CHECK(p.LandDropCastOrderRank() == -1);
+        CHECK_FALSE(p.CastOrderTotalByName());
+        CHECK(SortedCastsAa(g, { "Weather the Storm", "Living Wish" })
+              == std::vector<std::string>{ "Living Wish", "Weather the Storm" });
+        CHECK(SortedCastsAa(g, { "Weather the Storm", "Stroke of Genius" })
+              == std::vector<std::string>{ "Stroke of Genius", "Weather the Storm" });
+        // Stroke stays where the hand had it among the noncreatures (here first); only Weather moves.
+        CHECK(SortedCastsAa(g, { "Stroke of Genius", "Weather the Storm", "Staff of Domination", "Nourish",
+                                 "Seedcradle Witch", "Living Wish", "Wild Growth" })
+              == std::vector<std::string>{ "Wild Growth", "Seedcradle Witch", "Stroke of Genius", "Staff of Domination",
+                                           "Nourish", "Living Wish", "Weather the Storm" });
+    }
+    // Both generic arms on: GENERIC_WEATHER_LAST (the superset) wins -- Stroke 22.
+    {
+        AaAllOrderArmsAa a(0, 0, 0, 0, 0, 0, 1);
+        GwArmAa w(1);
+        CHECK(p.CastOrderRank(g, DefAa("Weather the Storm")) == 21);
+        CHECK(p.CastOrderRank(g, DefAa("Stroke of Genius")) == 22);
+    }
+    // Inert while the order is on: every card's rank equals the order's own (alone, walwl, wlate).
+    for (int late : { 0, 1 })
+    for (int wal : { 0, 1 })
+    for (int wl : { 0, 1 })
+    {
+        CAPTURE(late); CAPTURE(wal); CAPTURE(wl);
+        std::vector<int> want;
+        {
+            AaAllOrderArmsAa a(1, 0, wal, 0, wl, late, 0);
+            GwArmAa w(0);
+            for (const std::string& n : AaProposedOrder()) { want.push_back(p.CastOrderRank(g, DefAa(n))); }
+        }
+        AaAllOrderArmsAa a(1, 0, wal, 0, wl, late, 0);
+        GwArmAa w(1);
+        int i = 0;
+        for (const std::string& n : AaProposedOrder()) { CAPTURE(n); CHECK(p.CastOrderRank(g, DefAa(n)) == want[i++]); }
+    }
+}

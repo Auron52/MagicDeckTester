@@ -3196,7 +3196,8 @@ public:
     // lifegain), _LIFE_FIRST (the lifegain right after the land Auras, then the Wish), _WEATHER_LAST (Weather the
     // Storm after the untappers), _WISH_LATE (Living Wish after Staff of Domination, before Weather / Stroke). One
     // arm read with the order OFF, DEFAULT OFF: MTG_AA_GENERIC_WEATHER_LAST (the generic tiers, Weather the Storm
-    // then Stroke of Genius after every other card).
+    // then Stroke of Genius after every other card); MTG_AA_GENERIC_WEATHER_ONLY_LAST (the same, Weather alone --
+    // Stroke keeps its generic tier).
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
     bool        CastOrderTotalByName() const override;

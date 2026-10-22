@@ -2792,16 +2792,83 @@ At 10x every persisting deal is already slower (g472 d5 and d3, g700, g937, g731
 * **g731 (all three arms): Stroke of Genius last.** The hand holds Stroke and no Weather, so gwl's only change there is
   Stroke's rank. Generic's T4 Combo Off decks the opponent with Stroke; with Stroke last the search fetches Ezuri off
   Elvish Harbinger on T2 instead and wins T5. Realisation failure not isolated.
-* The 170001 wins: g535, g916 are Weather cast ahead of the lifegain in generic (g535 T3 Nourish, Weather, Nourish vs
-  gwl Nourish, Weather; g916 T3 Weather, Feed, Crab Umbra); g39, g923 a different T2-T4 line (Stroke / Weather ranks),
-  not traced further.
+* The 170001 wins (attribution CORRECTED by round 2 below, which isolates Weather from Stroke): g39, g916, g923 are the
+  Weather move (the Weather-only arm keeps them at d8 b0; g916 generic T3 Weather, Feed, Crab Umbra); g535 is the Stroke
+  move, not Weather (Weather-only plays generic's T7; gwl casts Nourish, then Stroke for X = 3 as a dig, Combo Off T6).
 
-**Recommendation for the USER (nothing adopted; every arm ships OFF).** wlate does what was asked of it in g335 and
+**Recommendation for the USER (round 1; SUPERSEDED by round 2 below).** wlate does what was asked of it in g335 and
 nowhere else; it is a near-tie with walwl. The measurement points past both fixed orders to **gwl**: best net (-35),
 fewest slower games (7, none at d3), cheapest perturbation, and the only arm that keeps g472 / g700 / g937 at unlimited
 budget. It still does not meet the slower-game bar: **g731 loses a turn at d8 b0** (the Stroke move). Next measurement
 if the USER wants this direction: a Weather-only tail (Stroke left in its generic tier) and a root cause for g731;
 separately, the g425 combat-finisher defect above is in current play. Adoption, and which arm, is the USER's decision.
+
+### Round 2 (2026-10-22, rebased onto bda6c46f8) -- the Weather-only tail, and g731's root cause
+
+`aa-castorder2` rebased onto primary bda6c46f8 (clean; NOT pushed). Unit 1829 / 1829, scenarios 251 / 251. **Flags
+unset: the alchemist + alchemist2hg smoke rows reproduce the committed smoke GT at bda6c46f8 exactly -- 4 / 4 digests,
+4 / 4 `gt_logs` `.wins`** (hand manifest, `build/scratch/aa/castorder2/smoke3/`; no harness tier was run -- a value-leaf
+run on the box reads `test/results/smoke.env`). Binary `build/scratch/aa/castorder2/mtg2.bin`; batches `ab2/`, `xr2/`
+(`mk2.py`, `mkx2.py`, `pool2.py ab2`, `tab2.py xr2 xr2.json.list`), traces `tr/r2_*`, route traces `rt731b_*.err`.
+
+**New arm (DEFAULT OFF, measurement only): `MTG_AA_GENERIC_WEATHER_ONLY_LAST`** (heurarm `AA_GENERIC_WEATHER_ONLY_LAST`,
+"gw"): order OFF, the generic tiers with ONLY Weather the Storm moved after every other card (rank 21); Stroke of
+Genius keeps its generic tier (20, plan order). Inert while the order is on; with gwl also on, gwl (the superset) wins.
+One new unit case (ranks, comparator incl. Stroke staying in hand order, both-on precedence, inert under the order).
+
+**g731's root cause -- an ordering mechanism, and gw fixes it (d8 b0: generic 4, gwl 5, gw 4).** Generic's T4 Combo
+Off route (MTG_AA_ROUTE_TRACE=2, root: Forest x3, Arbor Elf, Elvish Harbinger, Accomplished Alchemist; hand Crab Umbra,
+Stroke, Nourish, Nourish): Nourish, Nourish (12 life) -> at the lifegain breakpoint the continuation {Stroke of Genius,
+Crab Umbra} casts Stroke at YOURSELF as a dig, with X sized to keep Crab Umbra's {U} back; the draw re-plans and Umbra is
+never cast, so U4 still floats -> the drawn Staff of Domination ({3}) and its {1} untap of the Alchemist -> the untap
+loop -> the drawn second Stroke decks the opponent. With Stroke ranked last (gwl) the SAME continuation realises Crab
+Umbra first, then Stroke: U3 floats instead of U4, the drawn Staff ({3}) takes all of it, its {1} untap is unpaid
+(Harbinger already tapped) and the walk finds no loop (same set-up `#19`: generic float U4, gwl float U3 -- the board key
+of "Umbra cast"). The only other continuation, Stroke alone, spends maximal X (float 0). So the turn-4 kill exists only because a LATER cast in the
+list reserves the one mana the loop needs: Stroke's X is not a searched axis in the route, and once the order moves the
+reserving cast behind it the line is unreachable at any budget. That is a completeness question for the engine (a
+searched X for a dig Stroke, or a hold-back variant) -- surfaced for the USER, not fixed here. gw leaves Stroke in its
+generic tier, so the continuation realises exactly as generic does.
+
+**What the Stroke move buys and costs, isolated:** of gwl's d8 b0 wins, g42, g837, g39, g916, g923 are the Weather move
+(gw keeps all five); g425 (in generic, the T5 combat-finisher defect of round 1) and g535 (Stroke cast after Nourish as an
+X = 3 dig, Combo Off T6 instead of T7) are the Stroke move (gw plays generic's turn); g731 is the Stroke move's loss. On 180001 both arms win the same four
+deals (g98, g643, g895, g969), i.e. Weather-move wins.
+
+**A/B** -- one pooled batch (22,500 games, 6 threads, box shared: ms not comparable, units are), arms by heurarm, 25-game
+chunks, `seed = base + off`, `game_index = off`, unwon = 9; bases 160001, 170001 and fresh held-out 180001. d5 = value_play
+depth, b20. Delta = arm - off; faster / slower; searched units vs off. off: 160001 4.9690 / 5.0500 / 6.4110, 170001
+4.8980 / 4.9400 / 6.3290, 180001 4.9260 / 4.9220 / 6.3080 (d5 / d3 / d0). The rebase moved 2 of 400 round-1 chunks
+(160001 d5 c825 and d3 c150, both arms alike); 396 / 400 reproduce round 1 per game.
+
+| arm | base | d5 b20 (1000) | d3 b10 (500) | d0 (1000) |
+|---|---|---|---|---|
+| gwl | 160001 | -0.003 4/2 0.997x | -0.012 6/0 0.998x | -0.011 7/1 |
+| gwl | 170001 | -0.005 6/1 0.996x | -0.004 2/0 0.985x | -0.008 4/3 |
+| gwl | 180001 | -0.006 6/1 0.981x | -0.006 3/1 0.966x | -0.011 4/1 |
+| gwl | pooled | -0.0047 16/4 0.992x | -0.0073 11/1 0.983x | -0.0100 15/5 |
+| **gw** | 160001 | -0.001 2/1 1.000x | -0.010 5/0 0.995x | -0.012 7/0 |
+| **gw** | 170001 | -0.004 4/0 0.987x | -0.002 1/0 1.000x | -0.008 4/3 |
+| **gw** | 180001 | -0.006 5/0 0.992x | -0.008 3/0 0.983x | -0.012 4/0 |
+| **gw** | pooled | **-0.0037 11/1 0.993x** | **-0.0067 9/0 0.993x** | **-0.0107 15/3** |
+
+Over all 7,500 paired games: gwl net **-55** turns (42 faster / 10 slower, searched units 0.989x); gw net **-53** (35 / 4,
+0.993x).
+
+**Slower games at 10x and d8 b0, faster games at d8 b0** (both arms, one d8 rerun per deal):
+
+| arm | d8 b0 LOST vs generic | d8 b0 WON | slower deals that recover |
+|---|---|---|---|
+| gwl | **1**: g731 (170001; persists at 10x) | 11 deals / 12 turns: g42, g425 (2), g837; g39, g535, g916, g923; g98, g643, g895, g969 (180001); g452, g806 same | g83 at 10x; g896 (unwon in both at 10x) and g165 (d5 at 10x; d3 still slower at 10x) at d8 b0; d0 g131, g72, g126, g202, g526 at d8 b0 |
+| **gw** | **0** | 9 deals: g42, g837; g39, g916, g923; g98, g643, g895, g969; g806 same | g83 at 10x; d0 g72, g126, g202 at d8 b0 |
+
+**Recommendation for the USER (nothing adopted; every arm ships OFF): gw.** It is the first arm that meets the
+slower-game bar on this sample -- all 4 slower deals recover (g83 at 10x, three d0 deals at d8 b0), no deal loses a turn
+at unlimited budget, it never trails at d3 or at d5 on 170001 / 180001, and it is a net -53 on 7,500 held-out games at
+0.993x units. gwl is -55 and wins two more deals at d8 b0, but g731 loses a turn at every budget, and of those two extra
+wins g425 rides a generic-arm defect. The Stroke move is a coin flip worth separate work: a searched X for Stroke as a
+dig (or a hold-back variant in the route) would remove g731's dependence on the order and might keep g535's gain. Also
+for the USER: the g425 combat-finisher defect (round 1) is in current play. Adoption is the USER's decision.
 
 ## Mulligan profile (exhaustive keep table) -- ADOPTED (2026-10-21)
 
