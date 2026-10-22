@@ -1932,7 +1932,11 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     print(f"\n{len(jobs)} arms x {spec.games:,} games -> ONE pooled batch"
           + (f"   (seed {seed}, held out from the screen's {spec.seed})" if seed is not None else ""))
     if dry_run:
-        json.dump({"jobs": jobs}, open(os.path.join(spec.out, f"{spec.stem}.{label}.manifest.json"), "w"), indent=1)
+        # The manifest a real run would write: run_batch / run_with_carry strip the driver-only
+        # `__tag` / `__fmt` keys before writing theirs, and this one used to keep them -- so a
+        # --dry-run manifest could never be diffed byte-for-byte against the run it previews.
+        json.dump({"jobs": [{k: v for k, v in j.items() if not k.startswith("__")} for j in jobs]},
+                  open(os.path.join(spec.out, f"{spec.stem}.{label}.manifest.json"), "w"), indent=1)
         return 0
 
     # Drop the TABLE without dropping the PROFILE. Passing profile=None would do both -- the arm
