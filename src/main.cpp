@@ -821,6 +821,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 }
                 if (a.kind == Action::Kind::SacForMana && !a.chosen_float_color.empty())
                 { tag += " for {" + a.chosen_float_color + "}\xC3\x97" + std::to_string(std::max(1, a.ritual_float)); }
+                // Say what the sacrifice is FOR: its mana gives the creature spell it pays for haste.
+                if (a.kind == Action::Kind::SacForMana && od && od->params.sac_for_mana_grants_haste)
+                { tag += " (haste to the creature it pays for)"; }
                 else if (a.direct_damage > 0) { tag += " \xE2\x86\x92 " + std::to_string(a.direct_damage) + " damage"; }
                 // Falkenrath Pit Fighter (Vampires A2): the searched victim and discard are the whole
                 // decision. Human play carries neither (both are asked at resolution), so the menu
@@ -2377,10 +2380,18 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // OTHER creatures (Skirk Prospector's sac_creature_outlet mana ability) keeps the chip
             // -- feeding a Goblin to it is a real decision, not a payment detail. Lines that DO
             // declare sacout= (older references) still match via CheckLine's declared branch.
+            // A HASTE-RIDER source (Generator Servant: "if that mana is spent on a creature spell, it
+            // gains haste") keeps the chip too: its sacrifice CHANGES THE LINE -- a hasty Niv-Mizzet,
+            // the Firemind taps to draw and goes off the turn it lands -- and costs a 2/1 attacker /
+            // soulbond partner, so it is a decision, not a payment detail. Without the chip the human
+            // could not build that line at all: the undeclared sac is an implicit source, CheckLine
+            // prefers the no-sac plan, and the signature dedup folds the haste plan into it (Niv seed 2,
+            // 2026-10-22: "should sac Generator Servant for haste"). Display-only: plan indices and the
+            // validator are unchanged, so every reference replays as before.
             const bool self_sac_mana =
                 ac.kind == Action::Kind::SacForMana
                 && [&]{ const CardDefinition* sd = CardDatabase::Instance().Lookup(ac.card_name);
-                        return !(sd && sd->params.sac_creature_outlet); }();
+                        return !(sd && (sd->params.sac_creature_outlet || sd->params.sac_for_mana_grants_haste)); }();
             if (!self_sac_mana
              && (ac.kind == Action::Kind::TapForTokens
              || ac.kind == Action::Kind::SacForMana
