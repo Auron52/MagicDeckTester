@@ -85,8 +85,13 @@ fi
 # step: the 2026-10-22 overnight rebaseline's 706 slower games took ~35 min on 1 of 24 cores. Pooled,
 # the step is one batch with one tail (CLAUDE.md: long / multi-item runs batch into ONE queue).
 #
-# ignore_play_profile: replay at the EXPLICIT depth/budget past the deck's enabled value_play
-# depth-lock (the classifier deliberately re-runs the case's own depth at 4x/16x budget).
+# Each re-run is the CASE's own job at 4x/16x its budget, emitted exactly as regression.sh emits it.
+# A depth-5 case is the value_play-driven case: it carries NO depth, so the deck's value_play block
+# decides the depth (FiveColour plays d6) and the hybrid/escalation stay on. It used to be replayed at
+# an explicit depth 5 with ignore_play_profile, which on a d6 deck plays a DIFFERENT configuration
+# from the one that slowed down -- so its churn/PERSISTS verdict answered a question nobody asked
+# (found 2026-10-22 on FiveColour's overnight d5 cells). The d0/d3 cases pin their shallow depth and
+# carry ignore_play_profile, as in the suite.
 WORK="$ROOT/test/logs/$MODE/classify"
 mkdir -p "$WORK"
 rm -f "$WORK"/wins/*.wins 2>/dev/null
@@ -117,13 +122,18 @@ INDEX="$WORK/index.tsv"     # job_stem key gi old new deck  (one line per slower
     if [[ "$deck" == *2hg ]]; then
       base=${deck%2hg}; extra="${extra}\"starting_life\": 30, \"opponent_heads\": 2, "
     fi
-    file=${DECK_FILE[$base]}
+    file=${DECK_FILE[$base]}; prof=${DECK_PROF[$base]}
     stem="${key}_gi${gi}"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$stem" "$key" "$gi" "$old" "$new" "$deck" >> "$INDEX"
     for x in 4 16; do
       [ $first -eq 1 ] && first=0 || printf ',\n'
-      printf '  { "name": "%s_x%s", "deck": "%s", %s"games": 1, "seed": %s, "game_index": %s, "depth": %s, "budget_ms": %s, "ignore_play_profile": true }' \
-        "$stem" "$x" "$file" "$extra" "$(( seed + gi ))" "$gi" "$depth" "$(( budget * x ))"
+      if [ "$depth" -eq 5 ]; then
+        printf '  { "name": "%s_x%s", "deck": "%s", "profile": "%s", %s"games": 1, "seed": %s, "game_index": %s, "budget_ms": %s }' \
+          "$stem" "$x" "$file" "$prof" "$extra" "$(( seed + gi ))" "$gi" "$(( budget * x ))"
+      else
+        printf '  { "name": "%s_x%s", "deck": "%s", "profile": "%s", %s"games": 1, "seed": %s, "game_index": %s, "depth": %s, "budget_ms": %s, "ignore_play_profile": true }' \
+          "$stem" "$x" "$file" "$prof" "$extra" "$(( seed + gi ))" "$gi" "$depth" "$(( budget * x ))"
+      fi
     done
   done <<< "$list"
   printf '\n] }\n'
