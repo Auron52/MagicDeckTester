@@ -5954,5 +5954,18 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Vampire"
+  },
+  "Mossborn Hydra": {
+    "cmc": 3.0,
+    "keywords": [
+      "Double",
+      "Landfall",
+      "Trample"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nThis creature enters with a +1/+1 counter on it.\nLandfall — Whenever a land you control enters, double the number of +1/+1 counters on this creature.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Elemental Hydra"
   }
 }

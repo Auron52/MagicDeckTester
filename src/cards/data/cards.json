@@ -11989,6 +11989,29 @@
    }
   },
   {
+   "name": "Mossborn Hydra",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Hydra"
+   ],
+   "keywords": [
+    "Trample",
+    "Landfall"
+   ],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nThis creature enters with a +1/+1 counter on it.\nLandfall — Whenever a land you control enters, double the number of +1/+1 counters on this creature. [Added 2026-10-22 as a Landfall SCREENING candidate (not in the shipped list). NOTHING DEFERRED. ENTERS WITH (clause 2): enters_with_plus_counters 1 -- an AS-ENTERS REPLACEMENT (CR 614.1c), not an ETB trigger, applied at the top of the universal enter cascade (FireEtbWatchers, core/SpellEffects.h) before anything observes the entrant, so it reaches every enter route (a cast in both worlds, Genesis Wave, a tutor-to-battlefield put, a graveyard return) and the printed 0/0 never meets the toughness SBA (CR 704.5f). A counter given as it enters is a 'put' (CR 122.6), so it goes through PutPlusCounters and a counter doubler already on the battlefield doubles it (Primal Vigor / Doubling Season: enters with 2). A SIMULTANEOUS multi-put (Genesis Wave, Defense of the Heart, Ghalta) applies it in its own pass 1 at the doubler count of the board BEFORE the event (CR 614.12: a doubler entering in the same event does not apply) and keeps the cascade from applying it twice (EntersWithPreappliedScope), so a co-entrant's trigger resolving first -- Primeval Titan's lands -- already finds the counter there. LANDFALL (clause 3): landfall_double_self_counters -- dispatched by the ONE landfall chokepoint, OnLandEntered, once per land entering under our control, played or put (EnterLand: fetches, Evolving Wilds' basic, ramp, Titan; Genesis Wave's landfall pass). 'Double' is the keyword action CR 701.10e: put as many +1/+1 counters as it has AT RESOLUTION, through the shared DoublePlusCounters routine -- a 'put', so a doubler applies AGAIN (N -> N + 2N = 3N under one). Each trigger doubles the count the previous one left: an Evolving Wilds drop and crack is 1 -> 2 -> 4; Genesis Wave putting it beside N lands is 1 -> 2^N (CR 603.6a: simultaneous entrants see each other). MANDATORY, no target, no choice -- nothing to surface in the viewer beyond the counter badge. SEARCH: the trigger sets CardDefinition::landfall_watcher, so LandfallProvider ranks it cast-order tier 1 (rank 130, tied with Courser of Kruphix on tier and mana value and placed after it by name) and the searched land-drop timing (Plan::land_after_casts / land_slot) offers 'cast the Hydra, THEN play the land'. The greedy leaf (EvalCard) prices the body it enters as (its counter, doubler-aware), not its landfall growth, which the search owns. 5i discard: a THREAT, ranked right after Rampaging Baloths on exact ties (PROVISIONAL -- the USER's call). ELEMENTAL: Omnath, Locus of Rage's 'Omnath or another Elemental you control dies' sees it. TRAMPLE is INERT -- the passive goldfish opponent never blocks -- and carried for faithfulness. OVERFLOW GUARD: the counter count is clamped at 2^20 (kPlusCounterCap) because repeated doubling would overflow an int; a million counters is lethal many times over, so no reachable outcome changes.]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_plus_counters": 1,
+    "landfall_double_self_counters": true
+   }
+  },
+  {
    "name": "Avenger of Zendikar",
    "mana_cost": "{5}{G}{G}",
    "types": [

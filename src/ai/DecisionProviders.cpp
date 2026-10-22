@@ -3374,7 +3374,8 @@ const char* LandfallProvider::CastOrderTierName(int rank) const
 //   THREATS   the catch-all, FLOOR 2 (USER: "2 threats sounds fine"). PHYLATH FIRST (USER: "it seems to be the
 //             fastest"), the rest by CASTABILITY (USER: "If we can't cast the threat we should use another"),
 //             the shared discard_dist factor (Genesis Wave priced at X = 3); exact ties by the author's rank
-//             Avenger > Primeval Titan > Rampaging Baloths > Genesis Wave > Omnath > Terastodon > Courser.
+//             Avenger > Primeval Titan > Rampaging Baloths > Genesis Wave > Omnath > Terastodon > Courser
+//             (a screened Mossborn Hydra slots after Baloths -- PROVISIONAL, the USER's call).
 //             AT MOST ONE Primeval Titan (USER: no kill potential in this list) and one copy of a legend,
 //             net of board.
 //   CAPPED    a copy beyond its cap: shed right after a dead card.
@@ -3500,10 +3501,14 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
     };
     // USER 2026-10-16: "I would actually keep Phylath first as it seems to be the fastest. (low mana + can
     // pump creatures that are not summoning sick next turn)".
+    // Mossborn Hydra (2026-10-22, a SCREENING candidate, not in the shipped list): PROVISIONAL slot right
+    // after Rampaging Baloths, ahead of Genesis Wave -- the default taken while the USER decides. Off the
+    // list it scored 0, i.e. silently below Courser, the gate's usual shed. Only the relative order is
+    // read (ra > rb), so renumbering keeps every other card's place: byte-identical without the Hydra.
     static const std::pair<const char*, int> kThreatRank[] = {   // higher = kept first
-        {"Phylath, World Sculptor", 8}, {"Avenger of Zendikar", 7}, {"Primeval Titan", 6},
-        {"Rampaging Baloths", 5}, {"Genesis Wave", 4}, {"Omnath, Locus of Rage", 3},
-        {"Terastodon", 2}, {"Courser of Kruphix", 1},
+        {"Phylath, World Sculptor", 9}, {"Avenger of Zendikar", 8}, {"Primeval Titan", 7},
+        {"Rampaging Baloths", 6}, {"Mossborn Hydra", 5}, {"Genesis Wave", 4},
+        {"Omnath, Locus of Rage", 3}, {"Terastodon", 2}, {"Courser of Kruphix", 1},
     };
     auto threat_rank = [&](const Card& c)
     { for (const auto& [name, r] : kThreatRank) { if (c.m_name == name) { return r; } } return 0; };
