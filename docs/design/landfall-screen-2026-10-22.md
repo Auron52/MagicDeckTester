@@ -233,3 +233,33 @@ Held out, the round-3 single winners SHRANK as selected winners do (F_b -0.0244 
 -0.0194 -> -0.0132) but held their sign, and they ADD: G1 = both = -0.0342 vs F0. A third Genesis Wave and/or
 Craterhoof in the Courser slots adds another ~0.006-0.008 t. **Leading list: G6** (or G3, statistically tied),
 -0.84 t vs the shipped list, T7+ tail 6.7% -> 1.5%.
+
+## Non-clairvoyant bracket 1 — no post-search shuffle (`logs/landfall_screen/nss1.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Same pinned engine, seed 8000000 (round 4's), 20,000 paired games, every arm the same as in its default round.
+With the shuffle off the search can no longer pick a re-roll it can see, so a gain that lived on clairvoyant
+shuffle-steering would SHRINK here (SelesnyaLifegain's Windswept Heath went -0.028 -> -0.003).
+
+| arm | NSS delta | default delta (round) |
+|---|---|---|
+| G6 | **-0.8555** | -0.8411 (r4, same seeds) |
+| G3 | -0.8494 | -0.8407 (r4) |
+| G1 | -0.8408 | -0.8331 (r4) |
+| F_rg2k2 | -0.8094 | -0.8121 (r4) |
+| F0 | -0.8044 | -0.7989 (r4) |
+| h4p_elf4_rg0 | -0.7801 | -0.7798 (r2) |
+| h4_phy0 | -0.6630 | -0.7088 (r2) / -0.6989 (r1) |
+| wr_feng | **-0.0328** | -0.0138 (r1) |
+| turntimber2 | -0.0263 | -0.0120 (r0) |
+| wave3_c1 | -0.0101 | -0.0086 (r0) |
+| hoof1_c1 | -0.0047 | -0.0103 (r0) |
+
+**Base is 0.15 t SLOWER without the shuffle (5.8761 vs 5.7266 on the same seeds).** The shipped list leans on
+its shuffles -- eight shufflers plus Courser's top-of-library -- and under the clairvoyant default some of that
+is the search picking re-rolls it can see. The changes under test CUT shufflers (Rampant Growth, Khalni) and
+Courser, so if anything the default screen understated them. Under NSS: the finalists gain slightly MORE;
+Hydra-for-Phylath alone gains a little less (-0.66 vs -0.70); Elves are unchanged; Kessig Wolf Run gains more
+than twice as much (-0.033). Turntimber Symbiosis also gains more, but NSS does not touch its real suspicion --
+the front face LOOKS at the top seven, which no shuffle setting hides -- so it stays unverified.
+**Nothing in the finalist depends on clairvoyant shuffle re-rolls.** (Cross-round rows compare different seeds
+and, for r0/r1, the pre-pin engine: read them to ~0.01.)
