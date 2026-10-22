@@ -62,7 +62,9 @@ held-out std games, 0 better / 3 worse (+1 each, budget spent on the clones), un
 **Suite.** Smoke (binary e5c71fff8, before the Landfall fold): 136/136 PASS, 0 configs changed, 0 plays
 changed. Every shipped Karoo deck holds no observer (no Rest for the Weary / Searing Blaze), and Landfall
 -- the only Karoo deck with a landfall trigger -- is byte-identical after the fold, so the shipped suite
-cannot move. Scenarios 235/235, unit 1706/1706.
+cannot move. Regression (final binary, 70c9569cd): 190/190 PASS, 0 configs changed; viewer protocol
+`--strict` over 640 references: 222 ok, 418 repaired, 0 play-drift / board-diverged / enum-gap.
+Scenarios 235/235 (five new `selesnya_*karoo*` fixtures), unit 1706/1706.
 
 **Held-out paired A/B** (`MTG_KAROO_POSITION` off = base vs on = pos, both arms in one pooled batch per
 binary, fresh seeds 73xxxxx, shipped play settings, loss scored 9; `test/paired_arms.py`):
