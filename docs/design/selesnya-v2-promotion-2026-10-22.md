@@ -110,3 +110,13 @@ and removing the stale shipped-key row. KittyEquipment's `kittyequipment` row ha
 * `require('tools/play/server.js')` + `listDecks()` is not side-effect free: a stale bench stamp spawns
   `ref_bench.py --stale-only --json test/ref_bench.json` per deck in the background. An agent checking
   the deck list that way rewrites the bench cache and runs engine games.
+
+## v1 suite rows retired (2026-10-22)
+
+USER, once the v1-vs-current summary (`v1-vs-current-selesnyalifegain.md`: -0.5433t standard / -0.5363t
+2HG, 10/10 blocks) was approved: *"Once we're happy with it we'll remove the old list from the regression
+test."* The `selesnya` key is gone from all three tiers (3 smoke, 7 regression, 14 overnight rows incl. the
+unbudgeted backstop), with its 24 GT keys, gt_logs and `suite_cost.json` entry. Tiers 145 / 275 / 573,
+`check_gt_logs` consistent at 993. The archived list's ten references are still replayed and benched on
+`v1-avatar-alchemist/` (every reference is played, USER 2026-10-22); the archive now carries no suite rows,
+so `suite_gate --require` blocks generation on it, like every other archived list.

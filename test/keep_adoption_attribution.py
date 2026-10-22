@@ -20,7 +20,7 @@ Exit 0 when every changed game is explained and both replays reproduce their bas
 
   python3 test/keep_adoption_attribution.py <mode> <deck-key> [--run-dir DIR] [--old-profile none|PATH]
         [--out DIR]
-  e.g. python3 test/keep_adoption_attribution.py regression selesnya
+  e.g. python3 test/keep_adoption_attribution.py regression selesnyav2
 
 --run-dir defaults to test/logs/<mode> (needs manifest.json, mtg.run, wins/). Run it BEFORE --accept:
 the committed gt_logs are the OLD side. Built 2026-10-08 for the SelesnyaLifegain adoption.

@@ -9,7 +9,7 @@
 # pooled batch, same seeds and game indices -> PAIRED by construction, one load-imbalance tail.
 #
 # Usage (from the repo root; DECKS = the Karoo decks -- the lever is unreachable in every other deck):
-#   DECKS=fungus,hinata,creature_giving,mirrorwing,minotaur,kitty,dragons,melira,selesnya \
+#   DECKS=fungus,hinata,creature_giving,mirrorwing,minotaur,kitty,dragons,melira,selesnyav2 \
 #     MTG_BIN=<binary> RUN=<name> bash test/karoo_tap_in_response_ab.sh
 #   (2026-10-08: Angels' Azorius Chancery was cut and Bruna is not a suite deck -- DECK_FILE has no
 #   `bruna`, so naming it crashes the manifest step. `hinata` / `minotaur` also select their 2HG rows.)

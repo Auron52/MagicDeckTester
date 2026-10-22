@@ -22,7 +22,7 @@ import re
 import sys
 from math import sqrt
 
-DECKS = ["vampires", "auras", "creature_giving", "minotaur", "pirates", "selesnya", "soldiers", "th"]
+DECKS = ["vampires", "auras", "creature_giving", "minotaur", "pirates", "selesnyav2", "soldiers", "th"]
 ARMS = {
     "on":  {"MTG_PAY_PAIN_LAST": True,  "MTG_PAY_NARROW_RESTRICTED_FIRST": True},
     "off": {"MTG_PAY_PAIN_LAST": False, "MTG_PAY_NARROW_RESTRICTED_FIRST": False},

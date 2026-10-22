@@ -61,15 +61,11 @@ declare -A DECK_FILE=(
   [snow]=decks/Snow/Snow.cod
   [giants]=decks/Giants/Giants.cod
   [pirates]=decks/Pirates/Pirates.cod
-  # selesnya: the ORIGINAL SelesnyaLifegain list, ARCHIVED 2026-10-22 as v1-avatar-alchemist when v2 was
-  # promoted (docs/design/selesnya-v2-promotion-2026-10-22.md). ONE KEY PER DECKLIST: the key follows its LIST
-  # to the archive path (identical file content, identical card numbering -> provably inert); it never moves
-  # to the shipped list. Whether to drop these rows is the USER's call.
-  [selesnya]=decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod
   # selesnyav2: the USER-approved NEW SelesnyaLifegain list (2026-10-22 screen, arm FINAL_hh), generated in
   # its versioned folder v2-bogbeast-heroes/ BEFORE promotion (the kitty v3 route) and PROMOTED to the
   # top-level shipped path 2026-10-22. Its OWN key -- ONE KEY PER DECKLIST: it keeps the v2 suffix (as
-  # kittyv3 did), and the `selesnya` key stays on the original list (now archived), never repointed here.
+  # kittyv3 did). The original list (key `selesnya`, archived as v1-avatar-alchemist) LEFT the suite 2026-10-22
+  # (USER, once the v1-vs-current summary was approved); its references are still replayed on that list.
   [selesnyav2]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
   [soldiers]=decks/Soldiers/soldiers.cod
   [pd]="decks/Prevent Damage/Prevent Damage.cod"
@@ -109,7 +105,6 @@ declare -A DECK_PROF=(
   [snow]=decks/Snow/Snow.profile.json
   [giants]=decks/Giants/Giants.profile.json
   [pirates]=decks/Pirates/Pirates.profile.json
-  [selesnya]=decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json
   [selesnyav2]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
   [soldiers]=decks/Soldiers/soldiers.profile.json
   [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
@@ -432,25 +427,9 @@ SMOKE_CASES=(
   "pirates 0 1001 1000 0"
   "pirates 3 1001  150 10"
   "pirates 5 1001   75 20"
-  # selesnya: GW "whenever you gain life" ramp-into-fatties (Wellwisher / Blighted Steppe / Feed the
-  # Clan / Verdant Sun's Avatar generating life; Ageless Entity + Nykthos Paragon converting it to
-  # +1/+1 counters; Accomplished Alchemist converting it to mana; Genesis Wave + Craterhoof closing).
-  # ADDED 2026-09-30 (analysis-SelesnyaLifegain.md) at PIRATES' counts, which is the conservative
-  # choice: measured on an idle box at the gate cells this deck is FASTER than pirates per game --
-  # 0.433 s/game d3b10 and 0.814 s/game d5b20 vs pirates' ~0.7 and ~1.3 -- so the same counts cost
-  # less. Gated metric (worst searched REGRESSION case, d5 b20) = 814 ms/game against a 3100 ms/game
-  # budget (3x fivecolour), i.e. ~0.79x the reference deck, so the 3x rule is not close to binding.
-  # NOTE those numbers only hold WITH --budget-ms: an early unbudgeted probe read ~12 s/game and
-  # looked 4x over budget. The per-decision budget is what bounds this deck; do not size it from an
-  # unbudgeted run. No <deck>2hg row: nothing in the 60 reads opponent heads or starting life (every
-  # gain is "you gain", every pump is "creatures you control"), so a 2HG arm would differ only in
-  # race LENGTH, not in any card's behaviour.
-  "selesnya 0 1001 1000 0"
-  "selesnya 3 1001  150 10"
-  "selesnya 5 1001   75 20"
   # selesnyav2: the NEW list (decks/SelesnyaLifegain/, promoted from v2-bogbeast-heroes 2026-10-22: 18 Elves,
   # 4 Bogbeast, 2 Heroes' Reunion, 2 Genesis Wave; Alchemist / Wellwisher / Verdant Sun's Avatar / Sanctuary
-  # out). ENTERS at the shipped selesnya rows' gate shape and the overnight ENTRY set; no keep table and no
+  # out). ENTERED at the original list's gate shape (pirates' counts) and the overnight ENTRY set; no keep table and no
   # value leaf yet, so GT WILL move when they land (the overnight rows expand to the FULL set just before the
   # keep table is adopted; both landed 2026-10-22, bc8766e76). selesnyav22hg: the screen measured std and 2HG as CO-EQUAL formats for this list,
   # so it carries the vampires entry shape for 2HG (smoke d3, regression d3+d5, overnight d5) rather than a
@@ -677,8 +656,6 @@ REGRESSION_CASES=(
   "pd               5 30001   5 0"
   "pirates          3 30001  20 0"
   "pirates          5 30001  20 0"
-  "selesnya         3 30001  20 0"
-  "selesnya         5 30001  20 0"
   # selesnyav2: screened 2026-10-22 over 18 candidate blocks (30001..30341 step 20, d3+d5, 20 games, budget 0,
   # abandon_units 2000000): 30061 finished every game, the costliest 211k units (~8 s on a loaded box).
   "selesnyav2       3 30061  20 0"
@@ -883,12 +860,6 @@ REGRESSION_CASES=(
   "pirates 3 3003  150 10"
   "pirates 5 2002   75 20"
   "pirates 5 3003   75 20"
-  # selesnya: see the SMOKE block. These are the GATED cells (worst searched case d5 b20).
-  "selesnya 0 2002 1000 0"
-  "selesnya 3 2002  150 10"
-  "selesnya 3 3003  150 10"
-  "selesnya 5 2002   75 20"
-  "selesnya 5 3003   75 20"
   # selesnyav2: see the SMOKE block.
   "selesnyav2 0 2002 1000 0"
   "selesnyav2 3 2002  150 10"
@@ -1072,8 +1043,6 @@ OVERNIGHT_CASES=(
   "pd               5 30101   5 0"
   "pirates          3 30101  20 0"
   "pirates          5 30101  20 0"
-  "selesnya         3 30301  20 0"
-  "selesnya         5 30301  20 0"
   # selesnyav2: same 2026-10-22 screen; 30161 finished every game, the costliest 169k units (~10 s, loaded box).
   "selesnyav2       3 30161  20 0"
   "selesnyav2       5 30161  20 0"
@@ -1459,24 +1428,9 @@ OVERNIGHT_CASES=(
   "pirates 5 5005  500 40"
   "pirates 5 6006  500 40"
   "pirates 5 7007  500 40"
-  # selesnya: see the SMOKE block. Full angels/pirates overnight shape -- measured 0.533 s/game at
-  # d3 b20 and 0.988 at d5 b40, so this block is ~4100 core-s (~2 min wall on 32 cores) against an
-  # 8 h tier budget; nothing to trim for.
-  "selesnya 0  4004 2000 0"
-  "selesnya 0  6006 2000 0"
-  "selesnya 0  8008 2000 0"
-  "selesnya 0 10010 2000 0"
-  "selesnya 3 4004 1000 20"
-  "selesnya 3 5005 1000 20"
-  "selesnya 3 6006 1000 20"
-  "selesnya 3 7007 1000 20"
-  "selesnya 5 4004  500 40"
-  "selesnya 5 5005  500 40"
-  "selesnya 5 6006  500 40"
-  "selesnya 5 7007  500 40"
   # selesnyav2: see the SMOKE block. The overnight FULL set (regression-testing skill, "Sizing a deck's
   # overnight rows"), expanded 2026-10-22 just before the keep table + value sidecar were adopted and
-  # re-baselined with both ABSENT first: the shipped selesnya rows' standard shape (d0 4x2000, d3 4x1000 b20,
+  # re-baselined with both ABSENT first: the original list's (= angels/pirates') standard shape (d0 4x2000, d3 4x1000 b20,
   # d5 4x500 b40) and 2hg d5 4x170 b40 (~1/3 of the d5 sample, galadriel2hg's full shape). Entered at the
   # ENTRY set (d3 4x400 b10, d5 4x300 b20, 2hg 4x100 b20).
   "selesnyav2 0  4004 2000 0"

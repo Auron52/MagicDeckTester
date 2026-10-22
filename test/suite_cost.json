@@ -226,14 +226,6 @@
    "total_core_ms": 51697,
    "worst_case": "pirates_regression_d3_s3003"
   },
-  "selesnya": {
-   "cost_per_game_ms": 161.5467,
-   "jobs": 5,
-   "key": "selesnya",
-   "tier": "regression",
-   "total_core_ms": 63636,
-   "worst_case": "selesnya_regression_d3_s2002"
-  },
   "selesnyav2": {
    "cost_per_game_ms": 2257.24,
    "jobs": 9,
