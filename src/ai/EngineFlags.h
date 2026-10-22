@@ -336,6 +336,23 @@ inline bool LineSpareTightOn()
 // Tomb's colourless burst are not coloured modes and are untouched. Unarmed boards only: Prevent Damage's
 // armed policy (dmgev::PainAwarePay / PayWithPain) owns pain there, deliberate pain included. One payer
 // for executor and rollout, so lockstep holds by construction.
+// MTG_PAY_DEPLETION_WASTE / MTG_PAY_DEPLETION_WASTE_ANY (2026-10-22; DEFAULT OFF pending the A/B) -- a
+// depletion land's tap (Saprazzan Skerry {U}{U}, Sandstone Needle {R}{R}, Remote Farm, Peat Bog, ...) that
+// would make more mana than this payment and the rest of the line can use is ranked behind every painless
+// plain source (the pain band): its counter is a finite resource and the LAST one kills the land. _ANY
+// covers every counter, the base flag only the last. Ordering, never a filter. See the key block in
+// ManaPayment.cpp's scarcity loop.
+inline bool PayDepletionWasteAnyOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DEPLETION_WASTE_ANY");
+    return heurarm::Flag(heurarm::PAY_DEPLETION_WASTE_ANY, env_on);
+}
+inline bool PayDepletionWasteOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DEPLETION_WASTE");
+    return PayDepletionWasteAnyOn() || heurarm::Flag(heurarm::PAY_DEPLETION_WASTE, env_on);
+}
+
 inline bool PayPainLastOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_PAIN_LAST", true);

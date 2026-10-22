@@ -1868,9 +1868,41 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (pay_narrow_first && def->params.colored_creature_only
                         && def->params.colored_creature_ability_ok) { broad = 1; }
                 }
+                // DEPLETION WASTE (MTG_PAY_DEPLETION_WASTE / _ANY, default OFF): a depletion land whose
+                // tap makes more mana than this payment and the rest of the line can still use is banded
+                // with pain. Niv seed 1 (2026-10-22): {2}{U} took Skerry's {U}{U} and the Needle's LAST
+                // counter for the final generic pip -- the second {R} floated away, the Needle died, and
+                // Spirebluff Canal stayed untapped (T6 -> T7 after the hand-off). The Needle ranks 11 (mono
+                // + the depletion nudge) to the Canal's 20, so the ladder alone always took it. A tap the
+                // payment fully uses is left alone (the th d0 gi50 shape the harm note above records).
+                int waste = 0;
+                if (kind == 1 && PayDepletionWasteOn())
+                {
+                    const int ctr = DepletionCountersOn(p);
+                    const int yield = (ctr > 0) ? ManaProducedPerTap(*def) : 0;
+                    if (ctr > 0 && yield > 1 && (ctr == 1 || PayDepletionWasteAnyOn()))
+                    {
+                        int rem[7];
+                        for (int k = 0; k < 7; ++k) { rem[k] = nd_left[k]; }
+                        { const int slot = any ? 6 : static_cast<int>(needed);
+                          if (slot >= 0 && slot < 7 && rem[slot] > 0) { --rem[slot]; } }
+                        int later[5];
+                        LineOwedAfterOwnPips(later);
+                        int payable = rem[6] + std::max(0, g_line_unpaid_cost.generic - cost.generic);
+                        int seen = 0;
+                        for (Color c : def->params.produces)
+                        {
+                            const int ci = static_cast<int>(c);
+                            if (ci < 0 || ci > 4 || (seen & (1 << ci))) { continue; }
+                            seen |= (1 << ci);
+                            payable += rem[ci] + later[ci];
+                        }
+                        if (payable < yield - 1) { waste = 1; }
+                    }
+                }
                 int key[4];
                 if (kind != 5 && rank >= 0 && rank < 60)
-                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank + pain * kPainBand;
+                { key[0] = 0;    key[1] = harm / kNdScale; key[2] = rank + ((pain || waste) ? kPainBand : 0);
                   key[3] = (harm % kNdScale) * 2 + broad; }
                 else                                     { key[0] = rank; key[1] = hold; key[2] = harm; key[3] = 0;    }
                 int cmp = 0;
