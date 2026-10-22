@@ -81,6 +81,19 @@ Spec format:
 A combination is a map of card -> NEW COUNT (absent = unchanged, 0 = removed). A card not in the base
 deck may be introduced by naming it, and the pre-flight above says what that costs.
 
+ARM-VS-ARM PAIRING ("parent" / "centre", optional). Each arm is numbered against a REFERENCE arm and
+inherits its numbers; the reference is base unless declared, so every arm pairs perfectly with base.
+Two arms far from base that differ from EACH OTHER by one swap are NOT paired that way (their other
+added cards land on different numbers), so to compare arms with each other declare the reference:
+
+    "centre": "FINAL",                                   # every other arm is numbered against FINAL
+    "parent": {"FINAL_hh": "FINAL", "DD": "base"},       # per-arm; overrides "centre"
+    "replace": {"FINAL_hh": {"Rest for the Weary": "Heroes' Reunion"}}   # relative to the REFERENCE
+
+A spec with neither key numbers exactly as before (byte-identical). The driver prints k (card copies
+that differ) against n (card NUMBERS that differ) for every arm's declared pair and lists every other
+misaligned pair -- see report_slot_alignment().
+
 `profile` and `value_profile` default to the deck's siblings and are NOT optional in effect: with no
 profile the engine loads MulliganProfile::DefaultProfile() and every arm plays a deck we do not ship
 (on slivers that zeroes vial_target_mv and inflated a measured effect 2.6x). "allow_no_profile": true
@@ -674,6 +687,74 @@ def changed_numbers(base_nums, arm_nums):
     return out
 
 
+def copy_distance(a, b):
+    """Card COPIES that differ between two count maps -- the fewest card numbers that can differ
+    between their numberings (k swaps move k numbers; a size change moves the larger side)."""
+    names = set(a) | set(b)
+    return max(sum(max(a.get(n, 0) - b.get(n, 0), 0) for n in names),
+               sum(max(b.get(n, 0) - a.get(n, 0), 0) for n in names))
+
+
+def report_slot_alignment(spec, show_max=30):
+    """Print, per pair of arms, the card copies that differ (k) against the card NUMBERS that differ
+    (n). n == k means the pair is SLOT-ALIGNED: every number either holds the same card in both arms
+    or holds one of the k copies that genuinely differ, so the two arms are dealt the same cards
+    everywhere else. n > k means unchanged cards sit on different numbers and the pair is dealt
+    different cards for no reason -- unbiased, but noisier (round 15 of the SelesnyaLifegain screen:
+    hh vs rr k=2, n=6, se 4-8x the slot-paired rerun's).
+
+    Every arm's DECLARED pair (arm vs its reference: base unless "parent"/"centre" names another)
+    is aligned by construction, so a WARNING there is a driver bug. Undeclared pairs are listed only
+    when misaligned, with the declaration that would fix them. -> number of declared-pair warnings."""
+    tags = list(spec.arms)
+    nums = {t: spec.numbering(t) for t in tags}
+    kn = lambda a, b: (copy_distance(spec.arms[a], spec.arms[b]), len(changed_numbers(nums[a], nums[b])))
+    print("\nslot alignment (k = card copies that differ, n = card NUMBERS that differ; paired when n == k):")
+    warn, declared = 0, set()
+    for t in tags[1:]:
+        ref = spec.parent[t]
+        declared.add(frozenset((t, ref)))
+        k, n = kn(t, ref)
+        line = f"  {t:>22s} vs {ref:<22s} k={k:<3d} n={n:<3d} "
+        if n == k:
+            line += "paired"
+        else:
+            warn += 1
+            line += f"WARNING: declared pair NOT slot-aligned (+{n - k})"
+        if ref != "base":
+            kb, nb = kn(t, "base")
+            # Not a warning: the arm was numbered against its reference, and base alignment is what
+            # that can cost when the arm puts back a card its reference cut. Shown so it is a choice.
+            line += f"   [vs base k={kb} n={nb}" + (f", +{nb - kb} paid for the reference]" if nb > kb else "]")
+        print(line)
+    bad, total, aligned = [], 0, 0
+    for i, a in enumerate(tags):
+        for b in tags[i + 1:]:
+            # Every arm's pairing with base is already on its line above (declared, or in brackets).
+            if frozenset((a, b)) in declared or "base" in (a, b):
+                continue
+            total += 1
+            k, n = kn(a, b)
+            if n == k:
+                aligned += 1
+            else:
+                bad.append((k, n - k, a, b))
+    if total:
+        print(f"  other pairs: {aligned} of {total} slot-aligned"
+              + ("" if not bad else f"; {len(bad)} NOT (closest first):"))
+    for k, e, a, b in sorted(bad)[:show_max]:
+        print(f"  {a:>22s} vs {b:<22s} k={k:<3d} n={k + e:<3d} unpaired (+{e})")
+    if len(bad) > show_max:
+        print(f"  ... and {len(bad) - show_max} more")
+    if bad:
+        k, e, a, b = sorted(bad)[0]
+        print(f"  To compare two arms against EACH OTHER, declare one as the other's reference --\n"
+              f"  e.g. \"parent\": {{\"{b}\": \"{a}\"}}, or \"centre\": \"<tag>\" for a census round --\n"
+              f"  so they differ only in the copies that differ. The base-relative estimate is unbiased\n"
+              f"  either way; an unpaired arm-vs-arm difference is just noisier.")
+    return warn
+
+
 def carry_mask_bits(numbers):
     """Card numbers -> the uint64 the engine builds (BitForNumber: bit = number - 1).
 
@@ -1099,17 +1180,62 @@ class Spec:
         if unknown:
             raise SystemExit(f"arm_flags names no such combination: {', '.join(unknown)}\n"
                              f"  known: {', '.join(sorted(self.arms))}")
+        # PAIRING REFERENCE ("parent": {"<tag>": "<ref tag>"}, "centre": "<tag>"; both optional).
+        # Every arm is numbered against ONE reference arm and inherits that arm's numbers; by default
+        # the reference is base, which is exactly the pre-2026-10-22 behaviour (byte-identical
+        # numbering for a spec that names neither key). Base-relative numbering pairs each arm with
+        # BASE perfectly, but says nothing about two arms against EACH OTHER: two arms far from base
+        # that differ from each other by one swap had their other added cards dealt out in
+        # alphabetical order against base, so on round 15 of the SelesnyaLifegain screen FINAL_hh
+        # (2 Heroes' Reunion) and FINAL_rr (2 Rest for the Weary) differed in SIX numbers instead of
+        # two. Card numbers key the shuffle, so they were dealt different cards: ~97% of their
+        # discordant games came from that, and the arm-vs-arm se was 4-8x a slot-paired rerun's
+        # (std -0.0082 +-0.0030 vs -0.0011 +-0.0004). Unbiased, but needlessly noisy.
+        # Declaring a reference numbers the arm against THAT arm's numbering (which itself came from
+        # its own reference, ... down to base), so the arm and its reference differ in exactly the
+        # copies that differ, and two siblings of one reference differ only where their edits do.
+        # "centre" is the shorthand for a centre-plus-census round: every arm the "parent" map does
+        # not name takes the centre as its reference (the centre itself stays on base unless named).
+        # The PRICE, printed per arm by report_slot_alignment(): numbering against a reference can
+        # cost alignment against base when the arm undoes part of its reference's edit (it puts back
+        # a card the reference cut). It never moves the base-relative ESTIMATE, only its noise.
+        par, centre = s.get("parent") or {}, s.get("centre")
+        if not isinstance(par, dict):
+            raise SystemExit("\"parent\" must be an object of tag -> reference tag")
+        if centre is not None and (centre not in self.arms or centre == "base"):
+            raise SystemExit(f"\"centre\" {centre!r} is not a combination")
+        for tag, ref in par.items():
+            if tag not in self.arms or tag == "base":
+                raise SystemExit(f"\"parent\" names an unknown combination: {tag}")
+            if ref not in self.arms:
+                raise SystemExit(f"\"parent\" {tag}: {ref!r} is not a combination (or \"base\")")
+            if ref == tag:
+                raise SystemExit(f"\"parent\" {tag}: an arm cannot be its own reference")
+        self.parent = {t: par.get(t, centre if centre not in (None, t) else "base")
+                       for t in self.arms if t != "base"}
+        for tag in self.parent:
+            seen, t = [tag], self.parent[tag]
+            while t != "base":
+                if t in seen:
+                    raise SystemExit("\"parent\" cycle: " + " -> ".join(seen + [t]))
+                seen.append(t)
+                t = self.parent[t]
+        self._numbering = {"base": self.nums}
         # Optional per-arm {removed card: added card}. Only the numbering reads it; it never changes
-        # what a combination IS (that is the counts), only which slots the new copies inherit.
+        # what a combination IS (that is the counts), only which slots the new copies inherit. It is
+        # RELATIVE TO THE ARM'S REFERENCE (base unless "parent"/"centre" says otherwise), since the
+        # slots it hands out are the ones the arm frees against that reference.
         self.replace = s.get("replace", {})
         for tag, m in self.replace.items():
             if tag not in self.arms:
                 raise SystemExit(f"\"replace\" names an unknown combination: {tag}")
+            ref = self.parent.get(tag, "base")
+            rc, rel = self.arms[ref], ("" if ref == "base" else f" relative to its reference {ref!r}")
             for src, dst in m.items():
-                if self.arms[tag].get(src, 0) >= self.counts.get(src, 0):
-                    raise SystemExit(f"\"replace\" {tag}: {src} is not reduced, so it frees nothing")
-                if self.arms[tag].get(dst, 0) <= self.counts.get(dst, 0):
-                    raise SystemExit(f"\"replace\" {tag}: {dst} is not increased, so it needs nothing")
+                if self.arms[tag].get(src, 0) >= rc.get(src, 0):
+                    raise SystemExit(f"\"replace\" {tag}: {src} is not reduced{rel}, so it frees nothing")
+                if self.arms[tag].get(dst, 0) <= rc.get(dst, 0):
+                    raise SystemExit(f"\"replace\" {tag}: {dst} is not increased{rel}, so it needs nothing")
         # PER-ARM ALIAS ("arm_alias": {"<tag>": {"<introduced card>": "<host card>"}}). The approved
         # no-regeneration route for a card the shipped table does not bucket is to alias it into the
         # bucket of the card it replaces (scripts/alias_card_into_bucket.py). One aliased table serves
@@ -1206,10 +1332,18 @@ class Spec:
         dp = os.path.join(outdir, self.deck_stem)
         open(dp, "w").write(decklist_body(ordered, self.side))
         np_ = os.path.join(outdir, "numbering.json")
-        nums = (self.nums if tag == "base" else
-                inherit_numbering(self.nums, self.counts, counts, self.replace.get(tag)))
-        json.dump(nums, open(np_, "w"), indent=0)
+        json.dump(self.numbering(tag), open(np_, "w"), indent=0)
         return dp, np_
+
+    def numbering(self, tag):
+        """This arm's card numbering: inherited from its reference arm's (see "parent" above), which is
+        base unless the spec declares otherwise -- so with no declaration this is exactly
+        inherit_numbering(base) as it has always been."""
+        if tag not in self._numbering:
+            ref = self.parent[tag]
+            self._numbering[tag] = inherit_numbering(self.numbering(ref), self.arms[ref],
+                                                     self.arms[tag], self.replace.get(tag))
+        return self._numbering[tag]
 
     def jname(self, fmt, tag):
         """Job name for one (format, combination) cell. The unnamed format keeps the bare tag, so a
@@ -1687,6 +1821,7 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         # gracefully) but is nearly always a typo in the spec -- say so rather than let it pass.
         warn = "" if tot == b else f"  <-- SIZE {b}->{tot}, intended?"
         print(f"  {tag:22s} {tot:3d} cards  |  " + ", ".join(ch) + warn)
+    report_slot_alignment(spec)
     print("\napparatus:")
     print(f"  play profile   {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE (deliberate)'}")
     print(f"  play settings  d{spec.depth} / {spec.budget}ms   <- {spec.play_source}")
@@ -1908,7 +2043,12 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     # Only present when used, so a spec without aliases fingerprints exactly as before.
     alias_fp = ({"arm_alias": spec.arm_alias,
                  "arm_tables": {k: stamp(v) for k, v in arm_tables.items()}} if spec.arm_alias else {})
-    json.dump({**alias_fp, "arms": spec.arms, "arm_flags": spec.arm_flags,
+    # The pairing references, likewise only when declared. INFORMATIONAL for --confirm (like the
+    # seed): a reference changes which card sits on which number, so which games are dealt, never
+    # what any arm's expected result is.
+    parent_fp = ({"parent": {t: r for t, r in spec.parent.items() if r != "base"}}
+                 if any(r != "base" for r in spec.parent.values()) else {})
+    json.dump({**alias_fp, **parent_fp, "arms": spec.arms, "arm_flags": spec.arm_flags,
                "games": spec.games, "depth": spec.depth,
                "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
                # Recorded but INFORMATIONAL (see confirm's `informational` set): it changes which
@@ -2680,7 +2820,7 @@ def confirm(spec, tag, dry_run):
         # them would assert the opposite of what the feature's own check establishes. The thing that
         # genuinely must not differ silently is the LOG SHAPE, and that is handled by
         # merge_carryfill below rather than by refusing the comparison.
-        informational = {"seed", "engine_commit", "index_carry"}
+        informational = {"seed", "engine_commit", "index_carry", "parent"}
         diff = sorted(k for k in set(fa) | set(fb)
                       if k not in informational and fa.get(k) != fb.get(k))
         def show(k):

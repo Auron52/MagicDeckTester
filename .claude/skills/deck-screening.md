@@ -172,6 +172,49 @@ better-matched pairing measured se ±0.0042 / 75.5% identical against ±0.0046 /
 pairing costs ~20% more games. It only matters when two names are added at once; without the map the
 freed numbers go out in sorted-name order, which is deterministic but arbitrary.
 
+### Declaring pairs: comparing arms with EACH OTHER (`"parent"` / `"centre"`)
+
+By default every arm is numbered against **base**, so each arm pairs perfectly with base — and two
+arms pair with each other only by luck. Two arms that sit many cards away from base but differ from
+each other by one swap get their *other* added cards numbered alphabetically against base, so they are
+dealt different cards. Round 15 of the SelesnyaLifegain screen (2026-10-22): FINAL_hh (2 Heroes'
+Reunion) vs FINAL_rr (2 Rest for the Weary), k = 2 copies apart, differed in **n = 6** card numbers
+(Heroes/Canopy/Razorverge vs Canopy/Razorverge/Rest). Traced over 240k games, ~97% of their discordant
+games came from that, and the arm-vs-arm se was **4-8x** a slot-paired rerun's (std −0.0082 ±0.0030
+vs −0.0011 ±0.0004; discordant 20.1% vs 0.7%). Unbiased, just needlessly noisy.
+
+**Whenever the question is arm vs arm, declare it.** Each arm then inherits its reference arm's
+numbering (which inherits its own reference's, down to base):
+
+```jsonc
+"centre": "FINAL",                                 // every arm not named in "parent" -> FINAL
+"parent": {"FINAL_hh": "FINAL", "DD": "base"},     // per arm; overrides "centre"; chains allowed
+"replace": {"FINAL_hh": {"Rest for the Weary": "Heroes' Reunion"}}   // RELATIVE TO THE REFERENCE
+```
+
+- An arm and its reference then differ in exactly the copies that differ, and a one-copy swap puts the
+  incoming card on the outgoing card's number. Two one-swap siblings of one centre differ only where
+  their edits do (hh vs rr: n = 2).
+- `replace` for a referenced arm is relative to the **reference**, not base (the driver refuses a
+  base-relative map there). A one-copy swap needs no map.
+- **The price**, printed per arm as `[vs base k=.. n=.., +e paid for the reference]`: an arm that
+  puts back a card its reference cut (centre cut the Forests, census arm adds one back) cannot be
+  aligned with both, and the reference wins. On round 14 re-declared with `"centre": "N"` that was +1
+  to +2 numbers on ~20 (5-10% more slots vs base) for 5 of the 10 arms referenced to N. It moves the base-relative
+  *noise*, never its estimate. Pin an arm whose base delta is the headline back with
+  `"parent": {"<tag>": "base"}`.
+- Siblings that both put back the same cut card still differ by one extra number (each puts it on
+  its own freed slot); the table lists them. Declare one as the other's reference if that pair is the
+  question.
+- A spec with neither key numbers **byte-identically** to before (verified on rounds 14 and 15).
+  `"parent"` is in the screen fingerprint only when declared, and `--confirm` treats it as
+  informational, like the seed.
+
+**Read the slot-alignment table the driver prints** under the arm list: k (copies that differ) vs n
+(numbers that differ) for every arm's declared pair, then every other pair that is not aligned,
+closest first, with the declaration that would fix it. A declared pair with n > k prints a WARNING and
+is a driver bug.
+
 Every arm shares one apparatus and every game of every arm goes into ONE `mtg --batch`. `profile` and `value_profile` default to the deck's siblings; the driver **refuses** a
 screen with no play profile (`"allow_no_profile": true` is the hatch — see the trap section).
 
