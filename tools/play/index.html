@@ -5142,9 +5142,11 @@ function commitTutor(d, oi){
 }
 function commitEcho(d, v){ pushChoice(d, v, `Echo ${d.creature||''}: ${v?'pay':'sacrifice'}`); }
 // Multi-select cleanup discard: toggle a card in/out of the discard set (capped at over_by), then
-// commit all at once. The engine still reads one hand-index per discard decision, so we submit the
-// picks in DESCENDING hand-index order -- removing a higher index never shifts a lower one, so each
-// index stays valid at its successive (shrinking-hand) discard decision.
+// commit all at once. The engine reads one hand-index per discard decision, against a hand that shrinks
+// by the card just discarded, so the picks are submitted IN THE ORDER THEY WERE CLICKED (USER 2026-10-22:
+// "The viewer should use exactly the order I give.") with each index re-based onto the hand as it will
+// stand at its own decision (LB.shrinkingIndices). They used to go in DESCENDING hand-index order, which
+// kept every index valid but discarded the cards in an order nobody chose.
 function toggleDiscard(d, oi){
   const over=d.over_by||1, sel=S.discardSel||(S.discardSel=new Set());
   if (sel.has(oi)) { sel.delete(oi); }
@@ -5154,10 +5156,10 @@ function toggleDiscard(d, oi){
 function commitDiscardBatch(d){
   const over=d.over_by||1, sel=[...(S.discardSel||[])];
   if (sel.length!==over){ flashHint(`Select exactly ${over} card${over===1?'':'s'} to discard.`); return; }
-  const desc=sel.slice().sort((a,b)=>b-a);   // descending hand-index order (see note above)
-  const names=desc.map(i=>{ const c=(d.options||[]).find(x=>x.index===i); return c?c.name:'card'; });
+  // `sel` is the Set's insertion order, i.e. the click order (a deselect-reselect moves a card last).
+  const names=sel.map(i=>{ const c=(d.options||[]).find(x=>x.index===i); return c?c.name:'card'; });
   S._discardFor=null; S.discardSel=null;      // clear the per-decision selection guard
-  pushChoices(d, desc, `discard: ${names.join(', ')}`);
+  pushChoices(d, LB.shrinkingIndices(sel), `discard: ${names.join(', ')}`);
 }
 // Multi-select Dragonstorm put override: toggle a candidate Dragon in/out of the put set (capped at
 // max_puts), then commit all at once. The engine reads ONE int per candidate (1 = put), in candidate
@@ -5465,9 +5467,10 @@ function commitMulligan(d, k){
   pushChoice(d, k, k?`Keep (${n-mc}-card hand)`:`Mulligan to ${n-(mc+1)}`);
 }
 // Multi-select London bottoming: toggle a card in/out of the bottom set (capped at K), then commit all
-// at once. The engine reads one hand-index per bottom decision, so we submit the picks in DESCENDING
-// hand-index order -- removing a higher index never shifts a lower one, so each stays valid at its
-// successive (shrinking-hand) bottom decision. (Same technique as commitDiscardBatch.)
+// at once. The engine reads one hand-index per bottom decision and puts each card on the bottom as it
+// is chosen, so the submission ORDER is the order the cards go under the library -- it goes in the
+// order they were CLICKED, each index re-based onto the shrinking hand (LB.shrinkingIndices; same
+// technique as commitDiscardBatch). It used to be DESCENDING hand index, an order nobody chose.
 function toggleBottom(d, oi){
   const K=d.bottom_total||1, sel=S.bottomSel||(S.bottomSel=new Set());
   if (sel.has(oi)) { sel.delete(oi); }
@@ -5493,10 +5496,10 @@ function followAiBottom(d){
 function commitBottomBatch(d){
   const K=d.bottom_total||1, sel=[...(S.bottomSel||[])];
   if (sel.length!==K){ flashHint(`Select exactly ${K} card${K===1?'':'s'} to bottom.`); return; }
-  const desc=sel.slice().sort((a,b)=>b-a);   // descending hand-index order (shrinking-hand safe)
-  const names=desc.map(i=>{ const c=(d.hand||[])[i]; return c?c.name:'card'; });
+  // `sel` is the Set's insertion order: the click order ("Follow AI" inserts in the AI's own order).
+  const names=sel.map(i=>{ const c=(d.hand||[])[i]; return c?c.name:'card'; });
   S._bottomFor=null; S.bottomSel=null;
-  pushChoices(d, desc, `bottom: ${names.join(', ')}`);
+  pushChoices(d, LB.shrinkingIndices(sel), `bottom: ${names.join(', ')}`);
 }
 function commitBoardSel(d, dec){
   const sel=[...(S.boardSel||[])];
@@ -5508,9 +5511,13 @@ function commitBoardSel(d, dec){
     const need=sacBurstNeed(d);
     if (need>1){
       // Answer THIS frame with the first pick and queue the rest for the frames that follow
-      // (sacBurstAuto). Order is board order, which is the order the engine re-enumerates in, so
-      // the queue's predicted option list stays comparable frame to frame.
-      const picked=(d.options||[]).filter(o=>S.boardSel&&S.boardSel.has('m:'+o.perm_index));
+      // (sacBurstAuto), IN THE ORDER THE VICTIMS WERE CLICKED (USER 2026-10-22: "The viewer should use
+      // exactly the order I give."; the selection Set keeps insertion order -- the seeded default is the
+      // heuristic pick first, then board order). This used to be BOARD order, an order nobody chose.
+      // The frame-to-frame prediction (`expect`, the option NAMES left after each pick) does not depend
+      // on the pick order, so sacBurstAuto matches exactly as before.
+      const byKey={}; (d.options||[]).forEach(o=>{ byKey['m:'+o.perm_index]=o; });
+      const picked=[...(S.boardSel||[])].map(k=>byKey[k]).filter(Boolean);
       if (picked.length!==need){ flashHint(`Pick ${need} to sacrifice (you have ${picked.length}).`); return; }
       const expect=(d.options||[]).map(o=>o.name);
       expect.splice(expect.indexOf(picked[0].name), 1);

@@ -914,6 +914,34 @@ function checkSequenceTokens() {
   return fails;
 }
 
+// CLICK-ORDER PICKS (cleanup discard, London bottoming; USER 2026-10-22). The engine reads one hand
+// index per decision against a hand the previous pick shrank, so the picks go in CLICK order, each
+// re-based: an earlier pick at a lower index shifts it down by one. (They used to be sorted into
+// descending index order -- always valid, never the order the human chose.)
+function checkShrinkingIndices() {
+  const fails = [];
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const cases = [
+    [[], []],
+    [[3], [3]],
+    [[1, 4], [1, 3]],          // the 2nd card (index 1) first: index 4 is index 3 once it is gone
+    [[4, 1], [4, 1]],          // the higher one first: nothing below it moved
+    [[5, 0, 3], [5, 0, 2]],
+    [[2, 6, 0, 4], [2, 5, 0, 2]],
+  ];
+  for (const [picks, want] of cases) {
+    const got = LB.shrinkingIndices(picks);
+    if (!eq(got, want)) fails.push(`shrinkingIndices(${JSON.stringify(picks)}) -> ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+  }
+  // Replaying the re-based indices against a shrinking hand removes exactly the clicked cards, in order.
+  const hand = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  const picks = [2, 6, 0, 4];
+  const live = hand.slice(), removed = [];
+  for (const i of LB.shrinkingIndices(picks)) { removed.push(live[i]); live.splice(i, 1); }
+  if (!eq(removed, picks.map(i => hand[i]))) fails.push(`replay removed ${JSON.stringify(removed)}`);
+  return fails;
+}
+
 function main() {
   const refs = collectRefs();
   if (!refs.length) { console.log('no reference games found under references/'); return 0; }
@@ -984,6 +1012,10 @@ function main() {
   seqFails.forEach(m => console.log(`  FAIL  sequence tokens: ${m}`));
   console.log(`Viewer whole-sequence pin: ${seqFails.length ? 'WRONG' : 'every queued entry is one <verb>=<name> step in queue order'} ` +
               `(${seqFails.length} FAIL)`);
+  const shrinkFails = checkShrinkingIndices();
+  shrinkFails.forEach(m => console.log(`  FAIL  click-order picks: ${m}`));
+  console.log(`Viewer click-order picks: ${shrinkFails.length ? 'WRONG' : 'discard / bottom picks go in click order, re-based'} ` +
+              `(${shrinkFails.length} FAIL)`);
   const karooFails = checkKarooPosition();
   karooFails.forEach(m => console.log(`  FAIL  karoo position: ${m}`));
   console.log(`Viewer karoo position: ${karooFails.length ? 'WRONG' : 'a Karoo before a cast encodes landat=<k> (0 = first), after every cast land='} ` +
@@ -995,7 +1027,7 @@ function main() {
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
-          + karooFails.length + seqFails.length) ? 1 : 0;
+          + karooFails.length + seqFails.length + shrinkFails.length) ? 1 : 0;
 }
 
 process.exit(main());

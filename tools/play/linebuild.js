@@ -516,6 +516,23 @@
     return v + '=' + card;
   }
   function sequenceTokens(seg) { return (seg || []).map(sequenceToken); }
+
+  // ONE-AT-A-TIME PICKS IN THE ORDER THEY WERE CLICKED (cleanup discard, London bottoming; USER
+  // 2026-10-22: "The viewer should use exactly the order I give."). The engine asks one decision per
+  // card and reads a HAND INDEX, against a hand the previous pick already shrank (the card is erased in
+  // place, so the rest keep their relative order). `picks` are ORIGINAL hand indices in click order;
+  // the result re-bases each onto the hand as it stands at its own decision: an earlier pick at a LOWER
+  // index shifts it down by one. (The viewer used to sort the picks into descending index order, which
+  // needs no re-basing but applies them in an order nobody chose.)
+  function shrinkingIndices(picks) {
+    const out = [];
+    (picks || []).forEach((p, k) => {
+      let shift = 0;
+      for (let j = 0; j < k; ++j) { if (picks[j] < p) { ++shift; } }
+      out.push(p - shift);
+    });
+    return out;
+  }
   // How many STEPS a segment holds (every entry but a manual tap, which is a payment, not a step). The
   // viewer pins a segment of two or more: a single step has no order to keep.
   function sequenceSteps(seg) { return (seg || []).filter(p => !isPreTap(p)).length; }
@@ -790,7 +807,7 @@
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            toggleKicker,
            offersLandAfter, topLandOffered, landPosition, karooPositionsOffered,
-           sequenceToken, sequenceTokens, sequenceSteps,
+           sequenceToken, sequenceTokens, sequenceSteps, shrinkingIndices,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
