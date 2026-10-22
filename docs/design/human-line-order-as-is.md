@@ -258,6 +258,15 @@ Only a NEW game sends `"**"`.
   Also failing identically on the unchanged tree, so not this change: `manual_tap_check.py`'s
   `MTG_ENERGY_C_MODE=0` control arm and `pay_line_color_check.py`'s two `=0` control arms;
   `human_line_order_check.py` SKIPs (its turn-6 line now grades legal_not_enumerated on both).
+* **After the review fixes (tree 1bf6453d9):** smoke 136/136 PASS, **configs changed: 0**, 0 slower /
+  0 faster / 0 play-changed; scenarios 254/254; unit 1726/1726; reference replay (640, `--strict`):
+  222 ok / 418 repaired / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap / 0 mull-drift /
+  0 contract-fail; `viewer_linebuild_check.js` 0 FAIL; `viewer_client_check.js` unchanged from the
+  unchanged tree (only the two pre-existing `equip` failures).
+* **Known limit of the validation preview:** its trial apply answers resolution-time choices (a
+  sacrifice victim, a bounce, a tutor pick) with the engine default, as the fallback's trials always
+  have; a later step whose payability depends on the human answering such a choice differently could
+  be graded on the default's board.
 
 ### Left as is, and why
 
@@ -269,11 +278,69 @@ Only a NEW game sends `"**"`.
   scry-bottom order, end-step auto-taps, the viewer's auto-answers.
 * **DigDraw** is not a step: the viewer commits a cycle / sac-dig as a line of its own (`fireDig`
   clears the queue), so it is never sequenced against anything; it keeps its pass.
-* **Validation granularity.** The line string's `landat=<k>` counts `cast=` / `act=` entries only, so
-  a Vial put, retrace or Land's Edge discard queued before the land is not visible to `CheckLine`'s
-  prefix check; the commit still plays the land at its queue position.
+* **Validation granularity** -- CLOSED by the review fixes below: a pinned line validates WITH its
+  exact sequence (`seq=`), so every step kind is checked in the order it will be committed.
+
+### Review fixes (adversarial review of 7c550297b..99638a647, same day)
+
+* **(1) A Land's Edge discard queued before the land burned the land being played.** The unit picked
+  its land by `LandsEdgePitchOrder`, ignoring the land named in `le=<land>`; `PlayLandByName` then failed
+  silently and the next cast was dropped on a validated line (reviewer repro `le6_2`; without the manual
+  tap, `le5`, the "your order cannot pay" fallback threw the whole queue away and described only the
+  casts). Each `le=` step now carries its land (`Action::discard_name`) and `fire_lands_edge` discards
+  exactly that land (a named land not in hand is reported, nothing discarded); a land that cannot be
+  played at its step -- or at the end-of-casts fallback point -- is reported. Scenarios
+  `treasure_hunt_human_seq_le_names_its_land`, `treasure_hunt_human_seq_le_before_land_no_tap`.
+* **(2) A deferred shock land ignored later PAID ACTIVATIONS.** The pay-2-life rule counted only casts /
+  retraces / digs after the land, so `Kor Duelist, Temple Garden, equip Bonesplitter` left the Garden
+  tapped and the Duelist hit for 1 instead of 6. It counts every mana-spending step after the land
+  (`HumanStepSpendsMana`: any action with a mana cost), and a `"**"` land-first line uses the same
+  widened rule (a superset of the old one, so never worse). Scenarios
+  `kitty_human_seq_shock_land_pays_for_later_equip` + `kitty_human_seq_shock_land_first_control`
+  (both: 20 -> 14, Garden untapped at 18 life).
+* **(3) Validation could accept an order the commit would drop.** `landPosition` counts only `cast=` /
+  `act=` entries, so a land queued after an equip encoded land-first and validated, and the walk then ran
+  the equip before the land and dropped it silently. The fix is to validate the ORDER ITSELF: the viewer
+  validates each pinned segment with `LB.validationLine` (its line plus `seq=<the "**" steps>`), and
+  `src/main.cpp ValidateHumanSequence` previews the commit through the commit's own body
+  (`PrepareHumanCommit`: the pin, the fallback, a trial apply of what will really be applied). A step
+  the plan cannot match or could mean two plays, a dropped cast, or a step that does not happen where it
+  was queued makes the line **Illegal with every reason**; a line the user-requested fallback rescues
+  stays accepted. (`landat=<k>` keeps its documented meaning -- the cast count CheckLine maps onto a
+  landfall slot -- because `seq=` now carries the exact all-kinds order and the preview checks it.)
+  At the commit, every `"**"` step is watched: a non-cast step that leaves the state unchanged (the
+  engine's dedup key plus zone sizes, the float and the life totals) is reported in the history as
+  `⚠ <step> was NOT applied: ...` (`report_step_fail`); casts keep their `dropped_casts` report.
+  Scenarios `kitty_human_seq_equip_before_land_rejected` (validation) and
+  `kitty_human_seq_equip_before_land_reported` (commit).
+* **(4) Same-name ambiguity.** A step now carries what the viewer knows about WHICH play it is --
+  `#<src>` (the clicked permanent, from the thumb's `data-num`, stamped only when an enumerated action
+  names that copy; the Equipment), `@<target>` (the equip host, the blinked creature, the equip-all host),
+  `*<count>` (a blink's count), `+kicked` / `+adventure` -- and `ApplyHumanSequencePin` matches on all
+  of it. The old "any unused action of that card" fallback is gone. A step that still matches two
+  candidates that are not the same play (`HumanStepSameIdentity`: same action fields and
+  indistinguishable permanents) is refused and reported, never picked. Unit tests.
+* **(5) Convoke double tap.** An unmatched queued step is an error (reported; the validation rejects
+  the line), not an implicit action; and the walk taps pre-pass convoke bodies only for a QUEUED step
+  (an implicit one was tapped by the pre-cast pass). Unit test.
+* **(a) Segment order.** `segmentParts` lifted extra land drops ahead of the line and pushed a repeated
+  activation behind the whole segment; it now cuts a new segment exactly where an entry cannot join the
+  current one (a second land, a repeat of a repeatable source, a deferred entry) and keeps every entry in
+  queue order (`checkSegmentOrder`).
+* **(b) Which land a cost discards.** Land's Edge: the named land (above). Retrace and a sac-land cast
+  (Shard Volley) already ask the human (`g_play_retrace_chooser`, `PerformSacrificeLandCost`'s human
+  chooser), so there is nothing to change.
+* **(c) The fallback reports exactly what it changed.** Its existence and trigger are untouched (shared
+  now as `PrepareHumanCommit`, byte-identical for the old pin forms). For a `"**"` line it names the
+  queued order, what could not be paid in it, and the order actually played instead -- read off the
+  trial applies through `g_line_order_capture`, for which every step of the canonical route is now
+  noted too. Scenario `burn_human_seq_fallback_reports_what_changed`: "your order (cast Sol Ring, land
+  Mountain) cannot pay for every spell in the line (not paid in that order: Sol Ring), so the WHOLE line
+  was played in the engine's order instead: land Mountain, cast Sol Ring, which pays them all".
 
 ## DEFERRED: a dropped board ACTIVATION is silent in the viewer
+
+*(2026-10-22: closed for `"**"` lines -- each step is dispatched alone, so "the state did not change" IS a failed step and is reported; see "Review fixes" above. What follows still describes the `"*"` route and the autonomous trailing pass.)*
 
 Server-truth resolution says a declared action that cannot be executed is **dropped and reported**.
 The drop half holds for activations and always has: every branch of the trailing dispatcher checks
