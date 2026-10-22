@@ -50733,6 +50733,82 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     return t;
 }
 
+// ---- LOCKSTEP #19: a breakpoint continuation's traits (MTG_CANON_CONT_TRAITS) -------------------------
+//
+// THE DEFECT (AccomplishedAlchemist s160426 gi425, --depth 8 --budget-ms 0 and the d5 play setting;
+// docs/design/rollout-executor-lockstep.md #19). The committed T5 line: Seedcradle Witch, Living Wish ->
+// Brindle Boar, the Combo Off route at the Witch's site-9 breakpoint (Boar, its sac for 4, the Witch loop:
+// the Alchemist pumped to 20 power and untapped -- a combat-lethal board), then the Living Wish's deferred
+// continuation, which the plan does not branch on: the unbranched canon [cast Arbor Elf, Seedcradle Witch:
+// untap ...]. A canon applies its casts only (MTG_CANON_CONT_NOACTS), so the Witch activation never runs --
+// yet the rollout built the continuation's PlanTraits from the WHOLE list, so the activation-line hold
+// (ActLineHoldMask: act_pips {G}{W}) held a green provider for it; the narrowest-then-index tie held the
+// Alchemist and Arbor Elf's {G} came off Elvish Harbinger. The executor replays the committed line's
+// RECORDS, which carry the canon's casts only, so its traits had no hold and the payer tapped the pumped
+// Alchemist for the {G}: the attack was Harbinger alone, the proven T5 kill became T7.
+//
+// THE FIX, in the world that was wrong: a hold for an activation nothing will make is a phantom by the
+// hold's own contract ("what the plan's own trailing activations still OWE"). So a canon continuation is
+// paid under the traits of the actions it applies; the rollout, the executor's re-derived continuation
+// (resolve_draw_breakpoint) and the record replay then all pay the same cast from the same sources.
+// Every non-canon continuation -- and every canon one without such an action -- is ComputePlanTraits over
+// its list exactly.
+static bool CanonContTraitsOn()
+{
+    static const bool s_env = EnvOn("MTG_CANON_CONT_TRAITS", true);   // DEFAULT ON; =0 -> the full list
+    return heurarm::Flag(heurarm::CANON_CONT_TRAITS, s_env);
+}
+// What an unbranched-canon continuation never dispatches: its board activations (apply_continuation_
+// activations and the executor's twins return first for cont_canon) and a go-off route (applied only by a
+// trailing pass, which a canon never reaches).
+static bool CanonUnappliedKind(Action::Kind k)
+{
+    return TurnSolver::IsTrailingActivation(k) || k == Action::Kind::ComboRoute;
+}
+static std::atomic<std::uint64_t> g_canon_phantom_hold{0};
+std::uint64_t TurnSolver::CanonPhantomHoldCount() { return g_canon_phantom_hold.load(std::memory_order_relaxed); }
+namespace
+{
+struct CanonHoldDumper
+{
+    ~CanonHoldDumper()
+    {
+        if (!EnvOn("MTG_CANON_HOLD_TRACE")) { return; }
+        std::fprintf(stderr, "[canon-hold] canon continuations whose unapplied activations change the act-line hold: %llu\n",
+                     static_cast<unsigned long long>(g_canon_phantom_hold.load()));
+    }
+} g_canon_hold_dumper;
+}   // namespace
+static bool ActHoldInputsDiffer(const PlanTraits& x, const PlanTraits& y)
+{
+    for (int c = 0; c < 5; ++c)
+    { if (x.act_pips[c] != y.act_pips[c] || x.act_pips_cab[c] != y.act_pips_cab[c]) { return true; } }
+    if (x.act_c_pips != y.act_c_pips || x.act_src_count != y.act_src_count) { return true; }
+    for (int k = 0; k < x.act_src_count; ++k) { if (x.act_src_nums[k] != y.act_src_nums[k]) { return true; } }
+    return false;
+}
+PlanTraits TurnSolver::ComputeContinuationTraits(const GameState& state, const Plan& cont)
+{
+    if (!cont.cont_canon) { return ComputePlanTraits(state, cont.actions); }
+    bool any = false;
+    for (const Action& a : cont.actions) { if (CanonUnappliedKind(a.kind)) { any = true; break; } }
+    if (!any) { return ComputePlanTraits(state, cont.actions); }
+    static const bool s_trace = EnvOn("MTG_CANON_HOLD_TRACE");   // DIAGNOSTIC, print-only
+    const bool on = CanonContTraitsOn();
+    if (!on && !s_trace) { return ComputePlanTraits(state, cont.actions); }
+    std::vector<Action> applied;
+    applied.reserve(cont.actions.size());
+    for (const Action& a : cont.actions) { if (!CanonUnappliedKind(a.kind)) { applied.push_back(a); } }
+    PlanTraits t = ComputePlanTraits(state, applied);
+    if (s_trace)
+    {
+        const PlanTraits full = ComputePlanTraits(state, cont.actions);
+        if (ActHoldInputsDiffer(t, full)) { g_canon_phantom_hold.fetch_add(1, std::memory_order_relaxed); }
+        if (!on) { return full; }
+    }
+    return t;
+}
+
 // MTG_ACT_HOLD_OUTER -- default OFF pending measurement; `=1` arms it. Read in exactly ONE place
 // (this TU) even though all three call sites span two files, because both worlds call this same
 // function -- the coding-conventions rule 4 shape without a shared EngineFlags entry.
@@ -58968,7 +59044,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         PlanTraits _cont_traits;
         if (PlanTraitsWanted())
         {
-            _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions);
+            // ...of the actions it APPLIES (LOCKSTEP #19: a canon's board activations never run, so they
+            // hold nothing -- see ComputeContinuationTraits). Executor twin: resolve_draw_breakpoint.
+            _cont_traits = TurnSolver::ComputeContinuationTraits(state, extra);
             // MTG_ACT_HOLD_OUTER: the outer plan's unfired activations are still owed their {T}.
             // Read BEFORE the scope below is installed, so CurrentPlanTraits() is still the base
             // plan's. Lockstep twin at AIEngine's two continuation installs.

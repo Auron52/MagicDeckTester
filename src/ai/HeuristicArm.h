@@ -643,6 +643,7 @@ enum Slot : int
     AA_ROUTE_KEY_GY_NAMES,    // MTG_AA_ROUTE_KEY_GY_NAMES  AccomplishedAlchemist COMBO OFF route memo key: the graveyard by card NAME, not card number -- a spell resolved inside the search reaches the graveyard numbered 0, so a route proven on a searched board missed the memo on the identical live board and the apply's own bounded walk could not re-find it (a committed proven route played as a no-op). DEFAULT ON (a key fix; the apply still verifies every path by replay); =0 -> the old key
     AA_ROUTE_TT,              // MTG_AA_ROUTE_TT  AccomplishedAlchemist COMBO OFF walk: a walk-wide TRANSPOSITION fold -- a child board (the route memo's exact Fingerprint) whose subtree already FAILED completely in this walk with at least as many links left is not re-explored (a board re-reached by another link order cannot win with fewer links; the bounds were not hit, so the earlier exploration was exhaustive). Sound: every route the walk found is still found (the freed applies only reach more boards). DEFAULT ON; =0 -> re-explore
     AA_ROUTE_LEAF_KILL,       // MTG_AA_ROUTE_LEAF_KILL  AccomplishedAlchemist COMBO OFF walk: at the LINK bound, still try the kill fold's own kill plans (UntapLoopKillPlans), free of the node / apply bounds -- every node the walk explored before is explored identically, so the verdict can only gain a win (a 6-link setup whose 7th link is the Stroke). DEFAULT ON; =0 -> stop at the bound
+    CANON_CONT_TRAITS,        // MTG_CANON_CONT_TRAITS  LOCKSTEP #19: an unbranched-canon breakpoint continuation (Plan::cont_canon) is paid under PlanTraits built from the actions it APPLIES (its casts), not its unapplied board activations -- the rollout and the executor's re-derived continuation held mana for an activation nothing makes (the act-line hold), while the committed-line record replay (casts only) did not, so the two paid the same cast from different sources (AccomplishedAlchemist s160426 gi425 T5: the rollout paid Arbor Elf with Elvish Harbinger, the replay tapped the pumped Alchemist and lost the proven kill). DEFAULT ON; =0 -> the full action list
     COUNT
 };
 
@@ -1236,6 +1237,7 @@ inline const char* Name(int slot)
         "MTG_AA_ROUTE_KEY_GY_NAMES",
         "MTG_AA_ROUTE_TT",
         "MTG_AA_ROUTE_LEAF_KILL",
+        "MTG_CANON_CONT_TRAITS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

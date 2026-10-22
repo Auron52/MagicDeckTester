@@ -1,0 +1,84 @@
+{
+  "_comment": [
+    "LOCKSTEP #19 (MTG_CANON_CONT_TRAITS; docs/design/rollout-executor-lockstep.md #19), the board of held-out",
+    "AccomplishedAlchemist s160426 gi425 at turn 5 main 1. The pre-fix search commits a VERIFIED T5 kill: Forest,",
+    "Seedcradle Witch, Living Wish -> Brindle Boar; the Witch's site-9 continuation is the Combo Off route (the Boar,",
+    "its sac for 4, the Witch loop pumps the Alchemist to 20 and leaves it untapped -- combat-lethal); then the Living",
+    "Wish's DEFERRED continuation, the unbranched canon [cast Arbor Elf, Seedcradle Witch: untap ...]. A canon applies",
+    "its casts only, but the rollout built its traits from the whole list, so the act-line hold kept a green provider",
+    "for the never-made activation and Arbor Elf's {G} came off Elvish Harbinger. The executor replays the line's",
+    "RECORDS (the canon's casts only): no hold, the payer taps the pumped Alchemist, only Harbinger attacks -- and the",
+    "spent board does not win T6 either ([fd-diverge] predicted 5, realised none; with MTG_CANON_CONT_TRAITS=0).",
+    "With the fix the rollout pays the canon exactly as the executor does, sees that kill fail, and plays its honest",
+    "T6 line, which the game realises. Asserts the realised T6. (A T5 kill does exist on this board -- the route with",
+    "the deferred continuation declined, or Arbor Elf paid by Harbinger -- but a plan targets ONE breakpoint, the",
+    "second is an unchallengeable canon and the payer's source is not searched; see the AA ledger, LOCKSTEP #19.)"
+  ],
+  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 25,
+  "opponent_life": 20,
+  "opponent_library_size": 48,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Wild Growth",
+      "equips": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Arbor Elf",
+      "sick": false
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Elvish Harbinger",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Living Wish",
+    "Forest",
+    "Arbor Elf",
+    "Seedcradle Witch"
+  ],
+  "graveyard": [
+    "Feed the Clan",
+    "Stroke of Genius"
+  ],
+  "library_top": [
+    "Utopia Sprawl",
+    "Feed the Clan",
+    "Forest",
+    "Staff of Domination",
+    "Forest",
+    "Weather the Storm",
+    "Elvish Harbinger",
+    "Utopia Sprawl",
+    "Elvish Harbinger",
+    "Living Wish",
+    "Forest",
+    "Forest"
+  ],
+  "library_filler": "Forest",
+  "library_size": 46,
+  "depth": 8,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "expect_win_turn": 6
+}

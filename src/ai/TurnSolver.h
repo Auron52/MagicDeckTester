@@ -2598,6 +2598,21 @@ public:
     // and every consumer behaves exactly as before.
     static PlanTraits ComputePlanTraits(const GameState& state, const std::vector<Action>& acts);
 
+    // A BREAKPOINT CONTINUATION'S traits (LOCKSTEP #19, MTG_CANON_CONT_TRAITS; docs/design/
+    // rollout-executor-lockstep.md). ComputePlanTraits over the actions the continuation will really
+    // APPLY: for an unbranched-canon continuation (Plan::cont_canon, MTG_CANON_CONT_NOACTS) that is its
+    // casts, not its board activations (and not a ComboRoute, which no canon dispatches) -- so its
+    // payment is not shaped by an activation-line hold (PlanTraits::act_pips / act_src_nums / ...) for an
+    // activation nothing will ever make. Every other continuation is ComputePlanTraits(cont.actions)
+    // exactly. ONE function for the rollout's deferred install (ApplyPlanDirect) and the executor's
+    // resolve_draw_breakpoint, so the two cannot drift; the committed-line record replay already derives
+    // its traits from what was recorded (the canon's casts), which this now agrees with.
+    static PlanTraits ComputeContinuationTraits(const GameState& state, const Plan& cont);
+    // Diagnostic (MTG_CANON_HOLD_TRACE, print-only): how many committed-line recordings met a canon
+    // continuation whose unapplied activations would have shaped its payment (an act-line hold input
+    // differs between the full action list and the applied one). Counted with the lever on or off.
+    static std::uint64_t CanonPhantomHoldCount();
+
     // MTG_ACT_HOLD_OUTER -- carry the OUTER plan's still-pending trailing-activation {T} SOURCES into
     // a breakpoint continuation's traits. Called at all three continuation installs (the rollout's
     // ApplyPlanDirect, the executor's resolve_draw_breakpoint and its record replay) so the fix cannot

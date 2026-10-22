@@ -3488,3 +3488,83 @@ TEST_CASE("Cast order, PROPOSED: an Alchemist turn's two-card bootstrap (Nourish
     CHECK(wal == 2);
     CHECK(lf == 2);
 }
+
+// ---- LOCKSTEP #19 (MTG_CANON_CONT_TRAITS): a canon continuation is paid under the traits of what it APPLIES ----
+//
+// AccomplishedAlchemist s160426 gi425 T5 (d8 b0 and the d5 play setting): the committed line's deferred Living
+// Wish continuation was the unbranched canon [cast Arbor Elf, Seedcradle Witch: untap ...]. A canon applies its
+// casts only (MTG_CANON_CONT_NOACTS), so the Witch's {2}{G}{W} is owed by nothing -- but built from the whole
+// list, the act-line hold held a green provider for it, and the rollout paid Arbor Elf with Elvish Harbinger
+// where the executor's record replay (the canon's casts only) tapped the pumped Alchemist: proven T5, realised T7.
+// End to end: test/scenarios/aa_canon_cont_traits_g425_t5.json.
+TEST_CASE("canon continuation traits: an unapplied Witch untap holds no mana (LOCKSTEP #19, s160426 gi425 T5)")
+{
+    GameState s = FreshAa();
+    s.m_provider = &AaProv();
+    const int witch = PutAa(s, "Seedcradle Witch");
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    PutAa(s, "Elvish Harbinger");
+    HandAa(s, "Arbor Elf");
+    const CardDefinition& wd = DefAa("Seedcradle Witch");
+    REQUIRE(wd.params.untap_pump_cost.has_value());
+
+    Action cast;
+    cast.kind      = Action::Kind::CastFromHand;
+    cast.card_name = "Arbor Elf";
+    cast.cost      = DefAa("Arbor Elf").card.m_mana_cost;
+    Action untap;
+    untap.kind          = Action::Kind::ActivateUntap;
+    untap.card_name     = "Seedcradle Witch";
+    untap.sac_source_id = witch;
+    untap.sac_victim_id = alch;
+    untap.cost          = *wd.params.untap_pump_cost;
+    TurnSolver::Plan cont;
+    cont.actions = { cast, untap };
+
+    auto pips = [](const PlanTraits& t)
+    { return t.act_pips[0] + t.act_pips[1] + t.act_pips[2] + t.act_pips[3] + t.act_pips[4]; };
+
+    // A SEARCHED continuation applies its activation, so the activation's pips are owed and held -- exactly
+    // ComputePlanTraits over the list, as before.
+    const PlanTraits searched = TurnSolver::ComputeContinuationTraits(s, cont);
+    const PlanTraits whole    = TurnSolver::ComputePlanTraits(s, cont.actions);
+    CHECK(searched.act_pips[0] == 1);   // {W}
+    CHECK(searched.act_pips[4] == 1);   // {G}
+    CHECK(pips(searched) == pips(whole));
+    CHECK(searched.mana_casts == 1);
+
+    // The CANON applies the cast only: nothing is owed, nothing is held; the cast's own traits are unchanged.
+    cont.cont_canon = true;
+    const PlanTraits canon = TurnSolver::ComputeContinuationTraits(s, cont);
+    CHECK(pips(canon) == 0);
+    CHECK(canon.act_src_count == 0);
+    CHECK(canon.mana_casts == 1);
+    CHECK(canon.cast_pips[4] == searched.cast_pips[4]);
+    // ...which is what the committed-line replay derives from the canon's RECORDS (its casts).
+    const PlanTraits records = TurnSolver::ComputePlanTraits(s, std::vector<Action>{ cast });
+    CHECK(pips(records) == pips(canon));
+    CHECK(records.own_board_hazard == canon.own_board_hazard);
+
+    // =0 restores the whole-list traits for the canon too (the pre-fix rollout).
+    {
+        struct Off
+        {
+            Off()  { heurarm::t_arm[heurarm::CANON_CONT_TRAITS] = 0; }
+            ~Off() { heurarm::t_arm[heurarm::CANON_CONT_TRAITS] = -1; }
+        } off;
+        const PlanTraits old = TurnSolver::ComputeContinuationTraits(s, cont);
+        CHECK(old.act_pips[0] == 1);
+        CHECK(old.act_pips[4] == 1);
+    }
+
+    // A ComboRoute in a canon list is not dispatched either (no canon reaches a trailing pass), so it adds no
+    // own-board hazard; in a searched list it still does.
+    Action route;
+    route.kind      = Action::Kind::ComboRoute;
+    route.card_name = "Combo Off";
+    TurnSolver::Plan rc;
+    rc.actions = { cast, route };
+    CHECK(TurnSolver::ComputeContinuationTraits(s, rc).own_board_hazard);
+    rc.cont_canon = true;
+    CHECK_FALSE(TurnSolver::ComputeContinuationTraits(s, rc).own_board_hazard);
+}

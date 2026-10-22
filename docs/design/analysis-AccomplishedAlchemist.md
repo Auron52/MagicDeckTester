@@ -42,6 +42,10 @@ slower games; see "USER: the discard mana cap (2026-10-21)".
 Combo Off walk (0-8% of their wall); the walk's own cost (90% of the gen-setting tail) is its breakpoint-variant fan-out.
 Two sound walk collapses landed DEFAULT ON (`MTG_AA_ROUTE_TT`, `MTG_AA_ROUTE_LEAF_KILL`); the near-linear walk stays the
 USER's call -- see "Why the Combo Off route gets stuck (2026-10-21/22)".
+2026-10-22 (branch `aa-g425`, NOT pushed): s160426 gi425's "Combo Off win, then the attack lost" is a rollout/executor
+payment split, not a route defect -- an unbranched-canon continuation's never-applied Witch activation held mana in the
+rollout only; `MTG_CANON_CONT_TRAITS` (LOCKSTEP #19) landed DEFAULT ON: 4 of 2,500 games faster, 0 slower, smoke
+140/140 byte-identical -- see "Combo Off "win", then the attack lost: s160426 gi425 (2026-10-22)".
 Open USER items are listed under "Open questions surfaced to USER".
 
 ## The deck
@@ -2250,6 +2254,12 @@ the primary's volume, so a worktree binary reads the PRIMARY checkout's defaults
   search proved it on (a Living Wish resolving to a different card / a payment that tapped the Alchemist) -- an
   fd-divergence surfacing through the route; the line plays on, a turn later.
 
+* **LOCKSTEP #19 / gi425 (2026-10-22) -- design question (default taken: not built).** After a combat-lethal Combo Off
+  route, a later UNTARGETED breakpoint still plays its unbranched canon (here: cast Arbor Elf, paid off the pumped
+  Alchemist), and there is no "cast nothing more" sibling to choose, so a real T5 kill is unreachable from that board at
+  any budget. Build the canon's EMPTY sibling at such occurrences (branching cost), and/or an attack-aware payer
+  tie-break? See "Combo Off "win", then the attack lost: s160426 gi425 (2026-10-22)".
+
 ## Claude-play sweep
 - commit: `251c426e`
 - seeds: 80001-80020 (claude-play deals by seed only) games: 20
@@ -3016,3 +3026,100 @@ with `MTG_DECISION_PROGRESS`, a cumulative route/derivation line on every `[dpro
 `MTG_AA_ROUTE_SLOW_MS=<ms>` one line per slow walk; `MTG_AA_ROUTE_TRACE=1` now marks each apply NEW / DUP / STILL with its
 `bp_choice` (=2: the variant's resolved continuation); `MTG_AA_ROUTE_BASE_ONLY_VERIFY=2` prints the full-only routes;
 `MTG_AA_ROUTE_VERIFY_SOUND=1` the collapse tally; `MTG_BP_DERIVE_STATS` the derivation nesting depth.
+
+## Combo Off "win", then the attack lost: s160426 gi425 (2026-10-22) -- LOCKSTEP #19, `MTG_CANON_CONT_TRAITS` landed DEFAULT ON
+
+Branch `aa-g425` (worktree `.claude/worktrees/aa-g425`, off `phase-1-2-deck-analyzer` @ bda6c46f8), NOT pushed. Scratch
+`/workspaces/MagicDeckTester/build/scratch/aa/g425/` (`r1`/`r2` the traced repro, `r3_*` both arms, `ab/` the pooled A/B +
+`an.py` / `fd.py`, `smoke_full.txt`, `reg_alch.txt`).
+
+**The symptom** (found by the cast-order A/B on current play; generic order, every `MTG_AA_CAST_ORDER*` unset): held-out
+seed 160426 gi425 at `--depth 8 --budget-ms 0` -- T5 logs `combo route: win`, the same main phase then casts Arbor Elf,
+the Alchemist ends main 1 tapped, Harbinger attacks alone for 1, the game is won T7. `[fd-diverge] realized_win=7
+predicted_win=5 proven_at_turn=1`.
+
+**The mechanism -- not the route.** The route ran completely and its log is accurate: Brindle Boar, its sac for 4, the
+Witch loop pumped the Alchemist to 20 power and left it untapped (a combat-lethal board, the FIN-WITCH verdict). Nothing
+was a no-op and nothing was half-played. The kill was lost AFTER the route, by an executor-vs-rollout payment split:
+* The committed T5 phase is Forest, Seedcradle Witch, Living Wish -> Brindle Boar; the route is the Witch's SITE-9
+  continuation (`bp_choice=0@0`). The Living Wish's DEFERRED site-3 continuation is not targeted by the plan, so it is the
+  unbranched canon (`BpUnbranchedCanon`): `[cast Arbor Elf, Seedcradle Witch: untap ...]`.
+* A canon applies its casts only (`MTG_CANON_CONT_NOACTS`; `apply_continuation_activations` returns first,
+  TurnSolver.cpp:53511 at bda6c46f8), so the Witch activation never runs. But the rollout's deferred install built the
+  continuation's PlanTraits from the WHOLE list (`ComputePlanTraits(state, extra.actions)`, TurnSolver.cpp:58972; its twin
+  in `resolve_draw_breakpoint`, AIEngine.cpp:5590): the ActivateUntap's `{2}{G}{W}` went into `act_pips`, and
+  `ActLineHoldMask` (ManaPayment.cpp:6132) held one green provider for it -- the float W2 covered the white; of the two
+  five-colour dorks the tie (narrowest, then battlefield index) held the Alchemist -- so Arbor Elf's `{G}` came off
+  Elvish Harbinger. `[fd-pred]` T5: opponent 0.
+* The executor replays the committed line's RECORDS (`replay_recorded`, AIEngine.cpp:5047), which hold the canon's casts
+  only: no activation, no hold, and the payer tapped the pumped Alchemist for the `{G}` (G4, G3 floating). Same payer, same
+  board (`[bp-pay]` identical on both sides), two scopes -- `[bp-traits] apply ... acts=2` vs `exec ... acts=1`.
+* So it is a SEARCH-side defect in the lockstep sense: the rollout scored a payment the executor never makes, and by the
+  hold's own contract ("what the plan's own trailing activations still OWE") the rollout was the wrong world -- the
+  canon owes nothing.
+
+**The fix** (`MTG_CANON_CONT_TRAITS`, heurarm `CANON_CONT_TRAITS`, DEFAULT ON; `=0` the whole list):
+`TurnSolver::ComputeContinuationTraits` -- a canon continuation is paid under the traits of the actions it APPLIES (its
+IsTrailingActivation kinds and any ComboRoute dropped); every non-canon continuation, and every canon without such an
+action, is `ComputePlanTraits(cont.actions)` exactly. One function for both installs, so the rollout, the executor's
+re-derived continuation and the record replay now pay a canon's casts from the same sources. Nothing is narrowed and no
+choice is made in the search window: it removes a phantom input to the (exempt) payer. Generic code; documented as
+LOCKSTEP #19 in `docs/design/rollout-executor-lockstep.md`. Diagnostic `MTG_CANON_HOLD_TRACE=1` (print-only) counts the
+canon continuations whose unapplied activations change the act-line hold.
+
+gi425 at d8 b0: **T7 -> T5** (the T1 search finds another T5 line once the phantom is gone; `=0` reproduces T7 and the
+`[fd-diverge]`).
+
+**How often it fires.** Precondition in the search: 369,807 canon continuations whose unapplied activations change the
+hold across the 5,000 A/B games (both arms) -- common, but it only CHANGES AN OUTCOME where it flips a payment that the
+committed-line replay then makes differently. Realised: **4 of the 2,500 games per arm (0.16%; 3 deals)** -- s160001
+d5 gi316 and gi425, s190001 gi403 at d5 and at d3 -- every one an off-arm simulated `[fd-diverge]` (predicted 4 / 5 / 5,
+realised 5 / 7 / 7), and the on arm has **0** `[fd-diverge]` in all 2,500. On the d5 frequency scan alone (s160001 x1000):
+2 games (0.2%).
+
+**Held-out A/B -- ONE pooled batch, 5,000 games** (off = `MTG_CANON_CONT_TRAITS=0` = HEAD play, on = the fix; 5 threads
+beside the value-leaf run; `--batch` heartbeat 5/5; seed = base + gi, game_index = gi; unwon = 9):
+
+| cell | off | on | delta | faster / slower | play-changed | units on/off | ms off -> on |
+|---|---|---|---|---|---|---|---|
+| s160001 d5 b20 (value_play), 1,000 -- the frequency scan | 4.9690 | 4.9670 | **-0.0020** | 2 / **0** (gi316 5->4, gi425 7->6) | 2 | 1.000x | 1,432 -> 1,405 s |
+| s190001 d5 b20 (value_play), 1,000 -- held-out | 4.9880 | 4.9860 | **-0.0020** | 1 / **0** (gi403 7->5) | 1 | 1.000x | 1,380 -> 1,382 s |
+| s190001 d3 b10, 500 -- held-out | 5.0140 | 5.0100 | **-0.0040** | 1 / **0** (gi403 7->5) | 1 | 1.000x | 678 -> 668 s |
+
+No slower game anywhere, so the 10x / d8 b0 recovery bar is vacuous. Play changed ONLY in the diverging games (every other
+game byte-identical, units identical). gi425 at d5 b20 realises T6, not T5 -- see the open item below.
+
+**Validation** (worktree binary, `MTG_PGO=0`): mtg-test **1825 / 1825** (new: `canon continuation traits: an unapplied
+Witch untap holds no mana`); scenarios **252 / 252** (new: `aa_canon_cont_traits_g425_t5` -- the gi425 T5 board: HEAD and
+`=0` commit the phantom T5 kill and realise NO win by T6; fixed, the search plays its honest T6 line and realises it);
+combo-off fixtures **50 / 50**. The other two changed games have the same signature (`MTG_BP_TRACE`, `=0` vs `=1`): at
+the diverging turn the Witch's site-9 route, then the deferred canon with `[bp-traits] apply ... acts=2` against
+`exec ... acts=1` -- gi316 T4 the canon casts the second Alchemist off the pumped one (realised T5 for a proven T4), gi403
+T5 as gi425.
+
+**Suite** (6 threads, NOT accepted -- nothing to accept): the FULL smoke tier **140 / 140 byte-identical** (per-game audit:
+0 configs changed, searched and d0 0 slower / 0 faster / 0 play-changed; every deck, alchemist and alchemist2hg included,
+46,920 games); `--deck=alchemist` regression **5 / 5 byte-identical** (per-game audit 0 / 0 / 0), its viewer-protocol
+`--strict` pass over all 650 references 227 ok / 423 repaired / **0 play-drift / 0 board-diverged / 0 enum-gap**. So the change reaches no suite game -- the class is
+rare (a committed line whose deferred canon carries an activation AND whose cast's payer then has a real choice) -- and
+the tiers need no GT move.
+
+**Open -- a design question for the USER, not fixed here (the completeness rule).** On the gi425 T5 board a T5 kill does
+exist: the route, then DECLINE the Living Wish's deferred continuation (cast nothing more), or cast Arbor Elf off Elvish
+Harbinger. Neither is reachable from the T5 root at any budget (scenario `aa_canon_cont_traits_g425_t5`: d8 b0 proves
+T6 at most):
+1. a plan targets ONE breakpoint occurrence (`bp_choice` / `bp_at`); the route rides the site-9 occurrence, so the
+   deferred site-3 occurrence is untargeted and gets the unbranched canon, which is UNCHALLENGEABLE -- there is no EMPTY
+   sibling there (the open item "Canon continuation default is unchallengeable", `combined-gt-2026-10-04.md` item 3:
+   "offering canon-with-activations and casts-only as siblings at every unbranched occurrence ... not built -- a
+   search-shape change with branching cost"). After a combat-lethal route, "cast nothing more" is exactly that sibling.
+2. which source pays a cast is the payer's (exempt) choice, not searched: with no phantom hold the battlefield-order tie
+   taps the 20-power Alchemist before the 1-power Harbinger. An attack-aware tie-break (tap the weakest attacker first
+   when `attack_matters`) would be a PAYER heuristic -- allowed there, but it moves every deck's payments and needs its own
+   A/B.
+Pre-fix the search "found" this kill only through the phantom hold -- a payer input, not a searched action -- and the
+committed-line executor (which replays records) could not realise it; only an executor that RE-DERIVES the continuation
+(non-committed play) shared the phantom. The fix changes which source the exempt payer takes for a canon's cast, in every
+world alike; it adds or removes no searched action, and is not a budget lever. Net: 4 faster, 0 slower above. The full
+game still wins T5 at d8 b0 (the T1 search reaches another line). Recommendation: (1), the canon's EMPTY sibling at an untargeted occurrence that follows a
+combat-lethal route, as the principled completion; ask before building it (branching cost).

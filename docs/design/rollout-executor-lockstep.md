@@ -56,6 +56,7 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 16 | a continuation's CAST MODE was dropped on the way to the executor: the site-9 (and pod) appliers called `cast_by_name` without `adventure`/`kicked`, and the breakpoint recorder copied `bestow` but no other mode (convoke, evoke, kicker, devour, loyalty ...) | **FIXED** 2026-10-17 -- `fungus-v2-fd-diverge-7021.md` |
 | 17 | a breakpoint-node / prefix-cache RESUME re-bound the line's unpaid-cost hold from the WHOLE plan's bill, so the resumed continuation paid under a phantom demand for casts the prefix had already paid -- a payment no full apply (and so no executor) makes | **FIXED** 2026-10-20 behind `MTG_BP_RESUME_LINE_HOLD` (default ON; below) |
 | 18 | the executor's CLEAN-set cast loop replayed a committed DEFERRED-class segment (a Remand-ridden plain cantrip) at the cast, before the deferred Karoo drop; the rollout runs it after | **FIXED** 2026-10-20 behind `MTG_EXEC_CLEAN_BP_DEFERRED` (default ON; below) |
+| 19 | an UNBRANCHED-CANON continuation (`Plan::cont_canon`) applies its casts only, but the rollout (and the executor's re-derived continuation) built its PlanTraits from the WHOLE list -- so the activation-line hold held mana for an activation nothing makes, while the committed-line record replay (the canon's casts only) held nothing, and the two paid the same cast from different sources | **FIXED** 2026-10-22 behind `MTG_CANON_CONT_TRAITS` (default ON; below) |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -731,3 +732,43 @@ Per-flag attribution of the 8 changed games (each re-run with one flag alone): #
 bar is vacuous. Suite: hinata + hinata2hg smoke 4/4 and the whole smoke tier 128/128 byte-identical; hinata + hinata2hg
 regression 5/7 -- `hinata_regression_d3_s3003` and `_d5_s3003` change play in gi 11 only, T6 -> T6 (owner #17); both
 flags `=0` regression 7/7 byte-identical. `[fd-diverge]` (leaf estimates only, none simulated) 4 -> 3 on the ship cell.
+
+## #19 -- a canon continuation's unapplied activations shaped its payment in the rollout only (found + fixed 2026-10-22)
+
+AccomplishedAlchemist held-out s160426 gi425 (`--depth 8 --budget-ms 0`, and the d5 play setting): the T1 search
+proves a T5 kill, `[fd-diverge] realized_win=7 predicted_win=5`. The committed T5 phase is Forest, Seedcradle Witch,
+Living Wish -> Brindle Boar; the Witch's entry opens site 9, whose searched continuation is the Combo Off route (the
+Boar, its sac for 4, the Witch loop: the Alchemist pumped to 20 power and left UNTAPPED -- combat-lethal; the game log's
+`combo route: win` is accurate). Then the Living Wish's DEFERRED site-3 continuation, which the plan does not target: the
+unbranched canon `[cast Arbor Elf, Seedcradle Witch: untap ...]`. `MTG_BP_TRACE` (with a temporary per-payment
+"what got tapped" line) on the first difference:
+
+```
+[bp-traits] apply T5 cont: ... attack=1 acts=2      <- rollout: {Arbor Elf, Witch untap}
+[bp-pay]    apply T5 cast=Arbor Elf float=W2 untapped=[] dorks=[Alchemist#200000, Harbinger#11]
+            -> Harbinger tapped, Alchemist untapped 20 power          [fd-pred] T5 opp_life=0
+[bp-traits] exec  T5 cont: ... attack=1 acts=1      <- record replay: {Arbor Elf}
+[bp-pay]    exec  T5 cast=Arbor Elf float=W2 untapped=[] dorks=[Alchemist#200000, Harbinger#11]
+            -> Alchemist tapped (G4, float G3)                         realised: Harbinger attacks for 1
+```
+
+A canon applies its casts only (`MTG_CANON_CONT_NOACTS`: `apply_continuation_activations` returns first, and so do the
+executor twins) -- yet `_cont_traits = ComputePlanTraits(state, extra.actions)` read the Witch's `{2}{G}{W}` into
+`act_pips`, so `ActLineHoldMask` held a green provider for an activation nothing would make (narrowest-then-index: the
+Alchemist), and Arbor Elf's `{G}` came off Harbinger. The record replay derives its traits from what was RECORDED -- the
+canon's casts -- so it had no hold and the payer tapped the pumped Alchemist. Same payer, same board, two scopes.
+
+Fix (`TurnSolver::ComputeContinuationTraits`, used by the rollout's deferred install and the executor's
+`resolve_draw_breakpoint`; the record replay already agreed): a canon continuation's traits are built from the actions it
+APPLIES -- its IsTrailingActivation kinds and a ComboRoute (no canon reaches a trailing pass) are dropped; every other
+continuation is `ComputePlanTraits(cont.actions)` exactly. The rollout was the wrong world by the hold's own contract
+("what the plan's own trailing activations still OWE"). `MTG_CANON_CONT_TRAITS=0` restores the whole list (heurarm slot
+`CANON_CONT_TRAITS`); `MTG_CANON_HOLD_TRACE=1` counts canon continuations whose unapplied activations would change the
+act-line hold (print-only). Pins: unit `canon continuation traits: an unapplied Witch untap holds no mana`, scenario
+`aa_canon_cont_traits_g425_t5` (the T5 board: the pre-fix search commits the phantom T5 kill and realises no win by T6;
+fixed, it plays its honest T6 line). Measured (one pooled batch, `=0` vs `=1`, AccomplishedAlchemist 2,500 games per
+arm: s160001 d5 x1000, held-out s190001 d5 x1000 + d3 x500): 4 of 2,500 games faster (3 deals: gi316 5->4 and gi425
+7->6 at d5 b20, gi403 7->5 at d5 and at d3), **0 slower**, units 1.000x, play changed in those games only -- each an `=0`
+`[fd-diverge]`, and `=1` has none. Whole smoke tier 140/140 byte-identical (every deck), alchemist regression 5/5.
+Details in the AccomplishedAlchemist ledger, "Combo Off "win", then the attack lost: s160426 gi425".
+

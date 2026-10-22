@@ -5587,7 +5587,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         PlanTraits _cont_traits;
         if (PlanTraitsWanted())
         {
-            _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions);
+            // The actions it APPLIES (LOCKSTEP #19, TurnSolver::ComputeContinuationTraits -- the rollout's
+            // install calls the same function): a canon continuation's activations are not dispatched below.
+            _cont_traits = TurnSolver::ComputeContinuationTraits(state, extra);
             // MTG_ACT_HOLD_OUTER (lockstep with ApplyPlanDirect's continuation install): the main
             // plan's unfired trailing activations are still owed their {T} while this continuation
             // pays its casts. Read before the scope replaces CurrentPlanTraits().
