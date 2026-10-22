@@ -810,13 +810,26 @@ function checkLandPosition() {
   r = LB.queueCard(offers, r, 'Forest', 'land');
   r = LB.queueCard(offers, r, 'Khalni Heart Expedition', 'permanent');
   if (LB.encodeLine(r) !== 'land=Forest;cast=Khalni Heart Expedition') fails.push(`land first -> ${LB.encodeLine(r)}`);
-  // No positioned line offered (every deck without a landfall card): click order never matters.
+  // No positioned line offered (every deck without a landfall card): the queue position is STILL the
+  // timing (USER 2026-10-22: "The viewer should use exactly the order I give."). It used to be dropped
+  // here -- `land=` and the engine played the land first; the engine now validates a legal position
+  // against the land-first plan and realises it through the "**" pin.
   let t = [];
   t = LB.queueCard(plain, t, 'Khalni Heart Expedition', 'permanent');
   t = LB.queueCard(plain, t, 'Forest', 'land');
   t = LB.queueCard(plain, t, 'Rampant Growth', 'nonpermanent');
-  if (LB.encodeLine(t) !== 'land=Forest;cast=Khalni Heart Expedition;cast=Rampant Growth')
-    fails.push(`no positioned line offered -> ${LB.encodeLine(t)}`);
+  if (LB.encodeLine(t) !== 'land=Forest;landat=1;cast=Khalni Heart Expedition;cast=Rampant Growth')
+    fails.push(`no positioned line offered, land between -> ${LB.encodeLine(t)}`);
+  let t2 = [];
+  t2 = LB.queueCard(plain, t2, 'Rampant Growth', 'nonpermanent');
+  t2 = LB.queueCard(plain, t2, 'Forest', 'land');
+  if (LB.encodeLine(t2) !== 'landafter=Forest;cast=Rampant Growth')
+    fails.push(`no positioned line offered, land after -> ${LB.encodeLine(t2)}`);
+  let t3 = [];
+  t3 = LB.queueCard(plain, t3, 'Forest', 'land');
+  t3 = LB.queueCard(plain, t3, 'Rampant Growth', 'nonpermanent');
+  if (LB.encodeLine(t3) !== 'land=Forest;cast=Rampant Growth')
+    fails.push(`no positioned line offered, land first -> ${LB.encodeLine(t3)}`);
   // A library-TOP land in the middle carries the same modifier.
   const top = { me: { hand, land_drops_left: 1, library_top: { name: 'Forest', number: 7, playable_land: true } },
                 plans: [{ land_slot: 1 }] };
@@ -866,6 +879,38 @@ function checkKarooPosition() {
   d = LB.queueCard(plain, d, 'Rest for the Weary', 'nonpermanent');
   if (LB.encodeLine(d) !== 'land=Selesnya Sanctuary;cast=Rest for the Weary')
     fails.push(`no karoo position offered -> ${LB.encodeLine(d)}`);
+  return fails;
+}
+
+// THE HUMAN'S WHOLE SEQUENCE (the "**" --cast-order list, 2026-10-22; USER: "The viewer should use
+// exactly the order I give. Same for everything else in the viewer."). sequenceTokens is the committing
+// segment as the engine's TurnSolver::ApplyHumanSequencePin reads it: one `<verb>=<name>` per entry IN
+// QUEUE ORDER, the land and each Land's Edge discard as steps, the manual taps in place, and the ACTION's
+// card for the verbs whose line value names a target (pod / ooze / gyreturn name the source's action).
+function checkSequenceTokens() {
+  const fails = [];
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const seg = [
+    { name: 'Krenko, Mob Boss', src: 'Krenko, Mob Boss', kind: 'activate', verb: 'cast' },
+    { name: 'Forest', kind: 'land' },
+    { kind: 'pretap', name: 'Forest', num: 7, color: 'G' },
+    { name: 'Shard Volley', kind: 'nonpermanent' },
+    { name: 'Mountain', kind: 'le' },
+    { name: 'Goblin Lackey', kind: 'vial' },
+    { name: 'Throes of Chaos', kind: 'retrace' },
+    { name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', verb: 'sacout', sacout: true },
+    { name: 'Lotus Bloom', kind: 'suspend' },
+    { name: 'Craterhoof Behemoth', src: 'Birthing Pod', kind: 'activate', verb: 'pod' },
+    { name: 'Emiel the Blessed', src: 'Emiel the Blessed', kind: 'activate', verb: 'blink', blinkTarget: 42, blinkCount: 1 },
+    { name: 'Forest', kind: 'land', fromTop: true },
+  ];
+  const want = ['act=Krenko, Mob Boss', 'land=Forest', 'tap=Forest#7:G', 'cast=Shard Volley', 'le=Mountain',
+                'vial=Goblin Lackey', 'retrace=Throes of Chaos', 'sacout=Skirk Prospector', 'suspend=Lotus Bloom',
+                'pod=Birthing Pod', 'blink=Emiel the Blessed', 'landtop=Forest'];
+  const got = LB.sequenceTokens(seg);
+  if (!eq(got, want)) fails.push(`sequenceTokens -> ${JSON.stringify(got)}`);
+  if (LB.sequenceSteps(seg) !== seg.length - 1) fails.push(`sequenceSteps -> ${LB.sequenceSteps(seg)} (a tap is not a step)`);
+  if (LB.sequenceSteps([]) !== 0) fails.push('sequenceSteps([]) != 0');
   return fails;
 }
 
@@ -935,6 +980,10 @@ function main() {
   posFails.forEach(m => console.log(`  FAIL  land position: ${m}`));
   console.log(`Viewer land position: ${posFails.length ? 'WRONG' : 'a land between two casts encodes landat=<k>, after all landafter='} ` +
               `(${posFails.length} FAIL)`);
+  const seqFails = checkSequenceTokens();
+  seqFails.forEach(m => console.log(`  FAIL  sequence tokens: ${m}`));
+  console.log(`Viewer whole-sequence pin: ${seqFails.length ? 'WRONG' : 'every queued entry is one <verb>=<name> step in queue order'} ` +
+              `(${seqFails.length} FAIL)`);
   const karooFails = checkKarooPosition();
   karooFails.forEach(m => console.log(`  FAIL  karoo position: ${m}`));
   console.log(`Viewer karoo position: ${karooFails.length ? 'WRONG' : 'a Karoo before a cast encodes landat=<k> (0 = first), after every cast land='} ` +
@@ -946,7 +995,7 @@ function main() {
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + posFails.length + kickFails.length
-          + karooFails.length) ? 1 : 0;
+          + karooFails.length + seqFails.length) ? 1 : 0;
 }
 
 process.exit(main());

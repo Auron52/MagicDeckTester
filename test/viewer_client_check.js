@@ -354,7 +354,8 @@ function testCastOrderBookkeeping(win) {
   // Reordered queue [B, A] vs canonical [A, B] -> pins main_ordinal 3.
   seed(['Spell B', 'Spell A']);
   co.apply(0, 'reordered');
-  chk(JSON.stringify(S.castOrder['3']) === JSON.stringify(['Spell B', 'Spell A']), 'reordered queue pins castOrder[3]=[B,A]');
+  chk(JSON.stringify(S.castOrder['3']) === JSON.stringify(['**', 'cast=Spell B', 'cast=Spell A']),
+      `reordered queue pins castOrder[3]=[**,B,A] (got ${JSON.stringify(S.castOrder['3'])})`);
   chk(S.choices[S.choices.length - 1] === 0, 'commit pushes exactly the plan int (0) to --choices');
   const last = S.steps[S.steps.length - 1];
   chk(last && last.n === 1 && last.co === '3', 'step marks n=1 + co=3 (cast-order key)');
@@ -363,7 +364,7 @@ function testCastOrderBookkeeping(win) {
   // Canonical queue [A, B] -> pinned TOO (the queued order is authoritative, see above).
   seed(['Spell A', 'Spell B']);
   co.apply(0, 'canonical');
-  chk(JSON.stringify(S.castOrder['3']) === JSON.stringify(['Spell A', 'Spell B']),
+  chk(JSON.stringify(S.castOrder['3']) === JSON.stringify(['**', 'cast=Spell A', 'cast=Spell B']),
       'canonical queue is pinned as well (queued order is authoritative)');
   // A SINGLE-cast commit still pins nothing: there is no order to respect, and pinning would put a
   // --cast-order on every reference for no reason.
@@ -401,26 +402,41 @@ function testCastOrderBookkeeping(win) {
   seedF(['Clue Token', 'Wild Growth', 'Emiel the Blessed']);
   co.apply(0, 'full order');
   chk(JSON.stringify(S.castOrder['7'])
-      === JSON.stringify(['*', 'Clue Token', 'Wild Growth', 'Emiel the Blessed']),
-      'a queue matching the plan ACTIONS pins the full order with the * marker');
+      === JSON.stringify(['**', 'act=Clue Token', 'cast=Wild Growth', 'act=Emiel the Blessed']),
+      `the whole queued segment is pinned with the ** marker (got ${JSON.stringify(S.castOrder['7'])})`);
   S.busy = false; co.rollback();
   chk(!('7' in S.castOrder), 'undo drops the full-order side-channel entry too');
-  // A queued LAND and a Land's Edge discard are not actions and must not enter the pin (nor break
-  // the multiset match): plan0.land / the landsedge count carry them.
+  // THE WHOLE SEGMENT (the "**" list, 2026-10-22; USER: "The viewer should use exactly the order I
+  // give."): the LAND and each Land's Edge discard are steps of the sequence too, at their queue
+  // positions -- the "*" form left both out, so the engine played the land first and fired Land's Edge
+  // after every cast whatever the queue said.
   seedF(['Clue Token', 'Wild Growth', 'Emiel the Blessed']);
-  S.plan.unshift({ name: 'Aether Hub', kind: 'land' });
+  S.plan.splice(1, 0, { name: 'Aether Hub', kind: 'land' });
   S.plan.push({ name: 'Mountain', kind: 'le' });
   co.apply(0, 'full order + land');
   chk(JSON.stringify(S.castOrder['7'])
-      === JSON.stringify(['*', 'Clue Token', 'Wild Growth', 'Emiel the Blessed']),
-      'the land drop and a Land’s Edge discard stay out of the pinned sequence');
-  // A queue that does NOT name every action (an implicit sac-for-mana, a Vial deploy) says nothing
-  // about those actions, so it falls back to the historical cast-only pin -- never a partial
-  // full-order list that would shuffle an action the human never sequenced.
+      === JSON.stringify(['**', 'act=Clue Token', 'land=Aether Hub', 'cast=Wild Growth',
+                          'act=Emiel the Blessed', 'le=Mountain']),
+      `the land and a Land’s Edge discard ride the pin at their queue positions (got ${JSON.stringify(S.castOrder['7'])})`);
+  // A queue that does NOT name every plan action (an implicit sac-for-mana) is pinned all the same: the
+  // ENGINE places what nobody queued (TurnSolver::ApplyHumanSequencePin). The old cast-only fallback
+  // here is exactly what dropped the activation order.
   seedF(['Clue Token', 'Wild Growth']);
   co.apply(0, 'partial');
-  chk(JSON.stringify(S.castOrder['7']) === JSON.stringify(['Clue Token', 'Wild Growth']),
-      'a queue that misses an action falls back to the cast-only pin (no * marker)');
+  chk(JSON.stringify(S.castOrder['7']) === JSON.stringify(['**', 'act=Clue Token', 'cast=Wild Growth']),
+      `a queue that misses a plan action still pins its own order (got ${JSON.stringify(S.castOrder['7'])})`);
+  // "cast Sol Ring, then play the Forest": ONE cast and a land is two steps, so it is pinned -- the land
+  // after the cast, where the human put it.
+  const decL = { type: 'main_phase', turn: 2, main_ordinal: 9,
+                 me: { life: 20, battlefield: [] }, opponent: { life: 20, battlefield: [] },
+                 plans: [{ index: 0, land: 'Forest', casts: ['Sol Ring'] }] };
+  S.choices = [1, 1]; S.steps = [{ n: 1 }, { n: 1 }];
+  S.checkpoints = [{ histLen: 0 }, { histLen: 0 }, { histLen: 0 }];
+  S.history = []; S.castOrder = {}; S.decision = decL; S.prev = null; S.busy = false;
+  S.plan = [{ name: 'Sol Ring', kind: 'permanent' }, { name: 'Forest', kind: 'land' }];
+  co.apply(0, 'land after cast');
+  chk(JSON.stringify(S.castOrder['9']) === JSON.stringify(['**', 'cast=Sol Ring', 'land=Forest']),
+      `a land queued after a cast is pinned after it (got ${JSON.stringify(S.castOrder['9'])})`);
   return fails;
 }
 // The live client state. newGame() rebinds `let S` to a fresh object, so always re-read through the
@@ -1121,17 +1137,18 @@ async function testPastCapOrderPin() {
       + `ENGINE's own order ["Overgrowth","Emiel the Blessed"] -- if it ever equals the queue, the `
       + 'multiset guard is comparing the queue with itself and pins every line unconditionally');
 
-  // THE FIX: a pin is emitted at all, and it is the human's queued order, marked `*` (the whole
-  // line, casts and activations interleaved) rather than the cast-only fallback.
+  // THE FIX: a pin is emitted at all, and it is the human's queued order -- since 2026-10-22 the "**"
+  // whole-segment form, which no longer depends on the plan object at all, so the past-cap case is the
+  // ordinary case by construction.
   const pin = (st.castOrder || {})['62'] || null;
   chk(!!pin, 'NO cast-order pin was emitted for a plan past the emit cap -- the human\'s declared '
            + 'order reverts to enumerator order (viewer-pass-guard.md, "what is still open")');
-  chk(JSON.stringify(pin) === JSON.stringify(['*', 'Emiel the Blessed', 'Overgrowth']),
-      `the pin is ${JSON.stringify(pin)}, not the queued ['*','Emiel the Blessed','Overgrowth']`);
+  chk(JSON.stringify(pin) === JSON.stringify(['**', 'blink=Emiel the Blessed', 'cast=Overgrowth']),
+      `the pin is ${JSON.stringify(pin)}, not the queued ['**','blink=Emiel the Blessed','cast=Overgrowth']`);
   // ...and it really reaches the engine: the same argv builder the live server spawns with.
   const argv = server.buildArgs(win.cfg({}), null, null, false);
   const at = argv.indexOf('--cast-order');
-  chk(at > 0 && argv[at + 1] === '62:*|Emiel the Blessed|Overgrowth',
+  chk(at > 0 && argv[at + 1] === '62:**|blink=Emiel the Blessed|cast=Overgrowth',
       `the pin does not reach argv (--cast-order ${at > 0 ? argv[at + 1] : 'ABSENT'})`);
   // Undo must drop it, like every other pin (the `co` step marker) -- a pin left behind describes a
   // decision that no longer happened, and would reorder whatever is committed there next.

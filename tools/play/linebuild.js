@@ -468,6 +468,13 @@
     return !!(decision && Array.isArray(decision.plans)
               && decision.plans.some(pl => pl && pl.land === name && pl.karoo_before));
   }
+  // EVERY LAND's queue position is its timing (USER 2026-10-22: "The viewer should use exactly the order I
+  // give. Same for everything else in the viewer."). It used to be read only on a decision that offered a
+  // positioned line (`after`, stamped by queueCard on landfall turns) -- everywhere else "cast Sol Ring,
+  // then play the Forest" encoded `land=` and the engine played the Forest first. The engine now matches
+  // a legal position the menu does not enumerate against the land-first plan (TurnSolver::CheckLine) and
+  // realises the queued position through the "**" side channel (sequenceTokens), so the line says where
+  // the land goes on every deck. A land queued FIRST still encodes `land=`, exactly as it always did.
   function landPosition(plan, l) {
     if (l && l.karoo) {
       const i = plan.indexOf(l);
@@ -475,7 +482,7 @@
       const later  = plan.slice(i + 1).filter(isSpecCast).length;
       return later === 0 ? '' : String(before);
     }
-    if (!l || !l.after) return '';
+    if (!l) return '';
     const i = plan.indexOf(l);
     const before = plan.slice(0, i).filter(isSpecCast).length;
     const later  = plan.slice(i + 1).filter(isSpecCast).length;
@@ -484,6 +491,34 @@
   }
   // A queued entry that is a cast/activation the land could come AFTER (not a land, pretap, LE discard).
   function isCastLike(p) { return p && p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'pretap'; }
+
+  // ---- THE HUMAN'S WHOLE SEQUENCE (the "**" --cast-order list, 2026-10-22) ---------------------
+  // USER: "The viewer should use exactly the order I give. Same for everything else in the viewer." The
+  // "*" list carried the queued casts and board activations, and only when the matched plan's actions
+  // were exactly the queued names; the land, a Land's Edge discard, a sac-land cast, a retrace, Krenko's
+  // tap, a declared sac-for-mana, a suspend, a convoke tap and a land-search crack all ran in canonical
+  // passes of their own, and a plan holding one implicit action lost the activation order entirely.
+  // This is the committing SEGMENT as the engine's TurnSolver::ApplyHumanSequencePin reads it: one token
+  // per queued entry, IN QUEUE ORDER, `<verb>=<name>` with the LineSpec verb the entry writes (so the
+  // engine can tell an `act=` of the Augur in play from a `cast=` of the copy in hand), `land=` /
+  // `landtop=` for the drop and `le=` for one Land's Edge discard, and the manual taps' own `tap=` tokens
+  // in place. The name is the plan ACTION's card -- the line value, except for the verbs whose value
+  // names a TARGET (gyreturn / pod / ooze name the returned / fetched / exiled card; the action is the
+  // source's).
+  function sequenceToken(p) {
+    if (isPreTap(p)) return preTapToken(p);
+    if (p.kind === 'land') return (p.fromTop ? 'landtop=' : 'land=') + p.name;
+    if (p.kind === 'le') return 'le=' + p.name;
+    if (p.kind === 'vial') return 'vial=' + p.name;
+    if (p.kind === 'retrace') return 'retrace=' + p.name;
+    const v = lineVerb(p);
+    const card = (v === 'gyreturn' || v === 'pod' || v === 'ooze') ? (p.src || p.name) : p.name;
+    return v + '=' + card;
+  }
+  function sequenceTokens(seg) { return (seg || []).map(sequenceToken); }
+  // How many STEPS a segment holds (every entry but a manual tap, which is a payment, not a step). The
+  // viewer pins a segment of two or more: a single step has no order to keep.
+  function sequenceSteps(seg) { return (seg || []).filter(p => !isPreTap(p)).length; }
 
   // THE LIBRARY TOP AS A LAND SOURCE (engine Plan::land_from_top, Courser of Kruphix, 2026-10-15).
   // The engine publishes me.library_top ONLY while a revealer is ours; `playable_land` says the top may
@@ -495,8 +530,8 @@
   }
 
   function encodeLine(plan) {
-    // A land queued AFTER a cast on a decision that offers land-after lines is marked `after` by
-    // queueCard and encodes as `landafter=` -- "cast Rampaging Baloths, then play the Forest".
+    // A land queued AFTER every cast encodes as `landafter=` -- "cast Rampaging Baloths, then play the
+    // Forest" -- on every deck now (landPosition: the queue position is the timing, 2026-10-22).
     // A land queued from the library TOP (`fromTop`, Courser) encodes as `landtop=` -- `land=` keeps
     // meaning a HAND copy, so every saved reference replays unchanged -- and its timing rides the
     // `landat=all` modifier (`landafter=` names a hand copy only).
@@ -755,6 +790,7 @@
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            toggleKicker,
            offersLandAfter, topLandOffered, landPosition, karooPositionsOffered,
+           sequenceToken, sequenceTokens, sequenceSteps,
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.

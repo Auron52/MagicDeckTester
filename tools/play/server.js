@@ -216,9 +216,10 @@ const SERVER_API = 4;   // 3 = sessionBin pin + @cast-order/@validate-line stdin
 // MTG names contain ',' but never '|'), keyed by main-phase ordinal — NEVER a --choices slot, so
 // existing references (no --cast-order) replay in canonical order unchanged.
 //
-// An entry is a card NAME, the leading "*" full-order marker, or a MANUAL TAP/PAY token
-// `tap=<name>#<num>:<COLOUR>` (docs/design/viewer-manual-tap-pay.md) — all three are opaque strings
-// here and are told apart by the engine (AIEngine::ReorderPlanCasts). ONE builder, because the
+// An entry is a card NAME, the leading "*" full-order or "**" whole-sequence marker, a `<verb>=<name>`
+// step of a "**" list (land=, cast=, act=, le=, ...; docs/design/human-line-order-as-is.md), or a MANUAL
+// TAP/PAY token `tap=<name>#<num>:<COLOUR>` (docs/design/viewer-manual-tap-pay.md) — all opaque strings
+// here, told apart by the engine (AIEngine::ReorderPlanCasts / TurnSolver::ApplyHumanSequencePin). ONE builder, because the
 // reject artifact's reproduce command has to name the identical argument the live run used;
 // re-deriving it there is how the two would come to disagree.
 function castOrderArg(map) {

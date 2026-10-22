@@ -3486,11 +3486,6 @@ function renderChooseDialog(v, line){
 // overlapping text and random pictures for all decklists". Real decisions still get a dialog or
 // board targeting; what is gone is the undifferentiated dump. renderChooseDialog's dimension walk
 // now handles every shape, including the mixed sub/no-sub variant sets that used to land here.)
-// Order-insensitive key for a list of card names, so two lists can be compared as MULTISETS.
-// Joined on \x01, which no MTG card name contains -- a plain '' join would make ['AB','C'] and
-// ['A','BC'] compare equal, and the whole point of the check is that the queued line and the
-// matched plan hold exactly the same actions before an order is pinned for them.
-const msKey = a => a.slice().sort().join('\u0001');
 // A plan by its ENGINE index. Given a name (rather than inlined) because the naive
 // `decision.plans[i]` is wrong and LOOKS right: `plans` is a RANKED TOP SLICE once a frame exceeds
 // the emit cap (MTG_PLAY_PLANS_CAP, 200 by default; `plans_total` carries the real count), so
@@ -3562,88 +3557,46 @@ function applyAccepted(planIndex, label, planView) {
   // Emiel to untap the land" unreachable in one line (the Clue's permanent is newer than Emiel's,
   // so the blink always ran first) and the player had to commit two lines to sequence it.
   //
-  // So: when the queued entries and the matched plan's ACTIONS are the same multiset, send the full
-  // queued sequence, marked with a leading "*" so the engine widens its reorderable slot set to
-  // include activations (ReorderPlanCasts / kFullOrderMarker). The old cast-only pin stays as the
-  // fallback for every plan whose actions the line does not name one-for-one (an implicit
-  // sac-for-mana, a Vial deploy) -- there the queued order says nothing about those actions. Both
-  // forms ride the same S.castOrder map, the same `co` step marker and the same --cast-order arg,
-  // so undo, the recorded reference and viewer_protocol_check.py need no new concept.
+  // ...and #10 now pins the WHOLE SEGMENT, every kind and the land included (the "**" list below,
+  // 2026-10-22). The "*" form -- the queued casts + activations, sent only when the matched plan's
+  // actions were the queued names one-for-one, with a cast-only fallback -- is what saved references
+  // from 2026-09-10 to 2026-10-22 carry, and the engine still replays it exactly as recorded.
   let coKey = null;
-  // LOOK THE PLAN UP BY ITS `index`, NEVER BY ARRAY POSITION. `decision.plans` is a RANKED TOP
-  // SLICE once a frame exceeds the emit cap (MTG_PLAY_PLANS_CAP, 200 by default -- `plans_total`
-  // carries the real count), so position and index stop agreeing entirely: measured on the user's
-  // seed-16 turn-4 frame, 200 plans were emitted carrying indices up to 771. `plans[planIndex]`
-  // therefore returned SOME OTHER PLAN -- whose `actions` then drove the multiset guard below, so
-  // the human's full-order pin was decided against a line the engine was not applying.
-  // ...and PAST the cap the plan is not in that list at all, so `planByIndex` alone returned null
-  // and NO pin was emitted -- the queued order silently reverted to enumerator order on exactly the
-  // rich combo frames that overflow the cap. Closed 2026-09-11 by `planView`: the verdict's own
-  // `matched_plans` entry for this index (src/main.cpp WriteValidation), which is the engine's view
-  // of the one plan being committed and is emitted whether or not that plan made the display slice.
-  //
-  // THE VALIDATION'S VIEW WINS when there is one. Both describe the same Plan out of the same
-  // enumerated vector -- WriteValidation serialises `matched_plans` from the very list it then
-  // writes `decision.plans` from -- so they cannot disagree, and preferring the verdict's own
-  // answer makes the past-cap path the ORDINARY path rather than a branch that only runs on a
-  // 700-plan frame. (A path taken only in the rare case is a path nothing routinely exercises,
-  // which is how this gap survived in the first place.) Callers with no verdict at all -- the
-  // "click an enumerated plan" buttons, fireDig, Combo Off -- pass nothing and keep planByIndex.
-  // Only `.actions[].card` and `.cast_order_canonical` are read off it below, which is exactly the
-  // pair `matched_plans` carries.
   const dec0 = S.decision;
-  const plan0 = planView || planByIndex(dec0, planIndex);
-  const canon = plan0 && plan0.cast_order_canonical;
-  // The queued entries that name a plan ACTION: the land is its own field (plan0.land) and a
-  // Land's Edge discard is a count, so neither is an action and neither can be sequenced here.
+  // THE WHOLE QUEUED SEGMENT, IN QUEUE ORDER (the "**" list; USER 2026-10-22: "The viewer should use
+  // exactly the order I give. Same for everything else in the viewer."). The "*" pin carried the
+  // queued casts and board activations only, and only when the matched plan's actions were exactly the
+  // queued names; otherwise it fell back to a cast-only pin, or to nothing. Three things leaked through:
+  //   * the LAND was never in the list, so "cast Sol Ring, then play the Forest" played the Forest first;
+  //   * every kind the engine runs in a canonical pass of its own (a sac-land cast, a retrace, a Land's
+  //     Edge discard, Krenko's tap, a declared sac-for-mana, a suspend, a land-search crack) kept that
+  //     pass whatever the queue said;
+  //   * a plan holding one action the human did not queue (an implicit sac-for-mana) dropped the whole
+  //     activation order back to enumerator order.
+  // So the pin is now the committing segment itself, one `<verb>=<name>` token per entry with the land
+  // and each Land's Edge discard as steps of their own and the manual taps in place
+  // (LB.sequenceTokens), sent for EVERY segment of two or more steps -- or any with a tap or an untap
+  // demand to deliver. The ENGINE matches each step to the plan (TurnSolver::ApplyHumanSequencePin) and
+  // places what nobody queued where it is needed (a mana source before the first step, anything else
+  // after the last), so there is no multiset test left for the viewer to fail. Same S.castOrder map,
+  // same `co` step marker, same --cast-order arg and recorded `cast_order` as before, so undo, the saved
+  // reference and the reference checks need no new concept. `planView` (the verdict's own matched-plan
+  // view) is no longer read here: nothing about the pin depends on the plan any more.
   //
-  // ...and the MANUAL TAP/PAY taps ride this SAME list (docs/design/viewer-manual-tap-pay.md).
-  // They are not plan actions, so they are held out of every multiset comparison below -- a
-  // pre-tapped line matches the plan it would have matched without the taps -- but they ARE part of
-  // the declared sequence, so they go into the emitted list at their queued position. Riding here
-  // rather than on a channel of their own is what makes a pre-tapped line reproducible from a saved
-  // reference for free: `cast_order` is already recorded per main-phase decision and already
-  // reconstructed verbatim by the reference checks.
-  //
-  // SCOPED TO THE COMMITTING SEGMENT (line macros). `plan0.actions` describes the ONE line being
-  // committed now, so the multiset test below has to compare it against that line's entries, not
-  // against the whole queue. It made no difference while every multi-segment plan was a bonus land
-  // drop (whose extra segments carry no actions) or a stack of one repeated ability (one action,
-  // so the `acts.length >= 2` guard already declined) -- but a macro's segment is a genuine
-  // multi-action line, and unscoped the test compares 2 actions against all 6 queued entries,
-  // fails, and drops the macro back to enumerator order. Which is the exact defect
-  // docs/design/human-line-order-as-is.md exists to fix, re-introduced one layer up.
-  const seg0    = LB.segmentParts(S.plan||[])[0] || [];
-  const entries = seg0.filter(p => p.kind !== 'land' && p.kind !== 'le');
-  const taps    = entries.filter(p => LB.isPreTap(p)).map(p => LB.preTapToken(p));
-  const queued  = entries.filter(p => !LB.isPreTap(p)).map(p => p.name);
-  const ordered = entries.map(p => LB.isPreTap(p) ? LB.preTapToken(p) : p.name);
-  const acts   = ((plan0 && plan0.actions) || []).map(a => a.card);
+  // SCOPED TO THE COMMITTING SEGMENT (line macros): `segmentParts` peels exactly the line being
+  // committed now; the rest of the queue is a later segment's pin.
+  const seg0  = LB.segmentParts(S.plan||[])[0] || [];
+  const steps = LB.sequenceSteps(seg0);
+  const taps  = seg0.filter(p => LB.isPreTap(p)).length;
   // QUEUED-CONTINUATION UNTAP DEMAND (docs/design/viewer-line-macros.md): the colours everything
   // STILL QUEUED behind this segment wants, so an ETB untap inside this line can serve the next
   // iteration instead of raw yield. Rides the same list as the taps, for the same reasons.
-  // Empty continuation -> empty token -> omitted -> byte-identical to before.
+  // Empty continuation -> empty token -> omitted.
   const need = LB.untapNeedToken((S.plan||[]).filter(p => seg0.indexOf(p) < 0), entryPips);
   const withNeed = a => need ? a.concat([need]) : a;
-  if (dec0 && dec0.main_ordinal != null && acts.length >= 2 && msKey(queued) === msKey(acts)) {
+  if (dec0 && dec0.main_ordinal != null && (steps >= 2 || taps || need)) {
     coKey = String(dec0.main_ordinal);
-    (S.castOrder=S.castOrder||{})[coKey] = withNeed(['*'].concat(ordered));  // the whole line, as-is
-  } else if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
-    const human = queued.filter(n => canon.includes(n));
-    if (msKey(human) === msKey(canon)) {   // same cast multiset -> the queued order is authoritative
-      coKey = String(dec0.main_ordinal);
-      (S.castOrder=S.castOrder||{})[coKey] = withNeed(taps.concat(human));
-    }
-  }
-  // Neither pin fired (a one-action plan, an implicit sac-for-mana), but the human still forced
-  // taps -- so send them ALONE, with no marker and no names. The engine lifts them out, finds an
-  // empty order, and leaves the plan's own execution order completely untouched (ReorderPlanCasts
-  // returns without setting searched_order); the taps go in up front, which is what "tap these,
-  // then play the line" means. Without this branch a pre-tap on a single-cast line would be
-  // silently dropped -- the exact failure the fallback exists to prevent.
-  if (!coKey && (taps.length || need) && dec0 && dec0.main_ordinal != null) {
-    coKey = String(dec0.main_ordinal);
-    (S.castOrder=S.castOrder||{})[coKey] = withNeed(taps);
+    (S.castOrder=S.castOrder||{})[coKey] = withNeed(['**'].concat(LB.sequenceTokens(seg0)));
   }
   S.prev = S.decision; S.choices.push(planIndex);
   // A multi-segment line (two land drops) keeps the REST of the plan queued: only the land just
