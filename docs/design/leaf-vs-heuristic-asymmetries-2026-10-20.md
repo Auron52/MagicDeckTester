@@ -388,6 +388,7 @@ worth a callgrind check before it is committed.
    **Partly in the pipeline since 2026-10-22** (USER: *"My biggest concern is actually that it didn't happen
    automatically for this deck"*, after Vampires' run judged every shape at b20 only): phase E.7
    (`scripts/play_setting_stage.py`) grids live AND every phase-E shape still in the running -- passed E.5 but not
-   installed, or dearer but notably better -- over depth {d-1,d,d+1} x budget {b/2,b,2b}, centre included, and
+   installed, or dearer but notably better -- over depth {d-1,d,d+1} x budget {b,1.5b,2b} (never below the current
+   budget, USER 2026-10-22), centre included, and
    adopts by E.5's rule. Still not curved: a shape phase E found dearer and no better at the play budget.
 4. Leafless run-on (`exhaust_mult` 4) per deck: a ~20% cost trade for the small gains above.

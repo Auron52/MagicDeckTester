@@ -308,6 +308,15 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   byte-identical to the block-less leaf; emul (units vs live, delta): b10 0.88-0.89x **+0.0034 (t +6.3, 7/8 seeds
   worse)**, b20 1.02-1.05x +0.0015 (t +2.7), b40 1.15-1.19x +0.0005 -- the same at d4/d5/d6 (its frozen emul_r sets
   the committing depth). The emulated ladder never reaches the leaf's quality at any budget. **Same pick, d6 / 10.**
+- **Budget back to 20: d6 / b20 ships** (USER 2026-10-22: *"Why are we even considering b10 for play settings?"*, then
+  *"I think that makes sense pretty much. Sometimes the higher budgets will actually turn out particularly well, but
+  that is primarily where you have trust."*). b10 came from the grid's b/2 arm under the leaf's cost-first rule; a
+  lower budget is just less search, Vampires has NO trust (the d5 candidate never engaged: ON vs OFF byte-identical on
+  8/8 seeds, so every unverified leaf line escalates and the budget pays for that), and the suite never played b10
+  (its d5 cases pass their own budget 20). d6b20 measured 0.999x units, -0.00012 (t -1.0) vs the built-in d5/20 --
+  and it is exactly what the suite's d5 rows already ran, so no GT key moves. The E.7 grid is now {b, 1.5b, 2b}.
+  Note for a keep-table regeneration: equivalence DISCOVERY reads value_play target_depth / budget_ms
+  (`src/analyzer/main.cpp`), so it would now discover at d6 / b20 (the table was discovered at d5 / 20; K=15 guarded).
 
 ## Stage 6a disclosure defects D1-D3 (fixed 2026-10-19, branch `vampires-fixn`, cherry-picked 3cd49a776 / 1b1d2d0e9 / a537d4e88)
 A read-only code audit compiling the Stage 6a disclosure found three in-window defects; each was reproduced on the

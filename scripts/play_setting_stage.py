@@ -16,7 +16,7 @@ there, so depth alone is the wrong axis.
 
 WHAT IT MEASURES. ONE pooled batch over every deck: the live sidecar as it stands (`live`, the baseline: its enabled
 block, or the built-in d5 / 20 when it has none) against a grid of ENABLED blocks around the current setting --
-target_depth {d-1, d, d+1} (>= 3) x budget_ms {b/2, b, 2b}. Each arm is built on the sidecar route (the live sidecar
+target_depth {d-1, d, d+1} (>= 3) x budget_ms {b, 1.5b, 2b}. Each arm is built on the sidecar route (the live sidecar
 plus the block: exactly the file that would be installed) in a variant deck folder whose other files are symlinks to
 the real ones, so every arm shares the keep table's cache entry (the cache is keyed by the canonical path). 8
 held-out seeds x 1000 paired games per arm, the leaf-adoption A/B's size. The arm whose depth and budget equal
@@ -38,6 +38,16 @@ replaces the whole live sidecar (its model and shape keys too); the previous one
 
 --live KEY=FILE measures as if FILE were the deck's live sidecar (a what-if, e.g. replaying the stage from the
 state an earlier E.5 left; refused with --write).
+
+NEVER BELOW THE CURRENT BUDGET (USER 2026-10-22: "Why are we even considering b10 for play settings?"). The first
+grid had b/2, and with the cost-first rule below it moved Vampires to b10 (0.91x units, quality flat). But that rule
+was set for the LEAF, a cheaper evaluator under the same search; a lower budget is simply less search -- on a deck
+without trust the budget is what pays for the escalation that corrects the leaf -- and the tolerance would let it
+give back up to 0.002 turns for any saving. The suite never plays it either (its d5 cases pass their own budget,
+which overrides the block's). Higher budgets stay: "Sometimes the higher budgets will actually turn out
+particularly well, but that is primarily where you have trust" -- a budget that COMPLETES the trusted depth ends a
+decision on the leaf, so it can cost LESS (the trust-depth rule, slivers d5 b10 vs b3); otherwise a dearer arm is
+reported as a TRADE.
 
 WHAT IT DECIDES: the leaf adoption's rule (USER 2026-10-11), through scripts/vlq_adopt_pick.py unchanged. ADOPT the
 CHEAPEST arm (work units, never wall-clock) whose quality is NOT NOTABLY WORSE than live (not: delta > 0.002 turns at
@@ -87,7 +97,7 @@ def current(vp):
 
 def grid(d0, b0):
     depths = sorted({d for d in (d0 - 1, d0, d0 + 1) if d >= 3})
-    budgets = sorted({max(1, round(b0 / 2)), b0, 2 * b0}) if b0 > 0 else [0]
+    budgets = sorted({b0, round(1.5 * b0), 2 * b0}) if b0 > 0 else [0]      # never below b0 (module doc)
     return [(d, b) for d in depths for b in budgets]
 
 

@@ -351,7 +351,7 @@ d, d+1, all at budget 20) only printed a table and is gone; on Vampires every de
 so depth alone was the wrong axis. `scripts/play_setting_stage.py` does it in ONE pooled batch, LAST (after E.5
 and E.6, because it measures the leaf and allowance that ship, and what it picks changes play).
 * **Arms:** the live sidecar as it stands (`live`: its enabled block, or the built-in d5 / 20) against enabled
-  blocks over depth {d-1, d, d+1} x budget {b/2, b, 2b}, each on the sidecar route (exactly the file that would be
+  blocks over depth {d-1, d, d+1} x budget {b, 1.5b, 2b}, each on the sidecar route (exactly the file that would be
   installed) in a symlinked variant folder, so all arms share the keep table's cache entry. 8 held-out seeds x 1000
   paired games per arm, the leaf A/B's size.
 * **The other phase-E shapes get the same grid** (USER 2026-10-22: *"My biggest concern is actually that it didn't
@@ -375,6 +375,12 @@ and E.6, because it measures the leaf and allowance that ship, and what it picks
   mulligan-generation keys (`mull_gen_*`, `expected_buckets`) copied in, because a sidecar's `value_play` replaces
   the profile's and losing `expected_buckets` would disarm the keep table's K guard. The install appends to the
   block's `note` (a changelog).
+* **Never below the current budget** (USER 2026-10-22: *"Why are we even considering b10 for play settings?"*). The
+  cost-first rule was set for the leaf (a cheaper evaluator, same search); a lower budget is just less search -- on
+  an untrusted deck it is what pays for the escalation that corrects the leaf -- and the suite never plays it (its d5
+  cases pass their own budget). Higher budgets stay in the grid: *"Sometimes the higher budgets will actually turn
+  out particularly well, but that is primarily where you have trust"* -- a budget that completes the trusted depth
+  ends decisions on the leaf and can cost less; otherwise a dearer arm is a TRADE for the USER.
 * **Cost is not monotone in budget:** a smaller budget can verify fewer leaf lines and escalate more, so it is
   measured, never assumed. In the suite an enabled block sets the d5 cases' DEPTH only (their budget is the
   case's), and the d0/d3 cases pin depth with `ignore_play_profile` -- but an enabled block arms the static d3 beam
