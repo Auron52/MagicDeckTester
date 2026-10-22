@@ -1,7 +1,16 @@
 # Analysis ledger — SelesnyaLifegain
 
 Per-deck durable state for the `analyze-deck` workflow (survives compaction and handoff).
-Deck: `decks/SelesnyaLifegain/SelesnyaLifegain.cod` (60 cards, GW lifegain-into-fatties).
+Deck: `decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod` (60 cards, GW lifegain-into-fatties).
+
+> **ARCHIVED 2026-10-22.** This ledger is the ORIGINAL list (suite key `selesnya`). It was the shipped
+> list at `decks/SelesnyaLifegain/` until v2 (`v2-bogbeast-heroes`, suite keys `selesnyav2` /
+> `selesnyav22hg`) was promoted to that path; it now lives at `decks/SelesnyaLifegain/v1-avatar-alchemist/`
+> with its own profile, keep table and value sidecar, and its hand-played references moved to
+> `references/SelesnyaLifegain/v1-avatar-alchemist/`. Every repro command below was repointed at the
+> archive (identical file, identical card numbering), so it still reproduces the game it describes.
+> The shipped list's ledger is `analysis-SelesnyaLifegain-v2-bogbeast-heroes.md`; the promotion is
+> `selesnya-v2-promotion-2026-10-22.md`.
 
 Started 2026-09-29.
 
@@ -303,7 +312,7 @@ because the skill requires every deferral to be user-approved, and **they are PR
 
 ### Done
 Stages 1–4 complete, 4a (provider) complete, 4-bis / 5j complete (all three tiers + accepted GT +
-cost gate PASS at 1.78x). `verify_deck.py decks/SelesnyaLifegain/SelesnyaLifegain.cod --no-network`
+cost gate PASS at 1.78x). `verify_deck.py decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod --no-network`
 reports: coverage PASS (20/20 full), regression_tiers PASS, viewer PASS, viewer_wiring PASS
 (bounce, dragon, lifegain_counters), **mismatch PASS — zero nonconv and zero fd-diverge over seeds
 7001+7002 x 60 games**, play_invariants PASS (8 games / 224 decisions), suite PASS.
@@ -432,8 +441,8 @@ the `ManaSourceRank` justification fails too, and the note must be corrected wit
 
 ### Minimal repro (turn 4)
 ```
-./build/Release/mtg decks/SelesnyaLifegain/SelesnyaLifegain.cod \
-  --profile decks/SelesnyaLifegain/SelesnyaLifegain.profile.json \
+./build/Release/mtg decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod \
+  --profile decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json \
   --claude-play --seed 77617 --max-turns 8 --reveal 6 \
   --choices "1,1,0,0,0,0,0,2,0,0,0,60"
 ```
@@ -523,8 +532,8 @@ game: a 20-life event with two unused Paragons, i.e. +40/+40 on ten creatures in
 >
 > **Minimal repro** (the seed-78137 report was the same shape; this is the frame that bisects cleanly):
 > ```
-> ./build/Release/mtg decks/SelesnyaLifegain/SelesnyaLifegain.cod \
->   --profile decks/SelesnyaLifegain/SelesnyaLifegain.profile.json \
+> ./build/Release/mtg decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod \
+>   --profile decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json \
 >   --claude-play --seed 77513 --max-turns 9 --reveal 4 --choices "1,0,0,0,0,0,0"
 > ```
 > Board: Blossoming Sands (GW), Brushland (GWC), **Priest of Titania** (G). Hand holds a second

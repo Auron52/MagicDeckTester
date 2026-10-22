@@ -196,8 +196,8 @@ unrestricted retry fires, and both arms win on T6:
 
 ```bash
 for arm in "" MTG_ACT_LINE_HOLD=1; do echo -n "[$arm] "; env $arm ./build/Release/mtg \
-  decks/SelesnyaLifegain/SelesnyaLifegain.cod \
-  --profile decks/SelesnyaLifegain/SelesnyaLifegain.profile.json \
+  decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod \
+  --profile decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json \
   --games 1 --seed 4011 --depth 0 --budget-ms 0 --ignore-play-profile --threads 1 \
   2>/dev/null | grep -i "avg (turns)"; done
 ```
@@ -227,8 +227,8 @@ over the repro above, and every arm gives `life: 25` with Blighted Steppe still 
 for e in "" MTG_ACT_TAP_RESERVE=1 MTG_NO_BATCH_PAY=1 MTG_LINE_C_HOLD=1 \
          "MTG_NO_BATCH_PAY=1 MTG_ACT_TAP_RESERVE=1 MTG_LINE_C_HOLD=1" MTG_ACT_LINE_HOLD=1; do
   echo -n "$e -> "
-  env $e ./build/Release/mtg decks/SelesnyaLifegain/SelesnyaLifegain.cod \
-    --profile decks/SelesnyaLifegain/SelesnyaLifegain.profile.json \
+  env $e ./build/Release/mtg decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod \
+    --profile decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json \
     --claude-play --seed 77617 --max-turns 8 --reveal 6 \
     --choices "1,1,0,0,0,0,0,2,0,0,0,60" 2>/dev/null \
   | grep -oE '"life": [0-9]+|"graveyard": \[[^]]*\]' | head -2 | tr '\n' ' '; echo
@@ -769,8 +769,8 @@ otherwise replay each other's games:
     for name, cod, prof, d, b, g in (
             ("snow_d5",     "decks/Snow/Snow.cod", "decks/Snow/Snow.profile.json", 5, 20, 40),
             ("snow_d2b1",   "decks/Snow/Snow.cod", "decks/Snow/Snow.profile.json", 2,  1, 60),
-            ("seles_d2b1",  "decks/SelesnyaLifegain/SelesnyaLifegain.cod",
-                            "decks/SelesnyaLifegain/SelesnyaLifegain.profile.json", 2, 1, 60)):
+            ("seles_d2b1",  "decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod",
+                            "decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json", 2, 1, 60)):
         for i in range(8):
             s = 500000 + 100*i
             for tag, on in (("on", True), ("off", False)):

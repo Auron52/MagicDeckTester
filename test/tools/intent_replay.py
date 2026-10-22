@@ -6,7 +6,7 @@ int (bottom index, colour ordinal, lifegain_counters count...). Prints every dec
 stops and dumps the menu when a matcher does not match, so the list can be extended one step at a
 time from the user's viewer log.
 
-  python3 test/tools/intent_replay.py decks/SelesnyaLifegain/SelesnyaLifegain.cod 9 \
+  python3 test/tools/intent_replay.py decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod 9 \
       mull mull keep 'Accomplished Alchemist' "Verdant Sun's Avatar" \
       '^land=Brushland; cast: Elvish Mystic' pass pass ...
 

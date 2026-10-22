@@ -163,7 +163,7 @@ Repro:
 
 ```bash
 env -C <tree> MTG_KEEP_REPLAY_LIST=<slow.log> MTG_DECISION_WORK_X=1000 [MTG_TAP_BUNDLE_EXACT=0] \
-  build/Release/mtg-analyze decks/SelesnyaLifegain/SelesnyaLifegain.cod \
+  build/Release/mtg-analyze decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod \
   --cards-json src/cards/data/cards.json --gen-mulligan fast > out.txt
 ```
 

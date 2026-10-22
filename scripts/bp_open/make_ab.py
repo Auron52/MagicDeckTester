@@ -46,7 +46,7 @@ ALL_DECKS = [  # (key, deck, profile) -- test/regression_cases.sh DECK_FILE / DE
     ("snow", "decks/Snow/Snow.cod", "decks/Snow/Snow.profile.json"),
     ("giants", "decks/Giants/Giants.cod", "decks/Giants/Giants.profile.json"),
     ("pirates", "decks/Pirates/Pirates.cod", "decks/Pirates/Pirates.profile.json"),
-    ("selesnya", "decks/SelesnyaLifegain/SelesnyaLifegain.cod", "decks/SelesnyaLifegain/SelesnyaLifegain.profile.json"),
+    ("selesnya", "decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod", "decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json"),
     ("soldiers", "decks/Soldiers/soldiers.cod", "decks/Soldiers/soldiers.profile.json"),
     ("pd", "decks/Prevent Damage/Prevent Damage.cod", "decks/Prevent Damage/Prevent Damage.profile.json"),
     ("bruna", "decks/Bruna/Bruna.cod", "decks/Bruna/Bruna.profile.json"),

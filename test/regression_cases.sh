@@ -61,11 +61,16 @@ declare -A DECK_FILE=(
   [snow]=decks/Snow/Snow.cod
   [giants]=decks/Giants/Giants.cod
   [pirates]=decks/Pirates/Pirates.cod
-  [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
+  # selesnya: the ORIGINAL SelesnyaLifegain list, ARCHIVED 2026-10-22 as v1-avatar-alchemist when v2 was
+  # promoted (docs/design/selesnya-v2-promotion-2026-10-22.md). ONE KEY PER DECKLIST: the key follows its LIST
+  # to the archive path (identical file content, identical card numbering -> provably inert); it never moves
+  # to the shipped list. Whether to drop these rows is the USER's call.
+  [selesnya]=decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod
   # selesnyav2: the USER-approved NEW SelesnyaLifegain list (2026-10-22 screen, arm FINAL_hh), generated in
-  # its versioned folder BEFORE promotion (the kitty v3 route). Its OWN key -- ONE KEY PER DECKLIST: the
-  # `selesnya` key stays on the shipped list until that list is archived, and is never repointed.
-  [selesnyav2]=decks/SelesnyaLifegain/v2-bogbeast-heroes/SelesnyaLifegain.cod
+  # its versioned folder v2-bogbeast-heroes/ BEFORE promotion (the kitty v3 route) and PROMOTED to the
+  # top-level shipped path 2026-10-22. Its OWN key -- ONE KEY PER DECKLIST: it keeps the v2 suffix (as
+  # kittyv3 did), and the `selesnya` key stays on the original list (now archived), never repointed here.
+  [selesnyav2]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
   [soldiers]=decks/Soldiers/soldiers.cod
   [pd]="decks/Prevent Damage/Prevent Damage.cod"
   [bruna]=decks/Bruna/Bruna.cod
@@ -104,8 +109,8 @@ declare -A DECK_PROF=(
   [snow]=decks/Snow/Snow.profile.json
   [giants]=decks/Giants/Giants.profile.json
   [pirates]=decks/Pirates/Pirates.profile.json
-  [selesnya]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
-  [selesnyav2]=decks/SelesnyaLifegain/v2-bogbeast-heroes/SelesnyaLifegain.profile.json
+  [selesnya]=decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.profile.json
+  [selesnyav2]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
   [soldiers]=decks/Soldiers/soldiers.profile.json
   [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
   [bruna]=decks/Bruna/Bruna.profile.json
@@ -443,11 +448,11 @@ SMOKE_CASES=(
   "selesnya 0 1001 1000 0"
   "selesnya 3 1001  150 10"
   "selesnya 5 1001   75 20"
-  # selesnyav2: the NEW list (decks/SelesnyaLifegain/v2-bogbeast-heroes, USER-approved 2026-10-22: 18 Elves,
+  # selesnyav2: the NEW list (decks/SelesnyaLifegain/, promoted from v2-bogbeast-heroes 2026-10-22: 18 Elves,
   # 4 Bogbeast, 2 Heroes' Reunion, 2 Genesis Wave; Alchemist / Wellwisher / Verdant Sun's Avatar / Sanctuary
   # out). ENTERS at the shipped selesnya rows' gate shape and the overnight ENTRY set; no keep table and no
   # value leaf yet, so GT WILL move when they land (the overnight rows expand to the FULL set just before the
-  # keep table is adopted). selesnyav22hg: the screen measured std and 2HG as CO-EQUAL formats for this list,
+  # keep table is adopted; both landed 2026-10-22, bc8766e76). selesnyav22hg: the screen measured std and 2HG as CO-EQUAL formats for this list,
   # so it carries the vampires entry shape for 2HG (smoke d3, regression d3+d5, overnight d5) rather than a
   # smoke-only canary. Nothing in the 60 reads opponent heads, but Feed the Clan / Heroes' Reunion are
   # "target player" gains, and a second head lengthens the race the deck is ranked on.

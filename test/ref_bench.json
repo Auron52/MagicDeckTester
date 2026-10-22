@@ -426,17 +426,17 @@
    "shortfalls": [],
    "src": "d8362d2e32e4d0c76b5ba45445bc06cc3964e296"
   },
-  "selesnyalifegain": {
+  "selesnyalifegain_v1_avatar_alchemist": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
    "human": 5.6,
    "max_turns": 8,
    "n": 10,
    "policy": "committed value_play",
-   "search": 5.5,
+   "search": 5.4,
    "short": 0,
    "shortfalls": [],
-   "src": "d8362d2e32e4d0c76b5ba45445bc06cc3964e296"
+   "src": "ec2de5145c607e49d630657564cf8e0be16530ae"
   },
   "slivers_vial": {
    "hand_mismatch": 0,

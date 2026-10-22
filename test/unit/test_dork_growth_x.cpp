@@ -1,5 +1,5 @@
 // {X} sizing with SAME-PLAN scaled-dork growth + the Wirewood Lodge burst. USER 2026-10-06,
-// references/suboptimal/SelesnyaLifegain/claude_s4_gi3.json T6: "I was only able to do X=8 on T6 when
+// references/suboptimal/SelesnyaLifegain/v1-avatar-alchemist/claude_s4_gi3.json T6: "I was only able to do X=8 on T6 when
 // I had enough on board for up to X=10." Board: Blossoming Sands, Brushland, Wirewood Lodge, Llanowar
 // Elves, two Elvish Archdruids; hand Llanowar Elves + Genesis Wave. Cast the Elf first (4 Elves):
 // Sands 1 + Brushland 1 + Llanowar 1 + Archdruids 4 + 4 + the Lodge burst re-tapping an Archdruid

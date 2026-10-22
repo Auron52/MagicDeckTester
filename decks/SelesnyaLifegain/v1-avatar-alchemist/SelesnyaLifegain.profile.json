@@ -1,0 +1,83 @@
+{
+  "card_scores": {
+    "Accomplished Alchemist": [
+      -0.1431230341019667
+    ],
+    "Ageless Entity": [
+      0.022721294389160818
+    ],
+    "Blighted Steppe": [
+      -0.032181631917219455
+    ],
+    "Blossoming Bogbeast": [
+      0.18329341036118585
+    ],
+    "Blossoming Sands": [
+      -0.11171806379420346
+    ],
+    "Branchloft Pathway": [
+      0.07054391070248656,
+      -0.1884939567430024
+    ],
+    "Brushland": [
+      0.1865535780321066,
+      -0.1310456253731873
+    ],
+    "Craterhoof Behemoth": [
+      0.17243320060221468
+    ],
+    "Elvish Archdruid": [
+      0.2686788744880033
+    ],
+    "Elvish Mystic": [
+      0.333931147605778
+    ],
+    "Feed the Clan": [
+      -0.2645390070921989
+    ],
+    "Forest": [
+      0.06342063766778239,
+      -0.26996332662959954
+    ],
+    "Genesis Wave": [
+      -0.14614247891139698,
+      -0.44052548907611033
+    ],
+    "Llanowar Elves": [
+      0.370069839177674,
+      0.11809045226130621
+    ],
+    "Nykthos Paragon": [
+      0.0024051483174796218,
+      -0.22048872180451173
+    ],
+    "Priest of Titania": [
+      0.3719573355936996,
+      -0.0016204829039052626
+    ],
+    "Selesnya Sanctuary": [
+      0.011070780399273339
+    ],
+    "Verdant Sun's Avatar": [
+      -0.19303448767357612
+    ],
+    "Wellwisher": [
+      -0.1609693877551024
+    ],
+    "Wirewood Lodge": [
+      -0.23351059053586187
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 1,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
