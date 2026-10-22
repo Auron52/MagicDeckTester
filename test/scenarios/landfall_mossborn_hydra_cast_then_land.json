@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Mossborn Hydra 2026-10-22 (a Landfall SCREENING candidate): the searched land-drop timing for a",
+    "counter-DOUBLING landfall watcher. T3 on the play, three untapped Forests, hand Mossborn Hydra +",
+    "two Forests, opponent at 4, resumed at main 1. CAST THE HYDRA FIRST (it enters with one +1/+1",
+    "counter), THEN play the Forest: its landfall doubles it to 2; T4's Forest doubles it to 4 and the",
+    "Hydra (no longer sick) swings for exactly 4 -- the only T4 win. Land-first casts a 1/1 that is a",
+    "2/2 on T4 (2 damage) and needs T5. So T4 needs the land-after plan to be enumerated (the card is a",
+    "landfall watcher: CardDefinition::landfall_watcher via landfall_double_self_counters), the",
+    "enters-with counter (enters_with_plus_counters) to be on the body, and the doubling to fire from",
+    "the land drop (PlayLandFromHand -> OnLandEntered) in both worlds.",
+    "Filler = Swords to Plowshares: a dead draw on a mono-Forest board."
+  ],
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 4,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    },
+    {
+      "name": "Forest"
+    }
+  ],
+  "hand": [
+    "Mossborn Hydra",
+    "Forest",
+    "Forest"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "max_turns": 7,
+  "expect_win_turn": 4
+}
