@@ -208,3 +208,28 @@ fragility -- here simply the same {G} at the same cost, and a 0/1 vs a 1/1 attac
 cut across Rampant Growth and Khalni is better than either alone. With Hydra and Elves, the two Baloths are
 now the most cuttable threat slot after Phylath. Craterhoof and a 3rd Wave each take ~0.01 t from a Courser.
 Round 4 combines these on HELD-OUT seeds.
+
+## Round 4 — the combinations, on HELD-OUT seeds (`logs/landfall_screen/r4.json`, seed 8000000)
+
+20,000 paired games; base 5.7266 (T7+ 6.73%, T8+ 0.65%). Every arm: 4 Mossborn Hydra, 4 Llanowar Elves, Kessig
+Wolf Run for Haunted Fengraf.
+
+| arm | Hydra replaces | Elves replace | Courser slots | vs base | vs F0 | vs G1 | T7+ | T8+ |
+|---|---|---|---|---|---|---|---|---|
+| **G6** | 2 Phylath + 2 Baloths | 2 RG + 2 Khalni | Craterhoof + 3rd Genesis Wave | **-0.8411** | -0.0422 +-0.0062 | **-0.0080 +-0.0018** | 1.55% | 0.24% |
+| G3 | 2 Phylath + 2 Baloths | 2 RG + 2 Khalni | 1 Courser + 3rd Wave | -0.8407 | -0.0418 | -0.0076 +-0.0015 | 1.50% | 0.18% |
+| G2 | 2 Phylath + 2 Baloths | 2 RG + 2 Khalni | 1 Courser + Craterhoof | -0.8390 | -0.0401 | -0.0060 +-0.0009 | 1.54% | 0.21% |
+| G7 | 1 Phylath + 2 Baloths + 1 Courser | 2 RG + 2 Khalni | 1 Courser | -0.8364 | -0.0374 | -0.0032 +-0.0038 | 1.42% | 0.18% |
+| G1 | 2 Phylath + 2 Baloths | 2 RG + 2 Khalni | 2 Courser | -0.8331 | -0.0342 +-0.0061 | -- | 1.57% | 0.18% |
+| G9 | 2 Phylath + 2 Baloths | 1 RG + 3 Khalni | 2 Courser | -0.8315 | -0.0326 | +0.0016 | 1.48% | 0.15% |
+| G8 | 2 Phylath + 2 Baloths | 3 RG + 1 Khalni | 2 Courser | -0.8251 | -0.0262 | +0.0080 | 1.75% | 0.19% |
+| G5 | 2 Phylath + 1 Baloths + 1 Courser | 2 RG + 2 Khalni | 1 Courser | -0.8217 | -0.0228 | +0.0114 | 1.62% | 0.19% |
+| F_b | 2 Phylath + 2 Baloths | 4 RG | 2 Courser | -0.8125 | -0.0136 +-0.0056 | +0.0206 | 1.96% | 0.25% |
+| F_rg2k2 | 4 Phylath | 2 RG + 2 Khalni | 2 Courser | -0.8121 | -0.0132 +-0.0036 | +0.0210 | 2.05% | 0.16% |
+| G4 | 2 Phylath + 2 Courser | 2 RG + 2 Khalni | -- | -0.8104 | -0.0115 | +0.0227 | 1.82% | 0.22% |
+| F0 | 4 Phylath | 4 RG | 2 Courser | -0.7989 | -- | +0.0342 | 2.40% | 0.29% |
+
+Held out, the round-3 single winners SHRANK as selected winners do (F_b -0.0244 -> -0.0136, F_rg2k2
+-0.0194 -> -0.0132) but held their sign, and they ADD: G1 = both = -0.0342 vs F0. A third Genesis Wave and/or
+Craterhoof in the Courser slots adds another ~0.006-0.008 t. **Leading list: G6** (or G3, statistically tied),
+-0.84 t vs the shipped list, T7+ tail 6.7% -> 1.5%.
