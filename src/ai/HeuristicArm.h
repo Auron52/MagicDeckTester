@@ -662,6 +662,10 @@ enum Slot : int
     NIV_SERVANT_FIREMIND_ONLY,// MTG_NIV_SERVANT_FIREMIND_ONLY  NivMizzetCombo: a Generator Servant sacrifice the line does NOT need for mana is searched only beside a Niv-Mizzet, the Firemind cast (its haste = {T}: draw the turn it lands); any other plan holding an unneeded sacrifice is pruned (NivMizzetComboProvider::SacForManaOnlyIfNeeded; USER 2026-10-22: "we should only use it for Niv-mizzet the firemind in that case"). A Servant the line needs (ramp) is untouched; human play is never pruned. DEFAULT ON (the USER's rule, Niv-only); =0 -> every Servant plan searched
     NIV_SERVANT_UNPAIR,       // MTG_NIV_SERVANT_UNPAIR  NivMizzetCombo: amendment to the Servant rule (DEFAULT OFF, the USER's call): an unneeded Servant sacrifice is ALSO searched when the Servant is a Tandem Lookout's live soulbond partner and the plan casts either Niv-Mizzet -- the sacrifice breaks the pair so the Lookout pairs with the entering Niv, and every ping draws (held-out d3 s67072: sac -> Parun paired -> T4 kill; the rule's prune -> T5, at 4x budget too). Inert unless MTG_NIV_SERVANT_FIREMIND_ONLY is on
     LFE_TUTOR_WIDTH,          // MTG_LFE_TUTOR_WIDTH  LandfallElementals: TutorSearchWidth admits EVERY distinct legal Elemental name for Flamekin Harbinger (10 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so four names were unreachable per search at ANY budget, which the shuffle chose (sweep s61016: Incandescent Soulstoke never scored -> T5 vs T4). A COVERAGE fix (it widens, never narrows; the axis is additive). =0 -> the base 6
+    NIV_BRAINSTORM_RULE,      // MTG_NIV_BRAINSTORM_RULE  NivMizzetCombo: Brainstorm's put-back by the USER's rule (2026-10-22: "put the cards you need the least first using the same rules, followed by the ones you can't use yet so you can draw them later") -- NivMizzetComboProvider::PutBackRanking + the per-card default (PutBackRankingPerCard). Inert unless MTG_NIV_CANTRIP_RULES is on; MTG_NIV_CANTRIP_AMEND's order-tier change applies. An ORDER only (every candidate still searched). DEFAULT OFF pending its A/B and the USER
+    NIV_BRAINSTORM_SINGLE,    // MTG_NIV_BRAINSTORM_SINGLE  NivMizzetCombo: the searched put-back fan is pruned to the rule's pick alone (PutBackSingleCandidate). Inert unless MTG_NIV_CANTRIP_RULES and MTG_NIV_BRAINSTORM_RULE are on. Human play is never pruned. DEFAULT OFF pending its A/B
+    NIV_PONDER_KEEP_SHUFFLE,  // MTG_NIV_PONDER_KEEP_SHUFFLE  NivMizzetCombo: Ponder's searched fan is keep-in-the-rule's-order vs shuffle (ReorderKeepShuffleOnly), not every order. USER 2026-10-22: "My ponder idea was allowing for search between shuffle and keep, but not the order." / "That way we avoid the worst situations and just need to make the reorder relatively smart." Inert unless MTG_NIV_CANTRIP_RULES is on. DEFAULT OFF pending its A/B
+    NIV_LOOKOUT_RULE2,        // MTG_NIV_LOOKOUT_RULE2  NivMizzetCombo: Tandem Lookout's pairing by the USER's rule (2026-10-22: "Niv in hand means wait for it, whereas extra draw sources without niv are what give us permission to try pairing them with something else"): a Niv candidate is taken; a Niv in hand -> wait, twin pruned; no Niv in hand + a spare draw-on-damage source -> pair, searched (the twin waits); no spare + a Niv in the library -> wait, pruned; no Niv left -> pair, searched as before. Replaces MTG_NIV_LOOKOUT_NIV_ONLY. Human play is never pruned. DEFAULT OFF pending its A/B and the USER
     COUNT
 };
 
@@ -1274,6 +1278,10 @@ inline const char* Name(int slot)
         "MTG_NIV_SERVANT_FIREMIND_ONLY",
         "MTG_NIV_SERVANT_UNPAIR",
         "MTG_LFE_TUTOR_WIDTH",
+        "MTG_NIV_BRAINSTORM_RULE",
+        "MTG_NIV_BRAINSTORM_SINGLE",
+        "MTG_NIV_PONDER_KEEP_SHUFFLE",
+        "MTG_NIV_LOOKOUT_RULE2",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -454,6 +454,7 @@ add_executable(mtg-test
     test/unit/test_manual_tap_sources.cpp
     test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp
+    test/unit/test_niv_brainstorm_rule.cpp
     test/unit/test_depletion_sba.cpp
     test/unit/test_izzet_mana_fidelity.cpp
     test/unit/test_depletion_hold.cpp

@@ -73473,7 +73473,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.cast_reorder <= 0) { continue; }
                 if (PonderAxisPartial() && !PonderSetIsMixed(state, d->params.cast_reorder)) { break; }
-                if (PonderOrderAxis())
+                // A provider with a user-given ORDER rule may narrow the fan to keep-in-its-order vs
+                // shuffle (ReorderKeepShuffleOnly): the keep_decision branch below.
+                if (PonderOrderAxis() && !ResolveProvider(state).ReorderKeepShuffleOnly(state))
                 {
                     // ORDER axis: branch on the full DISPOSITION (every order of the looked-at
                     // cards, plus the shuffle; see PonderOrderAxis). TopDispositionCandidates puts
@@ -73518,7 +73520,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // stays additive -- the convention every axis here keeps); ONE put-back per variant: a plan's
     // second Brainstorm takes the provider's default (the Ponder axis's "vary ONE Ponder" shape).
     // Human play asks at resolution instead (the dig chooser; ResolvePutBackFromHand).
-    if (PutBackAxisEnabled() && !HumanPlayActive())
+    // A provider that owns a put-back rule may prune the fan to its default (PutBackSingleCandidate):
+    // no variants, so every put-back resolves at candidate 0 -- the shape of the Ponder order axis's
+    // ReorderSingleCandidate prune. Human play never reaches this block.
+    if (PutBackAxisEnabled() && !HumanPlayActive() && !ResolveProvider(state).PutBackSingleCandidate(state))
     {
         std::vector<TurnSolver::Plan> extra;
         std::size_t fanned = 0, widest = 0;
@@ -75908,6 +75913,9 @@ static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<Tu
     if (all.empty() || !state.deck_has_soulbond || HumanPlayActive()) { return; }
     static const bool s_on = EnvOn("MTG_SOULBOND_DECLINE_AXIS", true);
     if (!s_on) { return; }
+    // A provider pairing rule may prune the twin on this board (SoulbondTwinPruned: NivMizzetCombo's
+    // MTG_NIV_LOOKOUT_RULE2 where the Lookout must wait for a Niv).
+    if (ResolveProvider(state).SoulbondTwinPruned(state)) { return; }
     const int active = state.active_player_index;
     bool gate_known = false, gate = false;   // SoulbondOnlyWeakPartners, computed once per call
     // THE COMBO-PARTNER GATE (Tandem Lookout, NivMizzetCombo 2026-10-17). A soulbond creature whose
