@@ -328,8 +328,8 @@ AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
 # The leaf-rule A/B (leafrule_counterfactual) adds ONE arm, leafOFF, on these same seeds: it pairs against
 # the staged arm, which already is the ON product.
-PLAY_GAMES=500
-PLAY_SEEDS="610000 611000 612000 613000"
+# (The play-profile target_depth sweep's PLAY_GAMES / PLAY_SEEDS are gone with the sweep: phase E.7,
+# scripts/play_setting_stage.py, measures and DECIDES the play setting on the leaf that ships.)
 # TRUST ACCEPTANCE arms (user, 2026-08-15): the depth matrix nominates a `value_trust_depth`
 # CANDIDATE and these games decide it, because trust is a claim about keeping leaf lines inside real
 # BUDGETED play and the matrix measures the two arms separately and unbounded. Same power as the
@@ -1253,7 +1253,9 @@ phase_emulcal() {
     mark "$E0_MARK"
 }
 
-# --------------------- PHASE E: A/B + play sweeps for every deck, ONE pooled batch (MEASURED ONLY)
+# --------------------- PHASE E: A/B + shape arms + trust for every deck, ONE pooled batch (MEASURED ONLY)
+# (No play-setting sweep here any more: it measured d-1/d/d+1 at a FIXED budget and decided nothing. Phase E.7
+# measures the depth x budget grid on the leaf that ships and decides -- USER 2026-10-22.)
 # Bases are spaced by exactly games-per-job so each arm tiles its seed space once: game identity is
 # base+game_index, so closer spacing makes jobs REPLAY games -- which once turned 1.3 sigma into a fake
 # -14.4 sigma (rule 7). Job names are "<deck>-<arm>_s<seed>" so the single log splits per deck after.
@@ -1265,8 +1267,7 @@ E_MARK=E_measure
 phase_measure() {
     done_p "$E_MARK" && return 0
     local vroot=$VLQ/variants; rm -rf "$vroot"; mkdir -p "$vroot"
-    rm -f "$VLQ/play_baseline"
-    local row key dir stem mkey base games staged s d bd drives bl
+    local row key dir stem mkey base games staged s d
     { for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         staged=logs/eval/$stem.value.STAGED.json
@@ -1349,56 +1350,8 @@ PY
                 h_job "$key-trustOFF_s$s" "$(deck_file "$vroot/$key/ptrust_off" "$stem")" "$vroot/$key/ptrust_off/$stem.profile.json" "$TRUST_GAMES" "$s"
             done
         fi
-        # play-profile sweep: target_depth around the shipped one, on the REGENERATED model.
-        # escalation_cap tracks target_depth, CLAMPED to the measured ladder (see the heredoc below);
-        # moving depth alone would otherwise silently change what the cap does.
-        read -r bd drives <<< "$(python3 -c "
-import json; vp = json.load(open('$staged')).get('value_play') or {}
-print(vp.get('target_depth') or 5, 1 if (vp.get('target_depth') and vp.get('enabled')) else 0)")"
-        # A staged model with no ENABLED block ships the BUILT-IN default (d5, budget 20, no
-        # escalation cap) -- exactly what the A/B above measured -- so THAT is the honest baseline
-        # and the enabled arms below measure "is an adopted play policy worth it at all?", not just
-        # which depth. For a regeneration the live block already drives, so d<bd> IS that baseline.
-        if [ "$drives" = 0 ]; then
-            make_variant_deck "$vroot/$key/pdflt" "$dir" "$stem" "$staged"
-            for s in $PLAY_SEEDS; do
-                h_job "$key-dflt_s$s" "$(deck_file "$vroot/$key/pdflt" "$stem")" "$vroot/$key/pdflt/$stem.profile.json" "$PLAY_GAMES" "$s"
-            done
-            echo "$key dflt" >> "$VLQ/play_baseline"
-        else
-            echo "$key d$bd" >> "$VLQ/play_baseline"
-        fi
-        for d in $((bd-1)) $bd $((bd+1)); do
-            [ "$d" -ge 3 ] || continue
-            python3 - "$staged" "$vroot/$key/d$d.value.json" "$d" <<'PY'
-import json, sys
-# ENABLED, deliberately. A value_play block steers play ONLY when enabled==true (ValuePlay::drives());
-# writing target_depth alone leaves it a pure RECOMMENDATION, so the d-1/d/d+1 arms came out
-# BYTE-IDENTICAL and the sweep reported "+0.00000, depth does not matter" having tested nothing
-# (FiveColour 2026-08-09, its first model -- a deck WITH a live enabled block never showed the bug).
-# budget_ms comes along because an enabled block OWNS the budget too: omit it and it resolves to 0,
-# confounding the depth comparison with a resource change. 20 = BuiltinDefaultPlay().budget_ms.
-v = json.load(open(sys.argv[1])); vp = v.setdefault("value_play", {})
-d = int(sys.argv[3])
-vp["target_depth"] = d
-# escalation_cap CLAMPED to the deepest MEASURED heuristic depth, matching what the deriver ships
-# (user, 2026-08-14). Arming escalation past the ladder spends budget reaching a depth the crossover
-# can never take (it clamps hcommitted to the measured [min,max]), so a sweep arm that did it would
-# not be measuring a config we would adopt. Clamping is also safe by construction: the ladder top is
-# >= the built-in play depth, so the cap is never LOWER than the d5 baseline it is compared against.
-hd = ((v.get("value_leaf_table") or {}).get("hdepths")) or [d]
-vp["escalation_cap"] = min(d, max(hd))
-vp["enabled"] = True
-vp["budget_ms"] = vp.get("budget_ms") or 20
-json.dump(v, open(sys.argv[2], "w"), indent=1)
-PY
-            make_variant_deck "$vroot/$key/pd$d" "$dir" "$stem" "$vroot/$key/d$d.value.json"
-            for s in $PLAY_SEEDS; do
-                h_job "$key-d${d}_s$s" "$(deck_file "$vroot/$key/pd$d" "$stem")" "$vroot/$key/pd$d/$stem.profile.json" "$PLAY_GAMES" "$s"
-            done
-        done
       done; } | h_manifest "$VLQ/measure.manifest.json" >/dev/null
-    log "PHASE E: $(grep -c '"name"' "$VLQ/measure.manifest.json") jobs (A/B + sweeps, every deck) in ONE queue"
+    log "PHASE E: $(grep -c '"name"' "$VLQ/measure.manifest.json") jobs (A/B + shape + trust arms, every deck) in ONE queue"
     # Exit status gates the phase, same as phase A (2026-09-05 OOM lesson): a killed batch must not
     # let truncated measurements read as an A/B verdict.
     "$(harness_bin)" --batch "$VLQ/measure.manifest.json" > "$VLQ/measure.log" 2> "$VLQ/measure.err" \
@@ -1411,7 +1364,6 @@ PY
         grep "^$key-" "$VLQ/measure.log" > "$VLQ/m_$key.log" 2>/dev/null
         [ -s "$VLQ/m_$key.log" ] || continue
         sed -i "s/^$key-//" "$VLQ/m_$key.log"
-        bl=$(awk -v k="$key" '$1==k{print $2}' "$VLQ/play_baseline" | tail -1)
         echo "=== $key: regenerated value-leaf vs live ===" | tee -a "$VLQ/driver.log"
         grep -E "^(live|staged)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_ab.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_ab.log" live 2>&1 | tee -a "$VLQ/driver.log"
@@ -1422,9 +1374,6 @@ PY
         else
             rm -f "$VLQ/m_${key}_shape.log"
         fi
-        echo "=== $key: play-profile target_depth sweep (baseline $bl = shipped) ===" | tee -a "$VLQ/driver.log"
-        grep -E "^(d[0-9]+|dflt)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_play.log"
-        python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "$bl" 2>&1 | tee -a "$VLQ/driver.log"
         # LEAF-RULE VERDICT. ON (staged) vs worst-case OFF at play settings. ON keeps its settings unless it
         # is NOTABLY WORSE than OFF (delta > $TRUST_TOL turns at paired t > +2, the adoption bar's quality
         # test); then OFF's H-dependent settings replace ON's in the staged model -- they lean toward
@@ -1529,7 +1478,7 @@ phase_adopt() {
                printf '%s\n' "$v" | sed 's/^/    /'
                echo "    the staged model stays at $staged; nothing in $dir changed. To adopt a candidate anyway:"
                echo "    cp '$staged' '$dir/$stem.value.json' (or $VLQ/$stem.value.NLESC.json / .NLFIT.json for a"
-               echo "    leafless shape, .EMUL.json for the emulated ladder), delete the E6_skipcal marker, and re-run."
+               echo "    leafless shape, .EMUL.json for the emulated ladder), delete the E6_skipcal and E7_playset markers, and re-run."
                echo; } >> "$DECISIONS" ;;
           *) log "  $stem: verdict FAILED (rc=$rc) -- see $alog"; printf '%s\n' "$v" | while IFS= read -r l; do log "    $l"; done
              return 1 ;;
@@ -1574,6 +1523,37 @@ phase_skipcal() {
     mark E6_skipcal
 }
 
+# ------------- PHASE E.7: the deck's PLAY SETTING (the live sidecar's enabled value_play)
+# USER 2026-10-22: "The leaf should have a stage that decides." The documented route to an enabled block was a
+# manual recommend -> accept exercise that nothing performed any more, so most leaves shipped with none and played
+# the built-in d5 / 20 undecided. All of it is in scripts/play_setting_stage.py: ONE pooled batch per run, the live
+# sidecar against an enabled depth {d-1,d,d+1} x budget {b/2,b,2b} grid, 8 held-out seeds x 1000 paired games;
+# adopted by the E.5 rule (vlq_adopt_pick.py: the cheapest arm not notably worse; a dearer-but-better arm is a
+# TRADE recorded for the user), installed in the live sidecar IN THIS TREE, every outcome in DECISIONS.txt.
+#   * LAST, after E.5 and E.6: it measures the leaf and skip allowance that ship, and the setting it picks changes
+#     play, which the deck's GT (and any later mulligan generation) must then be fitted to.
+phase_playset() {
+    done_p E7_playset && return 0
+    log "PHASE E.7: play setting (depth x budget grid on the live leaf -> the E.5 adoption rule)"
+    local row key dir stem mkey base games skipped="" dirs=()
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        [ -s "logs/eval/$stem.value.STAGED.json" ] || continue
+        if [ ! -e "$dir/$stem.value.json" ]; then
+            log "  PHASE E.7: $stem has no live leaf (not adopted, see $DECISIONS) -- skipped; re-run after installing"
+            skipped="$skipped $stem"; continue
+        fi
+        dirs+=("$dir")
+    done
+    if [ ${#dirs[@]} -gt 0 ]; then
+        python3 scripts/play_setting_stage.py "${dirs[@]}" --work "$VLQ/playset" --decisions "$DECISIONS" --write 2>&1 \
+            | tee -a "$VLQ/driver.log"
+        [ "${PIPESTATUS[0]}" -eq 0 ] || { log "  PHASE E.7: FAILED -- NOT marked done; a re-run reuses a finished batch"; return 1; }
+    fi
+    [ -n "$skipped" ] && { log "  PHASE E.7: NOT marked done (skipped:$skipped) -- nothing is pending on it in this run"; return 0; }
+    mark E7_playset
+}
+
 # ------------- (PHASE F, the mulligan-generation setting screen, MOVED to scripts/mullgen.sh run, USER
 # 2026-10-18: "remove it as a value-leaf stage and make it a mulligan profile stage that only runs when it
 # hasn't been done yet." The screen runs before a deck's first keep-table generation, value leaf or not.)
@@ -1602,7 +1582,7 @@ finish|run)
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
     _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
     for ph in phase_freeze phase_rows phase_split phase_train phase_leafcal phase_matrix phase_riskgate \
-              phase_meta phase_emulcal phase_measure phase_adopt phase_skipcal; do
+              phase_meta phase_emulcal phase_measure phase_adopt phase_skipcal phase_playset; do
         check_freeze || exit 1
         check_decks  || exit 1
         check_leaf_keys || exit 1
@@ -1622,7 +1602,8 @@ status)
         D_meta)    echo "D metadata    ";; E0_emulcal) echo "E0 emul R     ";;
         E_measure)  echo "E measure     ";;
         E_adopt)   echo "E.5 adopt     ";;
-        E6_skipcal) echo "E.6 skip allow";; esac; }
+        E6_skipcal) echo "E.6 skip allow";;
+        E7_playset) echo "E.7 play set  ";; esac; }
     echo "queue dir  : $VLQ"
     echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
     now=$(src_fingerprint); frz=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
@@ -1638,7 +1619,7 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E0_emulcal E_measure E_adopt E6_skipcal; do
+    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E0_emulcal E_measure E_adopt E6_skipcal E7_playset; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done
@@ -1749,7 +1730,7 @@ ab)
     done
     E_MARK=E_ab_nomatrix
     E0_MARK=E0_emulcal_nomatrix   # R at pre-matrix play settings; a later full run recalibrates under its own marker
-    log "=== NO-MATRIX ADOPTION A/B: staged (as-is, presence-only) vs live, + play sweep ==="
+    log "=== NO-MATRIX ADOPTION A/B: staged (as-is, presence-only) vs live ==="
     check_freeze || exit 1
     check_decks  || exit 1
     check_leaf_keys || exit 1
@@ -1781,5 +1762,28 @@ skipcal)
     [ -s "$DECISIONS" ] && log "=== DECISIONS taken without stopping: $DECISIONS ==="
     exit "$_rc"
     ;;
-*) echo "usage: $0 {run|ab|skipcal|status} [deck-dir ...]"; echo "  $0 run                          # regenerate the whole fleet"; echo "  $0 run decks/FiveColour         # one deck, new or existing"; echo "  $0 run decks/A decks/B          # two+ decks in ONE pooled queue (3 tails, not 3 per deck)"; echo "  $0 ab  decks/FiveColour         # adoption A/B of the staged model, no matrix needed"; echo "  $0 skipcal [decks/X ...]        # phase E.6 alone: escalation-skip allowance for live leaves"; echo "  the deck(s) are the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
+playset)
+    # PHASE E.7 ALONE, for decks whose leaf is ALREADY live: the backfill of the leaves that shipped with no decided
+    # play setting, or a leaf installed by hand. No marker -- it always re-decides -- and no freeze check: it
+    # measures the tree as it stands. Named decks, else every REGRESSION-SUITE deck with a live value sidecar (an
+    # archived list has no GT to re-accept an adoption against). ONE pooled batch over all of them.
+    harness_pgo_ensure
+    _dirs=()
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        [ -e "$dir/$stem.value.json" ] || continue
+        if [ ${#DECK_DIRS[@]} -eq 0 ] && ! python3 scripts/suite_gate.py --require "$dir" > /dev/null 2>&1; then
+            log "  playset: $dir is not a regression-suite deck (an archived list?) -- skipped"; continue
+        fi
+        _dirs+=("$dir")
+    done
+    [ ${#_dirs[@]} -gt 0 ] || { echo "no deck with a live value sidecar to decide"; exit 2; }
+    log "=== PHASE E.7 ALONE (playset): ${#_dirs[@]} deck(s) ==="
+    python3 scripts/play_setting_stage.py "${_dirs[@]}" --work "$VLQ/playset" --decisions "$DECISIONS" --write 2>&1 \
+        | tee -a "$VLQ/driver.log"
+    _rc=${PIPESTATUS[0]}
+    [ -s "$DECISIONS" ] && log "=== DECISIONS taken without stopping: $DECISIONS ==="
+    exit "$_rc"
+    ;;
+*) echo "usage: $0 {run|ab|skipcal|playset|status} [deck-dir ...]"; echo "  $0 run                          # regenerate the whole fleet"; echo "  $0 run decks/FiveColour         # one deck, new or existing"; echo "  $0 run decks/A decks/B          # two+ decks in ONE pooled queue (3 tails, not 3 per deck)"; echo "  $0 ab  decks/FiveColour         # adoption A/B of the staged model, no matrix needed"; echo "  $0 skipcal [decks/X ...]        # phase E.6 alone: escalation-skip allowance for live leaves"; echo "  $0 playset [decks/X ...]        # phase E.7 alone: decide the play setting for live leaves"; echo "  the deck(s) are the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
 esac
