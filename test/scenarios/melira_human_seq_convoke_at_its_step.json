@@ -1,0 +1,75 @@
+{
+  "deck": "decks/Melira Pod/Melira Pod.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Kitchen Finks",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Kitchen Finks",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Chord of Calling",
+    "Llanowar Elves"
+  ],
+  "library_filler": "Forest",
+  "library": [
+    "Melira, Sylvok Outcast"
+  ],
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "cast=Llanowar Elves;cast=Chord of Calling"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "cast=Llanowar Elves",
+      "cast=Chord of Calling"
+    ]
+  ],
+  "expect_line_order": [
+    "cast Llanowar Elves",
+    "cast Chord of Calling"
+  ],
+  "expect_no_win": true,
+  "expect_opponent_life": 17,
+  "comment": "(B) A PRE-PASS CONVOKE TAPS ITS BODIES AT ITS OWN STEP. T4, four Forests and two non-sick Kitchen Finks, hand Llanowar Elves + Chord of Calling (Melira in the library); the human queues Elves, then Chord. Before: Chord's convoke bodies were tapped in the pre-cast pass, ahead of every cast -- the Elves was not on the battlefield yet, so both Finks were tapped and nothing attacked (the \"*\" pin still ends at 20). Now the convoke happens at Chord's step, after the Elves resolved: the summoning-sick Elves is a legal (free) body, one Finks stays untapped and attacks: 20 - 3 = 17."
+}

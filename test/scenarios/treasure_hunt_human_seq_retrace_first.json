@@ -1,0 +1,29 @@
+{
+  "deck": "decks/treasure_hunt/treasure_hunt.txt",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Island", "Lightning Bolt" ],
+  "graveyard": [ "Throes of Chaos" ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "cast=Lightning Bolt;retrace=Throes of Chaos" ],
+  "human_cast_orders": [ [ "**", "retrace=Throes of Chaos", "cast=Lightning Bolt" ] ],
+  "expect_line_order": [ "retrace Throes of Chaos", "cast Lightning Bolt" ],
+  "expect_opponent_life": 17,
+  "comment": "(B) A RETRACE CAST AT ITS QUEUE POSITION. T5, five Mountains, hand Island + Lightning Bolt, Throes of Chaos in the graveyard; the human queues 'retrace Throes (discarding the Island), then Bolt'. Before: a graveyard cast ran in its own loop after every hand cast, so Bolt went first whatever the queue said. Now it is a step of the \"**\" sequence. (The cascade hits only Islands here, so it casts nothing.)"
+}
