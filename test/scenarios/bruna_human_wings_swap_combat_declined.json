@@ -1,0 +1,55 @@
+{
+  "comment": "CONTROL for bruna_human_wings_swap_combat_choice: the same position, the human DECLINES the combat prompt -- no swap at all, Mother swings for 1 (opponent 21 -> 20). The combat swap is the human's pick, never applied for them.",
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "battlefield": [
+    {
+      "name": "Mother of Runes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Arcanum Wings",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Mother of Runes"
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Colossification"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "human_lines": [
+    "pass"
+  ],
+  "human_dig_picks": [
+    "decline"
+  ],
+  "expect_no_win": true,
+  "expect_opponent_life": 20
+}

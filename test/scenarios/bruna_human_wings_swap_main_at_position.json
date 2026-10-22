@@ -1,0 +1,55 @@
+{
+  "comment": "USER 2026-10-22 (Arcanum Wings: \"it shouldn't lose any options for the user\") -- CHOICE 1 of 2 from the same position as bruna_human_wings_swap_combat_choice. Bruna T5: Mother of Runes (untapped, can attack) wears Arcanum Wings, three Seaside Citadels, Colossification in hand, opponent at 21. The human commits the MAIN-PHASE swap `auraswap=Colossification`: it happens where it was queued, in main 1 (no longer moved to combat): Colossification's ETB taps Mother, she cannot attack, the opponent stays at 21. Under the 2026-10-06..22 rule this option did not exist (the swap was moved to combat); that rule now only replays the references stamped `combat_swap_timing` (bruna_human_wings_swap_deferred_to_combat).",
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "battlefield": [
+    {
+      "name": "Mother of Runes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Arcanum Wings",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Mother of Runes"
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Colossification"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "human_lines": [
+    "auraswap=Colossification"
+  ],
+  "expect_history_lacks": [
+    "deferred to COMBAT"
+  ],
+  "expect_no_win": true,
+  "expect_opponent_life": 21
+}

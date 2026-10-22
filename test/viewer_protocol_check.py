@@ -402,12 +402,13 @@ def recording_rule_args(ref):
     """Engine flags that make a replay follow the RULES the reference was recorded under, where a
     later rule changed what the same picks do.
 
-    `combat_swap_timing` (2026-10-06, USER: Arcanum Wings -> Colossification "should be automatically
-    applied in the attack phase rather than the 1st main"): from then on a human's main-phase swap of
-    a host-tapping Aura onto a would-be attacker is applied in the COMBAT window. A recording made
-    before carries no key and may hold the old main-phase swap, so it is replayed with
-    --legacy-main-swap -- an OLD recording must never be invalidated by a NEW behaviour. Inert on
-    every deck without an Aura-swap card.
+    `combat_swap_timing` (2026-10-06..22, USER: Arcanum Wings -> Colossification "should be automatically
+    applied in the attack phase rather than the 1st main"): a recording made in that window had a
+    human's main-phase swap of a host-tapping Aura onto a would-be attacker MOVED to the combat window.
+    Since 2026-10-22 (USER: "it shouldn't lose any options for the user") live play swaps at the queued
+    position again, so a STAMPED recording is replayed with --legacy-combat-swap-defer and an unstamped
+    one (older, or newer) with nothing -- an OLD recording must never be invalidated by a NEW
+    behaviour. Inert on every deck without an Aura-swap card.
 
     `karoo_float` (2026-10-08, USER on Bruna seed 18: "You just need to float the Green."): from then
     on, in human play, a land a Karoo returns is tapped for mana in response when it can be
@@ -433,7 +434,7 @@ def recording_rule_args(ref):
     30-life threshold before the regular step. A recording made before carries no key and replays with
     --legacy-single-damage-step -- the one summed step it was played with. CritterLifegain/claude_s6_gi5
     (recorded T5) otherwise replays T4. Inert on every deck without a first or double striker."""
-    args = [] if ref.get("combat_swap_timing") else ["--legacy-main-swap"]
+    args = ["--legacy-combat-swap-defer"] if ref.get("combat_swap_timing") else []
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
     if not ref.get("pain_defer"):

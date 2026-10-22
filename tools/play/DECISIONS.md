@@ -976,6 +976,15 @@ replays exactly as played (main-phase swap, T5 win); WITHOUT it the same recorde
 to combat, the Birds stays home to pay, Pilgrim swings for 21 and the game is won on **T4** -- the
 line the user describes. The recording stays exactly as played and replays under the legacy gate.
 
+**SUPERSEDED 2026-10-22 (USER: "Essentially, it shouldn't lose any options for the user").** The
+automatic deferral took away the main-phase swap onto a would-be attacker. Live play now applies a
+main-phase swap at its queued position, and the combat swap is the human's own answer to the combat
+window's prompt (both reachable from the same position). The deferral survives only to replay the
+references stamped `"combat_swap_timing": 1` (four Bruna games depend on it): `recording_rule_args` now
+passes `--legacy-combat-swap-defer` for a STAMPED reference and nothing otherwise; `MTG_HUMAN_COMBAT_SWAP`
+and `--legacy-main-swap` are gone. Details: `docs/design/human-line-order-as-is.md`, "The two
+exceptions, ruled".
+
 **Parity with the search.** The search keeps both windows in-tree: the main-phase `AuraSwap` action
 (its damage-max pick) and the in-combat pin variants (`Plan::combat_aura_swap_choice`, damage-max at
 the window). Human play offers every legal Aura in both windows; the combat prompt's default is the

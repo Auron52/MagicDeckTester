@@ -1,0 +1,54 @@
+{
+  "comment": "USER 2026-10-22 -- CHOICE 2 of 2 from the same position as bruna_human_wings_swap_main_at_position. Bruna T5: Mother of Runes (untapped, can attack) wears Arcanum Wings, three Seaside Citadels, Colossification in hand, opponent at 21. The human passes main 1 and, after attackers are declared, answers the combat window's own prompt (ApplyCombatAuraSwap: 'aura swap {2}{U} in combat ... bring in which Aura?') with Colossification: Mother is already attacking, the ETB tap costs nothing (CR 506.4), 1 + 20 = 21 -> T5 win.",
+  "deck": "decks/Bruna/Bruna.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "battlefield": [
+    {
+      "name": "Mother of Runes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Arcanum Wings",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Mother of Runes"
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Seaside Citadel",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Colossification"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "human_lines": [
+    "pass"
+  ],
+  "human_dig_picks": [
+    "Colossification"
+  ],
+  "expect_win_turn": 5
+}

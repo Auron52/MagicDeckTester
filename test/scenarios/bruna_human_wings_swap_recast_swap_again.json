@@ -1,0 +1,72 @@
+{
+  "comment": "USER 2026-10-22: \"If I want to activate and then re-enchant (and perhaps activate again) I should be able to.\" The board of bruna_wings_swap_chain (seed 77001 T4: Mother of Runes in Arcanum Wings, two Eldrazi Conscriptions, 8 mana with the Botanical Sanctum drop), played through the HUMAN path as three commits in ONE main phase, each at its position: swap Wings <-> Conscription, recast the returned Wings on Mother, swap again -- 1 + 10 + 10 = 21, T4. (One queue cannot hold this: the viewer has no hand card for a Wings the queue itself returns to hand, and the engine does not enumerate the three steps as one line -- it is legal_not_enumerated. Each commit is its own frame, so the second swap's `#src` is read off the recast Wings on the board.)",
+  "deck": "decks/Bruna/Bruna.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 21,
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Mother of Runes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Arcanum Wings",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Mother of Runes"
+    },
+    {
+      "name": "Avacyn's Pilgrim",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Azorius Chancery",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Birds of Paradise",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Avacyn's Pilgrim",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Sol Ring",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Botanical Sanctum",
+    "Eldrazi Conscription",
+    "Eldrazi Conscription",
+    "Somberwald Sage"
+  ],
+  "library_filler": "Boseiju, Who Endures",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 150,
+  "max_turns": 5,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "land=Botanical Sanctum;auraswap=Eldrazi Conscription",
+    "cast=Arcanum Wings",
+    "auraswap=Eldrazi Conscription"
+  ],
+  "human_variants": [
+    "",
+    "Mother of Runes",
+    ""
+  ],
+  "expect_win_turn": 4
+}

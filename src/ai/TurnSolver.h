@@ -1808,9 +1808,11 @@ public:
     // Greedy Aura-swap timing (MTG_SOLVE_COMBAT_SWAP): drop a pre-combat swap that would tap a
     // would-be attacker when the combat swap stays payable. Call ONLY right before the combat pin.
     static void DeferAuraSwapToCombat(const GameState& state, bool is_pre_combat, Plan& plan);
-    // HUMAN-PLAY Aura-swap timing (HumanCombatSwapOn, USER 2026-10-06): the same rule for a plan
-    // the HUMAN committed in a pre-combat main -- a swap naming a host-tapping Aura (Colossification)
-    // onto a creature that could attack moves to the combat window when it stays payable there.
+    // HUMAN-PLAY Aura-swap timing (HumanCombatSwapOn, USER 2026-10-06) -- REPLAY ONLY since 2026-10-22
+    // (USER: "it shouldn't lose any options for the user"; only --legacy-combat-swap-defer, for the
+    // references stamped `combat_swap_timing`, turns it on): the same rule for a plan the HUMAN
+    // committed in a pre-combat main -- a swap naming a host-tapping Aura (Colossification) onto a
+    // creature that could attack moves to the combat window when it stays payable there.
     // HumanSwapDefersToCombat is the pure test (index of the swap action, or -1; out: the Wings and
     // the hand Aura's card numbers) -- the viewer's menu labels read it; DeferHumanAuraSwapToCombat
     // applies it (erases the swap, pins scripted_combat_aura_swap/_in). Caller guarantees pre-combat.

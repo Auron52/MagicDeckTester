@@ -46107,8 +46107,12 @@ void TurnSolver::DeferAuraSwapToCombat(const GameState& state, bool is_pre_comba
     }
 }
 
-// HUMAN-PLAY AURA-SWAP TIMING (HumanCombatSwapOn; USER 2026-10-06: "My recommendation for the viewer
-// is that it should be automatically applied in the attack phase rather than the 1st main"). The
+// HUMAN-PLAY AURA-SWAP TIMING -- REPLAY ONLY since 2026-10-22 (HumanCombatSwapOn is set only by
+// --legacy-combat-swap-defer, for the references stamped `combat_swap_timing`; USER 2026-10-22: "it
+// shouldn't lose any options for the user" -- live play swaps at the queued position and the combat swap
+// is the human's own pick in ApplyCombatAuraSwap's window). The rule as it was recorded (USER 2026-10-06:
+// "My recommendation for the viewer is that it should be automatically applied in the attack phase rather
+// than the 1st main"): the
 // human's main-phase plan names the Aura it swaps in (`auraswap=Colossification`). When that Aura's
 // ETB taps its host (aura_etb_tap_host) and the host could attack this turn, the main-phase swap
 // taps a would-be attacker for nothing; the same swap in the combat window (after attackers are

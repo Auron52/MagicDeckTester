@@ -5051,11 +5051,11 @@ if (!log_dir.empty())
         << ", \"win_turn\": " << (won ? win_turn : -1)
         << ", \"won\": " << (won ? "true" : "false")
         << ",\n  \"mulligan\": " << mulligan_json;
-    // RECORDING-RULE STAMP: this game was played under the human-play Aura-swap timing rule
-    // (HumanCombatSwapOn -- a main-phase host-tapping swap onto a would-be attacker is applied in
-    // combat). A reference WITHOUT the key predates it, and its replayers pass --legacy-main-swap so
-    // it replays exactly as played (test/viewer_protocol_check.py). Additive key; omitted when the
-    // run itself was legacy, so re-writing an old recording does not mislabel it.
+    // RECORDING-RULE STAMP: this game was played under the 2026-10-06..22 human-play Aura-swap
+    // DEFERRAL (HumanCombatSwapOn -- a main-phase host-tapping swap onto a would-be attacker moved to
+    // combat). Live play no longer defers (USER 2026-10-22: no option may be lost), so only a replay
+    // of a stamped reference (--legacy-combat-swap-defer) writes it again -- re-writing that recording
+    // keeps its label; a new recording carries no key and replays without the flag.
     if (HumanCombatSwapOn()) { out << ", \"combat_swap_timing\": 1"; }
     // Same pattern for the human Karoo TAP-IN-RESPONSE float (HumanKarooFloatOn, 2026-10-08): a
     // reference without `karoo_float` predates it and replays under --legacy-karoo-float.
@@ -8614,7 +8614,42 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     //                                              // (TurnSolver's line-order record), EXACTLY
     //   "expect_dropped": ["...", ...]             // the casts the committed lines dropped, EXACTLY
     //                                              // ([] = none)
+    //   (a human_lines entry "pass" passes that frame -- ends the main phase, as the viewer's pass does)
+    //   "human_dig_picks": ["Colossification", "decline", ...]  // the human's answers, in order, to the
+    //                                              // card prompts (g_play_dig_chooser: the in-combat Aura
+    //                                              // swap after attackers are declared, a dig, ...): the
+    //                                              // first legal card of that name, "decline" = -1; once
+    //                                              // used up, the engine's own pick. Absent = no chooser.
+    //   "legacy_combat_swap_defer": true           // the REPLAY-ONLY 2026-10-06..22 swap deferral
+    //                                              // (--legacy-combat-swap-defer; stamped references)
     const std::vector<std::string> human_lines = j.value("human_lines", std::vector<std::string>{});
+    if (j.value("legacy_combat_swap_defer", false)) { g_play_legacy_combat_swap_defer = true; }
+    const std::vector<std::string> human_dig_picks = j.value("human_dig_picks", std::vector<std::string>{});
+    std::size_t human_dig_next = 0;
+    DigChooser human_dig_chooser =
+        [&](const GameState& ds, int, const std::string& prompt, const std::vector<Card>& cards,
+            const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            int pick = heuristic_pick;
+            std::string said = "(engine pick)";
+            if (human_dig_next < human_dig_picks.size())
+            {
+                said = human_dig_picks[human_dig_next++];
+                pick = -1;
+                if (said != "decline")
+                {
+                    for (int i : legal)
+                    {
+                        if (i >= 0 && i < static_cast<int>(cards.size())
+                            && cards[static_cast<std::size_t>(i)].m_name.str() == said) { pick = i; break; }
+                    }
+                }
+            }
+            std::cout << "scenario: human T" << ds.turn_number << " prompt \"" << prompt << "\" -> " << said
+                      << (pick >= 0 ? "" : " (none)") << "\n";
+            return pick;
+        };
+    if (j.contains("human_dig_picks")) { g_play_dig_chooser = &human_dig_chooser; }
     const std::vector<std::string> human_variants = j.value("human_variants", std::vector<std::string>{});
     const std::vector<std::vector<std::string>> human_orders =
         j.value("human_cast_orders", std::vector<std::vector<std::string>>{});
@@ -8647,6 +8682,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 const std::string& want_variant =
                     human_next < human_variants.size() ? human_variants[human_next] : std::string();
                 const std::string& line = human_lines[human_next++];
+                if (line == "pass")   // the human passes this frame (the viewer's "pass" line)
+                {
+                    std::cout << "scenario: human T" << fs.turn_number << (is_pre ? " main1" : " main2") << " passes\n";
+                    return -1;
+                }
                 const TurnSolver::LineSpec hspec = ParseLineSpec(line);
                 TurnSolver::LineCheck chk = TurnSolver::CheckLine(fs, is_pre, hspec, &plans);
                 ValidateHumanSequence(fs, is_pre, hspec, plans, chk);
@@ -8687,6 +8727,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         g_play_dropped_cast_sink = nullptr;
         g_play_cast_order_chooser = nullptr;
         g_line_order_record = nullptr;
+        if (j.contains("human_dig_picks")) { g_play_dig_chooser = nullptr; }
         for (const std::string& d : human_dropped) { std::cout << "scenario: dropped cast " << d << "\n"; }
         if (j.contains("expect_dropped"))
         {
@@ -9382,7 +9423,7 @@ int main(int argc, char* argv[])
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
         if (flag == "--storage-hold-prompt") { storage_hold_prompt = true; continue; }   // #6: value-less; parse regardless of position (the else-if chain below is gated on i+1<argc, so a trailing value-less flag would be dropped)
         if (flag == "--firebreathe-prompt")  { firebreathe_prompt = true; continue; }
-        if (flag == "--legacy-main-swap")    { g_play_legacy_main_swap = true; continue; }   // replay a reference recorded before the human combat-swap timing rule (value-less)    // #4: value-less, same trap as above
+        if (flag == "--legacy-combat-swap-defer") { g_play_legacy_combat_swap_defer = true; continue; }   // replay a reference recorded UNDER the 2026-10-06..22 human combat-swap deferral (stamp combat_swap_timing; value-less)
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
         if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)

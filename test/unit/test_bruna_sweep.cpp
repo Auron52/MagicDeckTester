@@ -898,11 +898,14 @@ TurnSolver::Plan HumanSwapPlan(const std::string& aura_in)
     return p;
 }
 
-struct LegacySwapScope
+// The deferral is REPLAY-ONLY since 2026-10-22 (USER: "it shouldn't lose any options for the user"):
+// --legacy-combat-swap-defer, for the references stamped `combat_swap_timing`. These tests pin the rule
+// those replays depend on, so each one turns it on.
+struct SwapDeferReplay
 {
     bool prev;
-    explicit LegacySwapScope(bool legacy) : prev(g_play_legacy_main_swap) { g_play_legacy_main_swap = legacy; }
-    ~LegacySwapScope() { g_play_legacy_main_swap = prev; }
+    SwapDeferReplay() : prev(g_play_legacy_combat_swap_defer) { g_play_legacy_combat_swap_defer = true; }
+    ~SwapDeferReplay() { g_play_legacy_combat_swap_defer = prev; }
 };
 
 int BfIndex(const GameState& s, int num)
@@ -919,11 +922,16 @@ TEST_CASE("Human swap timing: a named Colossification swap onto a would-be attac
     const int mother = b.s.battlefield.front().card.m_number;
     const int colo   = b.s.players[0].hand.back().m_number;
     TurnSolver::Plan plan = HumanSwapPlan("Colossification");
-    REQUIRE(TurnSolver::HumanSwapDefersToCombat(b.s, plan) == 0);
-    {   // control: the pre-rule replay arm (--legacy-main-swap) keeps the main-phase swap
-        LegacySwapScope legacy(true);
+    {   // LIVE play (no replay flag): never deferred -- the main-phase swap stays at its queued position
+        // and the combat swap is the human's own pick in the combat window.
+        g_play_legacy_combat_swap_defer = false;
         CHECK(TurnSolver::HumanSwapDefersToCombat(b.s, plan) == -1);
+        TurnSolver::Plan live = plan;
+        CHECK_FALSE(TurnSolver::DeferHumanAuraSwapToCombat(b.s, live));
+        CHECK(live.actions.size() == 1);
     }
+    SwapDeferReplay replay;
+    REQUIRE(TurnSolver::HumanSwapDefersToCombat(b.s, plan) == 0);
     std::string label;
     REQUIRE(TurnSolver::DeferHumanAuraSwapToCombat(b.s, plan, &label));
     CHECK(plan.actions.empty());                                     // nothing left for main 1
@@ -955,6 +963,7 @@ TEST_CASE("Human swap timing: a named Colossification swap onto a would-be attac
 
 TEST_CASE("Human swap timing: a swap only the mana-creature host can pay stays in the main phase")
 {
+    SwapDeferReplay replay;   // the replay-only rule (stamped references)
     BoardBs b;
     const int birds = b.Put("Birds of Paradise");
     Permanent w;
@@ -971,6 +980,7 @@ TEST_CASE("Human swap timing: a swap only the mana-creature host can pay stays i
 
 TEST_CASE("Human swap timing: an Aura without the ETB tap, or a host that cannot attack, keeps the main swap")
 {
+    SwapDeferReplay replay;   // the replay-only rule (stamped references)
     {
         BoardBs b = WingsOnMother(/*mother_sick=*/false);
         b.Hand("Eldrazi Conscription");
@@ -985,6 +995,7 @@ TEST_CASE("Human swap timing: an Aura without the ETB tap, or a host that cannot
 
 TEST_CASE("Human swap timing: mana spent later in main 1 moves the deferred swap back into the main phase")
 {
+    SwapDeferReplay replay;   // the replay-only rule (stamped references)
     // Wings on Avacyn's Pilgrim; Chancery {W}{U} + Forest pay the {2}{U} without the attacking
     // Pilgrim, so the swap is deferred. A LATER line in the same main phase taps the Forest: the
     // combat window can no longer pay, but the main phase still can (Chancery + the Pilgrim itself)
@@ -1010,6 +1021,7 @@ TEST_CASE("Human swap timing: mana spent later in main 1 moves the deferred swap
 
 TEST_CASE("Human swap timing: a deferred swap nobody can pay any more is dropped, not left to fail in combat")
 {
+    SwapDeferReplay replay;   // the replay-only rule (stamped references)
     BoardBs b = WingsOnMother(/*mother_sick=*/false);
     const int colo = b.s.players[0].hand.back().m_number;
     TurnSolver::Plan plan = HumanSwapPlan("Colossification");
@@ -1031,6 +1043,7 @@ TEST_CASE("Human swap timing: a deferred swap nobody can pay any more is dropped
 // play predicts that attack set, so the main-phase swap the user committed is deferred to combat.
 TEST_CASE("Human swap timing: claude_s3_gi2 T4 -- the Birds stays home to pay, the swap moves to combat")
 {
+    SwapDeferReplay replay;   // the replay-only rule (stamped references)
     BoardBs b;
     const int pilgrim = b.Put("Avacyn's Pilgrim");
     Permanent w;
@@ -1329,6 +1342,7 @@ TEST_CASE("Aura host ranking: a hardcast Colossification goes on the creature ca
 // the ETB tap took the Sage out of the T4 kill.
 TEST_CASE("Human swap timing: the plan's own land drop pays the combat swap (seed 11 T4)")
 {
+    SwapDeferReplay replay;   // the replay-only rule (stamped references)
     BoardBs b;
     const int sage = b.Put("Somberwald Sage");
     Permanent w;

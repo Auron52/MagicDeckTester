@@ -1362,21 +1362,18 @@ inline __attribute__((always_inline)) bool HumanPlayActive()
     return s_env && !g_human_play_suppressed;
 }
 
-// HUMAN-PLAY AURA-SWAP TIMING (USER 2026-10-06: "it should be automatically applied in the attack
-// phase rather than the 1st main"). A main-phase Arcanum Wings swap the human commits that brings a
-// host-tapping Aura (Colossification) onto a creature that could attack is applied in the COMBAT swap
-// window after attackers are declared instead -- the same rule and affordability as the greedy's
-// MTG_SOLVE_COMBAT_SWAP (TurnSolver::HumanSwapDefersToCombat). DEFAULT ON; MTG_HUMAN_COMBAT_SWAP=0
-// or `--legacy-main-swap` restores the old main-phase timing. The CLI flag exists for REPLAY: a
-// reference recorded before this rule carries no `combat_swap_timing` key, and its replayers
-// (test/viewer_protocol_check.py) pass `--legacy-main-swap` so the recording replays exactly as
-// played. Human play only -- autonomous play never reaches the deferral.
-inline bool g_play_legacy_main_swap = false;
-inline bool HumanCombatSwapOn()
-{
-    static const bool s_env = EnvOn("MTG_HUMAN_COMBAT_SWAP", true);
-    return s_env && !g_play_legacy_main_swap;
-}
+// HUMAN-PLAY AURA-SWAP TIMING -- NOW A REPLAY-ONLY RULE. From 2026-10-06 to 2026-10-22 a main-phase
+// Arcanum Wings swap the human committed that brought a host-tapping Aura (Colossification) onto a
+// creature that could attack was MOVED to the combat swap window after attackers were declared
+// (TurnSolver::HumanSwapDefersToCombat). USER 2026-10-22: "Essentially, it shouldn't lose any options
+// for the user" -- the inferred move took away the main-phase swap onto a would-be attacker. Human play
+// now applies a main-phase swap AT ITS QUEUED POSITION, and the combat swap is the human's own choice in
+// the combat window (ApplyCombatAuraSwap's prompt after attackers are declared): both reachable.
+// The old rule survives ONLY to replay references recorded under it -- they carry the
+// `"combat_swap_timing": 1` stamp, and test/viewer_protocol_check.py passes `--legacy-combat-swap-defer`
+// for them. Nothing else sets it; human play only either way.
+inline bool g_play_legacy_combat_swap_defer = false;
+inline bool HumanCombatSwapOn() { return g_play_legacy_combat_swap_defer; }
 
 // HUMAN-PLAY KAROO TAP-IN-RESPONSE (USER 2026-10-08, Bruna seed 18 T3: "The engine is rejecting this
 // even though this is a perfectly valid way to play the line. You just need to float the Green.").
