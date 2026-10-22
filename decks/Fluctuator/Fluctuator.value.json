@@ -1,4 +1,5 @@
 {
+  "escalation_skip_r": [137.8, 0.0, 0.0, 0.0, 0.0],
   "value_leaf_table": {
     "metric": "loss_penalized_avg_win_turn",
     "value_min_depth": 0,

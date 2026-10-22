@@ -1,5 +1,4 @@
 {
- "escalation_skip_r": [200.7, 96.2, 58.6, 36.0, 21.0],
  "value_play": {
   "mull_gen_depth": 2,
   "mull_gen_budget_ms": 3,

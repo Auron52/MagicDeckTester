@@ -129,6 +129,45 @@ for the most expensive (KittyV3 at ~5 s a game). A deck that passes adds about 1
 
 It reproduced every hand-made decision of the same day.
 
+## Re-calibration under the 0.5 escalation floor (2026-10-22)
+
+Every allowance above was fitted when the escalation ran on the probe's **leftover** budget, which was
+often close to nothing. Since eb0e7d066 the escalation runs on a fresh 0.5 x budget_ms as a floor
+(`search-shape-open-items.md`, the superseded `escalation_fresh_frac` note). That changes both sides of
+the trade:
+
+* A doomed escalation is no longer a cheap failure. It spends real budget and is still discarded, so the
+  headroom rises. Of the floor's extra work over the leftover, the share that went to discarded
+  escalations: slivers_vial 85%, Auras 54%, Prevent Damage 38%, treasure_hunt 26%, Bruna 24%.
+* Some escalations that used to be starved are now takeable. An allowance fitted on the starved regime
+  then skips escalations that would now be taken, so it can turn lossy without anyone touching it.
+
+The stage was re-run fleet-wide, dry (35 suite decks with a live sidecar, probe seed 7.1M, A/B seed
+7.3M; `logs/tgt/fresh05` in the lf-target work tree). The two shipped keys under the 4% gate were then
+A/B'd by hand the same way (`curvec.py`), because the stage keeps such keys unmeasured.
+
+| deck | headroom | verdict |
+|---|---|---|
+| Selesnya | 11.4% | **replace** [110.4, 57.5, 39.0, 18.5, 6.5] with the fit [74.3, 29.3, 16.1, 8.4, 1.0]: the shipped key now loses gi4562 (7 -> 8) in 6000 g; the fit is -5.2% units with 0 moved |
+| Prevent Damage | 4.8% | **remove** [200.7, 96.2, 58.6, 36.0, 21.0]: 6 of 6000 games slower, 3 of them losing a turn-8 win; the fit is 2 slower too, so back to R = 0 (+2.7% units vs the shipped key) |
+| Fluctuator | 4.6% | **adopt** [137.8, 0, 0, 0, 0]: -1.0% units, 0 moved |
+| Giants | 1.0% | under the gate; the shipped key measured by hand: 0 of 6000 moved, -1.9%: **kept** |
+| Mirrorwing | 2.4% | under the gate; the shipped 70.5 measured by hand: 3 moved, all the same win turn alone, -2.6%: **kept** |
+| Bruna, Vampires, Soldiers, CritterLifegain, Pirates | 0-3.7% | under the gate (no key) |
+
+Applied with the stage's own `install`/`remove` and accepted through smoke + regression.
+
+**The gap this exposed: single-path decks are outside the stage.** The probe gives up on any deck with no
+ladder escalations, but the single path discards too, and under the floor three single-path decks clear
+the gate: slivers_vial 7.2%, Auras 6.1%, treasure_hunt 4.3%. These are also the three decks whose cost
+grew most under the floor. The climb-aware single skip already reads the same `escalation_skip_r`
+(`esk_R` in `esk_climb_reach`), so fitting it is plumbing in the stage, not new engine code. One
+mechanism was not a prediction at all. A single-path retry follows an overrun and never climbs, so a
+retry below T is discarded whatever it finds. That is folded unconditionally (`MTG_ESC_RETRY_FOLD`,
+TurnSolver.cpp). On the probe's 12 single-path decks x 1200 games it moved 0 of 14,400 digests. It is
+small: slivers_vial -0.83% units, Auras -0.38%, FiveColour / Hinata2 / treasure_hunt about -0.08%. The
+overrun pass before the retry is the bulk of a fell-back escalation, and that pass is not foldable.
+
 ## Open questions for the user
 
 * **Automatic adoption** is what was built, as E.5 does for the leaf, under the strict bar above.
@@ -143,3 +182,9 @@ It reproduced every hand-made decision of the same day.
   is okay. If we found it to be really worthwhile we could even go a bit lower, but with what you mentioned
   4% is probably good enough."*). Lowering it is the user's lever, to reach for if the fleet's adoptions
   show the stage paying well.
+* **Extend the stage to single-path decks? (OPEN, 2026-10-22.)** See the floor re-calibration above:
+  slivers_vial, Auras and treasure_hunt clear 4% on the single path, where the stage does not look.
+* **Skip, or price the next pass correctly? (OPEN, 2026-10-22.)** Most discards under the floor stop with
+  more than half of the fresh budget unspent, because the next pass is over-priced. Skipping them saves
+  the work. Pricing the pass right would instead let many of them reach T and be taken, which spends the
+  budget the floor gives. The two compete for the same escalations: see `search-shape-open-items.md` §3d.

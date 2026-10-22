@@ -122,6 +122,59 @@ These reduce the knob count without losing measured quality. None is urgent; all
 
 ~~**Do not turn `escalation_fresh_frac` into a constant.**~~ **SUPERSEDED 2026-10-22 (USER: *"The escalated shape was meant to always use 0.5"*; the 2026-09-11 ruling was "make the fresh escalation budget unconditional").** The key is DELETED and the escalation always runs on a fresh 0.5 x budget_ms **as a floor** (the probe's leftover when larger), every deck, every depth. The 2026-09-12 revert below settled a cost trade (treasure_hunt 1.083x units, z +0.71) that was the USER's to make and was never surfaced; meanwhile every deck without the key escalated on leftovers (Kitty, Melira: the escalation committed depth 1 or was skipped). Held-out 2026-10-22 vs the leftover (`logs/tgt/fresh05` in the lf-target work tree): play settings, 26 decks x 500, floor -0.0012 (14 faster / 1 slower), flat 0.5 -0.0011 (15 / 4); d3 b10, 33 decks x 300, floor -0.0004 (5 / 1), flat 0.5 +0.0027 (10 / 32) -- a flat allowance under-funds the escalation after a cheap probe, hence the floor. USER 2026-10-22: *"0.5 floor probably and 0.5 default certainly."* -- the 0.5 is settled; the floor (vs a flat 0.5) is the USER's provisional choice, open to a later re-measure.
 
+### 3d. Under the 0.5 floor, the escalation's next pass is over-priced (2026-10-22)
+
+**Status: measured, nothing built. A play change in the direction of MORE work, so it is the user's call.**
+
+**What the floor cost, and where it went.** At play settings the floor costs, against the old leftover
+budget: Bruna 1.12x units, treasure_hunt 1.11x, Auras 1.11x, slivers_vial 1.08x, Prevent Damage 1.06x,
+everything else 1.04x or less. On Auras, slivers_vial, Giants, Fluctuator, Knights, CritterLifegain and
+Soldiers, play is byte-identical over 500 games (same digests). Two kinds of work make up the extra:
+
+* **Taken escalations that went deeper.** These are the rule working as intended. They changed play only
+  on Bruna, treasure_hunt and Prevent Damage, each 1 faster and 0 slower in 500 games.
+* **Discarded escalations.** These are the take rule throwing the line away (24-85% of the extra; see
+  `escalation-skip-calibration-stage.md`, floor re-calibration). Under the leftover budget they were
+  starved and cheap. Now each one spends real budget and is still discarded.
+
+**Why they are discarded: the next pass is over-priced, not unaffordable.** On the ladder decks most
+discards stop with more than half of the fresh budget unspent:
+
+| deck | escalations discarded with >50% of the budget left |
+|---|---|
+| Prevent Damage | 538 of 642 |
+| Bruna | 1048 of 1431 |
+| Vampires | 63 of 72 |
+| Giants | 42 of 50 |
+
+The start gate extrapolates the next pass from the last one (kDefaultGrowth 6x at pass 2, then the
+measured ratio). Real rollout cost per probe leaf FALLS with depth:
+
+| deck | units per leaf, d1 / d2 / d3 / d4 |
+|---|---|
+| Prevent Damage | 282 / 145 / 75 / 58 |
+| Bruna | 137 / 64 / 36 / 21 |
+| Selesnya | 146 / 68 / 35 / 23 |
+
+Deeper leaves are closer to the end of the game, and the shared tail rollouts hit more. So the gate
+over-estimates the refused pass by a median 1.7x (PD), 2.5x (Bruna), 2.1x (Selesnya) and 5.2x (Giants).
+Price that pass at the deck's measured per-depth cost per leaf instead, and it would have fit in about
+half the cases: PD 46%, Bruna 52%, Selesnya 52%, Giants 78%. That estimate has a known bias: the price
+comes from escalations the gate admitted, which skew cheap. The single path's climb shows the same thing.
+A discarded single-path escalation leaves a median 55-92% of its budget unspent (slivers_vial: the d1
+pass costs ~1.2k of ~13k units, and the climb refuses d2). The same over-estimate on Kitty, 8.8x at pass
+2, is what made Kitty's starved escalations commit depth 1.
+
+**The two levers compete for the same escalations.**
+* **Skip** (escalation-skip allowance, E.6): cheaper, play unchanged, and it gives up the escalation.
+* **Re-price** (a per-depth cost-per-leaf model in the escalation's start gate and climb, fitted per deck
+  like `escalation_skip_r`): costs more, lets more escalations reach T and be taken, and so spends the
+  0.5 the USER asked the escalation to have.
+
+Re-pricing is a price, so it is inert at unlimited budget (the budget rule's good shape). It changes
+budgeted play on every hybrid deck, so it needs a held-out A/B per deck. It is likely a trade (better
+play for more work), which makes it the user's call.
+
 ---
 
 ## 4. CLOSED — decided, with the reasoning, so they are not re-litigated
