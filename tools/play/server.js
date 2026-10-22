@@ -891,6 +891,16 @@ function srcNow() {
 // regular: the trigger only fires from a real stamp mismatch, at most one queue per src tree (a
 // failing bench must not respawn per request), and each child also passes --stale-only so a deck
 // healed in the meantime costs zero games. Output goes under logs/ per the repo rule.
+//
+// ONLY THE RUNNING VIEWER self-heals (USER 2026-10-22). benchState() is reached through listDecks(),
+// which headless checks (test/viewer_checks.sh) call via require(); there it used to queue a re-bench
+// of EVERY stale deck (all of them after any src commit) that nobody asked for, contended with
+// whatever else was running, stopped wherever the check process exited (30 of 45 decks on
+// 2026-10-22, leaving the cache on a mix of src trees) and rewrote test/ref_bench.json mid-work so
+// it got swept into an unrelated commit. A require()d server reports staleness and starts nothing.
+// PLAY_AUTO_BENCH forces it either way (=1 on, =0 off), mirroring PLAY_PIN_BIN.
+const AUTO_BENCH = process.env.PLAY_AUTO_BENCH === '1'
+                || (process.env.PLAY_AUTO_BENCH !== '0' && require.main === module);
 const benchRefresh = { running: false, attemptedSrc: '', queue: [] };
 function benchRunNext(log) {
   const key = benchRefresh.queue.shift();
@@ -910,7 +920,7 @@ function benchRunNext(log) {
   } catch (e) { benchRefresh.running = false; try { fs.closeSync(log); } catch (e2) {} }
 }
 function maybeStartBenchRefresh(src) {
-  if (!src || benchRefresh.running || benchRefresh.attemptedSrc === src) return;
+  if (!AUTO_BENCH || !src || benchRefresh.running || benchRefresh.attemptedSrc === src) return;
   let staleKeys = [];
   try {
     const cache = JSON.parse(fs.readFileSync(REF_BENCH, 'utf8'));

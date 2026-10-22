@@ -224,15 +224,28 @@ def load_cache(path):
         return {"decks": {}}
 
 
-def write_json(path, results, args):
+def write_json(path, results, args, live_keys=None):
     """MERGE this run's decks into the cache; never replace it.
 
     Replacing would make `--deck knights` silently delete every other deck's entry -- and the file
     still parses, so the viewer would simply report those decks as un-benched. Merging is what makes
-    a per-deck refresh safe, which is what makes the cache usable at all."""
+    a per-deck refresh safe, which is what makes the cache usable at all.
+
+    `live_keys` (every key that SOME reference folder maps to, computed before any --deck filter)
+    drops the one kind of row a merge can never fix: an ORPHAN with no reference games behind it.
+    It arises when a list is promoted -- its games move to `references/<Deck>/<v1-slug>/` and are
+    benched there, against the archived list, under `<deck>_<v1_slug>`, while the plain `<deck>` row
+    keeps the OLD list's verdict under the name of a new list that has no games yet. No bench can
+    refresh it (nothing to run), so the viewer reads it as stale forever and carries the old list's
+    tier forward. KittyEquipment v3 shipped with one (2026-10-22). Only rows with ZERO reference
+    games go; every archived list's games stay in contention on their own list."""
     src = src_fingerprint()
     cache = load_cache(path)
     cache.setdefault("decks", {})
+    if live_keys is not None:
+        for k in sorted(set(cache["decks"]) - set(live_keys)):
+            print("dropping orphan bench row '%s' (no reference folder maps to it)" % k)
+            del cache["decks"][k]
     for r in results:
         short = [g["name"] for g in r["games"] if any(f.startswith("SHORTFALL") for f in g["flags"])]
         bad = [g["name"] for g in r["games"] if g["hand"].startswith("HAND")]
@@ -341,6 +354,9 @@ def main():
     decks = deck_registry.discover()
     root = "references/suboptimal" if args.suboptimal else "references"
     pairs = ref_dirs(root)
+    # Every key a reference folder maps to, BEFORE the --deck filter: the orphan test is about the
+    # whole tree, not this run. Not applied to --suboptimal, whose root names a different set.
+    live_keys = None if args.suboptimal else {deck_registry.reference_deck_key(s) for s, _ in pairs}
     if args.deck:
         want = {deck_registry.slug(d) for d in args.deck}
         pairs = [p for p in pairs if p[0] in want]
@@ -391,7 +407,7 @@ def main():
         print("SKIPPED %s (%s)%s: no decks/ folder with a decklist AND a profile for '%s' -- these "
               "references are NOT benched" % (slug, refdir, via, key))
     if args.json:
-        write_json(args.json, results, args)
+        write_json(args.json, results, args, live_keys)
         print("\nbench artifact -> %s" % args.json)
     if tmp:
         # --stale-only is the ROUTINE call and usually runs nothing, so it would otherwise leave an
