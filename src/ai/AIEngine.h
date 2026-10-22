@@ -633,7 +633,9 @@ struct HumanCommitPreview
     bool                     sequence = false;  // the pin was a "**" whole sequence
     bool                     fallback = false;  // the fallback replaced the human's order
     std::string              fallback_message;  // its history line (what changed, exactly)
-    std::vector<std::string> errors;            // "**" steps not matched / ambiguous
+    std::vector<std::string> errors;            // "**" steps not matched / ambiguous / unpayable
+    bool                     unpayable = false; // "**": the queued order cannot pay -- the commit
+                                                // applies NOTHING of the segment (never reorders it)
     std::vector<std::string> dropped;           // trial_result: casts the applied plan drops
     std::vector<std::string> failed;            // trial_result: steps that did not happen
 };

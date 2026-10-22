@@ -4743,10 +4743,10 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
 // then, for the matched plan (or each `choose` variant), the commit is previewed through the SAME body
 // the commit runs (PrepareHumanCommit: the pin, the "your order cannot pay" fallback, one trial apply of
 // what would really be applied). A queued step that matches nothing or could mean two plays, a cast the
-// applied plan drops, or a step that does not happen where it was queued (an equip with no mana yet, a
+// order cannot pay at its position (USER 2026-10-22: rejected, never reordered -- "The user should make
+// their line playable"), or a step that does not happen where it was queued (an equip with no mana yet, a
 // Land's Edge discard of a land not in hand, a land that cannot be played) makes the line ILLEGAL here,
-// with every reason -- the commit would otherwise drop it. A line the fallback rescues (the plan's own
-// order pays) stays accepted; the commit reports what the fallback changed. Human play only; a line
+// with every reason -- the commit would otherwise drop it. Human play only; a line
 // without `seq=` (every line written before 2026-10-22, and every one-step line) is untouched.
 static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSolver::LineSpec& spec,
                                   const std::vector<TurnSolver::Plan>& plans, TurnSolver::LineCheck& chk)
@@ -4762,8 +4762,11 @@ static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSol
         if (idx < 0 || idx >= static_cast<int>(plans.size())) { return out; }
         const HumanCommitPreview pv = PrepareHumanCommit(s, plans[static_cast<std::size_t>(idx)], ord, is_pre, true);
         out = pv.errors;
-        for (const std::string& d : pv.dropped)
-        { out.push_back("cast " + d + ": it cannot be paid at its position in your order"); }
+        if (!pv.unpayable)   // (an unpayable order's errors already name each cast it cannot pay)
+        {
+            for (const std::string& d : pv.dropped)
+            { out.push_back("cast " + d + ": it cannot be paid at its position in your order"); }
+        }
         out.insert(out.end(), pv.failed.begin(), pv.failed.end());
         return out;
     };
@@ -7943,6 +7946,7 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // the only assertion that sees a rider-only illegal cast
 //     "validate_line": "land=X;cast=A;cast=B",   // optional: run TurnSolver::CheckLine on this board
 //     "expect_verdict": "accept",    // ... and fail unless the verdict matches (default "accept").
+//     "expect_reason_contains": "...", // ... and (optional) unless its reason contains this.
 //                                    // Guards a line the SEARCH would not pick on its own (a
 //                                    // goldfish values a do-nothing permanent at 0), which a
 //                                    // win-turn assertion structurally cannot see.
@@ -8349,6 +8353,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             chk.verdict == Vd::Unsupported        ? "unsupported" :
                                                     "illegal";
         const std::string want = j.value("expect_verdict", std::string("accept"));
+        const std::string want_reason = j.value("expect_reason_contains", std::string());
         std::cout << "scenario: validate_line verdict=" << got
                   << " variants=" << chk.variants.size()
                   << (chk.reason.empty() ? "" : (" reason=\"" + chk.reason + "\"")) << "\n";
@@ -8357,6 +8362,12 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         if (want != got)
         {
             std::cout << "scenario: FAIL expected line verdict " << want << ", got " << got << "\n";
+            return 1;
+        }
+        // Optional REASON assertion ("expect_reason_contains"): the verdict's reason names the cause.
+        if (!want_reason.empty() && chk.reason.find(want_reason) == std::string::npos)
+        {
+            std::cout << "scenario: FAIL the verdict's reason does not contain \"" << want_reason << "\"\n";
             return 1;
         }
         // Optional COUNT assertion. `choose` alone cannot tell "every sub-decision variant survived"

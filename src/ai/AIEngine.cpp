@@ -340,8 +340,8 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
     bool manual_taps = false;
     for (const std::string& t : ord) { if (t.rfind("tap=", 0) == 0) { manual_taps = true; break; } }
     // A trial apply on a copy: the casts it drops, and (when asked) the order it realised and the steps
-    // that did not happen. The capture pointers are null for every pin but "**", so the historical
-    // trials are untouched.
+    // that did not happen. The capture pointers are null for every legacy pin, so the historical trials
+    // are untouched.
     auto trial = [&](const TurnSolver::Plan& pl, std::vector<std::string>* drops_out,
                      std::vector<std::string>* seen, std::vector<std::string>* fails) -> std::size_t
     {
@@ -366,42 +366,45 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
         return drops.size();
     };
     bool fallback = false;
-    std::vector<std::string> pinned_drops_v, pinned_seen, pinned_fails, chosen_seen;
-    if (!ord.empty() && !manual_taps)
+    std::vector<std::string> pinned_drops_v;
+    // A "**" SEQUENCE IS NEVER REORDERED (USER 2026-10-22: "You should reject it in that case. The user
+    // should make their line playable."). An order that cannot pay is an error naming each cast that
+    // cannot be paid at its queued position -- the validation turns it into Illegal, and a commit that
+    // reaches it anyway applies NOTHING of the segment (AIEngine::TakeTurn) rather than the engine's
+    // order. Taps or not: the human's order is the line. The fallback below stays for every legacy pin
+    // form (no "**"), so saved references replay as recorded.
+    if (pv.sequence)
     {
-        const std::size_t pinned_drops = trial(pinned, &pinned_drops_v, pv.sequence ? &pinned_seen : nullptr,
-                                               pv.sequence ? &pinned_fails : nullptr);
-        if (pinned_drops > 0 && trial(chosen, nullptr, pv.sequence ? &chosen_seen : nullptr, nullptr) == 0)
+        std::vector<std::string> drops_v, seen_ok;
+        trial(pinned, &drops_v, nullptr, nullptr);
+        if (!drops_v.empty())
+        {
+            const bool engine_pays = trial(chosen, nullptr, &seen_ok, nullptr) == 0;
+            std::string pays;
+            for (const std::string& x : seen_ok) { pays += (pays.empty() ? "" : ", ") + x; }
+            for (const std::string& d : drops_v)
+            {
+                std::string cost;
+                for (const Card& c : state.ActivePlayer().hand)
+                { if (c.m_name == d) { cost = c.m_mana_cost.ToString(); break; } }
+                pv.errors.push_back("cast " + d + ": it cannot be paid at its position in your order -- "
+                                    + (cost.empty() ? std::string("its cost") : cost)
+                                    + " is more than the steps queued before it leave available"
+                                    + (engine_pays ? " (the order " + pays + " pays every spell: queue it that way)"
+                                                   : std::string()));
+            }
+            pv.unpayable = true;
+        }
+    }
+    else if (!ord.empty() && !manual_taps)
+    {
+        const std::size_t pinned_drops = trial(pinned, &pinned_drops_v, nullptr, nullptr);
+        if (pinned_drops > 0 && trial(chosen, nullptr, nullptr, nullptr) == 0)
         { fallback = true; }
     }
     if (fallback)
     {
         pv.fallback = true;
-        if (pv.sequence)
-        {
-            // EXACTLY WHAT CHANGED: the queued order, as the human queued it; what it could not do; the
-            // order that was played instead, as the trial apply played it.
-            std::string queued;
-            for (std::size_t k = 1; k < ord.size(); ++k)
-            {
-                const std::string& tok = ord[k];
-                if (tok.rfind("tap=", 0) == 0 || tok.rfind("need=", 0) == 0) { continue; }
-                const std::size_t eq = tok.find('=');
-                const std::string w = eq == std::string::npos ? tok : tok.substr(0, eq) + " " + tok.substr(eq + 1);
-                queued += (queued.empty() ? "" : ", ") + w;
-            }
-            auto join = [](const std::vector<std::string>& v) {
-                std::string out;
-                for (const std::string& x : v) { out += (out.empty() ? "" : ", ") + x; }
-                return out;
-            };
-            std::string failed = join(pinned_drops_v);
-            if (!pinned_fails.empty()) { failed += (failed.empty() ? "" : "; ") + join(pinned_fails); }
-            pv.fallback_message = "your order (" + queued + ") cannot pay for every spell in the line "
-                                  "(not paid in that order: " + failed + "), so the WHOLE line was played in "
-                                  "the engine's order instead: " + join(chosen_seen) + ", which pays them all";
-        }
-        else
         {
             auto names_of = [](const TurnSolver::Plan& pl) {
                 std::string out;
@@ -3512,14 +3515,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { EmitPlayEvent(state.turn_number, "step_dropped", "\xE2\x9A\xA0 " + e + " -- that step was NOT applied"); }
                 if (pv.fallback) { EmitPlayEvent(state.turn_number, "cast_order", pv.fallback_message); }
                 chosen = std::move(pv.plan);
+                // A "**" order that cannot pay is NEVER replaced by the engine's order (USER 2026-10-22:
+                // "You should reject it in that case. The user should make their line playable."): the
+                // validation rejects it first; a commit that reaches it anyway applies NOTHING of this
+                // segment -- the errors above say why -- and the frame is offered again.
+                if (pv.unpayable)
+                {
+                    EmitPlayEvent(state.turn_number, "cast_order",
+                                  "\xE2\x9A\xA0 your order cannot pay for its spells, so NOTHING of this "
+                                  "segment was applied -- queue it in an order that pays");
+                    chosen = TurnSolver::Plan{};
+                }
             }
-            // HUMAN-PLAY AURA-SWAP TIMING (USER 2026-10-06: "it should be automatically applied in the
-            // attack phase rather than the 1st main"). A committed main-phase Arcanum Wings swap that
-            // brings a host-tapping Aura (Colossification) onto a creature that could attack moves to
-            // the combat swap window after attackers are declared -- the greedy's MTG_SOLVE_COMBAT_SWAP
-            // rule and affordability (TurnSolver::HumanSwapDefersToCombat). The menu summary already
-            // said "(in combat, after attacks)". Human play only (this branch); --legacy-main-swap /
-            // MTG_HUMAN_COMBAT_SWAP=0 keep the old timing for references recorded before it.
+            // HUMAN-PLAY AURA-SWAP DEFERRAL -- REPLAY ONLY (HumanCombatSwapOn: set only by
+            // --legacy-combat-swap-defer, for references stamped `combat_swap_timing`). From 2026-10-06
+            // to 2026-10-22 a committed main-phase Arcanum Wings swap of a host-tapping Aura onto a
+            // would-be attacker was moved to the combat window. USER 2026-10-22: "it shouldn't lose any
+            // options for the user" -- live play now swaps at the queued position, and the combat swap
+            // is the human's own pick in the combat window (ApplyCombatAuraSwap). Four Bruna references
+            // were played under the deferral and replay only with it, so it stays for them.
             if (is_pre_combat_main)
             {
                 std::string swap_label;

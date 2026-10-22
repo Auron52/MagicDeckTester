@@ -6,18 +6,39 @@
   "opponent_life": 20,
   "resume_at": "main1",
   "battlefield": [],
-  "hand": [ "Mountain", "Sol Ring" ],
+  "hand": [
+    "Mountain",
+    "Sol Ring"
+  ],
   "library_filler": "Mountain",
   "library_size": 30,
   "depth": 1,
   "budget_ms": 50,
   "max_turns": 1,
-  "env": { "MTG_HUMAN_PLAY": "1" },
-  "human_lines": [ "land=Mountain;cast=Sol Ring" ],
-  "human_cast_orders": [ [ "**", "cast=Sol Ring", "land=Mountain" ] ],
-  "expect_line_order": [ "land Mountain", "cast Sol Ring" ],
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "land=Mountain;cast=Sol Ring"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "cast=Sol Ring",
+      "land=Mountain"
+    ]
+  ],
+  "expect_line_order": [],
   "expect_dropped": [],
-  "expect_history_contains": [ "your order (cast Sol Ring, land Mountain) cannot pay for every spell in the line (not paid in that order: Sol Ring), so the WHOLE line was played in the engine's order instead: land Mountain, cast Sol Ring" ],
+  "expect_history_contains": [
+    "cast Sol Ring: it cannot be paid at its position in your order",
+    "(the order land Mountain, cast Sol Ring pays every spell: queue it that way)",
+    "NOTHING of this segment was applied"
+  ],
   "expect_no_win": true,
-  "comment": "REVIEW 2026-10-22 (c): AIEngine's 'your order cannot pay' fallback (USER 2026-10-08; its existence is the user's call and is untouched) can now replace a WHOLE \"**\" sequence, land position included -- so it must say exactly what it changed. T1, empty board, hand Mountain + Sol Ring, pinned 'Sol Ring, then the Mountain' (committed without the `seq=` preview, which would have rejected it): Sol Ring cannot be paid before the land, the plan's own order pays, and the history names the queued order, what could not be paid, and the order actually played -- read off the trial applies, not reconstructed. (It used to say only 'your cast order (Sol Ring) ... cast in the order Sol Ring'.)"
+  "comment": "USER 2026-10-22 on the 'your order cannot pay' fallback: \"You should reject it in that case. The user should make their line playable.\" A \"**\" sequence is never reordered. T1, empty board, hand Mountain + Sol Ring, pinned 'Sol Ring, then the Mountain' and committed WITHOUT the `seq=` preview (which rejects it: burn_human_seq_unpayable_order_rejected): Sol Ring cannot be paid before the land, so NOTHING of the segment is applied -- no land, no Sol Ring -- and the history names the cast that cannot be paid at its position and the order that would pay. (Until 2026-10-22 the fallback played the WHOLE line in the engine's order and said so; legacy pins without \"**\" still take that fallback, so saved references replay as recorded.)",
+  "expect_history_lacks": [
+    "engine's order instead",
+    "cannot pay for every spell"
+  ]
 }
