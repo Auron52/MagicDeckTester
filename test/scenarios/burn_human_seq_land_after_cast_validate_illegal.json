@@ -1,0 +1,19 @@
+{
+  "deck": "decks/burn/burn.txt",
+  "turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [],
+  "hand": [ "Mountain", "Sol Ring" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 1,
+  "validate_line": "landafter=Mountain;cast=Sol Ring",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "expect_verdict": "illegal",
+  "comment": "(A) VALIDATE, the other side: a land position the CASTS BEFORE IT cannot pay is still rejected, with its reason. T1, empty board, hand Mountain + Sol Ring: 'cast Sol Ring, then play the Mountain' has no mana for Sol Ring. The land-first fallback is taken only for a line the legality walks pass, and the `landafter=` prefix check (casts paid on the board WITHOUT the land) is what refuses this one: \"can't pay {1} for 'Sol Ring' before the land\"."
+}

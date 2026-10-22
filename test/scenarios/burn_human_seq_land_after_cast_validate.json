@@ -1,0 +1,21 @@
+{
+  "deck": "decks/burn/burn.txt",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Mountain", "Sol Ring", "Lightning Bolt" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 2,
+  "validate_line": "land=Mountain;landat=1;cast=Sol Ring;cast=Lightning Bolt",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "expect_verdict": "accept",
+  "comment": "(A) VALIDATE: a land BETWEEN two casts on a deck with no landfall card. T2, one untapped Mountain, hand Mountain + Sol Ring + Lightning Bolt: 'Sol Ring (off the Mountain in play), then the Mountain, then Bolt (off the new Mountain)'. The menu has no plan with that land position (the search only distinguishes positions after a landfall watcher), so `landat=1` used to grade legal_not_enumerated -- a reject for a legal line. It is matched against the land-first plan now; the commit's \"**\" pin realises the position."
+}

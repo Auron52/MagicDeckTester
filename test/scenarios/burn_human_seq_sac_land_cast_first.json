@@ -1,0 +1,54 @@
+{
+  "deck": "decks/burn/burn.txt",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Shard Volley",
+    "Lightning Bolt"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "cast=Shard Volley;cast=Lightning Bolt"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "cast=Shard Volley",
+      "cast=Lightning Bolt"
+    ]
+  ],
+  "expect_line_order": [
+    "sacland Shard Volley",
+    "cast Lightning Bolt"
+  ],
+  "comment": "(B) A SAC-LAND CAST AT ITS QUEUE POSITION. T3, three untapped Mountains, hand Shard Volley ('As an additional cost, sacrifice a land', 3 damage) + Lightning Bolt, opponent at 6 (the burn provider offers Volley on a lethal turn); the human queues Volley FIRST. Before: a sac-land cast was never a reorderable slot -- it ran in its own trailing loop after every other cast, so Bolt went first whatever the queue said (the \"*\" pin realises [cast Lightning Bolt] and the Volley after it, untraced). Now it is a step of the \"**\" sequence like any cast; both resolve for the T3 kill.",
+  "expect_win_turn": 3
+}

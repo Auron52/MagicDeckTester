@@ -1,0 +1,25 @@
+{
+  "deck": "decks/treasure_hunt/treasure_hunt.txt",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Land's Edge", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Island", "Island", "Lightning Bolt" ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "cast=Lightning Bolt;landsedge=2" ],
+  "human_cast_orders": [ [ "**", "le=Island", "cast=Lightning Bolt", "le=Island" ] ],
+  "expect_line_order": [ "landsedge Land's Edge", "cast Lightning Bolt", "landsedge Land's Edge" ],
+  "expect_opponent_life": 13,
+  "comment": "(B) EACH LAND'S EDGE DISCARD AT ITS OWN QUEUE POSITION. T3, Land's Edge + an untapped Mountain, hand two Islands + Lightning Bolt; the human queues 'discard an Island, Bolt, discard the other Island'. Before: the plan's ONE DiscardToLandsEdge action (a count of 2) fired after every cast, so both discards came after Bolt. Now each queued `le=` step is one unit fired where it stands. 20 - 2 - 3 - 2 = 13."
+}

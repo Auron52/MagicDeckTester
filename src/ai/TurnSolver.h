@@ -1147,6 +1147,25 @@ public:
         // byte-identical. Deliberately absent from PlanSignature and PlansEqual for the same reason:
         // it is not part of the search's plan space.
         bool human_action_order = false;
+        // THE HUMAN'S WHOLE SEQUENCE (viewer only; the "**" --cast-order list, USER 2026-10-22: "The
+        // viewer should use exactly the order I give. Same for everything else in the viewer.").
+        // human_action_order sequences casts, Vial puts and the IsTrailingActivation kinds; every
+        // other kind the human can queue ran in a canonical pass of its own (the land first, sac-land
+        // casts / retrace / Land's Edge / Krenko after the casts, a declared sac-for-mana / suspend /
+        // convoke tap / land-search crack before them). With human_sequence set,
+        //   * actions[0, human_seq_len) are the human's queued steps IN QUEUE ORDER, each dispatched
+        //     where it stands whatever its kind (ApplyPlanDirect's apply_human_step);
+        //   * actions[human_seq_len, end) are the plan's actions the human did NOT queue (an implicit
+        //     self-sacrifice mana source): mana/suspend kinds before the first step, the rest after
+        //     the last one (TurnSolver::ApplyHumanSequencePin states the rule);
+        //   * human_land_step is the land drop's step index (the land is a step, so a pre-tap's
+        //     `position` counts it): -1 = the land is not positioned (land-first, as always).
+        // Set ONLY by TurnSolver::ApplyHumanSequencePin from AIEngine's side channel under
+        // HumanPlayActive(); the search never sets it. Absent from PlanSignature / PlansEqual for the
+        // reason human_action_order is.
+        bool         human_sequence  = false;
+        std::int8_t  human_land_step = -1;
+        std::uint8_t human_seq_len   = 0;
 
         // HUMAN PRE-TAPS (viewer only; MTG_HUMAN_PRE_TAP) -- see TurnSolver::PreTap. Applied by
         // ApplyPlanDirect at each entry's declared `position` in the ordered walk, so the mana is
@@ -2709,6 +2728,22 @@ public:
     // canonical pass -- so the failure mode is "the viewer can't sequence it", never a double
     // apply or a dropped action.
     static bool IsTrailingActivation(Action::Kind k);
+    // THE HUMAN'S WHOLE SEQUENCE (Plan::human_sequence; the viewer's "**" --cast-order list). `tokens`
+    // is the list WITHOUT its marker, one entry per queued step in queue order, each `<verb>=<name>`
+    // with the LineSpec verb the viewer writes for that entry (cast / act / sacout / vial / retrace /
+    // suspend / channel / eternalize / equip / blink / ... ; `land=` / `landtop=` for the land drop,
+    // `le=` for one Land's Edge discard) plus the position-carrying `tap=` and position-free `need=`
+    // tokens the "*" list already carries. Matches each step to one of the plan's actions (the verb
+    // picks the KIND -- a `cast=` is a hand cast, an `act=` a board activation of the same name --
+    // and the name the card), lays the matched actions out in queue order, records the land's step
+    // and every pre-tap's position in steps, and sets human_sequence / human_action_order /
+    // searched_order. A step that names nothing in the plan is dropped (it counts no position).
+    // Pure (no HumanPlayActive read): the caller gates it, and the unit tests drive it directly.
+    static void ApplyHumanSequencePin(Plan& plan, const std::vector<std::string>& tokens);
+    // A human-sequence plan losing one action (DeferHumanAuraSwapToCombat moves an Aura swap to
+    // combat): erase actions[q] and keep human_seq_len, human_land_step and the pre-tap positions
+    // naming the same steps. Plain erase for every other plan.
+    static void EraseHumanSequenceAction(Plan& plan, std::size_t q);
     // Plan::land_search_act_slot support (shared by ApplyPlanDirect and AIEngine::TakeTurn, so the
     // two worlds apply the positioned land-search activations through ONE body): is `a` a land-search
     // activation; apply every such action of `acts` now (live source, {T} first, shared payer,
@@ -3153,6 +3188,12 @@ public:
     static LineCheck CheckLine(const GameState& state, bool is_pre_combat,
                                const LineSpec& spec,
                                const std::vector<Plan>* menu = nullptr);
+    // CheckLine's matcher, with the land position read EXACTLY (Plan::land_slot): what CheckLine was
+    // before the human's land position became a queue position. CheckLine calls it, and in human play
+    // retries a positioned land the menu has no plan for against the land-first plan (see CheckLine).
+    static LineCheck CheckLineExact(const GameState& state, bool is_pre_combat,
+                                    const LineSpec& spec,
+                                    const std::vector<Plan>* menu);
 
     // Returns the plan that leads to the earliest win, evaluated by simulating
     // the rest of the game for each candidate play at this turn.
@@ -3458,3 +3499,9 @@ long long GreedyFoldTestCount(int which);
 // TEST HOOK: this THREAD's running count of creature-Aura host options the searched walk late-binds instead
 // of walking (MTG_AURA_HOST_LATE_BIND). Never reset; read a delta.
 long long AuraLateBindTestCount();
+// THE REALISED HUMAN LINE ORDER, as data (diagnostic; the recorder behind MTG_LINE_ORDER_TRACE). When
+// non-null, every step a COMMITTED human-play apply performs is appended as "<what> <card>" -- the
+// same lines the trace prints, on the same condition (a real apply: g_play_event_sink bound and
+// g_real_resolution), so a search rollout or a quiet trial apply never writes here. Bound only by the
+// scenario harness's `expect_line_order` (src/main.cpp); null everywhere else, so play never reads it.
+extern thread_local std::vector<std::string>* g_line_order_record;

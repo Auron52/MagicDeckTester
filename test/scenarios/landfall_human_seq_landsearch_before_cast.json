@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Landfall/Landfall.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Evolving Wilds", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Llanowar Elves" ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "landsearch=Evolving Wilds;cast=Llanowar Elves" ],
+  "human_cast_orders": [ [ "**", "landsearch=Evolving Wilds", "cast=Llanowar Elves" ] ],
+  "expect_line_order": [ "landsearch Evolving Wilds", "cast Llanowar Elves" ],
+  "expect_no_win": true,
+  "comment": "(B) A LAND-SEARCH CRACK AT ITS QUEUE POSITION. T3, Evolving Wilds + a Forest, hand Llanowar Elves; the human queues 'crack the Wilds, then cast the Elves'. Before: the crack's position was the matched plan's searched land_search_act_slot (the trailing pass, after every cast, by default), whatever the queue said. Now it is a step of the \"**\" sequence."
+}

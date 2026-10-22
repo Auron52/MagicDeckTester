@@ -46187,7 +46187,9 @@ bool TurnSolver::DeferHumanAuraSwapToCombat(GameState& state, Plan& plan, std::s
         { if (c.m_number == aura) { aname = c.m_name.str(); break; } }
         *label_out = wname + " \xE2\x87\x84 " + aname + " (on " + hname + ")";
     }
-    plan.actions.erase(plan.actions.begin() + q);
+    // Through the human-sequence eraser: the swap leaves the queued steps, and the land's step and
+    // every pre-tap position must keep naming the steps they named (a plain erase for any other plan).
+    EraseHumanSequenceAction(plan, static_cast<std::size_t>(q));
     state.scripted_combat_aura_swap    = wings;
     state.scripted_combat_aura_swap_in = aura;
     return true;
@@ -52704,6 +52706,173 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
     }
 }
 
+thread_local std::vector<std::string>* g_line_order_record = nullptr;
+
+// Does an action of kind `k` answer a queued step the viewer wrote with LineSpec verb `verb`? The verb
+// is what separates two same-named things the human can mean (USER 2026-10-06, Snow seed 9 T3: the
+// Frost Augur in play vs the copy in hand), so it decides the KIND and the name decides the card. An
+// empty verb (a bare name) accepts any kind.
+static bool HumanVerbMatchesKind(const std::string& verb, Action::Kind k)
+{
+    using K = Action::Kind;
+    if (verb.empty())         { return true; }
+    if (verb == "cast")       { return k == K::CastFromHand; }
+    if (verb == "vial")       { return k == K::ActivateVial; }
+    if (verb == "retrace")    { return k == K::CastFromGraveyard; }
+    if (verb == "suspend")    { return k == K::Suspend; }
+    if (verb == "channel")    { return k == K::Channel; }
+    if (verb == "eternalize") { return k == K::Eternalize; }
+    if (verb == "sacout")     { return k == K::SacForMana || k == K::SacCreatureOutlet; }
+    // `act=` and every board-activation verb (equip / blink / pod / landsearch / ...): an ability of a
+    // permanent on the battlefield, never a card leaving the hand or the graveyard.
+    return k != K::CastFromHand && k != K::ActivateVial && k != K::CastFromGraveyard
+        && k != K::DiscardToLandsEdge && k != K::Suspend && k != K::Channel && k != K::Eternalize
+        && k != K::PlayLand;
+}
+
+// See the header. THE IMPLICIT-ACTION RULE (an action of the matched plan that no queued step names --
+// in practice a self-sacrifice mana source the viewer deliberately does not offer as a click, Dwarven
+// Ruins / Lotus Bloom / an Eldrazi Spawn, which CheckLine matches implicitly; or the units of a Land's
+// Edge count the queue did not place): it goes WHERE IT IS NEEDED and nowhere the human put something.
+// A mana or suspend action runs before the first queued step (it is a source the line is paid from, so
+// it must exist before the first payment -- the pre-cast pass it always ran in); anything else runs
+// after the last queued step (where the trailing pass always ran it). The human's steps keep their
+// relative order exactly; an implicit action never runs BETWEEN two of them.
+void TurnSolver::ApplyHumanSequencePin(Plan& plan, const std::vector<std::string>& tokens)
+{
+    plan.human_pre_taps.clear();
+    plan.human_untap_need = 0;
+    const std::vector<Action> src = plan.actions;
+    std::vector<char> used(src.size(), 0);
+    std::vector<Action> seq;
+    seq.reserve(src.size());
+    const bool has_land = plan.land_decided && !plan.land_to_play.empty();
+    int land_step = -1;
+    // Land's Edge is ONE action carrying a COUNT; the viewer queues one `le=` step per land, and each
+    // can sit anywhere in the line. Each step takes one unit at its own position.
+    int le_idx = -1, le_left = 0;
+    for (std::size_t i = 0; i < src.size(); ++i)
+    {
+        if (src[i].kind == Action::Kind::DiscardToLandsEdge && src[i].discard_lands > 0)
+        { le_idx = static_cast<int>(i); le_left = src[i].discard_lands; break; }
+    }
+    int steps = 0;
+    for (const std::string& tok : tokens)
+    {
+        if (IsHumanPreTapToken(tok))
+        {
+            if (!HumanPreTapEnabled()) { continue; }
+            PreTap pt;
+            ParseHumanPreTapToken(tok, pt);     // malformed -> empty name -> rejected at apply
+            pt.position = steps;                // the steps queued before it, the land included
+            plan.human_pre_taps.push_back(std::move(pt));
+            continue;
+        }
+        if (IsHumanUntapNeedToken(tok))
+        {
+            if (HumanUntapDemandEnabled()) { plan.human_untap_need |= ParseHumanUntapNeedToken(tok); }
+            continue;
+        }
+        const std::size_t eq = tok.find('=');
+        const std::string verb = eq == std::string::npos ? std::string() : tok.substr(0, eq);
+        const std::string name = eq == std::string::npos ? tok : tok.substr(eq + 1);
+        if (verb == "land" || verb == "landtop" || verb == "landafter")
+        {
+            if (has_land && land_step < 0) { land_step = steps++; }
+            continue;
+        }
+        if (verb == "le")
+        {
+            if (le_left > 0)
+            {
+                Action unit = src[static_cast<std::size_t>(le_idx)];
+                unit.discard_lands = 1;
+                seq.push_back(std::move(unit));
+                --le_left;
+                ++steps;
+            }
+            continue;
+        }
+        // The first unused action of this card whose kind the verb names; failing that (a verb this
+        // table does not know, a kind it files elsewhere) the first unused action of the card at all.
+        int hit = -1;
+        for (int pass = 0; pass < 2 && hit < 0; ++pass)
+        {
+            for (std::size_t i = 0; i < src.size(); ++i)
+            {
+                if (used[i] != 0 || static_cast<int>(i) == le_idx || src[i].card_name != name) { continue; }
+                if (pass == 0 && !HumanVerbMatchesKind(verb, src[i].kind)) { continue; }
+                hit = static_cast<int>(i);
+                break;
+            }
+        }
+        if (hit < 0) { continue; }   // names nothing in this plan: not a step, so it counts no position
+        used[static_cast<std::size_t>(hit)] = 1;
+        seq.push_back(src[static_cast<std::size_t>(hit)]);
+        ++steps;
+    }
+    const std::size_t named = std::min<std::size_t>(seq.size(), 255);
+    // The implicit actions, in the plan's own order; the Land's Edge units no step placed run as one.
+    for (std::size_t i = 0; i < src.size(); ++i)
+    {
+        if (used[i] != 0) { continue; }
+        if (static_cast<int>(i) == le_idx)
+        {
+            if (le_left <= 0) { continue; }
+            Action rest = src[i];
+            rest.discard_lands = le_left;
+            seq.push_back(std::move(rest));
+            continue;
+        }
+        seq.push_back(src[i]);
+    }
+    plan.actions            = std::move(seq);
+    plan.human_seq_len      = static_cast<std::uint8_t>(named);
+    plan.human_land_step    = static_cast<std::int8_t>(std::min(land_step, 127));
+    plan.human_sequence     = true;
+    plan.human_action_order = true;
+    plan.searched_order     = true;
+}
+
+// THE WHOLE-TURN PREPAY UNDER A HUMAN SEQUENCE. BatchPrepayMainCasts allocates the mana for every cast
+// of the line from the board as it stands BEFORE the first step. That is exact only when no queued step
+// changes what pays for a later one. When a step is itself a mana source the human placed -- a declared
+// sac-for-mana or other mana-floating activation, a pre-pass convoke (Chord of Calling's bodies tap at
+// its own step now) -- the prepay would pay the later casts before that source exists, and the source
+// the human queued to pay them would float unused. Such a line pays as it goes: the per-cast payer
+// spends the float first, which is the human's order. false for every apply that is not a human sequence.
+static bool HumanLinePaysAsItGoes(const TurnSolver::Plan& plan, bool human_v2, bool human_pre_taps)
+{
+    (void)human_pre_taps;
+    if (!human_v2) { return false; }
+    const std::size_t n = std::min<std::size_t>(plan.human_seq_len, plan.actions.size());
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (a.kind == Action::Kind::SacForMana) { return true; }
+        if (a.kind != Action::Kind::CastFromHand && a.ritual_float > 0) { return true; }
+        if (a.kind == Action::Kind::CastFromHand && (a.convoke_green > 0 || a.convoke_other > 0)
+            && !ConvokeTapsAtCast(ActionCastDef(a)))
+        { return true; }
+    }
+    return false;
+}
+
+void TurnSolver::EraseHumanSequenceAction(Plan& plan, std::size_t q)
+{
+    if (q >= plan.actions.size()) { return; }
+    if (plan.human_sequence && q < plan.human_seq_len)
+    {
+        // Action q's STEP index: the land, when positioned at or before it, is a step too.
+        const int L  = plan.human_land_step;
+        const int sq = static_cast<int>(q) + ((L >= 0 && static_cast<int>(q) >= L) ? 1 : 0);
+        --plan.human_seq_len;
+        if (L > sq) { plan.human_land_step = static_cast<std::int8_t>(L - 1); }
+        for (PreTap& t : plan.human_pre_taps) { if (t.position > sq) { --t.position; } }
+    }
+    plan.actions.erase(plan.actions.begin() + static_cast<std::ptrdiff_t>(q));
+}
+
 // See the header. Stable so that equal ranks keep the emitted order exactly as today, and an
 // early-out so a deck declaring no order copies nothing and sorts nothing.
 bool TurnSolver::TrailingHasCountBands(const std::vector<Action>& acts)
@@ -53322,6 +53491,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     bool        land_after_deferred = false;
     std::string deferred_land_face;
     int         deferred_rad_mode   = -1;
+    // ...and whether the deferred play pays a shock land's life (enters untapped). true = the searched
+    // position's historical behaviour; only the HUMAN's positioned land (human_land_at) can clear it.
+    bool        deferred_land_shock_pay = true;
     // ...and WHERE (Plan::land_slot): k >= 1 plays it right after the k-th landfall-watcher cast of
     // the plan's OWN cast section (the slot hook in apply_plan_actions, armed for the top-level call
     // only by land_slot_top_armed), -1 / an unreached k at the after-all-casts point below.
@@ -53369,6 +53541,43 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // env in a function-local static (AFTER main's setenv) and returns false inside the engine's
     // clairvoyant rollouts, so bottoming/keep playouts sequence plays like the autonomous game.
     const bool s_human_play = HumanPlayActive();
+    // THE HUMAN'S WHOLE SEQUENCE (Plan::human_sequence -- the viewer's "**" list; USER 2026-10-22: "The
+    // viewer should use exactly the order I give."): every queued step, the land included, is applied
+    // where the human put it by apply_human_step inside the ordered walk, and the canonical passes skip
+    // the steps it dispatched. Set only by the viewer's side channel, so every search / autonomous /
+    // rollout apply reads false here and is byte-identical.
+    const bool human_v2 = plan.human_sequence && plan.human_action_order && plan.searched_order && s_human_play;
+    // The land drop's step in the human's sequence when it does NOT go first: the drop is reserved (the
+    // Karoo deferral's machinery) and played by the walk right before that step. -1 = land-first, as
+    // always -- including a land the human queued first, whatever position the matched plan carries.
+    // A KAROO always takes its human step (its default is after the casts, so "queued first" is a
+    // position too), and so does a land a manual tap was declared before.
+    int  human_land_at        = -1;
+    bool human_land_shock_pay = true;   // a deferred human land pays a shock land's life (see below)
+    if (human_v2 && plan.land_decided && !plan.land_to_play.empty() && plan.human_land_step >= 0)
+    {
+        const int L = plan.human_land_step;
+        bool tap_before = false;
+        for (const TurnSolver::PreTap& t : plan.human_pre_taps) { if (t.position <= L) { tap_before = true; } }
+        const CardDefinition* hld = CardDatabase::Instance().Lookup(plan.land_to_play);
+        const bool karoo = s_karoo_defer && hld != nullptr && hld->params.etb_bounce_land;
+        if (L > 0 || tap_before || karoo) { human_land_at = L; }
+        // A shock land enters untapped (2 life) only when the line can still spend its mana: a cast /
+        // retrace / dig AFTER its step, or a manual tap of it -- the land-first human rule below, read
+        // from the land's own position instead of from the whole line.
+        human_land_shock_pay = false;
+        for (std::size_t i = 0; i < plan.actions.size(); ++i)
+        {
+            const Action& a = plan.actions[i];
+            const int si = i < plan.human_seq_len
+                ? static_cast<int>(i) + (static_cast<int>(i) >= L ? 1 : 0) : INT_MAX;
+            if (si > L && (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard
+                           || a.kind == Action::Kind::DigDraw))
+            { human_land_shock_pay = true; break; }
+        }
+        for (const TurnSolver::PreTap& t : plan.human_pre_taps)
+        { if (t.position > L && t.name == plan.land_to_play) { human_land_shock_pay = true; } }
+    }
 
     // Land drop first, so the land's mana is available to the spells that follow.
     // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
@@ -53396,7 +53605,31 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
-                if (s_karoo_defer && ld && ld->params.etb_bounce_land)
+                const bool ld_karoo = s_karoo_defer && ld && ld->params.etb_bounce_land;
+                if (human_land_at >= 0)
+                {
+                    // THE HUMAN'S POSITION (Plan::human_land_step): reserve the drop exactly as the
+                    // Karoo / searched-position deferral does (every breakpoint guard keyed on
+                    // karoo_deferred applies unchanged), with no slot of its own -- the ordered walk
+                    // plays it right before step human_land_at (apply_human_land), and a step never
+                    // reached falls back to the end-of-casts point below, so the drop is never lost.
+                    // The plan's own land_slot is not consulted: the human's queue says where.
+                    karoo_deferred       = true;
+                    karoo_land_name      = plan.land_to_play;
+                    karoo_fetch          = plan.fetch_target;
+                    karoo_from_top       = plan.land_from_top;
+                    deferred_karoo_slot  = 0;
+                    deferred_karoo_every = false;
+                    if (!ld_karoo)
+                    {
+                        land_after_deferred = true;
+                        deferred_land_face  = plan.land_face;
+                        deferred_rad_mode   = plan.rad_mode;
+                        deferred_land_slot  = 0;
+                        deferred_land_shock_pay = human_land_shock_pay;
+                    }
+                }
+                else if (ld_karoo)
                 {
                     // Reserve the drop; play it after the main casts (see karoo_deferred above) -- or
                     // right before its r-th counted cast (deferred_karoo_slot, MTG_KAROO_POSITION).
@@ -53407,10 +53640,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     deferred_karoo_slot  = TurnSolver::KarooSlotOrdinal(plan.land_slot);
                     deferred_karoo_every = TurnSolver::KarooSlotEvery(plan.land_slot);
                 }
-                else if (plan.land_slot != 0)
+                else if (plan.land_slot != 0 && !(human_v2 && plan.human_land_step >= 0))
                 {
                     // Searched land position (see land_after_deferred above): reserve the drop exactly
                     // as for a Karoo; the land is played after its watcher cast or after the casts.
+                    // (Not for a human sequence that queued the land FIRST: the queue says land-first.)
                     karoo_deferred      = true;
                     land_after_deferred = true;
                     karoo_land_name     = plan.land_to_play;
@@ -53621,6 +53855,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // OWN apply_trailing_activations call, so an inline dispatch there would apply it twice). Both
     // of those sites are !s_human_play-gated today; this makes the guarantee structural instead.
     bool human_seq_inline = false;
+    // ...and the WHOLE-SEQUENCE walk (human_v2) the same way: armed for the top-level committed plan's
+    // section only. human_v2_done flags, per plan.actions index, the steps that walk applied, so the
+    // canonical passes (the pre-cast pass, the sac-land / retrace / Land's Edge loops, the Krenko taps,
+    // the trailing pass) skip exactly those. Empty for every apply that is not a human sequence.
+    bool              human_v2_armed = false;
+    std::vector<char> human_v2_done;
     // Armed by apply_continuation_plan for an UNBRANCHED-CANON continuation (Plan::cont_canon) and
     // consumed at the entry of the apply_plan_actions call it wraps: that cast section records the
     // Equips its CastSectionUnlock fires into the breakpoint sink. A canon continuation's board
@@ -53662,12 +53902,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // RevealLogPause nulls it for the whole duration of any search/rollout, so non-null means "the
     // human is watching this one".
     static const bool s_line_order_trace = EnvOn("MTG_LINE_ORDER_TRACE");
-    auto line_order_trace = [&](const char* what, const Action& a)
+    // ...and the same lines as DATA when a scenario binds g_line_order_record (`expect_line_order`).
+    auto line_order_note = [&](const char* what, const std::string& card)
     {
-        if (!s_line_order_trace || g_play_event_sink == nullptr || !g_real_resolution) { return; }
-        std::fprintf(stderr, "[line-order] turn=%d human_seq=%d %s %s\n",
-                     state.turn_number, human_seq ? 1 : 0, what, a.card_name.c_str());
+        if ((!s_line_order_trace && g_line_order_record == nullptr)
+            || g_play_event_sink == nullptr || !g_real_resolution) { return; }
+        if (s_line_order_trace)
+        {
+            std::fprintf(stderr, "[line-order] turn=%d human_seq=%d %s %s\n",
+                         state.turn_number, human_seq ? 1 : 0, what, card.c_str());
+        }
+        if (g_line_order_record != nullptr) { g_line_order_record->push_back(std::string(what) + " " + card); }
     };
+    auto line_order_trace = [&](const char* what, const Action& a) { line_order_note(what, a.card_name.str()); };
 
     // ---- HUMAN PRE-TAPS, at their declared positions (docs/design/viewer-manual-tap-pay.md) -----
     // `Plan::human_pre_taps` carries, per tap, the number of declared ordered entries that must run
@@ -56926,8 +57173,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             ScriptedTopChoice    _stc(plan.scry_choice);
             ScriptedBounceChoice _sbc(plan.bounce_choice);
-            PlayLandByName(state, karoo_land_name, karoo_fetch, true, deferred_land_face, deferred_rad_mode,
-                           karoo_from_top);
+            PlayLandByName(state, karoo_land_name, karoo_fetch, deferred_land_shock_pay, deferred_land_face,
+                           deferred_rad_mode, karoo_from_top);
         }
         std::vector<std::pair<std::string, int>> held;
         held.swap(karoo_host_auras);
@@ -56990,6 +57237,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan without a position, i.e. every plan of every deck without a landfall card.
         const bool slot_top = land_slot_top_armed;
         land_slot_top_armed = false;
+        // THE HUMAN'S WHOLE SEQUENCE (Plan::human_sequence): armed for the TOP-LEVEL committed plan's
+        // section only and consumed here, exactly like human_seq_inline, so a continuation re-entering
+        // this lambda never walks the human's steps. `acts` IS plan.actions when it is set, so the
+        // dispatched-step flags (human_v2_done) index both.
+        const bool v2_walk = explicit_order && human_v2_armed;
+        human_v2_armed = false;
         // ...and the same hook for a BREAKPOINT CONTINUATION's own positioned land (cont_land), armed
         // by apply_continuation_plan for exactly that continuation's section, consumed here likewise.
         const bool slot_cont = cont_land.armed;
@@ -57062,6 +57315,59 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         { return (rec_unlock && out_breakpoint != nullptr && !sink_stack.empty()) ? sink_stack.back() : nullptr; };
         CastSectionUnlock _unlock(state, acts, unlock_sink());
         auto fire_unlock = [&]() { _unlock.Fire(unlock_sink()); };
+        // ONE Land's Edge action: discard `discard_lands` lands from hand and deal `rate` per land, rate
+        // = the best discard_land_damage among controlled permanents (a no-op without a Land's Edge in
+        // play, or for any other kind). The post-cast pass below fires the plan's count; the human's
+        // whole-sequence walk fires one queued discard at a time, each at its own position.
+        auto fire_lands_edge = [&](const Action& a)
+        {
+            if (a.kind != Action::Kind::DiscardToLandsEdge || a.discard_lands <= 0) { return; }
+            int le_rate = 0;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                auto le_def = CardDatabase::Instance().LookupCached(p.card);
+                if (le_def && le_def->params.discard_land_damage > 0)
+                { le_rate = std::max(le_rate, le_def->params.discard_land_damage); }
+            }
+            if (le_rate <= 0) { return; }   // no Land's Edge in play -> nothing to fire
+            Player& le_ap = state.ActivePlayer();
+            const int le_life_before = state.players[opp_idx].life;   // play-viewer "before->after"
+            // Same provider ranking as the executor (LandsEdgePitchOrder) -- these two must model
+            // identical Land's Edge damage or the rollout's projection and the realised game
+            // diverge, which is the classic executor/rollout lockstep failure.
+            const std::vector<int> le_pitch =
+                LandsEdgePitchOrder(state, state.m_required_pieces, a.discard_lands);
+            std::vector<char> le_burn(le_ap.hand.size(), 0);
+            for (int bi : le_pitch) { le_burn[static_cast<std::size_t>(bi)] = 1; }
+            // Hand order, through THE SHARED DISCARD HOOK (Vampires A1) -- lockstep with the
+            // executor's FireLandsEdge (same order, same kept hand as the old hand rebuild).
+            std::vector<int> le_burn_idx;
+            for (int i = 0; i < static_cast<int>(le_burn.size())
+                            && static_cast<int>(le_burn_idx.size()) < a.discard_lands; ++i)
+            { if (le_burn[static_cast<std::size_t>(i)] != 0) { le_burn_idx.push_back(i); } }
+            std::vector<MadnessPending> le_mq;
+            int fired = 0;
+            for (const int bi : le_burn_idx)
+            {
+                DiscardCardFromHand(state, state.active_player_index, bi - fired, &le_mq, "Land's Edge");
+                state.players[opp_idx].life -= le_rate;
+                state.opponent_lost_life_this_turn = true;
+                ++fired;
+            }
+            ResolvePendingMadness(state, le_mq, MadnessWindowNow(state), MadnessPin{}, "Land's Edge");
+            // Play-viewer history: one "burn" event for this Land's Edge activation (fired `fired`
+            // lands x le_rate). Nulled by RevealLogPause during search/rollout -> byte-identical.
+            if (g_play_event_sink && fired > 0)
+            {
+                const int after = state.players[opp_idx].life;
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xF0\x9F\x94\xA5 Land's Edge: " + std::to_string(le_life_before - after)
+                              + " to opponent (" + std::to_string(fired) + " land"
+                              + (fired == 1 ? "" : "s") + " discarded, "
+                              + std::to_string(le_life_before) + "\xE2\x86\x92" + std::to_string(after) + ")");
+            }
+        };
         if (explicit_order)
         {
             // HUMAN-ORDER INTERLEAVE: consume the arm here so a continuation re-entering this
@@ -57087,6 +57393,157 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Taps the human declared AHEAD of their first queued entry (the ordinary case: "tap
             // these lands, then cast") go in before anything is paid for.
             if (inline_taps) { flush_pre_taps(0); }
+            if (v2_walk)
+            {
+                // THE HUMAN'S WHOLE SEQUENCE, ONE STEP AT A TIME (Plan::human_sequence; USER 2026-10-22:
+                // "The viewer should use exactly the order I give."). acts[0, n) are the human's queued
+                // steps in queue order, the land drop is step human_land_step, and each step is applied
+                // HERE, whatever its kind, through the same body its canonical pass uses -- a hand cast
+                // (sac-land ones too) through apply_one, a Vial put through apply_vial, a graveyard cast,
+                // one Land's Edge discard, Krenko's tap, a declared sac-for-mana / suspend / land-search
+                // crack, and every board activation through the trailing dispatcher (a one-action
+                // slice, never a second implementation). A pre-tap fires right before the step it was
+                // declared ahead of. acts[n, end) are the actions nobody queued (TurnSolver::
+                // ApplyHumanSequencePin's rule): a mana / suspend one already ran in the pre-cast pass,
+                // the rest run after the last step. Each step applied here is flagged in human_v2_done
+                // so its canonical pass skips it; a kind not dispatched here (a dig, which the viewer
+                // commits as a line of its own) keeps its pass.
+                //
+                // SERVER TRUTH is unchanged: every body checks its own precondition and payment and
+                // no-ops when either fails, so a step the human put where it cannot be paid is dropped
+                // where it stands, never moved ("It's up to me to make sure the order is correct").
+                const std::size_t n_named = std::min<std::size_t>(plan.human_seq_len, acts.size());
+                if (human_v2_done.size() < acts.size()) { human_v2_done.assign(acts.size(), 0); }
+                int step = 0;
+                // A land the human queued FIRST was played by the land block, land-first: it is step 0.
+                if (plan.human_land_step == 0 && human_land_at < 0
+                    && plan.land_decided && !plan.land_to_play.empty())
+                { line_order_note("land", plan.land_to_play); step = 1; }
+                // The deferred land, right before the step it was queued ahead of (or after the last).
+                auto human_land_due = [&]()
+                {
+                    if (human_land_at < 0 || step != human_land_at || !karoo_deferred || bp_truncate) { return; }
+                    if (inline_taps) { flush_pre_taps(step); }
+                    line_order_note("land", karoo_land_name);
+                    if (land_after_deferred) { play_deferred_land(); } else { play_deferred_karoo(); }
+                    ++step;
+                };
+                auto finish_named = [&]()
+                {
+                    human_land_due();
+                    // Taps declared AFTER the last step: a deliberate float for the next segment.
+                    if (inline_taps) { flush_pre_taps(INT_MAX); }
+                };
+                const int me = state.active_player_index;
+                for (std::size_t i = 0; i < acts.size(); ++i)
+                {
+                    const Action& a = acts[i];
+                    const bool named = i < n_named;
+                    if (i == n_named) { finish_named(); }
+                    if (named)
+                    {
+                        human_land_due();
+                        if (inline_taps) { flush_pre_taps(step); }
+                        ++step;
+                    }
+                    else if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend)
+                    { continue; }   // implicit mana / suspend: the pre-cast pass already ran it
+                    bool did = true;
+                    if (is_put(a))
+                    {
+                        line_order_trace("vial", a);
+                        karoo_pre_hook(a);
+                        const bool tb = bp_truncate;
+                        apply_vial(a.card_name);
+                        fire_unlock();
+                        slot_hook(a, tb);
+                    }
+                    else if (a.kind == Action::Kind::CastFromHand)
+                    {
+                        // A pre-pass convoke (Chord of Calling) taps its bodies AT ITS STEP: the pre-cast
+                        // pass skips a queued cast (a creature spell's cast-time convoke is a no-op here).
+                        if (a.convoke_green > 0 || a.convoke_other > 0)
+                        { ApplyConvokeTapsForCard(state, me, ActionCastDef(a), a.convoke_green, a.convoke_other); }
+                        line_order_trace(a.sacrifice_land ? "sacland" : "cast", a);
+                        karoo_pre_hook(a);
+                        if (!a.sacrifice_land)
+                        {
+                            const CardDefinition* lod = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                            if (lod != nullptr && lod->params.impulse_exile > 0
+                                && ResolveProvider(state).MergesBreakpointLeftovers(*lod))
+                            {
+                                lo_pending.clear();
+                                for (std::size_t r = i + 1; r < acts.size(); ++r)
+                                {
+                                    if (acts[r].kind == Action::Kind::CastFromHand && !acts[r].sacrifice_land)
+                                    { lo_pending.push_back(acts[r]); }
+                                }
+                                lo_pending_set = !lo_pending.empty();
+                            }
+                        }
+                        const bool tb = bp_truncate;
+                        cast_riders = CastRiders::Of(a); apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                        lo_pending_set = false; lo_pending.clear();
+                        fire_unlock();
+                        slot_hook(a, tb);
+                    }
+                    else if (a.kind == Action::Kind::CastFromGraveyard)
+                    {
+                        line_order_trace("retrace", a);
+                        karoo_pre_hook(a);
+                        const bool tb = bp_truncate;
+                        cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+                        fire_unlock();
+                        slot_hook(a, tb);
+                    }
+                    else if (a.kind == Action::Kind::DiscardToLandsEdge)
+                    {
+                        line_order_trace("landsedge", a);
+                        fire_lands_edge(a);
+                    }
+                    else if (a.kind == Action::Kind::TapForTokens)
+                    {
+                        line_order_trace("tokens", a);
+                        ApplyTapForTokens(state, me, a.sac_source_id);
+                    }
+                    else if (a.kind == Action::Kind::SacForMana)
+                    {
+                        line_order_trace("sacmana", a);
+                        ApplySacForMana(state, me, a.sac_source_id,
+                                        TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float,
+                                        a.sac_victim_id);
+                    }
+                    else if (a.kind == Action::Kind::Suspend)
+                    {
+                        line_order_trace("suspend", a);
+                        ApplySuspend(state, me, a.card_name);
+                    }
+                    else if (TurnSolver::IsLandSearchActivation(a))
+                    {
+                        line_order_trace("landsearch", a);
+                        TurnSolver::ApplyLandSearchActs(state, std::vector<Action>{ a });
+                    }
+                    else if (a.kind == Action::Kind::GarthActivate && GarthOrderedEnabled())
+                    {
+                        // MTG_GARTH_ORDERED (default on): the activation IS the copy's cast, applied in
+                        // the ordered cast section -- the trailing dispatcher skips it, so a one-action
+                        // slice through it would apply nothing. The canonical route's apply_garth body
+                        // (its acquisition re-solve is autonomous-only, !s_human_play), at its step.
+                        line_order_trace("garth", a);
+                        if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+                        { ApplyGarthActivate(state, me, a.sac_source_id, a.tutor_target, a.chosen_x); }
+                    }
+                    else if (TurnSolver::IsTrailingActivation(a.kind))
+                    {
+                        line_order_trace("activate", a);
+                        apply_trailing_activations(std::vector<Action>{ a });
+                    }
+                    else { did = false; }   // a dig (its own line in the viewer): its pass below
+                    if (did) { human_v2_done[i] = 1; }
+                }
+                if (acts.size() <= n_named) { finish_named(); }
+            }
+            else
             // Cast-ordering search: play the non-sacrifice hand casts in the EXACT vector
             // order the search chose (no enabler-first bucketing), so interleavings the
             // canonical order batches wrong are reachable. See Plan::searched_order.
@@ -57408,10 +57865,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
+        // A step the human's whole-sequence walk already applied at its own position (v2_walk) is
+        // skipped by every pass below; nothing is ever flagged outside that walk.
+        auto v2_did = [&](std::size_t ai) { return v2_walk && ai < human_v2_done.size() && human_v2_done[ai] != 0; };
         for (size_t ai = 0; ai < acts.size(); ++ai)
         {
             // Already cast: by the Spectacle hoist, or at its rank (SacLandCastsInOrder).
-            if (spec_hoisted_sac.count(ai)) { continue; }
+            if (spec_hoisted_sac.count(ai) || v2_did(ai)) { continue; }
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
@@ -57421,8 +57881,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 slot_hook(a, tb);
             }
         }
-        for (const Action& a : acts)
+        for (size_t ai = 0; ai < acts.size(); ++ai)
         {
+            if (v2_did(ai)) { continue; }
+            const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
                 karoo_pre_hook(a);
@@ -57438,55 +57900,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // EXACT count the committed plan carries -- discard `discard_lands` lands from hand and
         // deal `rate` per land, where rate is the best discard_land_damage among controlled
         // permanents. Fired after all casts (it is a post-stack main-phase activation), in plan
-        // order; a count > lands-in-hand simply fires every land present.
-        for (const Action& a : acts)
+        // order; a count > lands-in-hand simply fires every land present. (The human's whole-sequence
+        // walk fires each queued discard at its own position through the same fire_lands_edge.)
+        for (size_t ai = 0; ai < acts.size(); ++ai)
         {
-            if (a.kind != Action::Kind::DiscardToLandsEdge || a.discard_lands <= 0) { continue; }
-            int le_rate = 0;
-            for (const Permanent& p : state.battlefield)
-            {
-                if (p.controller_index != state.active_player_index) { continue; }
-                auto le_def = CardDatabase::Instance().LookupCached(p.card);
-                if (le_def && le_def->params.discard_land_damage > 0)
-                { le_rate = std::max(le_rate, le_def->params.discard_land_damage); }
-            }
-            if (le_rate <= 0) { continue; }   // no Land's Edge in play -> nothing to fire
-            Player& le_ap = state.ActivePlayer();
-            const int le_life_before = state.players[opp_idx].life;   // play-viewer "before->after"
-            // Same provider ranking as the executor (LandsEdgePitchOrder) -- these two must model
-            // identical Land's Edge damage or the rollout's projection and the realised game
-            // diverge, which is the classic executor/rollout lockstep failure.
-            const std::vector<int> le_pitch =
-                LandsEdgePitchOrder(state, state.m_required_pieces, a.discard_lands);
-            std::vector<char> le_burn(le_ap.hand.size(), 0);
-            for (int bi : le_pitch) { le_burn[static_cast<std::size_t>(bi)] = 1; }
-            // Hand order, through THE SHARED DISCARD HOOK (Vampires A1) -- lockstep with the
-            // executor's FireLandsEdge (same order, same kept hand as the old hand rebuild).
-            std::vector<int> le_burn_idx;
-            for (int i = 0; i < static_cast<int>(le_burn.size())
-                            && static_cast<int>(le_burn_idx.size()) < a.discard_lands; ++i)
-            { if (le_burn[static_cast<std::size_t>(i)] != 0) { le_burn_idx.push_back(i); } }
-            std::vector<MadnessPending> le_mq;
-            int fired = 0;
-            for (const int bi : le_burn_idx)
-            {
-                DiscardCardFromHand(state, state.active_player_index, bi - fired, &le_mq, "Land's Edge");
-                state.players[opp_idx].life -= le_rate;
-                state.opponent_lost_life_this_turn = true;
-                ++fired;
-            }
-            ResolvePendingMadness(state, le_mq, MadnessWindowNow(state), MadnessPin{}, "Land's Edge");
-            // Play-viewer history: one "burn" event for this Land's Edge activation (fired `fired`
-            // lands x le_rate). Nulled by RevealLogPause during search/rollout -> byte-identical.
-            if (g_play_event_sink && fired > 0)
-            {
-                const int after = state.players[opp_idx].life;
-                EmitPlayEvent(state.turn_number, "damage",
-                              "\xF0\x9F\x94\xA5 Land's Edge: " + std::to_string(le_life_before - after)
-                              + " to opponent (" + std::to_string(fired) + " land"
-                              + (fired == 1 ? "" : "s") + " discarded, "
-                              + std::to_string(le_life_before) + "\xE2\x86\x92" + std::to_string(after) + ")");
-            }
+            if (v2_did(ai)) { continue; }
+            fire_lands_edge(acts[ai]);
         }
 
         // Human-play (claude-play) player-initiated dig: cycle a land from hand (Lonely Sandbar /
@@ -58561,8 +58980,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
     else
     {
-    for (const Action& a : plan.actions)
+    for (std::size_t pi = 0; pi < plan.actions.size(); ++pi)
     {
+        const Action& a = plan.actions[pi];
+        // A step the human QUEUED runs at its own position in the whole-sequence walk, not here; only
+        // an implicit one (nobody queued it -- see TurnSolver::ApplyHumanSequencePin) stays up front.
+        if (human_v2 && pi < plan.human_seq_len) { continue; }
         if (a.kind == Action::Kind::SacForMana)
         { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
                           TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
@@ -58581,7 +59004,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // land-first drop. Executor twin: the same TurnSolver::ApplyLandSearchActs at AIEngine::TakeTurn's
     // pre-cast pass. The trailing pass below then skips them (WithoutLandSearchActs). -1 (every other
     // plan) -> no-op; k >= 1 runs in slot_hook.
-    if (plan.land_search_act_slot == 0)
+    // A human sequence places its land-search cracks itself (each one is a queued step, or an implicit
+    // one after the last step), so the plan's searched slot is not consulted and every slot-driven
+    // site (here, slot_hook, the trailing list) stands down.
+    if (human_v2) { ls_act_done = true; }
+    else if (plan.land_search_act_slot == 0)
     {
         TurnSolver::ApplyLandSearchActs(state, plan.actions);
         ls_act_done = true;
@@ -58628,7 +59055,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan));
     }
-    else
+    else if (!HumanLinePaysAsItGoes(plan, human_v2, !pre_taps.empty()))
     {
         // HUMAN PLAY: hold what the rest of the hand needs (MTG_HUMAN_PREPAY_DEMAND). HumanPlayActive()
         // is false in every rollout (HumanPlaySuppress) and every autonomous game -> byte-identical.
@@ -58661,15 +59088,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     pre_taps_armed = plan.searched_order;
     PlanSoulbondDeclineScope _sbd_top(plan.soulbond_decline);   // Plan::soulbond_decline (executor twin: TakeTurn)
     land_slot_top_armed = true;   // the plan's land position counts THIS section's casts (consumed at entry)
+    human_v2_armed      = human_v2;   // the whole-sequence walk, TOP-LEVEL section only (consumed at entry)
     apply_plan_actions(plan.actions, plan.searched_order);
     land_slot_top_armed = false;
+    human_v2_armed   = false;
     pre_taps_armed   = false;
     human_seq_inline = false;
 
     // Krenko, Mob Boss taps AFTER the main casts, so X = Goblins you control counts this turn's
     // developed board (the tokens then count toward Skirk fuel / a later attack). Free ({T} only).
-    for (const Action& a : plan.actions)
+    // (A tap the human queued already ran at its own step in the whole-sequence walk.)
+    for (std::size_t ki = 0; ki < plan.actions.size(); ++ki)
     {
+        const Action& a = plan.actions[ki];
+        if (human_v2 && ki < human_v2_done.size() && human_v2_done[ki] != 0) { continue; }
         if (a.kind == Action::Kind::TapForTokens)
         { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
     }
@@ -73338,6 +73770,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
             add(pl.human_action_order);   // human-play only; present so the list is exhaustive
+            add(pl.human_sequence); add(pl.human_land_step); add(pl.human_seq_len);   // ...likewise
             add(pl.soulbond_decline);
             add(static_cast<long long>(pl.human_pre_taps.size()));
             add(pl.human_untap_need);
@@ -93975,9 +94408,40 @@ static void MarkSuggestedAuraHosts(const GameState& state, bool is_pre_combat,
     }
 }
 
+// THE HUMAN'S LAND POSITION IS A QUEUE POSITION (USER 2026-10-22: "The viewer should use exactly the
+// order I give."). The menu offers a positioned land only where the SEARCH distinguishes positions --
+// right after a landfall watcher (Plan::land_slot k), after every cast on a landfall turn (-1), a
+// Karoo's slots -- because everywhere else land-first dominates for the search. A human is not bound by
+// that: "cast Sol Ring, then play the Forest" is a legal line on any deck, and the commit realises it
+// exactly through the "**" side channel (Plan::human_land_step), whatever land_slot the matched plan
+// carries. So when the exact match finds nothing and the line is otherwise LEGAL (CheckLineExact has by
+// then run every legality walk, including the prefix check that the casts queued BEFORE the land are
+// payable without it -- "Khalni, then the Forest" on one Forest stays Illegal, Landfall sweep flag 1),
+// the line is matched against the plan with the SAME land played first: same land, same actions, the
+// position carried by the queue. Human play only (the viewer is CheckLine's only caller besides the
+// scenario harness), and only ever turns a LegalNotEnumerated into a match.
 TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_pre_combat,
                                             const LineSpec& spec,
                                             const std::vector<Plan>* menu)
+{
+    LineCheck exact = CheckLineExact(state_in, is_pre_combat, spec, menu);
+    const bool positioned = spec.has_land
+        && (spec.land_slot != 0 || spec.land_at_cast > 0 || spec.land_at_raw >= 0);
+    if (exact.verdict != LineCheck::Verdict::LegalNotEnumerated || !positioned || !HumanPlayActive())
+    { return exact; }
+    LineSpec first = spec;
+    first.land_slot    = 0;
+    first.land_at_cast = 0;
+    first.land_at_raw  = -1;
+    LineCheck loose = CheckLineExact(state_in, is_pre_combat, first, menu);
+    if (loose.verdict == LineCheck::Verdict::Accept || loose.verdict == LineCheck::Verdict::Choose)
+    { return loose; }
+    return exact;
+}
+
+TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool is_pre_combat,
+                                                 const LineSpec& spec,
+                                                 const std::vector<Plan>* menu)
 {
     using V = LineCheck::Verdict;
     LineCheck out;
@@ -96006,9 +96470,16 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     // without it in the way this check models.
     const CardDefinition* lat_def = spec.has_land ? CardDatabase::Instance().Lookup(spec.land) : nullptr;
     const bool lat_karoo = lat_def != nullptr && lat_def->params.etb_bounce_land;
-    if (spec.has_land && spec.land_at_cast > 0 && sac_wild == 0 && !lat_karoo)
+    // ...and in human play `landafter=` too (the land after EVERY cast): CheckLine now matches a legal
+    // human position the menu does not offer against the land-first plan, so the casts queued before
+    // the land must be shown payable without it here, or "cast it all, then the land" would be accepted
+    // on the land's own mana and dropped at the commit.
+    const int lat_k = spec.land_at_cast > 0 ? spec.land_at_cast
+                    : (spec.land_slot == kLandSlotAfterCasts && HumanPlayActive())
+                      ? static_cast<int>(spec.casts.size()) : 0;
+    if (spec.has_land && lat_k > 0 && sac_wild == 0 && !lat_karoo)
     {
-        const std::size_t kk = static_cast<std::size_t>(spec.land_at_cast);
+        const std::size_t kk = static_cast<std::size_t>(lat_k);
         bool mapped = kk <= pending.size() && kk <= spec.casts.size();
         for (std::size_t i = 0; mapped && i < kk; ++i)
         { if (pending[i].board_act || pending[i].name != spec.casts[i]) { mapped = false; } }
@@ -96026,8 +96497,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 out.verdict = V::Illegal;
                 out.failed_action = "cast=" + nm;
                 out.reason = "can't pay " + real_fail_cost.ToString() + " for '" + nm + "' before the land: "
-                             "`landat=" + std::to_string(spec.land_at_cast) + "` plays '" + spec.land
-                             + "' after cast " + std::to_string(spec.land_at_cast)
+                             + (spec.land_at_cast > 0
+                                ? "`landat=" + std::to_string(spec.land_at_cast) + "` plays '" + spec.land
+                                  + "' after cast " + std::to_string(spec.land_at_cast)
+                                : "`landafter=` plays '" + spec.land + "' after every cast")
                              + ", so its mana is not available to the casts before it";
                 return out;
             }

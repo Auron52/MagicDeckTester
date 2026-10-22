@@ -8502,20 +8502,36 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     //   "human_variants": ["...", ...]             // per line (optional): a `choose` takes the first
     //                                              // variant whose label contains this, as the human
     //                                              // picks a sub-decision (an Aura's host); "" = first
+    //   "human_cast_orders": [[...], ...]          // per line (optional): the --cast-order list the
+    //                                              // viewer would send with it ("**" / "*" / names /
+    //                                              // `tap=`), as the commit's side channel
+    //   "expect_line_order": ["cast Sol Ring", ...] // the realised sequence of every committed apply
+    //                                              // (TurnSolver's line-order record), EXACTLY
     const std::vector<std::string> human_lines = j.value("human_lines", std::vector<std::string>{});
     const std::vector<std::string> human_variants = j.value("human_variants", std::vector<std::string>{});
+    const std::vector<std::vector<std::string>> human_orders =
+        j.value("human_cast_orders", std::vector<std::vector<std::string>>{});
     std::size_t human_next = 0;
     std::vector<std::string> human_summaries;
     std::vector<PlayEvent>   human_events;
+    // The pin of the line the chooser committed last: AIEngine asks for it right after the chooser
+    // returns (keyed by the frame's main ordinal, which a fixture has no reason to know).
+    std::vector<std::string> human_cur_order;
+    CastOrderChooser human_order_chooser = [&](int) { return human_cur_order; };
+    std::vector<std::string> human_line_order;
     if (!human_lines.empty())
     {
         if (!HumanPlayActive())
         { std::cerr << "scenario: \"human_lines\" needs \"env\": {\"MTG_HUMAN_PLAY\": \"1\"}\n"; return 2; }
         g_play_hooks_installed = true;   // before any sink is bound (RevealLogPause's fast path)
         g_play_event_sink      = &human_events;
+        if (!human_orders.empty()) { g_play_cast_order_chooser = &human_order_chooser; }
+        if (j.contains("expect_line_order")) { g_line_order_record = &human_line_order; }
         ai.SetExternalChooser(
             [&](const GameState& fs, std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
             {
+                human_cur_order.clear();
+                if (human_next < human_orders.size()) { human_cur_order = human_orders[human_next]; }
                 if (human_next >= human_lines.size()) { return -1; }
                 const std::string& want_variant =
                     human_next < human_variants.size() ? human_variants[human_next] : std::string();
@@ -8555,8 +8571,25 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     if (!human_lines.empty())
     {
         g_play_event_sink = nullptr;
+        g_play_cast_order_chooser = nullptr;
+        g_line_order_record = nullptr;
         for (const PlayEvent& e : human_events)
         { std::cout << "scenario:   hist T" << e.turn << " [" << e.kind << "] " << e.text << "\n"; }
+        if (j.contains("expect_line_order"))
+        {
+            const std::vector<std::string> want = j.at("expect_line_order").get<std::vector<std::string>>();
+            std::string got_s;
+            for (const std::string& g : human_line_order) { got_s += (got_s.empty() ? "" : " | ") + g; }
+            std::cout << "scenario: line order [" << got_s << "]\n";
+            if (human_line_order != want)
+            {
+                std::string want_s;
+                for (const std::string& w : want) { want_s += (want_s.empty() ? "" : " | ") + w; }
+                std::cout << "scenario: FAIL realised line order differs, expected [" << want_s << "]\n";
+                return 1;
+            }
+            std::cout << "scenario: PASS (line order)\n";
+        }
         if (j.contains("expect_human_summary_contains"))
         {
             const std::string need = j.at("expect_human_summary_contains").get<std::string>();

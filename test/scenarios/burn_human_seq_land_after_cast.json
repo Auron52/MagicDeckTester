@@ -1,0 +1,23 @@
+{
+  "deck": "decks/burn/burn.txt",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Mountain", "Sol Ring" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 2,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "landafter=Mountain;cast=Sol Ring" ],
+  "human_cast_orders": [ [ "**", "cast=Sol Ring", "land=Mountain" ] ],
+  "expect_line_order": [ "cast Sol Ring", "land Mountain" ],
+  "expect_no_win": true,
+  "comment": "(A) AN ORDINARY LAND'S QUEUE POSITION IS ITS TIMING (USER 2026-10-22: 'The viewer should use exactly the order I give.'). T2, one untapped Mountain, hand Mountain + Sol Ring; the human queues 'cast Sol Ring, then play the Mountain'. Before: burn offers no positioned land line, so the viewer wrote `land=Mountain` and the engine played the Mountain FIRST whatever the queue said (a `landafter=` line did not even validate -- no plan had that position). Now the line validates (CheckLine matches a legal, un-enumerated land position against the land-first plan) and the \"**\" pin plays the land as step 2, after Sol Ring."
+}

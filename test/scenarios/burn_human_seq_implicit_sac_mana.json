@@ -1,0 +1,26 @@
+{
+  "deck": "decks/burn/burn.txt",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Dwarven Ruins", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Lightning Bolt", "Skullcrack" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "cast=Skullcrack;cast=Lightning Bolt" ],
+  "human_cast_orders": [ [ "**", "cast=Skullcrack", "cast=Lightning Bolt" ] ],
+  "expect_line_order": [ "cast Skullcrack", "cast Lightning Bolt" ],
+  "expect_history_contains": [ "Dwarven Ruins -- sacrifice: add 2 R" ],
+  "expect_win_turn": 3,
+  "comment": "(C) AN ACTION NOBODY QUEUED GOES WHERE IT IS NEEDED. T3, Dwarven Ruins + a Mountain, hand Lightning Bolt + Skullcrack, opponent at 6; the human queues Skullcrack, then Bolt. The matched plan sacrifices the Ruins for {R}{R} -- an IMPLICIT self-sacrifice mana source the viewer deliberately offers no click for (CheckLine matches it implicitly). The old viewer saw a plan action the queue did not name and fell back to the cast-only pin (and, with a board activation in the line, lost the activation order outright). The \"**\" pin is sent anyway: TurnSolver::ApplyHumanSequencePin lays the queued casts out in queue order and the implicit sacrifice before the first step (the pre-cast pass), so Skullcrack and Bolt are paid in the human's order for the T3 kill."
+}

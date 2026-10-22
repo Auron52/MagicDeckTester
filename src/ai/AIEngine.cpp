@@ -169,9 +169,39 @@ static const bool s_human_line_order = EnvOn("MTG_HUMAN_LINE_ORDER", true);
 // saved game's activations.
 static const char* const kFullOrderMarker = "*";
 
+// THE WHOLE-SEQUENCE marker (USER 2026-10-22: "The viewer should use exactly the order I give. Same for
+// everything else in the viewer."). The "*" list sequences casts, Vial puts and board activations; every
+// other kind the human can queue still ran in a canonical pass of its own (the land FIRST; sac-land
+// casts, retrace, Land's Edge and Krenko AFTER the casts; a declared sac-for-mana / suspend / convoke /
+// land-search crack BEFORE them), and the viewer sent no pin at all when the plan held an action the
+// queue did not name. A "**" list is the viewer's whole queued segment, one `<verb>=<name>` per step,
+// the land drop and each Land's Edge discard included, sent for every multi-step line;
+// TurnSolver::ApplyHumanSequencePin matches it to the plan and ApplyPlanDirect walks it step by step.
+// A NEW marker, not a reinterpretation of "*": every reference saved before 2026-10-22 carries "*",
+// a bare cast list or nothing, and replays through exactly the branch it was recorded under.
+static const char* const kSequenceMarker = "**";
+
 static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::string>& order_in)
 {
     if (order_in.empty()) { return; }
+    if (order_in.front() == kSequenceMarker && HumanPlayActive())
+    {
+        const std::vector<std::string> tokens(order_in.begin() + 1, order_in.end());
+        if (s_human_line_order) { TurnSolver::ApplyHumanSequencePin(plan, tokens); return; }
+        // MTG_HUMAN_LINE_ORDER=0, the documented opt-out: the historical cast-only pin -- the queue's
+        // hand casts and Vial puts by name, its taps -- i.e. what the viewer used to send for it.
+        std::vector<std::string> legacy;
+        for (const std::string& tok : tokens)
+        {
+            if (IsHumanPreTapToken(tok) || IsHumanUntapNeedToken(tok)) { legacy.push_back(tok); continue; }
+            const std::size_t eq = tok.find('=');
+            if (eq == std::string::npos) { continue; }
+            const std::string verb = tok.substr(0, eq);
+            if (verb == "cast" || verb == "vial") { legacy.push_back(tok.substr(eq + 1)); }
+        }
+        ReorderPlanCasts(plan, legacy);
+        return;
+    }
     const bool full_order = s_human_line_order && HumanPlayActive()
                          && order_in.front() == kFullOrderMarker;
     std::vector<std::string> order(order_in.begin() + (full_order ? 1 : 0), order_in.end());

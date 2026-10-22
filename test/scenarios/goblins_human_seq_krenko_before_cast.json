@@ -1,0 +1,49 @@
+{
+  "deck": "decks/Goblins/Goblins.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Krenko, Mob Boss",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Goblin Guide"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "act=Krenko, Mob Boss;cast=Goblin Guide"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "act=Krenko, Mob Boss",
+      "cast=Goblin Guide"
+    ]
+  ],
+  "expect_line_order": [
+    "tokens Krenko, Mob Boss",
+    "cast Goblin Guide"
+  ],
+  "expect_no_win": true,
+  "comment": "(B) KRENKO'S TAP AT ITS QUEUE POSITION. T3, a non-sick Krenko, Mob Boss and one Mountain, hand Goblin Guide; the human queues 'tap Krenko, then cast Goblin Guide'. Before: TapForTokens ran after EVERY cast (so X counted the Guide) even though the viewer queues `act=Krenko` in click order. Now the tap is a step of the \"**\" sequence: Krenko taps first (X = 1, Krenko alone), then the Guide is cast."
+}

@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Dragonstorm/Dragonstorm.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Lightning Bolt", "Lotus Bloom" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "human_lines": [ "cast=Lightning Bolt;suspend=Lotus Bloom" ],
+  "human_cast_orders": [ [ "**", "cast=Lightning Bolt", "suspend=Lotus Bloom" ] ],
+  "expect_line_order": [ "cast Lightning Bolt", "suspend Lotus Bloom" ],
+  "expect_opponent_life": 17,
+  "comment": "(B) A SUSPEND AT ITS QUEUE POSITION. T3, one Mountain, hand Lightning Bolt + Lotus Bloom; the human queues 'Bolt, then suspend Lotus Bloom'. Before: Suspend ran in the pre-cast pass, ahead of every cast. Now it is a step of the \"**\" sequence."
+}
