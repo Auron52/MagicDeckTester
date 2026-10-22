@@ -150,7 +150,7 @@ vampires_smoke_d5_s1001=4.2133/0d95bc73dac6513a
 vampires2hg_smoke_d3_s1001=4.9200/e01af5f2e9e2f355
 alchemist_smoke_d0_s1001=6.3250/3623703b1738e51b
 alchemist_smoke_d3_s1001=4.9733/9bfb0deb6e247a18
-alchemist_smoke_d5_s1001=4.9067/2e8852894d5375c7
+alchemist_smoke_d5_s1001=4.9067/742ec521a12a7bf7
 alchemist2hg_smoke_d3_s1001=5.2000/4ad3d68838036e40
 
 # --- regression ---
@@ -419,8 +419,8 @@ vampires2hg_regression_d5_s2002=4.9600/c529d048a80301e8
 alchemist_regression_d0_s2002=6.3450/adb9f46f2284e3e1
 alchemist_regression_d3_s2002=4.9133/6e8f9cced07d1105
 alchemist_regression_d3_s3003=5.1333/f3e6525dd9dca2f5
-alchemist_regression_d5_s2002=4.8667/ee3aad1f5796a24d
-alchemist_regression_d5_s3003=4.9867/e9bfacfec5018dd8
+alchemist_regression_d5_s2002=4.8667/4443d57ef6098d61
+alchemist_regression_d5_s3003=4.9867/202bdd6a6a9ad30f
 
 # --- overnight ---
 fungusv3_overnight_d0_s4004=5.3810/218363fba321b400

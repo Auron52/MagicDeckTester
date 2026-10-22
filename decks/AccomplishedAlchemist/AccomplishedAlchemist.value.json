@@ -2,6 +2,13 @@
  "value_play": {
   "ladder": "single",
   "leaf": "none",
-  "alpha": "relaxed"
+  "alpha": "relaxed",
+  "mull_gen_depth": 1,
+  "mull_gen_budget_ms": 1,
+  "expected_buckets": 15,
+  "target_depth": 4,
+  "budget_ms": 20,
+  "enabled": true,
+  "note": "E.7 play-setting stage 2026-10-22: d4b20 adopted over the built-in default (no enabled block) (d5/20); the cheapest of 1 passing arm(s) (0.99x vs live, delta +0.00063)"
  }
 }

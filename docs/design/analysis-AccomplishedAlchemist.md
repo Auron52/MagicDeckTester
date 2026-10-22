@@ -2895,6 +2895,28 @@ at 10x (5 / 7) and at d8 b0 (identical units). GT accepted deck-scoped.
 **Note:** the sidecar's `value_play` replaces the profile's generation keys (K 15, mull_gen_depth 1,
 mull_gen_budget_ms 1) wholesale. A later `mullgen.sh run` copies the profile-screened setting into the sidecar;
 nothing in play reads them.
+
+**Phase E.7, the play setting (2026-10-22, rerun on the USER's never-below-b grid, dbdca57d8).** The grid was
+depth {4, 5, 6} x budget {20, 30, 40} across the live sidecar and the staged / nlesc / emul shapes: 37 arms x 8 seeds
+x 1,000 paired games (seeds 7505000..), run at 759f830e5. It ADOPTED **d4b20** (`target_depth 4, budget_ms 20,
+enabled`) over the built-in d5 / 20: 0.995x units, delta +0.00063 (t +0.83), not notably worse. The generation keys
+were copied in from the profile (K 15, mull_gen_depth 1, mull_gen_budget_ms 1). d5b20 is byte-identical to live; d6b20
+is +0.0004 at 1.009x (no better). **Every other arm is better but dearer -- a TRADE for the USER:**
+
+| arm | delta | t | units |
+|---|---|---|---|
+| d4b30 | -0.0043 | -2.96 | 1.19x |
+| d4b40 | -0.0086 | -6.81 | 1.36x |
+| nlesc_d5b20 | -0.0021 | -3.66 | 1.15x |
+| nlesc_d4b30 | -0.0093 | -9.65 | 1.48x |
+| nlesc_d4b40 | -0.0144 | -10.66 | 1.75x |
+| staged_d6b40 | -0.0130 | -8.11 | 1.92x |
+
+The rest of the grid is in `logs/vlq_accomplishedalchemist/DECISIONS.txt`. staged_d4b20 is notably WORSE (+0.0053).
+With d4b20 plus lockstep #19 (62e85668f), the suite moves only the d5 rows: smoke d5 s1001 and regression d5 s2002 /
+s3003 change play on 3 + 2 games, 0 slower / 0 faster, and the averages are unchanged. GT accepted deck-scoped
+(smoke alchemist + alchemist2hg, regression alchemist). The overnight alchemist GT stays stale until the next periodic
+overnight run.
 ## Why the Combo Off route "gets stuck" (2026-10-21/22) -- not phase A's hour; two sound walk collapses landed DEFAULT ON; the near-linear walk is the USER's call
 
 Branch `aa-walkroot` (worktree `.claude/worktrees/aa-walkroot`, off `phase-1-2-deck-analyzer` @ 644530764), NOT pushed.
