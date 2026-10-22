@@ -9,6 +9,7 @@ where the search FALLS SHORT (wins later than the human, or does not win at all)
     scripts/ref_bench.py                      # every reference deck
     scripts/ref_bench.py --deck knights burn  # a subset (deck_registry slugs)
     scripts/ref_bench.py --suboptimal         # also references/suboptimal/<Deck>/ (known-slow targets)
+    scripts/ref_bench.py --suboptimal --require-beat   # fail unless the search STRICTLY beats each one
 
 WHY --force-mulligan IS NOT OPTIONAL. A bare re-run mulligans autonomously, so it plays a DIFFERENT
 opening hand than the human did and the win-turn difference measures mulligan policy, not play. Over
@@ -265,11 +266,46 @@ def write_json(path, results, args, live_keys=None):
         fh.write("\n")
 
 
+def superseded(path):
+    """A references/suboptimal/<dir>/<file> with a PROPER references/<dir>/<file> for the same deck
+    and shuffle: the proper game already bounds the engine at least as tightly, so the suboptimal copy
+    is not benched (USER 2026-10-22). Same rule as test/viewer_protocol_check.py."""
+    rel = os.path.relpath(path, os.path.join("references", "suboptimal"))
+    return not rel.startswith("..") and os.path.exists(os.path.join("references", rel))
+
+
+def require_beat(results, skipped):
+    """--require-beat: every benched game must be STRICTLY beaten by the search -- an earlier win than
+    the recorded line, or a win where it recorded none -- on a hand that reconstructed. This is the
+    contract for references/suboptimal/ (USER 2026-10-22: "replayed as well with the expectation that
+    we strictly beat them"). A game nothing could bench FAILS: a gate with no evidence must not pass."""
+    bad = []
+    for r in results:
+        for g in r["games"]:
+            s, h = g["search"], g["human"]
+            beat = isinstance(s, int) and (h is None or s < h) and not g["hand"].startswith("HAND")
+            if not beat:
+                bad.append("%s/%s: human %s, search %s%s" % (r["deck"], g["name"], h, s,
+                                                             " " + g["hand"] if g["hand"] else ""))
+    bad += ["%s (%s): no deck to bench it on" % (slug, refdir) for slug, refdir, _ in skipped]
+    n = sum(len(r["games"]) for r in results)
+    if bad:
+        print("\nREQUIRE-BEAT FAIL: %d of %d game(s) not strictly beaten by the search:" % (len(bad), n))
+        for b in bad:
+            print("  " + b)
+        return 1
+    print("\nREQUIRE-BEAT: all %d game(s) strictly beaten by the search" % n)
+    return 0
+
+
 def collect_deck(slug, refdir, deck, args):
     """Read a deck's references into rows. Runs NOTHING -- every deck is collected first so the
     whole fleet goes into ONE pooled batch (see run_pooled)."""
     games = []
     for path in sorted(glob.glob(os.path.join(refdir, "claude_s*_gi*.json"))):
+        if args.suboptimal and superseded(path):
+            print("superseded: %s has a proper reference for the same game, not benched" % path)
+            continue
         r = json.load(open(path))
         games.append({"name": os.path.basename(path), "seed": r["seed"], "gi": r["game_index"],
                       "mull": r.get("mulligan") or {"count": 0, "bottom": []},
@@ -335,6 +371,9 @@ def main():
                          "multiplies a 700 MB footprint per worker")
     ap.add_argument("--suboptimal", action="store_true",
                     help="bench references/suboptimal/<Deck>/ instead (known-slow aspirational targets)")
+    ap.add_argument("--require-beat", action="store_true",
+                    help="exit 1 unless the search STRICTLY beats every benched game (earlier win, or a "
+                         "win where the recorded line has none) -- the references/suboptimal/ contract")
     ap.add_argument("--no-verify-hands", action="store_true",
                     help="skip the forced-hand check (drops the pooled run's --game-trace-dir)")
     ap.add_argument("--log-root", default=None,
@@ -382,7 +421,9 @@ def main():
         if args.stale_only and cache_src and (cached.get(key) or {}).get("src") == cache_src:
             fresh.append(key)
             continue
-        entries.append(collect_deck(key, refdir, decks[key], args))
+        entry = collect_deck(key, refdir, decks[key], args)
+        if entry["games"]:                # every game superseded -> nothing to bench for this deck
+            entries.append(entry)
 
     # EVERY deck's games in ONE batch -- collect first, run once, then report. Reporting per deck as
     # it completes would re-introduce the barrier the pooling exists to remove.
@@ -421,6 +462,8 @@ def main():
             pass
     if tmp:
         print("\nper-game logs: %s" % tmp)
+    if args.require_beat:
+        sys.exit(require_beat(results, skipped))
 
 
 if __name__ == "__main__":

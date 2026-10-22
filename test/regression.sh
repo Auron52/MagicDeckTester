@@ -503,6 +503,20 @@ elif [ -f "$VPC" ] && command -v python3 >/dev/null 2>&1; then
     log "FAIL: reference reproducibility (--strict) -- a recorded human game no longer replays; see $OUT"
     FAIL=$((FAIL+1))
   fi
+  # SUBOPTIMAL references must be STRICTLY BEATEN by the search (USER 2026-10-22: "Suboptimal games
+  # could be replayed as well with the expectation that we strictly beat them"). The sweep above
+  # replays their recorded lines; this plays each from its shuffle at the deck's committed play
+  # setting and fails unless the search wins EARLIER than the user did. A suboptimal game with a proper
+  # reference for the same game is superseded and skipped. A handful of games: seconds.
+  log ""
+  log "--- suboptimal references (the search must strictly beat each one) ---"
+  sub_out=$(MTG_BIN="$BIN" python3 "$HERE/../scripts/ref_bench.py" --suboptimal --require-beat 2>&1); sub_rc=$?
+  printf '%s\n' "$sub_out" >> "$OUT"
+  printf '%s\n' "$sub_out" | grep -E '^(REQUIRE-BEAT|  )' | while IFS= read -r sl; do echo "$sl"; done
+  if [ $sub_rc -ne 0 ]; then
+    log "FAIL: a suboptimal reference is no longer strictly beaten by the search; see $OUT"
+    FAIL=$((FAIL+1))
+  fi
 fi
 
 # ---- per-game audit (split by depth) -- makes the pre-accept analysis unmissable ----------

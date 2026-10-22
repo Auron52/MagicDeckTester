@@ -219,6 +219,19 @@ def _resolve_deck_dir(ref_dir):
     return None
 
 
+def _is_suboptimal(path):
+    return os.path.relpath(path, "references").startswith("suboptimal" + os.sep)
+
+
+def _superseded_suboptimal(path):
+    """A suboptimal game with a PROPER reference for the same deck and shuffle
+    (references/<same dir>/<same claude_s<seed>_gi<gi>.json>) is superseded: the proper one already
+    bounds the engine at least as tightly, so the suboptimal copy is not replayed (USER 2026-10-22:
+    "it is arguable whether we need to do this for games that we have a proper reference for")."""
+    rel = os.path.relpath(path, os.path.join("references", "suboptimal"))
+    return _is_suboptimal(path) and os.path.exists(os.path.join("references", rel))
+
+
 def _unique_decklist_stem(d):
     """-> the file stem of `d`'s ONE top-level decklist (.cod|.txt), else None (none, or several).
     Same contract as scripts/deck_registry._unique_decklist_stem."""
@@ -1317,6 +1330,10 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
     # references/<Deck>/<version>/, where the last segment is the version slug and resolves to no
     # deck at all. basename() silently turned every such reference into an "unknown deck dir".
     deck_dir = os.path.dirname(os.path.relpath(path, "references"))
+    # references/suboptimal/<Deck>[/<version>]/ mirrors the deck layout one level down, so the deck
+    # is the path BELOW `suboptimal/` (USER 2026-10-22: suboptimal games are replayed too).
+    if deck_dir.startswith("suboptimal/"):
+        deck_dir = deck_dir[len("suboptimal/"):]
     if deck_dir not in DECKS:
         # LOUD, not `ok`. This used to return ok/"skip", so a reference dir missing from DECKS was
         # counted as verified while never being replayed at all -- 30 Goblins + 10 Creature Giving
@@ -1437,6 +1454,12 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             if repairs:
                 det += "; " + "; ".join(repairs)
             if drift:
+                # A SUBOPTIMAL reference is a line the user saved as beatable, and the expectation is
+                # that we STRICTLY BEAT it (USER 2026-10-22). Replaying it to an EARLIER win is that
+                # expectation met, not drift; a later win or a loss still gates as play-drift.
+                if (_is_suboptimal(path) and res.get("won")
+                        and (not ref.get("won") or res.get("win_turn") < ref.get("win_turn"))):
+                    return True, "beaten", det
                 return True, "play", det
             return True, ("repaired" if (shifted or inserted or vanished or skipped or reordered)
                           else "ok"), det
@@ -1880,8 +1903,20 @@ def main():
     # remembered to glob. Anything we then cannot resolve a deck for is reported LOUDLY (see the
     # "unknown deck dir" branch), never skipped -- which is the property that matters, because the
     # whole point of this sweep is to leverage every game the user has hand-played.
+    #
+    # references/suboptimal/ IS replayed too (USER 2026-10-22: "Suboptimal games could be replayed as
+    # well with the expectation that we strictly beat them"). The carve-out existed on the theory that
+    # a knowingly-beatable game would show as permanent drift -- but this sweep replays the HUMAN's
+    # recorded line by intent, so a suboptimal line reproduces exactly like any other, and a drift on
+    # one is the same engine defect it is anywhere else. "Strictly beat" is the search-vs-human
+    # question, which is ref_bench.py --suboptimal --require-beat's job (regression.sh runs both).
     refs = sorted(p for p in glob.glob("references/**/claude_s*_gi*.json", recursive=True)
-                  if not p.startswith(("references/suboptimal/", "references/optimal/")))
+                  if not p.startswith("references/optimal/"))
+    superseded = [p for p in refs if _superseded_suboptimal(p)]
+    if superseded:
+        print(f"[{len(superseded)} suboptimal ref(s) superseded by a proper reference for the same game, "
+              f"not replayed: {', '.join(p[len('references/suboptimal/'):] for p in superseded)}]")
+        refs = [p for p in refs if p not in superseded]
     if not refs:
         print("no reference games found under references/")
         return 0
@@ -1934,9 +1969,10 @@ def main():
             threads = max(1, int(sys.argv[1:][i + 1]))
         elif a.startswith("--threads="):
             threads = max(1, int(a.split("=", 1)[1]))
-    counts = {k: 0 for k in ("ok", "repaired", "play", "shuffle-dead", "board-diverged", "unresolvable",
-                             "mulligan", "contract")}
-    LABEL = {"ok": "ok            ", "repaired": "repaired      ", "play": "play-drift    ",
+    counts = {k: 0 for k in ("ok", "repaired", "beaten", "play", "shuffle-dead", "board-diverged",
+                             "unresolvable", "mulligan", "contract")}
+    LABEL = {"ok": "ok            ", "repaired": "repaired      ", "beaten": "beaten        ",
+             "play": "play-drift    ",
              "shuffle-dead": "shuffle-dead  ", "board-diverged": "BOARD-DIVERGED", "unresolvable": "ENUM-GAP      ",
              "mulligan": "mull-drift    "}
     if threads > 1:
@@ -1951,7 +1987,7 @@ def main():
             print(f"  CONTRACT-FAIL {rel}: {detail}"); counts["contract"] += 1
         else:
             print(f"  {LABEL[kind]}{rel}: {detail}"); counts[kind] += 1
-    print(f"\nViewer protocol: {counts['ok']} ok, {counts['repaired']} repaired, "
+    print(f"\nViewer protocol: {counts['ok']} ok, {counts['repaired']} repaired, {counts['beaten']} beaten, "
           f"{counts['play']} play-drift, {counts['shuffle-dead']} shuffle-dead, "
           f"{counts['board-diverged']} board-diverged, "
           f"{counts['unresolvable']} enum-gap, {counts['mulligan']} mull-drift, "
@@ -1959,6 +1995,9 @@ def main():
     if counts["repaired"]:
         print("  repaired     = recorded line REPRODUCED after repairing stale indices / answering decision")
         print("                 points the reference predates. Not a regression; no action (never ask the user to re-save)")
+    if counts["beaten"]:
+        print("  beaten       = a SUBOPTIMAL reference replayed to an EARLIER win than the user's recorded line --")
+        print("                 the expectation for that tree (strictly beat it). Not a regression")
     if counts["play"]:
         print("  play-drift   = the recorded line replays to a DIFFERENT outcome -> a real behaviour change")
     if counts["shuffle-dead"]:
