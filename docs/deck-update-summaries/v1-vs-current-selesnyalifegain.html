@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang=en><head><meta charset=utf-8><title>V1 vs the current list — Selesnya Lifegain</title><style>
+/* ONE stylesheet for screen AND print, so the fit script's on-screen measurement is what prints. */
+@page { size: A4 portrait; margin: 12mm; }
+html { background: #888; }
+body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111;
+       font-size: 9pt; line-height: 1.25; }
+section.page { box-sizing: border-box; width: 186mm; margin: 6mm auto; background: #fff; padding: 0;
+               overflow: hidden; break-after: page; page-break-after: always; break-inside: avoid; }
+section.page:last-child { break-after: auto; page-break-after: auto; }
+.sheet { padding: 4mm; }
+h1 { font-size: 14pt; margin: 0 0 2mm 0; border-bottom: 1.5px solid #333; padding-bottom: 1mm; }
+h2 { font-size: 10.5pt; margin: 3mm 0 1mm 0; }
+p { margin: 1.2mm 0; }
+ul { margin: 1.2mm 0; padding-left: 5mm; } li { margin: 0.5mm 0; }
+table { border-collapse: collapse; margin: 1mm 0 2mm 0; font-size: 8.5pt; }
+th, td { border: 1px solid #999; padding: 1px 4px; vertical-align: top; }
+th { background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; align-items: start; }
+.pair table { width: 100%; }
+code { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 0.92em; background: #f3f3f3; padding: 0 2px; }
+pre { background: #f6f6f6; border: 1px solid #ddd; padding: 1.5mm; font-size: 7.5pt; white-space: pre-wrap; margin: 1mm 0; }
+pre code { background: none; padding: 0; }
+a { color: inherit; text-decoration: none; }
+section.page { position: relative; }
+section.page::after { content: "printed at " attr(data-scale); position: absolute; top: 1mm; right: 2mm;
+                      font-size: 7pt; color: #c00; }
+@media print { html { background: none; } section.page { margin: 0; } .sheet { padding: 0; }
+               section.page::after { content: none; } }
+</style><script>
+function fitPages() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:100mm;width:1px';
+  document.body.appendChild(probe);
+  const pxPerMm = probe.getBoundingClientRect().height / 100; probe.remove();
+  const avail = (297 - 24 - 3) * pxPerMm;          // 3 mm safety for printer rounding
+  document.querySelectorAll('section.page > .sheet').forEach(s => {
+    s.style.zoom = 1;
+    const pad = parseFloat(getComputedStyle(s).paddingTop) * 2;
+    const h = s.scrollHeight - (matchMedia('print').matches ? 0 : pad);
+    s.style.zoom = h > avail ? (avail / h).toFixed(4) : 1;
+    s.parentElement.dataset.scale = Math.round(100 * s.style.zoom) + '%';
+  });
+}
+window.addEventListener('load', fitPages);
+window.addEventListener('beforeprint', fitPages);
+</script></head><body>
+<section class="page"><div class="sheet"><h1>V1 vs the current list — Selesnya Lifegain</h1>
+<p><strong>The current list wins over half a turn sooner than the list it replaced, in both formats, on all 10 paired blocks, at a third of the cost per game.</strong></p>
+<table><thead><tr><th>deck</th><th>format</th><th class=num>v1</th><th class=num>current</th><th class=num>change</th><th class=num>blocks better</th></tr></thead><tbody><tr><td><strong>Selesnya Lifegain</strong></td><td>standard</td><td class=num>5.1341</td><td class=num><strong>4.5908</strong></td><td class=num><strong>−0.5433t</strong></td><td class=num>10/10</td></tr><tr><td></td><td>2HG</td><td class=num>5.4255</td><td class=num><strong>4.8892</strong></td><td class=num><strong>−0.5363t</strong></td><td class=num>10/10</td></tr></tbody></table>
+<p>Average turn the goldfish wins on (a non-win counts as turn 9); lower is better.</p>
+<h2>The share of games won by turn 4 is the number that matters</h2>
+<table><thead><tr><th>deck</th><th>standard ≤T4</th><th>2HG ≤T4</th><th>standard ≥T6</th><th>2HG ≥T6</th></tr></thead><tbody><tr><td><strong>Selesnya Lifegain</strong></td><td>18.59% → <strong>53.74%</strong></td><td>9.02% → <strong>35.00%</strong></td><td>24.57% → 9.46%</td><td>37.78% → 17.50%</td></tr></tbody></table>
+<p>A goldfish win on turn 6 or later (<code>≥T6</code>, including non-wins) is too slow against a fast deck.</p>
+<ul><li><strong>Over half of standard games now end by turn 4</strong>, up from fewer than one in five. Neither list ever wins before turn 4 (0 of 160,000 games).</li><li><strong>Almost all of the speed is the cards.</strong> With both lists on v1's keep table and value sidecar, the screen measured −0.5086t standard and −0.5330t 2HG.</li><li><strong>Most of the cost drop is not the cards.</strong> The new list plays leafless at depth 6 where v1 used a learned value table at depth 5; the card changes alone cut cost to about 0.7×.</li><li><strong>Goldfish measures speed only.</strong> The lifegain package stays (more Feed the Clan, Heroes' Reunion, more Blighted Steppe) and now feeds Bogbeast's damage.</li></ul>
+<p><strong>Method.</strong> 160,000 games (40,000 per list per format), each list at its own shipped setting (v1 d5, current d6; 20 ms), <code>max_turns</code> 8. 2HG = 30 life, 2 opponent heads. 10 paired blocks per list: both lists see the same shuffles. Each list plays with its own shipped profile, keep table and value sidecar.</p>
+</div></section>
+<section class="page"><div class="sheet">
+<h1>Selesnya Lifegain — −0.5433t standard, −0.5363t 2HG, 3× cheaper</h1>
+<p><strong>Bogbeast becomes the payoff, with more mana Elves and a faster mana base. Gone: the big lifegain creatures and the cards that make mana from lifegain.</strong></p>
+<h2>Shared core — 42 of 60 cards in both lists</h2>
+<table><thead><tr><th class=num>n</th><th>card</th><th class=num>n</th><th>card</th><th class=num>n</th><th>card</th></tr></thead><tbody><tr><td class=num>4</td><td>Ageless Entity</td><td class=num>4</td><td>Priest of Titania</td><td class=num>2</td><td>Forest</td></tr><tr><td class=num>4</td><td>Branchloft Pathway</td><td class=num>3</td><td>Elvish Archdruid</td><td class=num>2</td><td>Genesis Wave</td></tr><tr><td class=num>4</td><td>Brushland</td><td class=num>3</td><td>Elvish Mystic</td><td class=num>1</td><td>Blossoming Bogbeast</td></tr><tr><td class=num>4</td><td>Llanowar Elves</td><td class=num>3</td><td>Feed the Clan</td><td class=num>1</td><td>Craterhoof Behemoth</td></tr><tr><td class=num>4</td><td>Nykthos Paragon</td><td class=num>2</td><td>Blighted Steppe</td><td class=num>1</td><td>Wirewood Lodge</td></tr></tbody></table>
+<div class="pair"><div><h2>Cards added</h2>
+<table><thead><tr><th class=num></th><th>card</th><th>v1 → now</th></tr></thead><tbody><tr><td class=num><strong>+4</strong></td><td>Razorverge Thicket</td><td>0 → 4 (new)</td></tr><tr><td class=num><strong>+3</strong></td><td>Blossoming Bogbeast</td><td>1 → 4</td></tr><tr><td class=num><strong>+2</strong></td><td>Blighted Steppe</td><td>2 → 4</td></tr><tr><td class=num><strong>+2</strong></td><td>Fyndhorn Elves</td><td>0 → 2 (new)</td></tr><tr><td class=num><strong>+2</strong></td><td>Heroes' Reunion</td><td>0 → 2 (new)</td></tr><tr><td class=num><strong>+2</strong></td><td>Horizon Canopy</td><td>0 → 2 (new)</td></tr><tr><td class=num><strong>+1</strong></td><td>Elvish Archdruid</td><td>3 → 4</td></tr><tr><td class=num><strong>+1</strong></td><td>Elvish Mystic</td><td>3 → 4</td></tr><tr><td class=num><strong>+1</strong></td><td>Feed the Clan</td><td>3 → 4</td></tr></tbody></table></div><div><h2>Cards removed</h2>
+<table><thead><tr><th class=num></th><th>card</th><th>v1 → now</th></tr></thead><tbody><tr><td class=num><strong>−4</strong></td><td>Verdant Sun's Avatar</td><td>4 → 0 (cut)</td></tr><tr><td class=num><strong>−3</strong></td><td>Accomplished Alchemist</td><td>3 → 0 (cut)</td></tr><tr><td class=num><strong>−3</strong></td><td>Forest</td><td>5 → 2</td></tr><tr><td class=num><strong>−2</strong></td><td>Blossoming Sands</td><td>2 → 0 (cut)</td></tr><tr><td class=num><strong>−2</strong></td><td>Genesis Wave</td><td>4 → 2</td></tr><tr><td class=num><strong>−2</strong></td><td>Selesnya Sanctuary</td><td>2 → 0 (cut)</td></tr><tr><td class=num><strong>−2</strong></td><td>Wellwisher</td><td>2 → 0 (cut)</td></tr></tbody></table></div></div>
+<p>18 Elves and 21 lands. Neither list has a sideboard.</p>
+<h2>Win-turn distribution — share of games</h2>
+<table><thead><tr><th></th><th></th><th class=num>T3</th><th class=num>T4</th><th class=num>T5</th><th class=num>≥T6</th><th class=num><strong>≤T4</strong></th></tr></thead><tbody><tr><td><strong>standard</strong></td><td>v1</td><td class=num>0.00%</td><td class=num>18.59%</td><td class=num>56.84%</td><td class=num>24.57%</td><td class=num><strong>18.59%</strong></td></tr><tr><td></td><td>current</td><td class=num>0.00%</td><td class=num>53.74%</td><td class=num>36.80%</td><td class=num>9.46%</td><td class=num><strong>53.74%</strong></td></tr><tr><td></td><td>change</td><td class=num>0</td><td class=num><strong>+35.15</strong></td><td class=num>−20.04</td><td class=num>−15.11</td><td class=num><strong>+35.15</strong></td></tr><tr><td><strong>2HG</strong></td><td>v1</td><td class=num>0.00%</td><td class=num>9.02%</td><td class=num>53.20%</td><td class=num>37.78%</td><td class=num><strong>9.02%</strong></td></tr><tr><td></td><td>current</td><td class=num>0.00%</td><td class=num>35.00%</td><td class=num>47.50%</td><td class=num>17.50%</td><td class=num><strong>35.00%</strong></td></tr><tr><td></td><td>change</td><td class=num>0</td><td class=num><strong>+25.98</strong></td><td class=num>−5.70</td><td class=num>−20.28</td><td class=num><strong>+25.98</strong></td></tr></tbody></table>
+<h2>Averages and cost</h2>
+<table><thead><tr><th>format</th><th>avg turn v1 → current</th><th class=num>change</th><th>win%</th><th>ms/game</th></tr></thead><tbody><tr><td><strong>standard</strong></td><td>5.1341 → <strong>4.5908</strong></td><td class=num><strong>−0.5433</strong></td><td>99.52 → 99.80</td><td>123.4 → <strong>40.6</strong></td></tr><tr><td><strong>2HG</strong></td><td>5.4255 → <strong>4.8892</strong></td><td class=num><strong>−0.5363</strong></td><td>99.01 → 99.52</td><td>216.3 → <strong>75.4</strong></td></tr></tbody></table>
+<ul><li><strong>Bogbeast is the engine:</strong> its attack trigger gains 2 life, then gives the team +X/+X and trample for the life gained that turn. In the screen, the three extra copies were worth −0.155t at standard on their own, still climbing at the 4-copy limit.</li><li><strong>The cuts went to cheaper cards:</strong> each Accomplished Alchemist → Fyndhorn Elves step measured about −0.06t. Elves were fixed at 18 by your ruling, keeping all 4 Priest of Titania. Horizon Canopy is 2, not 4, because the goldfish barely charges for its life payment.</li><li><strong>Non-wins halve in both formats</strong> (192 → 79 and 395 → 192 of 40,000).</li></ul></div></section>
+</body></html>
