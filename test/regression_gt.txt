@@ -1,4 +1,4 @@
-# Regression ground truth -- commit aa7d55e3a  date 2026-10-22
+# Regression ground truth -- commit e202e0ff9  date 2026-10-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-22): Periodic overnight rebaseline 2026-10-22 on 519c1f470 (PGO+LTO, 24/24 workers; 41m02s makespan on a loaded host -- same 1,642M units as a 25m29s run an hour earlier): 414 moved + 72 NEW (the UNBUDGETED BACKSTOP rows, USER 2026-10-22); searched 1760 faster / 704 slower, d0 8583 faster / 2518 slower. classify_turn_later (now pooled; d5 replayed at the case's value_play config): 167 churn / 537 PERSISTS, of which 527 are alchemist (346) and landfall (181) -- the keep-table / leaf / play-setting adoptions since 10-19 change which hands are kept, so their games diverge from the first draw; both decks are among the biggest net gains (alchemist searched -0.37t, d0 -0.83t; landfall -0.08t / -0.14t). The rest: edf 6, dragonstorm 3, hinata 1. Net slower groups: fivecolour2hg +0.0125, edf +0.0010, colossus +0.0004, fivecolour/fungusv3/creature_giving/slivers <= +0.0002. FIVECOLOUR IS A KNOWN REGRESSION, NOT CHURN: bisected to 4fc1437a2 (MTG_FS_STRICT_CUT_O1 default ON, 2026-10-21) -- its parent reproduces every moved FiveColour d5 game's GT digest, the commit moves 11 of 12. Held-out on/off at play settings: +0.0053t (0/7, t 2.5) std and +0.0217t (2/12, t 2.6) 2HG at 1.09-1.19x units, i.e. the cut ADDS work on this deck; root-cause open (suspect: the strict cut turns estimated wins into bounded no-wins that the budget-bind veto refuses to store). Carried, standing USER rulings: Galadriel ScryVerdict scry prune (5c85e812; clairvoyant +0.0476t, honest bar -0.0108t); escalation fresh 0.5 x budget_ms floor (per-deck escalation_fresh_frac deleted); MTG_ID_HINT_ROOT default 3 (2026-10-21); AccomplishedAlchemist keep table K=15 + nlfit sidecar + E.7 play setting d4b20. Prior overnight notes dropped deliberately: every cell re-measured; their adoption records (fungusv3/vampires resizes, EDF/Vampires keep tables) are in git.
 # accepted-with-regressions (smoke, 2026-10-22): MTG_PROBE_INCLUSIVE_CUT (DEFAULT ON, 2026-10-22): the value-leaf probe keeps the inclusive cut at an O(1) leaf while it records the leaf counts the escalation is priced from (MTG_FS_STRICT_CUT_O1 had collapsed them: FiveColour 1.46 -> 240 units/leaf). Held-out 36 value-leaf decks x 300 + FiveColour 1500 std / 600 2HG: every deck net <= 0, 22 faster / 3 slower; FiveColour -0.0053 (t -2.5) / 2HG -0.0217 (t -2.6) at 0.88-0.98x units; Landfall byte-identical; 35 other decks 0 score change. Smoke: 138/140 identical; burn d5 play-only; fivecolour d5 s1001 +0.0133 = gi70 4->5 churn (recovers to 4 at 4x and 16x). Carried verbatim from the prior smoke note: Rebase of the AccomplishedAlchemist branch (119 local commits + the 0fe1b0994 GT accept) onto origin 8c2797282 (escalation 0.5 floor eb0e7d066, Vampires keep table + value leaf, EDF sidecar, Karoo position, Heroes' Reunion / Rest for the Weary). 130/140 keys byte-identical (every alchemist cell included); 10 move, all the two sides' accepted changes composed: searched 0 slower / 0 faster / 1 play-only (edf d5 gi4 T4 both = our MTG_UNTAP_LOOP_KILL_FOLD on upstream's play: =0 restores upstream's digest exactly); d0 0 slower / 16 faster: angels auras creature_giving minotaur pirates selesnya soldiers vampires d0 are our greedy policy fixes (MTG_GREEDY_LETHAL_STOP + MTG_GREEDY_PUMP_LETHAL =0 restores upstream's GT digest exactly in all 8; vampires d0 4.5660->4.5540), critter d0 avg = upstream's (greedy fix + chunk-A card data). Carried from the dropped smoke notes, still in force: escalation fresh 0.5 x budget_ms floor (USER; per-deck escalation_fresh_frac deleted); MTG_ID_HINT_ROOT default 3 (USER 2026-10-21); AccomplishedAlchemist keep table (K=15) + nlfit value sidecar adopted; fluctuator escalation_skip_r re-fit under the floor.
@@ -797,18 +797,18 @@ selesnyav2_overnight_d0_s4004=5.3850/6c1afbffcb262b97
 selesnyav2_overnight_d0_s6006=5.4835/cb2070d0f443c9f7
 selesnyav2_overnight_d0_s8008=5.4580/709bfa2bde9b1d5e
 selesnyav2_overnight_d0_s10010=5.3875/db2356b24fa708b9
-selesnyav2_overnight_d3_s4004=4.7550/227777f258f730d7
-selesnyav2_overnight_d3_s5005=4.7775/b5dcfc4050fd9bdd
-selesnyav2_overnight_d3_s6006=4.7725/8188a72bc5dcef23
-selesnyav2_overnight_d3_s7007=4.9250/bdddbfe6e41b6bde
-selesnyav2_overnight_d5_s4004=4.7367/7aa515eb6956c969
-selesnyav2_overnight_d5_s5005=4.7900/3b3fc13e898de19c
-selesnyav2_overnight_d5_s6006=4.7367/84818a7c347ffd7f
-selesnyav2_overnight_d5_s7007=4.9000/e8c1d03f5781bd98
-selesnyav22hg_overnight_d5_s4004=4.9900/f41d03429ebad41c
-selesnyav22hg_overnight_d5_s5005=4.9600/6a2464a9d7ca611e
-selesnyav22hg_overnight_d5_s6006=5.0900/8d57fea04c57eb95
-selesnyav22hg_overnight_d5_s7007=5.2500/7c6d63f3a21a5194
+selesnyav2_overnight_d3_s4004=4.7860/848a556b6c9997ef
+selesnyav2_overnight_d3_s5005=4.7990/e3aaebc092507270
+selesnyav2_overnight_d3_s6006=4.8130/7f831110cd7d6a9b
+selesnyav2_overnight_d3_s7007=4.8710/41f246b035391c88
+selesnyav2_overnight_d5_s4004=4.7760/53688acf9aedfc2b
+selesnyav2_overnight_d5_s5005=4.7960/cf764de2328a7b69
+selesnyav2_overnight_d5_s6006=4.7740/7cc572e5db0e3f6f
+selesnyav2_overnight_d5_s7007=4.8940/990dc3967cbbe148
+selesnyav22hg_overnight_d5_s4004=5.0235/5f0f172aed5a7a4b
+selesnyav22hg_overnight_d5_s5005=4.9882/874bb46a901988f5
+selesnyav22hg_overnight_d5_s6006=5.0882/1b8ad0f4725201e5
+selesnyav22hg_overnight_d5_s7007=5.1294/50b5ad5c44ac200f
 soldiers_overnight_d0_s4004=4.4410/902ddcef40abf074
 soldiers_overnight_d0_s6006=4.4445/15a34e276731f6a4
 soldiers_overnight_d0_s8008=4.4135/a61d7aa2b20683dd

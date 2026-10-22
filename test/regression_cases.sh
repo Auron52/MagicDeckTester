@@ -1443,25 +1443,27 @@ OVERNIGHT_CASES=(
   "selesnya 5 5005  500 40"
   "selesnya 5 6006  500 40"
   "selesnya 5 7007  500 40"
-  # selesnyav2: see the SMOKE block. The overnight ENTRY set (regression-testing skill, "Sizing a deck's
-  # overnight rows"): d0 4x2000, d3 4x400 b10, d5 4x300 b20, 2hg d5 4x100 b20 (vampires' entry shape).
-  # Expand to the FULL set just before the keep table is adopted.
+  # selesnyav2: see the SMOKE block. The overnight FULL set (regression-testing skill, "Sizing a deck's
+  # overnight rows"), expanded 2026-10-22 just before the keep table + value sidecar were adopted and
+  # re-baselined with both ABSENT first: the shipped selesnya rows' standard shape (d0 4x2000, d3 4x1000 b20,
+  # d5 4x500 b40) and 2hg d5 4x170 b40 (~1/3 of the d5 sample, galadriel2hg's full shape). Entered at the
+  # ENTRY set (d3 4x400 b10, d5 4x300 b20, 2hg 4x100 b20).
   "selesnyav2 0  4004 2000 0"
   "selesnyav2 0  6006 2000 0"
   "selesnyav2 0  8008 2000 0"
   "selesnyav2 0 10010 2000 0"
-  "selesnyav2 3 4004  400 10"
-  "selesnyav2 3 5005  400 10"
-  "selesnyav2 3 6006  400 10"
-  "selesnyav2 3 7007  400 10"
-  "selesnyav2 5 4004  300 20"
-  "selesnyav2 5 5005  300 20"
-  "selesnyav2 5 6006  300 20"
-  "selesnyav2 5 7007  300 20"
-  "selesnyav22hg 5 4004 100 20"
-  "selesnyav22hg 5 5005 100 20"
-  "selesnyav22hg 5 6006 100 20"
-  "selesnyav22hg 5 7007 100 20"
+  "selesnyav2 3 4004 1000 20"
+  "selesnyav2 3 5005 1000 20"
+  "selesnyav2 3 6006 1000 20"
+  "selesnyav2 3 7007 1000 20"
+  "selesnyav2 5 4004  500 40"
+  "selesnyav2 5 5005  500 40"
+  "selesnyav2 5 6006  500 40"
+  "selesnyav2 5 7007  500 40"
+  "selesnyav22hg 5 4004 170 40"
+  "selesnyav22hg 5 5005 170 40"
+  "selesnyav22hg 5 6006 170 40"
+  "selesnyav22hg 5 7007 170 40"
   # soldiers: see the SMOKE block. Full angels/pirates overnight shape (~1.9 core-h at the measured
   # 0.94 s/game d3 b20 and 1.49 s/game d5 b40).
   "soldiers 0  4004 2000 0"
