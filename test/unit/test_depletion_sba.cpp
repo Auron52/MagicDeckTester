@@ -199,3 +199,110 @@ TEST_CASE("Depletion SBA: the apply sacrifices an emptied depletion land before 
         CHECK_FALSE(OnBattlefieldDs(r0, 50));      // ...swept at the end of the plan all the same
     }
 }
+
+// ---- the PREPAY shape: a land emptied BEFORE the first cast is still there when that cast resolves ----
+// Fungus held-out s87000 gi236 T3 (the first MTG_DEPLETION_SBA swept at the TOP of every cast and moved
+// two games T4 -> T5): Hickory Woodlot on its last counter, Ancient Tomb, Sol Ring, Forest; Wild Growth
+// (Enchant land) + Saproling Migration kicked ({5}{G}) take all seven mana, so the whole-turn prepay taps
+// the Woodlot's last counter BEFORE the first cast. The real game resolves Wild Growth onto the Woodlot
+// (still on the battlefield -- SBA runs only after a resolution), then the SBA sacrifices the Woodlot and
+// Wild Growth goes with it. Sweeping before the first cast made the search's ResolveEnchantTarget move
+// Wild Growth onto Ancient Tomb: a phantom {G} every later turn.
+namespace
+{
+GameState BoardFungus236()
+{
+    EnsureCardsDs();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.game_seed           = 87236;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.players[0].lands_played_this_turn = 1;
+    Permanent& wl = PutDs(s, "Hickory Woodlot", 36);
+    wl.counters.Add(Counter::Type::Depletion, 1);
+    PutDs(s, "Ancient Tomb", 4);
+    PutDs(s, "Sol Ring", 46);
+    PutDs(s, "Forest", 30);
+    HandDs(s, "Wild Growth", 60);
+    HandDs(s, "Saproling Migration", 43);
+    for (int k = 0; k < 8; ++k) { LibDs(s, "Lightning Bolt", 320 + k); }   // inert filler
+    return s;
+}
+
+// The plan that casts Wild Growth onto the Woodlot (#36) and Saproling Migration KICKED, no land.
+const TurnSolver::Plan* WildGrowthOnWoodlotThenMigration(const std::vector<TurnSolver::Plan>& plans)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (!p.land_to_play.empty()) { continue; }
+        bool wg = false, mig = false, other = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { other = true; continue; }
+            if (a.card_name.str() == "Wild Growth" && a.enchant_target == 36) { wg = true; }
+            else if (a.card_name.str() == "Saproling Migration" && a.kicked)  { mig = true; }
+            else { other = true; }
+        }
+        if (wg && mig && !other) { return &p; }
+    }
+    return nullptr;
+}
+
+bool InGraveyardDs(const GameState& s, int number)
+{
+    for (const Card& c : s.players[0].graveyard) { if (c.m_number == number) { return true; } }
+    return false;
+}
+
+bool AnythingAttachedTo(const GameState& s, int number)
+{
+    for (const Permanent& p : s.battlefield) { if (p.aura_attached_to == number) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("Depletion SBA: a land the whole-turn prepay empties is still the first cast's Aura host (Fungus s87000 gi236 T3), both worlds")
+{
+    const GameState s = BoardFungus236();
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = WildGrowthOnWoodlotThenMigration(plans);
+    REQUIRE(p != nullptr);
+
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *p, true);
+    const GameState exec = RunExecutorDs(s, *p);
+    for (const GameState* g : { static_cast<const GameState*>(&roll), &exec })
+    {
+        INFO("world: " << std::string(g == &roll ? "rollout (ApplyPlan)" : "executor (AIEngine::TakeTurn)"));
+        CHECK_FALSE(OnBattlefieldDs(*g, 36));     // the Woodlot was emptied and sacrificed...
+        CHECK(InGraveyardDs(*g, 36));
+        CHECK_FALSE(OnBattlefieldDs(*g, 60));     // ...and Wild Growth, on it, went with it
+        CHECK(InGraveyardDs(*g, 60));
+        CHECK_FALSE(AnythingAttachedTo(*g, 4));   // never re-homed onto Ancient Tomb
+    }
+
+    // The same plan from the board the PREPAY leaves: the Woodlot's last counter already spent into the
+    // float ({G}{G}), the land still on the battlefield at 0 counters, no cast resolved yet. Nothing has
+    // resolved, so nothing may remove it before Wild Growth picks its host -- in either world.
+    GameState pre = s;
+    for (Permanent& pm : pre.battlefield)
+    {
+        if (pm.card.m_number != 36) { continue; }
+        pm.tapped = true;
+        DecrementDepletionOnTap(pm);              // 1 -> 0: the marker SacrificeDepletedLands cleans up
+    }
+    pre.floating_mana.green += 2;
+    GameState roll2 = pre;
+    TurnSolver::ApplyPlan(roll2, *p, true);
+    const GameState exec2 = RunExecutorDs(pre, *p);
+    for (const GameState* g : { static_cast<const GameState*>(&roll2), &exec2 })
+    {
+        INFO("pre-emptied board, world: " << std::string(g == &roll2 ? "rollout (ApplyPlan)" : "executor (AIEngine::TakeTurn)"));
+        CHECK_FALSE(OnBattlefieldDs(*g, 36));
+        CHECK_FALSE(OnBattlefieldDs(*g, 60));     // Wild Growth died with its host...
+        CHECK(InGraveyardDs(*g, 60));
+        CHECK_FALSE(AnythingAttachedTo(*g, 4));   // ...and was never moved onto Ancient Tomb
+    }
+}
