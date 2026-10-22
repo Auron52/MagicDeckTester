@@ -209,6 +209,20 @@ The driver measures; it does not judge, and it cannot write a card. Four things 
 Everything else — numbering, apparatus selection, pooling, pairing, the floor bracket — is mechanical
 and already in the driver. Do not hand-roll it.
 
+## Shuffle and hidden-library cards need a NON-CLAIRVOYANT arm (USER 2026-10-22)
+
+The search sees post-shuffle draws (shuffles are seeded), so a card whose value passes through a
+library shuffle or a read of hidden library order (fetchlands, tutors, Ponder/Brainstorm-style effects)
+can buy a free re-roll a real player never gets. SelesnyaLifegain's Windswept Heath, which could only
+fetch a Forest, measured −0.003 with no post-search shuffle, −0.028 under the default shuffle and
+−0.040 under the legacy shuffle. USER: *"Windswept Heath is definitely clairvoyance coming to bite us
+... If there is a card like this, we'll need to adjust our screen to run non-clairvoyant tests."*
+So when a screen introduces or re-counts such a card, run a non-clairvoyant bracket (at minimum a
+`MTG_NO_SEARCH_SHUFFLE=1` copy of the arm and its reference; `arm_flags` refuses that flag, so use a
+global-env tiny spec) and report the card's gain from that bracket, not from the default run.
+`MTG_SHUFFLE_SALT_SEARCH=1` moved the Heath result by only +0.0002, so do not rely on it as the
+decoupling until it is shown to reach batch play. Open questions: `docs/design/fetchland-shuffle-gain.md`.
+
 ## The new-card route
 
 A card that is not in the base deck at all costs a one-time implementation, then joins the pool.

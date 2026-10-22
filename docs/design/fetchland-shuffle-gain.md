@@ -63,6 +63,15 @@ Every deck that holds fetchlands or tutors: `grep -l "fetch_land_types\|tutor_" 
 against `decks/*/`. Any past screen that measured a fetchland, a land-search spell or a shuffle
 effect carries this bias in the direction of FAVOURING the shuffler.
 
+## USER diagnosis and screening rule (2026-10-22)
+
+USER: *"Windswept Heath is definitely clairvoyance coming to bite us. We'll need to watch out for
+those when screening. If there is a card like this, we'll need to adjust our screen to run
+non-clairvoyant tests."* Hypothesis 1 is therefore the working diagnosis. The screening rule is
+written into `.claude/skills/deck-screening.md` ("Shuffle and hidden-library cards need a
+NON-CLAIRVOYANT arm"). The engine-side fix (a search that cannot see post-shuffle order) is still
+deferred; the first step remains confirming whether `MTG_SHUFFLE_SALT_SEARCH` reaches batch play.
+
 ## What was done in the meantime
 
 The SelesnyaLifegain screen excludes Windswept Heath from every candidate list (the measured gain is
