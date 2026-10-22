@@ -10089,12 +10089,24 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
 // call site). See docs/design/dragonstorm-d0-divergence-digest.md.
 static const bool s_storm_hold = !EnvOn("MTG_NO_STORM_HOLD");
 
+// MTG_PAYOFF_PRUNE_REDUCER_SINK (heurarm PAYOFF_PRUNE_REDUCER_SINK). DEFAULT ON; =0 -> the creature / storm /
+// Apex payoffs only. A PERMANENT spell-cost reducer (Ruby Medallion) is a sink for the ritual's mana: the
+// discount outlives the turn, so "Rite of Flame -> Ruby Medallion" is not a one-turn accelerant burnt for
+// nothing -- it is the USER's "cast as early as possible" Medallion (dragonstorm-user-cast-order.md). Without
+// it the prune deletes that line at every budget, even with a Dragonstorm in hand (it advances the storm turn).
+static bool PayoffPruneReducerSinkOn()
+{
+    static const bool on = EnvOn("MTG_PAYOFF_PRUNE_REDUCER_SINK", true);
+    return heurarm::Flag(heurarm::PAYOFF_PRUNE_REDUCER_SINK, on);
+}
+
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
                                    bool storm_in_hand)
 {
     // A fair creature justifies a ritual by default; under the storm-hold rule, when a storm payoff is
     // in hand, it does NOT -- only the storm finishers (Dragonstorm/Apex) do, so the ritual is held.
     const bool creature_pays = !(s_storm_hold && storm_in_hand);
+    const bool reducer_pays  = PayoffPruneReducerSinkOn();
     bool has_ritual = false, has_payoff = false;
     for (int j : sel)
     {
@@ -10102,7 +10114,8 @@ static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::
         const CardDefinition* d = cands[j].def;
         if (!d) { continue; }
         if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0
-            || (creature_pays && d->card.IsCreature()))
+            || (creature_pays && d->card.IsCreature())
+            || (reducer_pays && !d->params.reduces_spell_color.empty() && !d->card.IsLand()))
         {
             has_payoff = true;
         }
@@ -33379,6 +33392,61 @@ static bool RestrictorOrderExactOn()
     return heurarm::Flag(heurarm::RESTRICTOR_ORDER_EXACT, on);
 }
 
+// MTG_RESTRICTOR_TRACE -- diagnostic (default off, print-only): one line per subset the restrictor test below
+// rejects, at either walk ("solve" = Solve::consider, "enum" = EnumeratePlans), so a reject can be compared
+// game by game against the lever's =0 arm.
+static void RestrictorRejectTrace(const char* site, const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel, int after)
+{
+    static const bool on = EnvOn("MTG_RESTRICTOR_TRACE");
+    if (!on) { return; }
+    std::string names;
+    for (int k : sel)
+    {
+        if (!names.empty()) { names += " + "; }
+        names += cands[k].card_name.str();
+        if (cands[k].chosen_x > 0) { names += "(x" + std::to_string(cands[k].chosen_x) + ")"; }
+    }
+    std::fprintf(stderr, "[restrictor] %s t%d after=%d hand=%zu: %s\n", site, state.turn_number, after,
+                 state.ActivePlayer().hand.size(), names.c_str());
+}
+// INVESTIGATION ONLY (not for commit): MTG_RESTRICTOR_SPARE = '|'-separated substrings of a
+// "<site> t<turn> after=<n> hand=<k> pre=<0|1> self=<0|1>: <names>" line; a matching reject is NOT applied.
+static bool RestrictorRejectSpared(const char* site, const GameState& state, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel, int after, bool pre_rej, bool self_rej)
+{
+    static const char* spec = std::getenv("MTG_RESTRICTOR_SPARE");
+    static const bool  dbg  = EnvOn("MTG_RESTRICTOR_TRACE2");
+    if (spec == nullptr && !dbg) { return false; }
+    std::string names;
+    for (int k : sel)
+    {
+        if (!names.empty()) { names += " + "; }
+        names += cands[k].card_name.str();
+        if (cands[k].chosen_x > 0) { names += "(x" + std::to_string(cands[k].chosen_x) + ")"; }
+    }
+    char head[160];
+    std::snprintf(head, sizeof head, "%s t%d after=%d hand=%zu pre=%d self=%d: ", site, state.turn_number, after,
+                  state.ActivePlayer().hand.size(), pre_rej ? 1 : 0, self_rej ? 1 : 0);
+    const std::string line = std::string(head) + names;
+    bool spared = false;
+    if (spec != nullptr)
+    {
+        std::string s(spec);
+        std::size_t b = 0;
+        while (b <= s.size())
+        {
+            std::size_t e = s.find('|', b);
+            if (e == std::string::npos) { e = s.size(); }
+            const std::string tok = s.substr(b, e - b);
+            if (!tok.empty() && line.find(tok) != std::string::npos) { spared = true; break; }
+            b = e + 1;
+        }
+    }
+    if (dbg) { std::fprintf(stderr, "[restrictor2] %s%s\n", spared ? "SPARED " : "", line.c_str()); }
+    return spared;
+}
+
 // THE CAST RESTRICTOR'S PRE-SET (MTG_RESTRICTOR_ORDER_EXACT). Both subset walks count the casts AFTER a
 // cast restrictor (Irencrag Feat: "you can cast only one more spell this turn") by CastOrderRank and
 // judge payability ORDER-FREE, with the restrictor's float credited to the whole subset. The two
@@ -35348,12 +35416,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // one more cast follows it. A REJECT-ONLY test: `after` itself is left alone, so the waste gate
             // below keeps judging the rank order it was ruled on (USER 2026-09-01) and no subset it drops
             // is readmitted. Rank-ordered decks only -- the same scope as that gate.
-            if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state)
-                && ((after + 1 > cands[j].max_casts_after
-                     && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand))
-                    || !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
-                                             /*self_only=*/true)))
-            { return; }
+            if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state))
+            {
+                const bool pre_rej = after + 1 > cands[j].max_casts_after
+                    && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand);
+                const bool self_rej = !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas,
+                                                            &colour_demand, /*self_only=*/true);
+                if ((pre_rej || self_rej)
+                    && !RestrictorRejectSpared("solve", state, cands, sel, after, pre_rej, self_rej))
+                { RestrictorRejectTrace("solve", state, cands, sel, after); return; }
+            }
             // ...and the OTHER end of the same rule (MTG_IRENCRAG_WASTE). A cast RESTRICTOR
             // exists to fund THE FINISHER, and the USER's order reserves its one allowed follower
             // for exactly that: "Irencrag Feat must be second last as it can only be cast before
@@ -39674,6 +39746,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               && (plan.bp_all || seen_before == plan.bp_at);
         dbg_bp_seen_before = seen_before; dbg_bp_eligible = eligible; dbg_bp_class_on = class_on;
         dbg_bp_cands = -1;
+        {   // INVESTIGATION ONLY (not for commit): MTG_BP_REACH_TRACE=<turn>
+            static const int s_reach = EnvInt("MTG_BP_REACH_TRACE", 0);
+            if (s_reach > 0 && state.turn_number == s_reach)
+            {
+                std::string hs;
+                for (const Card& hc : state.ActivePlayer().hand)
+                { hs += hc.m_name.str(); if (hc.m_is_staged) { hs += "(s)"; } hs += ","; }
+                int untapped = 0;
+                for (const Permanent& pm : state.battlefield)
+                { if (pm.controller_index == state.active_player_index && !pm.tapped) { ++untapped; } }
+                std::fprintf(stderr, "[bp-reach] T%d %s site=%d class_on=%d seen_before=%d eligible=%d bp_choice=%d bp_at=%d bp_all=%d casts=%d untapped=%d float=%d plan={%s} hand=[%s]\n",
+                             state.turn_number, is_pre_combat ? "m1" : "m2", site, class_on ? 1 : 0, seen_before,
+                             eligible ? 1 : 0, plan.bp_choice, plan.bp_at, plan.bp_all ? 1 : 0,
+                             state.spells_cast_this_turn, untapped, static_cast<int>(state.floating_mana.Total()),
+                             FsPlanText(plan).c_str(), hs.c_str());
+            }
+        }
         // Report the running count so the wave walker can open a slot for each nested breakpoint it
         // discovers (see g_bp_seen_last). Written per breakpoint rather than once at the end so it
         // survives every early exit out of this apply.
@@ -39808,9 +39897,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     std::string hs;
                     for (const Card& hc : state.ActivePlayer().hand)
                     { hs += hc.m_name.str(); if (hc.m_is_staged) { hs += "(s)"; } hs += ","; }
-                    std::fprintf(stderr, "[bp-cont] T%d %s site=%d n=%zu land_played=%d hand=[%s]\n",
+                    std::string pend;
+                    for (const Card& hc : state.ActivePlayer().hand)
+                    { if (BpPlanCasts(hc.m_name_hash)) { pend += hc.m_name.str(); pend += ","; } }
+                    int untapped = 0;
+                    for (const Permanent& pm : state.battlefield)
+                    { if (pm.controller_index == state.active_player_index && !pm.tapped) { ++untapped; } }
+                    std::fprintf(stderr, "[bp-cont] T%d %s site=%d n=%zu land_played=%d float=%d untapped=%d casts=%d rem=%d pend=[%s] hand=[%s]\n",
                                  state.turn_number, is_pre_combat ? "m1" : "m2", site, cands.size(),
-                                 state.ActivePlayer().lands_played_this_turn, hs.c_str());
+                                 state.ActivePlayer().lands_played_this_turn,
+                                 static_cast<int>(state.floating_mana.Total()), untapped,
+                                 state.spells_cast_this_turn, state.casts_remaining_this_turn,
+                                 pend.c_str(), hs.c_str());
                     for (std::size_t ci = 0; ci < cands.size(); ++ci)
                     { std::fprintf(stderr, "[bp-cont]   #%zu %s\n", ci, FsPlanText(cands[ci]).c_str()); }
                 }
@@ -47858,12 +47956,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (after > cands[j].max_casts_after) { _ct.label = "irencrag"; return; }
             // MTG_RESTRICTOR_ORDER_EXACT (lockstep twin of Solve::consider -- reject-only, `after` untouched).
-            if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state)
-                && ((after + 1 > cands[j].max_casts_after
-                     && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand))
-                    || !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand,
-                                             /*self_only=*/true)))
-            { _ct.label = "irencrag-order"; return; }
+            if (RestrictorOrderExactOn() && !OrderingSearchEnabled(state))
+            {
+                const bool pre_rej = after + 1 > cands[j].max_casts_after
+                    && !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas, &colour_demand);
+                const bool self_rej = !RestrictorPrePayable(state, cands, sel, j, r_rank, pool, combined, colour_feas,
+                                                            &colour_demand, /*self_only=*/true);
+                if ((pre_rej || self_rej)
+                    && !RestrictorRejectSpared("enum", state, cands, sel, after, pre_rej, self_rej))
+                { _ct.label = "irencrag-order"; RestrictorRejectTrace("enum", state, cands, sel, after); return; }
+            }
             // The other end of the same rule -- see the twin in Solve::consider for the full note.
             // Lockstep: both sites must agree or the enumerator offers a plan the leaf will not score.
             const int  rule    = IrencragRule();
@@ -50878,6 +50980,33 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
             v.bp_wave0  = false;
             v.bp_base   = static_cast<int>(base_i);   // as the uniform arm above: inert, for the census
             variants.push_back(std::move(v));
+        }
+    }
+    // PROTOTYPE (investigation, default OFF): MTG_BP_EMPTY_ARM_DEFERRED=1 -- the EMPTY arm for a base
+    // plan whose breakpoint class wave 0 DEFERRED (MTG_BP_SITE3_DEFER) at a turn the node does not host.
+    // Without it that plan's only continuation is MTG_BP_BASE_CANON's cands.front(), and the walker
+    // never SCORES its past-the-end EMPTY rank.
+    {
+        static const bool s_empty_def = EnvOn("MTG_BP_EMPTY_ARM_DEFERRED");
+        if (heurarm::Flag(heurarm::BP_EMPTY_ARM_DEFERRED, s_empty_def))
+        {
+            const int full = BpWaveSiteMask(state);
+            const std::size_t n_base = plans.size();
+            for (std::size_t base_i = 0; base_i < n_base; ++base_i)
+            {
+                const TurnSolver::Plan& p = plans[base_i];
+                if (p.bp_choice >= 0 || p.bp_wave0) { continue; }   // wave 0 already gave it an EMPTY arm
+                if ((PlanOpensBreakpoint(state, p) & full) == 0) { continue; }
+                for (int at = 0; at < BpSearchDepth(); ++at)
+                {
+                    TurnSolver::Plan v = p;
+                    v.bp_choice = kBpEmptyChoice;
+                    v.bp_at     = at;
+                    v.bp_wave0  = false;
+                    v.bp_base   = static_cast<int>(base_i);
+                    variants.push_back(std::move(v));
+                }
+            }
         }
     }
     plans.insert(plans.end(), std::make_move_iterator(variants.begin()),
@@ -59303,6 +59432,16 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // falls through to the plain EOT tail unchanged. An unconditional re-solve here was
             // the measured net-red form -- extra non-lethal casts deviate the future from
             // everything the outer line priced.
+            if (m2t_here)
+            {   // INVESTIGATION ONLY (not for commit)
+                int untapped = 0;
+                for (const Permanent& pm : s2.battlefield)
+                { if (pm.controller_index == s2.active_player_index && !pm.tapped) { ++untapped; } }
+                std::fprintf(stderr, "[m2fx-gate] T%d d%d q=%s bpc=%d bpat=%d bpall=%d bpactions=%zu mode=%d fired=%d nest=%d s2untapped=%d s2hand=%zu node_host=%d\n",
+                             state.turn_number, depth, m2t_sum(q).c_str(), q.bp_choice, q.bp_at, q.bp_all ? 1 : 0,
+                             bp.size(), m2fmode, static_cast<int>(g_bp_fired_last), g_m2fix_nest, untapped,
+                             s2.ActivePlayer().hand.size(), node_host_here ? 1 : 0);
+            }
             if (m2fmode != 0 && g_bp_fired_last > 0 && g_m2fix_nest < 1)
             {
                 // The second m2 PhasePlan is replayed as a fresh executor TakeTurn pass
@@ -59312,6 +59451,14 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 ++g_m2fix_nest;   // the scan's applies must not re-enter the scan
                 std::vector<TurnSolver::Plan> fx = M2DropLive(s2)
                     ? EnumeratePlansWithLand(s2, false) : EnumeratePlansM2Memoized(s2);
+                if (m2t_here)
+                {   // INVESTIGATION ONLY (not for commit)
+                    const std::vector<InternedName> dd = M2FixDrawnDelta(m2fix_hand0, s2);
+                    std::string fxs;
+                    for (const TurnSolver::Plan& e : fx) { fxs += "{" + m2t_sum(e) + (e.wins_this_turn ? "W" : "") + "}"; }
+                    std::fprintf(stderr, "[m2fx] T%d d%d q=%s fx=%zu drawn=%zu actionable=%d plans=%s\n", state.turn_number,
+                                 depth, m2t_sum(q).c_str(), fx.size(), dd.size(), M2FixActionable(fx, dd) ? 1 : 0, fxs.c_str());
+                }
                 for (const TurnSolver::Plan& e : fx)
                 {
                     // Projected-lethal plans only -- see ApplySecondMainInSearch's filter note

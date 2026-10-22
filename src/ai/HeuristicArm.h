@@ -437,6 +437,9 @@ enum Slot : int
     ATTACK_REPROJECT_INTENT,  // MTG_ATTACK_REPROJECT_INTENT  an attack RE-PROJECTION (the board with the plan's taps applied) reads who WANTS to attack from the provider's verdict on the PRE-PLAN board, and re-reads only who CAN (the taps) and what the team hits for: re-asking AttackWith on a board where the plan's direct damage, casts and land payment have not happened flipped FiveColour's Deathrite hold (d0 gi1924: Cannons + Cornucopia + Archangel read 10, the real combat dealt 11). Default ON; =0 -> AttackWith re-asked on the re-projected board
     TAPAHEAD_PENDING_PIP_AUTO,// MTG_TAPAHEAD_PENDING_PIP_AUTO the ETB-untap tap-ahead (EtbUntapTapAheadIntoFloat) commits a dual land's banked unit to the pending cast's own still-uncovered pip in AUTONOMOUS play too (was human-only), when no other untapped source still covers that pip: Kitchen, the only {U}, banked {G} and Cloud of Faeries' {1}{U} was dropped (EDF held-out gi 147 t4); Solve's payer, which runs the same tap-ahead, refused {Wild Growth, Cloud} for the same reason. Executor + rollout + both walks (shared). Default ON; =0 -> human-only, byte-identical
     SOLVE_AURA_PAYER_AS_EXECUTED,// MTG_SOLVE_AURA_PAYER_AS_EXECUTED MTG_SOLVE_AURA_PAYER_CHECK prices the land-Aura subset the way both apply worlds pay it: the whole-turn prepay (BatchPrepayMainCasts) on a scratch copy first, the per-cast walk only behind a declined prepay. The per-cast walk alone was stricter than execution where the joint prepay pays a line the walk cannot (EDF held-out gi 1011 t2 {Trace, Training Grounds}). Default ON; =0 -> the per-cast walk alone, byte-identical
+    FB_HOLD_BANKED_NEXT_TURN, // MTG_FB_HOLD_BANKED_NEXT_TURN MTG_FB_HOLD_BANKED holds the banked sources only when spending them does not buy a NEXT-TURN kill that holding misses: both worlds (full pump now / banked held now) are projected one turn on -- the same attackers, the board untapped, an idle storage land's +1, the full pump -- and the hold is dropped when only the spend world is lethal then. The hold's "lethal THIS combat" test was myopic: a Scourge race pumping the Needle on T3 kills on T4, holding it kills on T5 (dragonstorm ab5 d3 gi 60 / 70, shipped gi 69 / 70). Executor + rollout (the one helper). Default ON; =0 -> the this-combat test alone, byte-identical
+    PAYOFF_PRUNE_REDUCER_SINK,// MTG_PAYOFF_PRUNE_REDUCER_SINK the Dragonstorm payoff-prune (SubsetWastesAccelerant: a ritual with no same-turn payoff is waste) counts a PERMANENT spell-cost reducer cast in the subset (Ruby Medallion, reduces_spell_color) as the ritual's sink: the ritual's mana buys a discount on every later red spell, so it is not a one-turn accelerant burnt for nothing. The prune deleted "Rite of Flame -> Ruby Medallion, storm next turn" at every budget; the committed tree reached it only through a phantom plan ({Rite, Medallion, Pyretic, Seething, Scourge}) whose later casts failed at payment (dragonstorm ab5 d3 gi 289 T1, shipped gi 188 T6, exposed by the USER order's exact walk). Solve::consider + EnumeratePlans (both call sites). Default ON; =0 -> the creature / storm / Apex payoffs only, byte-identical
+    BP_EMPTY_ARM_DEFERRED,    // MTG_BP_EMPTY_ARM_DEFERRED (PROTOTYPE, investigation, default OFF) emit the EMPTY arm for a base plan whose breakpoint class wave 0 deferred at a turn the node does not host
     COUNT
 };
 
@@ -835,6 +838,9 @@ inline const char* Name(int slot)
         "MTG_ATTACK_REPROJECT_INTENT",
         "MTG_TAPAHEAD_PENDING_PIP_AUTO",
         "MTG_SOLVE_AURA_PAYER_AS_EXECUTED",
+        "MTG_FB_HOLD_BANKED_NEXT_TURN",
+        "MTG_PAYOFF_PRUNE_REDUCER_SINK",
+        "MTG_BP_EMPTY_ARM_DEFERRED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

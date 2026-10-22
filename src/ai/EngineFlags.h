@@ -149,6 +149,15 @@ inline bool FbHoldBankedOn()
     return heurarm::Flag(heurarm::FB_HOLD_BANKED, env_on);
 }
 
+// MTG_FB_HOLD_BANKED_NEXT_TURN (DEFAULT ON; =0 -> the this-combat lethal test alone) -- the banked hold
+// is dropped when spending the banked sources now buys a NEXT-turn kill that holding them misses.
+// Read only inside FbHoldBankedThisCombat (Combat.cpp), so executor and rollout stay in lockstep.
+inline bool FbHoldBankedNextTurnOn()
+{
+    static const bool env_on = EnvOn("MTG_FB_HOLD_BANKED_NEXT_TURN", true);
+    return heurarm::Flag(heurarm::FB_HOLD_BANKED_NEXT_TURN, env_on);
+}
+
 // MTG_LINE_FLOAT_TAP_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware float rung
 // (TapForCostSharedImpl, ManaPayment.cpp). One payer for executor, rollout and the payability walks.
 inline bool LineFloatTapFirstOn()

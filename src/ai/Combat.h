@@ -65,7 +65,9 @@ using FbPayer = bool (*)(GameState&, const ManaCost&);
 std::uint64_t FbBankedSourceMask(const GameState& state);
 
 // Should this combat's pump hold the banked sources? Lever on, a banked source untapped, and the full
-// pump (with `payer`, on a copy) NOT lethal. False (byte-identical) whenever no banked source is up.
+// pump (with `payer`, on a copy) NOT lethal -- and (MTG_FB_HOLD_BANKED_NEXT_TURN) not the one pump that
+// makes NEXT turn's attack lethal where holding does not. False (byte-identical) whenever no banked
+// source is up.
 bool FbHoldBankedThisCombat(const GameState& state, const std::vector<int>& atk_idx, FbPayer payer);
 
 // The hold is published per thread for the duration of one pump (both sites) ...
