@@ -4444,7 +4444,9 @@ static void WriteAttachHostDecisionJson(std::ostream& os, const GameState& s,
     {
         d.Note("reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), "
                "or -1 to decline the pairing. While paired, both creatures keep the bonus for as "
-               "long as you control both. Default = the AI's pick (highest effective power).");
+               "long as you control both. Default = the AI's pick (highest effective power; a Tandem "
+               "Lookout ranks a Niv first, and under MTG_NIV_LOOKOUT_NIV_ONLY waits -- -1 -- rather than "
+               "pair with anything else while a Niv can still arrive).");
     }
     else
     {

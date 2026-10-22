@@ -3913,6 +3913,13 @@ function initBoardSel(d){
     // fall back to the first option, which would preselect a conversion nobody chose.
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default);
     if (def) S.boardSel.add('m:'+def.perm_index);
+  } else if (d.type==='attach_host' && d.soulbond){
+    // Soulbond is a "you MAY pair": the AI's pick can be "don't pair" (-1 -- e.g. a Tandem Lookout
+    // waiting for a Niv), so seed only a real pick and never fall back to the first option, which
+    // would present a pairing nobody recommended as the AI's (USER 2026-10-22: "I'm not sure what
+    // the AI is recommending for pairing").
+    const def=(d.options||[]).find(o=>o.index===d.heuristic_default);
+    if (def) S.boardSel.add('m:'+def.perm_index);
   } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
@@ -4785,8 +4792,11 @@ function promptPanelHtml(d, dec){
   if (dec==='attach_host' && d.soulbond){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    const aiOpt=(d.options||[]).find(o=>o.index===d.heuristic_default);
+    const aiSays=aiOpt ? `pair with <b>${esc(aiOpt.name)}</b> (preselected)` : `<b>don't pair</b> (nothing preselected)`;
     return `<h3>Soulbond: pair ${esc(d.source||'this creature')} — with which creature?</h3>`+
       `<div class="sub">${esc(d.source||'It')} may be paired with one of your other unpaired creatures (click it), or not paired at all. While paired, both creatures keep the bonus for as long as you control both.</div>`+
+      `<div class="sub">AI recommendation: ${aiSays}.</div>`+
       `<div class="pbtns"><span class="pcount">Pairing with: <b>${opt?esc(opt.name):'(pick a creature)'}</b></span>`+
       `<span class="spacer"></span><button id="decnoattach" class="ghost">Don't pair</button>`+
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
