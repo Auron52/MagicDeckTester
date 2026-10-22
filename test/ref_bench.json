@@ -510,6 +510,18 @@
    "shortfalls": [],
    "src": "208b5152f9640a6822ec7228633aa906d7921986"
   },
+  "vampires": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.3,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.1,
+   "short": 0,
+   "shortfalls": [],
+   "src": "208b5152f9640a6822ec7228633aa906d7921986"
+  },
   "whiteknights": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
