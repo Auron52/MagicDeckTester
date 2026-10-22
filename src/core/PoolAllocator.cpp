@@ -14,8 +14,21 @@
 // block: one allocated while the gate was off (e.g. during early static init, before g_pool_on's
 // dynamic init flips it true) frees correctly even after the gate turns on. There is no headerless
 // block and thus no new/delete-policy mismatch across the static-init boundary. Persistent
-// allocations are safe: a freed pooled block is retained on a free-list (reused, never returned to
-// the OS -- footprint is the live high-water mark, measured ~81 MB at 12 threads, not cumulative).
+// allocations are safe: a freed pooled block is retained on a free-list and reused, up to a
+// per-thread RETENTION CAP (below); past the cap it goes straight back to malloc.
+//
+// THE RETENTION CAP (MTG_POOL_ALLOC_CAP_MB, default 64 MB per thread; =0 = unbounded, the old
+// behaviour). Without it a thread kept EVERY small block it ever freed, so its footprint was its
+// own all-time high-water mark of live small blocks, summed over threads -- not the ~81 MB the
+// ordinary search needs (measured at 12 threads), but whatever the worst enumeration on each thread
+// ever held. NivMizzetCombo, 2026-10-22: the Brainstorm put-back axis materialises up to millions of
+// whole-Plan clones in ONE rollout-turn candidate list (AppendSubdecisionAxes' `Plan v = p`, 99.4% of
+// a 6 GB thread's live heap at the peak, jemalloc heap profile), a 1-action plan's Action vector is a
+// 496-byte block, and every such list ratcheted that thread's pool up for good: the mulligan settings
+// screen's d1 b1 scorer arm climbed monotonically to the 35 GB RSS cap in under a minute at 24
+// threads, while the SAME run with MTG_POOL_ALLOC=0 fell back to 1-6 GB between lists and finished.
+// The cap keeps the reuse the pool exists for (the hot per-node GameState churn lives far below it)
+// and hands the rest back. It changes only where memory lives, never a value: byte-identical.
 //
 // Over-aligned types use the aligned operator new/delete(align_val_t) overloads, which we do NOT
 // override -> they stay on the default allocator (self-consistent pair, never reaching our header).
@@ -50,6 +63,17 @@ namespace
     // payload) intact across the free/realloc cycle. Payload is >= kQuantum (16) bytes, so it always
     // fits a void*.
     thread_local void* g_free[kClasses] = {};
+    // Bytes (header included) currently parked on THIS thread's free-lists, and the cap on them
+    // (see THE RETENTION CAP at the top). The cap is value-carrying, so it keeps the raw getenv
+    // parse (and no allocation can happen in here: this is operator new's own TU). Zero-initialized
+    // until this dynamic init runs, and 0 means unbounded, so the early static-init window keeps the
+    // old retain-everything behaviour for the handful of blocks freed in it.
+    thread_local std::size_t g_free_bytes = 0;
+    const std::size_t g_free_cap = []{
+        const char* e = std::getenv("MTG_POOL_ALLOC_CAP_MB");
+        const unsigned long long mb = (e != nullptr && *e != '\0') ? std::strtoull(e, nullptr, 10) : 64ULL;
+        return static_cast<std::size_t>(mb) << 20;
+    }();
 
     inline int SizeClass(std::size_t n)
     {
@@ -68,12 +92,13 @@ namespace
             return static_cast<char*>(raw) + kAlign;
         }
         const int cls = SizeClass(n);
+        const std::size_t block = static_cast<std::size_t>(cls) * kQuantum;
         if (void* pl = g_free[cls])                           // free-list hit: pop a payload
         {
             g_free[cls] = *static_cast<void**>(pl);           // next-pointer lives in the payload
+            g_free_bytes -= kAlign + block;
             return pl;                                        // header (before pl) still valid
         }
-        const std::size_t block = static_cast<std::size_t>(cls) * kQuantum;
         void* raw = std::malloc(kAlign + block);              // miss: fresh block from jemalloc
         if (!raw) { return nullptr; }
         static_cast<Header*>(raw)->cls = cls;
@@ -86,8 +111,13 @@ namespace
         void* raw = static_cast<char*>(p) - kAlign;
         const int cls = static_cast<Header*>(raw)->cls;       // header records the alloc policy
         if (cls == kBigClass) { std::free(raw); return; }     // passthrough block -> straight back
+        const std::size_t bytes = kAlign + static_cast<std::size_t>(cls) * kQuantum;
+        // Over this thread's retention cap: a pooled block is still a plain malloc block (its header
+        // only names the class), so it goes straight back like a passthrough one.
+        if (g_free_cap != 0 && g_free_bytes + bytes > g_free_cap) { std::free(raw); return; }
         *static_cast<void**>(p) = g_free[cls];                // stash next-pointer IN the payload
         g_free[cls] = p;                                      // retain (list holds payload pointers)
+        g_free_bytes += bytes;
     }
 }
 
