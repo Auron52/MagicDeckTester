@@ -38772,8 +38772,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else if (def.params.exiles_self_on_resolve) { state.exile.push_back(def.card); }
             // Green Sun's Zenith: "Shuffle Green Sun's Zenith into its owner's library." LOCKSTEP
             // with EffectHandler::MoveToGraveyard (the shared ShuffleSelfIntoLibrary).
+            //
+            // THE COPY THAT GOES IN MUST CARRY ITS PER-COPY ID (MTG_SELF_SHUFFLE_COPY_ID, DEFAULT
+            // ON; =0 restores the old definition-card push). `def.card` is the DATABASE card, whose
+            // m_number is 0, while the executor shuffles in `entry.source` -- the physical copy
+            // (m_number 24..27 for Zenith). Library::ShuffleByKey places every card by
+            // key(seed, m_number), so the two worlds then put Zenith at DIFFERENT depths: same
+            // seed, same ordinal, same multiset by name, different draws. Every other card's order
+            // agrees, which is exactly what made it hard to see -- the lookahead simply drew a
+            // card the real game would not. Measured: Prevent Damage s108346 gi345, T2
+            // "Ancient Tomb + Zenith(X=2) -> Dina": the search drew Zenith#0 off the top on T3
+            // (recast it for Tamanoa, scored the line a T5 win and took it over Citadel ->
+            // Tamanoa), the real game drew Manabarbs there and never won (d5 b100/b1000, d8 b0;
+            // d5 b20 only won because it did not search deep enough to find the phantom line).
             else if (def.params.shuffles_self_into_library_on_resolve)
-            { ShuffleSelfIntoLibrary(state, state.active_player_index, def.card); }
+            {
+                static const bool s_copy_id = EnvOn("MTG_SELF_SHUFFLE_COPY_ID", true);
+                if (s_copy_id)
+                {
+                    Card self = def.card;
+                    self.m_number = cast_number;
+                    ShuffleSelfIntoLibrary(state, state.active_player_index, self);
+                }
+                else { ShuffleSelfIntoLibrary(state, state.active_player_index, def.card); }
+            }
             else                                       { ap.graveyard.push_back(def.card); }
         }
 
