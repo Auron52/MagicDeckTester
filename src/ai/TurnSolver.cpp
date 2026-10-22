@@ -23527,8 +23527,12 @@ struct CondemnSuppressGuard   // save/restore, so nested guards cannot clear an 
 
 // Forward decl: ApplyPlanDirect's SEARCHED breakpoint continuation (Plan::bp_choice) picks its
 // candidate from the same land-folded plan set the outer search ranks. Defined later.
+// `pb_lazy` (MTG_PB_LAZY_CANDS; see PbLazyLayout): SolveWithLookahead's own request to hold the put-back
+// clone block lazily. nullptr everywhere else.
+struct PbLazyLayout;
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
-                                                            bool is_pre_combat);
+                                                            bool is_pre_combat,
+                                                            PbLazyLayout* pb_lazy = nullptr);
 
 // HOST gate for the fresh-spend axis (MTG_FRESH_SPEND_AXIS): its variants are admissible only
 // where a host VALIDATES them by simulation -- FSLineWin's plan loop, which discards any
@@ -25962,11 +25966,14 @@ struct PutBackFoldMemo
     bool on = false;
     // The sibling whose apply this variant would repeat (its cand index), or -1.
     int Declines(const TurnSolver::Plan& p) const
+    { return DeclinesKey(p.putback_group, p.putback_choice, p.bp_choice); }
+    // ...on the three fields it reads, so a lazily held clone (MTG_PB_LAZY_CANDS) is tested unbuilt.
+    int DeclinesKey(int putback_group, int putback_choice, int bp_choice) const
     {
-        if (!on || p.putback_group == 0 || p.putback_choice < 1 || p.bp_choice >= 0) { return -1; }
-        const auto it = groups.find(p.putback_group);
+        if (!on || putback_group == 0 || putback_choice < 1 || bp_choice >= 0) { return -1; }
+        const auto it = groups.find(putback_group);
         if (it == groups.end() || it->second.width <= 0) { return -1; }
-        const int r = std::min(p.putback_choice, it->second.width - 1);
+        const int r = std::min(putback_choice, it->second.width - 1);
         const auto f = it->second.first.find(r);
         return f == it->second.first.end() ? -1 : f->second;
     }
@@ -70965,6 +70972,213 @@ namespace
 
 }
 
+// ---- THE LAZY PUT-BACK BLOCK (MTG_PB_LAZY_CANDS, DEFAULT ON; =0 materialises every clone) ---------
+//
+// WHY. The SEARCHED BRAINSTORM PUT-BACK axis (AppendSubdecisionAxes) fans every base plan that casts a
+// put-back card into one clone per candidate rank up to PutBackAxisWidth -- an UPPER bound, ~190-360 on
+// a late Niv-Mizzet board where the plan also holds a Ponder (the drawn cards cannot be predicted). The
+// clamped ranks are declined by PutBackFoldMemo before any unit is charged, but every one of them was
+// MATERIALISED first, as a whole Plan: on NivMizzetCombo one rollout-turn candidate list of
+// SolveWithLookahead held 1-3.3M clones (2-7 GB), several threads reached such boards at once, and the
+// mulligan settings screen and equivalence discovery died at the RSS cap every time
+// (docs/design/niv-putback-fan-memory.md).
+//
+// THE IDENTITY. Every put-back clone is its base with putback_choice = k (k = 1..w-1) and putback_group =
+// the fan's id, copied when the axis runs; every later axis skips it (base plans only -- the four that do
+// not are materialised first, see PbLazyMaterialize's callers); the only later writes to it are the
+// end-of-axes bp_wave0 clear and, for a soulbond deck, a decline twin (soulbond_decline = true, bp_wave0 =
+// false) appended in list order. So the full list is exactly
+//     [L0 .. e0) [V1: the clones, fan by fan, k = 1..w-1] [L e0 .. t_at) [V2: the clones' twins] [L t_at ..)
+// where L is the list WITHOUT the clones (and their twins), and each fan is held as ONE prototype (the
+// rank-1 clone as the axis built it, with every later write applied). A full-list index is served from L
+// or synthesised from its fan's prototype: the same Plan, field for field (Plan::operator==), as the
+// materialised list holds there -- MTG_PB_LAZY_CANDS_VERIFY checks exactly that, at every index.
+//
+// SCOPE. Requested by SolveWithLookahead's own enumeration only (where every giant list was seen). The
+// enumeration memo (MTG_ENUM_MEMO) stores such a list lazily too -- priced as the full list it stands for
+// (PbLazyListBytes), handed back lazy to a lazy caller and materialised for any other. Any consumer that
+// reads the whole list by position and is not written against the view (the combat-pin share, the
+// put-bounce / ETB / ETB-counter folds, the EDF combo shortcut, the land-deferral filter, the four axes
+// that do not skip a clone, the census / dump diagnostics) materialises first -- none of them is live on
+// a deck that casts Brainstorm today. Inert for every deck without a put_back_from_hand card: no fan, no
+// layout.
+//
+// MTG_PB_LAZY_CANDS_VERIFY (PbAxesAndTwins) runs the axes and the twin step a second time, in full, on
+// the same input and compares every index of the lazy view with that list.
+static bool PbLazyCandsOn()
+{
+    static const bool v = EnvOn("MTG_PB_LAZY_CANDS", true);   // DEFAULT ON; =0 materialises every clone
+    return v;
+}
+static bool PbLazyCandsVerifyOn()
+{
+    static const bool v = EnvOn("MTG_PB_LAZY_CANDS_VERIFY");  // diagnostic: re-enumerate in full and compare
+    return v;
+}
+
+struct PbLazyLayout
+{
+    bool active = false;                    // at least one fan is held lazily (nothing materialised it)
+    std::size_t e0 = 0;                     // full-list index of the clone block (the list size at the axis)
+    std::vector<int> fan_n;                 // per fan: its clone count (w - 1)
+    std::vector<std::size_t> fan_base;      // per fan: its base plan's index (< e0, the same in both lists)
+    std::vector<std::size_t> fan_end;       // per fan: the end of its clones within the block (prefix sums)
+    std::vector<TurnSolver::Plan> protos;   // per fan: the rank-1 clone, with every later write applied
+    std::size_t P = 0;                      // the clone block's length (sum of fan_n)
+    // The twins of the clones (AppendSoulbondDeclineVariants): per fan, does it twin them; where (in L) the
+    // block of twins sits; its length. Q == 0 when the deck has no soulbond or no fan is twinned.
+    std::vector<char> fan_twin;
+    std::vector<std::size_t> twin_fan;      // the twinned fans, in order, and the end of each one's twins
+    std::vector<std::size_t> twin_end;      // within the twin block (prefix sums)
+    std::size_t t_at = 0;
+    std::size_t Q = 0;
+    bool twins_recorded = false;
+
+    // Full-list index i -> where it lives: in L (returns false, `li` set) or in a synthesised block (returns
+    // true: fan `f`, put-back rank `k`, and `twin` for the block of the clones' soulbond decline twins).
+    bool Locate(std::size_t i, std::size_t& li, std::size_t& f, int& k, bool& twin) const
+    {
+        if (i < e0) { li = i; return false; }
+        if (i < e0 + P)
+        {
+            const std::size_t j = i - e0;
+            const std::size_t fi = static_cast<std::size_t>(
+                std::upper_bound(fan_end.begin(), fan_end.end(), j) - fan_end.begin());
+            const std::size_t start = fi == 0 ? 0 : fan_end[fi - 1];
+            f = fi; k = static_cast<int>(j - start + 1); twin = false;
+            return true;
+        }
+        const std::size_t j = i - P;
+        if (j < t_at || Q == 0) { li = j; return false; }
+        if (j < t_at + Q)
+        {
+            const std::size_t r = j - t_at;
+            const std::size_t ti = static_cast<std::size_t>(
+                std::upper_bound(twin_end.begin(), twin_end.end(), r) - twin_end.begin());
+            const std::size_t start = ti == 0 ? 0 : twin_end[ti - 1];
+            f = twin_fan[ti]; k = static_cast<int>(r - start + 1); twin = true;
+            return true;
+        }
+        li = j - Q;
+        return false;
+    }
+    // Full-list index i -> fills `out` with the synthesised entry and returns true, or returns false with
+    // `li` = its index into L.
+    bool Synth(std::size_t i, std::size_t& li, TurnSolver::Plan& out) const
+    {
+        std::size_t f = 0;
+        int k = 0;
+        bool twin = false;
+        if (!Locate(i, li, f, k, twin)) { return false; }
+        out = protos[f];
+        out.putback_choice = k;
+        if (twin) { out.soulbond_decline = true; out.bp_wave0 = false; }
+        return true;
+    }
+};
+
+namespace pblazycands
+{
+inline std::atomic<long long> g_lazy{0}, g_avoided{0}, g_materialised{0}, g_verified{0},
+                              g_verified_n{0}, g_bad{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (g_lazy.load() == 0 && g_materialised.load() == 0 && g_verified.load() == 0) { return; }
+        std::fprintf(stderr, "[pb-lazy-cands] lazy_lists=%lld clones_not_materialised=%lld materialised_on_demand=%lld"
+                     " | verify lists=%lld entries=%lld MISMATCH=%lld\n",
+                     g_lazy.load(), g_avoided.load(), g_materialised.load(),
+                     g_verified.load(), g_verified_n.load(), g_bad.load());
+    }
+};
+inline Dump g_dump;
+}   // namespace pblazycands
+
+// Builds the full list in place from L + the layout (the order spelled out above) and retires the
+// layout. Before the twin step (twins_recorded false) only the clone block exists, inserted at e0.
+static void PbLazyMaterialize(std::vector<TurnSolver::Plan>& all, PbLazyLayout& lz)
+{
+    if (!lz.active) { return; }
+    pblazycands::g_materialised.fetch_add(1, std::memory_order_relaxed);
+    const std::size_t total = all.size() + lz.P + (lz.twins_recorded ? lz.Q : 0);
+    std::vector<TurnSolver::Plan> full;
+    full.reserve(total);
+    if (!lz.twins_recorded) { lz.Q = 0; }
+    for (std::size_t i = 0; i < total; ++i)
+    {
+        std::size_t li = 0;
+        TurnSolver::Plan syn;
+        if (lz.Synth(i, li, syn)) { full.push_back(std::move(syn)); }
+        else                      { full.push_back(std::move(all[li])); }
+    }
+    all.swap(full);
+    lz = PbLazyLayout{};
+}
+
+// A candidate list as its consumers index it: the vector itself, or (MTG_PB_LAZY_CANDS) the vector plus a
+// layout whose blocks are synthesised. Implicit from a vector, so every plain caller is unchanged.
+// operator[] on a synthesised index returns a reference into a small ring keyed by index: valid until
+// kRing further DISTINCT synthesised indices are read through the same view. A caller that must hold
+// one across arbitrary work copies it, or uses At() with its own storage.
+class CandSeq
+{
+public:
+    CandSeq(const std::vector<TurnSolver::Plan>& real) : m_real(&real) {}   // NOLINT(implicit)
+    // `lz` is read LIVE: once a consumer materialises the layout (PbLazyMaterialize retires it), the view
+    // is the plain vector again.
+    CandSeq(const std::vector<TurnSolver::Plan>& real, const PbLazyLayout* lz) : m_real(&real), m_lz(lz) {}
+    bool Lazy() const { return Live() != nullptr; }
+    std::size_t size() const
+    {
+        const PbLazyLayout* lz = Live();
+        return m_real->size() + (lz != nullptr ? lz->P + lz->Q : 0);
+    }
+    // Is full-list index i a lazily held put-back clone (or its decline twin)? Then `proto` is its fan's
+    // prototype and `k` its put-back rank: the entry is *proto with putback_choice = k (and, for a twin,
+    // soulbond_decline = true, bp_wave0 = false) -- every other field is the prototype's.
+    bool PutBackClone(std::size_t i, const TurnSolver::Plan*& proto, int& k) const
+    {
+        const PbLazyLayout* lz = Live();
+        if (lz == nullptr) { return false; }
+        std::size_t li = 0, f = 0;
+        bool twin = false;
+        if (!lz->Locate(i, li, f, k, twin)) { return false; }
+        proto = &lz->protos[f];
+        return true;
+    }
+    const TurnSolver::Plan& At(std::size_t i, TurnSolver::Plan& storage) const
+    {
+        const PbLazyLayout* lz = Live();
+        if (lz == nullptr) { return (*m_real)[i]; }
+        std::size_t li = 0;
+        if (lz->Synth(i, li, storage)) { return storage; }
+        return (*m_real)[li];
+    }
+    const TurnSolver::Plan& operator[](std::size_t i) const
+    {
+        const PbLazyLayout* lz = Live();
+        if (lz == nullptr) { return (*m_real)[i]; }
+        for (std::size_t r = 0; r < kRing; ++r) { if (m_ring_idx[r] == i) { return m_ring[r]; } }
+        if (m_ring.empty()) { m_ring.resize(kRing); }   // allocated once, never again: references stay put
+        std::size_t li = 0;
+        const std::size_t slot = m_ring_next;
+        if (!lz->Synth(i, li, m_ring[slot])) { return (*m_real)[li]; }
+        m_ring_idx[slot] = i;
+        m_ring_next = (m_ring_next + 1) % kRing;
+        return m_ring[slot];
+    }
+private:
+    const PbLazyLayout* Live() const { return (m_lz != nullptr && m_lz->active) ? m_lz : nullptr; }
+    static constexpr std::size_t kRing = 8;
+    const std::vector<TurnSolver::Plan>* m_real = nullptr;
+    const PbLazyLayout* m_lz = nullptr;
+    mutable std::vector<TurnSolver::Plan> m_ring;   // kRing slots once a synthesised index is read
+    mutable std::size_t m_ring_idx[kRing] = { SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX,
+                                              SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX };
+    mutable std::size_t m_ring_next = 0;
+};
+
 // Hands one node's deferred continuations to its caller, one variant at a time. The caller owns the
 // scoring (the two candidate loops score differently), the walker owns WHICH variant comes next and
 // when a slot is exhausted.
@@ -71014,7 +71228,7 @@ public:
     // `host_pends` -- can THIS host pend a base plan at the breakpoint node (does it pass the node a
     // capture)? Only FSLineWin's and FSLineTail's plan loops ever do, and only when node_host_here.
     // See BpWaveUnhostedSitesOn for why the mask has to know.
-    BpWaveWalker(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
+    BpWaveWalker(const GameState& state, const CandSeq& plans,
                  std::size_t limit, const KnownLens* known_n,
                  const TranspositionTable::Key* node_key,
                  const std::unordered_set<std::size_t>* no_bp,
@@ -71097,7 +71311,7 @@ public:
     std::size_t LastSlot() const { return m_last; }   // MTG_BP_WAVE_PROBE slot attribution
 
     // Fills `out` with the next variant to score. False once every slot is retired.
-    bool Next(const std::vector<TurnSolver::Plan>& plans, TurnSolver::Plan& out)
+    bool Next(const CandSeq& plans, TurnSolver::Plan& out)
     {
         const std::size_t n = m_slots.size();
         for (std::size_t tried = 0; tried < n; ++tried)
@@ -71243,7 +71457,7 @@ public:
     // `m` (MTG_BP_NEW_ONLY_DEMOTE) is the same breakpoint's DEMOTED list length, read from the same
     // apply (g_bp_demoted_last); -1 = the host does not track it. A slot that still owes demoted
     // hand-outs is not retired at the end of its list -- Next() hands them out last.
-    bool Report(const std::vector<TurnSolver::Plan>& plans, int n, int seen, int m = -1)
+    bool Report(const CandSeq& plans, int n, int seen, int m = -1)
     {
         if (m_last_empty || m_last_demoted)
         {
@@ -71325,7 +71539,7 @@ private:
     // bp_at < BpSearchDepth() for a plan it fanned out (bp_wave0), so those resume at rank W; every
     // other slot -- a plan MTG_BP_MAXBASE or the wave-0 class mask dropped, and every NESTED index --
     // starts at rank 0, because nothing has scored it yet.
-    void AddSlots(const std::vector<TurnSolver::Plan>& plans, std::size_t bi, int want)
+    void AddSlots(const CandSeq& plans, std::size_t bi, int want)
     {
         if (bi >= m_bases.size()) { return; }
         if (m_at_count.size() < m_bases.size()) { m_at_count.resize(m_bases.size(), 0); }
@@ -71981,8 +72195,14 @@ constexpr int kCombatAuraSwapNoSwap = 0;
 // purge step 14: ApplyPlanDirect's dig loop runs in BOTH mains, so the m2 dig variants are live.)
 // `idle_pass`: `all` is the ONE pass plan a host appended after an empty enumeration
 // (AppendIdlePassAxes) -- it changes only the dig axis's lever hatch (see there).
+// The put-back fan id counter (Plan::putback_group), per thread. File scope (it used to be a static local of
+// the axis below) only so MTG_PB_LAZY_CANDS_VERIFY can rewind it around its full re-enumeration, which then
+// numbers its fans exactly as the lazy one did.
+static thread_local int t_pb_group_counter = 0;
+
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
-                                  std::vector<TurnSolver::Plan>& all, bool idle_pass = false)
+                                  std::vector<TurnSolver::Plan>& all, bool idle_pass = false,
+                                  PbLazyLayout* pb_lazy = nullptr)
 {
     // INSIDE A BREAKPOINT CONTINUATION DERIVATION (g_bp_enum_depth > 0) only the DURING-CAST axes
     // fan out -- the ones whose pins a continuation carries (ContPins, TurnSolver.h): scry (its land),
@@ -72059,6 +72279,23 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         return plan_tr[i];
     };
     const Player& ap = state.ActivePlayer();
+    // MTG_PB_LAZY_CANDS: four axes below do NOT skip put-back clones (their base-only filter predates the
+    // put-back axis), so in the full list they would clone a clone too. Before one of them runs, if the
+    // lazy layout holds a fan whose base passes that axis's filter -- a clone passes it exactly when its
+    // base does, they differ only in the put-back fields no such filter reads -- the clone block is put
+    // back into the list (at its own position) and the layout retired. Positions past it move, so the
+    // per-plan trait cache is dropped (recomputed lazily; it is a function of each plan's content).
+    auto pb_lazy_materialize_if = [&](auto&& base_passes)
+    {
+        if (pb_lazy == nullptr || !pb_lazy->active) { return; }
+        for (std::size_t f = 0; f < pb_lazy->fan_base.size(); ++f)
+        {
+            if (!base_passes(pb_lazy->fan_base[f])) { continue; }
+            PbLazyMaterialize(all, *pb_lazy);
+            plan_tr.clear();
+            return;
+        }
+    };
     // SEARCHED land-ETB scry/surveil (MTG_SCRY_SEARCH, opt-in). The disposition resolves inline
     // inside the land's ETB, so it cannot be an Action -- instead emit one plan variant per
     // candidate disposition and let the outer rollout score each, exactly as fetch_target and
@@ -73190,6 +73427,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         // group counter) runs exactly as in a full derivation, so the base plans are bit-for-bit the
         // same objects. Full lists (every list that is stored or indexed) are never built this way.
         const bool pb_materialize = t_bp_front_only_depth != g_bp_enum_depth;
+        // MTG_PB_LAZY_CANDS (see PbLazyLayout): the host asked for this list's clones to be held as ONE
+        // prototype per fan. Only where they would be materialised at all (not a front-only derivation).
+        const bool pb_lazy_here = pb_lazy != nullptr && pb_materialize;
+        if (pb_lazy_here) { *pb_lazy = PbLazyLayout{}; pb_lazy->e0 = n_now; }
         for (std::size_t pi = 0; pi < n_now; ++pi)
         {
             const TurnSolver::Plan& p = all[pi];
@@ -73204,14 +73445,26 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const int w = PutBackAxisWidth(state, p, ai, *d);
                 // The fan's sibling identity for the put-back fold (PutBackFoldMemo): on the variants
                 // now, on the base after every axis has cloned (putback_based, below).
-                static thread_local int s_putback_group = 0;
+                int& s_putback_group = t_pb_group_counter;   // one counter per thread (MTG_PB_LAZY_CANDS_VERIFY rewinds it)
                 if (w > 1)
                 {
                     if (++s_putback_group <= 0) { s_putback_group = 1; }
                     putback_based.emplace_back(pi, s_putback_group);
                 }
                 if (pb_materialize) { cantripattr::NoteFan(cantripattr::kPutBack, w - 1); }   // diagnostic
-                for (int k = 1; pb_materialize && k < w; ++k)
+                if (pb_lazy_here && w > 1)
+                {
+                    // The fan's PROTOTYPE: the rank-1 clone, built exactly as the loop below builds it.
+                    TurnSolver::Plan v = p;
+                    v.putback_choice = 1;
+                    v.putback_group  = s_putback_group;
+                    pb_lazy->protos.push_back(std::move(v));
+                    pb_lazy->fan_n.push_back(w - 1);
+                    pb_lazy->fan_base.push_back(pi);
+                    pb_lazy->P += static_cast<std::size_t>(w - 1);
+                    pb_lazy->fan_end.push_back(pb_lazy->P);
+                }
+                for (int k = 1; pb_materialize && !pb_lazy_here && k < w; ++k)
                 {
                     TurnSolver::Plan v = p;
                     v.putback_choice = k;
@@ -73241,11 +73494,22 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         static const bool s_pb_trace = EnvOn("MTG_PUTBACK_TRACE");
         if (s_pb_trace && fanned > 0)
         {
-            std::fprintf(stderr, "[putback] T%d %zu base plan(s) fanned, widest %zu, +%zu variants (of %zu plans)\n",
-                         state.turn_number, fanned, widest, extra.size(), all.size());
+            std::fprintf(stderr, "[putback] T%d %zu base plan(s) fanned, widest %zu, +%zu variants (of %zu plans)%s\n",
+                         state.turn_number, fanned, widest, extra.size() + (pb_lazy_here ? pb_lazy->P : 0),
+                         all.size(), (pb_lazy_here && pb_lazy->P > 0) ? " [lazy]" : "");
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+        if (pb_lazy_here)
+        {
+            pb_lazy->active = pb_lazy->P > 0;
+            if (pb_lazy->active)
+            {
+                pblazycands::g_lazy.fetch_add(1, std::memory_order_relaxed);
+                pblazycands::g_avoided.fetch_add(static_cast<long long>(pb_lazy->P), std::memory_order_relaxed);
+            }
+            else { *pb_lazy = PbLazyLayout{}; }
+        }
     }
 
     // SEARCHED OPTIONAL ETB COUNTER (Emiel the Blessed's "you may pay {G/W}") -- 2026-09-30. The
@@ -73539,6 +73803,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             const std::vector<int> lackey_ranks = StatePinVariantRanks(state.scripted_cheat_choice,
                                                                        static_cast<int>(k));
+            pb_lazy_materialize_if([&](std::size_t bi)
+            {
+                const TurnSolver::Plan& p = all[bi];
+                return !(p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0);
+            });
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
             {
@@ -73582,6 +73851,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         const std::size_t W = std::min<std::size_t>(4, sac_names.size() + 1);
         if (W > 1)
         {
+            pb_lazy_materialize_if([&](std::size_t bi)
+            {
+                const TurnSolver::Plan& p = all[bi];
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                    || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || !p.sac_pins.empty()) { return false; }
+                return (plan_traits(bi) & kTrSacLand) != 0;
+            });
             std::vector<TurnSolver::Plan> extra;
             for (std::size_t pi = 0, n_sl = all.size(); pi < n_sl; ++pi)
             {
@@ -73883,6 +74159,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             return true;
         };
+        pb_lazy_materialize_if([&](std::size_t bi)
+        {
+            const TurnSolver::Plan& p = all[bi];
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0
+                || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
+                || !p.sac_pins.empty()) { return false; }
+            return (plan_traits(bi) & kTrSacCol) != 0;
+        });
         std::vector<TurnSolver::Plan> extra;
         for (std::size_t pi = 0, n_sc = all.size(); pi < n_sc; ++pi)
         {
@@ -73965,6 +74250,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         && PaySacFreshHoldEnabled() && !HumanPlayActive()
         && !CopyMagnetLive(state, state.active_player_index))
     {
+        pb_lazy_materialize_if([](std::size_t) { return true; });
         std::vector<TurnSolver::Plan> extra;
         for (const TurnSolver::Plan& p : all)
         {
@@ -75408,6 +75694,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             for (std::size_t i = n_before_axes; i < all.size(); ++i)
             { all[i].bp_wave0 = false; }
+            // ...and the lazy clone block's prototypes (MTG_PB_LAZY_CANDS): every clone sits at e0 or
+            // later, and e0 >= n_before_axes, so the clear reaches each of them in the full list.
+            if (pb_lazy != nullptr && pb_lazy->active)
+            { for (TurnSolver::Plan& pr : pb_lazy->protos) { pr.bp_wave0 = false; } }
         }
     }
 
@@ -75496,8 +75786,17 @@ struct SoulbondDeclineAuditDumper
 static SoulbondDeclineAuditDumper s_soulbond_decline_audit_dumper;
 }  // namespace
 
-static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<TurnSolver::Plan>& all)
+static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<TurnSolver::Plan>& all,
+                                          PbLazyLayout* pb_lazy = nullptr)
 {
+    // MTG_PB_LAZY_CANDS: the twins of a lazy clone block are recorded, not built (see the loop). With no
+    // twin step at all, the layout's second block is empty.
+    PbLazyLayout* const lz = (pb_lazy != nullptr && pb_lazy->active) ? pb_lazy : nullptr;
+    if (lz != nullptr)
+    {
+        lz->t_at = all.size(); lz->Q = 0; lz->fan_twin.assign(lz->fan_n.size(), 0); lz->twins_recorded = true;
+        lz->twin_fan.clear(); lz->twin_end.clear();
+    }
     if (all.empty() || !state.deck_has_soulbond || HumanPlayActive()) { return; }
     static const bool s_on = EnvOn("MTG_SOULBOND_DECLINE_AXIS", true);
     if (!s_on) { return; }
@@ -75544,9 +75843,11 @@ static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<Tu
         }
     };
     std::vector<TurnSolver::Plan> extra;
-    for (const TurnSolver::Plan& p : all)
+    // Does plan `p` get a decline twin? A function of its actions and of state facts (computed lazily
+    // above, order-free), so a put-back clone is twinned exactly when its base is.
+    auto wants_twin = [&](const TurnSolver::Plan& p) -> bool
     {
-        if (p.soulbond_decline) { continue; }
+        if (p.soulbond_decline) { return false; }
         bool casts_soulbond = false, casts_strong = false;
         bool casts_dd_soulbond = false, casts_ping = false, casts_other = false, casts_creature = false;
         for (const Action& a : p.actions)
@@ -75571,7 +75872,7 @@ static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<Tu
                 if (d->card.m_power.value_or(0) >= 2) { casts_strong = true; }
             }
         }
-        if (!casts_creature) { continue; }
+        if (!casts_creature) { return false; }
         bool want = false;
         // (A false weak-partner gate used to `return` here: it is board-level, so no later plan could
         // get its twin either. Folding it into `want` is the same outcome for every plan.)
@@ -75591,13 +75892,35 @@ static void AppendSoulbondDeclineVariants(const GameState& state, std::vector<Tu
             // would be unfindable. Rare: a free Lookout beside an unpaired Niv.
             if (free_lookout_on_bf && niv_on_bf && NivLookoutNivOnlyOn())         { want = true; }
         }
-        if (!want) { continue; }
+        return want;
+    };
+    // The lazy clone block sits at e0 in the full list, so its twins come right after the twins of the
+    // entries before it: record that position (in the list as built here) and which fans twin.
+    auto record_lazy_twins = [&]()
+    {
+        lz->t_at = all.size() + extra.size();
+        for (std::size_t fi = 0; fi < lz->fan_n.size(); ++fi)
+        {
+            if (!wants_twin(lz->protos[fi])) { continue; }
+            lz->fan_twin[fi] = 1;
+            lz->Q += static_cast<std::size_t>(lz->fan_n[fi]);
+            lz->twin_fan.push_back(fi);
+            lz->twin_end.push_back(lz->Q);
+            g_soulbond_decline_twins.fetch_add(lz->fan_n[fi], std::memory_order_relaxed);
+        }
+    };
+    for (std::size_t i = 0, n = all.size(); i < n; ++i)
+    {
+        if (lz != nullptr && i == lz->e0) { record_lazy_twins(); }
+        const TurnSolver::Plan& p = all[i];
+        if (!wants_twin(p)) { continue; }
         TurnSolver::Plan v = p;
         v.soulbond_decline = true;
         v.bp_wave0 = false;   // a clone does not inherit wave 0's fan-out (MTG_BP_AXIS_W0_CLEAR)
         extra.push_back(std::move(v));
         g_soulbond_decline_twins.fetch_add(1, std::memory_order_relaxed);
     }
+    if (lz != nullptr && lz->e0 >= all.size()) { record_lazy_twins(); }
     all.insert(all.end(), std::make_move_iterator(extra.begin()),
                           std::make_move_iterator(extra.end()));
 }
@@ -75915,8 +76238,64 @@ static PrefixProbeGuard PositionPrefixProbeGuard(const GameState& state, const T
 }
 
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const GameState& state,
-                                                                    bool is_pre_combat);
+                                                                    bool is_pre_combat,
+                                                                    PbLazyLayout* pb_lazy = nullptr);
 static const char* PlanDumpKindName(Action::Kind k);
+
+// The enumeration's last two steps -- the sub-decision axes and the soulbond decline twins -- with the
+// put-back clone block held lazily when `pb_lazy` is given (MTG_PB_LAZY_CANDS). Returns the list's length
+// right after the axes, counting the lazy block (the no-drop path's axis-variant stat).
+//
+// MTG_PB_LAZY_CANDS_VERIFY: the same two steps run AGAIN, in full, on a copy of the same input list with
+// the fan counter rewound (so the fans get the same ids), and every index of the lazy view is compared
+// with the full list (Plan::operator==, every field). Both runs share everything the enumeration did
+// before the axes, which is the point: two whole enumerations of one state can legitimately differ
+// (breakpoint-cache residency), the axes on one input cannot, so a mismatch here is the fold's.
+// Diagnostic only: the second run's side counters are not undone.
+static std::size_t PbAxesAndTwins(const GameState& state, bool is_pre_combat,
+                                  std::vector<TurnSolver::Plan>& all, PbLazyLayout* pb_lazy)
+{
+    const bool verify = pb_lazy != nullptr && PbLazyCandsVerifyOn();
+    std::vector<TurnSolver::Plan> copy;
+    const int c0 = t_pb_group_counter;
+    if (verify) { copy = all; }
+    AppendSubdecisionAxes(state, is_pre_combat, all, /*idle_pass=*/false, pb_lazy);
+    const std::size_t after_axes = all.size() + ((pb_lazy != nullptr && pb_lazy->active) ? pb_lazy->P : 0);
+    AppendSoulbondDeclineVariants(state, all, pb_lazy);
+    if (!verify) { return after_axes; }
+    const int c1 = t_pb_group_counter;
+    t_pb_group_counter = c0;
+    AppendSubdecisionAxes(state, is_pre_combat, copy);
+    AppendSoulbondDeclineVariants(state, copy);
+    const bool same_counter = t_pb_group_counter == c1;
+    t_pb_group_counter = c1;
+    const CandSeq view(all, pb_lazy);
+    long long bad = (copy.size() != view.size() || !same_counter) ? 1 : 0;
+    std::size_t first_bad = SIZE_MAX;
+    TurnSolver::Plan syn;
+    const std::size_t n = std::min(copy.size(), view.size());
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        if (view.At(i, syn) == copy[i]) { continue; }
+        ++bad;
+        if (first_bad == SIZE_MAX) { first_bad = i; }
+    }
+    pblazycands::g_verified.fetch_add(1, std::memory_order_relaxed);
+    pblazycands::g_verified_n.fetch_add(static_cast<long long>(n), std::memory_order_relaxed);
+    if (bad > 0)
+    {
+        const long long nb = pblazycands::g_bad.fetch_add(bad, std::memory_order_relaxed);
+        if (nb < 20)
+        {
+            std::fprintf(stderr, "[pb-lazy-cands] MISMATCH T%d %s full=%zu lazy=%zu (L=%zu e0=%zu P=%zu t_at=%zu Q=%zu"
+                         " active=%d) counter=%d first_bad=%zd bad=%lld\n",
+                         state.turn_number, is_pre_combat ? "m1" : "m2", copy.size(), view.size(), all.size(),
+                         pb_lazy->e0, pb_lazy->P, pb_lazy->t_at, pb_lazy->Q, pb_lazy->active ? 1 : 0,
+                         same_counter ? 1 : 0, first_bad == SIZE_MAX ? -1 : static_cast<std::ptrdiff_t>(first_bad), bad);
+        }
+    }
+    return after_axes;
+}
 static const char* PlanDumpModeName(PermAbilityMode m);
 static std::string VampDumpAction(const Action& a)
 {
@@ -75937,9 +76316,10 @@ static std::string VampDumpAction(const Action& a)
     return s;
 }
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
-                                                                    bool is_pre_combat)
+                                                                    bool is_pre_combat,
+                                                                    PbLazyLayout* pb_lazy = nullptr)
 {
-    std::vector<TurnSolver::Plan> all = EnumeratePlansWithLandUncachedBody(state, is_pre_combat);
+    std::vector<TurnSolver::Plan> all = EnumeratePlansWithLandUncachedBody(state, is_pre_combat, pb_lazy);
     // A PROVIDER'S LAND-DEFERRAL RESTRICTION (DecisionProvider::OffersLandDeferral; Vampires' PROPOSED
     // MTG_VAMP_ALWAYS_LAND). Pre-combat, while the drop is open and a land is in hand, a provider that says no
     // drops every plan that plays no land; the land plans (land-first and land-after-the-activations alike)
@@ -75957,6 +76337,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
         if (land_in_hand && ap.lands_played_this_turn < ap.LandDropsAvailable())
         {
+            // A lazy clone block is filtered with its base (they share land_to_play), but this filter is
+            // written against the whole list: materialise it first (MTG_PB_LAZY_CANDS).
+            if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
             std::vector<TurnSolver::Plan> kept;
             kept.reserve(all.size());
             for (TurnSolver::Plan& p : all) { if (!p.land_to_play.empty()) { kept.push_back(std::move(p)); } }
@@ -75969,6 +76352,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // (default 20) times per process. Single-threaded runs only.
     static const int s_min = EnvInt("MTG_VAMP_PLAN_DUMP", 0);
     static std::atomic<int> s_left{EnvInt("MTG_VAMP_PLAN_DUMP_N", 20)};
+    if (s_min > 0 && pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }   // the dump prints every plan
     if (s_min > 0 && static_cast<int>(all.size()) >= s_min && s_left.fetch_sub(1) > 0)
     {
         const Player& ap = state.ActivePlayer();
@@ -75992,7 +76376,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     return all;
 }
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const GameState& state,
-                                                                    bool is_pre_combat)
+                                                                    bool is_pre_combat,
+                                                                    PbLazyLayout* pb_lazy)
 {
     RevealLogPause _rlp_enum;   // candidate scoring is hypothetical -- see EnumeratePlans
     considerstats::RecordHost(is_pre_combat);
@@ -76043,14 +76428,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         const long long pre_axes = static_cast<long long>(plans.size());
         {
             const std::size_t n0 = plans.size();
-            AppendSubdecisionAxes(state, is_pre_combat, plans);   // during-cast axes only inside a derivation
+            // During-cast axes only inside a derivation; then the soulbond decline twins (the vial-order
+            // axis runs on the no-drop path too, m1 AND m2: a Vial deck spends most of its turns with no
+            // land left to play, which is exactly when the puts and casts pile up).
+            const std::size_t n_axes = PbAxesAndTwins(state, is_pre_combat, plans, pb_lazy);
             g_nodrop_enum[is_pre_combat ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
             g_nodrop_axis_vars[is_pre_combat ? 1 : 0].fetch_add(
-                static_cast<long long>(plans.size() - n0), std::memory_order_relaxed);
+                static_cast<long long>(n_axes - n0), std::memory_order_relaxed);
         }
-        // The vial-order axis runs on the no-drop path too (m1 AND m2): a Vial deck spends most of
-        // its turns with no land left to play, which is exactly when the puts and casts pile up.
-        AppendSoulbondDeclineVariants(state, plans);
         if (axes_stats)
         {
             t_bpd_pre_axes = pre_axes;
@@ -77210,8 +77595,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     const auto axes_t0 = axes_stats ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const long long pre_axes = static_cast<long long>(all.size());
     AppendBreakpointVariants(state, all);
-    AppendSubdecisionAxes(state, is_pre_combat, all);
-    AppendSoulbondDeclineVariants(state, all);
+    PbAxesAndTwins(state, is_pre_combat, all, pb_lazy);   // the axes, then the soulbond decline twins
     if (axes_stats)
     {
         t_bpd_pre_axes = pre_axes;
@@ -77221,7 +77605,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
-    PROF_ADD(plans_generated, all.size());
+    PROF_ADD(plans_generated, all.size()
+                              + ((pb_lazy != nullptr && pb_lazy->active) ? pb_lazy->P + pb_lazy->Q : 0));
     PlanDomCensus(all);   // MTG_PLANDOM_CENSUS only; prunes nothing (see the census above)
     return all;
 }
@@ -77429,6 +77814,9 @@ namespace enummemo
         // max_dropped propagation problem, solved the same way.
         uint32_t condemn_drops = 0;            // g_condemn_drops delta over the uncached body
         uint32_t trunc_delta   = 0;            // g_fs_trunc_events delta over the uncached body
+        // MTG_PB_LAZY_CANDS: `plans` is the list WITHOUT its lazily held put-back clone block when this
+        // is active. A lazy caller gets both back; any other caller gets the materialised full list.
+        PbLazyLayout lazy;
     };
 
     // Fingerprint of the enumeration inputs the key does NOT (or conditionally does not) fold --
@@ -77571,10 +77959,32 @@ namespace
     }
 }
 
+// MTG_PB_LAZY_CANDS: what plancache::ApproxPlansBytes would charge for the FULL list a lazily held one
+// stands for -- its stored part, one Plan per synthesised entry, and each clone's (and decline twin's)
+// heap, which is its fan prototype's: both are copy-constructed from the same plan, so their capacities
+// agree. Only the outer vector's growth slack is not reproduced. The memo below prices a lazy entry with
+// this, so it is admitted to the shared plan pool when the full list would have been (pool binding
+// aside, where admission is interleaving-dependent anyway: see the determinism warning).
+static long long PbLazyListBytes(const std::vector<TurnSolver::Plan>& real, const PbLazyLayout& lz)
+{
+    std::size_t b = plancache::ApproxPlansBytes(real) + (lz.P + lz.Q) * sizeof(TurnSolver::Plan);
+    for (std::size_t fi = 0; fi < lz.protos.size(); ++fi)
+    {
+        const std::size_t per = ApproxPlanBytes(lz.protos[fi]) - sizeof(TurnSolver::Plan);
+        const std::size_t n   = static_cast<std::size_t>(lz.fan_n[fi])
+                              * ((fi < lz.fan_twin.size() && lz.fan_twin[fi] != 0) ? 2 : 1);
+        b += per * n;
+    }
+    return static_cast<long long>(b);
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
-                                                            bool is_pre_combat)
+                                                            bool is_pre_combat,
+                                                            PbLazyLayout* pb_lazy)
 {
     routetape::Suspend _rts;   // see EnumeratePlans
+    // The memo's own verifier compares whole lists: it keeps every list it sees whole.
+    if (enummemo::VerifyOn()) { pb_lazy = nullptr; }
     const bool memo_ok = enummemo::Enabled() && !HumanPlayActive()
                       && !g_bp_root_enum
                       && g_bp_enum_depth == 0
@@ -77601,7 +78011,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             { enummemo::g_bypass_nest.fetch_add(1, std::memory_order_relaxed); }
             else                         { enummemo::g_bypass_other.fetch_add(1, std::memory_order_relaxed); }
         }
-        return EnumeratePlansWithLandUncached(state, is_pre_combat);
+        return EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy);
     }
 
     auto& cache = enummemo::t_cache;
@@ -77664,6 +78074,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             g_condemn_drops   += it->second.condemn_drops;
             g_fs_trunc_events += it->second.trunc_delta;
         }
+        // MTG_PB_LAZY_CANDS: a lazily stored entry goes back lazy to a lazy caller and whole to any other.
+        if (it->second.lazy.active)
+        {
+            if (pb_lazy != nullptr) { *pb_lazy = it->second.lazy; return it->second.plans; }
+            std::vector<TurnSolver::Plan> full = it->second.plans;
+            PbLazyLayout lz = it->second.lazy;
+            PbLazyMaterialize(full, lz);
+            return full;
+        }
         return it->second.plans;
     }
 
@@ -77674,8 +78093,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     groupwave::g_state.max_dropped = 0;
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
-    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLandUncached(state, is_pre_combat);
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy);
     plancache::ReportHiwater("m1", state, plans);
+    const bool lazy_now = pb_lazy != nullptr && pb_lazy->active;
     const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
@@ -77688,13 +78108,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     {
         // Second visit this decision: the state provably recurs -- promote to full storage,
         // IF the plan-cache byte budget has room (over budget: stay a marker, recompute).
-        const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
+        const long long psz = lazy_now ? PbLazyListBytes(plans, *pb_lazy)
+                                       : static_cast<long long>(plancache::ApproxPlansBytes(plans));
         if (plancache::Fits(psz))
         {
             plancache::Acquire(psz, plancache::t_enum_bytes);
             it->second.has_plans     = true;
             it->second.max_dropped   = own_md;
             it->second.plans         = plans;
+            it->second.lazy          = lazy_now ? *pb_lazy : PbLazyLayout{};
             it->second.condemn_drops = own_drops;
             it->second.trunc_delta   = own_trunc;
             if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
@@ -90393,6 +90815,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     g_bp_root_enum = enforce_budget;
     groupwave::g_state.max_dropped = 0;   // reset; capture right after (see the FSLineWin twin)
     std::vector<Plan> candidates;
+    // MTG_PB_LAZY_CANDS (see PbLazyLayout): the put-back clone block of this list is held as one prototype
+    // per fan and synthesised per index (`cands` below). Not under the census / dump diagnostics that walk
+    // the enumeration itself; every whole-list consumer below either reads through `cands` or materialises.
+    PbLazyLayout pb_lazy;
+    static const bool s_pb_lazy_diag_off = BfCensusOn() || EnvInt("MTG_BF_DUMP", 0) > 0
+                                        || EnvOn("MTG_PLANDOM_CENSUS") || branchstats::Enabled();
+    const bool pb_lazy_req = PbLazyCandsOn() && !HumanPlayActive() && !s_pb_lazy_diag_off;
     {
         // CONDEMNATION: the ENFORCING root's own candidate set is never filtered -- a root
         // candidate the condemnation filter deletes has no escalation path back (the beam below
@@ -90400,11 +90829,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // stay filtered; that is where the savings live. The 100-game census never saw an
         // executed-m2 root drop, so this is insurance for the tail, not a behaviour change.
         CondemnSuppressGuard _csg_root(enforce_budget);
-        candidates = EnumeratePlansWithLand(state, is_pre_combat);
+        candidates = EnumeratePlansWithLand(state, is_pre_combat, pb_lazy_req ? &pb_lazy : nullptr);
     }
     g_bp_root_enum = false;
     const int gw_dropped = groupwave::g_state.max_dropped;
-
+    CandSeq cands(candidates, &pb_lazy);   // reads pb_lazy live: a materialised layout falls back to the vector
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
     for (const Plan& p : candidates)
@@ -90427,6 +90856,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // and reads the resulting state.
     if (enforce_budget ? edfco::RootOn(ResolveProvider(state)) : edfco::LookOn(ResolveProvider(state)))
     {
+        PbLazyMaterialize(candidates, pb_lazy);   // the shortcut indexes the whole list (MTG_PB_LAZY_CANDS)
         const int co = EdfComboOffShortcut(state, candidates, is_pre_combat,
                                            /*verify=*/enforce_budget || edfco::LookTrialOn(),
                                            /*at_root=*/enforce_budget);
@@ -90549,6 +90979,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         }
         if (any_pinned)
         {
+            // A clone carries its base's pins, so `any_pinned` over the lazy list is the full list's; the
+            // share below indexes and edits the whole list, so it gets the full one (MTG_PB_LAZY_CANDS).
+            PbLazyMaterialize(candidates, pb_lazy);
             cp_base_of.assign(candidates.size(), -1);
             cp_is_base.assign(candidates.size(), 0);
             // A bucketing hash only -- equality decides. Ignores nothing the share depends on
@@ -90743,7 +91176,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                       << (enforce_budget ? " top-level" : " rollout")
                       << " depth=" << depth << " sub_depth=" << sub_depth
                       << (is_pre_combat ? " main1" : " main2")
-                      << "  candidates=" << candidates.size() << "\n";
+                      << "  candidates=" << cands.size() << "\n";
             // MTG_TRACE_SOLVE_BOARD=1 (diagnostic, default off; needs the trace above armed): the active
             // player's board (tapped marks), hand, lives and float under each traced decision, and every
             // candidate's FULL action list below -- PlanDesc names casts only, so two plans that differ
@@ -91085,6 +91518,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pin_fold_seen;
         // The put-bounce fold (see PutBounceFold): rides the combat-pin share and the fold above.
         PutBounceFold put_fold;
+        if (pin_fold_here && !HumanPlayActive() && PutBounceFoldOn()) { PbLazyMaterialize(candidates, pb_lazy); }
         put_fold.Build(candidates, cp_base_of, pin_fold_here && !HumanPlayActive() && PutBounceFoldOn());
         const bool put_fold_verify = put_fold.on && PutBounceFoldVerifyOn();
         // EXACT-REPEAT census: the same plan, nothing erased -- full BpCandFingerprint plus the two
@@ -91101,8 +91535,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // Searched-breakpoint variant dedup -- see the identical guard in FSLineWin. Records every
         // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
         // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
-        bool bp_variants_here = false;
-        for (const Plan& p : candidates) { if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
+        bool bp_variants_here = cands.Lazy();   // a lazy block is all put-back clones: PlanDupSkippable
+        for (const Plan& p : candidates) { if (bp_variants_here) { break; } if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
         // The bounce fold (see BounceFoldMemo), wherever the post-apply dedup it replaces runs.
         BounceFoldMemo bounce_fold;
@@ -91111,12 +91545,21 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // ...and the put-bounce fold's IN-PLAN mode (see PutBounceFold::BuildInPlan): the ETB / in-plan
         // sub-choices, declined where the post-apply dedup they repeat runs.
         PutBounceFold etb_fold;
+        if (is_pre_combat && bp_variants_here && state.deck_has_land_search && !HumanPlayActive() && PutBounceFoldOn())
+        { PbLazyMaterialize(candidates, pb_lazy); }
         etb_fold.BuildInPlan(candidates, is_pre_combat && bp_variants_here && state.deck_has_land_search
                                          && !HumanPlayActive() && PutBounceFoldOn());
         const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
         // ...and the ETB-counter fold (see EtbcFold), where the post-apply dedup it pre-empts runs.
         // A combat-pin share candidate (base or variant) is left alone: its apply feeds cp_cache.
         EtbcFold etbc_fold;
+        // The fold arms only on a list holding an ETB-counter variant; that axis runs after the put-back
+        // axis, so no clone carries one and the lazy list answers for the full one. Armed: it indexes the
+        // whole list, so it gets the full one (MTG_PB_LAZY_CANDS).
+        if (cands.Lazy() && bp_variants_here && EtbcFoldOn() && !HumanPlayActive()
+            && std::any_of(candidates.begin(), candidates.end(),
+                           [](const Plan& q) { return q.etbcounter_choice >= 0; }))
+        { PbLazyMaterialize(candidates, pb_lazy); }
         etbc_fold.Build(candidates, bp_variants_here && EtbcFoldOn() && !HumanPlayActive(),
                         [&](std::size_t i)
                         {
@@ -91302,7 +91745,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         { candcensus::g_nodes[census_slot].fetch_add(1, std::memory_order_relaxed); }
         PrePlanShare la_pps;   // every candidate below is applied to a fresh copy of `state`
         vampaxis::List vax_list;   // MTG_VAMP_AXIS_CENSUS: per pass
-        for (const Plan& plan : candidates)
+        // MTG_PB_LAZY_CANDS: iterate the full list's indices; a synthesised candidate lives in pb_syn for
+        // its iteration (nothing below keeps a reference to `plan` past it -- picks are copies, indices
+        // are `ci`).
+        Plan pb_syn;
+        const std::size_t n_cands = cands.size();
+        for (std::size_t ci = 0; ci < n_cands; ++ci)
         {
             // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
             // returns a no-win at its first turn-step, so the rest of the list would only re-pay applies.
@@ -91321,7 +91769,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 long long pass_used       = budget->Used() - used_before;
                 double    avg_per_cand    = static_cast<double>(pass_used)
                                           / static_cast<double>(candidates_done);
-                long long remaining_cands = static_cast<long long>(candidates.size())
+                long long remaining_cands = static_cast<long long>(n_cands)
                                           - candidates_done;
                 double    projected       = avg_per_cand
                                           * static_cast<double>(remaining_cands);
@@ -91335,6 +91783,29 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     break;
                 }
             }
+
+            // THE PUT-BACK FOLD, UNBUILT (MTG_PB_LAZY_CANDS). A lazily held clone reaches the put-back fold's
+            // decline below untouched by every earlier skip -- each of them reads only bp_choice / bp_base /
+            // bp_all (none skips at bp_choice < 0), bounce_group / bounce_choice, dig_group / dig_choice, all
+            // of which the clone shares with its fan's prototype -- so the same tests on the prototype, then
+            // the fold on (group, rank), decide it without building it. The bookkeeping is the fold's own.
+            {
+                const Plan* pb_proto = nullptr;
+                int pb_k = 0;
+                if (cands.PutBackClone(ci, pb_proto, pb_k) && pb_proto->bp_choice < 0
+                    && bounce_fold.SiblingOf(*pb_proto) < 0 && dig_fold.Declines(*pb_proto) < 0)
+                {
+                    const int pbs = pb_fold.DeclinesKey(pb_proto->putback_group, pb_k, pb_proto->bp_choice);
+                    if (pbs >= 0)
+                    {
+                        if (bp_nobp.count(static_cast<std::size_t>(pbs)) != 0)
+                        { bp_nobp.insert(ci); }
+                        ++candidates_done;
+                        continue;
+                    }
+                }
+            }
+            const Plan& plan = cands.At(ci, pb_syn);
 
             // WAVE-0 NOBP SKIP (MTG_BP_W0_NOBP). The base plan this variant was cloned from reached
             // no breakpoint occurrence of ANY class, and a variant differs from its base plan only
@@ -91462,7 +91933,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     {
                         bouncestats::Folded();
                         if (bp_nobp.count(static_cast<std::size_t>(sib)) != 0)
-                        { bp_nobp.insert(static_cast<std::size_t>(&plan - candidates.data())); }
+                        { bp_nobp.insert(ci); }
                         ++candidates_done;
                         continue;
                     }
@@ -91477,7 +91948,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 {
                     g_dig_folded.fetch_add(1, std::memory_order_relaxed);
                     if (bp_nobp.count(static_cast<std::size_t>(db)) != 0)
-                    { bp_nobp.insert(static_cast<std::size_t>(&plan - candidates.data())); }
+                    { bp_nobp.insert(ci); }
                     ++candidates_done;
                     continue;
                 }
@@ -91488,7 +91959,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (pbs >= 0)
                 {
                     if (bp_nobp.count(static_cast<std::size_t>(pbs)) != 0)
-                    { bp_nobp.insert(static_cast<std::size_t>(&plan - candidates.data())); }
+                    { bp_nobp.insert(ci); }
                     ++candidates_done;
                     continue;
                 }
@@ -91505,7 +91976,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             bool put_fold_expect = false;   // verify mode: the combat-pin fold must skip this one
             if (put_fold.on && !cp_base_of.empty())
             {
-                const std::size_t pf_i = static_cast<std::size_t>(&plan - candidates.data());
+                const std::size_t pf_i = ci;
                 const int pf_b = cp_base_of[pf_i];
                 const bool pf_skip = pf_b >= 0 && put_fold.Skip(pf_i, pf_b, cp_cache.count(pf_b) != 0);
                 if (pf_skip && put_fold_verify)
@@ -91533,7 +92004,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             bool etb_fold_expect = false;   // verify mode: the post-apply dedup must skip this one
             if (etb_fold.on)
             {
-                const std::size_t ef_i = static_cast<std::size_t>(&plan - candidates.data());
+                const std::size_t ef_i = ci;
                 const int ef_b = etb_fold.base_of[ef_i];
                 const PutBounceFold::ApplyTrace* ef_tr =
                     ef_b >= 0 ? etb_fold.SkipTrace(ef_i, ef_b, true) : nullptr;
@@ -91585,7 +92056,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // (w0len_record) and the candidate counted for the overrun guard.
             int etbc_expect = -1;   // verify mode: the base this candidate's apply must repeat
             {
-                const std::size_t ec_i = static_cast<std::size_t>(&plan - candidates.data());
+                const std::size_t ec_i = ci;
                 const int ec_b = etbc_fold.Skip(ec_i);
                 if (ec_b >= 0 && etbc_fold.verify) { etbc_expect = ec_b; }
                 else if (ec_b >= 0)
@@ -91615,7 +92086,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 DedupCensusOn() ? g_stranded_tapdraw_count : 0;
             // COMBAT-PIN MAIN-PHASE SHARE (see the block before the pass loop): a variant whose base's
             // apply was cached starts from that post-apply state instead of re-applying it.
-            const std::size_t cp_i = static_cast<std::size_t>(&plan - candidates.data());
+            const std::size_t cp_i = ci;
             const GameState* cp_shared = nullptr;
             if (is_pre_combat && !cp_base_of.empty() && cp_base_of[cp_i] >= 0)
             {
@@ -91629,7 +92100,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // a continuation list, so the host reads nothing stale).
             if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
             // ...and the same one-apply-measures-it convention for the no-breakpoint gate.
-            cand_index = static_cast<std::size_t>(&plan - candidates.data());
+            cand_index = ci;
             any_before = g_bp_any_last;   // DELTA, not a reset -- see g_bp_any_last
             classon_before = g_bp_classon_last;   // ...and its enabled-class twin
             // Per-apply, exactly as FSLineWin resets it: "did THIS apply suppress a searched-only
@@ -92261,7 +92732,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 pass_best_inf  = leaf_inf;
                 pass_has_best  = true;
             }
-            esc_pool.push_back(EscEntry{static_cast<int>(&plan - candidates.data()), win_turn,
+            esc_pool.push_back(EscEntry{static_cast<int>(ci), win_turn,
                                         g_condemn_drops != esc_drops_before});
             ++candidates_done;
         }
@@ -92316,7 +92787,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         if (!pass_aborted && BpWavesHere(budget))
         {
             // A pass that was not aborted scanned every candidate, so no limit applies here.
-            BpWaveWalker walker(state, candidates, candidates.size(),
+            BpWaveWalker walker(state, cands, cands.size(),
                                 bp_w0_lens.empty() ? nullptr : &bp_w0_lens,
                                 nullptr,
                                 bp_nobp.empty() ? nullptr : &bp_nobp,
@@ -92346,7 +92817,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // Probe-only: breakpoint states this node has already snapped (see prefix_snaps).
                 std::unordered_set<TranspositionTable::Key,
                                    TranspositionTable::KeyHash> la_prefix_states;
-                while (walker.Next(candidates, v))
+                while (walker.Next(cands, v))
                 {
                     if (AnytimeStop(budget))
                     { ++g_fs_trunc_events;
@@ -92388,7 +92859,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             PrePlanShareArm(la_pps, copy);   // no hit: a fresh copy of `state`
                             ApplyPlanDirect(copy, v, true);
                         }
-                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
+                        if (walker.Report(cands, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
@@ -92414,7 +92885,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             if (hit == prefix_cache.end()) { PrePlanShareArm(la_pps, copy); }
                             ApplyPlanDirect(copy, v, false);
                         }
-                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
+                        if (walker.Report(cands, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last))
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
@@ -92700,7 +93171,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             }
             for (int oi : order)
             {
-                const Plan& p = candidates[committed_esc_pool[oi].idx];
+                const Plan& p = cands[static_cast<std::size_t>(committed_esc_pool[oi].idx)];
                 const int   w = esc_eval(p);
                 if (s_esc_trace)
                 {
