@@ -694,4 +694,33 @@ Centre A0, 20,000 games per arm. Omnath 1 in every arm.
 | C12 | C0 + both Baloths -> 2 Courser |
 | C14 | C1 + 1 Avenger -> 1 Courser |
 
-NSS bracket 10 runs the same spec with the shuffle off. Results below when they land.
+NSS bracket 10 runs the same spec with the shuffle off.
+
+20,000 paired games per arm, fresh seeds. base 5.7257 (T7+ 7.00%); **A0 4.9941, -0.7317 vs shipped** (T7+ 2.07%).
+
+| arm | change from A0 | vs A0 | se | T7+ | T8+ |
+|---|---|---|---|---|---|
+| C8 | C1 + 1 Forest -> 4th Evolving Wilds | -0.0476 | 0.0034 | 1.44% | 0.19% |
+| C4 | C1 + 1 Avenger -> 4th Cultivate | **-0.0444** | 0.0033 | 1.40% | 0.19% |
+| C13 | C1 + 1 Titan -> 4th Cultivate | **-0.0425** | 0.0033 | **1.27%** | 0.19% |
+| C7 | C1 + 1 Mountain -> Forest | -0.0400 | 0.0032 | 1.43% | 0.19% |
+| C3 | C0 + both Baloths -> 2 Cultivate (4) | -0.0392 | 0.0031 | 1.35% | 0.19% |
+| C5 | C1 + 1 Avenger -> 4th Wave | -0.0391 | 0.0031 | 1.48% | 0.18% |
+| C9 | C1 + 1 Avenger -> 3rd Phylath | -0.0367 | 0.0032 | 1.43% | 0.19% |
+| C6 | C1 + 1 Titan -> 4th Wave | -0.0365 | 0.0031 | 1.36% | 0.19% |
+| **C1** | C0 + both Baloths -> 3rd Cultivate + 3rd Wave | **-0.0346** | 0.0028 | 1.44% | 0.19% |
+| C14 | C1 + 1 Avenger -> Courser | -0.0319 | 0.0032 | 1.56% | 0.19% |
+| C10 | C0 + both Baloths -> 3rd Cultivate + Courser | -0.0295 | 0.0028 | 1.48% | 0.18% |
+| C2 | C0 + both Baloths -> 2 Wave (4) | -0.0277 | 0.0026 | 1.68% | 0.22% |
+| C11 | C0 + 1 Baloths -> 3rd Cultivate (keeps 1 Baloths) | -0.0267 | 0.0025 | 1.57% | 0.18% |
+| C12 | C0 + both Baloths -> 2 Courser | -0.0194 | 0.0025 | 1.67% | 0.18% |
+| C0 | Radiant Fountain -> Forest | -0.0117 | 0.0017 | 1.94% | 0.21% |
+
+Reading (default engine; nss10 is the check for C8 / C4 / C13 / C3, which add shuffles):
+- **The round-12 singles add up on fresh seeds.** C1 (-0.035) is close to the sum of its three parts
+  (-0.010 - 0.019 - 0.012), so C1 = shipped -0.77 t, with Omnath kept as the USER asked.
+- **A 4th Cultivate is the next step**, for an Avenger (C4) or a Titan (C13, the thinnest tail: T7+ 1.27%).
+  Splitting the Baloths slots Cultivate + Wave (C1) beats 2 Wave (C2) and is level with 2 Cultivate (C3).
+- **Courser loses every slot it was offered**: in the 2nd Baloths slot it is 0.005 behind a Wave (C10 vs C1),
+  for an Avenger 0.003 behind (C14 vs C1), both Baloths slots 0.015 behind (C12 vs C1).
+- C8's 4th Evolving Wilds is round 12's clairvoyant shuffle again until nss10 says otherwise.
