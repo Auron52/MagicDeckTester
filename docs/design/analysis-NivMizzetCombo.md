@@ -31,6 +31,26 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
+## STATUS 2026-10-23 ~03:45 UTC -- supersedes the 10-18 hand-off below where they differ
+- **In the regression suite** since 2026-10-22 (`9cb575dbd`, all three tiers, GT `01172bba8`); buckets K19 -> 16
+  (USER: "somewhat reasonable"). The unbudgeted backstop block is still owed (item 5 below).
+- **The USER-adopted cantrip package is DEFAULT ON** (`052a885a2`, landed with GT `cd4048e7e`): MTG_NIV_CANTRIP_RULES
+  + MTG_NIV_CANTRIP_AMEND, MTG_NIV_PONDER_KEEP_SHUFFLE, MTG_NIV_BUCKET_DISCARD, MTG_NIV_BRAINSTORM_RULE +
+  MTG_NIV_BRAINSTORM_SINGLE. Held-out confirmation (seeds 71000 d3 b10 x600 / 72000 play x300, vs the old play):
+  d3 -0.0755 (t -3.92, 73 faster / 35 slower), play -0.0408 (28 / 17), 0.24x / 0.33x work units; the amendment
+  alone is worth -0.0183 d3 / -0.0100 play, so it stays ON. Still OFF: PONDER_SINGLE, LOOKOUT_RULE2 (+ _SERVANT),
+  SERVANT_UNPAIR, LOOKOUT_NIV_ONLY, the MTG_NIV_ORDER_* rules (the latter two families and the MIDDLE / BAND
+  put-back prunes are on branch `niv-brainstorm`, unlanded, pending their A/B).
+- **The mulligan-generation memory blow-up is fixed** (`88a979f07`..`a0fe3421b`, `docs/design/niv-putback-fan-memory.md`):
+  the pool retention cap + MTG_PB_LAZY_CANDS (DEFAULT ON, byte-identical, VERIFY 0 mismatches). Discovery at
+  d5 b20 peaks at 15 GB (it died at ~40 GB).
+- **Stage 5c2 DONE 2026-10-23** (item 4 below): `leaf_tiebreak_check.py` at the deck's play cell, 12 blocks x
+  1000 paired games on `cd4048e7e`: net **-20 turns** (30 better / 13 worse, binding 0.358%; half A -2, half B
+  -18) -> **VERDICT: KEEP THE DEFAULT (ON)**. Despite the stored-value combo shape the check warns about, the
+  horizon tie-break lowers Niv's average.
+- **Mulligan profile generation RUNNING** since 2026-10-23 03:42 UTC (`mullgen.sh run decks/NivMizzetCombo fast`,
+  worktree `niv-mullgen` at `cd4048e7e`).
+
 ## HAND-OFF (2026-10-18 ~22:00 UTC) -- read this first
 Everything is PUSHED to `origin/phase-1-2-deck-analyzer` (USER 2026-10-18: "Let's get everything pushed and we'll
 sort out the remaining issues during the week"). The session's worktrees are retired; this file and

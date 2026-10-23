@@ -393,3 +393,21 @@ permanent advances the Abominable Treefolk CDA and the Marit Lage's Slumber thre
 enablers (Astrolabe, Coldsteel Heart, the look engines) lower nobody's life on the turn they
 land, so opponent-life-at-horizon prices the build-up at zero. Same class as Dragonstorm
 (ritual/storm build-up), expressed through permanents instead of a spell chain.
+
+## 4d. NivMizzetCombo keeps the default (2026-10-23 — a combo deck the tie-break HELPS)
+
+`scripts/leaf_tiebreak_check.py decks/NivMizzetCombo/NivMizzetCombo.cod` at the deck's PLAY settings on
+`cd4048e7e` (the USER-adopted cantrip package ON), both arms in one pooled batch at 20 workers, 24,000 games
+(12,000 paired):
+
+| split | paired | net turns | worse | better |
+|---|---|---|---|---|
+| half A | 6,000 | **-2** | 9 | 11 |
+| half B | 6,000 | **-18** | 4 | 19 |
+| **ALL** | **12,000** | **-20** | **13** | **30** |
+
+43 changed games of 12,000 paired (0.358% binding, above the 20-changed-games floor). Both halves agree:
+**KEEP THE DEFAULT (ON)**. Niv is the combo shape the check warns about, but its build-up is not priced at zero
+the way Snow's and Dragonstorm's is: the draw/ping loop is assembled from a handful of named pieces, not
+accumulated, and a horizon position that has assembled it usually HAS dealt damage (Niv pings on the turn a
+draw follows it), so opponent life still separates the better no-win lines.
