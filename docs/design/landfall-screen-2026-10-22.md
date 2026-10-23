@@ -930,3 +930,34 @@ moves with the apparatus (U0 vs shipped: -0.750 / -0.594 / -0.780) because a Hyd
 keep bucket mulligans like a different deck; with no table both sides keep alike. **Apparatus for the
 new-card rounds: no keep table on any arm** (x3's shape) -- slower (~74 min per 100k games against ~12 with
 a table) but free of the host choice that produced round 2's artefact.
+
+## New cards (USER 2026-10-23: "Let's add Moraug, Fury of Akoum, Scute Swarm and maybe even Scythecat Cub")
+
+Budget caveat (USER: "the owner is a bit under a budget"; "The Cub is especially expensive"; "Hydra is not cheap
+either"). Cheapest printings on Scryfall, 2026-10-23: Scythecat Cub $27.48, Mossborn Hydra $13.72, Scute Swarm $8.22,
+Primeval Titan $5.00, Moraug $1.93; Avenger / Wolf Run / Cultivate / Genesis Wave / Omnath / Phylath $0.30-0.50.
+
+Implemented and verified (byte-identical for every other deck: smoke 148/148, regression 282/282, 656 references):
+* **Scute Swarm, Scythecat Cub** -- d7381d0c9. Engine rules they needed: a multi-land put (Titan's two, Genesis Wave)
+  is ONE land event for landfall (a Scute copy made during it does not trigger for its lands: 1 Swarm -> 3 on Titan,
+  not 4; a token another trigger of the same land made is not a Cub target), and counter DOUBLINGS resolve after a
+  land's other landfall triggers (the controller's order, a dominance). The Cub's target follows the Phylath pick
+  rule; its doubling goes to the attack-ready body with the most counters (PROVISIONAL).
+* **Moraug, Fury of Akoum** -- 5e25e1e23. Additional combat phases: a main-1 landfall's combat runs BEFORE the
+  regular one (which then does not untap: no extra attack), a main-2 landfall's after it (untap, attack again).
+  +1/+0 per attack this turn. While Moraug is ours the post-combat main is searched (full menu) and a land held
+  since main 1 may be played there (PROVISIONAL exemption from the newly-arrived-lands rule). Harness on a Moraug
+  list: 0 non-convergence (60 games, d3), 0 commit-the-line divergence (40 games, d5 full depth).
+
+Backup odds (P(>=2 threats by T4/T5/T6 on the draw), P(>=3 by T6); every creature a threat):
+18 creatures (U0, shipped) 91.0/93.7/95.7%, 83.0%; 20: 94.4/96.3/97.6%, 89.1%; 22: 96.6/97.9/98.7%, 93.4%.
+
+Rounds (no keep table on any arm; pinned PGO engines in build/scratch/lfscreen/):
+* **n1** (`logs/landfall_screen/n1.json`, seed 9400000, 20,000 games, pin d7381d0): U0 vs Cub / Scute in the slots
+  of Rampant Growth / Search for Tomorrow / Khalni / Hydra / a Forest, plus the budget mixes (Hydra 2 + Scute 2,
+  Cub 2 + Scute 2). **nss13**: its first 10,000 games with MTG_NO_SEARCH_SHUFFLE=1 (the cuts change the number of
+  shuffle effects).
+* **m1** (`m1.json`, seed 9500000, pin 5e25e1e): Moraug 1-2 for Rampant Growth / Genesis Wave / Hydra and a
+  3-Mountain list, plus the KESSIG WOLF RUN SLOT arms (Wolf Run for one Forest / Mountain / Fountain / Wilds /
+  Terramorphic / Myriad / Gruul Turf / Rampant Growth; Fengraf kept; Fountain's burn/aggro value is NOT measured
+  here), with MTG_DUMP_CARDS=1 (seen-but-never-cast: Omnath / Moraug red on the 1-Mountain arm). **nss14**: NSS.
