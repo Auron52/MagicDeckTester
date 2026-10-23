@@ -409,3 +409,26 @@ targets -- cutting both is the worst row). The fetch lands are pulling their wei
 counted honestly (the K_myr3 / K_tx cuts are worse, and cutting a shuffler is UNDER-stated by the default).
 The Titan cut is the round's surprise (-0.029); Titan fetches Kessig Wolf Run, and with 7 dorks it is the
 slowest-to-matter card in the list. NSS bracket of this round: nss4 (below). Round 8 combines the winners.
+
+## Non-clairvoyant bracket 4 — all of round 7 (`logs/landfall_screen/nss4.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Round 7's seeds, 20,000 games, centre K0. base 5.8755; K0 -0.8814 vs base.
+
+| arm | change from K0 | default vs K0 | NSS vs K0 | NSS se |
+|---|---|---|---|---|
+| K_t3 | Titan -> Mystic | -0.0294 | **-0.0343** | 0.0025 |
+| K_fnt | Radiant Fountain -> Forest | -0.0169 | -0.0202 | 0.0020 |
+| K_k1 | Khalni -> Mystic | -0.0102 | -0.0155 | 0.0021 |
+| K_rg1 | Rampant Growth -> Mystic | -0.0039 | -0.0154 | 0.0014 |
+| K_s3 | Search for Tomorrow -> Mystic | -0.0019 | -0.0093 | 0.0020 |
+| K_mtn1 | Mountain -> Forest | -0.0118 | -0.0081 | 0.0021 |
+| K_cu0 | Cultivate -> Mystic | -0.0105 | -0.0065 | 0.0022 |
+| K_av2 | Avenger -> 4th Phylath | +0.0012 | -0.0036 | 0.0017 |
+| K_tx | Terramorphic -> Forest | +0.0152 | +0.0050 | 0.0021 |
+| K_em3 | Forest -> Mystic | +0.0038 | +0.0076 | 0.0028 |
+| K_myr3 | Myriad Landscape -> Forest | +0.0122 | +0.0124 | 0.0024 |
+| K_mtn0 | both Mountains -> Forest | +0.0524 | +0.1105 | 0.0042 |
+
+Every shuffler-for-dork swap holds its sign and most GROW with the shuffle off (Rampant Growth -> Mystic
+-0.004 -> -0.015), which is the direction the clairvoyance argument predicts for a cut shuffler. Nothing
+round 8 builds on depends on a re-roll the search could see.
