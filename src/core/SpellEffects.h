@@ -1941,8 +1941,9 @@ inline int ConsumeScriptedLandSearchPin()
 // list + a cursor) twice over, in one vector so the Plan grows by one field:
 //   * LAND entries (value < kLookTopOrderBase): the j-th look-top resolution of the apply whose top
 //     card IS A LAND takes the j-th land entry: 0 = onto the battlefield tapped, 1 = into the hand,
-//     -1 = the provider's default (DecisionProvider::LookTopLandToBattlefield). A nonland top is no
-//     choice ("if you don't put it onto the battlefield, put it into your hand") and consumes nothing.
+//     -1 = the provider's default (DecisionProvider::LookTopLandToBattlefield), kLookTopLandFlip (2) =
+//     the OPPOSITE of the provider's default at that resolution. A nonland top is no choice ("if you
+//     don't put it onto the battlefield, put it into your hand") and consumes nothing.
 //   * ORDER entries (value >= kLookTopOrderBase): the i-th entry whose OWN top-of-library tutor met
 //     pending look-top triggers takes the i-th order entry: kLookTopOrderBase = the provider's default
 //     (DecisionProvider::LookTopTriggersBeforeTopTutor), kLookTopOrderBase + 1 + k = resolve k of the
@@ -1954,6 +1955,11 @@ inline int ConsumeScriptedLandSearchPin()
 // outlives the apply). Installed by both worlds around the plan apply (ScriptedLookTop) and carried
 // by a breakpoint continuation (ContPins::look_top).
 inline constexpr int kLookTopOrderBase = 1000;
+// The FLIP land entry (2026-10-23, MTG_LOOKTOP_FLIP_FOLD): "not the default". {default, flip} names the
+// same two outcomes as {0, 1} at every land look -- whatever the default is at that state -- so a fan
+// over {-1, flip} reaches exactly the outcome set a fan over {0, 1} does, while the variant that pins a
+// look to its own default (== the unpinned base plan, an inert duplicate) is never emitted.
+inline constexpr int kLookTopLandFlip = 2;
 inline thread_local const std::vector<int>* g_scripted_look_top_pins         = nullptr;
 inline thread_local int                     g_scripted_look_top_land_cursor  = 0;
 inline thread_local int                     g_scripted_look_top_order_cursor = 0;
@@ -37080,7 +37086,8 @@ inline void ResolveOneLookTop(GameState& state, int controller, const std::strin
     {
         to_bf = ResolveProvider(state).LookTopLandToBattlefield(state, controller, *d);
         const int pin = ConsumeScriptedLookTopLandPin();
-        if (pin >= 0) { to_bf = (pin == 0); }
+        if (pin == kLookTopLandFlip) { to_bf = !to_bf; }
+        else if (pin >= 0)           { to_bf = (pin == 0); }
         if (g_play_dig_chooser != nullptr && !g_tap_speculating)
         {
             const std::vector<Card> examined{ top };

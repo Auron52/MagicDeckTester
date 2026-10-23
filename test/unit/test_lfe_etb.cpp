@@ -409,29 +409,30 @@ TEST_CASE("Search axis: an Elemental cast with a Reef out fans look-top land var
     s.players[0].hand.push_back(CardLfe(kFulm, 5));
     LibLfe(s, { "Forest", "Island" }, 10);
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
-    bool base = false, to_bf = false, to_hand = false;
+    // The land answer is fanned as {default (the unpinned base), FLIP} (MTG_LOOKTOP_FLIP_FOLD): both
+    // outcomes -- the Forest onto the battlefield and the Forest into the hand -- must be reachable,
+    // and no variant pins the look to its own default (that one IS the base plan).
+    bool to_bf = false, to_hand = false, explicit_pin = false;
+    int n_base = 0, n_flip = 0;
     for (const TurnSolver::Plan& p : plans)
     {
         bool fulm = false;
         for (const Action& a : p.actions) { if (a.card_name.str() == kFulm) { fulm = true; } }
-        if (!fulm) { continue; }
-        if (p.look_top_pins.empty()) { base = true; continue; }
-        if (p.look_top_pins[0] == 0) { to_bf = true; }
-        if (p.look_top_pins[0] == 1) { to_hand = true; }
-    }
-    CHECK(base);
-    CHECK(to_bf);
-    CHECK(to_hand);
-    // ...and the hand variant really does put the Forest into the hand.
-    for (const TurnSolver::Plan& p : plans)
-    {
-        if (p.look_top_pins.size() != 1 || p.look_top_pins[0] != 1) { continue; }
+        if (!fulm || p.actions.size() != 1) { continue; }
+        if (p.look_top_pins.empty()) { ++n_base; }
+        else if (p.look_top_pins.size() == 1 && p.look_top_pins[0] == kLookTopLandFlip) { ++n_flip; }
+        else if (p.look_top_pins.size() == 1 && (p.look_top_pins[0] == 0 || p.look_top_pins[0] == 1)) { explicit_pin = true; }
+        else { continue; }
         GameState t = s;
         TurnSolver::ApplyPlan(t, p, true);
-        CHECK(InHand(t, "Forest"));
-        CHECK(CountNamed(t, "Forest") == 0);
-        break;
+        if (CountNamed(t, "Forest") == 1 && !InHand(t, "Forest")) { to_bf = true; }
+        if (CountNamed(t, "Forest") == 0 && InHand(t, "Forest"))  { to_hand = true; }
     }
+    CHECK(n_base >= 1);
+    CHECK(n_flip >= 1);
+    CHECK_FALSE(explicit_pin);
+    CHECK(to_bf);
+    CHECK(to_hand);
 }
 
 TEST_CASE("Search axis: Harbinger cast with a Reef out fans the ORDER (and both orders apply)")
@@ -522,7 +523,9 @@ TEST_CASE("Risen Reef: the SEARCH finds 'land to hand, play it, cast more' -- an
     {
         const TurnSolver::Plan pick = TurnSolver::SolveWithLookahead(s, true, 2);
         bool hand_pin = false;
-        for (int e : pick.look_top_pins) { if (e == 1) { hand_pin = true; } }
+        // the default here is BATTLEFIELD, so the hand answer is the FLIP pin (MTG_LOOKTOP_FLIP_FOLD;
+        // the explicit 1 with the fold off)
+        for (int e : pick.look_top_pins) { if (e == 1 || e == kLookTopLandFlip) { hand_pin = true; } }
         CHECK(hand_pin);
         GameState t = s;
         TurnSolver::ApplyPlan(t, pick, true);

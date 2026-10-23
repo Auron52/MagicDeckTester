@@ -72304,6 +72304,8 @@ constexpr int kCombatAuraSwapNoSwap = 0;
 // numbers its fans exactly as the lazy one did.
 static thread_local int t_pb_group_counter = 0;
 
+// MTG_LOOKTOP_FLIP_FOLD (default ON, =0 restores the {0,1} land fan): see the look-top pin axis below.
+static bool LookTopFlipFoldOn() { static const bool on = EnvOn("MTG_LOOKTOP_FLIP_FOLD", true); return on; }
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all, bool idle_pass = false,
                                   PbLazyLayout* pb_lazy = nullptr)
@@ -75708,11 +75710,36 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             std::size_t product = 1;
             for (const std::vector<int>& wi : w)
             { product = std::min<std::size_t>(product * wi.size(), 1u << 20); }
+            // THE FLIP FOLD (MTG_LOOKTOP_FLIP_FOLD, default ON; an identity fold, 2026-10-23). A LAND
+            // ordinal's two explicit values {0 battlefield, 1 hand} always include the provider's own
+            // default at that look, so one of them reproduces the unpinned base plan: in the ADDITIVE fan
+            // exactly one of every ordinal's two variants was an inert duplicate of `p` (measured: 72% of
+            // the look-top variants on a 806k-plan LandfallElementals turn-6 list landed on their stripped
+            // twin's state). {-1 default, kLookTopLandFlip} names the same two outcomes at every look
+            // whatever the default is there, so the outcome set reached is unchanged in both modes: the
+            // product keeps its size (minus the all-default combination, which IS `p`), the additive fan
+            // emits only the flip. The product/additive choice is made on the unchanged sizes above.
+            const bool flip_fold = LookTopFlipFoldOn();
+            if (flip_fold)
+            {
+                const bool prod = product <= kLookTopProductCap;
+                for (int k = n_order; k < n; ++k)
+                {
+                    w[static_cast<std::size_t>(k)] = prod ? std::vector<int>{ -1, kLookTopLandFlip }
+                                                          : std::vector<int>{ kLookTopLandFlip };
+                }
+            }
             if (product <= kLookTopProductCap)
             {
                 std::vector<int> digit(static_cast<std::size_t>(n), 0);
                 for (;;)
                 {
+                    // the all-default combination (only possible with no order ordinal) is `p` itself
+                    bool all_default = flip_fold && n_order == 0;
+                    for (int k = 0; all_default && k < n; ++k)
+                    { all_default = w[static_cast<std::size_t>(k)][static_cast<std::size_t>(digit[static_cast<std::size_t>(k)])] == -1; }
+                    if (!all_default)
+                    {
                     TurnSolver::Plan v = p;
                     v.look_top_pins.resize(static_cast<std::size_t>(n));
                     for (int k = 0; k < n; ++k)
@@ -75721,6 +75748,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                             w[static_cast<std::size_t>(k)][static_cast<std::size_t>(digit[static_cast<std::size_t>(k)])];
                     }
                     extra.push_back(std::move(v));
+                    }
                     int i = 0;
                     while (i < n)
                     {
@@ -78232,6 +78260,76 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy);
     plancache::ReportHiwater("m1", state, plans);
     const bool lazy_now = pb_lazy != nullptr && pb_lazy->active;
+    // DIAGNOSTIC (MTG_ENUM_DUPCENSUS=<min plans>, default off): on the first m1 list at least that big,
+    // apply every plan to a copy and count distinct post-apply states, plus per axis how many pinned
+    // variants land on the SAME state as the plan with that pin stripped (an inert variant). Prints
+    // and EXITS (the applies run inside an enumeration and may touch per-decision caches).
+    if (static const long long s_dc = EnvInt("MTG_ENUM_DUPCENSUS", 0);
+        s_dc > 0 && static_cast<long long>(plans.size()) >= s_dc && is_pre_combat)
+    {
+        auto key_of = [&](const TurnSolver::Plan& pl) {
+            GameState c = state;
+            ApplyPlanDirect(c, pl, is_pre_combat);
+            return BuildSimKey(c, 0, 8, false);
+        };
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> all_keys;
+        long long n_look = 0, inert_look = 0, n_act = 0, inert_act = 0, n_slot = 0, inert_slot = 0;
+        long long n_ls = 0, inert_ls = 0;
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            const TurnSolver::Plan& pl = plans[i];
+            const TranspositionTable::Key k = key_of(pl);
+            all_keys.insert(k);
+            if (i % 7 != 0) { continue; }   // per-axis stripping on a 1-in-7 sample (cost)
+            if (!pl.look_top_pins.empty())
+            { ++n_look; TurnSolver::Plan q = pl; q.look_top_pins.clear(); if (key_of(q) == k) { ++inert_look; } }
+            if (pl.land_search_act_slot != -1)
+            { ++n_act; TurnSolver::Plan q = pl; q.land_search_act_slot = -1; if (key_of(q) == k) { ++inert_act; } }
+            if (pl.land_slot != 0)
+            { ++n_slot; TurnSolver::Plan q = pl; q.land_slot = 0; if (key_of(q) == k) { ++inert_slot; } }
+            if (!pl.land_search_pins.empty())
+            { ++n_ls; TurnSolver::Plan q = pl; q.land_search_pins.clear(); if (key_of(q) == k) { ++inert_ls; } }
+        }
+        // Within-FAMILY redundancy per axis: plans sharing everything but that axis (fingerprint of the
+        // plan with the axis reset) that land on the same state -- duplicates the axis itself created.
+        {
+            struct Ax { const char* nm; long long n = 0; std::unordered_set<std::uint64_t> seen; };
+            Ax ax[4] = { {"look_top"}, {"act_slot"}, {"land_slot"}, {"land_search"} };
+            for (const TurnSolver::Plan& pl : plans)
+            {
+                const bool has[4] = { !pl.look_top_pins.empty(), pl.land_search_act_slot != -1,
+                                      pl.land_slot != 0, !pl.land_search_pins.empty() };
+                if (!(has[0] || has[1] || has[2] || has[3])) { continue; }
+                const TranspositionTable::Key k = key_of(pl);
+                for (int a = 0; a < 4; ++a)
+                {
+                    if (!has[a]) { continue; }
+                    TurnSolver::Plan q = pl;
+                    if (a == 0) { q.look_top_pins.clear(); } else if (a == 1) { q.land_search_act_slot = -1; }
+                    else if (a == 2) { q.land_slot = 0; } else { q.land_search_pins.clear(); }
+                    const std::uint64_t f = BpCandFingerprint(q) * 0x9E3779B97F4A7C15ULL
+                                          ^ TranspositionTable::KeyHash{}(k);
+                    ++ax[a].n; ax[a].seen.insert(f);
+                }
+            }
+            for (const Ax& a : ax)
+            { std::fprintf(stderr, "[enum-dupcensus] family %-11s plans=%lld distinct(family,state)=%zu\n",
+                           a.nm, a.n, a.seen.size()); }
+        }
+        std::fprintf(stderr, "[enum-dupcensus] turn=%d plans=%zu distinct_states=%zu | sampled 1/7: "
+                     "look_top %lld inert %lld | act_slot %lld inert %lld | land_slot %lld inert %lld | "
+                     "land_search %lld inert %lld\n", state.turn_number, plans.size(), all_keys.size(),
+                     n_look, inert_look, n_act, inert_act, n_slot, inert_slot, n_ls, inert_ls);
+        // Order-independent digest of the distinct-state SET, so two runs (a fold on/off) can be
+        // compared for the same reachable outcomes, not merely the same count.
+        std::uint64_t set_sum = 0, set_xor = 0;
+        for (const TranspositionTable::Key& k : all_keys)
+        { const std::uint64_t h = TranspositionTable::KeyHash{}(k); set_sum += h * 0x9E3779B97F4A7C15ULL; set_xor ^= h; }
+        std::fprintf(stderr, "[enum-dupcensus] state-set digest sum=%016llx xor=%016llx\n",
+                     static_cast<unsigned long long>(set_sum), static_cast<unsigned long long>(set_xor));
+        std::fflush(stderr);
+        std::_Exit(0);
+    }
     const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
