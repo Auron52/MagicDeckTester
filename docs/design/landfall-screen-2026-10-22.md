@@ -482,3 +482,27 @@ Every six-drop (Avenger, Titan) is now worth less than a one-mana {G} creature; 
 (Search, Rampant Growth) and the 25th land are not. **A goldfish caveat that grows with every dork added:** the
 passive opponent never removes or blocks a creature, so a mana creature here is at its most valuable; a
 real opponent's removal would tax a 10-dork list that the goldfish never charges.
+
+## Non-clairvoyant bracket 6 — all of round 9 (`logs/landfall_screen/nss6.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+(Brackets 5 and NC samples 2-5 were written as specs and superseded before they ran; numbering kept so the spec
+files match.) Round 9's seeds, 20,000 games, centre M0. base 5.8816; M0 -0.9711 vs base; K0 +0.0838 behind.
+
+| arm | change from M0 | default vs M0 | NSS vs M0 | NSS se |
+|---|---|---|---|---|
+| M_av2 | Avenger -> Fyndhorn | -0.0256 | **-0.0243** | 0.0024 |
+| M_t1 | Titan -> Fyndhorn | -0.0141 | -0.0101 | 0.0023 |
+| M_k0 | both Khalni -> 2 Fyndhorn | -0.0041 | -0.0073 | 0.0019 |
+| M_t0 | both Titans -> 2 Fyndhorn | -0.0204 | **-0.0073** | 0.0031 |
+| M_k1 | Khalni -> Fyndhorn | -0.0029 | -0.0040 | 0.0014 |
+| M_rg1 | Rampant Growth -> Fyndhorn | +0.0073 | +0.0005 | 0.0020 |
+| M_s3 | Search -> Fyndhorn | +0.0081 | +0.0013 | 0.0020 |
+| M_w3 | Genesis Wave -> Phylath | +0.0104 | +0.0081 | 0.0021 |
+| M_f13 | Forest -> Fyndhorn | +0.0058 | +0.0099 | 0.0027 |
+| M_t1p | Titan -> Phylath | +0.0157 | +0.0160 | 0.0022 |
+
+**The Titan count is NOT settled by this screen.** The FIRST Titan -> dork holds (-0.014 -> -0.010), but the
+second does not: cutting both Titans is -0.020 by default and only -0.007 with the shuffle off, i.e. the
+second cut's share goes -0.006 -> +0.003. The default prefers 0 Titans, NSS prefers 1, and both are within
+~1-2 se of a tie. One Titan is the conservative reading (and keeps Kessig Wolf Run's fetcher, which the user
+called out). Avenger -> dork holds unchanged (-0.024), the strongest single in round 9.
