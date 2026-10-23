@@ -350,6 +350,9 @@ The generation-setting screen (`mullgen_finalize.py --write`) aborted twice at t
    act-slot twins, `extra` = 440,049 and growing in the land_search_pins fan (TurnSolver.cpp:74754),
    the look-top fan still to come. `MTG_ENUM_HIWATER_KB` is SILENT for it (it reports only after an
    enumeration completes). This game is what killed both 5c2 attempts (in flight in both aborts).
+   Built at d93492f1f~1 (before the 2026-10-19 crack-before-reader twins) the same game finishes, T5 in
+   15 s, at **8.4 GB** peak: the explosion predates that change, which more than doubled it past what
+   this box can hold.
 
 ## Stage 5c2 / 5h / verify_deck / backstop screen (2026-10-23, this box: 23.5 GB, 32 cores)
 - **5h viewer audit: PASS** (`audit_viewer_decisions.py`, 40 games from seed 9001): expected
