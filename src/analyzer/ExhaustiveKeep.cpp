@@ -1,5 +1,6 @@
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
+#include "../core/MemBudget.h"
 #include "ExhaustiveKeep.h"
 #include "BucketPolicy.h"
 #include "../deck/DeckLoader.h"
@@ -2451,6 +2452,34 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
     { Slow().Observe(ms, "keep-rollout", [&]{ return describe_cell(H, comp, pd, r, rs); }); };
 
+    // ---- IN-FLIGHT ROLLOUTS, named on an RSS-cap abort ----------------------------------------------
+    // The slow stream above names a rollout only when it FINISHES, so one that explodes in memory and
+    // trips MTG_RSS_CAP_GB mid-flight left no trace: LandfallElementals 2026-10-23 went 9.6 -> 19.5 GB
+    // in 20 s, about 4 minutes into each of four resumed launches, and the abort named nothing. Every
+    // rollout registers (H, comp, side, r, seed, start) here, and the cap's context printer lists the
+    // live ones oldest-first as SLOW-ROLLOUT lines (ms = age so far), so `grep 'in flight'` of the abort
+    // feeds MTG_KEEP_REPLAY_LIST unchanged. One uncontended lock per rollout; nothing here feeds a
+    // decision, a seed or an accumulator, so results stay byte-identical.
+    struct InFlight { std::chrono::steady_clock::time_point t0; int H; std::vector<int> comp; int pd; long long r; uint64_t rs; };
+    std::mutex flight_mtx;
+    std::unordered_map<std::thread::id, InFlight> flight;
+    membudget::SetCapContext([&]() -> std::string {
+        std::vector<InFlight> v;
+        { std::lock_guard<std::mutex> lk(flight_mtx); for (const auto& kv : flight) { v.push_back(kv.second); } }
+        std::sort(v.begin(), v.end(), [](const InFlight& a, const InFlight& b) { return a.t0 < b.t0; });
+        const auto now = std::chrono::steady_clock::now();
+        std::string out;
+        for (const InFlight& f : v)
+        {
+            const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - f.t0).count();
+            out += "[rss-cap]   in flight: SLOW-ROLLOUT " + std::to_string(ms) + "ms  keep-rollout  "
+                 + describe_cell(f.H, f.comp, f.pd, f.r, f.rs) + "\n";
+        }
+        return out;
+    });
+    // The printer reads this frame's locals, so it must not outlive the frame.
+    struct CapContextClear { ~CapContextClear() { membudget::SetCapContext(std::function<std::string()>()); } } cap_ctx_clear;
+
     // ---- PER-ROLLOUT WALL BACKSTOP, and what an abandoned rollout does (USER RULING 2026-10-10) ----
     // Until this existed the keep generator armed NO per-rollout bound of any kind: `gamework` was
     // armed only by BatchRunner, so `RolloutKeepWinTurn` here ran unbounded. That is not a theoretical
@@ -2849,8 +2878,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const auto t_roll = std::chrono::steady_clock::now();
         double wt;
         arm_rollout();
+        { std::lock_guard<std::mutex> lk(flight_mtx); flight[std::this_thread::get_id()] = { t_roll, H, comp, pd, r, rs }; }
         if (hit) { std::fill(hit->begin(), hit->end(), 0); wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, hit); }
         else     { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
+        { std::lock_guard<std::mutex> lk(flight_mtx); flight.erase(std::this_thread::get_id()); }
         capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
         // Abandoned => NOT A LABEL. This path's caller stores the result in a per-(cell,r) slot and
