@@ -275,6 +275,17 @@ still beaten. Smoke + regression GT accepted on this binary; gt_logs consistent 
 run's to accept. The 2026-10-19 classification of 49 slower overnight games compared against a baseline
 this rebase superseded, so it is moot.
 
+### HAND-OFF (UPDATED 2026-10-23 -- supersedes the list below it)
+1. **The mulligan profile is BLOCKED by memory**, not by a missing step: see
+   `docs/design/lfe-plan-fan-explosion.md`. The settings screen, 5c2 and the backstop rows all die on the
+   same plan-fan explosion (one ~1-in-1,100 game reaches 18.9 GB alone). The FLIP fold (sound) landed;
+   bounding the rest is a USER design call (Q10). Then: settings screen -> `mullgen.sh run ... fast`.
+2. Done 2026-10-23: confirmation claude-play sweep (12 games), 5h PASS, verify_deck run, 6a disclosure
+   (below). Open: the 2 sweep flags (Smokebraider over-tap fix design in the sweep section; Fulminator x7
+   = an unlabeled breakpoint-continuation variant in the viewer menu), 5c2, backstop rows, overnight GT.
+3. Item 5 below (the untracked `LandfallElementals2.cod`) lives on the OTHER machine's primary checkout;
+   this box's primary never had it.
+
 ### HAND-OFF: what is still owed (for whichever machine picks this up)
 1. The user's answers to Q1-Q9 below and the discard proposal (Stage 5i) -- implement what they decide.
 2. Stage 5c2 `scripts/leaf_tiebreak_check.py`, 5h `scripts/audit_viewer_decisions.py` (with the sweep),
@@ -379,6 +390,85 @@ The generation-setting screen (`mullgen_finalize.py --write`) aborted twice at t
   not bound it. Same root cause as the memory explosion; screen again after it is fixed. (Picking a
   block to dodge it would hide exactly the defect the rows exist to catch.)
 
+## Stage 6a -- encoded heuristics & assumptions disclosure (2026-10-23)
+
+Deck `decks/LandfallElementals/LandfallElementals.cod`, routed to `LandfallElementalsProvider`
+(signature `lfe` = Risen Reef's `enters_look_top_land_or_hand` OR Smokebraider's
+`mana_only_subtype_abilities`, src/ai/DecisionProviders.cpp:22705; routed first, :23176, above `anti`
+/ `vial` / `landfall` / `fungus`). Compiled from the code at HEAD a8aa3579a. PROVISIONAL = deferral or
+narrowing still waiting for the user's sign-off (ledger Q4). Numbers quoted are from the ledger.
+
+### 1. Global engine assumptions
+
+| assumption | source | classification | what it costs / why safe |
+|---|---|---|---|
+| Passive goldfish opponent: never casts, blocks or attacks, has no lands / artifacts / enchantments; 8 games in 10 get passive spawn creatures (removal targets only) | src/runner/GoldFishRunner.cpp:797 (`PATTERNS[game_index % 10]`) | global model | Makes Brushfire's evasion, Hydra's trample, Fulminator, Foundation Breaker and Fury's ETB nearly or fully inert. Speed numbers are goldfish speed, not deck strength |
+| Clairvoyant search over a known, deterministically shuffled library | engine-wide | global model | Reef looks, Harbinger tutor and crack order all plan against a known top card. This favours the library-top cards (Reef, Harbinger, cracks before a look) |
+| **First main only.** `DeckUsesSecondMain` fires for nothing in this list (no spectacle / convoke / devour / lifegain-mana / combat-trigger param), so the autonomous post-combat main does nothing | GoldFishRunner.cpp:56-325; AIEngine.cpp:3072-3103 | global model (sound in a goldfish: combat makes no new resource here) | Only the human viewer plays main 2. A Soulstoke put or Fury evoke after combat is priced at -2, below passing (TurnSolver.cpp:34704, 38188) |
+| Settings: suite rows d0 / **d3 b10** / **d5 b20** (virtual ms) + 2HG canary `elementals2hg` d3 b10 | test/regression_cases.sh:406, 585-587, 961-965, 1745-1756 | settings | No `.value.json`, so there is no value leaf. The search is the horizon-rollout (no-leaf) shape. The profile has no `value_play` block |
+| **No unbudgeted backstop rows** for `elementals` in regression or overnight (the USER 2026-10-22 rule says every deck gets them) | regression_cases.sh:596ff / 989ff (no elementals entry) | suite gap (owed; BLOCKED -- no block screens clean, see the backstop screen above) | Nothing standing smokes this deck's budget-0 paths |
+| Mulligan: no keep table yet. The static keep rule comes from the profile (`min_lands 1`, `max_lands 5`, `curve_check two_drop`, `min_playable 0`, `stop_at 4`). **Bottoming plays out every candidate bottom as a full clairvoyant game** | LandfallElementals.profile.json; AIEngine.cpp:1925-2010 | correctness shortcut (pre-keep-table) | Clairvoyant bottoming flatters multi-mulligan games and is the main per-game cost (the 30.5 s SLOW-GAME). The keep rule is USER-owned (Q2, Q6) |
+| Within-turn cast ORDER is **not searched**. The permutation oracle `searchorder` is analysis-only, and for this deck it runs at 29 s / 4.2 GB per game. Casts are sorted by `GenericProvider::CastOrderRank` (every creature tier 10, Aether Vial 20), and **ties keep plan order (hand order)**. `CastOrderTiesByName` / `TotalByName` are off for this provider | DecisionProviders.cpp:4852-4940; ManaPayment.cpp:3555-3604; TurnSolver.cpp:59414 | pruning (global) | **No deck cast order exists (USER-owned, not authored).** Whether Risen Reef or Incandescent Soulstoke resolves BEFORE the Elementals cast with it the same turn depends on plan/hand order. Lines like "Reef, then Hellhound" (one more look) can be missed. The 5e unpruned check could not test this, because `searchorder` alone blew the RSS cap |
+
+### 2. Card-modelling simplifications (bracket notes, verbatim, shortened where long)
+
+| card | bracket text | classification | why inert / what it costs |
+|---|---|---|---|
+| Brushfire Elemental | "[PARTIAL: 'can't be blocked by creatures with power 2 or less' is not modelled; WHY inert: the passive goldfish opponent never blocks ... PROVISIONAL, user sign-off pending.]" | deferral, goldfish-inert | the opponent never blocks |
+| Mossborn Hydra | "TRAMPLE is INERT -- the passive goldfish opponent never blocks -- and carried for faithfulness." / "OVERFLOW GUARD: the counter count is clamped at 2^20" | goldfish-inert | no blocks; 2^20 counters is lethal anyway |
+| Risen Reef | "Every OTHER own-ETB of the entrant resolves before the Reef looks -- a fixed order, disclosed as inert: no other card in the pool reads or writes the library top as it enters alongside a Reef" / Elemental tokens "resolve at the world drain points" | deferral (fixed trigger order), inert in this pool | Harbinger, the one other top-reader, IS ordered and searched. Per the ledger: Reef triggers from non-plan entries take the provider default, triggers raised mid-resolution resolve after older pending ones (not strict LIFO), and more than 16 look/order variants fall back to one-at-a-time (PROVISIONAL) |
+| Flamekin Harbinger | "WHICH Elemental is the searched tutor axis ... 'you MAY search' is the tutor_optional decline variant" | searched (no simplification) | width now 32 (see section 3) |
+| Smokebraider | "[PARTIAL: an Elemental spell of a NONCREATURE type (a Kindred spell) is refused -- WHY inert: cards.json holds no such card. The viewer's manual pre-tap does not offer this source (creature-only sources are paid automatically ...)" | deferral, inert (no such card) + viewer gap | the payer chooses Smokebraider's colours (mana-payment exemption, see section 3) |
+| Fury | "(a) PLANESWALKERS are not in the target set -- WHY inert: the goldfish opponent has none ... (b) The ETB-vs-evoke-sacrifice trigger ORDER ... the engine always resolves the ETB first -- WHY inert: ... no sacrifice outlet or Fling in this list" | PROVISIONAL, inert | none here |
+| Incandescent Soulstoke | "INSTANT-SPEED TIMING -- the ability is activated only in our own main phase ... 'activate at the end of the OPPONENT's turn' ... is not modelled ... Effect: the deck is UNDER-rated wherever that line is better." | **real deferral, NOT inert** (Q3) | it loses up to 2 puts per turn cycle and a turn-early Reef / landfall trigger. Design: docs/design/opponent-end-step-window.md (~2-3 days) |
+| Fulminator Mage | "offered to the search only while a death payoff is live (SelfSacHasDeathPayoff -- none in this list, so it never branches here ...). WHICH land autonomously = DecisionProvider::EtbDestroyTargetPick ... a PROVISIONAL reviewed ranking, not searched" | dominated-action removal + PROVISIONAL ranking | Against the goldfish the activation only kills our own land |
+| Foundation Breaker | "[PROVISIONAL known narrowing: an OWN artifact-creature target whose death would pay (a death watcher) is never chosen autonomously -- unreachable in any deck that runs this card.]" | dominance fold + PROVISIONAL narrowing | it always declines autonomously (only own Vial / Mimic are legal). A Breaker evoke that nothing reads is also cut (`PlanHasDeadOptionalEvoke`, TurnSolver.cpp:32660) |
+| Metallic Mimic | "Deck-constant, so not surfaced to the human: the deck's own tribe weakly dominates every alternative ... PROVISIONAL inert-gap disclosure." Simultaneous-enter ruling "is inert" | correctness shortcut (type = `DominantCreatureSubtypeId` -> Elemental) + viewer gap | it makes Mimic an Elemental for the lord, Reef, Smokebraider abilities and Soulstoke. It is NOT one in hand or library (no Harbinger or Soulstoke-put target) |
+| Aether Vial | "CHARGE: the shared hand-aware rule WantVialCharge ... The charge is not a searched decision (the searched charge axis MTG_VIAL_AXIS ships OFF, USER ruling 2026-08-30). PUT: searched" | pruning (heuristic charge) | see section 3 |
+| Secluded Courtyard / Unclaimed Territory | "the ETB type choice is simplified to 'any creature'" / "'any creature spell'"; Courtyard: "the oracle's any-zone 'source' (e.g. cycling a creature card) is not modelled" | simplification, exact here | Every creature except Mimic is an Elemental, and Mimic costs only {2}. Territory correctly cannot pay Soulstoke's ability |
+| Terramorphic Expanse / Myriad Landscape | "PROVISIONAL: the instant-speed timing is collapsed to the trailing pass of our main phase"; Myriad: "'Up to two' collapsed for the search to as many as the library allows (dominance ...) -- PROVISIONAL" | PROVISIONAL, inert vs a passive opponent | Main-1 cracks weakly dominate here (EOT pumps, permanent Hydra counters), UNLESS the Soulstoke end-step window is ever built: then Myriad's {2} would compete with Soulstoke's {1}{R} |
+| Gruul Turf | "returns one of your lands to hand (BounceKarooLand prefers a tapped land ...)" | description (the bounce is searched, see section 3) | it describes only the default (front) pick, not the searched `Plan::bounce_choice`. Worth a refresh |
+| Waterlogged Grove / Fiery Islet | Grove: "nothing deferred ... Whether a line digs is offered by the provider's dig gate" (Islet has no bracket) | description + gated dig | see section 3 (Q7) |
+| Akoum Hellhound, Basics | Hellhound: "Nothing deferred." Basics: none | -- | -- |
+
+### 3. DecisionProvider heuristics
+
+`LandfallElementalsProvider` (DecisionProviders.h:3313) derives from `DeckProvider`, which is GenericProvider plus a pure `Certificate()` (cert NotAssessed). **Its only judgement-relevant override is `TutorSearchWidth`.** Everything else is the GenericProvider / DecisionProvider base, listed where it touches this deck:
+
+| hook | what it decides | source | classification | flag | what it could miss / why safe |
+|---|---|---|---|---|---|
+| `TutorSearchWidth` (OVERRIDE) -> 32 | how many of Harbinger's distinct Elemental targets the tutor axis scores | DecisionProviders.cpp:30347 | coverage fix (widens, never narrows) | `MTG_LFE_TUTOR_WIDTH` default ON (=0 -> base 6) | With base 6 the candidates come in library order, so 4 of 10 names were unreachable at ANY budget (s61016: Soulstoke). Measured d3 -0.0375 / d5 -0.0333 at ~1.11x units. **Q8: keep?** |
+| `ShouldConsiderDig` / `HasAnyDigSource` (generic) | whether a line may crack Waterlogged Grove / Fiery Islet to draw: only when nothing in hand is castable, at least 2 lands remain after the dig, and the drop is used / it is not the last land in hand | DecisionProviders.cpp:418, 439 | **pruning (lossy at any budget)** | `MTG_GENERIC_DIG` (on); `MTG_UNPRUNE=dig` lifts it | It hides 8/1,600 d3 faster lines even at 20x budget. Opening it is aggregate-neutral (d3 -0.0013, d5 -0.0008, +5% units). This conflicts with the completeness rule. **Q7** |
+| `WantVialCharge` (generic -> `::WantVialCharge`) | whether Vial gains a counter each upkeep (hold at an MV in hand, climb, pre-charge to the deck's modal MV) | DecisionProviders.cpp:529; core/SpellEffects.h:21751 | pruning (heuristic charge, also used in the rollout) | `MTG_VIAL_AXIS` default OFF (EngineFlags.h:1838; USER 2026-08-30) | Can miss a stop-at-N / overcharge line. This deck's MVs are 1x8, 2x9, 3x10, 4x1, 5x2. A Vial put of an Elemental also triggers Reef |
+| `BounceSearchCandidates` + `BounceUserRulePick` (base) | which land Gruul Turf returns. A lone tapped land that re-enters untapped and makes no unique colour is returned with NO search; otherwise at most 3 candidates are searched | DecisionProvider.h:3285; DecisionProviders.cpp:3092, 4139 | pruning (USER rule) | `MTG_BOUNCE_SEARCH`, `MTG_BOUNCE_USER_RULE`, `MTG_BOUNCE_RULE_AMEND` all ON; `MTG_UNPRUNE=karoobounce` | AMEND counts Courtyard / Territory colours as NO colour. In this all-creature deck that undercounts coverage, so a tapped Courtyard always qualifies as the free return. The 5e "every gate except searchorder" run attributed **no** residual line to it. Returning an uncracked Terramorphic stays searched only when the rule does not fire |
+| `LookTopLandToBattlefield` / `LookTopTriggersBeforeTopTutor` (base) | default for an unpinned Reef look (land to hand iff the drop is open, no land is in hand and it would enter untapped) and for the Harbinger/Reef order (n-1) | DecisionProvider.h:2034, 2058 | default only (searched via `Plan::look_top_pins`) | -- | It binds only beyond the horizon, at d0, and for looks past the pin list |
+| `EtbDividedDamageAlloc` (base) | Fury's 4 divided damage: no targets unless an opponent-death payoff is out | DecisionProvider.h:3576 | dominance fold | -- | goldfish creatures never block or attack. Human: `divide` |
+| `EtbOptionalDestroyTargetPick` / `EtbDestroyTargetPick` (base) | Breaker: opponent's target else decline. Fulminator: opponent's land, then our own tapped / lowest-value one | DecisionProvider.h:3549, 3521 | dominance fold / PROVISIONAL ranking | -- | Fulminator never activates here (no death payoff) |
+| `CleanupDiscardCandidates` (base, max-MV) + `CleanupDiscardSearchWidth` 1 | the cleanup shed (sheds Fury / Foundation Breaker first). The executor searches it; the rollout takes the top pick | DecisionProviders.cpp:1041; DecisionProvider.h:2588 | pruning (rollout greedy beyond the decision) | -- | 3 real sheds in 400 d3 games, all ties. The USER-owned bucket proposal (Stage 5i, `MTG_LFE_BUCKET_DISCARD`) is not implemented |
+| `CastOrderRank` (generic) | same-turn cast order (see section 1) | DecisionProviders.cpp:4852 | pruning | -- | Reef / Soulstoke-first is not guaranteed. **No deck order authored (USER-owned)** |
+| Smokebraider payment ordering (engine, mana-payment exemption; see the OPEN over-tap flag in the sweep section): Smokebraider pays first unless general mana covers this payment plus what the line still owes; the restricted wild float goes to the pip the board cannot make | ManaPayment.cpp:1223, 1325; PlanContext.h:159 | standing mana-payment exemption | -- | it fixed sweep flags B-I / R. It decides which source pays, never what is cast |
+| Land-search picks (Terramorphic / Myriad) | `LandSearchPickOrder` orders, `LandSearchPickWidth` base = no narrowing | DecisionProvider.h:3172-3205 | searched (order only) | `MTG_UNPRUNE=landpick` | none: every maximal pick is branched. The crack position before library-top readers is searched (Q9: only "some cracks before all casts") |
+
+### 4. Play-viewer auto-resolved decisions
+
+Surfaced: Reef look (`dig` "(look-top land)"), Harbinger/Reef trigger order (`dig` "(trigger order)", Q5), Harbinger target (`tutor_etb`), Breaker (`dig` "(may destroy)"), Fury `divide` (allow_none), the Fury pitch and Soulstoke `sfput` (main_phase), Fulminator `target`, the Vial charge (`vial_charge`), the Gruul Turf `bounce`, land searches (`tutor_etb`), the land-drop position, the cleanup `discard`, main 2. **Auto-resolved (known gaps, PROVISIONAL inert):**
+- **Metallic Mimic's creature type.** It is set to `DominantCreatureSubtypeId` (Elemental) and the human is never asked (audit_viewer_decisions.py:1470).
+- **Secluded Courtyard / Unclaimed Territory's ETB type.** It is collapsed to "any creature", exact for this list.
+- **Smokebraider is never offered in the manual pre-tap.** Creature-only sources are paid automatically (audit_viewer_decisions.py:751).
+- **Fixed trigger orders that are not asked:** Fury's ETB before the evoke sacrifice, and the entrant's other ETBs before a Reef look.
+
+The 5h mechanical audit (`scripts/audit_viewer_decisions.py`, 40 games from seed 9001) PASSED: no HARD MISS, no UNVERIFIED, oracle-text cross-check clean.
+
+### Things the user may find surprising
+1. **There is no LandfallElementals cast order, and in-turn order is not searched.** Ties among creatures fall to hand order. So whether Risen Reef / Soulstoke resolve before the Elementals cast with them is luck of the hand. The permutation oracle that could measure this explodes on this deck.
+2. **The provider overrides exactly one hook** (`TutorSearchWidth` 6 -> 32). Before it, Harbinger could not find 4 of 10 Elementals at any budget, depending on the shuffle.
+3. **The generic dig gate makes Grove / Islet dig lines unfindable even at 20x budget.** That breaks the completeness rule, and opening it measured neutral (Q7).
+4. **Soulstoke's end-of-opponent's-turn put is not modelled.** The deck is under-rated there, and that line is the card's main use in real play (Q3).
+5. **Aether Vial's charge is a heuristic**, not searched (`MTG_VIAL_AXIS` off by USER ruling).
+6. **The Karoo rule treats Courtyard / Territory as making no colour.** In an all-creature deck that is conservative, but it makes a tapped Courtyard a no-search return.
+7. **No unbudgeted backstop rows for `elementals`, and no keep table yet.** Mulligan bottoming is a clairvoyant play-out of every candidate.
+8. **Gruul Turf's bracket note describes only the default pick** (`BounceKarooLand` prefers a tapped land). The bounce is actually searched, over at most 3 candidates.
+
 ## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
 Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
 STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout
@@ -455,6 +545,15 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
   (conservative). OK as is?
 - Q5. Harbinger/Reef trigger order reuses the `dig` modal (two card tiles, asked up front) rather than a
   new decision type -- OK?
+
+- Q10. (2026-10-23) The plan-fan explosion: bound it by BUDGET-STAGING the look-top / position fans (the
+  sanctioned wave shape; complete at large budget) or by a measured narrowing (lossy; a held-out A/B)?
+  Options 1-5 in `docs/design/lfe-plan-fan-explosion.md` sec. 5. Recommendation: option 1 (staged
+  look-top answers) plus the sound per-ordinal sizing of option 3. Default until answered: nothing
+  further changed; the deck's mulligan profile waits.
+- Q11. (2026-10-23) The deck has NO authored cast order (creature ties fall to hand order, so Reef /
+  Soulstoke before the Elementals cast with them is not guaranteed). Do you want to author one (e.g. Reef
+  and Soulstoke first, then Harbinger, then landfall bodies)? Default: generic order.
 
 ## Approved deferrals
 (none yet)
