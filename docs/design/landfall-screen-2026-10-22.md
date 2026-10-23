@@ -797,6 +797,13 @@ wins are the same line:** Phylath on T4, then on T5 a land drop plus fetch / Myr
 triggers on ONE Plant (0/1 -> 16/17), and Phylath 5 + Plant 16 = 21, exactly lethal from 20 (gi0, gi7, gi8, gi9).
 The engine models that targeting (the provider orders an un-sick Plant first, then the highest power).
 
+**Why Phylath beats Baloths (USER):** *"Because they can attack next turn and take all of the landfall as current
+turn damage. The Baloths are much worse because they need to wait another turn to realize the damage."* Phylath's
+Plants (and Avenger's) exist BEFORE the turn's landfalls, so each land that turn is damage that turn; Mossborn
+Hydra is the same shape at 3 mana. Rampaging Baloths' Beasts -- and Omnath's Elementals -- are CREATED by the
+landfall, summoning sick, so they hit a turn later. The references show it: the two Baloths-led wins are T6, the
+Phylath line T5.
+
 **What the screen says about Phylath, and why its count is 2 so far:**
 - It was cut 4 -> 2 in round 2 only to make room for the Hydras (Hydra for 4 Phylath beat Hydra for 2 Courser
   + 2 Baloths while keeping 4 Phylath by 0.12 t). Phylath is LEGENDARY: a second copy's ETB still makes Plants,
