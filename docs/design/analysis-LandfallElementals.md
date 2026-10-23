@@ -548,9 +548,13 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
 
 - Q10. (2026-10-23) The plan-fan explosion: bound it by BUDGET-STAGING the look-top / position fans (the
   sanctioned wave shape; complete at large budget) or by a measured narrowing (lossy; a held-out A/B)?
-  Options 1-5 in `docs/design/lfe-plan-fan-explosion.md` sec. 5. Recommendation: option 1 (staged
-  look-top answers) plus the sound per-ordinal sizing of option 3. Default until answered: nothing
-  further changed; the deck's mulligan profile waits.
+  Options 1-5 in `docs/design/lfe-plan-fan-explosion.md` sec. 5. MEASURED: option 3 (per-ordinal pin
+  sizing) removes nothing; option 5 (skip the reader/look-top fans in the PLAYOUT's per-turn lookahead only,
+  beyond the horizon) bounds both repros (18.9 GB -> 1.2 GB; 9 min -> 28 s) and is quality-neutral on 400
+  paired games (d3 +2 turns, d5 -2 turns), -17-20% units. Recommendation: option 5 as the quick unblock for
+  the mulligan profile, validated by a large held-out A/B first (the patch is in the design doc), then
+  option 1 (staged look-top answers) for the searched nodes. Default until answered: nothing further
+  changed; the deck's mulligan profile waits.
 - Q11. (2026-10-23) The deck has NO authored cast order (creature ties fall to hand order, so Reef /
   Soulstoke before the Elementals cast with them is not guaranteed). Do you want to author one (e.g. Reef
   and Soulstoke first, then Harbinger, then landfall bodies)? Default: generic order.
