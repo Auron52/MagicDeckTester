@@ -332,3 +332,28 @@ That is the user's warning ("clairvoyance loves shuffles so they will be overval
 added nothing a real player could use, and the search was picking re-rolls it could see. Do not add Wilds on
 this screen's evidence. Arms that CUT a shuffler hold their sign (Cultivate -> Forest stays a small gain; the
 Search and Cultivate cuts stay clearly worse), as they should if the default overvalues shuffles.
+
+## Round 6 — round 5's winners combined, HELD OUT (`logs/landfall_screen/r6.json`, seed 8200000)
+
+20,000 games, centre G6 (k = n on every arm). base 5.7260 (T7+ 6.89%); G6 4.8918, -0.8341 vs base. The arms were
+fixed from round 5 before these seeds were played, so each designed combination's delta is not selection-biased
+(picking the best of the 11 still is, a little).
+
+| arm | change from G6 | vs G6 | se | vs base | T7+ | shuffle count |
+|---|---|---|---|---|---|---|
+| J1_w2 | J1 + 2 Forest -> 2 Evolving Wilds | -0.0565 | 0.0038 | -0.8906 | 1.23% | -1 +2 |
+| J1_w1 | J1 + Forest -> Evolving Wilds | -0.0485 | 0.0034 | -0.8826 | 1.34% | -1 +1 |
+| **J1_em2** | J1 + Forest -> 2nd Elvish Mystic | **-0.0433** | 0.0037 | -0.8775 | 1.51% | -1 |
+| **J1** | Cultivate -> Elvish Mystic, Avenger -> 4th Genesis Wave, Omnath -> 3rd Phylath | **-0.0364** | 0.0030 | -0.8706 | 1.45% | -1 |
+| J_ao_w2 | J_ao + 2 Forest -> 2 Evolving Wilds | -0.0347 | 0.0034 | -0.8689 | 1.28% | +2 |
+| J_em_w2 | J_em + 2 Forest -> 2 Evolving Wilds | -0.0286 | 0.0036 | -0.8628 | 1.44% | +2 |
+| J2 | J_ao + Forest -> Elvish Mystic | -0.0280 | 0.0033 | -0.8622 | 1.47% | = |
+| J3 | J_ao + Cultivate -> Forest | -0.0249 | 0.0030 | -0.8591 | 1.53% | -1 |
+| J_cuem | Cultivate -> Elvish Mystic | -0.0209 | 0.0021 | -0.8550 | 1.65% | -1 |
+| J_ao | Avenger -> 4th Genesis Wave, Omnath -> 3rd Phylath | -0.0167 | 0.0023 | -0.8508 | 1.44% | = |
+| J_em | Forest -> Elvish Mystic | -0.0132 | 0.0026 | -0.8474 | 1.63% | = |
+
+Reading: the round-5 singles held out and ADD (J_ao -0.017 vs their r5 sum -0.012; J1 -0.036 vs J_cuem + J_ao
+-0.038). Cultivate is the right slot for the Mystic (J_cuem -0.021 vs Forest -> Mystic -0.013), and a second
+Mystic for a Forest adds another -0.007 on top of J1. The Evolving Wilds rows lead again, but bracket 2 showed
+that gain is the clairvoyant search steering re-rolls; the NSS bracket of this round (nss3) re-checks them.
