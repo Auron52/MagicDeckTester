@@ -1072,3 +1072,23 @@ reached hand in which no copy was cast / played):
   the USER's red-mana concern is real, but it is a 1-of rarely cast either way.
 * nss14 (first 10,000 games, MTG_NO_SEARCH_SHUFFLE=1) brackets the Wolf Run arms that cut a shuffle effect
   (Wilds, Terramorphic, Myriad, Rampant Growth).
+
+### nss14 — m1's first 10,000 games with `MTG_NO_SEARCH_SHUFFLE=1` (`logs/landfall_screen/nss14.json`)
+
+| arm | m1, same 10,000 games | nss14 | se | shift |
+|---|---|---|---|---|
+| M_2W (2 Moraug for 2 Wave) | -0.0253 | **-0.0392** | 0.0025 | -0.014 |
+| W_Fo (Wolf Run for Fountain) | -0.0029 | -0.0134 | 0.0013 | -0.011 |
+| W_M (Wolf Run for a Mountain) | +0.0017 | -0.0073 | 0.0020 | -0.009 |
+| W_RG (Wolf Run for a Rampant Growth) | +0.0227 | -0.0003 | 0.0046 | -0.023 |
+| W_GT (for Gruul Turf) | +0.0039 | +0.0069 | 0.0027 | +0.003 |
+| W_F (for a Forest) | +0.0178 | +0.0073 | 0.0024 | -0.011 |
+| M_1RG | +0.0265 | +0.0094 | 0.0044 | -0.017 |
+| W_TE / W_EW / W_My | +0.032 / +0.040 / +0.027 | +0.010 / +0.014 / +0.016 | ~0.0027 | -0.011 to -0.026 |
+| M_2RG / M_2RG_mt | +0.061 / +0.079 | +0.034 / +0.051 | ~0.0063 | -0.028 |
+| M_2H | +0.2155 | +0.1962 | 0.0049 | -0.019 |
+
+**Same order.** Moraug for Genesis Wave stays the only Moraug gain (-0.025 to -0.039 across the bracket). Kessig
+Wolf Run is bracketed at [-0.003, -0.013] in Fountain's slot and [+0.002, -0.007] in a Mountain's -- a small gain
+at best, before its unmeasured blocker value and Fountain's unmeasured life. The arms that cut a shuffle effect
+(Rampant Growth, Wilds, Terramorphic, Moraug for ramp) gain 0.02-0.03 without the clairvoyant shuffle, as in nss13.
