@@ -1532,7 +1532,10 @@ async function testEquip() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
   const win = buildDom(); await settle(win);
-  await startGame(win, { deck: 'KittyEquipment', seed: 2, turns: 8 });
+  // Pinned to the v1 list: the seed-2 board (Shadowspear in play beside a creature at T3) is v1's.
+  // On the shipped v3 list (34cfa9050) seed 2 reaches T3 with NO creature in play, so the only host
+  // is a Puresteel Paladin still in hand and the drop never becomes an attachment.
+  await startGame(win, { deck: 'KittyEquipment', version: 'v1-kemba-balan', seed: 2, turns: 8 });
   const st = () => S(win);
   let guard = 0;
   while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 3)) {
@@ -1620,7 +1623,9 @@ async function testEquipFromHand() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
   const win = buildDom(); await settle(win);
-  await startGame(win, { deck: 'KittyEquipment', seed: 6, turns: 8 });
+  // Pinned to the v1 list: v3 (shipped since 34cfa9050) plays no Kor Duelist and holds Bonesplitter
+  // only in the sideboard, so this board does not exist on it.
+  await startGame(win, { deck: 'KittyEquipment', version: 'v1-kemba-balan', seed: 6, turns: 8 });
   const st = () => S(win);
   let guard = 0;
   while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 2)) {
