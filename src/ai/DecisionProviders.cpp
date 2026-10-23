@@ -52927,8 +52927,32 @@ bool NivMizzetComboProvider::PutBackRankingPerCard(const GameState& s) const
 
 bool NivMizzetComboProvider::PutBackSingleCandidate(const GameState& s) const
 {
+    // The middle prune, while on, REPLACES the one-option prune (its fan is the middle list).
+    return NivPutBackRuleLive() && NivBrainstormSingleOn() && PutBackTopChoices(s) == 0;
+}
+
+// THE MIDDLE PUT-BACK PRUNE (USER 2026-10-23, on adopting the ranking + BRAINSTORM_SINGLE: "it seems to me
+// like we should be able to actually prune the choices more" / "we should consider whether there is a
+// better option to adopt"). The coordinator's shape, mirroring the USER's Ponder ("search between shuffle
+// and keep, but not the order"): the rule fixes the order and the DEEPEST card, and the search picks only
+// which card goes on TOP -- the next draw -- among the rule's first K distinct choices. MIDDLE: K = 3;
+// MIDDLE2: K = 2 (wins when both are on). Both DEFAULT OFF pending the A/B; inert unless the rule is live.
+static bool NivBrainstormMiddleOn()
+{
+    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_MIDDLE");    // DEFAULT OFF pending its A/B
+    return heurarm::Flag(heurarm::NIV_BRAINSTORM_MIDDLE, on);
+}
+static bool NivBrainstormMiddle2On()
+{
+    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_MIDDLE2");   // DEFAULT OFF pending its A/B
+    return heurarm::Flag(heurarm::NIV_BRAINSTORM_MIDDLE2, on);
+}
+int NivMizzetComboProvider::PutBackTopChoices(const GameState& s) const
+{
     (void)s;
-    return NivPutBackRuleLive() && NivBrainstormSingleOn();
+    if (!NivPutBackRuleLive()) { return 0; }
+    if (NivBrainstormMiddle2On()) { return 2; }
+    return NivBrainstormMiddleOn() ? 3 : 0;
 }
 
 std::vector<int> NivMizzetComboProvider::CleanupDiscardCandidates(

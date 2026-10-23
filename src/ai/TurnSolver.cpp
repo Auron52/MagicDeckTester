@@ -72300,7 +72300,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.put_back_from_hand <= 0) { continue; }
-                const int w = PutBackAxisWidth(state, p, ai, *d);
+                int w = PutBackAxisWidth(state, p, ai, *d);
+                // The MIDDLE shape (DecisionProvider::PutBackTopChoices): the resolution offers at most K
+                // candidates, so K bounds the fan (an over-wide rank would only clamp to a duplicate).
+                if (const int top_k = ResolveProvider(state).PutBackTopChoices(state);
+                    top_k > 0 && ResolveProvider(state).PutBackRankingPerCard(state))
+                { w = std::min(w, top_k); }
                 // The fan's sibling identity for the put-back fold (PutBackFoldMemo): on the variants
                 // now, on the base after every axis has cloned (putback_based, below).
                 static thread_local int s_putback_group = 0;

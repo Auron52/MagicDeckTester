@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -99,7 +100,8 @@ void NivAllOffNb()
                               heurarm::NIV_SERVANT_UNPAIR, heurarm::NIV_BRAINSTORM_RULE, heurarm::NIV_BRAINSTORM_SINGLE,
                               heurarm::NIV_PONDER_KEEP_SHUFFLE, heurarm::NIV_LOOKOUT_RULE2, heurarm::NIV_LOOKOUT_RULE2_SERVANT,
                               heurarm::NIV_ORDER_COLOUR_LAND, heurarm::NIV_ORDER_GOOFF_MANA, heurarm::NIV_ORDER_CURIOSITY_FIRST,
-                              heurarm::NIV_ORDER_RAMP_NEEDED, heurarm::NIV_ORDER_PROBE_HOLD })
+                              heurarm::NIV_ORDER_RAMP_NEEDED, heurarm::NIV_ORDER_PROBE_HOLD,
+                              heurarm::NIV_BRAINSTORM_MIDDLE, heurarm::NIV_BRAINSTORM_MIDDLE2 })
     { heurarm::t_arm[static_cast<int>(sl)] = 0; }
 }
 
@@ -686,4 +688,122 @@ TEST_CASE("Niv package adoption: the adopted levers are DEFAULT ON, the rest DEF
     CHECK(NivProvNb().ReorderKeepShuffleOnly(s));       // PONDER_KEEP_SHUFFLE
     CHECK_FALSE(NivProvNb().ReorderSingleCandidate(s)); // PONDER_SINGLE stays off
     CHECK_FALSE(NivProvNb().SoulbondTwinPruned(s));     // LOOKOUT_RULE2 stays off (a Niv in hand would prune)
+}
+
+// ---- THE MIDDLE PUT-BACK PRUNE (MTG_NIV_BRAINSTORM_MIDDLE: K = 3, _MIDDLE2: K = 2) -------------------------
+// The rule fixes the deepest card and the order; the search picks only the TOP card among the rule's first K
+// distinct choices. The fast path and the reference agree index for index, rank 0 is the per-card default,
+// every candidate keeps the default's deepest card, and the tops are distinct classes.
+TEST_CASE("Niv Brainstorm MIDDLE: the middle list -- fast path == reference, deepest fixed, distinct tops")
+{
+    const std::vector<std::string> pool = {
+        "Niv-Mizzet, the Firemind", "Niv-Mizzet, Parun", "Tandem Lookout", "Curiosity", "Generator Servant",
+        "Gitaxian Probe", "Preordain", "Ponder", "Brainstorm", "Remand", "Island", "Island", "Spirebluff Canal",
+        "Sulfur Falls", "Saprazzan Skerry", "Sol Ring", "Izzet Signet" };
+    for (int K : { 3, 2 })
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_BRAINSTORM_RULE,
+                     K == 3 ? heurarm::NIV_BRAINSTORM_MIDDLE : heurarm::NIV_BRAINSTORM_MIDDLE2 });
+        std::uint64_t rng = 0x51dd1e5eedull + static_cast<std::uint64_t>(K);
+        auto next = [&rng](int mod) { rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17; return static_cast<int>(rng % static_cast<std::uint64_t>(mod)); };
+        int checked = 0, narrowed = 0;
+        for (int trial = 0; trial < 300; ++trial)
+        {
+            GameState s = BoardNb({}, next(2) == 0);
+            const int hn = next(10);
+            for (int i = 0; i < hn; ++i)
+            {
+                Card c = CardNb(pool[static_cast<std::size_t>(next(static_cast<int>(pool.size())))], 300 + i);
+                if (next(12) == 0) { c.m_is_staged = true; }
+                s.players[0].hand.push_back(c);
+            }
+            for (int n = 1; n <= 2; ++n)
+            {
+                const std::vector<std::vector<int>> ref = PutBackCandidates(s, 0, n);
+                const PutBackPick first = PutBackPickAt(s, 0, n, 0);
+                INFO("K=" << K << " trial=" << trial << " n=" << n << " hand=" << hn);
+                REQUIRE(first.count == static_cast<int>(ref.size()));
+                CHECK(first.count <= K);
+                if (ref.empty()) { continue; }
+                for (int k = 0; k < static_cast<int>(ref.size()) + 2; ++k)
+                {
+                    const PutBackPick p = PutBackPickAt(s, 0, n, k);
+                    const std::vector<int>& want = ref[static_cast<std::size_t>(std::min(k, static_cast<int>(ref.size()) - 1))];
+                    REQUIRE(p.take == static_cast<int>(want.size()));
+                    for (int j = 0; j < p.take; ++j) { CHECK(p.idx[j] == want[static_cast<std::size_t>(j)]); }
+                    ++checked;
+                }
+                // Rank 0 = the per-card default; with two cards every candidate keeps its deepest card and the
+                // tops are pairwise distinct classes.
+                const std::vector<int> r = NivProvNb().PutBackRanking(s, 0);
+                int def[2];
+                if (PutBackPerCardDefault(s.players[0], r, first.take, def) == first.take)
+                {
+                    CHECK(first.idx[0] == def[first.take - 1]);
+                    if (first.take == 2) { CHECK(first.idx[1] == def[0]); }
+                }
+                for (std::size_t a = 0; a < ref.size(); ++a)
+                {
+                    if (first.take == 2) { CHECK(ref[a][1] == ref[0][1]); }
+                    for (std::size_t b = a + 1; b < ref.size(); ++b)
+                    {
+                        CHECK(PutBackClassKey(s, s.players[0].hand[static_cast<std::size_t>(ref[a][0])])
+                              != PutBackClassKey(s, s.players[0].hand[static_cast<std::size_t>(ref[b][0])]));
+                    }
+                }
+                heurarm::t_arm[static_cast<int>(K == 3 ? heurarm::NIV_BRAINSTORM_MIDDLE : heurarm::NIV_BRAINSTORM_MIDDLE2)] = 0;
+                const int full = PutBackPickAt(s, 0, n, 0).count;
+                heurarm::t_arm[static_cast<int>(K == 3 ? heurarm::NIV_BRAINSTORM_MIDDLE : heurarm::NIV_BRAINSTORM_MIDDLE2)] = 1;
+                if (full > first.count) { ++narrowed; }
+            }
+        }
+        CHECK(checked > 500);
+        CHECK(narrowed > 0);
+    }
+}
+
+// The searched fan: at most K-1 put-back variants per Brainstorm plan (the default is the base plan), more
+// than SINGLE's none, fewer than the full fan's; MIDDLE replaces BRAINSTORM_SINGLE while on.
+TEST_CASE("Niv Brainstorm MIDDLE: the fan is K-1 variants per Brainstorm plan, and it replaces SINGLE")
+{
+    const GameState board = BoardNb({ "Brainstorm", "Niv-Mizzet, the Firemind", "Tandem Lookout", "Island" }, false,
+                                    { "Preordain", "Sol Ring", "Curiosity", "Island", "Gitaxian Probe" });
+    auto fan = [&](int& variants, int& widest_group)
+    {
+        variants = 0;
+        widest_group = 0;
+        std::map<int, int> per_group;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(board, true))
+        { if (p.putback_choice >= 1) { ++variants; ++per_group[p.putback_group]; } }
+        for (const auto& g : per_group) { widest_group = std::max(widest_group, g.second); }
+    };
+    int full = 0, full_w = 0, v = 0, w = 0;
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_BRAINSTORM_RULE });
+        fan(full, full_w);
+        CHECK(full_w > 2);
+    }
+    for (int K : { 3, 2 })
+    {
+        INFO("K=" << K);
+        const heurarm::Slot mid = K == 3 ? heurarm::NIV_BRAINSTORM_MIDDLE : heurarm::NIV_BRAINSTORM_MIDDLE2;
+        {
+            ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_BRAINSTORM_RULE, mid });
+            fan(v, w);
+            CHECK(v > 0);
+            CHECK(v < full);
+            CHECK(w <= K - 1);
+        }
+        {
+            ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_BRAINSTORM_RULE, heurarm::NIV_BRAINSTORM_SINGLE, mid });
+            CHECK_FALSE(NivProvNb().PutBackSingleCandidate(board));
+            int v2 = 0, w2 = 0;
+            fan(v2, w2);
+            CHECK(v2 == v);
+        }
+        {
+            ArmNb arms({ heurarm::NIV_BRAINSTORM_RULE, mid });   // inert without the rules: the full fan
+            CHECK(NivProvNb().PutBackTopChoices(board) == 0);
+        }
+    }
 }

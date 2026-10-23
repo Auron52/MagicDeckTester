@@ -581,6 +581,15 @@ public:
     // asked at resolution). Default false -> every candidate is searched.
     virtual bool PutBackSingleCandidate(const GameState& s) const { (void)s; return false; }
 
+    // PutBackTopChoices -- K > 0 narrows the searched put-back fan to the MIDDLE shape: the provider's
+    // per-card rule fixes the DEEPEST card (its most expendable eligible card) and the order, and the
+    // search picks only WHICH card goes on TOP -- the next draw -- among the first K distinct-class
+    // choices walking the per-card ranking past the deepest card (one put-back card: the first K distinct
+    // classes). Candidate 0 is still the per-card default. Read only while PutBackRankingPerCard is true
+    // (the order it walks); a provider-owned ORDER + RESTRICT of options, never a pick. Default 0 -> the
+    // full fan.
+    virtual int PutBackTopChoices(const GameState& s) const { (void)s; return 0; }
+
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
     // order? When true (the default, and true of every bucket rule in the suite -- they choose which

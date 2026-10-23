@@ -3261,6 +3261,8 @@ public:
     std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
     bool PutBackRankingPerCard(const GameState& s) const override;
     bool PutBackSingleCandidate(const GameState& s) const override;
+    // The MIDDLE prune (MTG_NIV_BRAINSTORM_MIDDLE = 3 top choices, _MIDDLE2 = 2; DEFAULT OFF).
+    int PutBackTopChoices(const GameState& s) const override;
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
     bool CleanupDiscardShedStable() const override;

@@ -35075,6 +35075,46 @@ inline int PutBackPerCardDefault(const Player& pl, const std::vector<int>& ranki
     return got;
 }
 
+// THE MIDDLE LIST (DecisionProvider::PutBackTopChoices = K > 0, per-card ranking live): candidate j puts
+// back (top = the j-th DISTINCT-CLASS card walking the per-card order -- `ranking`, then hand order --
+// past the deepest card; deep = the per-card default's deepest card). One card to put back: the first K
+// distinct classes in that order. Candidate 0 IS the per-card default (its top is the first card past
+// the deepest). Writes up to K (<= 8) pairs {top, deep} of hand indices; returns how many.
+inline int PutBackMiddleList(const GameState& state, const Player& pl, const std::vector<int>& ranking, int take,
+                             int K, int list[8][2])
+{
+    K = std::min(K, 8);
+    int def[2];
+    if (K <= 0 || take < 1 || take > 2 || PutBackPerCardDefault(pl, ranking, take, def) != take) { return 0; }
+    const int hn = static_cast<int>(pl.hand.size());
+    std::vector<int> order;
+    auto offer = [&](int hi)
+    {
+        if (hi < 0 || hi >= hn || !PutBackEligible(pl.hand[static_cast<std::size_t>(hi)])) { return; }
+        if (std::find(order.begin(), order.end(), hi) != order.end()) { return; }
+        order.push_back(hi);
+    };
+    for (int hi : ranking) { offer(hi); }
+    for (int hi = 0; hi < hn; ++hi) { offer(hi); }
+    const int deep = take == 2 ? def[0] : -1;
+    std::uint64_t seen[8];
+    int m = 0;
+    for (int hi : order)
+    {
+        if (m >= K) { break; }
+        if (hi == deep) { continue; }
+        const std::uint64_t key = PutBackClassKey(state, pl.hand[static_cast<std::size_t>(hi)]);
+        bool dup = false;
+        for (int j = 0; j < m; ++j) { if (seen[j] == key) { dup = true; break; } }
+        if (dup) { continue; }
+        seen[m] = key;
+        list[m][0] = hi;
+        list[m][1] = deep;
+        ++m;
+    }
+    return m;
+}
+
 // Every distinct ordered selection of min(n, eligible) classes, PROVIDER-ORDERED. Each candidate is a
 // list of HAND indices, element 0 = the card that ends on TOP. Index 0 is the default: the classes the
 // provider ranks most expendable, the less expendable of them on top (drawn first). Deterministic.
@@ -35102,6 +35142,23 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
     // Provider ranking: hand indices, most expendable first. A class ranks at its best member (they
     // are identical, so every member ranks the same under any sane provider; min is the safe read).
     const std::vector<int> ranking = ResolveProvider(state).PutBackRanking(state, controller);
+    // THE MIDDLE SHAPE (PutBackTopChoices): the list is the middle list, nothing else.
+    if (take <= 2 && ResolveProvider(state).PutBackRankingPerCard(state))
+    {
+        const int K = ResolveProvider(state).PutBackTopChoices(state);
+        int mid[8][2];
+        const int m = K > 0 ? PutBackMiddleList(state, pl, ranking, take, K, mid) : 0;
+        if (m > 0)
+        {
+            for (int j = 0; j < m; ++j)
+            {
+                std::vector<int> pick{ mid[j][0] };
+                if (take == 2) { pick.push_back(mid[j][1]); }
+                out.push_back(std::move(pick));
+            }
+            return out;
+        }
+    }
     for (std::size_t r = 0; r < ranking.size(); ++r)
     {
         for (Cls& cl : classes)
@@ -35282,6 +35339,21 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
     if (out.count > 1)
     {
         ranking = ResolveProvider(state).PutBackRanking(state, controller);
+        // THE MIDDLE SHAPE (PutBackTopChoices; PutBackCandidates' twin): the list is the middle list.
+        if (ResolveProvider(state).PutBackRankingPerCard(state))
+        {
+            const int K = ResolveProvider(state).PutBackTopChoices(state);
+            int mid[8][2];
+            const int m = K > 0 ? PutBackMiddleList(state, pl, ranking, take, K, mid) : 0;
+            if (m > 0)
+            {
+                out.count = m;
+                const int rm = std::max(0, std::min(k, m - 1));
+                out.idx[0] = mid[rm][0];
+                out.idx[1] = take == 2 ? mid[rm][1] : -1;
+                return out;
+            }
+        }
         const int hn = static_cast<int>(sc.hand_cls.size());
         for (std::size_t q = 0; q < ranking.size(); ++q)
         {
