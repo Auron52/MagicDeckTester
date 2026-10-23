@@ -380,3 +380,32 @@ Held out, the Evolving Wilds artifact replicates on all three hosts: every Wilds
 0.012-0.020 to nothing or a small loss. The non-Wilds candidates hold (J1 even grows, as a list that cuts a
 Cultivate should if the default overvalues shuffles). J1_em2's second Mystic over J1 shrinks to -0.002 here
 (default -0.007): J1 and J1_em2 are close; both are ~-0.04 t better than G6.
+
+## Round 7 — single changes around K0 = J1_em2 (`logs/landfall_screen/r7.json`, seed 8300000)
+
+20,000 games, centre K0 (k = n on every arm). base 5.7256; **K0 4.8498, -0.8758 vs base**; G6 +0.0440 behind K0
+(round 6 had -0.043 the other way round: it replicates). K0 = G6 + Cultivate -> Elvish Mystic, Forest -> Elvish
+Mystic, Avenger -> 4th Genesis Wave, Omnath -> 3rd Phylath.
+
+| arm | change from K0 | vs K0 | se | T7+ | shuffle count |
+|---|---|---|---|---|---|
+| K_t3 | Primeval Titan -> 3rd Elvish Mystic | **-0.0294** | 0.0022 | 1.16% | -1 |
+| K_fnt | Radiant Fountain -> Forest | -0.0169 | 0.0018 | 1.20% | = |
+| K_mtn1 | Mountain -> Forest | -0.0118 | 0.0019 | 1.30% | = |
+| K_cu0 | last Cultivate -> 3rd Mystic | -0.0105 | 0.0019 | 1.50% | -1 |
+| K_k1 | Khalni -> 3rd Mystic | -0.0102 | 0.0019 | 1.34% | -1 |
+| K_rg1 | Rampant Growth -> 3rd Mystic | -0.0039 | 0.0015 | 1.40% | -1 |
+| K_s3 | Search for Tomorrow -> 3rd Mystic | -0.0019 | 0.0019 | 1.41% | -1 |
+| K_av2 | Avenger -> 4th Phylath | +0.0012 | 0.0015 | 1.35% | = |
+| K_em3 | Forest -> 3rd Mystic | +0.0038 | 0.0025 | 1.52% | = |
+| K_myr3 | Myriad Landscape -> Forest | +0.0122 | 0.0022 | 1.48% | -1 |
+| K_tx | Terramorphic Expanse -> Forest | +0.0152 | 0.0020 | 1.44% | -1 |
+| K_mtn0 | both Mountains -> Forest | +0.0524 | 0.0032 | 2.43% | = |
+
+Reading: a one-mana dork beats every two-mana-or-more ramp card and the fourth Titan, but NOT a land (25 lands
+is the floor here). Of the lands, the colourless Radiant Fountain and one of the two Mountains are the weak
+slots; the second Mountain is load-bearing (the red for Kessig Wolf Run and the fetches' only basic Mountain
+targets -- cutting both is the worst row). The fetch lands are pulling their weight even with the shuffle
+counted honestly (the K_myr3 / K_tx cuts are worse, and cutting a shuffler is UNDER-stated by the default).
+The Titan cut is the round's surprise (-0.029); Titan fetches Kessig Wolf Run, and with 7 dorks it is the
+slowest-to-matter card in the list. NSS bracket of this round: nss4 (below). Round 8 combines the winners.
