@@ -432,3 +432,27 @@ Round 7's seeds, 20,000 games, centre K0. base 5.8755; K0 -0.8814 vs base.
 Every shuffler-for-dork swap holds its sign and most GROW with the shuffle off (Rampant Growth -> Mystic
 -0.004 -> -0.015), which is the direction the clairvoyance argument predicts for a cut shuffler. Nothing
 round 8 builds on depends on a re-roll the search could see.
+
+## Round 8 — round 7's winners combined + more dorks, HELD OUT (`logs/landfall_screen/r8.json`, seed 8400000)
+
+20,000 games, centre K0 (k = n on every arm; keep-table fall-through 0.48% worst arm). base 5.7268; K0 4.8365
+(-0.8902 vs base); G6 +0.0508 behind K0. Fyndhorn Elves (= Elvish Mystic, a third name so a list can hold more
+than 8 one-drop {G} dorks) rides Khalni Heart Expedition's keep bucket.
+
+| arm | change from K0 | vs K0 | se | vs base | T7+ |
+|---|---|---|---|---|---|
+| **L7** | L2 + a 2nd Titan -> Fyndhorn Elves | **-0.0814** | 0.0039 | **-0.9716** | 0.98% |
+| **L4** | L1 + a 2nd Titan -> 4th Mystic | **-0.0795** | 0.0035 | -0.9697 | 0.86% |
+| L6 | L2 + 2 Khalni -> 2 Fyndhorn | -0.0691 | 0.0038 | -0.9593 | 1.04% |
+| L5 | L2 + Khalni -> Fyndhorn | -0.0680 | 0.0036 | -0.9582 | 1.09% |
+| L3 | L1 + Khalni -> 4th Mystic | -0.0624 | 0.0034 | -0.9526 | 0.98% |
+| L2 | L1 + Cultivate -> 4th Mystic | -0.0623 | 0.0035 | -0.9525 | 1.13% |
+| L1 | Titan -> 3rd Mystic, Radiant Fountain -> Forest, Mountain -> Forest | -0.0536 | 0.0031 | -0.9438 | 1.00% |
+| L8 | L2 + Rampant Growth -> Fyndhorn | -0.0536 | 0.0038 | -0.9438 | 1.26% |
+| L1a | L1 without the Mountain change | -0.0450 | 0.0027 | -0.9352 | 1.06% |
+
+Reading: round 7's three singles ADD held out (L1 -0.054 vs their sum -0.058; the Mountain is worth -0.009 of
+it). The second Titan cut is worth another -0.026 on top (L4 vs L1), the same size as the first: Titan is the
+list's most expendable expensive card once it has 8+ one-mana dorks. With the Titans down to two, Cultivate,
+Khalni and Rampant Growth are interchangeable with a dork to within ~0.01 (L4 ~ L7 ~ L6/L5 > L8). **Leader:
+L7 / L4, about -0.97 t vs the shipped list** (T7+ 6.6% -> 0.9-1.0%). Round 9 follows the Titan direction.
