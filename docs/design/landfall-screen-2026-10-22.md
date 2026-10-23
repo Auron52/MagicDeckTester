@@ -1023,3 +1023,52 @@ the owner pays for the ADDED copies at the cheapest printing (Cub $27.48, Hydra 
 loves shuffles"). Part of the shift is not about the shuffle count -- Cub for Hydra changes no shuffle effect and
 still moves -0.057 -- so the cheap two-drop threat itself reads better with less lookahead. Hydra still beats Cub
 head to head; Scute still loses everywhere.
+
+### m1 — Moraug and the Kessig Wolf Run slot around U0 (`logs/landfall_screen/m1.json`, seed 9500000, 20,000 paired games)
+
+No keep table on any arm; pin a16b898 (byte-identical to 5e25e1e on these lists). 300,000 games 16:25-18:34 UTC
+(~2 h 10 min including the card-score pooling for Moraug / Wolf Run). Moraug $1.93, Wolf Run $0.40.
+
+| arm | change from U0 | creatures | vs U0 | se | t | T7+ |
+|---|---|---|---|---|---|---|
+| **M_2W** | 2 Moraug for 2 Genesis Wave | 20 | **-0.0242** | 0.0015 | -16.1 | 2.90% |
+| W_Fo | Wolf Run for Radiant Fountain | 18 | -0.0022 | 0.0006 | -3.8 | 2.83% |
+| U0 | -- | 18 | -- | -- | -- | 2.96% |
+| W_M | Wolf Run for a Mountain (1 Mountain left) | 18 | +0.0003 | 0.0009 | +0.3 | 2.89% |
+| W_GT | Wolf Run for Gruul Turf | 18 | +0.0051 | 0.0016 | +3.3 | 3.29% |
+| W_F | Wolf Run for a Forest | 18 | +0.0180 | 0.0014 | +12.6 | 3.15% |
+| W_RG | Wolf Run for a Rampant Growth | 18 | +0.0181 | 0.0029 | +6.2 | 3.06% |
+| M_1RG | 1 Moraug for 1 Rampant Growth | 19 | +0.0207 | 0.0026 | +7.8 | 3.31% |
+| W_My | Wolf Run for a Myriad Landscape | 18 | +0.0297 | 0.0017 | +17.3 | 3.24% |
+| W_TE | Wolf Run for Terramorphic Expanse | 18 | +0.0331 | 0.0019 | +17.8 | 3.28% |
+| W_EW | Wolf Run for an Evolving Wilds | 18 | +0.0396 | 0.0020 | +19.8 | 3.50% |
+| M_2RG | 2 Moraug for 2 Rampant Growth | 20 | +0.0600 | 0.0038 | +15.8 | 4.04% |
+| M_2RG_mt | the same with 3 Mountain / 12 Forest | 20 | +0.0772 | 0.0040 | +19.4 | 4.28% |
+| M_2H | 2 Moraug for 2 Hydra | 18 | +0.2167 | 0.0035 | +62.7 | 3.85% |
+| shipped | | 16 | +0.7604 | 0.0055 | +138.8 | 8.23% |
+
+Seen-but-never-cast (`MTG_DUMP_CARDS=1`, `logs/landfall_screen/cardseen.py`; "never" = share of the games where a copy
+reached hand in which no copy was cast / played):
+
+| card | U0 | M_2W | W_M (1 Mountain) | shipped |
+|---|---|---|---|---|
+| Omnath, Locus of Rage | 90.3% | 91.9% | **96.7%** | 82.3% |
+| Moraug, Fury of Akoum | -- | 50.6% | -- | -- |
+| Genesis Wave | 48.6% | -- | 48.9% | 24.7% |
+| Kessig Wolf Run | -- | -- | 7.7% | -- |
+| Mountain | 10.8% | 9.2% | 6.9% | 6.0% |
+
+* **Moraug earns a slot only in Genesis Wave's, and only a small one** (-0.024 for two; $3.86). In a ramp slot it
+  is worse (+0.021 for one, +0.060 for two), with more Mountains worse still (+0.077), and the Hydra beats it by
+  0.217. Moraug and Wave are cast about equally often (half the games each is drawn), so the gain is the body:
+  M_2W has 20 creatures. n2 tests it beside the four Cubs and against 2 Baloths for Wave (is it Moraug, or any
+  creature for Wave?).
+* **Kessig Wolf Run is neutral at best in the goldfish.** Its only non-negative slots are Radiant Fountain (-0.002)
+  and a Mountain (+0.000); it costs 0.03-0.04 in a fetch / Myriad slot (fewer landfall doublers). Like Fountain's
+  life, its real value -- trample-pumping a Plant over a blocker -- is invisible against a goldfish with no
+  blockers, so this says only that it costs nothing in the Fountain or Mountain slot.
+* **Omnath is mostly a dead draw in this list**: cast in under 10% of the games it is drawn in (7 mana in a deck
+  that wins on turn 5), against 17.7% in the slower shipped list. One Mountain makes it worse (96.7% uncast) --
+  the USER's red-mana concern is real, but it is a 1-of rarely cast either way.
+* nss14 (first 10,000 games, MTG_NO_SEARCH_SHUFFLE=1) brackets the Wolf Run arms that cut a shuffle effect
+  (Wilds, Terramorphic, Myriad, Rampant Growth).
