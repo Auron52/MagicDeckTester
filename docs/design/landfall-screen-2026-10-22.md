@@ -809,7 +809,11 @@ and *"in a tougher game ... Phylath and Avenger can work together."* Both make P
 pumps the other's (Avenger: a counter on EVERY Plant; Phylath: four on any one) -- modelled, both by Plant
 subtype. The goldfish rarely produces the tougher game (no removal, no blocks), so this shows mainly in the T7+
 tail; round 15 separates it by adding Phylath while KEEPING four Avengers (E_tp, E_atpp keeps 3) vs cutting them
-(E_ap, E_aapp).
+(E_ap, E_aapp). USER: *"this is a way in which they are understated. Even with the Legend rule and multiple
+Phylaths you could still create more plants for Avenger, but most of the time having one of each is plenty to
+break through an opponent's setup."* (A 2nd Phylath's ETB does resolve before the legend rule -- modelled.)
+**Reading rule adopted for round 15 on:** where a Phylath / Avenger arm is within noise of a Titan / Wave arm,
+the tie breaks toward Phylath + Avenger, because the goldfish understates them; said in the report each time.
 
 **What the screen says about Phylath, and why its count is 2 so far:**
 - It was cut 4 -> 2 in round 2 only to make room for the Hydras (Hydra for 4 Phylath beat Hydra for 2 Courser
