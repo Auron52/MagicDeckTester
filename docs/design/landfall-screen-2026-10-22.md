@@ -530,3 +530,28 @@ the shipped list. Two signs the direction is near its end: the T7+ tail turns ba
 only 13 threats some games run out of gas), and the goldfish caveat above scales with the dork count.
 **With no Titan, Kessig Wolf Run is worse than a basic Forest (N4 vs N2: -0.010)** -- its value in this list
 came through Titan fetching it, which is the user's own reading of the card.
+
+## Non-clairvoyant bracket 7 — all of round 10 (`logs/landfall_screen/nss7.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Round 10's seeds, 20,000 games, centre M0. base 5.8896; M0 -0.9898 vs base; M0 T7+ 3.49%.
+
+| arm | default vs M0 | NSS vs M0 | NSS se | NSS T7+ | NSS unwon |
+|---|---|---|---|---|---|
+| N5 | -0.0424 | -0.0318 | 0.0043 | 4.03% | 0.38% |
+| N3 | -0.0576 | -0.0309 | 0.0047 | 4.84% | 0.61% |
+| N4 | -0.0481 | -0.0308 | 0.0043 | 4.16% | 0.51% |
+| **N1** | -0.0336 | **-0.0279** | 0.0033 | **3.71%** | 0.35% |
+| N2 | -0.0380 | -0.0254 | 0.0039 | 4.26% | 0.39% |
+| N8 | **-0.0707** | **-0.0235** | 0.0054 | **5.85%** | **0.91%** |
+| N_a | -0.0237 | -0.0215 | 0.0025 | 3.55% | 0.29% |
+| N_t | -0.0193 | -0.0158 | 0.0032 | 3.89% | 0.31% |
+
+**The clairvoyant default overvalues LOW-THREAT lists, through the shuffles.** N8 (no Avenger, no Titan, 14
+dorks, 13 threats) loses two thirds of its gain with the shuffle off, and its slow tail more than doubles (T7+
+3.5% -> 5.9%, unwon 0.22% -> 0.91%). The mechanism: a list with few threats and many shufflers (Search, Rampant
+Growth, Khalni, Evolving Wilds, Myriad, Terramorphic) lets the clairvoyant search re-roll the library until a
+threat is on top -- the same steering that inflated Evolving Wilds, here propping up thin threat density. With
+the shuffle off the deep-threat games stay deep, as they do for a real player. Every arm that cuts a six-drop
+shrinks the same way, in proportion to the threats it removes. **N1 (2 Avenger, 1 Titan, +2 Fyndhorn) is the
+robust step: -0.034 default, -0.028 NSS, tail level with M0.** The arms are within ~1-2 se of each other under
+NSS; the TAIL is what separates them. Round 11 is re-centred on N1 (it had been queued around N8).
