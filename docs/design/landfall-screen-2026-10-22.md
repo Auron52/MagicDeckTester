@@ -506,3 +506,27 @@ second does not: cutting both Titans is -0.020 by default and only -0.007 with t
 second cut's share goes -0.006 -> +0.003. The default prefers 0 Titans, NSS prefers 1, and both are within
 ~1-2 se of a tie. One Titan is the conservative reading (and keeps Kessig Wolf Run's fetcher, which the user
 called out). Avenger -> dork holds unchanged (-0.024), the strongest single in round 9.
+
+## Round 10 — round 9's winners combined + Ignoble Hierarch, HELD OUT (`logs/landfall_screen/r10.json`, seed 8600000)
+
+20,000 games, centre M0 (k = n; fall-through 0.64%). base 5.7290; M0 4.7552 (-0.9738 vs base). Ignoble Hierarch
+({G}, taps for {B}/{R}/{G}; exalted modelled) is the 13th-14th one-drop dork and the list's second red source;
+it rides Rampant Growth's keep bucket.
+
+| arm | change from M0 | vs M0 | se | vs base | T7+ |
+|---|---|---|---|---|---|
+| **N8** | 0 Avenger, 0 Titan; +3 Fyndhorn, +2 Hierarch (14 dorks) | **-0.0707** | 0.0039 | **-1.0445** | 1.44% |
+| N3 | 1 Avenger, 0 Titan; +3 Fyndhorn, +1 Hierarch | -0.0576 | 0.0036 | -1.0314 | 1.20% |
+| N4 | N2 + Kessig Wolf Run -> Forest | -0.0481 | 0.0034 | -1.0219 | 1.01% |
+| N5 | N2 + Khalni -> Hierarch | -0.0424 | 0.0034 | -1.0162 | 0.93% |
+| N2 | 2 Avenger, 0 Titan; +3 Fyndhorn | -0.0380 | 0.0031 | -1.0118 | 1.03% |
+| N1 | 2 Avenger, 1 Titan; +2 Fyndhorn | -0.0336 | 0.0027 | -1.0074 | 0.95% |
+| N_a | Avenger -> Fyndhorn (= M_av2) | -0.0237 | 0.0020 | -0.9975 | 0.96% |
+| N_t | both Titans -> Fyndhorn (= M_t0) | -0.0193 | 0.0026 | -0.9931 | 1.03% |
+
+Reading: the round-9 singles replicate held out (Avenger -0.024 / -0.026; Titans -0.019 / -0.020) and add
+(N2 -0.038 vs -0.043). Each further six-drop out for a dork still gains (N3, N8), now past ONE TURN faster than
+the shipped list. Two signs the direction is near its end: the T7+ tail turns back UP (1.0% -> 1.4% at N8: with
+only 13 threats some games run out of gas), and the goldfish caveat above scales with the dork count.
+**With no Titan, Kessig Wolf Run is worse than a basic Forest (N4 vs N2: -0.010)** -- its value in this list
+came through Titan fetching it, which is the user's own reading of the card.
