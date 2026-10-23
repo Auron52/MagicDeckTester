@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a69001144  date 2026-10-23
+# Regression ground truth -- commit 5bd82b1c0  date 2026-10-23
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-22): Periodic overnight rebaseline 2026-10-22 on 519c1f470 (PGO+LTO, 24/24 workers; 41m02s makespan on a loaded host -- same 1,642M units as a 25m29s run an hour earlier): 414 moved + 72 NEW (the UNBUDGETED BACKSTOP rows, USER 2026-10-22); searched 1760 faster / 704 slower, d0 8583 faster / 2518 slower. classify_turn_later (now pooled; d5 replayed at the case's value_play config): 167 churn / 537 PERSISTS, of which 527 are alchemist (346) and landfall (181) -- the keep-table / leaf / play-setting adoptions since 10-19 change which hands are kept, so their games diverge from the first draw; both decks are among the biggest net gains (alchemist searched -0.37t, d0 -0.83t; landfall -0.08t / -0.14t). The rest: edf 6, dragonstorm 3, hinata 1. Net slower groups: fivecolour2hg +0.0125, edf +0.0010, colossus +0.0004, fivecolour/fungusv3/creature_giving/slivers <= +0.0002. FIVECOLOUR IS A KNOWN REGRESSION, NOT CHURN: bisected to 4fc1437a2 (MTG_FS_STRICT_CUT_O1 default ON, 2026-10-21) -- its parent reproduces every moved FiveColour d5 game's GT digest, the commit moves 11 of 12. Held-out on/off at play settings: +0.0053t (0/7, t 2.5) std and +0.0217t (2/12, t 2.6) 2HG at 1.09-1.19x units, i.e. the cut ADDS work on this deck; root-cause open (suspect: the strict cut turns estimated wins into bounded no-wins that the budget-bind veto refuses to store). Carried, standing USER rulings: Galadriel ScryVerdict scry prune (5c85e812; clairvoyant +0.0476t, honest bar -0.0108t); escalation fresh 0.5 x budget_ms floor (per-deck escalation_fresh_frac deleted); MTG_ID_HINT_ROOT default 3 (2026-10-21); AccomplishedAlchemist keep table K=15 + nlfit sidecar + E.7 play setting d4b20. Prior overnight notes dropped deliberately: every cell re-measured; their adoption records (fungusv3/vampires resizes, EDF/Vampires keep tables) are in git.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -152,7 +152,7 @@ alchemist_smoke_d3_s1001=4.9733/9bfb0deb6e247a18
 alchemist_smoke_d5_s1001=4.9067/742ec521a12a7bf7
 alchemist2hg_smoke_d3_s1001=5.2000/4ad3d68838036e40
 elementals_smoke_d0_s1001=5.7600/13023d3c2fb4df76
-elementals_smoke_d3_s1001=4.5733/b5373ab960a16aa2
+elementals_smoke_d3_s1001=4.5733/42366719897354a4
 elementals_smoke_d5_s1001=4.5733/5f6dc34d82a89466
 
 # --- regression ---
@@ -433,9 +433,9 @@ alchemist_regression_d5_s2002=4.8667/4443d57ef6098d61
 alchemist_regression_d5_s3003=4.9867/202bdd6a6a9ad30f
 elementals_regression_d0_s2002=5.7320/164a9c255825ec8b
 elementals_regression_d3_s2002=4.4867/1836b3fa3902ab27
-elementals_regression_d3_s3003=4.4733/86a20927ca05e371
-elementals_regression_d5_s2002=4.4400/eb90e971afdca45a
-elementals_regression_d5_s3003=4.4933/88c75a5f219d19be
+elementals_regression_d3_s3003=4.4867/65431df1c239279a
+elementals_regression_d5_s2002=4.4133/29a36569425bc0e3
+elementals_regression_d5_s3003=4.4800/645efb62a71b3453
 
 # --- overnight ---
 alchemist_overnight_d3_s30101=4.8000/e3ed67adcd562587
