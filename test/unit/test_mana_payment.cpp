@@ -808,6 +808,31 @@ TEST_CASE("failed payment refunds Aether Hub energy (the retry must see it)")
     CHECK(s.players[0].energy_counters == 0);   // the successful payment spends it for real
 }
 
+// A GENERIC PIP NEVER SPENDS {E} (MTG_ENERGY_C_MODE, default ON; the s13_gi12 report: "I should have
+// the energy to drake, but I cannot"). DripLandAnyPipColor is the last word on which mode a source
+// takes for a generic pip, and for Aether Hub it must return the FREE {C} whatever colour the
+// caller's line-demand pick (LineDemandAnyPipColor) offered -- the coloured modes cost the {E}.
+// Pinned here directly because the end-to-end witness lost its power: since b513fcf93 (generic pips
+// read the line NET of the payment's own coloured pips) the seed-13 Overgrowth line owes nothing
+// beyond its own {G}, so the line-demand pick is the Hub's prod[0] = {C} and the lever is never
+// reached on that board (test/manual_tap_check.py arm i). A board where a LATER cast in the same
+// line owes a Hub colour still reaches it.
+TEST_CASE("a generic pip takes Aether Hub's free {C}, never an energy-paid colour")
+{
+    EnsureCards();
+    const GameState s = MakeBoard({"Aether Hub", "Forest"});
+    const CardDefinition* hub = CardDatabase::Instance().Lookup("Aether Hub");
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(hub != nullptr);
+    REQUIRE(forest != nullptr);
+    for (Color pick : { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green })
+    {
+        CHECK(DripLandAnyPipColor(s, 0, *hub, pick) == Color::Colorless);
+    }
+    // ...and the override is the Hub's own: a plain land keeps the pick it was handed.
+    CHECK(DripLandAnyPipColor(s, 0, *forest, Color::Green) == Color::Green);
+}
+
 // GENERIC PIPS MUST NOT EAT THE COLOURLESS A {C} PIP NEEDS (USER-found, EDF seed 5 reference,
 // 2026-09-07: "we drain the colourless before green even when the colourless matters").
 //

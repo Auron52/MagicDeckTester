@@ -49,8 +49,8 @@ ASSERTS
      what proves the `+` suffixes are matched against the ANY-COLOUR Auras only -- plus the Hub's
      `tap_energy` / `energy` affordances (USER: "I cannot see my energy for Aether Hub");
   i) a GENERIC pip never spends {E}: the seed-13 gi-12 rejection log the user filed, asserted as the
-     Peregrine Drake becoming castable the following turn, with MTG_ENERGY_C_MODE=0 as the control
-     that reproduces the reported failure.
+     Peregrine Drake becoming castable the following turn. (Its MTG_ENERGY_C_MODE=0 control lost
+     its power to b513fcf93 -- see the arm; the lever is pinned by a unit test instead.)
 
 SKIPS (exit 0) when the binary or the reference is missing, or when the board has moved so the
 frame this drives is no longer reachable -- the same policy as human_line_order_check.py.
@@ -556,11 +556,14 @@ else:
     v13 = block(s13(after, line="cast=Peregrine Drake").stdout, "CLAUDE_VALIDATION")
     check("Peregrine Drake is castable at turn 4 (the user's own report)",
           (v13 or {}).get("verdict"), "accept")
-    # ...and the lever is a real off switch, so the fix is measurable in one binary.
-    v13off = block(s13(after, line="cast=Peregrine Drake",
-                       env_extra={"MTG_ENERGY_C_MODE": "0"}).stdout, "CLAUDE_VALIDATION")
-    check("MTG_ENERGY_C_MODE=0 reproduces the reported failure",
-          (v13off or {}).get("verdict"), "illegal")
+    # NO OFF-SWITCH CONTROL ON THIS BOARD ANY MORE (2026-10-22). It asserted MTG_ENERGY_C_MODE=0
+    # reproduces the failure; since b513fcf93 (2026-10-06: a generic pip reads the line NET of the
+    # payment's OWN coloured pips) the Overgrowth line owes nothing beyond its own {G}, so the
+    # line-demand pick for the Hub is its prod[0] = {C} and the lever is never reached here -- the
+    # control read 'accept' with the lever off and had no power left. The ON assertions above stay
+    # (they are the user's complaint as an outcome); the lever itself is pinned directly by
+    # test/unit/test_mana_payment.cpp "a generic pip takes Aether Hub's free {C}, never an
+    # energy-paid colour".
 
 if fails:
     print("manual tap/pay: FAIL (%d)" % len(fails))

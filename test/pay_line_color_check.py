@@ -27,6 +27,9 @@ both hatches, and why fixing one and calling it done would have looked green on 
   * MTG_PAY_LINE_GENERIC_ORDER -- which colour a generic pip EATS out of the pool the payment has
                                 just built (ConsumeFloatingAny); a fixed WUBRG order without it,
                                 which spends the {U} first even when the tap chose it deliberately.
+Both live in the PER-CAST payer. Since 2026-10-18 (b098451bf) the default route pays this segment
+through the whole-turn prepay's joint solve instead, held right by MTG_PAY_PAIN_LAST; so the check
+asserts the fix on BOTH routes and measures the two hatches with the prepay off (MTG_NO_BATCH_PAY=1).
 
 WHY A CHECK AND NOT A DOC NOTE -- nothing else in the suite can see this:
   * both levers are HumanPlayActive()-gated, so the regression digests, the scenario fixtures and
@@ -208,42 +211,66 @@ def main():
             or pre["lands"]["Kitchen"] or pre["float"] != {"W": 1}:
         skip("pre-segment board moved (lands=%s float=%s)" % (pre["lands"], pre["float"]))
 
-    # (a) Kitchen alone pays the segment: Adarkar Wastes stays UP, no pain, nothing stranded.
-    want(res["lands"].get("Adarkar Wastes") is False,
-         "Adarkar Wastes should stay UNTAPPED (Kitchen's {U}+{G}{G} pays the whole segment); got tapped")
-    want(res["life"] == pre["life"],
-         "no pain should be taken (Adarkar's painless {C} was never needed); life %s -> %s"
-         % (pre["life"], res["life"]))
-    want(res["float"] == {},
-         "float should be EMPTY -- nothing was over-tapped; got %s" % (res["float"],))
-    # (b) ...and the consequence the user actually cares about: the Displacer can blink.
-    want(res["blink_offered"],
-         "Eldrazi Displacer's blink must be offered ({C} from the still-untapped Adarkar Wastes)")
+    def want_fixed(res, route):
+        # (a) Kitchen alone pays the segment: Adarkar Wastes stays UP, no pain, nothing stranded.
+        want(res["lands"].get("Adarkar Wastes") is False,
+             "[%s] Adarkar Wastes should stay UNTAPPED (Kitchen's {U}+{G}{G} pays the whole "
+             "segment); got tapped" % route)
+        want(res["life"] == pre["life"],
+             "[%s] no pain should be taken (Adarkar's painless {C} was never needed); life %s -> %s"
+             % (route, pre["life"], res["life"]))
+        want(res["float"] == {},
+             "[%s] float should be EMPTY -- nothing was over-tapped; got %s" % (route, res["float"]))
+        # (b) ...and the consequence the user actually cares about: the Displacer can blink.
+        want(res["blink_offered"],
+             "[%s] Eldrazi Displacer's blink must be offered ({C} from the still-untapped Adarkar "
+             "Wastes)" % route)
 
-    # (c) Both hatches are REAL off switches, and EACH ALONE reproduces the reported bug --
-    #     the two defects are independent, so a one-sided fix is not a fix.
-    for flag in ("MTG_PAY_LINE_TAP_COLOR", "MTG_PAY_LINE_GENERIC_ORDER"):
-        off = drive({flag: "0"})
-        if off is None:
-            fails.append("%s=0 arm did not reach the board" % flag)
-            continue
-        r = off[UNDER_TEST + 1]
+    def want_bug(frames, base, what):
+        if frames is None:
+            fails.append("%s arm did not reach the board" % what)
+            return
+        r = frames[UNDER_TEST + 1]
         want(r["lands"].get("Adarkar Wastes") is True and r["float"] == {"G": 1}
              and r["life"] == pre["life"] - 1 and not r["blink_offered"],
-             "%s=0 must restore the reported behaviour (Adarkar tapped, float {G:1}, -1 life, no "
+             "%s must restore the reported behaviour (Adarkar tapped, float {G:1}, -1 life, no "
              "blink); got lands=%s float=%s life=%s blink=%s"
-             % (flag, r["lands"], r["float"], r["life"], r["blink_offered"]))
+             % (what, r["lands"], r["float"], r["life"], r["blink_offered"]))
         # ...and it must be scoped to THIS segment: every earlier frame is untouched.
-        want(off[:UNDER_TEST + 1] == on[:UNDER_TEST + 1],
-             "%s=0 changed a frame BEFORE the segment under test -- the lever is out of scope" % flag)
+        want(frames[:UNDER_TEST + 1] == base[:UNDER_TEST + 1],
+             "%s changed a frame BEFORE the segment under test -- the lever is out of scope" % what)
+
+    # TWO PAYMENT ROUTES REACH THIS SEGMENT, AND THE FIX MUST HOLD ON BOTH (2026-10-22).
+    #  * The DEFAULT route since b098451bf (MTG_PREPAY_FLOAT_POOL, 2026-10-18): the pre-segment float
+    #    {W:1} no longer makes the whole-turn prepay (TurnSolver::BatchPrepayMainCasts) decline, so its
+    #    JOINT solve pays both casts and the per-cast payer only spends the float. The two levers below
+    #    live in the per-cast payer and are not reached here; what keeps this route right is the joint
+    #    solve's painless-first pass (MTG_PAY_PAIN_LAST, eabf60390) -- without it the prepay re-created
+    #    the exact reported outcome (measured on b098451bf: Adarkar tapped, -1 life, float {G:1}).
+    #  * The PER-CAST route, which still pays every segment the prepay declines (one cast, a "**" line
+    #    with a manual tap or a queued mana source -- HumanLinePaysAsItGoes, a wild/snow float).
+    #    MTG_NO_BATCH_PAY=1 forces it, and that is where the two hatches are measured.
+    want_fixed(res, "default route")
+    want_bug(drive({"MTG_PAY_PAIN_LAST": "0"}), on, "default route, MTG_PAY_PAIN_LAST=0")
+
+    NOBATCH = {"MTG_NO_BATCH_PAY": "1"}
+    pc = drive(NOBATCH)
+    if pc is None:
+        fails.append("per-cast route (MTG_NO_BATCH_PAY=1) did not reach the board")
+    else:
+        want_fixed(pc[UNDER_TEST + 1], "per-cast route")
+        # (c) Both hatches are REAL off switches, and EACH ALONE reproduces the reported bug --
+        #     the two defects are independent, so a one-sided fix is not a fix.
+        for flag in ("MTG_PAY_LINE_TAP_COLOR", "MTG_PAY_LINE_GENERIC_ORDER"):
+            want_bug(drive(dict(NOBATCH, **{flag: "0"})), pc, "per-cast route, %s=0" % flag)
 
     if fails:
         print("FAIL: pay line colour")
         for f in fails:
             print("  - %s" % f)
         sys.exit(1)
-    print("PASS: pay line colour (seed 6 gi 5 T4: Adarkar stays up, float {}, blink offered; "
-          "both hatches restore the bug)")
+    print("PASS: pay line colour (seed 6 gi 5 T4: Adarkar stays up, float {}, blink offered on the "
+          "prepay AND per-cast routes; MTG_PAY_PAIN_LAST and both per-cast hatches restore the bug)")
 
 
 if __name__ == "__main__":
