@@ -874,3 +874,24 @@ keeps / bottoms a hand of Hydras as if it were a hand of 6-drops. That would fla
 unchanged), U0_p3 / U0_p2 / U0_p0 = Phylath 3 / 2 / 0, measured under x1 (Hydra -> Phylath bucket, as before),
 x2 (Hydra -> Courser bucket, a 3-drop for a 3-drop) and x3 (no alias: the table is dropped on every arm,
 heuristic mulligan, symmetric). If the Phylath-count deltas move between x1 and x2 / x3, the alias biased them.
+
+### x1 — Hydra on Phylath's bucket for EVERY arm (`logs/landfall_screen/x1.json`)
+
+20,000 paired games, centre U0, fall-through 0.02% worst-arm. base 5.7226 (T7+ 6.64%).
+
+| arm | Phylath | Hydra replaces | vs U0 | se | vs shipped | T7+ |
+|---|---|---|---|---|---|---|
+| **U0** | 4 | 2 Courser + 2 Baloths | -- | -- | **-0.7495** | **1.97%** |
+| U0_p3 | 3 | 2 Courser + 1 Baloths + 1 Phylath | +0.0072 | 0.0017 | -0.742 | 2.16% |
+| U0_p2 | 2 | 2 Courser + 2 Phylath | +0.0143 | 0.0024 | -0.735 | 2.29% |
+| U0_p0 | 0 | 4 Phylath | +0.0287 | 0.0037 | -0.721 | 3.10% |
+
+**Round 2's Phylath reading was an apparatus artefact, and the USER was right to doubt it.** Round 2 gave the
+Hydra a DIFFERENT keep-table host per arm: the arms that cut Phylath rode Phylath's bucket, the arms that cut
+Courser / Baloths / Wave rode COURSER's (`r2.json`: h4_c0_bal0 `arm_alias` Hydra -> Courser). So "4 Phylath kept
+is 0.12-0.14 t worse" (h4_c0_bal0 -0.588 vs h4_phy0 -0.709) compared two keep tables, not two decks. With ONE
+host for every arm the order reverses: **each Phylath cut costs ~0.007 t, and U0 (the USER's shape: Hydra for
+Courser + Baloths, all four Phylath) is the best of the four, with the thinnest tail.** Every round from 5 on
+used one host (Phylath) for all its Hydra arms, so their within-round comparisons are consistent; but A0 itself
+was chosen on round 2's mixed-host reading. x2 (Courser host) and x3 (no table) say how much the host choice
+moves the level.
