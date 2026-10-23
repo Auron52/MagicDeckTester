@@ -582,5 +582,44 @@ Anchor **A0 = shipped + 4 Mossborn Hydra (for 2 Phylath + 2 Courser) + Kessig Wo
 `"centre": "A0"`. Twenty single swaps, every one inside the landfall package: Phylath / Courser / Baloths /
 Omnath / Genesis Wave / Cultivate against Titan, Avenger and each other, the two alternative Hydra cuts
 (2 Baloths or 2 Titan instead of 2 Courser), and the lands (Radiant Fountain, a Mountain, 25 lands with a 3rd
-Cultivate, Evolving Wilds 2 and 4). NSS bracket 9 runs the same spec with the shuffle off. Results below when
-they land.
+Cultivate, Evolving Wilds 2 and 4). NSS bracket 9 runs the same spec with the shuffle off.
+
+20,000 paired games per arm. base 5.7310 (T7+ 6.94%, T8+ 0.64%); **A0 5.0052, -0.7258 vs shipped on fresh
+seeds** (se 0.0053; T7+ 2.17%, T8+ 0.24%, unwon 0.07%) -- round 2's no-dork reading, reproduced. Deltas are
+paired per game against A0 (`logs/landfall_screen/vsref.py`); "shuffles" counts library searches added (+) or
+removed (-), the quantity the clairvoyant default can flatter.
+
+| arm | change from A0 | vs A0 | se | T7+ | shuffles |
+|---|---|---|---|---|---|
+| A_cu3b | 1 Rampaging Baloths -> 3rd Cultivate | **-0.0190** | 0.0020 | 1.70% | +1 |
+| A_o0 | Omnath -> 3rd Genesis Wave | **-0.0146** | 0.0015 | 1.81% | 0 |
+| A_cu3a | 1 Avenger -> 3rd Cultivate | -0.0124 | 0.0021 | 1.85% | +1 |
+| A_ew4 | 1 Forest -> 4th Evolving Wilds | -0.0123 | 0.0021 | 2.03% | +1 |
+| A_w3b | 1 Rampaging Baloths -> 3rd Genesis Wave | -0.0118 | 0.0015 | 1.96% | 0 |
+| A_fnt | Radiant Fountain -> Forest | -0.0101 | 0.0016 | 2.05% | 0 |
+| A_cu3t | 1 Titan -> 3rd Cultivate | -0.0092 | 0.0019 | 1.92% | 0 |
+| A_c2b0 | 2 Baloths -> 2 Courser (the Hydras cut Baloths, not Courser) | -0.0089 | 0.0019 | 2.00% | 0 |
+| A_w3a | 1 Avenger -> 3rd Genesis Wave | -0.0076 | 0.0016 | 2.19% | 0 |
+| A_ph3a | 1 Avenger -> 3rd Phylath | -0.0065 | 0.0016 | 2.10% | 0 |
+| A_w3t | 1 Titan -> 3rd Genesis Wave | -0.0043 | 0.0014 | 2.10% | -1 |
+| A_mtn | 1 Mountain -> Forest | -0.0038 | 0.0018 | 2.14% | 0 |
+| A_ph3t | 1 Titan -> 3rd Phylath | -0.0031 | 0.0018 | 2.09% | -1 |
+| A_o2 | 1 Baloths -> 2nd Omnath | -0.0008 | 0.0013 | 2.18% | 0 |
+| A_c2t2 | 2 Titan -> 2 Courser | +0.0031 | 0.0020 | 2.19% | -2 |
+| A_c1 | 1 Phylath -> Courser | +0.0049 | 0.0020 | 2.28% | 0 |
+| A_cu1 | 1 Cultivate -> 3rd Genesis Wave | +0.0055 | 0.0020 | 2.44% | -1 |
+| A_b3 | 1 Phylath -> 3rd Baloths | +0.0097 | 0.0019 | 2.35% | 0 |
+| A_ew2 | 1 Evolving Wilds -> Forest | +0.0149 | 0.0021 | 2.30% | -1 |
+| A_l25 | 1 Forest -> 3rd Cultivate (25 lands) | **+0.0198** | 0.0024 | 2.18% | +1 |
+
+Reading (clairvoyant default; the NSS bracket is the check for every arm with a non-zero shuffle count):
+- **Rampaging Baloths is the weakest card in A0.** Every swap out of it gains (Cultivate -0.019, Wave -0.012,
+  Courser -0.009 per two), and a third copy in for Phylath costs +0.010. Omnath likewise: out for a Wave -0.015,
+  in for a Baloths ~0. Both are landfall payoffs, so cutting them is a USER call on the deck's shape.
+- **Land-putting cards gain**: a 3rd Cultivate for any six-drop and a 3rd Genesis Wave (no shuffle, so not a
+  clairvoyance artefact) for Omnath / Baloths / Avenger. Cultivate's gains carry a +1 shuffle and need nss9.
+- **26 lands is the floor**: Forest -> Cultivate costs +0.020 although it adds a shuffle, the strongest single
+  loss here. Radiant Fountain -> Forest -0.010 (a green source beats 2 life).
+- **Evolving Wilds looks like round 5's clairvoyance again** (4th copy -0.012, 2nd copy cut +0.015), pending nss9.
+- Titan and Avenger are close to neutral against the others (-0.003 to -0.012 out); Phylath out for Courser is
+  worse, so the Hydras' best second cut stays Courser or Baloths (A_c2b0 prefers Baloths by -0.009).
