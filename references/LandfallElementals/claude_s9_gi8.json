@@ -1,0 +1,450 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Aether Vial" }, { "num": 52, "name": "Terramorphic Expanse" }, { "num": 8, "name": "Brushfire Elemental" }, { "num": 40, "name": "Risen Reef" }, { "num": 53, "name": "Terramorphic Expanse" }, { "num": 44, "name": "Secluded Courtyard" }, { "num": 13, "name": "Flamekin Harbinger" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 22, "cast_order": ["**", "land=Secluded Courtyard", "cast=Aether Vial"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 8, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flamekin Harbinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Mossborn Hydra", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Mossborn Hydra" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Brushfire Elemental", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Brushfire Elemental" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Incandescent Soulstoke", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Incandescent Soulstoke" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Akoum Hellhound", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Akoum Hellhound" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Risen Reef", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Risen Reef" }] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Smokebraider", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Smokebraider" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Fulminator Mage", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fulminator Mage" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Flamekin Harbinger", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Flamekin Harbinger" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Fury", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fury" }] },
+    { "index": 9, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → Foundation Breaker", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Foundation Breaker" }] },
+    { "index": 10, "summary": "land=Secluded Courtyard; cast: Flamekin Harbinger → fail to find (X=0)", "land": "Secluded Courtyard", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "(decline search)" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Flamekin Harbinger → Mossborn Hydra", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Mossborn Hydra" }] },
+    { "index": 12, "summary": "land=Mountain; cast: Flamekin Harbinger → Brushfire Elemental", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Brushfire Elemental" }] },
+    { "index": 13, "summary": "land=Mountain; cast: Flamekin Harbinger → Incandescent Soulstoke", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Incandescent Soulstoke" }] },
+    { "index": 14, "summary": "land=Mountain; cast: Flamekin Harbinger → Akoum Hellhound", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Akoum Hellhound" }] },
+    { "index": 15, "summary": "land=Mountain; cast: Flamekin Harbinger → Risen Reef", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Risen Reef" }] },
+    { "index": 16, "summary": "land=Mountain; cast: Flamekin Harbinger → Smokebraider", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Smokebraider" }] },
+    { "index": 17, "summary": "land=Mountain; cast: Flamekin Harbinger → Fulminator Mage", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fulminator Mage" }] },
+    { "index": 18, "summary": "land=Mountain; cast: Flamekin Harbinger → Flamekin Harbinger", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Flamekin Harbinger" }] },
+    { "index": 19, "summary": "land=Mountain; cast: Flamekin Harbinger → Fury", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fury" }] },
+    { "index": 20, "summary": "land=Mountain; cast: Flamekin Harbinger → Foundation Breaker", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Foundation Breaker" }] },
+    { "index": 21, "summary": "land=Mountain; cast: Flamekin Harbinger → fail to find (X=0)", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "(decline search)" }] },
+    { "index": 22, "summary": "land=Secluded Courtyard; cast: Aether Vial", "land": "Secluded Courtyard", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 23, "summary": "land=Mountain; cast: Aether Vial", "land": "Mountain", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 24, "summary": "land=Terramorphic Expanse; cast: Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Terramorphic Expanse"], "actions": [{ "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 25, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=Terramorphic Expanse; cast: (nothing)", "land": "Terramorphic Expanse", "casts": [], "actions": [] },
+    { "index": 27, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 28, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 8, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flamekin Harbinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 8, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flamekin Harbinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [0], "hand": [{ "num": 8, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flamekin Harbinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Brushfire Elemental", "vial=Flamekin Harbinger"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Brushfire Elemental" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 8, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flamekin Harbinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Brushfire Elemental, Flamekin Harbinger (vial)", "land": "Mountain", "casts": ["Brushfire Elemental", "Flamekin Harbinger"], "cast_order_canonical": ["Brushfire Elemental", "Flamekin Harbinger"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Flamekin Harbinger" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Brushfire Elemental", "land": "Mountain", "casts": ["Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }] },
+    { "index": 2, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Mossborn Hydra, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Mossborn Hydra" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 3, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Brushfire Elemental, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 4, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Incandescent Soulstoke, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Incandescent Soulstoke" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 5, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Akoum Hellhound, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Akoum Hellhound" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 6, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Risen Reef, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Risen Reef" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 7, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Smokebraider, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Smokebraider" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 8, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Fulminator Mage, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fulminator Mage" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 9, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Flamekin Harbinger, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Flamekin Harbinger" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 10, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Fury, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fury" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 11, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Foundation Breaker, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Foundation Breaker" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 12, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → fail to find (X=0), Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "(decline search)" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 13, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger (vial), Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger", "Terramorphic Expanse"], "actions": [{ "card": "Flamekin Harbinger" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 14, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Mossborn Hydra", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Mossborn Hydra" }] },
+    { "index": 15, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Brushfire Elemental", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Brushfire Elemental" }] },
+    { "index": 16, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Incandescent Soulstoke", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Incandescent Soulstoke" }] },
+    { "index": 17, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Akoum Hellhound", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Akoum Hellhound" }] },
+    { "index": 18, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Risen Reef", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Risen Reef" }] },
+    { "index": 19, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Smokebraider", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Smokebraider" }] },
+    { "index": 20, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Fulminator Mage", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fulminator Mage" }] },
+    { "index": 21, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Flamekin Harbinger", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Flamekin Harbinger" }] },
+    { "index": 22, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Fury", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fury" }] },
+    { "index": 23, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → Foundation Breaker", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Foundation Breaker" }] },
+    { "index": 24, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger → fail to find (X=0)", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "(decline search)" }] },
+    { "index": 25, "summary": "land=Terramorphic Expanse; cast: Flamekin Harbinger (vial)", "land": "Terramorphic Expanse", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger" }] },
+    { "index": 26, "summary": "land=Mountain; cast: Flamekin Harbinger → Mossborn Hydra", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Mossborn Hydra" }] },
+    { "index": 27, "summary": "land=Mountain; cast: Flamekin Harbinger → Brushfire Elemental", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Brushfire Elemental" }] },
+    { "index": 28, "summary": "land=Mountain; cast: Flamekin Harbinger → Incandescent Soulstoke", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Incandescent Soulstoke" }] },
+    { "index": 29, "summary": "land=Mountain; cast: Flamekin Harbinger → Akoum Hellhound", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Akoum Hellhound" }] },
+    { "index": 30, "summary": "land=Mountain; cast: Flamekin Harbinger → Risen Reef", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Risen Reef" }] },
+    { "index": 31, "summary": "land=Mountain; cast: Flamekin Harbinger → Smokebraider", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Smokebraider" }] },
+    { "index": 32, "summary": "land=Mountain; cast: Flamekin Harbinger → Fulminator Mage", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fulminator Mage" }] },
+    { "index": 33, "summary": "land=Mountain; cast: Flamekin Harbinger → Flamekin Harbinger", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Flamekin Harbinger" }] },
+    { "index": 34, "summary": "land=Mountain; cast: Flamekin Harbinger → Fury", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fury" }] },
+    { "index": 35, "summary": "land=Mountain; cast: Flamekin Harbinger → Foundation Breaker", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Foundation Breaker" }] },
+    { "index": 36, "summary": "land=Mountain; cast: Flamekin Harbinger → fail to find (X=0)", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "(decline search)" }] },
+    { "index": 37, "summary": "land=Mountain; cast: Flamekin Harbinger (vial)", "land": "Mountain", "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger" }] },
+    { "index": 38, "summary": "land=none; cast: Flamekin Harbinger → Mossborn Hydra", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Mossborn Hydra" }] },
+    { "index": 39, "summary": "land=none; cast: Flamekin Harbinger → Brushfire Elemental", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Brushfire Elemental" }] },
+    { "index": 40, "summary": "land=none; cast: Flamekin Harbinger → Incandescent Soulstoke", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Incandescent Soulstoke" }] },
+    { "index": 41, "summary": "land=none; cast: Flamekin Harbinger → Akoum Hellhound", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Akoum Hellhound" }] },
+    { "index": 42, "summary": "land=none; cast: Flamekin Harbinger → Risen Reef", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Risen Reef" }] },
+    { "index": 43, "summary": "land=none; cast: Flamekin Harbinger → Smokebraider", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Smokebraider" }] },
+    { "index": 44, "summary": "land=none; cast: Flamekin Harbinger → Fulminator Mage", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fulminator Mage" }] },
+    { "index": 45, "summary": "land=none; cast: Flamekin Harbinger → Flamekin Harbinger", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Flamekin Harbinger" }] },
+    { "index": 46, "summary": "land=none; cast: Flamekin Harbinger → Fury", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Fury" }] },
+    { "index": 47, "summary": "land=none; cast: Flamekin Harbinger → Foundation Breaker", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "Foundation Breaker" }] },
+    { "index": 48, "summary": "land=none; cast: Flamekin Harbinger → fail to find (X=0)", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger", "tutor_target": "(decline search)" }] },
+    { "index": 49, "summary": "land=none; cast: Flamekin Harbinger (vial)", "land": null, "casts": ["Flamekin Harbinger"], "actions": [{ "card": "Flamekin Harbinger" }] },
+    { "index": 50, "summary": "land=Terramorphic Expanse; cast: Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Terramorphic Expanse"], "actions": [{ "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 51, "summary": "land=Terramorphic Expanse; cast: (nothing)", "land": "Terramorphic Expanse", "casts": [], "actions": [] },
+    { "index": 52, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 53, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "tutor_etb",
+  "source": "Flamekin Harbinger",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 9, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Mossborn Hydra" }, { "index": 1, "name": "Brushfire Elemental" }, { "index": 2, "name": "Incandescent Soulstoke" }, { "index": 3, "name": "Akoum Hellhound" }, { "index": 4, "name": "Risen Reef" }, { "index": 5, "name": "Smokebraider" }, { "index": 6, "name": "Fulminator Mage" }, { "index": 7, "name": "Flamekin Harbinger" }, { "index": 8, "name": "Fury" }, { "index": 9, "name": "Foundation Breaker" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 2, "source": "Flamekin Harbinger (searched)", "cards": [{ "name": "Brushfire Elemental", "disposition": "to top" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 9, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Brushfire Elemental (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 9, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 9, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 4, "cast_order": ["**", "cast=Brushfire Elemental", "vial=Brushfire Elemental", "land=Terramorphic Expanse"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Brushfire Elemental" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 9, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Brushfire Elemental", "cost": "{R}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Terramorphic Expanse; cast: Brushfire Elemental (vial), Brushfire Elemental, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Brushfire Elemental", "Brushfire Elemental", "Terramorphic Expanse"], "cast_order_canonical": ["Brushfire Elemental", "Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Terramorphic Expanse (after Brushfire Elemental); cast: Brushfire Elemental (vial), Brushfire Elemental, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "land_slot": 1, "casts": ["Brushfire Elemental", "Brushfire Elemental", "Terramorphic Expanse"], "cast_order_canonical": ["Brushfire Elemental", "Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 2, "summary": "land=Terramorphic Expanse (after Brushfire Elemental); cast: Brushfire Elemental (vial), Brushfire Elemental, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "land_slot": 2, "casts": ["Brushfire Elemental", "Brushfire Elemental", "Terramorphic Expanse"], "cast_order_canonical": ["Brushfire Elemental", "Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 3, "summary": "land=Terramorphic Expanse; cast: Brushfire Elemental (vial), Brushfire Elemental", "land": "Terramorphic Expanse", "casts": ["Brushfire Elemental", "Brushfire Elemental"], "cast_order_canonical": ["Brushfire Elemental", "Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Brushfire Elemental" }] },
+    { "index": 4, "summary": "land=Terramorphic Expanse (after the casts); cast: Brushfire Elemental (vial), Brushfire Elemental", "land": "Terramorphic Expanse", "land_after_casts": true, "casts": ["Brushfire Elemental", "Brushfire Elemental"], "cast_order_canonical": ["Brushfire Elemental", "Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Brushfire Elemental" }] },
+    { "index": 5, "summary": "land=Terramorphic Expanse (after Brushfire Elemental); cast: Brushfire Elemental (vial), Brushfire Elemental", "land": "Terramorphic Expanse", "land_slot": 1, "casts": ["Brushfire Elemental", "Brushfire Elemental"], "cast_order_canonical": ["Brushfire Elemental", "Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Brushfire Elemental" }] },
+    { "index": 7, "summary": "land=none; cast: Brushfire Elemental (vial), Brushfire Elemental", "land": null, "casts": ["Brushfire Elemental", "Brushfire Elemental"], "cast_order_canonical": ["Brushfire Elemental", "Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Brushfire Elemental" }] },
+    { "index": 8, "summary": "land=Terramorphic Expanse; cast: Brushfire Elemental, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Brushfire Elemental", "Terramorphic Expanse"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 9, "summary": "land=Terramorphic Expanse; cast: Brushfire Elemental (vial), Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Brushfire Elemental", "Terramorphic Expanse"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 10, "summary": "land=Terramorphic Expanse (after Brushfire Elemental); cast: Brushfire Elemental, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "land_slot": 1, "casts": ["Brushfire Elemental", "Terramorphic Expanse"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 11, "summary": "land=Terramorphic Expanse (after Brushfire Elemental); cast: Brushfire Elemental (vial), Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "land_slot": 1, "casts": ["Brushfire Elemental", "Terramorphic Expanse"], "actions": [{ "card": "Brushfire Elemental" }, { "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 12, "summary": "land=Terramorphic Expanse; cast: Brushfire Elemental", "land": "Terramorphic Expanse", "casts": ["Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }] },
+    { "index": 13, "summary": "land=Terramorphic Expanse; cast: Brushfire Elemental (vial)", "land": "Terramorphic Expanse", "casts": ["Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }] },
+    { "index": 14, "summary": "land=Terramorphic Expanse (after the casts); cast: Brushfire Elemental", "land": "Terramorphic Expanse", "land_after_casts": true, "casts": ["Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }] },
+    { "index": 15, "summary": "land=Terramorphic Expanse (after the casts); cast: Brushfire Elemental (vial)", "land": "Terramorphic Expanse", "land_after_casts": true, "casts": ["Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }] },
+    { "index": 18, "summary": "land=none; cast: Brushfire Elemental", "land": null, "casts": ["Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }] },
+    { "index": 19, "summary": "land=none; cast: Brushfire Elemental (vial)", "land": null, "casts": ["Brushfire Elemental"], "actions": [{ "card": "Brushfire Elemental" }] },
+    { "index": 20, "summary": "land=Terramorphic Expanse; cast: Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Terramorphic Expanse"], "actions": [{ "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 21, "summary": "land=Terramorphic Expanse; cast: (nothing)", "land": "Terramorphic Expanse", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 3,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Terramorphic Expanse): +2/+2 until end of turn (now 3/3)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Terramorphic Expanse): +2/+2 until end of turn (now 3/3)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Terramorphic Expanse): +2/+2 until end of turn (now 3/3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }, { "name": "Terramorphic Expanse", "idx": 9, "num": 52, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": null, "casts": ["Terramorphic Expanse"], "actions": [{ "card": "Terramorphic Expanse", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "tutor_etb",
+  "source": "Terramorphic Expanse -- basic land onto the battlefield tapped",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Island" }, { "index": 2, "name": "Mountain" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "sacrifice", "text": "🔪 Terramorphic Expanse -- sacrificed (cost)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Forest): +2/+2 until end of turn (now 5/5)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Forest): +2/+2 until end of turn (now 5/5)" }, { "turn": 3, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Forest): +2/+2 until end of turn (now 5/5)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Terramorphic Expanse: Forest onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Brushfire Elemental (5), Flamekin Harbinger (1), Brushfire Elemental (5), Brushfire Elemental (5) — 16 to opponent (19→3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 15,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 3, "cast_order": ["**", "vial=Risen Reef", "land=Terramorphic Expanse"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Terramorphic Expanse" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 40, "name": "Risen Reef", "cost": "{1}{U}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Terramorphic Expanse; cast: Risen Reef, Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Risen Reef", "Terramorphic Expanse"], "actions": [{ "card": "Risen Reef" }, { "card": "Terramorphic Expanse", "src_num": 53, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 1, "summary": "land=Terramorphic Expanse; cast: Risen Reef (vial), Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Risen Reef", "Terramorphic Expanse"], "actions": [{ "card": "Risen Reef" }, { "card": "Terramorphic Expanse", "src_num": 53, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 2, "summary": "land=Terramorphic Expanse; cast: Risen Reef", "land": "Terramorphic Expanse", "casts": ["Risen Reef"], "actions": [{ "card": "Risen Reef" }] },
+    { "index": 3, "summary": "land=Terramorphic Expanse; cast: Risen Reef (vial)", "land": "Terramorphic Expanse", "casts": ["Risen Reef"], "actions": [{ "card": "Risen Reef" }] },
+    { "index": 4, "summary": "land=none; cast: Risen Reef", "land": null, "casts": ["Risen Reef"], "actions": [{ "card": "Risen Reef" }] },
+    { "index": 5, "summary": "land=none; cast: Risen Reef (vial)", "land": null, "casts": ["Risen Reef"], "actions": [{ "card": "Risen Reef" }] },
+    { "index": 6, "summary": "land=Terramorphic Expanse; cast: Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": "Terramorphic Expanse", "casts": ["Terramorphic Expanse"], "actions": [{ "card": "Terramorphic Expanse", "src_num": 53, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] },
+    { "index": 7, "summary": "land=Terramorphic Expanse; cast: (nothing)", "land": "Terramorphic Expanse", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 36,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "dig",
+  "source": "Risen Reef (look-top land)",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Risen Reef", "idx": 10, "num": 40, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 53, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Mountain" }],
+  "note": "reply 0 to put the top card -- a land -- onto the battlefield TAPPED (landfall triggers; it is not your land drop), or -1 to put it into your HAND instead (you may then play it as your land drop). Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "reveals": [{ "turn": 4, "source": "Risen Reef (look at the top card)", "cards": [{ "name": "Mountain", "disposition": "battlefield (tapped)" }] }],
+  "events": [{ "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Mountain): +2/+2 until end of turn (now 3/3)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Mountain): +2/+2 until end of turn (now 3/3)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Mountain): +2/+2 until end of turn (now 3/3)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Terramorphic Expanse): +2/+2 until end of turn (now 5/5)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Terramorphic Expanse): +2/+2 until end of turn (now 5/5)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Terramorphic Expanse): +2/+2 until end of turn (now 5/5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 11, "num": 34, "tapped": true, "is_land": true }, { "name": "Risen Reef", "idx": 10, "num": 40, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }, { "name": "Terramorphic Expanse", "idx": 12, "num": 53, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 54, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Terramorphic Expanse: sacrifice it: search for land(s), put them onto the battlefield", "land": null, "casts": ["Terramorphic Expanse"], "actions": [{ "card": "Terramorphic Expanse", "src_num": 53, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 19,
+  "type": "tutor_etb",
+  "source": "Terramorphic Expanse -- basic land onto the battlefield tapped",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 11, "num": 34, "tapped": true, "is_land": true }, { "name": "Risen Reef", "idx": 10, "num": 40, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 54, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse", "Terramorphic Expanse"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "heuristic_default": 2,
+  "candidates": [{ "index": 0, "name": "Forest" }, { "index": 1, "name": "Island" }, { "index": 2, "name": "Mountain" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "sacrifice", "text": "🔪 Terramorphic Expanse -- sacrificed (cost)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Mountain): +2/+2 until end of turn (now 7/7)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Mountain): +2/+2 until end of turn (now 7/7)" }, { "turn": 4, "kind": "trigger", "text": "🌍 Brushfire Elemental (landfall: Mountain): +2/+2 until end of turn (now 7/7)" }, { "turn": 4, "kind": "tutor", "text": "🔎 Terramorphic Expanse: Mountain onto the battlefield tapped" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Brushfire Elemental", "idx": 3, "num": 8, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Brushfire Elemental", "idx": 7, "num": 9, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Brushfire Elemental", "idx": 8, "num": 10, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Flamekin Harbinger", "idx": 4, "num": 13, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 9, "num": 17, "is_land": true, "taps": "G" }, { "name": "Mountain", "idx": 2, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 11, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 12, "num": 33, "tapped": true, "is_land": true }, { "name": "Risen Reef", "idx": 10, "num": 40, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 44, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 54, "name": "Terramorphic Expanse", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Terramorphic Expanse", "Terramorphic Expanse"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Brushfire Elemental (7), Flamekin Harbinger (1), Brushfire Elemental (7), Brushfire Elemental (7) — 22 to opponent (3→-19)" }
+  ]
+}
