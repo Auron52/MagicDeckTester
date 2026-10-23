@@ -480,3 +480,124 @@ TEST_CASE("depletion hold retry: taken only when it spends the held land and a s
     // the re-payment does not even spend the land -> not this retry's shape
     CHECK_FALSE(DepletionRetryDominates({ forest, mountain, needle }, { mountain }, needle));
 }
+
+// MTG_PAY_ROLLBACK_DEPLETION -- the USER's roll-back for a held depletion land (2026-10-22): "you might keep up a
+// depletion land and then realize after the next breakpoint that you need different colours. In that case you
+// roll back to the previous one to spend the depletion land instead." Mirrorwing play gi=16230's shape: the
+// hold paid Fists of Flame {1}{R} with Game Trail + Forest and kept the last-counter Sandstone Needle; the
+// drawn Gold Rush {1}{G} then finds only the Needle's {R}{R}. Two-pip: both lands come back, the Needle pays.
+// One-pip: its second unit floats only in the phase of the payment it replaces.
+namespace
+{
+struct RbArm
+{
+    std::int8_t prev_rb, prev_dep;
+    explicit RbArm(bool dep)
+        : prev_rb(heurarm::t_arm[heurarm::PAY_ROLLBACK]), prev_dep(heurarm::t_arm[heurarm::PAY_ROLLBACK_DEPLETION])
+    { heurarm::t_arm[heurarm::PAY_ROLLBACK] = 1; heurarm::t_arm[heurarm::PAY_ROLLBACK_DEPLETION] = dep ? 1 : 0; }
+    ~RbArm() { heurarm::t_arm[heurarm::PAY_ROLLBACK] = prev_rb; heurarm::t_arm[heurarm::PAY_ROLLBACK_DEPLETION] = prev_dep; }
+    RbArm(const RbArm&)            = delete;
+    RbArm& operator=(const RbArm&) = delete;
+};
+ManaCost CostG(int generic, int g)
+{
+    ManaCost c;
+    c.generic = generic; c.green = g;
+    return c;
+}
+}   // namespace
+
+TEST_CASE("depletion rollback: two-pip -- the held Needle takes over Fists' {1}{R}, Game Trail + Forest pay Gold Rush")
+{
+    EnsureCardsDh();
+    for (bool dep : { false, true })
+    {
+        CAPTURE(dep);
+        HoldArm hold(true);
+        RbArm rb(dep);
+        GameState s = BoardDh({ LandDh("Game Trail"), LandDh("Sandstone Needle", 1), LandDh("Forest") });
+        s.phase = Phase::PreCombatMain;
+        {
+            LineUnpaidCostScope _luc(CostDh(1, 0, /*r=*/1));
+            LineOpensUnseenScope _lou(true);
+            REQUIRE(TapForCostDirect(s, CostDh(1, 0, 1), false));       // Fists: the hold spends GT + Forest
+        }
+        CHECK_FALSE(s.battlefield[1].tapped);
+        ++s.players[0].cards_drawn_this_turn;                           // Fists draws: the breakpoint
+        const bool ok = TapForCostDirect(s, CostG(1, 1), false);        // the drawn Gold Rush
+        if (dep)
+        {
+            CHECK(ok);
+            CHECK(DepletionCountersOn(s.battlefield[1]) == 0);          // the Needle paid after all
+            CHECK(s.floating_mana.Total() == 0);                        // both of its units used
+        }
+        else
+        {
+            CHECK_FALSE(ok);                                            // {R}{R} cannot pay {1}{G}
+            CHECK_FALSE(s.battlefield[1].tapped);                       // a failed payment changes nothing
+        }
+    }
+}
+
+TEST_CASE("depletion rollback: one-pip -- the Needle's second unit floats in the same phase, is lost across one")
+{
+    EnsureCardsDh();
+    for (bool cross : { false, true })
+    {
+        CAPTURE(cross);
+        HoldArm hold(true);
+        RbArm rb(true);
+        GameState s = BoardDh({ LandDh("Game Trail"), LandDh("Sandstone Needle", 1) });
+        s.phase = Phase::PreCombatMain;
+        REQUIRE(TapForCostDirect(s, CostDh(0, 0, /*r=*/1), false));     // Anger {R}: Game Trail, Needle held
+        CHECK_FALSE(s.battlefield[1].tapped);
+        ++s.players[0].cards_drawn_this_turn;                             // Anger draws: the breakpoint
+        if (cross) { s.phase = Phase::PostCombatMain; s.floating_mana = ManaPool{}; }
+        CHECK(TapForCostDirect(s, CostG(0, 1), false));                  // a {G}: Game Trail is freed for it
+        CHECK(DepletionCountersOn(s.battlefield[1]) == 0);
+        CHECK(s.floating_mana.red == (cross ? 0 : 1));
+    }
+}
+
+// MTG_PAY_ROLLBACK_FLOATBACK -- mana left floating pays an earlier same-phase pip back (strictly dominant: the
+// freed source makes that colour). Mirrorwing d3 gi=14488's shape: Ancestral Anger {R} off Game Trail with both
+// Needles held, then the two Needles pay Frontline Heroism {2}{R} and float an {R}; it re-pays the Anger, and
+// Game Trail is up for the drawn Fortifying Draught's {G}.
+TEST_CASE("depletion rollback: float-back -- a Needle's floating {R} re-pays the Anger, Game Trail comes back")
+{
+    EnsureCardsDh();
+    for (bool fb : { false, true })
+    {
+        CAPTURE(fb);
+        HoldArm hold(true);
+        RbArm rb(false);
+        const std::int8_t prev_fb = heurarm::t_arm[heurarm::PAY_ROLLBACK_FLOATBACK];
+        heurarm::t_arm[heurarm::PAY_ROLLBACK_FLOATBACK] = fb ? 1 : 0;
+        GameState s = BoardDh({ LandDh("Game Trail"), LandDh("Sandstone Needle", 1), LandDh("Sandstone Needle", 1) });
+        s.phase = Phase::PreCombatMain;
+        REQUIRE(TapForCostDirect(s, CostDh(0, 0, /*r=*/1), false));       // Anger: Game Trail, both Needles held
+        CHECK(s.battlefield[0].tapped);
+        REQUIRE(TapForCostDirect(s, CostDh(2, 0, /*r=*/1), false));       // Heroism: Needle + Needle, {R} over
+        CHECK(s.battlefield[0].tapped == !fb);                            // float-back frees Game Trail
+        CHECK(s.floating_mana.Total() == (fb ? 0 : 1));
+        CHECK(TapForCostDirect(s, CostG(0, 1), false) == fb);             // ...for the drawn Draught's {G}
+        heurarm::t_arm[heurarm::PAY_ROLLBACK_FLOATBACK] = prev_fb;
+    }
+}
+
+// ...and only AFTER a breakpoint (USER: "realize after the next breakpoint that you need different colours").
+// Niv seed 1's shape: Tandem Lookout {2}{U} off Skerry + Canal with the last-counter Needle held, then a {U}
+// in the same phase with no draw between -- demand the hold already weighed; the Needle stays.
+TEST_CASE("depletion rollback: no draw since the earlier pip -> no rescue (the hold's own decision stands)")
+{
+    EnsureCardsDh();
+    HoldArm hold(true);
+    RbArm rb(true);
+    GameState s = BoardDh({ LandDh("Sandstone Needle", 1), LandDh("Saprazzan Skerry", 2), LandDh("Spirebluff Canal") });
+    s.phase = Phase::PreCombatMain;
+    s.players[0].cards_drawn_this_turn = 1;                            // the draw step, before both payments
+    REQUIRE(TapForCostDirect(s, CostDh(2, /*u=*/1), true));            // Lookout: Skerry + Canal, Needle held
+    CHECK_FALSE(s.battlefield[0].tapped);
+    CHECK_FALSE(TapForCostDirect(s, CostDh(0, /*u=*/1), false));       // a {U}: no rescue without a breakpoint
+    CHECK(DepletionCountersOn(s.battlefield[0]) == 1);
+}

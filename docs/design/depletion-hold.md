@@ -184,3 +184,83 @@ Not built (USER-deferred): the full-yield rule against LANDS ("float the extra")
 13 open the kill with Fists of Flame paid by the Needle (11 of them exactly, {R}{R} for {1}{R}) -- the shape
 that rule targets; 12 open with Ancestral Anger {R}, where the Needle's second {R} floats into a later
 spell's generic, which a this-payment full-yield test would not see; 2 are other shapes.
+
+## "Lose neither": HOLD + the payment ROLLBACK (USER 2026-10-22, second round)
+
+USER: *"We shouldn't need to make compromises on Mirrorwing. If we are losing games either way we should come
+up with an approach that loses neither."* Then, choosing the route: *"I would rather not do much in terms of
+searched mana logic if we can avoid it ... I do think we want to use the roll-back idea"* -- *"you might keep
+up a depletion land and then realize after the next breakpoint that you need different colours. In that case
+you roll back to the previous one to spend the depletion land instead."* The searched hold (plan variants
+hold / spend) is PARKED (no prototype); searched mana stays an open USER question.
+
+### What the two sets of games are (claude-play replays of one arm's line under the other arm's payer)
+
+* **Slower games: a payer mechanism.** OFF's winning line replayed under the HOLD payer loses its turn (14, 8022,
+  16230, ...) or is not even offered (557, 6197, 14488, 16050, 5855, 16349, 16439, 17960, 19234, 19305).
+* **Faster games: mostly a SEARCH miss under OFF, not a mana one.** HOLD's winning line replayed under the OFF
+  payer still wins at HOLD's turn in 9 of 18 (3517, 7459, 14131, 1654, 3707, 4698, 6560, 7474, 17078): the OFF
+  payer pays it, the OFF search does not find it (from HOLD's board at budget 0, 14 of 18). The same miss is
+  the full-yield loss: play gi=1654 under HOLD + MTG_PAY_DEPLETION_FULL_YIELD pays the HOLD line (Fists off the
+  Needle, the two Angers off the Gold Rush Treasures) and kills T3, but the search never finds it. Not
+  root-caused (owed): the common shape is a cantrip paid off the Needle with its second unit floating, or the
+  continuation paid off fresh Treasures, before a draw.
+
+### The current rollback cannot reach it
+
+MTG_PAY_ROLLBACK (current) on the 47 changed games: real-play `tried=0 fired=0`, play byte-identical to OFF
+(rollback alone) and to HOLD (HOLD + rollback). As expected: its swap-in must be a one-mana side-effect-free
+source (the Needle is yield 2 with a counter), and it fires only on an outright payment failure.
+
+### The extension (all DEFAULT OFF, sub-flags of MTG_PAY_ROLLBACK)
+
+* `MTG_PAY_ROLLBACK_DEPLETION` (payroll::TryDepletionRescue). Trigger: a payment (TapForCostShared, depth 1)
+  or the whole-turn prepay's joint bill has a coloured pip no untapped NON-CREATURE source makes, the ledger
+  holds a pip paid by a one-mana side-effect-free source A that makes it, the pip was paid BEFORE a draw this
+  turn (cards_drawn_this_turn on the ledger entry -- the USER's "after the next breakpoint"), and an untapped
+  depletion land B (counters, never a source this turn) could have paid it (generic or B's colour). Apply: B
+  taps and loses a counter (the last-counter sacrifice happens at the same state-based check as for any
+  payment); two-pip: a second ledger pip moves onto B too and both A's untap; one-pip: B's second unit floats
+  iff the rescue is in the same phase as the re-paid pip (Phase on the ledger entry), else it is lost. One
+  rescue per turn, no nesting, nothing floating, no untap effect; undone if the payment still fails.
+* Castability (`MTG_RB_DEP_CAST`, DEFAULT OFF -- measured below): with a rescue live, EnumeratePlans re-asks a
+  colour-rejected subset by the line paid as executed (SubsetPayableAsExecuted). The greedy Solve's twin is a
+  measurement arm only (`MTG_RB_DEP_CAST_SOLVE`, default OFF; inert on these games).
+* `MTG_PAY_ROLLBACK_FLOATBACK` (payroll::TryFloatBack): mana left floating after a payment re-pays an earlier
+  same-phase pip whose one-mana source makes that colour; the source untaps. Strictly dominant.
+
+### Measured (47 changed + 47 unchanged Mirrorwing games, single-game chunks, the A/B's seeds)
+
+| arm | changed: sum of win turns | vs OFF faster / slower | vs HOLD faster / slower | unchanged 47 |
+|---|---|---|---|---|
+| OFF | 219 | -- | 29 / 18 | 195 |
+| HOLD | 229 | 18 / 29 | -- | 195 |
+| ROLLBACK (current) | 219 (= OFF, byte-identical) | 0 / 0 | 29 / 18 | 195 |
+| HOLD + ROLLBACK (current) | 229 (= HOLD, byte-identical) | 18 / 29 | 0 / 0 | 195 |
+| HOLD + ROLLBACK + DEPLETION, no castability | **210** | 18 / 10 | **19 / 0** | 195 (identical) |
+| ... + castability (as executed) | 210 | 14 / 6 | 23 / 4 | 195 (identical) |
+| ... + float-back | 210-211 | 13-17 / 5-10 | 19-24 / 1-5 | 195 (1 digest moves) |
+| unseen-colour fix (A) | 219 (= OFF) | 0 / 0 | 29 / 18 | 195 |
+
+So **HOLD + ROLLBACK + DEPLETION (no castability) loses NOTHING to HOLD** and keeps all 18 faster games, recovers
+19 of the 29 slower ones; 10 are still slower than OFF (557, 14488, 16050, 5855, 15395, 16087, 16439, 17960,
+19234, 19305). Most are the "not offered" class: the drawn spell's continuation is not on HOLD's menu at all;
+castability admission recovers 4 of them (557, 16439, 19234, 19305) but costs 4 faster games (3517, 6560,
+7474, 17078 -- from HOLD's board their kill becomes unfindable at budget 0, at 4x too; mechanism not isolated).
+14488's shape (two Needles pay {2}{R} and float {R} after a Game Trail paid an earlier {R}) is float-back's;
+16050 / 5855 / 17960 are a two-cast continuation (Gold Rush then Fists, its Treasures paying) the menu drops
+under HOLD although the line is payable -- the rescue's colour trigger never sees it (owed).
+
+Real play on the 47 changed games: 19 depletion rescues (no castability), 11 two-pip, 8 one-pip (second unit
+floated, same phase; never lost across a phase), 10 of the 19 NOT dominant within the turn (they trade the
+Needle's {R}{R} for Game Trail + Forest, Forest + Mountain, Rootbound Crag + Forest -- right because the card the
+draw revealed wants green). The unchanged sample: 0 real rescues. The non-clairvoyant twin
+(MTG_SHUFFLE_SALT_SEARCH=977) is byte-identical on Mirrorwing -- the salt moves mid-game RESHUFFLES only and this
+deck has none -- so it cannot test clairvoyance here.
+
+NivMizzetCombo seeds 1/6 (the USER's hand-off lines): seed 1 is T6 under HOLD, HOLD + rollback (current) and HOLD +
+ROLLBACK + DEPLETION without castability (OFF: T7). Two things pull it back to T7: without the draw gate a rescue
+re-paid the Lookout's generic onto the Needle's last counter for a same-phase {U} with no draw between (hence
+the gate); with castability the search plans a post-draw {U} around exactly that rescue (hence castability OFF).
+Seed 6 is T5 under every arm, the unseen-colour fix (A) included -- the Skerry paying the Brainstorm costs nothing
+in outcome on this tree.

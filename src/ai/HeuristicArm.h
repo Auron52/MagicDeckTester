@@ -658,6 +658,8 @@ enum Slot : int
     MW_DEPLETION_UNSEEN,       // MTG_MW_DEPLETION_UNSEEN  Mirrorwing's provider opts in to the MTG_PAY_DEPLETION_HOLD_UNSEEN amendment (DepletionHoldNeutralWhenUnseen): under a line that casts a cantrip, the Sandstone Needle is held only over colour-neutral sources. Inert without MTG_PAY_DEPLETION_HOLD. DEFAULT OFF pending the USER
     PAY_DEPLETION_FULL_YIELD,  // MTG_PAY_DEPLETION_FULL_YIELD  amendment to MTG_PAY_DEPLETION_HOLD (inert without it), the USER's 2026-10-22 refinement: "I would also spend the depletion first if you need both of its mana to avoid using both unnecessarily" -- "primarily for Treasures or other expendable resources". A held depletion land whose WHOLE yield this payment uses ranks ahead of pay-sac one-shots (a Treasure); against lands and rocks the hold is unchanged. DEFAULT OFF pending its A/B and the USER
     PAY_DEPLETION_HOLD_RETRY,  // MTG_PAY_DEPLETION_HOLD_RETRY  amendment to MTG_PAY_DEPLETION_HOLD (inert without it), the USER's strict-dominance retry: a held depletion land that paid anyway with mana left floating -> re-pay once with it unheld, keep that only if it spends the same land and ONE source fewer (any source -- "Even a mountain or a dual land that taps for red would be better than floating red"); else the first payment stands ("we might need the colour later"). DEFAULT OFF pending its A/B and the USER
+    PAY_ROLLBACK_DEPLETION,    // MTG_PAY_ROLLBACK_DEPLETION  sub-flag of MTG_PAY_ROLLBACK: an untapped depletion land (a held one) may be the rollback's swap-in -- when a later payment this turn is short of a colour no untapped non-creature source makes, earlier one-mana pips move onto the depletion land (two-pip: both sources untap; one-pip: its second unit floats in the same phase only). USER 2026-10-22. DEFAULT OFF pending its A/B and the USER
+    PAY_ROLLBACK_FLOATBACK,    // MTG_PAY_ROLLBACK_FLOATBACK  sub-flag of MTG_PAY_ROLLBACK: mana left floating after a payment re-pays an earlier same-phase pip whose one-mana source makes that colour, and the source untaps (strictly dominant). DEFAULT OFF pending its A/B and the USER
     NIV_BUCKET_DISCARD,       // MTG_NIV_BUCKET_DISCARD  NivMizzetCombo: cleanup discard by the same buckets (Niv / draw-on-damage / go-off / mana to 6 with <= 3 hand lands / draw / a 7th source if space). DEFAULT OFF pending its A/B and the USER
     COUNT
 };
@@ -1267,6 +1269,8 @@ inline const char* Name(int slot)
         "MTG_MW_DEPLETION_UNSEEN",
         "MTG_PAY_DEPLETION_FULL_YIELD",
         "MTG_PAY_DEPLETION_HOLD_RETRY",
+        "MTG_PAY_ROLLBACK_DEPLETION",
+        "MTG_PAY_ROLLBACK_FLOATBACK",
         "MTG_NIV_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

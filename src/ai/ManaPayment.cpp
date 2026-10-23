@@ -445,7 +445,8 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     { payledger::Record(state, active, p, def, col, payledger::t_cur_pip_any); }
     // Rollback ledger (MTG_PAY_ROLLBACK, both worlds): the committed tap, on the state.
     if (PayRollbackOn())
-    { state.pay_ledger.Push(state.turn_number, active, p.card.m_number, static_cast<int>(col), payledger::t_cur_pip_any); }
+    { state.pay_ledger.Push(state.turn_number, active, p.card.m_number, static_cast<int>(col), payledger::t_cur_pip_any,
+                            static_cast<int>(state.phase), state.players[active].cards_drawn_this_turn); }
     // CRACK FLAG: a pay-sac source (Treasure / Eldrazi Spawn) is SACRIFICED, not left tapped, and
     // the erase is deferred to CommitPaySacSacrifices -- which uses this flag to skip its whole
     // battlefield walk on the overwhelmingly common board that cracked nothing. Set here because
@@ -6630,6 +6631,12 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     if (t_pay_nest == 1 && !t_ramp_route && RampFeedRouteOn()
         && RampFeedRouteRepay(state, cost_in, for_creature, available, honor_legacy_cco))
     { _ramp_route.emplace(); }
+    // MTG_PAY_ROLLBACK_DEPLETION (see payroll::TryDepletionRescue): this payment is short of a colour that no
+    // untapped non-creature source makes, and an earlier pip this turn could have been paid by the untapped
+    // (held) depletion land -> move it there first. Undone below if the payment still fails.
+    payroll::AppliedDepletion dep_rec;
+    const bool dep_rescued = t_pay_nest == 1 && PayRollbackDepletionOn()
+                          && payroll::TryDepletionRescue(state, cost_in, nullptr, &dep_rec);
     bool ok;
     if (!state.dmg_events_armed)
     { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
@@ -6657,6 +6664,9 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // so the re-pay is undone too (its own taps were restored by the failure path above).
         if (!ok) { payroll::UndoLast(state); }
     }
+    if (!ok && dep_rescued) { payroll::UndoDepletion(state, dep_rec); }
+    // MTG_PAY_ROLLBACK_FLOATBACK: what this payment left floating pays an earlier same-phase pip back.
+    if (ok && t_pay_nest == 1 && PayRollbackFloatBackOn()) { payroll::TryFloatBack(state); }
     return ok;
 }
 

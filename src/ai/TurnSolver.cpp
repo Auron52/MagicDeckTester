@@ -47210,6 +47210,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // source, and the NONCREATURE casts against the pool that drops creature-only sources.
     const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
     const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
+    // MTG_PAY_ROLLBACK_DEPLETION's castability admission (payroll::DepletionRescueLive): with a held depletion
+    // land and a same-turn ledger it could re-pay, a subset the colour gates reject is re-asked by the real
+    // sequential payment, whose TapForCostShared runs the rescue. Built once; false on every other board.
+    // In the greedy Solve (the rollout policy and pruned continuations) the admission is a measurement arm
+    // only (MTG_RB_DEP_CAST_SOLVE, default OFF): a greedy max-value pick over rescue-admitted subsets is a
+    // heuristic choice, not the search deciding.
+    static const bool s_rb_dep_cast_solve = EnvOn("MTG_RB_DEP_CAST_SOLVE");
+    const bool dep_rescue_live = s_rb_dep_cast_solve && PayRollbackDepletionOn() && payroll::DepletionRescueLive(state);
     // Per-candidate half of the same test, hoisted out of the per-subset walk (ManaPayment.h).
     ColorDemandIndex colour_demand;
     BuildColorDemandIndex(cands, colour_demand);
@@ -48046,7 +48054,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             const bool* have_eff_c = WidenHaveWithSubsetRocks(have_colors, have_rock_c, cands, sel,
                                                               /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
                                                               /*any_rock_cand=*/any_rock);
-            if (!SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
+            if (!SubsetPayable(have_eff_c, cands, sel, &colour_demand)
+                && !(dep_rescue_live && SubsetPayableAsExecuted(state, cands, sel)))
+            { mc_store_reject(); return; }
         }
         if (es_on_c) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
@@ -48058,7 +48068,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                          /*noncreature_only=*/false, &colour_demand))
              || (colour_feas_nc.usable
                  && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc_cg),
-                                            /*noncreature_only=*/true, &colour_demand))))
+                                            /*noncreature_only=*/true, &colour_demand)))
+            && !(dep_rescue_live && SubsetPayableAsExecuted(state, cands, sel)))
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
             mc_store_reject();
@@ -51027,8 +51038,23 @@ int TurnSolver::HumanPrepayDemandHolds(const GameState& state, const std::vector
     return k;
 }
 
+// MTG_PAY_ROLLBACK_DEPLETION's whole-turn twin: the prepay pays the line's casts jointly (TapForCostBacktrack),
+// never through TapForCostShared, so the joint bill gets the same depletion rescue at its entry -- undone when
+// the prepay declines or fails, so the per-cast path that follows decides afresh.
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                       bool mint_prefix, bool hand_demand)
+{
+    payroll::AppliedDepletion dep_rec;
+    const bool dep = PayRollbackDepletionOn()
+                  && payroll::TryDepletionRescue(state, LineCastCostTotal(acts), nullptr, &dep_rec);
+    const bool ok  = BatchPrepayMainCastsCore(state, acts, mint_prefix, hand_demand);
+    if (!ok && dep) { payroll::UndoDepletion(state, dep_rec); }
+    // (No float-back here: the prepay's float IS the plan's pool, spent by the casts that follow.)
+    return ok;
+}
+
+bool TurnSolver::BatchPrepayMainCastsCore(GameState& state, const std::vector<Action>& acts,
+                                          bool mint_prefix, bool hand_demand)
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
     if (!s_enabled) { return false; }
@@ -63678,6 +63704,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // source, and the NONCREATURE casts against the pool that drops creature-only sources.
     const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
     const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
+    // MTG_PAY_ROLLBACK_DEPLETION's castability admission (payroll::DepletionRescueLive): with a held depletion
+    // land and a same-turn ledger it could re-pay, a subset the colour gates reject is re-asked by the real
+    // sequential payment, whose TapForCostShared runs the rescue. Built once; false on every other board.
+    // MTG_RB_DEP_CAST (measurement switch, DEFAULT OFF): on Mirrorwing's 47 changed games it recovered 4 slower
+    // games and lost 4 faster ones (unfindable from HOLD's board at budget 0), and on NivMizzetCombo seed 1 it
+    // let the search plan a post-draw {U} around a rescue that spent the Needle's last counter (T6 -> T7).
+    static const bool s_rb_dep_cast = EnvOn("MTG_RB_DEP_CAST");
+    const bool dep_rescue_live = s_rb_dep_cast && PayRollbackDepletionOn() && payroll::DepletionRescueLive(state);
     // Per-candidate half of the same test, hoisted out of the per-subset walk (ManaPayment.h).
     ColorDemandIndex colour_demand;
     BuildColorDemandIndex(cands, colour_demand);
@@ -64701,6 +64735,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             const bool ef_on  = ExecFeasEnabled();
             const bool seq_on_etb = SeqEtbUntapEnabled();
             const bool seq_on_aura = SeqLandAuraEnabled();
+            // MTG_PAY_ROLLBACK_DEPLETION: a held depletion land and a same-turn ledger it could re-pay -> the
+            // subset is re-asked by the line paid THE WAY THE EXECUTOR PAYS IT (prepay first, then per cast --
+            // SubsetPayableAsExecuted), whose payments run the rescue. As-executed, not the sequential walk: a
+            // subset only the walk's cast order can pay would be offered and then fail in the apply.
+            if (dep_rescue_live && SubsetPayableAsExecuted(state, cands, sel)) { exec_feas = 1; return true; }
             if (!ef_on && !seq_on_etb && !seq_on_aura) { return false; }
             bool interacts = ef_on && any_hinata_credit;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online

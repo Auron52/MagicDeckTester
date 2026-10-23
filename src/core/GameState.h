@@ -245,7 +245,12 @@ struct StackEntry
 // the untap-effect flag, which the untap effects always set (one store).
 struct PayRollbackLedger
 {
-    struct Entry { int source_num = 0; signed char produced = -1; bool generic = false; };
+    // phase: the Phase the paying tap happened in (MTG_PAY_ROLLBACK_DEPLETION's one-pip case credits the
+    // depletion land's second unit as float only when the rescue is in that same phase).
+    // draws: the active player's cards_drawn_this_turn at the paying tap -- the depletion rescue re-pays only a
+    // pip paid BEFORE a draw ("realize after the next breakpoint that you need different colours", USER).
+    struct Entry { int source_num = 0; signed char produced = -1; bool generic = false; signed char phase = -1;
+                   signed char draws = 0; };
     static constexpr int kMax = 12;
     Entry       e[kMax];
     signed char n            = 0;
@@ -255,8 +260,10 @@ struct PayRollbackLedger
     int         turn         = -1;
     void Stamp(int t, int p)
     { if (t != turn || p != player) { n = 0; turn = t; player = static_cast<signed char>(p); rollbacks = 0; untap_effect = false; } }
-    void Push(int t, int p, int num, int col, bool gen)
-    { Stamp(t, p); if (n < kMax) { e[n].source_num = num; e[n].produced = static_cast<signed char>(col); e[n].generic = gen; ++n; } }
+    void Push(int t, int p, int num, int col, bool gen, int ph = -1, int dr = 0)
+    { Stamp(t, p); if (n < kMax) { e[n].source_num = num; e[n].produced = static_cast<signed char>(col); e[n].generic = gen;
+                                   e[n].phase = static_cast<signed char>(ph);
+                                   e[n].draws = static_cast<signed char>(dr > 127 ? 127 : dr); ++n; } }
     void NoteUntapEffect(int t, int p) { Stamp(t, p); untap_effect = true; }
 };
 

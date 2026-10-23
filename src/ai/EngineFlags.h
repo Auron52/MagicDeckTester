@@ -765,6 +765,23 @@ inline bool PayRollbackOn()
     static const bool env_on = EnvOn("MTG_PAY_ROLLBACK");
     return heurarm::Flag(heurarm::PAY_ROLLBACK, env_on);
 }
+// MTG_PAY_ROLLBACK_DEPLETION (DEFAULT OFF; a sub-flag, inert without MTG_PAY_ROLLBACK, whose ledger it reads) --
+// the held depletion land as the rollback's swap-in (payroll::TryDepletionRescue, PayRollback.h). USER
+// 2026-10-22: "you might keep up a depletion land and then realize after the next breakpoint that you need
+// different colours. In that case you roll back to the previous one to spend the depletion land instead."
+// MTG_PAY_ROLLBACK_FLOATBACK (DEFAULT OFF; sub-flag, inert without MTG_PAY_ROLLBACK) -- payroll::TryFloatBack:
+// mana left floating after a payment re-pays an earlier same-phase pip whose one-mana source makes that colour,
+// and that source untaps (strictly dominant within the turn).
+inline bool PayRollbackFloatBackOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_ROLLBACK_FLOATBACK");
+    return PayRollbackOn() && heurarm::Flag(heurarm::PAY_ROLLBACK_FLOATBACK, env_on);
+}
+inline bool PayRollbackDepletionOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_ROLLBACK_DEPLETION");
+    return PayRollbackOn() && heurarm::Flag(heurarm::PAY_ROLLBACK_DEPLETION, env_on);
+}
 
 // MTG_ETB_WATCHER_GATES (DEFAULT ON) -- stamp the two remaining ETB-cascade presence gates
 // (GameState::deck_has_subtype_enter_counters / deck_has_etb_counter_payer) from the decklist

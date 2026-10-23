@@ -2564,6 +2564,9 @@ public:
     // (the executor, rollouts, the payability probes) passes false: byte-identical.
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false);
+    // The prepay itself; BatchPrepayMainCasts wraps it with MTG_PAY_ROLLBACK_DEPLETION's joint-bill rescue.
+    static bool BatchPrepayMainCastsCore(GameState& state, const std::vector<Action>& acts,
+                                     bool mint_prefix = false, bool hand_demand = false);
     // The hold masks behind `hand_demand`, exposed for tests: one untapped source per coloured pip
     // the hand minus `acts`' casts still owes (scarcest colour first, narrowest source, tie lower
     // card number), written to `out` as PREFIX masks over battlefield indices, largest first --
