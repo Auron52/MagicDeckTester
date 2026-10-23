@@ -624,6 +624,44 @@ Reading (clairvoyant default; the NSS bracket is the check for every arm with a 
 - Titan and Avenger are close to neutral against the others (-0.003 to -0.012 out); Phylath out for Courser is
   worse, so the Hydras' best second cut stays Courser or Baloths (A_c2b0 prefers Baloths by -0.009).
 
+## Non-clairvoyant bracket 9 — all of round 12 (`logs/landfall_screen/nss9.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Round 12's seeds, 20,000 games, centre A0. base 5.8761; **A0 -0.7118 vs shipped** (T7+ 14.29% -> 5.45%).
+
+| arm | change from A0 | default vs A0 | NSS vs A0 | NSS se | NSS T7+ | shuffles |
+|---|---|---|---|---|---|---|
+| A_cu3b | 1 Baloths -> 3rd Cultivate | -0.0190 | **-0.0267** | 0.0025 | 4.81% | +1 |
+| A_cu3a | 1 Avenger -> 3rd Cultivate | -0.0124 | **-0.0194** | 0.0027 | 4.83% | +1 |
+| A_cu3t | 1 Titan -> 3rd Cultivate | -0.0092 | **-0.0178** | 0.0025 | 4.84% | 0 |
+| A_o0 | Omnath -> 3rd Wave | -0.0146 | -0.0133 | 0.0017 | 5.08% | 0 |
+| A_w3b | 1 Baloths -> 3rd Wave | -0.0118 | -0.0123 | 0.0017 | 5.30% | 0 |
+| A_fnt | Radiant Fountain -> Forest | -0.0101 | -0.0111 | 0.0019 | 5.22% | 0 |
+| A_ph3a | 1 Avenger -> 3rd Phylath | -0.0065 | -0.0099 | 0.0018 | 5.30% | 0 |
+| A_w3a | 1 Avenger -> 3rd Wave | -0.0076 | -0.0092 | 0.0019 | 5.34% | 0 |
+| A_w3t | 1 Titan -> 3rd Wave | -0.0043 | -0.0064 | 0.0018 | 5.37% | -1 |
+| A_ph3t | 1 Titan -> 3rd Phylath | -0.0031 | -0.0052 | 0.0022 | 5.24% | -1 |
+| A_c2b0 | 2 Baloths -> 2 Courser | -0.0089 | -0.0045 | 0.0024 | 5.70% | 0 |
+| A_mtn | 1 Mountain -> Forest | -0.0038 | -0.0034 | 0.0021 | 5.54% | 0 |
+| A_ew4 | 1 Forest -> 4th Evolving Wilds | -0.0123 | **-0.0001** | 0.0022 | 5.44% | +1 |
+| A_o2 | 1 Baloths -> 2nd Omnath | -0.0008 | +0.0035 | 0.0016 | 5.68% | 0 |
+| A_ew2 | 1 Evolving Wilds -> Forest | +0.0149 | +0.0052 | 0.0023 | 5.56% | -1 |
+| A_c2t2 | 2 Titan -> 2 Courser | +0.0031 | +0.0078 | 0.0025 | 5.80% | -2 |
+| A_c1 | 1 Phylath -> Courser | +0.0049 | +0.0116 | 0.0024 | 5.76% | 0 |
+| A_b3 | 1 Phylath -> 3rd Baloths | +0.0097 | +0.0160 | 0.0022 | 5.78% | 0 |
+| A_l25 | 1 Forest -> 3rd Cultivate (25 lands) | +0.0198 | +0.0205 | 0.0027 | 5.39% | +1 |
+| A_cu1 | 1 Cultivate -> 3rd Wave | +0.0055 | **+0.0207** | 0.0025 | 6.20% | -1 |
+
+Reading:
+- **Cultivate's gain is NOT clairvoyance -- it GROWS with the shuffle off** (-0.019 -> -0.027 over a Baloths;
+  cutting one costs +0.021). Cultivate puts a land onto the battlefield AND one in hand, so it is landfall fuel
+  on two turns; without the shuffle re-roll to find threats, that card advantage is worth more, not less.
+- **The 4th Evolving Wilds was clairvoyance** (-0.012 -> 0.000), as in rounds 5-7; the 2nd-copy cut shrinks too.
+- Every no-shuffle swap holds (Omnath / Baloths -> Wave, Fountain -> Forest): those were never in question.
+- **Courser does not earn a slot here**: 2 Courser for 2 Baloths halves to -0.0045 (t -1.9), and Courser for a
+  Phylath or a Titan is worse (+0.012 / +0.008). The default engine already reads the top card, so Courser's
+  information value is invisible to it: its reading is, if anything, slightly low.
+- 26 lands stays the floor (+0.020 under both engines).
+
 ## USER decisions on round 12 (2026-10-23)
 
 * *"Omnath I would keep over Baloths for the extra upside vs removal and sweepers"* -- *"(as a 1-of)"*. The
