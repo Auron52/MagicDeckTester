@@ -724,3 +724,35 @@ Reading (default engine; nss10 is the check for C8 / C4 / C13 / C3, which add sh
 - **Courser loses every slot it was offered**: in the 2nd Baloths slot it is 0.005 behind a Wave (C10 vs C1),
   for an Avenger 0.003 behind (C14 vs C1), both Baloths slots 0.015 behind (C12 vs C1).
 - C8's 4th Evolving Wilds is round 12's clairvoyant shuffle again until nss10 says otherwise.
+
+## Non-clairvoyant bracket 10 — all of round 13 (`logs/landfall_screen/nss10.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Round 13's seeds, 20,000 games, centre A0. base 5.8784; A0 -0.7184 vs shipped (T7+ 14.29% -> 5.35%).
+
+| arm | change from A0 | default vs A0 | NSS vs A0 | NSS se | NSS T7+ |
+|---|---|---|---|---|---|
+| C13 | C1 + 1 Titan -> 4th Cultivate | -0.0425 | **-0.0583** | 0.0041 | **4.07%** |
+| C4 | C1 + 1 Avenger -> 4th Cultivate | -0.0444 | **-0.0569** | 0.0041 | 4.30% |
+| C3 | C0 + both Baloths -> 2 Cultivate (4) | -0.0392 | -0.0546 | 0.0038 | 4.13% |
+| C9 | C1 + 1 Avenger -> 3rd Phylath | -0.0367 | -0.0536 | 0.0038 | 4.37% |
+| C8 | C1 + 1 Forest -> 4th Evolving Wilds | -0.0476 | -0.0530 | 0.0041 | 4.42% |
+| C6 | C1 + 1 Titan -> 4th Wave | -0.0365 | -0.0497 | 0.0038 | 4.38% |
+| C5 | C1 + 1 Avenger -> 4th Wave | -0.0391 | -0.0481 | 0.0038 | 4.59% |
+| **C1** | C0 + both Baloths -> 3rd Cultivate + 3rd Wave | -0.0346 | **-0.0468** | 0.0035 | 4.42% |
+| C7 | C1 + 1 Mountain -> Forest | -0.0400 | -0.0466 | 0.0039 | 4.65% |
+| C10 | C0 + both Baloths -> 3rd Cultivate + Courser | -0.0295 | -0.0389 | 0.0035 | 4.57% |
+| C14 | C1 + 1 Avenger -> Courser | -0.0319 | -0.0378 | 0.0039 | 4.80% |
+| C11 | C0 + 1 Baloths -> 3rd Cultivate | -0.0267 | -0.0364 | 0.0031 | 4.54% |
+| C2 | C0 + both Baloths -> 2 Wave (4) | -0.0277 | -0.0328 | 0.0030 | 4.86% |
+| C12 | C0 + both Baloths -> 2 Courser | -0.0194 | -0.0169 | 0.0030 | 5.13% |
+| C0 | Radiant Fountain -> Forest | -0.0117 | -0.0131 | 0.0020 | 5.14% |
+
+Reading:
+- **Every combination holds or grows with the shuffle off**; C1 = shipped -0.765 t under NSS (-0.767 default).
+- **The 4th Cultivate holds** (C13 / C4 -0.011 / -0.010 past C1 under NSS) and is the best step on both engines.
+  Titan or Avenger as its cut is a tie (0.0014 apart, well inside one se).
+- **The 4th Evolving Wilds halves** (C8 vs C1: -0.013 default -> -0.006 NSS): mostly clairvoyance, as before.
+- **Mountain -> Forest is nothing under NSS** (C7 vs C1 +0.0002): its default -0.005 was shuffle-assisted.
+- **Avenger -> 3rd Phylath gains more without the shuffle** (C9 vs C1 -0.007 NSS vs -0.002 default); round 14
+  tests it on top of the 4th Cultivate.
+- **Courser loses again**, by 0.008-0.009 vs C1 in both slots (C10, C14).
