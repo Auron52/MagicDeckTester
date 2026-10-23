@@ -630,14 +630,16 @@ Reading (clairvoyant default; the NSS bracket is the check for every arm with a 
   goldfish has no removal or sweepers, so Omnath's resilience (a 5/5 per land drop rebuilds a board) is
   exactly what this apparatus cannot see; A_o0's -0.015 does not override it. **Omnath stays at 1; Rampaging
   Baloths is the cut.**
-* *"I also agree with the Hydra replacing Courser."* **Courser stays out** (A0 already cuts both).
+* *"I also agree with the Hydra replacing Courser."*, then: *"to be clear, we can still test courser in, but if
+  things show it isn't worth being in the deck I have no issue with dropping it."* **Courser stays a
+  candidate**: A0 cuts it, and round 13 tests putting it back in the Baloths and Avenger slots.
 
 Round 13 was rewritten before it started (the Omnath-cutting draft is kept as `r13.omnath_cut.json`): every
-arm holds 1 Omnath and 0 Courser.
+arm holds 1 Omnath; three arms bring Courser back.
 
 ## Round 13 — round 12's winners combined, HELD OUT (`logs/landfall_screen/r13.json`, seed 8900000)
 
-Centre A0, 20,000 games per arm. Omnath 1, Courser 0 in every arm.
+Centre A0, 20,000 games per arm. Omnath 1 in every arm.
 
 | arm | change from A0 |
 |---|---|
@@ -650,5 +652,8 @@ Centre A0, 20,000 games per arm. Omnath 1, Courser 0 in every arm.
 | C6 / C13 | C1 + 1 Titan -> 4th Wave / 4th Cultivate |
 | C7 | C1 + 1 Mountain -> Forest |
 | C8 | C1 + 1 Forest -> 4th Evolving Wilds |
+| C10 | C0 + both Baloths -> 3rd Cultivate + 1 Courser |
+| C12 | C0 + both Baloths -> 2 Courser |
+| C14 | C1 + 1 Avenger -> 1 Courser |
 
 NSS bracket 10 runs the same spec with the shuffle off. Results below when they land.
