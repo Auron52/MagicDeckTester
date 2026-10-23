@@ -1003,3 +1003,23 @@ the owner pays for the ADDED copies at the cheapest printing (Cub $27.48, Hydra 
   960 s game. Fixed byte-identically in a16b898b3 (same digest, 8 s on PGO; smoke 148/148 unchanged); nss13, m1
   and nss14 run on that pin (pin-a16b898). The remaining per-node cost on huge token boards (FireLandfallTriggers'
   per-watcher scans, the lord/aura power reads) is a follow-up only if Scute were adopted.
+
+### nss13 — n1's first 10,000 games with `MTG_NO_SEARCH_SHUFFLE=1` (`logs/landfall_screen/nss13.json`, pin a16b898)
+
+| arm | n1, same 10,000 games | nss13 | shift |
+|---|---|---|---|
+| N_cKH (4 Cub for Khalni) | -0.2695 | **-0.3214** | -0.052 |
+| N_cRG (4 Cub for Rampant Growth) | -0.1842 | -0.2518 | -0.068 |
+| N_cST (4 Cub for Search) | -0.1537 | -0.2178 | -0.064 |
+| N_c2RG (2 Cub for Rampant Growth) | -0.0789 | -0.1226 | -0.044 |
+| N_cF (1 Cub for a Forest) | -0.0343 | -0.0451 | -0.011 |
+| N_c2s2RG | +0.0265 | -0.0341 | -0.061 |
+| N_cH (4 Cub for the Hydra) | +0.1142 | +0.0575 | -0.057 |
+| Scute arms | +0.11 to +0.72 | +0.09 to +0.68 | -0.006 to -0.042 |
+| shipped | +0.7553 | +0.7263 | -0.029 |
+
+**The order is unchanged and the Cub's gain is LARGER without the clairvoyant shuffle** (Khalni slot -0.321, se
+0.0066). Cutting three-to-four shuffle effects was understated by the clairvoyant search, as expected ("clairvoyance
+loves shuffles"). Part of the shift is not about the shuffle count -- Cub for Hydra changes no shuffle effect and
+still moves -0.057 -- so the cheap two-drop threat itself reads better with less lookahead. Hydra still beats Cub
+head to head; Scute still loses everywhere.
