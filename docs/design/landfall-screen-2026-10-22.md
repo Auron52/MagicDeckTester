@@ -804,6 +804,13 @@ Hydra is the same shape at 3 mana. Rampaging Baloths' Beasts -- and Omnath's Ele
 landfall, summoning sick, so they hit a turn later. The references show it: the two Baloths-led wins are T6, the
 Phylath line T5.
 
+**Phylath + Avenger (USER):** *"it does need some landfall support, but we have quite a lot of that in the deck"*
+and *"in a tougher game ... Phylath and Avenger can work together."* Both make Plants, and each one's landfall
+pumps the other's (Avenger: a counter on EVERY Plant; Phylath: four on any one) -- modelled, both by Plant
+subtype. The goldfish rarely produces the tougher game (no removal, no blocks), so this shows mainly in the T7+
+tail; round 15 separates it by adding Phylath while KEEPING four Avengers (E_tp, E_atpp keeps 3) vs cutting them
+(E_ap, E_aapp).
+
 **What the screen says about Phylath, and why its count is 2 so far:**
 - It was cut 4 -> 2 in round 2 only to make room for the Hydras (Hydra for 4 Phylath beat Hydra for 2 Courser
   + 2 Baloths while keeping 4 Phylath by 0.12 t).
