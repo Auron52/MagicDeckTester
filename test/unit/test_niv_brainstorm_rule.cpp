@@ -126,6 +126,9 @@ std::pair<std::string, std::string> Default2(const GameState& s)
 TEST_CASE("Niv Brainstorm rule: inert unless MTG_NIV_CANTRIP_RULES and MTG_NIV_BRAINSTORM_RULE are both on")
 {
     const GameState s = BoardNb({ "Niv-Mizzet, the Firemind", "Tandem Lookout", "Tandem Lookout", "Island" }, true);
+    // The baseline with every Niv lever OFF: since the 2026-10-23 adoption the defaults are ON, and the base
+    // ranking reads the provider's (virtual) card valuation.
+    NivAllOffNb();
     const std::vector<int> base = NivProvNb().DecisionProvider::PutBackRanking(s, 0);
     for (int arm = 0; arm < 3; ++arm)
     {
