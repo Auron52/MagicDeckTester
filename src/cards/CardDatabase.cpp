@@ -858,10 +858,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.landfall_token_color     = params.value("landfall_token_color", std::string());
     for (const std::string& s : params.value("landfall_token_keywords", json::array()))
         p.landfall_token_keywords.push_back(s);
+    p.landfall_copy_self_at_lands = params.value("landfall_copy_self_at_lands", 0);   // Scute Swarm
     p.landfall_counters_each         = params.value("landfall_counters_each", 0);
     p.landfall_counters_each_subtype = params.value("landfall_counters_each_subtype", std::string());
     p.landfall_target_counters       = params.value("landfall_target_counters", 0);
     p.landfall_target_subtype        = params.value("landfall_target_subtype", std::string());
+    p.landfall_target_any_creature   = params.value("landfall_target_any_creature", false);     // Scythecat Cub
+    p.landfall_target_second_doubles = params.value("landfall_target_second_doubles", false);   // Scythecat Cub
     p.landfall_lifegain              = params.value("landfall_lifegain", 0);
     p.landfall_quest_counters        = params.value("landfall_quest_counters", 0);
     p.landfall_double_self_counters  = params.value("landfall_double_self_counters", false);   // Mossborn Hydra

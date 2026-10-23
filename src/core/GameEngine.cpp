@@ -368,6 +368,8 @@ void GameEngine::UntapStep(GameState& state)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
             p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
+            p.landfall_resolved_once  = false;            // Scythecat Cub's "second time this turn" (PER COPY)
+            p.landfall_resolved_twice = false;
             p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }

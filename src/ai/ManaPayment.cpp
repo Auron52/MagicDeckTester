@@ -388,6 +388,8 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         // change: it can only turn a silent divergence into a loud one.
         if (a.lifegain_counters_used_this_turn != b.lifegain_counters_used_this_turn) { fail(i, "lifegain_counters_used"); }
         if (a.once_per_turn_used != b.once_per_turn_used) { fail(i, "once_per_turn_used"); }
+        if (a.landfall_resolved_once != b.landfall_resolved_once)   { fail(i, "landfall_resolved_once"); }
+        if (a.landfall_resolved_twice != b.landfall_resolved_twice) { fail(i, "landfall_resolved_twice"); }
         if (a.storied_draw_used_this_turn != b.storied_draw_used_this_turn) { fail(i, "storied_draw_used"); }
         if (a.ice_counters != b.ice_counters)         { fail(i, "ice_counters"); }
         if (a.age_counters != b.age_counters)         { fail(i, "age_counters"); }

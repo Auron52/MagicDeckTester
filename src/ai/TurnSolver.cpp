@@ -661,7 +661,9 @@ inline uint64_t FungibilityKey(const Permanent& p)
          // one sim key -- a silent search-correctness bug, not a cosmetic clash -- so Kili's flag
          // moved to the next free bit (1<<18; 1<<19 and up are still unused here).
          | (p.storied_draw_used_this_turn ? 262144ull : 0ull)       // Kili once-each-turn draw
-         | (p.once_per_turn_used ? 524288ull : 0ull));              // Stromkirk Condemned once-each-turn activation (1<<19)
+         | (p.once_per_turn_used ? 524288ull : 0ull)                // Stromkirk Condemned once-each-turn activation (1<<19)
+         | (p.landfall_resolved_once ? 1048576ull : 0ull)           // Scythecat Cub resolved once this turn (1<<20)
+         | (p.landfall_resolved_twice ? 2097152ull : 0ull));        // ... and twice (1<<21)
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -16256,6 +16258,8 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     if (p.storied_draw_used_this_turn)      { return false; }
     // Stromkirk Condemned: a used copy cannot pump again this turn, an unused one can (Vampires A2).
     if (p.once_per_turn_used)               { return false; }
+    // Scythecat Cub: its next landfall puts a counter, doubles, or puts again by how often it resolved.
+    if (p.landfall_resolved_once || p.landfall_resolved_twice) { return false; }
     why = foldcensus::kChosenColor;
     if (p.chosen_color != -1) { return false; }
     why = foldcensus::kIceAge;
@@ -53826,6 +53830,8 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.colored_cast_lifegain_used_this_turn == b.colored_cast_lifegain_used_this_turn
         && a.storied_draw_used_this_turn == b.storied_draw_used_this_turn
         && a.once_per_turn_used == b.once_per_turn_used && a.cond_haste == b.cond_haste
+        && a.landfall_resolved_once == b.landfall_resolved_once
+        && a.landfall_resolved_twice == b.landfall_resolved_twice
         && a.lifegain_counters_used_this_turn == b.lifegain_counters_used_this_turn
         && a.chosen_color == b.chosen_color && a.garth_chosen_mask == b.garth_chosen_mask
         && a.chosen_keyword_mask == b.chosen_keyword_mask && a.chosen_subtype_id == b.chosen_subtype_id
@@ -62080,6 +62086,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
             p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
+            p.landfall_resolved_once  = false;            // Scythecat Cub's "second time this turn" (PER COPY)
+            p.landfall_resolved_twice = false;
             p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
@@ -73812,19 +73820,17 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         && !ResolveProvider(state).LandfallCounterTargetIsPick(state))   // the provider's pick (Landfall, USER 2026-10-20)
     {
         const int me = state.active_player_index;
-        auto targeted = [](const CardDefinition* d)
-        {
-            return d != nullptr && d->params.landfall_target_counters > 0
-                && !d->params.landfall_target_subtype.empty();
-        };
-        std::vector<std::string> subs;   // the target subtypes live on THIS board
+        auto targeted = [](const CardDefinition* d) { return d != nullptr && DefHasTargetedLandfall(d->params); };
+        // The target FILTER key: the subtype, or "" for "target creature you control" (Scythecat Cub).
+        auto filter_of = [](const CardDefinition* d)
+        { return d->params.landfall_target_any_creature ? std::string() : d->params.landfall_target_subtype; };
+        std::vector<std::string> subs;   // the target filters live on THIS board
         for (const Permanent& pm : state.battlefield)
         {
             if (pm.controller_index != me || pm.def_absent) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
-            if (targeted(d) && std::find(subs.begin(), subs.end(), d->params.landfall_target_subtype)
-                                   == subs.end())
-            { subs.push_back(d->params.landfall_target_subtype); }
+            if (targeted(d) && std::find(subs.begin(), subs.end(), filter_of(d)) == subs.end())
+            { subs.push_back(filter_of(d)); }
         }
         // Classes now, for the widest subtype on board (a cast-only watcher contributes its subtype
         // too, so its plans size off the same count). Memoised per subtype for this enumeration: the
@@ -73841,7 +73847,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (const Permanent& q : state.battlefield)
             {
                 if (q.controller_index != me) { continue; }
-                if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
+                if (sub.empty() ? (!q.card.IsCreature() && !q.is_animated)            // any creature
+                                : (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes())) { continue; }
                 if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
                 std::uint64_t k = 0;
                 if (!LandfallTargetFoldKey(state, q, k, &linked)) { ++singles; continue; }
@@ -73869,8 +73876,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (d == nullptr) { continue; }
                 if (targeted(d))
                 {
-                    // A watcher this plan casts: its subtype's classes on the current board.
-                    classes = std::max(classes, classes_for(d->params.landfall_target_subtype));
+                    // A watcher this plan casts: its filter's classes on the current board.
+                    classes = std::max(classes, classes_for(filter_of(d)));
                 }
                 else if (d->params.reveal_x_put_permanents && classes < 0) { classes = 0; }   // may put one
             }
@@ -75458,19 +75465,17 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 //      explicit 0) is a variant (StatePinVariantRanks).
                 if (state.deck_has_landfall && !ResolveProvider(state).LandfallCounterTargetIsPick(state))   // the provider's pick
                 {
-                    auto targeted = [](const CardDefinition* d)
-                    {
-                        return d != nullptr && d->params.landfall_target_counters > 0
-                            && !d->params.landfall_target_subtype.empty();
-                    };
-                    std::vector<std::string> bsubs;   // the targeted watchers' subtypes on THIS board
+                    auto targeted = [](const CardDefinition* d) { return d != nullptr && DefHasTargetedLandfall(d->params); };
+                    // The target FILTER key: the subtype, or "" for "target creature you control" (the Cub).
+                    auto filter_of = [](const CardDefinition* d)
+                    { return d->params.landfall_target_any_creature ? std::string() : d->params.landfall_target_subtype; };
+                    std::vector<std::string> bsubs;   // the targeted watchers' filters on THIS board
                     for (const Permanent& q : state.battlefield)
                     {
                         if (q.controller_index != me || q.def_absent) { continue; }
                         const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
-                        if (targeted(d) && std::find(bsubs.begin(), bsubs.end(),
-                                                     d->params.landfall_target_subtype) == bsubs.end())
-                        { bsubs.push_back(d->params.landfall_target_subtype); }
+                        if (targeted(d) && std::find(bsubs.begin(), bsubs.end(), filter_of(d)) == bsubs.end())
+                        { bsubs.push_back(filter_of(d)); }
                     }
                     // Classes of one subtype's legal targets on this board (the resolver's identity fold:
                     // LandfallTargetFoldKey; shroud as the resolver reads it), and whether a class has
@@ -75487,7 +75492,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         for (const Permanent& q : state.battlefield)
                         {
                             if (q.controller_index != me) { continue; }
-                            if (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes()) { continue; }
+                            if (sub.empty() ? (!q.card.IsCreature() && !q.is_animated)            // any creature
+                                            : (!CardHasSubtype(q.card, sub) && !q.AnimatedAllTypes())) { continue; }
                             if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
                             std::uint64_t k = 0;
                             if (!LandfallTargetFoldKey(state, q, k, &linked)) { ++singles; continue; }
@@ -75519,7 +75525,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         {
                             if (a.kind != Action::Kind::CastFromHand) { continue; }
                             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
-                            if (targeted(d)) { take(d->params.landfall_target_subtype); }
+                            if (targeted(d)) { take(filter_of(d)); }
                         }
                         if (classes < 0) { continue; }   // no targeted watcher can be on the battlefield in combat
                         const int width = std::min(4, classes + (split ? 1 : 0));
@@ -79567,6 +79573,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.lifegain_counters_used_this_turn) { Fold(tk, 0x9A8A6); }
         if (perm.storied_draw_used_this_turn)      { Fold(tk, 0x57091); }
         if (perm.once_per_turn_used)               { Fold(tk, 0x0CE7A); }   // Stromkirk Condemned (Vampires A2)
+        if (perm.landfall_resolved_once)           { Fold(tk, 0x5C7C1); }   // Scythecat Cub (resolved once)
+        if (perm.landfall_resolved_twice)          { Fold(tk, 0x5C7C2); }   // ... and twice
         // Marked damage: coarse drop #3 (combat leftovers; state-based actions already ran, so
         // by the time an m2 solve sees the board the survivors' damage is history, not future).
         if (g_simkey_m2coarse == 0)

@@ -889,6 +889,10 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         if (d != nullptr && d->params.enters_with_plus_counters > 0)
         { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
     }
+    // ONE event for every trigger pass below: a token made while it resolves (a Scute Swarm copy from the
+    // first land's landfall) did not exist when the Wave's lands entered -- it neither triggers for them nor
+    // is a target of their triggers (LandfallSimultaneousScope; the target snapshot below says the same).
+    LandfallSimultaneousScope lf_event(state);
     for (int i = 0; i < static_cast<int>(revealed.size()); ++i)
     {
         if (!put_flag[static_cast<std::size_t>(i)]) { continue; }

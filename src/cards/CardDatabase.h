@@ -228,6 +228,15 @@ struct CardParams
     std::vector<std::string> landfall_token_subtypes;
     std::string              landfall_token_color;
     std::vector<std::string> landfall_token_keywords;
+    // "If you control N or more lands, create a token that's a copy of this creature instead" (Scute
+    // Swarm: 6; 2026-10-23). Rides landfall_creates_tokens: at RESOLUTION (CR 608.2 -- the condition is
+    // in the effect, not an intervening "if"), with N+ lands we control the payload is ONE token copy of
+    // the watcher (CR 707.2: its copiable values, i.e. Permanent::card -- no counters, damage or
+    // until-EOT effects; Scryfall ruling 2020-09-25) through CreateTokenCopyOfCard, instead of the
+    // landfall_token_* token. The copy carries the ability, so the swarm doubles per landfall from then
+    // on; a copy made while a SIMULTANEOUS land entry resolves did not exist when those lands entered and
+    // does not trigger for them (LandfallSimultaneousScope). 0 = never a copy.
+    int                      landfall_copy_self_at_lands = 0;
     // "you may put a +1/+1 counter on each <subtype> creature you control" (Avenger of Zendikar:
     // 1 on each Plant). The set is read at RESOLUTION (CR 608.2), so Plants made earlier in the same
     // cascade receive it. The "may" is resolved as YES by a dominance argument stated at the
@@ -242,6 +251,19 @@ struct CardParams
     // LandfallCounterTargetOrder; the human picks on the board (`target`, loyalty-prompt shape).
     int                      landfall_target_counters      = 0;
     std::string              landfall_target_subtype;
+    // "...on target CREATURE you control" (Scythecat Cub, 2026-10-23): the targeted payload above with no
+    // subtype filter -- every creature we control (an animated land included) is legal, minus shroud. The
+    // same searched / provider-ordered target machinery as Phylath's Plant (DefHasTargetedLandfall).
+    bool                     landfall_target_any_creature  = false;
+    // "If this is the second time this ability has resolved this turn, double the number of +1/+1
+    // counters on that creature instead" (Scythecat Cub). PER OBJECT, read at RESOLUTION: the watcher's
+    // own Permanent::landfall_resolved_once / _twice bits (reset at our untap step in both worlds) say
+    // whether this resolution is its second this turn; that one DOUBLES the target's counters through
+    // DoublePlusCounters (CR 701.10e) instead of putting landfall_target_counters, and the provider
+    // orders its target by LandfallDoubleTargetOrder. The first and the third-and-later resolutions put
+    // the counters as usual. A trigger removed for want of a target (CR 603.3d) never resolved, so it
+    // is not counted.
+    bool                     landfall_target_second_doubles = false;
     // "you gain N life" (Courser of Kruphix). Through the shared GainLife hook: one life-gain EVENT.
     int                      landfall_lifegain             = 0;
     // "you may put a quest counter on this enchantment" (Khalni Heart Expedition). Through
@@ -4455,11 +4477,20 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
 // per-game presence stamp (GameState::deck_has_landfall) stays clear for a deck that needs it.
 // `landfall_damage` (Searing Blaze) is deliberately NOT a term: it is a resolution-time CONDITION
 // on a spell, never a trigger.
+// A TARGETED landfall counters payload: "put N +1/+1 counters on target <subtype> you control" (Phylath)
+// or "...on target creature you control" (Scythecat Cub). The one predicate for the dispatch, the
+// presence stamp and the solver's target-rank axes.
+inline bool DefHasTargetedLandfall(const CardParams& p)
+{
+    return p.landfall_target_counters > 0
+        && (!p.landfall_target_subtype.empty() || p.landfall_target_any_creature);
+}
+
 inline bool DefHasLandfallTrigger(const CardParams& p)
 {
     return p.landfall_creates_tokens > 0
         || (p.landfall_counters_each > 0 && !p.landfall_counters_each_subtype.empty())
-        || (p.landfall_target_counters > 0 && !p.landfall_target_subtype.empty())
+        || DefHasTargetedLandfall(p)   // Phylath; Scythecat Cub (any creature, 2026-10-23)
         || p.landfall_lifegain > 0
         || p.landfall_quest_counters > 0
         || p.landfall_self_pump_power > 0 || p.landfall_self_pump_toughness > 0

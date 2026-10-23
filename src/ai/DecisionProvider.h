@@ -747,6 +747,13 @@ public:
     // lowest battlefield index (the oldest). Restricts nothing.
     virtual void LandfallCounterTargetOrder(const GameState& s, int controller,
                                             std::vector<int>& class_reps) const;
+    // LandfallDoubleTargetOrder -- the same contract, for a resolution that DOUBLES the target's +1/+1
+    // counters instead of putting N (Scythecat Cub's second landfall resolution each turn). Base rule
+    // (out-of-line): a body that can attack RIGHT NOW first (LandfallCounterTargetOrder's first key), then
+    // the MOST +1/+1 counters (the doubling adds exactly that many), then the highest effective power,
+    // ties to the oldest. Restricts nothing.
+    virtual void LandfallDoubleTargetOrder(const GameState& s, int controller,
+                                           std::vector<int>& class_reps) const;
 
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the

@@ -533,6 +533,18 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
                 and not any(v for k, v in params.items() if k.startswith("landfall_")):
             gaps.append("Landfall in oracle text but no landfall_* param set")
 
+        # The two landfall riders of 2026-10-23 (Scute Swarm / Scythecat Cub). Either one unparametered
+        # resolves as the PLAIN payload -- a 1/1 Insect every time, a +1/+1 counter every time -- silently.
+        if re.search(r"create a token that's a copy of this creature instead", oracle, re.I) \
+                and "Landfall" in oracle and not params.get("landfall_copy_self_at_lands") \
+                and not is_d("copy of this creature"):
+            gaps.append("landfall 'create a token that's a copy of this creature instead' in oracle text "
+                        "but landfall_copy_self_at_lands not set")
+        if re.search(r"second time this ability has resolved this turn, double", oracle, re.I) \
+                and not params.get("landfall_target_second_doubles") and not is_d("second time"):
+            gaps.append("'second time this ability has resolved this turn, double' in oracle text but "
+                        "landfall_target_second_doubles not set")
+
         # "This creature enters with N +1/+1 counter(s) on it" (Mossborn Hydra, 2026-10-22): an
         # as-enters replacement read by FireEtbWatchers. A printed 0/0 entered without the param is a
         # creature that dies to the toughness SBA on arrival -- silently. (Turntimber's "additional",

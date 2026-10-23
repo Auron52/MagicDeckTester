@@ -532,6 +532,17 @@ struct Permanent
     // parity check) -- a used Condemned and an unused one are not interchangeable. Never set for any
     // other deck -> every key gated on it is byte-identical elsewhere.
     bool      once_per_turn_used   : 1 = false;
+    // "If this is the second time this ability has resolved this turn" (Scythecat Cub's landfall,
+    // CardParams::landfall_target_second_doubles; 2026-10-23). PER OBJECT: `once` = it has resolved at
+    // least once this turn, `twice` = at least twice -- so a resolution finding once && !twice is the
+    // second, the one that doubles. Two more bits of the same byte (sizeof(Permanent) stays 304). Set in
+    // ResolveLandfallTargetCounters, reset at OUR untap step in BOTH worlds (GameEngine::UntapStep +
+    // TurnSolver's per-turn reset). FLIPS MID-TURN, so it carries the once_per_turn_used fold treatment
+    // (BuildSimKey bits, PermIsPlainForFoldImpl refusal, FungibilityKey, dominance::Build,
+    // LandfallTargetFoldKey, RemovalSelfTargetFoldKey, the payment parity check). Never set for a card
+    // without the param -> byte-identical elsewhere.
+    bool      landfall_resolved_once  : 1 = false;
+    bool      landfall_resolved_twice : 1 = false;
     // DERIVED conditional haste (Bloodghast: "has haste as long as an opponent has 10 or less life";
     // CardParams::haste_if_opp_life_at_most). Read by CanAttackFull (both overloads) and CanTapNow
     // beside temp_haste, and RECOMPUTED (set AND cleared) by RefreshOppLifeHaste -- at the permanent's

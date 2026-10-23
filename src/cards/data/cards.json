@@ -12204,6 +12204,56 @@
    }
   },
   {
+   "name": "Scythecat Cub",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Cat"
+   ],
+   "keywords": [
+    "Trample",
+    "Landfall"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Trample\nLandfall — Whenever a land you control enters, put a +1/+1 counter on target creature you control. If this is the second time this ability has resolved this turn, double the number of +1/+1 counters on that creature instead. [Added 2026-10-23 as a Landfall SCREENING candidate (USER: \"maybe even Scythecat Cub\"; not in the shipped list). NOTHING DEFERRED. LANDFALL: landfall_target_counters 1 + landfall_target_any_creature -- one +1/+1 counter on TARGET creature we control (an animated land included; shroud excluded, CR 702.18b), dispatched by the ONE landfall chokepoint, OnLandEntered, once per land played or put. THE TARGET is chosen as the trigger is put on the stack (CR 603.3d), so a token made by another trigger of the same land event (a Baloths Beast, a Scute Swarm copy) is not legal (LandfallSimultaneousScope's token floor; Genesis Wave's target snapshot). WHICH creature: the legal set is identity-folded (LandfallTargetFoldKey) and ordered by the provider -- LandfallCounterTargetOrder for a put (a body that can attack now first, then the highest power) -- and under LandfallProvider the front class IS the target (LandfallCounterTargetIsPick, the USER's Phylath rule of 2026-10-20, applied to the Cub PROVISIONALLY); with MTG_LANDFALL_TARGET_PICK=0 the search branches the rank (Plan::landfall_target_choice / combat_landfall_target_choice). THE DOUBLING: landfall_target_second_doubles -- PER OBJECT, the watcher's Permanent::landfall_resolved_once / _twice bits (reset at our untap step in both worlds) mark its SECOND resolution this turn, which DOUBLES the target's +1/+1 counters instead (DoublePlusCounters, CR 701.10e: put as many as it has -- a 'put', so a counter doubler applies; Scryfall ruling 2024-11-08), its target ordered by LandfallDoubleTargetOrder (attack-now first, then the MOST +1/+1 counters, then power); the first and third-and-later resolutions put the counter. A trigger removed for want of a target never resolved and is not counted. TRIGGER ORDER (CR 603.3b, ours): a payload that doubles counters this time (this second resolution, Mossborn Hydra's own) resolves AFTER the land's other landfall triggers, a dominance (2(c+a) >= 2c+a; counters never hurt against the passive goldfish). DISCLOSED SIMPLIFICATION: a simultaneous put of several lands resolves land by land, so a THIRD-or-later +1 inside one such event cannot be moved before an earlier land's doublings (under-credits, never over). HUMAN PLAY picks on the board over every legal creature (the `target` decision through g_play_loyalty_chooser, the Phylath shape). TRAMPLE is INERT (the goldfish never blocks) and carried for faithfulness.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_target_counters": 1,
+    "landfall_target_any_creature": true,
+    "landfall_target_second_doubles": true
+   }
+  },
+  {
+   "name": "Scute Swarm",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Insect"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Landfall — Whenever a land you control enters, create a 1/1 green Insect creature token. If you control six or more lands, create a token that's a copy of this creature instead. [Added 2026-10-23 as a Landfall SCREENING candidate (USER: \"Let's add ... Scute Swarm\"; not in the shipped list). NOTHING DEFERRED. LANDFALL: landfall_creates_tokens 1 + landfall_token_power/toughness 1/1, subtypes [Insect], colour G -- dispatched by the ONE landfall chokepoint, OnLandEntered (core/SpellEffects.h), once per land entering under our control, played or put. THE COPY CLAUSE: landfall_copy_self_at_lands 6 -- the condition is part of the EFFECT (no intervening 'if'), so it is read AT RESOLUTION: with six or more lands we control the payload is instead ONE token that is a COPY of this creature, through CreateTokenCopyOfCard (the copy-token funnel: Doubling Season, the universal enter cascade). A copy takes the COPIABLE values (CR 707.2) -- Permanent::card, i.e. a Scute Swarm, or whatever a copy effect made the source -- never its counters, damage or until-EOT effects (Scryfall ruling 2020-09-25); it carries the ability, so the swarm DOUBLES per landfall from six lands on. The copy enters SUMMONING SICK. SIMULTANEITY: a copy made while a multi-land put resolves (Primeval Titan's two lands, a land search's battlefield picks, Genesis Wave) did not exist when those lands entered and neither triggers for them nor is a target of their triggers (LandfallSimultaneousScope: the token floor of the event) -- N swarms on Titan's two lands become 3N, not 4N. Last-known information (the source gone before resolution) is unreachable against the passive goldfish. MANDATORY, no target, no choice -- nothing to surface in the viewer. SEARCH: the trigger sets CardDefinition::landfall_watcher, so LandfallProvider ranks it cast-order tier 1 and the searched land-drop timing offers 'cast the Swarm, THEN play the land'. 5i discard: a THREAT, ranked after Mossborn Hydra and Scythecat Cub on exact ties (PROVISIONAL -- the USER's call). Not a Plant, Elemental or Beast: no other payload in the pool reads it.]",
+   "template": "custom",
+   "parameters": {
+    "landfall_creates_tokens": 1,
+    "landfall_token_power": 1,
+    "landfall_token_toughness": 1,
+    "landfall_token_subtypes": [
+     "Insect"
+    ],
+    "landfall_token_color": "G",
+    "landfall_copy_self_at_lands": 6
+   }
+  },
+  {
    "name": "Avenger of Zendikar",
    "mana_cost": "{5}{G}{G}",
    "types": [

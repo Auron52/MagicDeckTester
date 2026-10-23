@@ -1276,6 +1276,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         if (p.storied_draw_used_this_turn)      { mfold(0x57091ull); }
         // Stromkirk Condemned's "activate only once each turn" (Vampires A2): exact-match, gated on SET.
         if (p.once_per_turn_used)               { mfold(0x0CE7Aull); }
+        // Scythecat Cub's "second time this turn" bits: exact-match, gated on SET (the same shape).
+        if (p.landfall_resolved_once)           { mfold(0x5C7C1ull); }
+        if (p.landfall_resolved_twice)          { mfold(0x5C7C2ull); }
         if (wired)
         {
             mfold(0xA77Aull);

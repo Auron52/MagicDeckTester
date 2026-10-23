@@ -1843,6 +1843,30 @@ void DecisionProvider::LandfallCounterTargetOrder(const GameState& s, int contro
     for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].second; }
 }
 
+void DecisionProvider::LandfallDoubleTargetOrder(const GameState& s, int controller,
+                                                 std::vector<int>& class_reps) const
+{
+    // (swings now, +1/+1 counters, effective power), descending; stable (oldest first on a tie). Keys
+    // computed once per class, as above. ORDER ONLY.
+    if (class_reps.size() < 2) { return; }
+    struct Keyed { bool swings; int counters; int power; int idx; };
+    std::vector<Keyed> keyed;
+    keyed.reserve(class_reps.size());
+    for (int idx : class_reps)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(idx)];
+        keyed.push_back(Keyed{ !q.tapped && CanAttackFull(q, s.battlefield, controller), PlusCountersOn(q),
+                               q.EffectivePower(), idx });
+    }
+    std::stable_sort(keyed.begin(), keyed.end(), [](const Keyed& a, const Keyed& b)
+    {
+        if (a.swings != b.swings)     { return a.swings; }
+        if (a.counters != b.counters) { return a.counters > b.counters; }
+        return a.power > b.power;
+    });
+    for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].idx; }
+}
+
 // The colours we NEED and LACK, as a 5-bit WUBRG mask: NEED = a coloured pip on a nonland card in
 // hand, LACK = no permanent we control produces it. Read off definitions -- hand cards are name-only
 // placeholders. The ONE reader for both LandSearchPickOrder and its memo key, so they cannot drift.
@@ -3522,7 +3546,8 @@ const char* LandfallProvider::CastOrderTierName(int rank) const
 //             fastest"), the rest by CASTABILITY (USER: "If we can't cast the threat we should use another"),
 //             the shared discard_dist factor (Genesis Wave priced at X = 3); exact ties by the author's rank
 //             Avenger > Primeval Titan > Rampaging Baloths > Genesis Wave > Omnath > Terastodon > Courser
-//             (a screened Mossborn Hydra slots after Baloths -- PROVISIONAL, the USER's call).
+//             (a screened Mossborn Hydra slots after Baloths, then Scythecat Cub, then Scute Swarm --
+//             PROVISIONAL, the USER's call).
 //             AT MOST ONE Primeval Titan (USER: no kill potential in this list) and one copy of a legend,
 //             net of board.
 //   CAPPED    a copy beyond its cap: shed right after a dead card.
@@ -3652,10 +3677,13 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
     // after Rampaging Baloths, ahead of Genesis Wave -- the default taken while the USER decides. Off the
     // list it scored 0, i.e. silently below Courser, the gate's usual shed. Only the relative order is
     // read (ra > rb), so renumbering keeps every other card's place: byte-identical without the Hydra.
+    // Scythecat Cub and Scute Swarm (2026-10-23, SCREENING candidates): PROVISIONAL slots right after the
+    // Hydra (the cheap landfall bodies together), ahead of Genesis Wave -- the default taken while the USER
+    // decides. Relative order only, so the renumbering is byte-identical without them.
     static const std::pair<const char*, int> kThreatRank[] = {   // higher = kept first
-        {"Phylath, World Sculptor", 9}, {"Avenger of Zendikar", 8}, {"Primeval Titan", 7},
-        {"Rampaging Baloths", 6}, {"Mossborn Hydra", 5}, {"Genesis Wave", 4},
-        {"Omnath, Locus of Rage", 3}, {"Terastodon", 2}, {"Courser of Kruphix", 1},
+        {"Phylath, World Sculptor", 11}, {"Avenger of Zendikar", 10}, {"Primeval Titan", 9},
+        {"Rampaging Baloths", 8}, {"Mossborn Hydra", 7}, {"Scythecat Cub", 6}, {"Scute Swarm", 5},
+        {"Genesis Wave", 4}, {"Omnath, Locus of Rage", 3}, {"Terastodon", 2}, {"Courser of Kruphix", 1},
     };
     auto threat_rank = [&](const Card& c)
     { for (const auto& [name, r] : kThreatRank) { if (c.m_name == name) { return r; } } return 0; };

@@ -6122,5 +6122,29 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Scythecat Cub": {
+    "cmc": 2.0,
+    "keywords": [
+      "Double",
+      "Landfall",
+      "Trample"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Trample\nLandfall — Whenever a land you control enters, put a +1/+1 counter on target creature you control. If this is the second time this ability has resolved this turn, double the number of +1/+1 counters on that creature instead.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Cat"
+  },
+  "Scute Swarm": {
+    "cmc": 3.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Landfall — Whenever a land you control enters, create a 1/1 green Insect creature token. If you control six or more lands, create a token that's a copy of this creature instead.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Insect"
   }
 }

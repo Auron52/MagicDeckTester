@@ -7699,6 +7699,42 @@ inline int LandfallTargetPinFor(const GameState& state)
     return g_landfall_target_pin_turn == state.turn_number ? g_landfall_target_pin : -1;
 }
 
+// SIMULTANEOUS LAND ENTRY -- the TOKEN FLOOR of the event (Scute Swarm, 2026-10-23). A put of several
+// lands at once (Primeval Titan's two, a land search's battlefield picks, Genesis Wave) is ONE event: every
+// landfall trigger it causes is put on the stack together, by the watchers that were on the battlefield
+// WHEN THE LANDS ENTERED, with their targets chosen then (CR 603.2 / 603.3d / 603.6a). The engine resolves
+// the event land by land, so a permanent MADE by an earlier land's trigger would otherwise be on the
+// battlefield for a later land's -- a Scute Swarm copy triggering for lands that entered before it
+// existed (N swarms -> 4N instead of 3N on Titan's two lands), a Rampaging Baloths Beast offered to
+// Scythecat Cub's target. The scope records next_token_number as the event begins; FireLandfallTriggers
+// then neither collects a TOKEN watcher numbered at or above it nor offers such a token as a target. With
+// no scope the floor is next_token_number at the trigger walk itself (a single land's own cascade), which
+// excludes exactly the tokens its earlier payloads made. INNERMOST WINS (save / restore): a Titan put by a
+// Wave starts its own event. Byte-identical for every deck without a TOKEN landfall watcher or a targeted
+// trigger that could see a mid-event token: no other payload makes a watcher, and none makes a Plant.
+//
+// THE FLOOR is next_token_number, raised past any token ALREADY on the battlefield with a higher number:
+// the engine numbers every token it makes from next_token_number, but a board stamped by hand (the
+// scenario harness, a unit test, a reference replay) can hold tokens numbered above it, and those existed
+// before the event -- never "made after it".
+inline int LandfallTokenFloorNow(const GameState& state)
+{
+    int f = state.next_token_number;
+    for (const Permanent& q : state.battlefield)
+    { if (q.is_token && q.card.m_number >= f) { f = q.card.m_number + 1; } }
+    return f;
+}
+inline thread_local int g_landfall_event_token_floor = -1;
+struct LandfallSimultaneousScope
+{
+    int saved;
+    explicit LandfallSimultaneousScope(const GameState& state)
+        : saved(g_landfall_event_token_floor) { g_landfall_event_token_floor = LandfallTokenFloorNow(state); }
+    ~LandfallSimultaneousScope() { g_landfall_event_token_floor = saved; }
+    LandfallSimultaneousScope(const LandfallSimultaneousScope&) = delete;
+    LandfallSimultaneousScope& operator=(const LandfallSimultaneousScope&) = delete;
+};
+
 // IDENTITY FOLD for a landfall counter target -- SOUND, the USER's "identical in all state" bar (the
 // FoldInterchangeableCreatureAuraHosts precedent). Two candidates whose keys are EQUAL are the same
 // target: the same card characteristics (name, type / supertype / colour / keyword masks, P/T,
@@ -7723,7 +7759,8 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.quest_counters != 0 || p.hone_counters != 0)                         { return false; }
     if (p.storage_hold_this_turn || p.loyalty_activated_this_turn
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
-        || p.lifegain_counters_used_this_turn || p.once_per_turn_used)            { return false; }
+        || p.lifegain_counters_used_this_turn || p.once_per_turn_used
+        || p.landfall_resolved_once || p.landfall_resolved_twice)                 { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty())           { return false; }
@@ -7802,10 +7839,18 @@ inline void LandfallTargetLinks(const GameState& state, std::vector<int>& out)
 //   * HUMAN PLAY re-asks over the FULL legal set (never the folded list) through the shared
 //     board-click `target` decision (g_play_loyalty_chooser -- the Saga-chapter-target shape), with
 //     the engine's pick preselected. Nulled by RevealLogPause, so autonomous play is untouched.
+//
+//   * SCYTHECAT CUB (2026-10-23): landfall_target_any_creature makes the legal set every CREATURE we control
+//     (an animated land included); landfall_target_second_doubles makes the watcher's SECOND resolution this
+//     turn double the target's +1/+1 counters instead (DoublePlusCounters, CR 701.10e), its target ordered
+//     by LandfallDoubleTargetOrder. `src_number` is the watcher's per-copy number (its resolution bits);
+//     `token_floor` excludes a token made after the land event began (LandfallSimultaneousScope).
 inline void ResolveLandfallTargetCounters(GameState& state, int controller, const std::string& src_name,
-                                          const CardParams& wp, const std::vector<int>* target_snapshot)
+                                          const CardParams& wp, const std::vector<int>* target_snapshot,
+                                          int src_number, int token_floor)
 {
     const std::string& sub = wp.landfall_target_subtype;
+    const bool any_creature = wp.landfall_target_any_creature;
     // The subtype by INTERNED ID (CardHasSubtypeId: a card's subtypes are interned at load, so a name
     // the registry does not know is on no card -- kNone matches nothing, as the string test would).
     const uint16_t sub_id = SubtypeRegistry::Instance().Id(sub);
@@ -7824,9 +7869,12 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
         if (q.controller_index != controller) { continue; }
-        if (!(sub_id != SubtypeRegistry::kNone && CardHasSubtypeId(q.card, sub_id)) && !q.AnimatedAllTypes()) { continue; }
+        if (any_creature)
+        { if (!q.card.IsCreature() && !q.is_animated) { continue; } }   // "target creature you control"
+        else if (!(sub_id != SubtypeRegistry::kNone && CardHasSubtypeId(q.card, sub_id)) && !q.AnimatedAllTypes()) { continue; }
         if ((q.card.IsCreature() || q.is_animated)
             && std::find(shrouded.begin(), shrouded.end(), q.card.m_number) != shrouded.end()) { continue; }
+        if (q.is_token && q.card.m_number >= token_floor) { continue; }   // made after the land entered
         if (target_snapshot != nullptr
             && std::find(target_snapshot->begin(), target_snapshot->end(), q.card.m_number)
                    == target_snapshot->end()) { continue; }
@@ -7850,7 +7898,19 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
         }
         reps.push_back(i);
     }
-    ResolveProvider(state).LandfallCounterTargetOrder(state, controller, reps);
+    // Scythecat Cub: is THIS resolution the watcher's second this turn (its per-object bits)?
+    bool doubling = false;
+    if (wp.landfall_target_second_doubles)
+    {
+        for (const Permanent& w : state.battlefield)
+        {
+            if (w.card.m_number != src_number || w.controller_index != controller) { continue; }
+            doubling = w.landfall_resolved_once && !w.landfall_resolved_twice;
+            break;
+        }
+    }
+    if (doubling) { ResolveProvider(state).LandfallDoubleTargetOrder(state, controller, reps); }
+    else          { ResolveProvider(state).LandfallCounterTargetOrder(state, controller, reps); }
     if (reps.empty()) { reps.push_back(legal.front()); }   // a provider may restrict, never empty
     int pick = reps.front();
     const int pin = LandfallTargetPinFor(state);
@@ -7865,23 +7925,42 @@ inline void ResolveLandfallTargetCounters(GameState& state, int controller, cons
         int def_opt = 0;
         for (int k = 0; k < static_cast<int>(legal.size()); ++k)
         { if (legal[static_cast<std::size_t>(k)] == pick) { def_opt = k; break; } }
-        const std::string prompt = "given " + std::to_string(wp.landfall_target_counters)
-                                 + " +1/+1 counters (permanently)";
+        const std::string prompt = doubling
+            ? std::string("its +1/+1 counters doubled (permanently)")
+            : "given " + std::to_string(wp.landfall_target_counters) + " +1/+1 counter"
+              + (wp.landfall_target_counters == 1 ? "" : "s") + " (permanently)";
         const int chosen = (*g_play_loyalty_chooser)(state, controller, src_name + " (landfall)",
                                                      prompt, legal, def_opt);
         if (chosen >= 0 && chosen < static_cast<int>(legal.size()))
         { pick = legal[static_cast<std::size_t>(chosen)]; }
     }
     Permanent& t = state.battlefield[static_cast<std::size_t>(pick)];
-    PutPlusCounters(state, t, wp.landfall_target_counters);
+    const int before = PlusCountersOn(t);
+    if (doubling) { DoublePlusCounters(state, t); }
+    else          { PutPlusCounters(state, t, wp.landfall_target_counters); }
     AnnihilateCounters(t);   // CR 704.5r -- a no-op unless the body carries -1/-1 counters
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "trigger",
-                      "\xF0\x9F\x8C\x8D " + src_name + " (landfall): +"
-                      + std::to_string(wp.landfall_target_counters) + "/+"
-                      + std::to_string(wp.landfall_target_counters) + " counters on "
-                      + t.card.m_name.str());
+                      "\xF0\x9F\x8C\x8D " + src_name + " (landfall): "
+                      + (doubling
+                         ? "doubles the +1/+1 counters on " + t.card.m_name.str() + " ("
+                           + std::to_string(before) + " \xE2\x86\x92 " + std::to_string(PlusCountersOn(t)) + ")"
+                         : "+" + std::to_string(wp.landfall_target_counters) + "/+"
+                           + std::to_string(wp.landfall_target_counters) + " counters on "
+                           + t.card.m_name.str()));
+    }
+    // The resolution is COUNTED (a trigger removed for want of a target returned above, uncounted).
+    // Re-found by number: no put above moves the battlefield, but the lookup costs nothing next to it.
+    if (wp.landfall_target_second_doubles)
+    {
+        for (Permanent& w : state.battlefield)
+        {
+            if (w.card.m_number != src_number || w.controller_index != controller) { continue; }
+            if (w.landfall_resolved_once) { w.landfall_resolved_twice = true; }
+            else                          { w.landfall_resolved_once  = true; }
+            break;
+        }
     }
 }
 
@@ -7894,14 +7973,36 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
     // battlefield (reallocating it) and a watcher must not be found twice or skipped. Battlefield order
     // is the CR 603.3b order (the controller orders their own simultaneous triggers; the house
     // convention used by every other watcher family).
+    //
+    // TOKEN FLOOR (LandfallSimultaneousScope): a token numbered at or above it was made after this land
+    // event began -- by an earlier land of the same simultaneous put, or by this cascade -- so it neither
+    // triggers for this land (a Scute Swarm copy) nor is a legal target of its triggers.
+    //
+    // DOUBLINGS LAST (CR 603.3b, the controller's order; a DOMINANCE, not a heuristic): a watcher whose
+    // payload this time DOUBLES +1/+1 counters (Mossborn Hydra's own; Scythecat Cub's second resolution
+    // this turn) resolves after every other watcher of this land, so each counter the others put is
+    // doubled with the rest: 2(c+a) >= 2c+a for every creature, counters never hurt against the passive
+    // goldfish (the Avenger "may" argument below), and two doublings commute. Stable, so each group keeps
+    // battlefield order. A board with no doubling watcher -- or with one that every payload commutes with
+    // (a Hydra beside Plants: no other payload puts a counter on it) -- reaches the same board.
+    // Outside a scope nothing on the battlefield is newer than this walk, so no watcher is excluded and the
+    // floor (for the targets) is LandfallTokenFloorNow's, computed in the same walk.
+    const bool in_event = g_landfall_event_token_floor >= 0;
+    int token_floor = in_event ? g_landfall_event_token_floor : state.next_token_number;
     std::vector<int> watchers;
+    std::vector<int> late_watchers;
     for (const Permanent& w : state.battlefield)
     {
+        if (!in_event && w.is_token && w.card.m_number >= token_floor) { token_floor = w.card.m_number + 1; }
         if (w.controller_index != controller || w.def_absent) { continue; }
+        if (in_event && w.is_token && w.card.m_number >= token_floor) { continue; }
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
         if (wd == nullptr || !wd->landfall_watcher) { continue; }
-        watchers.push_back(w.card.m_number);
+        const bool late = wd->params.landfall_double_self_counters
+            || (wd->params.landfall_target_second_doubles && w.landfall_resolved_once && !w.landfall_resolved_twice);
+        (late ? late_watchers : watchers).push_back(w.card.m_number);
     }
+    watchers.insert(watchers.end(), late_watchers.begin(), late_watchers.end());
     // GRAVEYARD watchers (Bloodghast; CardDefinition::gy_landfall_watcher), snapshotted by per-copy
     // number AT THE MOMENT OF ENTRY: the ability functions only from the graveyard (CR 113.6k) and only
     // for a copy already there when the land enters (Scryfall ruling 2009-10-01) -- one that arrives
@@ -7941,7 +8042,32 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
         // Tokens (Rampaging Baloths' 4/4 Beast, Omnath's 5/5 Elemental). MANDATORY in the current
         // Oracle text of both. One event of N tokens through the token chokepoint (Doubling Season,
         // the enter cascade). Each enters summoning sick, so a landfall token cannot attack this turn.
-        if (wp.landfall_creates_tokens > 0)
+        //
+        // Scute Swarm (landfall_copy_self_at_lands): with N+ lands we control AT RESOLUTION, a token that
+        // is a COPY of this creature instead -- its copiable values (Permanent::card, CR 707.2), taken by
+        // VALUE first because the put reallocates the battlefield. The copy enters sick through the
+        // universal cascade (CreateTokenCopyOfCard: Doubling Season, the enter watchers) and carries the
+        // ability, but did not exist when this land entered, so it does not trigger for it.
+        const bool copy_self = wp.landfall_creates_tokens > 0 && wp.landfall_copy_self_at_lands > 0
+            && [&]
+               {
+                   int lands = 0;
+                   for (const Permanent& q : state.battlefield)
+                   { if (q.controller_index == controller && q.card.IsLand()) { ++lands; } }
+                   return lands >= wp.landfall_copy_self_at_lands;
+               }();
+        if (copy_self)
+        {
+            const Card src = state.battlefield[static_cast<std::size_t>(wi)].card;
+            for (int k = 0; k < wp.landfall_creates_tokens; ++k) { CreateTokenCopyOfCard(state, controller, src); }
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name
+                              + "): create a token copy of " + src.m_name.str());
+            }
+        }
+        else if (wp.landfall_creates_tokens > 0)
         {
             CreateTokens(state, controller, wp.landfall_creates_tokens, wp.landfall_token_power,
                          wp.landfall_token_toughness, wp.landfall_token_subtypes,
@@ -7996,9 +8122,10 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
             }
         }
 
-        // "Put N +1/+1 counters on target <subtype> you control" (Phylath) -- searched target.
-        if (wp.landfall_target_counters > 0 && !wp.landfall_target_subtype.empty())
-        { ResolveLandfallTargetCounters(state, controller, wname, wp, target_snapshot); }
+        // "Put N +1/+1 counters on target <subtype> you control" (Phylath) / "...on target creature you
+        // control" (Scythecat Cub, doubling on its second resolution this turn) -- searched target.
+        if (DefHasTargetedLandfall(wp))
+        { ResolveLandfallTargetCounters(state, controller, wname, wp, target_snapshot, num, token_floor); }
 
         // "You gain N life" (Courser of Kruphix) -- one life-gain EVENT through the shared hook.
         if (wp.landfall_lifegain > 0)
@@ -39231,7 +39358,8 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.storied_draw_used_this_turn ? 1048576 : 0)
         | (p.lifegain_counters_used_this_turn ? 2097152 : 0)
         | (p.once_per_turn_used ? 4194304 : 0)   // Stromkirk Condemned's once-each-turn activation
-        | (p.sac_at_end_step ? 8388608 : 0));
+        | (p.sac_at_end_step ? 8388608 : 0)
+        | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0));   // Scythecat Cub
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);

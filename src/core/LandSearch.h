@@ -815,6 +815,11 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     }
     int n_bf = 0;
     std::string bf_text, hand_text;
+    // ONE land event: a token made by an earlier land's landfall (a Scute Swarm copy) neither triggers for
+    // a later land of it nor is offered as a target (LandfallSimultaneousScope). For a single land it only
+    // restarts the floor -- what matters when this search resolves INSIDE another event (a Titan a Genesis
+    // Wave put: its lands are an event of their own, after the Wave's earlier tokens exist).
+    LandfallSimultaneousScope lf_event(state);
     for (int i = 0; i < bf_n; ++i)
     {
         Card lc;
