@@ -756,3 +756,31 @@ Reading:
 - **Avenger -> 3rd Phylath gains more without the shuffle** (C9 vs C1 -0.007 NSS vs -0.002 default); round 14
   tests it on top of the 4th Cultivate.
 - **Courser loses again**, by 0.008-0.009 vs C1 in both slots (C10, C14).
+
+## Round 14 — the 4th Cultivate and its companions, around C1, HELD OUT (`logs/landfall_screen/r14.json`, seed 9000000)
+
+`"centre": "C1"`, 20,000 paired games per arm. base 5.7275 (T7+ 6.65%); **C1 4.9662, -0.7613 vs shipped**
+(T7+ 1.38%, T8+ 0.17%). Deltas vs C1.
+
+| arm | change from C1 | vs C1 | se | T7+ | T8+ |
+|---|---|---|---|---|---|
+| D_a_tw_m | 1 Avenger -> 4th Cultivate, 1 Titan -> 4th Wave, 1 Mountain -> Forest | **-0.0196** | 0.0028 | 1.32% | 0.15% |
+| D_t_m | 1 Titan -> 4th Cultivate, 1 Mountain -> Forest | -0.0146 | 0.0024 | 1.26% | 0.16% |
+| D_t_aw | 1 Titan -> 4th Cultivate, 1 Avenger -> 4th Wave | -0.0138 | 0.0023 | 1.26% | 0.17% |
+| D_a_ap | 1 Avenger -> 4th Cultivate, 1 Avenger -> 3rd Phylath | -0.0126 | 0.0025 | 1.34% | 0.18% |
+| D_a_m | 1 Avenger -> 4th Cultivate, 1 Mountain -> Forest | -0.0124 | 0.0025 | 1.43% | 0.20% |
+| D_a_tw | 1 Avenger -> 4th Cultivate, 1 Titan -> 4th Wave | -0.0123 | 0.0023 | 1.27% | 0.14% |
+| D_t_tw | 1 Titan -> 4th Cultivate, 1 Titan -> 4th Wave (2 Titan) | -0.0112 | 0.0022 | **1.16%** | 0.17% |
+| D_a_aw | 1 Avenger -> 4th Cultivate, 1 Avenger -> 4th Wave (2 Avenger) | -0.0088 | 0.0024 | 1.45% | 0.18% |
+| D_t | 1 Titan -> 4th Cultivate | -0.0084 | 0.0018 | 1.21% | 0.16% |
+| D_a | 1 Avenger -> 4th Cultivate | -0.0062 | 0.0019 | 1.36% | 0.18% |
+| D_m | 1 Mountain -> Forest | -0.0060 | 0.0017 | 1.44% | 0.18% |
+| D_aw | 1 Avenger -> 4th Wave | -0.0057 | 0.0015 | 1.42% | 0.17% |
+
+Reading (default engine; nss11 next):
+- **Diminishing returns.** Single steps from C1 are now worth 0.006-0.008 t and the best pair 0.012-0.015; the
+  arms are mostly within one or two se of each other. The deck is near the top of this landfall-only family.
+- **The 4th Cultivate is confirmed on fresh seeds** (D_t -0.008, D_a -0.006); cutting a Titan for it is
+  slightly ahead of an Avenger on the average and the tail, but within one se.
+- **A second six-drop -> 4th Wave or 3rd Phylath adds another ~0.004-0.006** on top (D_t_aw, D_a_tw, D_a_ap).
+- Mountain -> Forest is -0.006 here but was 0 under NSS in round 13: it waits for nss11.
