@@ -287,6 +287,49 @@ this rebase superseded, so it is moot.
    `LandfallElementals.cod` modulo CRLF) sits untracked in the primary checkout. USER 2026-10-22: the
    final name must not carry the 2 -- move that copy aside (never delete) once the primary is updated.
 
+## Claude-play sweep
+- commit: `100759123` (play-identical to `0513b9b65`: that commit adds an allocator retention cap and
+  env-gated diagnostics only)
+- seeds: first sweep 61000-61019 (20 games, 2026-10-19, pre-loop-1; every flag fixed in convergence
+  loop 1). Confirmation sweep 2026-10-23: seeds 62000-62011 as `--seed 62000+gi --game-index gi`
+  (12 games, Opus players; brief `logs/lfe/sweep2_prompt.md`). The first launch passed
+  `--seed 62000 --game-index gi`, which replays ONE shuffle for every gi (the index only drives
+  opponent spawns), so seed 62000 was played 6 times and counts once.
+- flags: 2 unresolved
+  * Smokebraider over-tap (62006 T3, 62007 T3): Mossborn Hydra {2}{G} is paid with Smokebraider's 2
+    units AND two lands (Courtyard + Islet / Territory), 4 mana for a 3-mana spell, floating 1
+    restricted unit. Smokebraider + one land pays it exactly. Legal but wasteful; in 62006 the extra
+    tapped land makes the main-2 Flamekin Harbinger {R} uncastable. Win turn unchanged in both games.
+    ManaPayment (the loop-1 `RestrictedMayHoldForAttack` / `RestrictedIneligOwedLater` path) -- OPEN.
+  * Fulminator Mage plans listed 7x on the 62006 T4 viewer menu (identical summaries, byte-identical
+    boards): an unlabeled axis or real duplicates -- under investigation with the plan-fan explosion
+    below.
+- Results: 11 of 12 tie the d5 b20 search (T4 x7, T5 x4); 62011 Claude T5 vs search T6 -- the search
+  mulligans a 1-land Gruul Turf 7 under the STATIC keep rule and finds T5 once handed the kept board
+  (keep policy, Q6 / the keep table, not a search hole). No illegal plan, missing legal play or wrong
+  state delta found. Also recurring, by design (d93492f1f): a human plan always cracks a fetch AFTER a
+  Harbinger top-tutor (the crack-first order is search-only; the human orders it across frames).
+- Decision types seen: mulligan, bottom, main_phase, tutor_etb (Terramorphic / Myriad), dig (Risen
+  Reef look-top land), divide (Fury), bounce (Gruul Turf), vial_charge (Aether Vial), discard.
+
+## Mulligan-profile blocker: memory (2026-10-23)
+The generation-setting screen (`mullgen_finalize.py --write`) aborted twice at the 20 GB RSS cap on this
+23.5 GB box: its d5 b20 hand scorer and keep-table discovery (d5 b20, 400 probes x 22 cards).
+1. **Allocator retention (FIXED upstream, 88a979f07 `MTG_POOL_ALLOC_CAP_MB`, landed in parallel with
+   this diagnosis).** `src/core/PoolAllocator.cpp` kept every freed <=512-byte block on its thread's
+   free-list forever, so each worker held its own all-time high-water mark. With the pool off the same
+   discovery peaks at 3.5 GB and completes (K=21, 293 s); an identical 64 MB/thread cap written here was
+   smoke-verified byte-identical (149/149 unchanged) and dropped for upstream's at the rebase.
+2. **Plan-fan explosion (OPEN).** The d5 b20 scorer still aborts with the cap: single main-1
+   `EnumeratePlansWithLand` lists reach 100k-527k plans (up to 1.7 GB for ONE call) at turns 5-7, bf
+   11-18, hand 6-8 (`MTG_ENUM_HIWATER_KB=100000`, axis breakdown): only ~300-2,800 BASE plans, multiplied
+   by the Risen Reef look-top pins (~70% of plans), the land-search activation positions incl. pre-cast
+   subsets (`land_search_act_slot`, ~80%), land_slot positions (~60%) and Harbinger tutor variants
+   (~40%). The axes compose multiplicatively because the look-top fan and the act-slot twins both take
+   tutor variants and position twins as bases (the 2026-10-19 loop-1 enumeration fix). A single slow
+   discovery rollout (probe 102 + Risen Reef) is 12.5 s alone (173 s in the contended pool); its T4
+   decision enumerated 156,707 plans over 513,816 odometer states for 60,873 billed units.
+
 ## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
 Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
 STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout
