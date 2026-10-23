@@ -623,3 +623,32 @@ Reading (clairvoyant default; the NSS bracket is the check for every arm with a 
 - **Evolving Wilds looks like round 5's clairvoyance again** (4th copy -0.012, 2nd copy cut +0.015), pending nss9.
 - Titan and Avenger are close to neutral against the others (-0.003 to -0.012 out); Phylath out for Courser is
   worse, so the Hydras' best second cut stays Courser or Baloths (A_c2b0 prefers Baloths by -0.009).
+
+## USER decisions on round 12 (2026-10-23)
+
+* *"Omnath I would keep over Baloths for the extra upside vs removal and sweepers"* -- *"(as a 1-of)"*. The
+  goldfish has no removal or sweepers, so Omnath's resilience (a 5/5 per land drop rebuilds a board) is
+  exactly what this apparatus cannot see; A_o0's -0.015 does not override it. **Omnath stays at 1; Rampaging
+  Baloths is the cut.**
+* *"I also agree with the Hydra replacing Courser."* **Courser stays out** (A0 already cuts both).
+
+Round 13 was rewritten before it started (the Omnath-cutting draft is kept as `r13.omnath_cut.json`): every
+arm holds 1 Omnath and 0 Courser.
+
+## Round 13 — round 12's winners combined, HELD OUT (`logs/landfall_screen/r13.json`, seed 8900000)
+
+Centre A0, 20,000 games per arm. Omnath 1, Courser 0 in every arm.
+
+| arm | change from A0 |
+|---|---|
+| C0 | Radiant Fountain -> Forest |
+| C11 | C0 + 1 Baloths -> 3rd Cultivate |
+| C1 | C0 + both Baloths -> 3rd Cultivate + 3rd Genesis Wave |
+| C2 | C0 + both Baloths -> 2 Genesis Wave (4) |
+| C3 | C0 + both Baloths -> 2 Cultivate (4) |
+| C4 / C5 / C9 | C1 + 1 Avenger -> 4th Cultivate / 4th Wave / 3rd Phylath |
+| C6 / C13 | C1 + 1 Titan -> 4th Wave / 4th Cultivate |
+| C7 | C1 + 1 Mountain -> Forest |
+| C8 | C1 + 1 Forest -> 4th Evolving Wilds |
+
+NSS bracket 10 runs the same spec with the shuffle off. Results below when they land.
