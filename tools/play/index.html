@@ -813,12 +813,22 @@ function enchantTargetsFor(name) {
 // already attached to Balan MOVES it off Balan, equipping the loose one does not -- and, since the
 // hosts of a cast-and-equip plan ride the same card name, it is also what stops a battlefield copy
 // from advertising a host that only the copy in HAND can reach.
+//
+// A host must be ON THE PLAYFIELD: in play now, or a creature whose cast is already queued (its planned
+// thumb carries the same m_number). The engine also enumerates "cast Puresteel Paladin, equip
+// Shadowspear -> Paladin", whose host is still in HAND; offering it advertised a creature the user
+// cannot drop on, and an equip queued onto it without the cast committed as a silent no-op (found
+// 2026-10-23 when testEquip ran on Kitty v3). Queue the cast first and the Paladin becomes a host.
 function equipTargetsFor(name, srcNum) {
   const d = S.decision, out = {};
   if (!d || !Array.isArray(d.plans)) return out;
+  const present = new Set();
+  ((d.me||{}).battlefield||[]).forEach(p => { if (p.num) present.add(p.num); });
+  (S.plan||[]).forEach(e => { if (e.num && e.kind !== 'activate') present.add(e.num); });
   d.plans.forEach(pl => (pl.actions||[]).forEach(a => {
     if (!(a.card===name && a.verb==='equip' && a.equip_host>0)) return;
     if (srcNum && a.equip_src && a.equip_src !== srcNum) return;
+    if (!present.has(a.equip_host)) return;
     out[a.equip_host] = a.equip_host_name || ('#'+a.equip_host);
   }));
   return out;

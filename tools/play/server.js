@@ -122,12 +122,18 @@ const VERSION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 // the user's Windows filesystem cannot tell the difference: Soldiers shipped as
 // decks/Soldiers/soldiers.cod, played and saved references normally on Windows, and was INVISIBLE
 // on Linux (absent from listDecks, unreplayable by every exact-name resolver). So entries are
-// matched the way the user's filesystem matches them. Same contract as deck_registry.ci_entry.
+// matched the way the user's filesystem matches them. Same contract as deck_registry.ci_entry,
+// INCLUDING its exact match from the LISTING rather than existsSync: on a case-insensitive filesystem
+// (the user's Windows box; this container's /workspaces mount) existsSync is true for ANY spelling, so
+// this returned the name it was ASKED for, not the one on disk -- e.g. "Soldiers.cod" for
+// soldiers.cod, and every sidecar path derived from that stem inherited the wrong case. deck_registry
+// fixed it 2026-10-08; this copy and viewer_protocol_check's kept the old line until 2026-10-23.
 function ciEntry(dir, name) {
-  if (fs.existsSync(path.join(dir, name))) return name;
-  let hits = [];
-  try { hits = fs.readdirSync(dir).filter(e => e.toLowerCase() === name.toLowerCase()); }
+  let entries;
+  try { entries = fs.readdirSync(dir); }
   catch (e) { return null; }
+  if (entries.includes(name)) return name;
+  const hits = entries.filter(e => e.toLowerCase() === name.toLowerCase());
   return hits.length === 1 ? hits[0] : null;
 }
 

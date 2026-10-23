@@ -245,13 +245,18 @@ def _unique_decklist_stem(d):
 
 def _ci_entry(d, name):
     """-> the entry of `d` named `name`, case-insensitively (exact match first), else None.
-    Same contract as scripts/deck_registry.ci_entry."""
-    if os.path.exists(os.path.join(d, name)):
-        return name
+    Same contract as scripts/deck_registry.ci_entry -- INCLUDING its exact match from the LISTING, never
+    os.path.exists: on a case-insensitive filesystem (Windows; this container's /workspaces mount)
+    exists() is True for any spelling, so this returned the name it was ASKED for instead of the one on
+    disk. deck_registry fixed that 2026-10-08; this copy kept the old line until 2026-10-23, which is why
+    test/deck_case_resolution_check.py failed whenever its scratch tree sat on such a mount."""
     try:
-        hits = [e for e in os.listdir(d) if e.lower() == name.lower()]
+        entries = os.listdir(d)
     except OSError:
         return None
+    if name in entries:
+        return name
+    hits = [e for e in entries if e.lower() == name.lower()]
     return hits[0] if len(hits) == 1 else None
 
 

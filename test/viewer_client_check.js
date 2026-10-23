@@ -1612,6 +1612,58 @@ async function testEquip() {
   return fails;
 }
 
+// Equip onto a creature cast EARLIER IN THE SAME LINE, on the SHIPPED Kitty list (v3). Seed 2 reaches
+// T3 with Shadowspear in play and NO creature on the battlefield; the engine's only Shadowspear plans
+// cast Puresteel Paladin first. Before 2026-10-23 equipTargetsFor offered the Paladin while it was
+// still in hand -- a host the user cannot drop on, and an equip queued onto it without the cast
+// committed as a silent no-op. Now the host appears exactly when its cast is queued, and the human's
+// order (cast Paladin, then equip it) commits with Shadowspear attached.
+async function testEquipQueuedHost() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck: 'KittyEquipment', seed: 2, turns: 8 });
+  const st = () => S(win);
+  let guard = 0;
+  while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 3)) {
+    if (!(await stepForward(win, 'ai'))) break;
+  }
+  chk(st().decision && st().decision.turn === 3, 'reached KittyEquipment (v3) s2 turn 3');
+  if (fails.length) return fails;
+  const bf0 = (st().decision.me && st().decision.me.battlefield) || [];
+  const spear = bf0.find(p => p.name === 'Shadowspear');
+  chk(!!spear, 'Shadowspear is on the battlefield');
+  const hand = (st().decision.me && st().decision.me.hand) || [];
+  chk(hand.some(c => (c.name || c) === 'Puresteel Paladin'), 'Puresteel Paladin is in hand');
+  if (fails.length) return fails;
+  const onField = new Set(bf0.map(p => p.num));
+  const before = win.equipTargetsFor('Shadowspear', spear.num);
+  chk(Object.keys(before).every(n => onField.has(+n)),
+      `before the cast is queued, every offered host is in play (got ${JSON.stringify(before)})`);
+  win.queueCard('Puresteel Paladin', 'permanent');
+  const pal = st().plan.find(e => e.name === 'Puresteel Paladin');
+  chk(pal && pal.num > 0, 'the queued Paladin carries its card number');
+  if (fails.length) return fails;
+  const after = win.equipTargetsFor('Shadowspear', spear.num);
+  chk(pal.num in after, `once its cast is queued, the Paladin is an equip host (got ${JSON.stringify(after)})`);
+  chk(win.tryEquipDrop('Shadowspear', pal.num, spear.num), 'dropping Shadowspear on the queued Paladin queues the equip');
+  chk(win.LineBuild.encodeLine(st().plan) === `cast=Puresteel Paladin;equip=Shadowspear#${spear.num}@${pal.num}`,
+      `the line keeps the user's order, got "${win.LineBuild.encodeLine(st().plan)}"`);
+  await win.commitLine(); await settle(win);
+  for (let i = 0; i < 6; i++) {
+    const pick = win.document.querySelector('#decpanel .varpick');
+    if (!pick) break;
+    pick.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await settle(win);
+  }
+  chk(!S(win).hadReject, 'the cast-then-equip line is ACCEPTED by the engine');
+  const bf = (st().decision && st().decision.me && st().decision.me.battlefield) || [];
+  const eq = bf.find(p => p.name === 'Shadowspear');
+  chk(eq && eq.attached_to === pal.num,
+      `Shadowspear is ATTACHED to the Paladin after the commit (attached_to=${eq && eq.attached_to}, Paladin #${pal.num})`);
+  return fails;
+}
+
 // Equipping decided FROM HAND (USER 2026-09-01: "Ideally we would allow equipping to be decided
 // from hand or by dragging the equipment on the field. That would mean two operations, playing it
 // plus equipping."). The engine has always enumerated the pair as ONE plan ("cast: Bonesplitter,
@@ -2198,6 +2250,14 @@ async function testColorlessFirstTapOrder() {
     if (S.plan.length !== 1) { oFails.push(`plan grew to ${S.plan.length} entries on re-click`); }
     if (oFails.length) { anyFail = true; console.log(`\u2717 equip all free (single action): ${oFails.length} fail`); oFails.forEach(m=>console.log('  - '+m)); }
     else { console.log('\u2713 equip all free is ONE action when the engine offers it (free_equip_all preferred over free_equips; encodes equipallfree=<host>)'); }
+  }
+  // Equip onto a creature whose cast is queued earlier in the same line (the shipped v3 list).
+  {
+    let eqFails;
+    try { eqFails = await testEquipQueuedHost(); }
+    catch (e) { console.error(`✗ equip queued host: harness error: ${e.stack || e}`); process.exit(2); }
+    if (eqFails.length) { anyFail = true; console.log(`✗ equip queued host: ${eqFails.length} fail`); eqFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ equip queued host (v3: a hand creature is a host only once its cast is queued; cast-then-equip commits attached)'); }
   }
   // Equipping decided from HAND: one drop queues the cast AND the equip (needs a real game walk).
   {
