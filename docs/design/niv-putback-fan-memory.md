@@ -83,7 +83,76 @@ once). The traced run shows the shape -- all of them a leaf rollout's nested sol
 A list is several GB, so no cache cap or thread count BOUNDS it; fewer threads only lowers the odds.
 (Discovery throughput: ~5/s at 12 threads against ~6/s at 24 -- these rollouts are bound by the copying.)
 
-## The real fix (DEFERRED -- needs the USER)
+## FIXED: the lazy put-back block (MTG_PB_LAZY_CANDS, DEFAULT ON; =0 materialises every clone)
+
+Shape 1 of the three below, 2026-10-22 (the orchestrator's call: a sound identity fold that changes no
+result is ours to land). Code: `PbLazyLayout` / `CandSeq` / `PbAxesAndTwins` in src/ai/TurnSolver.cpp.
+
+- **The identity.** A put-back clone is its base with `putback_choice = k` and `putback_group` = the fan's
+  id. Every later axis skips it except four (the Lackey put, sac-land target, sac victim and fresh-mint
+  release axes, whose base-only filters predate the put-back axis); before one of those runs, if a fan's
+  base passes its filter, the block is put back into the list at its own position. The only later writes
+  are the end-of-axes `bp_wave0` clear and, on a soulbond deck, a decline twin appended in list order. So
+  the full list is exactly `[L0..e0) [clones, fan by fan] [L e0..t_at) [the clones' twins] [L t_at..)` and
+  each index is served from `L` (the list without them) or synthesised from its fan's prototype.
+- **Where.** Requested by the two search hosts' own enumerations: `SolveWithLookahead` (every giant list
+  in the d1 b1 heap profile -- the leaf rollout's searched turns) and `FSLineWin` (the d5 search's
+  interior nodes: discovery's remaining 30 GB spike was its T5 lists of 2.4M clones, `rollout_nest=0
+  fsline_nest=3`). Threaded through `EnumeratePlansWithLand` -> uncached -> body -> the axes and the twin
+  step. FSLineWin also ORDERS its list (the `bp_self` stamp, `MoveOrderPlans`, the `bp_base` remap, the
+  ID-hint rotation): on a lazy list those run on full-list indices (`CandOrder`: a permutation plus the
+  two fields of the synthesised entries), the real entries edited in place exactly as before;
+  `MoveOrderLess` reads only fields a clone shares with its prototype.
+- **The memo.** The enumeration memo (`MTG_ENUM_MEMO`, default ON -- its banner still says off) stores a
+  lazy entry, priced as the full list (`PbLazyListBytes`), hands it back lazy to a lazy caller and
+  materialised to any other.
+- **Consumers.** The candidate loop runs over full-list indices (`ci` replaces `&plan - candidates.data()`);
+  the wave walker takes a `CandSeq` (implicit from a vector, so its other hosts are unchanged); the
+  escalation pool reads through it. A clone the put-back fold declines is decided UNBUILT: every earlier skip reads
+  only fields it shares with its prototype, then `PutBackFoldMemo::DeclinesKey(group, rank)`. Whole-list
+  consumers not written against the view (combat-pin share, put-bounce / ETB / ETB-counter folds, EDF
+  combo shortcut, land-deferral filter, census and dump diagnostics) materialise first; none is live on a
+  Brainstorm deck today (`materialised_on_demand=0` in every run below).
+- **Verify.** `MTG_PB_LAZY_CANDS_VERIFY=1` runs the axes and the twin step again, in full, on the SAME
+  input list (fan counter rewound) and compares every index with `Plan::operator==`; in FSLineWin it also
+  orders a materialised copy with the vector code and compares every position. (Comparing against a
+  second whole enumeration of the state is NOT a valid check: two enumerations of one state can differ by
+  breakpoint-cache residency, and a memo hit can serve a list made from a state with the same key but a
+  different library order beneath the top -- `PutBackAxisWidth` reads the top cards. Both are
+  pre-existing and independent of this fold; the first attempt at the verifier tripped on them.)
+
+**Proof** (commits a19b633e6.. -> 109eec0b0 on niv-rss; Release binary; 47 GB box, normal RSS cap 35.28 GB):
+
+| run | before (1aa6cc32a) | after (109eec0b0) |
+|---|---|---|
+| d1 b1 scorer arm, 48 openers x R=24, 24 threads | dies at the cap in 48 s | completes in 131 s, **peak 2.72 GB**; labels and work units (83,489,728) identical to the 12-thread pre-fold run |
+| equivalence discovery, d5 b20, 7,600 rollouts, 20 threads | dies at ~30% (39.6-40.1 GB) | completes (3,257 s on a shared box), **peak 15.05 GB**, K = 16 (19 raw) |
+
+- Lazy lists in that discovery: 2,183,393; clones never materialised: 1,300,159,245; materialised on demand: 0.
+- Byte identity: scorer labels and units identical lazy on/off at d1 b1 and d5 b20 (48 openers x R=2);
+  VERIFY 482,564 + 2,156,754 lists / 5.80M + 32.2M entries, 0 mismatches; mtg-test 1910/1910; smoke ALL
+  PASS (306 scenarios, 148 jobs); `--overnight --deck=niv,niv2hg` ALL PASS (16 of 16 rows match GT);
+  300 held-out Niv games (d3 b10 x150 @ seed 67000, d5 b20 x100 @ 68000, 2HG d5 b20 x50 @ 69000): play
+  digests and averages identical lazy off / on / verify, VERIFY 5,292,730 lists / 170.6M entries, 0
+  mismatches; summed game time 4,037 s off vs 3,067 s on (-24%); the full regression tier is run when this lands
+  with the Niv package on the combined tree.
+- Before this fold, with only SolveWithLookahead lazy (c9a3958a1): the d1 b1 arm peaked at 3.58 GB but
+  discovery still reached 30.3 GB -- FSLineWin's interior lists (above).
+
+**Work units under a BINDING plan pool (the one residual).** In the 300-game A/B the units matched on two
+jobs and differed by 13 of 52,941,644 on d3 b10 (play digest identical). Both arms logged plan-pool
+refusals (`[determinism] WARNING`: 1,398 off, 1,443 on); with the pool raised to 8 GB
+(`MTG_PLAN_CACHE_KB=8388608`; 97 / 14 refusals left) both arms give exactly 52,941,644. The channel is the enumeration memo's
+admission price: a lazy entry is priced by `PbLazyListBytes`, which counts every entry the full list
+holds but not the full VECTOR's growth slack (the list doubles its capacity at the first insert after
+the clone block, up to ~one Plan per entry), so near a full pool a lazy entry is admitted where the full
+one was refused, a later lookup hits instead of recomputing, and the work it charges differs. That can
+in principle move budgeted play at a start-gate edge -- the same class as the pool-binding
+nondeterminism the engine already warns about (the GT tiers bind too: smoke 12 refusals, Niv overnight
+rows 5,698, digests stable). Making the price exact means replaying the full list's capacity growth
+(a shadow of the insert sequence after the clone block); not done here.
+
+## The fix shapes considered (record)
 
 Three shapes; each removes the materialisation (or most of it):
 
@@ -110,5 +179,3 @@ Three shapes; each removes the materialisation (or most of it):
    through the reference" pattern would leak the write into the copy, so it needs that audit and a full
    suite pass.
 
-Until one of them lands, Niv's mulligan generation cannot run: its settings screen and discovery reach
-these boards deterministically.
