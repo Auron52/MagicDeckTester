@@ -72335,6 +72335,26 @@ static void AxisTrace(const char* stage, const GameState& state, const std::vect
 
 // MTG_LOOKTOP_FLIP_FOLD (default ON, =0 restores the {0,1} land fan): see the look-top pin axis below.
 static bool LookTopFlipFoldOn() { static const bool on = EnvOn("MTG_LOOKTOP_FLIP_FOLD", true); return on; }
+// MTG_ROLLOUT_FAN_NARROW (default ON, =0 restores the full fan in playouts): inside the full-depth search's
+// TAIL ROLLOUT (the SimulateToEnd beyond the horizon, armed by RolloutNarrowScope at the leaf sites only)
+// skip the library-top-reader position twins and the look-top pin fan. A playout-policy change: the
+// SolveWithLookahead root's own rollouts (sub_depth > 0, inside the window) are never armed, so every
+// in-window enumeration stays whole. Armed for the WHOLE rollout, so a plan chosen in a narrowed turn is
+// applied against the same narrowed continuation lists. Every cache that can hold a list or an answer
+// computed under it folds the flag into its key (enum memo m2 host, searched-m2 memo, rollout-m1 memo,
+// breakpoint enum cache, the leaf TT); the m1 enum host bypasses its memo. (MTG_BP_NSKIP_GLOBAL, opt-in and
+// unbudgeted-only, does not fold it.) Measured: docs/design/lfe-plan-fan-explosion.md option 5.
+static thread_local bool t_rollout_narrow = false;
+static bool RolloutFanNarrowOn() { static const bool on = EnvOn("MTG_ROLLOUT_FAN_NARROW", true); return on; }
+struct RolloutNarrowScope
+{
+    bool prev;
+    RolloutNarrowScope() : prev(t_rollout_narrow) { if (RolloutFanNarrowOn()) { t_rollout_narrow = true; } }
+    ~RolloutNarrowScope() { t_rollout_narrow = prev; }
+    RolloutNarrowScope(const RolloutNarrowScope&) = delete;
+    RolloutNarrowScope& operator=(const RolloutNarrowScope&) = delete;
+};
+static constexpr uint64_t kRolloutNarrowTag = 0x7A11;
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all, bool idle_pass = false,
                                   PbLazyLayout* pb_lazy = nullptr)
@@ -75016,7 +75036,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         const bool acts_at_end = ResolveProvider(state).LandEntrySpotsRule(state)
                               && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LandPick);
         AxisTrace("pre-actslot", state, all);
-        if (!cont_axes_only && !acts_at_end)
+        if (!cont_axes_only && !acts_at_end && !t_rollout_narrow)
         {
             std::vector<TurnSolver::Plan> twins;
             for (const TurnSolver::Plan& p : all)
@@ -75687,7 +75707,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // "which order" interact and the tutor axis's additivity argument no longer holds for the order;
     // the cross product is bounded by the tutor width. Human play never fans: the human answers the
     // resolution-time `dig` prompts. Gated on the deck constant (one bool test for every other deck).
-    if (!HumanPlayActive() && state.deck_has_look_top_watcher)
+    if (!HumanPlayActive() && state.deck_has_look_top_watcher && !t_rollout_narrow)
     {
         constexpr std::size_t kLookTopProductCap = 16;
         // A base plan, or a pure tutor-target variant (`tutor_variant`), and nothing else: the other
@@ -78196,7 +78216,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                       // frames that do (2026-10-20: a cached outer list served inside the walk handed it
                       // its own route plan back).
                       && !AlchemistComboRouteInProgress()
-                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
+                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0)
+                      && !t_rollout_narrow;
     if (!memo_ok)
     {
         if (enummemo::StatsOn() && enummemo::Enabled() && !HumanPlayActive())
@@ -78437,6 +78458,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         // Same suppress-flag split as the m1 host (the fresh axis is m1-only, no fold needed).
         if (g_condemn_suppress) { Fold(k, 0xC5B9); }
     }
+    if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
     auto it = cache.find(k);
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
     {
@@ -80407,6 +80429,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         // canon the multiset key must not share values across permuted states -- leaf-verify caught
         // cached=8/fresh=7 on mirrorwing gi=363 (a must-find win silently lost). Order-exact key.
         if (CanonSimKeyOn()) { Fold(key, FsOrderSig(state)); }
+        if (t_rollout_narrow) { Fold(key, kRolloutNarrowTag); }
         PROF_INC(tt_lookups); ++g_tt_look_n;
         const int* cached = tt->Lookup(key);
         if (cached != nullptr)
@@ -84492,6 +84515,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     0xB1D0ULL + static_cast<uint64_t>(k));
                 bl.ActivePlayer().library.Shuffle(bsalt);
                 bl.shuffle_salt_search = bsalt;
+                const RolloutNarrowScope _narrow;   // beyond the horizon: see MTG_ROLLOUT_FAN_NARROW
                 sum += SimulateToEnd(std::move(bl), EffectiveFdLeafDepth(), max_turns, budget, max_turns + 1,
                                      second_main, nullptr);
             }
@@ -84501,7 +84525,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             return { w, {} };
         }
         GameState leaf = state;
-        int w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
+        int w;
+        {
+            const RolloutNarrowScope _narrow;   // the tail rollout beyond the horizon: see MTG_ROLLOUT_FAN_NARROW
+            w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
+        }
         g_fs_leaf_wt_sum += w;
         return { w, {} };
     }
@@ -94339,6 +94367,7 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     // (its fresh esc_tt guards the TT but not this thread_local cache).
     static const bool s_hosttag_m2s = EnvOn("MTG_ENUM_MEMO_HOSTTAG", true);
     if (s_hosttag_m2s && g_condemn_suppress) { Fold(k, 0xC5B9); }
+    if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }
     auto& cache = solvememo::t_m2cache;
     auto it = cache.find(k);
     // MTG_LEAF_KILL_ONLY (see LeafKillOnlyOn): a kill-only solve's plan lives under its own namespace;
@@ -94522,6 +94551,7 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
     Fold(k, (g_force_heuristic_leaf ? 1u : 0u) | (g_force_value_leaf ? 2u : 0u)
               | (g_force_constant_leaf ? 4u : 0u));
     if (g_condemn_suppress) { Fold(k, 0xC5B9); }
+    if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }
     auto& cache = m1memo::t_cache;
     if (m1memo::t_epoch != g_decision_epoch)
     {
@@ -95412,6 +95442,7 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
             }
         }
     }
+    if (t_rollout_narrow) { Fold(key, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
     *out = key;
     return true;
 }

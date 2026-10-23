@@ -64,7 +64,7 @@ the s70060 list 806,356 -> 567,926 plans with the identical distinct-state set (
 (seeds 70000-70199) at d3 b10 and d5 b20: 400/400 identical win turns, peak RSS 4.5 -> 1.1 GB (d3) and
 4.3 -> 3.1 GB (d5); the time twin 7:24 -> 6:00. It does NOT save the monster (still > 6 GB at ~8 s).
 
-## 5. Options for the remaining explosion (USER decision; nothing below is implemented)
+## 5. Options for the remaining explosion (USER decision; option 5 landed default ON 2026-10-23, the rest not implemented)
 
 Constraints that bind every option: no greedy pick inside the search window; a budget may re-price work
 but never make a line unfindable at large budget; a lossy narrowing needs a held-out A/B and the USER.
@@ -108,6 +108,33 @@ but never make a line unfindable at large budget; a lossy narrowing needs a held
    scale (and the d8 b0 check of each slower game) is the next step IF the USER takes this route. Caveat:
    the breakpoint cache can still carry a narrowed continuation list out of the playout (the experiment
    bypasses only the enum memo).
+   **HELD-OUT A/B (2026-10-23, 3,000 paired games, `logs/lfe/opt5_ab/`):** fresh seeds 80000+gi (d3 b10) and
+   90000+gi (d5 b20), 1,500 games each, the patched binary with the flag 0 vs 1 (one pooled batch per arm,
+   12 cores each): d3 22 faster / 11 slower, net **-11** turns (avg 4.5433 -> 4.5360), units -23%; d5 32
+   faster / 16 slower, net **-17** (4.4980 -> 4.4867), units -18%, wall -27%. No game unfinished in either
+   arm. **d8 b0 check of all 27 slower games (ON binary):** 26 reach the OFF arm's turn or better; d5 gi1019
+   (OFF T4 at d5 b20) is T5 at d8 b0 with the flag OFF as well as ON (13.7 s each, identical), so its T4 is
+   a budgeted-search accident the flag does not cause. Pooled over all three samples: 4,075 games, net -33.
+   **AUDIT BEFORE LANDING found the experiment unsound in three ways**, so the A/B above measured a patch
+   that was NOT shipped: (a) RolloutPreCombatSolve is also reached from the SolveWithLookahead root's own
+   rollouts at `sub_depth > 0`, which are INSIDE the window (greedywindow::Frame(depth), `searched =
+   !in_rollout || depth > 0`), so it narrowed in-window enumerations in that mode (the full-depth
+   no-win FALLBACK and non-full-depth play); (b) narrowed lists leaked through caches that did not key on
+   the flag (breakpoint enum cache bpcache::t_plans, the searched-m2 memo, the m2 enum-memo host, the leaf
+   TT when it is game-persistent); (c) only the pre-combat solve was narrowed, so the same rollout turn's
+   pre-plan apply / combat / m2 re-derived continuation lists UN-narrowed -- a `bp_choice` index chosen
+   against a narrowed list could be replayed against a different one.
+   **SHIPPED SHAPE (rescoped):** `RolloutNarrowScope` arms the flag around the full-depth search's TAIL
+   ROLLOUT only (the two `SimulateToEnd(..., EffectiveFdLeafDepth(), ...)` leaf sites -- "tail estimate
+   beyond the horizon"), for the WHOLE rollout; the SolveWithLookahead root's rollouts are never armed.
+   Every reachable cache folds the flag into its key (m2 enum memo, searched-m2 memo, rollout-m1 memo,
+   breakpoint enum key -- which bpcanon shares -- and the leaf TT); the m1 enum host still bypasses its
+   memo. Not covered: `MTG_BP_NSKIP_GLOBAL` (opt-in, unbudgeted-only). Repros unchanged: monster T5 2.4 s
+   1.17 GB, time twin T6 30.7 s 1.55 GB (so the explosion lived in the tail rollouts).
+   **Fresh held-out A/B of the shipped shape (`logs/lfe/opt5b_ab/`, seeds 100000+gi d3 b10 / 110000+gi d5
+   b20, 1,500 games each):** d3 25 faster / 19 slower, net **-5**; d5 37 faster / 21 slower, net **-16**.
+   The flag-OFF arm hit the 10 GB RSS cap at d5 gi~1366 (the explosion itself) and was completed by a
+   second OFF batch at a 20 GB cap over every game it had not streamed.
 
 ## 6. Instruments added on the way (all inert unless set)
 

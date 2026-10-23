@@ -553,8 +553,14 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
   beyond the horizon) bounds both repros (18.9 GB -> 1.2 GB; 9 min -> 28 s) and is quality-neutral-to-better on
   1,075 paired games (400 fresh: net 0; 675 vs the accepted suite GT: net -5 turns), -17-20% units. Recommendation: option 5 as the quick unblock for
   the mulligan profile, validated by a large held-out A/B first (the patch is in the design doc), then
-  option 1 (staged look-top answers) for the searched nodes. Default until answered: nothing further
-  changed; the deck's mulligan profile waits.
+  option 1 (staged look-top answers) for the searched nodes. **TAKEN 2026-10-23 (agent, while the USER was away;
+  theirs to overturn):** option 5 LANDED default ON (`MTG_ROLLOUT_FAN_NARROW=0` reverts), RESCOPED after a
+  pre-landing audit to the full-depth search's tail rollout only, for the whole rollout, with the flag folded
+  into every cache that could carry a narrowed list (the experiment also narrowed in-window SolveWithLookahead
+  rollouts and leaked through caches -- details in the design doc). Fresh held-out A/B of the shipped shape,
+  3,000 paired games: d3 b10 net -5, d5 b20 net -16; 39 of 40 slower games recover at d8 b0 and the 40th (d5
+  gi356) is T5 at d8 b0 with the flag off too. Smoke: only elementals keys moved, net faster, both slower
+  games churn. Option 1 for the SEARCHED nodes is still the USER's call. The mulligan profile proceeds.
 - Q11. (2026-10-23) The deck has NO authored cast order (creature ties fall to hand order, so Reef /
   Soulstoke before the Elementals cast with them is not guaranteed). Do you want to author one (e.g. Reef
   and Soulstoke first, then Harbinger, then landfall bodies)? Default: generic order.
