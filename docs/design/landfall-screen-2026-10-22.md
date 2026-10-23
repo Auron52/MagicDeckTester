@@ -834,3 +834,40 @@ around D_t (C1 + 1 Titan -> 4th Cultivate), 20,000 games, centre D_t. Arms: 3rd 
 / a Wave / a Hydra; 4 Phylath for 2 Avenger or Avenger + Titan; 3rd Phylath + a Forest -> Mountain (red); 1
 Phylath (for a Titan or a Wave), 0 Phylath (for Titan + Wave); plus C1 and D_t_aw for reference. NSS bracket 12
 follows, then the non-clairvoyant nc7 (now also holding the 3- and 4-Phylath lists).
+
+## Non-clairvoyant bracket 11 — all of round 14 (`logs/landfall_screen/nss11.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Round 14's seeds, centre C1. base 5.8734; C1 -0.7597 vs shipped. vs C1: D_a_ap (Avenger -> 4th Cultivate +
+Avenger -> 3rd Phylath) **-0.0167**, D_t_aw -0.0138, D_t_tw -0.0120, D_t -0.0117, D_t_m -0.0112, D_a_tw -0.0100,
+D_a_tw_m -0.0092, D_a_aw -0.0076, D_a -0.0066, D_a_m -0.0053, D_aw -0.0030, **D_m (Mountain -> Forest) +0.0006**
+(se 0.002-0.0035). The 4th Cultivate holds without the shuffle; Mountain -> Forest is again nothing; the best arm
+is the one that adds a 3rd Phylath. These rounds trade threats for ramp, which the USER's goals below rule out
+as a direction, and they share the alias apparatus questioned below.
+
+## USER goals and constraints (2026-10-23, after round 14)
+
+* *"the deck owner mentioned to me that they felt like the deck was lacking in threats. I'm guessing part of the
+  reason is removal and another part draw variance. One of our top goals is to change that so there is some
+  redundancy."*, *"we cannot simulate removal, but we could determine how often we have backup"*, *"we want
+  higher threat density in the final list"*, *"All of our creatures are threats except arguably Titan and even
+  then it is a decent threat."* -> **the final list holds MORE creatures than the shipped list's 18**; trading a
+  threat for a Cultivate (C1 -> D_t) is the wrong direction, whatever the goldfish says (it has no removal).
+* *"Hydra replacing courser helps a bit, but may not be sufficient."*, *"Dropping Baloths for more Hydra is
+  probably okay, but that is also why I am a bit suspicious of the Phylath replacement."*
+* **Haunted Fengraf stays**: *"That is a way to get back a threat. Especially when you can search it up with
+  Titan."* Radiant Fountain only with care: *"there are definitely games where titan fetching that Fountain could
+  be important. Less common likely than the Fengraf case, but still a real concern."* -> Wolf Run's slot is
+  re-opened: *"We should take a look at the cost of dropping other lands or other things."* The goldfish values
+  neither card (it never kills a creature and never deals damage), so their cost is unmeasured by construction.
+
+## The keep-table alias question
+
+Every Hydra arm since round 1 rode Phylath's keep-table bucket (`arm_alias` Hydra -> Phylath). The shipped
+table buckets by card name (`decks/Landfall/Landfall.buckets.json`), so an arm with 4 Hydra and 0 Phylath fills
+that bucket exactly as the shipped 4 Phylath did, while 4 Hydra + 2-4 Phylath shows it 6-8 "Phylaths" and
+keeps / bottoms a hand of Hydras as if it were a hand of 6-drops. That would flatter "Hydra replaces Phylath"
+-- round 2's 0.12-0.14 t penalty for keeping 4 Phylath is the reading in question.
+**Diagnostic (`chain13.sh`, seed 9300000):** U0 = shipped + 4 Hydra for 2 Courser + 2 Baloths (Phylath 4; lands
+unchanged), U0_p3 / U0_p2 / U0_p0 = Phylath 3 / 2 / 0, measured under x1 (Hydra -> Phylath bucket, as before),
+x2 (Hydra -> Courser bucket, a 3-drop for a 3-drop) and x3 (no alias: the table is dropped on every arm,
+heuristic mulligan, symmetric). If the Phylath-count deltas move between x1 and x2 / x3, the alias biased them.
