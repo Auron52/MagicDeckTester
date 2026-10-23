@@ -734,17 +734,24 @@ TEST_CASE("Niv Brainstorm MIDDLE: the middle list -- fast path == reference, dee
                     const PutBackPick p = PutBackPickAt(s, 0, n, k);
                     const std::vector<int>& want = ref[static_cast<std::size_t>(std::min(k, static_cast<int>(ref.size()) - 1))];
                     REQUIRE(p.take == static_cast<int>(want.size()));
-                    for (int j = 0; j < p.take; ++j) { CHECK(p.idx[j] == want[static_cast<std::size_t>(j)]); }
+                    // Same CLASS (a one-candidate list is read off the class's first copy by the fast path
+                    // and off the per-card order by the reference -- the resolver takes the last copy anyway).
+                    for (int j = 0; j < p.take; ++j)
+                    {
+                        CHECK(PutBackClassKey(s, s.players[0].hand[static_cast<std::size_t>(p.idx[j])])
+                              == PutBackClassKey(s, s.players[0].hand[static_cast<std::size_t>(want[static_cast<std::size_t>(j)])]));
+                    }
                     ++checked;
                 }
                 // Rank 0 = the per-card default; with two cards every candidate keeps its deepest card and the
                 // tops are pairwise distinct classes.
                 const std::vector<int> r = NivProvNb().PutBackRanking(s, 0);
                 int def[2];
+                auto key = [&](int hi) { return PutBackClassKey(s, s.players[0].hand[static_cast<std::size_t>(hi)]); };
                 if (PutBackPerCardDefault(s.players[0], r, first.take, def) == first.take)
                 {
-                    CHECK(first.idx[0] == def[first.take - 1]);
-                    if (first.take == 2) { CHECK(first.idx[1] == def[0]); }
+                    CHECK(key(first.idx[0]) == key(def[first.take - 1]));
+                    if (first.take == 2) { CHECK(key(first.idx[1]) == key(def[0])); }
                 }
                 for (std::size_t a = 0; a < ref.size(); ++a)
                 {
