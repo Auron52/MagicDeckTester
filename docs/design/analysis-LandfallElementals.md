@@ -244,6 +244,49 @@ Somberwald Sage's creature-only float). This confirms the 'possible Angels hole'
 flagged UNVERIFIED in Stage 2.
 Final binary (8c684037b): unit 1596/1596, scenarios 237/237; tiers running.
 
+## Rebased onto origin and PUSHED (2026-10-23)
+USER 2026-10-22: pull the latest and push all of this to the shared branch; the open questions get
+answered later, on a less busy machine that can implement the answers. The 26 local commits were rebased
+over 430 upstream commits (pre-rebase branch kept as `lfe-analysis-prerebase-0f5af89de`, local only).
+Overlaps that needed real merging, not a side pick:
+- **Mossborn Hydra** landed upstream 2026-10-22 as a Landfall SCREENING candidate (same param names).
+  Upstream's engine (`DoublePlusCounters`, the as-enters block + `EntersWithPreappliedScope`) and card
+  entry are kept; this branch's duplicate entry and its second as-enters application are dropped.
+- **Provider signature** narrowed to Risen Reef's `enters_look_top_land_or_hand` + Smokebraider's
+  `mana_only_subtype_abilities` (both carried by no other card): `landfall_double_self_counters` would now
+  pull a Landfall list that adopts Mossborn onto this provider.
+- **Self-only sac victim** (d23208168): upstream fixed the same bug; its version is kept.
+- **Duplicate-use filter**: upstream's compact path (`DupCompactReject`, `MTG_DUP_SRC_SKIP`) gave bit 8 to
+  the Pod entry, which `kDupPitch` used; `kDupPitch` moved to bit 9 (`kDupCopies` to 10) and the compact
+  path got the pitch clause (`DupPitchReject`, shared with the full filter). Without it the default path
+  would have skipped the Fury pitch guard.
+- **`sac_at_end_step`** became a 1-bit field beside Vampires' bit-fields, so `sizeof(Permanent)` stays 304.
+- **Fast plan signature** (`PlanSignatureFast`, `MTG_PLAN_SIG_FAST`): the Fury `#EX` pitch token was
+  missing there (two pitch evokes collapsed to one plan; test_lfe_fury caught it). Fixed; every upstream
+  `*_VERIFY` diagnostic armed over 60 elementals d3 games: 0 mismatches.
+- **CreatureAbilityPayScope(source card)** carried onto upstream's reworked Vampires / Alchemist ability
+  apply sites (executor + rollout), and the put-from-hand hold onto upstream's ActivateUntap hold.
+Rebased binary: unit 1995/1995, scenarios 314/314. Smoke: searched slower 0, faster 5, play-changed 8
+(angels / pirates / soldiers, the same decks the shared fixes moved before); d0 faster 1. Regression:
+searched slower 0 / faster 0 / play-changed 13 (same-score), d0 one +1 and one -1 in angels d0 (net 0,
+the Giada mana fix; accepted with a note); 658 references replay (0 drift), both suboptimal references
+still beaten. Smoke + regression GT accepted on this binary; gt_logs consistent (1002).
+**Overnight:** no elementals overnight GT exists; per the repo rule it is the next periodic overnight
+run's to accept. The 2026-10-19 classification of 49 slower overnight games compared against a baseline
+this rebase superseded, so it is moot.
+
+### HAND-OFF: what is still owed (for whichever machine picks this up)
+1. The user's answers to Q1-Q9 below and the discard proposal (Stage 5i) -- implement what they decide.
+2. Stage 5c2 `scripts/leaf_tiebreak_check.py`, 5h `scripts/audit_viewer_decisions.py` (with the sweep),
+   full `scripts/verify_deck.py decks/LandfallElementals`.
+3. Record the `## Claude-play sweep` section (20 games, seeds 61000-61019: 16 tie, 2 Claude faster
+   (61002, 61016: plan-space gaps), 1 Claude slower (61003: the Smokebraider payer bug) -- every flag
+   fixed in convergence loop 1 above), then a small confirmation sweep on fresh seeds.
+4. Stage 6a disclosure, then the mulligan profile (USER order: profile -> mulligan -> value leaf).
+5. The user's original `decks/LandfallElementals/LandfallElementals2.cod` (byte-identical to the shipped
+   `LandfallElementals.cod` modulo CRLF) sits untracked in the primary checkout. USER 2026-10-22: the
+   final name must not carry the 2 -- move that copy aside (never delete) once the primary is updated.
+
 ## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
 Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
 STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout
@@ -295,10 +338,8 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
   d5 2x20 b20; overnight d0 4x2000, d3 4x250, d5 4x150.
 
 ## Open questions for the user (collected, never blocking)
-- Q1. Deck file name: the shipped copy is `LandfallElementals.cod` (the folder's name). Your original
-  `LandfallElementals2.cod` is still untracked in the primary checkout; once the tracked copy lands
-  there, should the `...2.cod` be removed (the viewer would otherwise see two lists in one folder)?
-  Default: leave it in place until you say.
+- Q1. ANSWERED (USER 2026-10-22): the final file has no 2 in its name -- `LandfallElementals.cod`; the
+  untracked `...2.cod` in the primary is moved aside once the primary carries the tracked copy.
 - Q2. `min_playable` is 0 in the generated profile (the skill suggests >= 1 for multi-colour decks; most
   decks ship 0 and Galadriel took 1 with its required piece). Mulligan territory -> yours. Default: as
   generated.
