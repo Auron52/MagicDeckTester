@@ -456,3 +456,29 @@ it). The second Titan cut is worth another -0.026 on top (L4 vs L1), the same si
 list's most expendable expensive card once it has 8+ one-mana dorks. With the Titans down to two, Cultivate,
 Khalni and Rampant Growth are interchangeable with a dork to within ~0.01 (L4 ~ L7 ~ L6/L5 > L8). **Leader:
 L7 / L4, about -0.97 t vs the shipped list** (T7+ 6.6% -> 0.9-1.0%). Round 9 follows the Titan direction.
+
+## Round 9 — single changes around M0 = L7 (`logs/landfall_screen/r9.json`, seed 8500000)
+
+20,000 games, centre M0 (k = n; fall-through 0.49%). base 5.7345; **M0 4.7694, -0.9652 vs base**; K0 +0.0845
+behind M0 (round 8: -0.081, replicates). M0 = 4 Hydra, 3 Phylath, 4 Genesis Wave, 1 Craterhoof, 1 Terastodon,
+3 Avenger, 2 Titan, 4 Llanowar + 4 Mystic + 1 Fyndhorn, 4 Search, 2 Rampant Growth, 2 Khalni; 25 lands
+(14 Forest, 1 Mountain, 3 Wilds, 4 Myriad, Gruul Turf, Kessig Wolf Run, Terramorphic).
+
+| arm | change from M0 | vs M0 | se | T7+ |
+|---|---|---|---|---|
+| M_av2 | Avenger -> Fyndhorn | **-0.0256** | 0.0020 | 1.04% |
+| M_t0 | both Titans -> 2 Fyndhorn | -0.0204 | 0.0026 | 1.13% |
+| M_t1 | Titan -> Fyndhorn | -0.0141 | 0.0019 | 1.12% |
+| M_k0 | both Khalni -> 2 Fyndhorn | -0.0041 | 0.0018 | 1.12% |
+| M_k1 | Khalni -> Fyndhorn | -0.0029 | 0.0013 | 1.12% |
+| M_f13 | Forest -> Fyndhorn | +0.0058 | 0.0022 | 1.21% |
+| M_rg1 | Rampant Growth -> Fyndhorn | +0.0073 | 0.0018 | 1.31% |
+| M_s3 | Search for Tomorrow -> Fyndhorn | +0.0081 | 0.0019 | 1.34% |
+| M_w3 | Genesis Wave -> 4th Phylath | +0.0104 | 0.0018 | 1.24% |
+| M_t1p | Titan -> 4th Phylath | +0.0157 | 0.0019 | 1.29% |
+
+Reading: it is the DORK that gains, not the Titan cut (Titan -> Phylath is worse; Titan -> Fyndhorn better).
+Every six-drop (Avenger, Titan) is now worth less than a one-mana {G} creature; the one-mana ramp spells
+(Search, Rampant Growth) and the 25th land are not. **A goldfish caveat that grows with every dork added:** the
+passive opponent never removes or blocks a creature, so a mana creature here is at its most valuable; a
+real opponent's removal would tax a 10-dork list that the goldfish never charges.
