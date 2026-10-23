@@ -82,7 +82,14 @@ but never make a line unfindable at large budget; a lossy narrowing needs a held
 3. **Size land-search pins per ordinal** by the sources that can consume that ordinal in resolution
    order (today every ordinal gets the union of every source's value list). Sound if a failed crack
    shifting later ordinals is handled (size each ordinal by the union over itself and LATER sources).
-   Targets the 77% land-search redundancy.
+   Targets the 77% land-search redundancy. **MEASURED NULL (2026-10-23):** implemented as a suffix union
+   per ordinal (`MTG_LSEARCH_PIN_ORDINAL`, not shipped; patch kept in the agent worktree at
+   `logs/fold/proposal3_per_ordinal_sizing.patch`) it removes NOTHING on either repro (567,926 plans
+   on/off, identical state set; the monster's stage counts unchanged): Terramorphic / Myriad each offer one
+   pick per available basic type, so every source's list is already the same width. The 77% comes from
+   resolution-time CLAMPS (a later crack sees fewer picks after an earlier one took the only Island) --
+   not knowable at enumeration. It also had an open soundness hole (a FAILED own pre-cast crack consumes
+   no ordinal, so a continuation's queued crack shifts onto it).
 4. **Bound the act-slot twins x tutor x land_slot cross product.** With a Reef out every Elemental entrant
    is a library-top reader, so no identity fold collapses the positions; it needs staging (as in 1) or a
    measured narrowing -- the USER's call.
