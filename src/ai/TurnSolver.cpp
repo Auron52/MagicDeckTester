@@ -27084,8 +27084,21 @@ static thread_local int g_bp_enum_depth = 0;
 // THE CANON FRONT DERIVATION's marker (see BpCanonFront): the g_bp_enum_depth at which the ONE
 // derivation that only needs its list's front() runs its axes, or -1. Set by BpDeriveContinuationList
 // for its own enumeration only and reset to -1 by every nested derivation (save/restore), so no list
-// stored anywhere is ever built under it. Read by the put-back axis alone.
+// stored anywhere is ever built under it. Read by the put-back and Ponder axes, and (BpFrontOnlyHere)
+// by the land-search pin and look-top pin axes.
 static thread_local int t_bp_front_only_depth = -1;
+// MTG_BP_CANON_FRONT_FANS (DEFAULT ON; =0 restores the full fans): the front-only derivation also skips
+// the land-search pin and look-top pin fans. Same argument as the put-back clones: each variant is a copy
+// of a base plan differing only in its pin list, appended after every base, so no verdict separates it
+// from its base and the stable ranking keeps it behind; front() is never one. LandfallElementals
+// 2026-10-23: with three or four Risen Reefs out every reveal is an unbranched breakpoint, and the canon
+// derived the whole pin product to read its front -- keep-gen rollouts of 400-990+ s at 1-2 GB each.
+static bool BpCanonFrontFansOn()
+{
+    static const bool v = EnvOn("MTG_BP_CANON_FRONT_FANS", true);
+    return v;
+}
+static bool BpFrontOnlyHere() { return BpCanonFrontFansOn() && t_bp_front_only_depth == g_bp_enum_depth; }
 
 // MTG_BP_DERIVE_METER (DEFAULT OFF -- it changes play; the USER's decision). A breakpoint-continuation
 // DERIVATION (BpDeriveContinuationList -> EnumeratePlansWithLand, under g_bp_enum_depth > 0) is an
@@ -75128,6 +75141,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         // (1) In-plan pins. Per ordinal a LIST of pin values (values_of), so a credited land-put cast
         //     fans only its restricted picks and a Karoo pick its bounce sub-choices; with neither,
         //     every list is exactly 0 .. width-1 and the variants are the old width fan's.
+        //     THE CANON FRONT DERIVATION skips them (BpFrontOnlyHere): each variant is its base with only
+        //     land_search_pins set, appended after every base, so it is never the front (see there).
+        if (!BpFrontOnlyHere())
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
@@ -75707,7 +75723,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // "which order" interact and the tutor axis's additivity argument no longer holds for the order;
     // the cross product is bounded by the tutor width. Human play never fans: the human answers the
     // resolution-time `dig` prompts. Gated on the deck constant (one bool test for every other deck).
-    if (!HumanPlayActive() && state.deck_has_look_top_watcher && !t_rollout_narrow)
+    // THE CANON FRONT DERIVATION skips this fan (BpFrontOnlyHere): every variant is its base with only
+    // look_top_pins set, appended after every base, so it is never the front.
+    if (!HumanPlayActive() && state.deck_has_look_top_watcher && !t_rollout_narrow && !BpFrontOnlyHere())
     {
         constexpr std::size_t kLookTopProductCap = 16;
         // A base plan, or a pure tutor-target variant (`tutor_variant`), and nothing else: the other
@@ -96488,6 +96506,9 @@ static bool BpCanonFrontOn()
 // Brainstorm or a Ponder keeps its caching, its units and its play byte for byte.
 static bool BpCanonFrontPays(const GameState& state)
 {
+    // A look-top watcher deck fans look-top pins (and, with a land search, land-search pins) inside the
+    // derivation, which the front-only route skips (BpFrontOnlyHere).
+    if (BpCanonFrontFansOn() && state.deck_has_look_top_watcher) { return true; }
     for (const Card& c : state.ActivePlayer().hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);

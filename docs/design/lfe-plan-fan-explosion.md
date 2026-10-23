@@ -141,6 +141,36 @@ but never make a line unfindable at large budget; a lossy narrowing needs a held
 `MTG_EQUIV_ONLY=<probe>:<card>` (one discovery rollout), `MTG_ENUM_HIWATER_KB` axis breakdown,
 `MTG_AXIS_TRACE=<min plans>` (stage counts while the list grows), `MTG_ENUM_DUPCENSUS=<min plans>`
 (distinct post-apply states + per-axis inert variants; prints and exits).
+Keep-gen RSS-cap aborts now list the rollouts IN FLIGHT as SLOW-ROLLOUT lines (5136dadca):
+`grep 'in flight' gen.log` feeds `MTG_KEEP_REPLAY_LIST` unchanged.
+
+## 7. The keep-gen RSS-cap loop (2026-10-23 PM) and the canon-front fans fold
+
+**Symptom.** The fresh mulligan generation at ffeb8f10a (d1 b1, K=21, 32 threads, 20 GB cap) aborted at the cap
+20 times in 4 h, each relaunch 4-75 min long, the journal gaining ~1.4 MB per 10-min cycle at the end. Baseline
+RSS after a resume is 8-9 GB (the cell tables); the rest was 4-11 Risen Reef rollouts in flight at 400-990 s each
+(healthy rollouts take < 1 s), never journaled, so every resume restarted them. Replayed alone on one thread one
+of them swung between 0.7 and 2.2 GB and was still running after an hour.
+
+**Layer 1: the canon derived the whole pin product to read one entry.** With three or four Reefs out every
+reveal is an UNBRANCHED breakpoint, and `BpUnbranchedCanon` -> `BpCanonFront` takes the front() of the
+continuation list there. The front-only derivation (which skips the put-back / Ponder clones) only armed when a
+put-back / reorder card was in hand, so this deck built the full list, land-search pins and look-top pins
+included, every time: on the replayed rollout 620 derivations over 300 ms (t6 main 1, enum depth 1, outside any
+playout, up to 381,711 plans) took 516 s of ~600 s. **Fold (`MTG_BP_CANON_FRONT_FANS`, default ON, =0 restores):**
+the front-only derivation also skips the land-search pin and look-top pin fans, and arms whenever the deck has a
+look-top watcher. Same argument as the put-back clones: each variant is a copy of a base differing only in its
+pin list, appended after every base, so no verdict separates it from its base and the stable ranking keeps it
+behind; derivations charge no units. Verified: smoke 149/149 byte-identical; 1,200 held-out games (seeds
+300000/310000/320000 + gi, d1 b1 / d3 b10 / d5 b20) identical digests AND units; `MTG_BP_CANON_FRONT_VERIFY=1`
+194,466 front-only derivations, 0 mismatches. Replays of the 11 stuck rollouts: 438 s -> 16-21 s and 990 s -> 173 s
+for the two that finish under a 1.7 GB per-process cap.
+
+**Layer 2 (OPEN, the USER's call -- section 5 option 1 / 4):** the other nine still exceed 1.7 GB, now in the
+OUTER turn-6 enumeration at the rollout's own searched decision: 160-300k plans before the look-top fan (about
+100k tutor variants and 100k land_slot twins over 7-cast plans), which the fan then multiplies. Option 5 does not
+reach it (that node is in the window at d1). The enumeration is uncharged, so at d1 b1 the decision builds
+millions of plans to score a few hundred.
 
 ## Appendix: the option-5 experiment patch (against 9711d6231; `MTG_ROLLOUT_FAN_NARROW=1` arms it)
 
