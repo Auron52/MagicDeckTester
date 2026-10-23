@@ -1133,3 +1133,34 @@ Backup odds = P(>=2 threats by T4/T5/T6 on the draw), P(>=3 by T6); 21 creatures
 * **Moraug is a real but small gain over Genesis Wave on its own (-0.024; Baloths there +0.033, so it is Moraug, not
   just a creature), and adds NOTHING beside four Cubs** (K0_mw -0.2627 against K0 -0.2632). With four Cubs the deck
   already wins before a six-drop's second combat matters.
+
+### nss15 — n2's first 10,000 games with `MTG_NO_SEARCH_SHUFFLE=1` (`logs/landfall_screen/nss15.json`)
+
+| arm | n2, same 10,000 games | nss15 | se | shift |
+|---|---|---|---|---|
+| K0_mw | -0.2657 | -0.3156 | 0.0067 | -0.050 |
+| **K0** (4 Cub for 4 Khalni) | -0.2657 | **-0.3121** | 0.0066 | -0.046 |
+| K_mix | -0.2397 | -0.2887 | 0.0063 | -0.049 |
+| K0_b2RG / K0_b2ST | -0.187 / -0.174 | -0.231 / -0.225 | ~0.008 | -0.044 / -0.051 |
+| K_c3 / K_c2 / K_c1 | -0.190 / -0.115 / -0.050 | -0.225 / -0.140 / -0.063 | 0.006 / 0.005 / 0.003 | -0.035 / -0.024 / -0.013 |
+| K_c2F2 | -0.1140 | -0.1490 | 0.0075 | -0.035 |
+| K_c2b2 | -0.0395 | -0.0509 | 0.0072 | -0.011 |
+| M_2W | -0.0260 | -0.0352 | 0.0026 | -0.009 |
+| W_b2 | +0.0337 | +0.0409 | 0.0022 | +0.007 |
+| K_F | +0.0695 | +0.0595 | 0.0088 | -0.010 |
+| K_b4_mw / K_b4 | +0.197 / +0.233 | +0.237 / +0.279 | ~0.009 | +0.040 / +0.046 |
+
+**Same order; every Cub arm gains a further 0.01-0.05 without the clairvoyant shuffle** (the Cub ladder reads
+-0.063 / -0.140 / -0.225 / -0.312 for 1-4), and the Baloths arms lose more. K0_mw against K0 is -0.0035 here and
++0.0005 in n2: Moraug beside four Cubs is within noise of nothing either way.
+
+## Where the screen stands (2026-10-23, end of the new-card rounds)
+
+* **Best list: K0 = U0 + 4 Scythecat Cub for the 4 Khalni Heart Expeditions** -- -1.03 t against the shipped list on
+  held-out seeds (bracket -0.263 / -0.312 against U0 with / without the search shuffle), 22 creatures, slow tail
+  halved. Cost over U0: $110 (U0 itself is 4 Mossborn Hydra over the shipped list, $55).
+* **Budget versions**: the Cub ladder is near-linear, so 1-3 Cubs in the Khalni slot keep 18% / 43% / 72% of it.
+* **No:** Scute Swarm (loses everywhere), Rampaging Baloths as the cheap threat (loses everywhere), Moraug beside
+  Cubs (nothing). **Small yes without Cubs:** 2 Moraug for 2 Genesis Wave (-0.024 / -0.039, $4).
+* **Kessig Wolf Run:** neutral to a small gain in Fountain's or a Mountain's slot (blocker value unmeasured).
+* Adoption (USER decision): mulligan keep table on the adopted list, then its value leaf.
