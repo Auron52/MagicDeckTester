@@ -163,6 +163,31 @@ journals and their backups) stay in the worker's worktree, which is on the persi
 is a human/agent step**: rebase it onto the branch, run smoke + regression, accept the GT it moves.
 Nothing is ever killed: `stop` takes effect between jobs.
 
+**Regenerations are never at lower settings than the incumbent** (USER 2026-10-23: *"Let's try to have
+them reasonably replace the existing one. If they use much lower settings they are all but guaranteed to
+fail."*). The old-vs-new A/B is the gate, so `mull_plan` reads the incumbent's own generation record
+(profile `effective_R`, raw `meta.R/depth/budget_ms`): R<=30 -> `fast`, R<=40 -> `complete`, above 40
+`complete` + the sanctioned cap pin `MTG_KEEP_ROLLOUTS=<R>` (burn/slivers/knights-era tables are R=60);
+depth and budget are each the HIGHER of the incumbent's and the deck's screened `mull_gen_*` (Goblins:
+incumbent d3 b10, screened d6 b6 -> d6 b10). The raised setting is written into the worker's worktree for
+the stage and restored afterwards, so landing never changes a deck's shipped setting; the plan is pinned in
+`inflight.json` so a resume cannot change R under a banked journal. `explain <deck>` prints the plan.
+`recipe_overrides` (USER) still wins. The value leaf needs nothing: `valueleaf.sh` has one fixed route, so a
+regeneration is at the incumbent's settings by construction.
+
+**A failed replacement is a VERDICT and marks the drift as addressed** (USER, same day: *"if a new table
+or value-leaf doesn't improve quality we still don't want to do it again"*). Every stage outcome that is a
+verdict -- `adopted`, `adopted-ungated`, `kept-incumbent` (mullgen's old-vs-new rejected the new table, or
+valueleaf.sh did not adopt its leaf) -- is appended to `test/artifact_ledger/<deck>.json` (one file per
+deck, so result branches never conflict) with the run id, the artifact identity (keep table: its `.gz`
+blob; leaf: its `eval_model` hash, so a `value_play` edit does not reset it), the frozen commit, the
+settings and the A/B delta, and it rides the result branch. A **verdict-only** branch changes no artifact,
+so it moves no play and needs no GT accept: land it as-is. From then on that artifact's drift is measured
+from the LATER of its adoption and its last verification, so it re-enters the queue only after play has
+drifted again since the attempt. Before the branch lands, its claim (`rejected`/`done` with a result
+branch) blocks a redo indefinitely; once landed (the claim's run id is in the ledger) the ledger governs.
+Outcomes that are not verdicts (`failed`, `refused`) are still retried after 14 days.
+
 **A `mullgen.sh` regeneration trap the worker works around (found while building this).** The driver
 decides REGENERATION vs FIRST VERSION with `[ -e <stem>.keepmodel.exhaustive.profile.json ]`, the PLAIN
 name, and every deck commits only the `.gz`. So `mullgen.sh run` on a committed deck (1) saves no
@@ -176,9 +201,9 @@ does) and in whatever made the new plain file live. Anyone who has hand-run a re
 which validation it ran.
 
 **Open questions (USER):**
-1. `mullgen_recipe` default is `fast` (the driver's own default, USER 2026-10-19). A table currently at R=40
-   regenerated at R=30 is a like-for-unlike swap that the old-vs-new A/B then judges; matching the
-   incumbent's R instead is the alternative. Per-deck `recipe_overrides` exist either way.
+1. ~~recipe fast vs match the incumbent~~ -- ANSWERED 2026-10-23: never below the incumbent (above).
+   Cost consequence: most shipped tables are R=40, so most regenerations are `complete`, and the R=60 ones
+   are dearer still; the queue does not project wall-clock before claiming.
 2. Should a keep-table regeneration always be followed by that deck's leaf (`leaf_follows_mulligan`)? It
    is exactly the pipeline-order axis, but it costs a leaf run per table, and the leaf is currently the
    weaker evaluator (USER 2026-10-18).

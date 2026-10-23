@@ -79,7 +79,6 @@ DEFAULT_CONFIG = {
     "branch": "phase-1-2-deck-analyzer",
     "min_drift": 0.02,
     "kind_weight": {"mulligan": 1.0, "valueleaf": 1.0},
-    "mullgen_recipe": "fast",
     "recipe_overrides": {},
     "leaf_follows_mulligan": False,
     "exclude": [],
@@ -385,6 +384,94 @@ def card_data_changes(H, adopt, cards):
     return sorted(c for c in cards if then.get(c) != now.get(c) and (c in then or c in now))
 
 
+# ------------------------------------------------------------------------------------------- ledger
+# A regeneration that did NOT replace the incumbent is still a result: at the frozen commit, a fresh
+# artifact at no-lower settings did not beat the shipped one. USER 2026-10-23: "if a new table or
+# value-leaf doesn't improve quality we still don't want to do it again". So every verdict lands as an
+# entry in test/artifact_ledger/<deck>.json (one file per deck, so result branches never conflict), and
+# the drift of an artifact is measured from the LATER of its adoption and its last verification -- a
+# kept incumbent only re-enters the queue once play has drifted again since the attempt.
+LEDGER_DIR = "test/artifact_ledger"
+VERIFYING = ("kept-incumbent", "adopted", "adopted-ungated")
+
+
+def ledger_path(root, key):
+    return os.path.join(root, LEDGER_DIR, key + ".json")
+
+
+def read_ledger(root, key):
+    try:
+        return json.load(open(ledger_path(root, key))).get("entries", [])
+    except Exception:
+        return []
+
+
+def append_ledger(root, key, entry):
+    ents = read_ledger(root, key) + [entry]
+    os.makedirs(os.path.join(root, LEDGER_DIR), exist_ok=True)
+    with open(ledger_path(root, key), "w") as f:
+        json.dump({"deck": key, "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+                   "entries": ents}, f, indent=1)
+        f.write("\n")
+
+
+def artifact_ident(kind, root, path):
+    """The identity an artifact is verified/claimed under. A keep table: its file's git blob. A leaf: its
+    eval_model's hash, NOT the sidecar's blob -- value.json also carries value_play settings, and an edit
+    to those must not make a verified leaf look new."""
+    p = os.path.join(root, path)
+    if not os.path.exists(p):
+        return None
+    if kind == "valueleaf":
+        h = eval_model_hash(json.load(open(p)))
+        return ("em:" + h[:20]) if h else None
+    return git("hash-object", p, cwd=root).strip()
+
+
+def mull_plan(cfg, deck, inc_R, inc_depth, inc_budget, screened):
+    """The mulligan regeneration's settings: NEVER BELOW THE INCUMBENT'S (USER 2026-10-23: "If they use much
+    lower settings they are all but guaranteed to fail"). The old-vs-new A/B is the gate, so a table
+    rolled at a lower R or a shallower/cheaper rollout than the one it must beat is a near-certain reject.
+      * R: `fast` (R30, adaptive bottoming) covers an incumbent at R<=30, `complete` (R40, full bottoming)
+        one at R<=40, and above 40 `complete` plus the sanctioned cap pin MTG_KEEP_ROLLOUTS=<R>.
+      * depth / budget: each the HIGHER of the incumbent's generation setting and the deck's screened
+        mull_gen_* -- never lower on either axis. Applied in the worker's worktree only, and restored after
+        the stage, so landing a result never changes a deck's shipped setting.
+    A per-deck recipe_overrides entry still wins (a USER decision)."""
+    plan = {"env": {}, "depth": None, "budget": None, "why": []}
+    R = max([r for r in (inc_R,) if isinstance(r, int)] or [0])
+    if deck in cfg.get("recipe_overrides", {}):
+        plan["recipe"] = cfg["recipe_overrides"][deck]
+        plan["why"].append("recipe %s from recipe_overrides" % plan["recipe"])
+    elif R and R <= 30:
+        plan["recipe"] = "fast"
+    else:
+        plan["recipe"] = "complete"
+        if R > 40:
+            plan["env"]["MTG_KEEP_ROLLOUTS"] = str(R)
+            plan["why"].append("incumbent R=%d > 40: complete + MTG_KEEP_ROLLOUTS=%d" % (R, R))
+    if R:
+        plan["why"].insert(0, "incumbent R=%d -> %s" % (R, plan["recipe"]))
+    sd, sb = screened
+    if isinstance(inc_depth, int) and isinstance(inc_budget, int) and isinstance(sd, int) and isinstance(sb, int):
+        d, b = max(inc_depth, sd), max(inc_budget, sb)
+        if (d, b) != (sd, sb):
+            plan["depth"], plan["budget"] = d, b
+            plan["why"].append("gen setting d%d b%d (incumbent d%d b%d, screened d%d b%d)" % (d, b, inc_depth, inc_budget, sd, sb))
+    return plan
+
+
+def screened_setting(root, d):
+    """-> ((depth, budget), file holding them) -- value.json first, then the profile (mullgen.sh's order)."""
+    for src in (d["value"], d["profile"]):
+        p = os.path.join(root, src)
+        if os.path.exists(p):
+            vp = json.load(open(p)).get("value_play", {}) or {}
+            if "mull_gen_depth" in vp:
+                return (vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms")), src
+    return (None, None), None
+
+
 _KCACHE = None
 
 
@@ -430,19 +517,32 @@ def assess_deck(H, d, cfg, smap):
     suite_key = smap.get(rel_list)
     cards = main_cards(os.path.join(R, rel_list))
     marks = {(m["deck"], m["kind"]): m for m in cfg.get("marks", [])}
+    ledger = read_ledger(R, d.key)
     items = {}
     src_now = git("rev-parse", "%s:src" % H.rev, cwd=H.root).strip()
 
-    def base_item(kind, path, adopt, notes):
+    def base_item(kind, path, adopt, notes, ident):
         dirty = H.is_dirty(path)
-        ap = H.pos[H.resolve(adopt)] if adopt else len(H.order) - 1
+        # The drift baseline: the LATER of the adoption and the newest verdict recorded for THIS artifact
+        # (same identity) -- see LEDGER_DIR. A verdict whose frozen commit is not in this history is ignored.
+        base, verified = adopt, None
+        for e in ledger:
+            if e.get("kind") == kind and e.get("ident") == ident and e.get("verdict") in VERIFYING \
+                    and e.get("frozen") in H.pos and (not base or H.pos[e["frozen"]] > H.pos[H.resolve(base)]):
+                base, verified = e["frozen"], e
+        ap = H.pos[H.resolve(base)] if base else len(H.order) - 1
         ch = play_churn(H, suite_key, ap) if suite_key else None
-        src_commits = H.src_commits_since(adopt) if adopt else 0
+        src_commits = H.src_commits_since(base) if base else 0
         it = {"deck": d.key, "dir": d.dir, "stem": d.stem, "kind": kind, "path": path,
               "adopted": adopt, "adopted_date": H.date(adopt), "uncommitted": dirty or not adopt,
+              "baseline": base, "baseline_date": H.date(base), "verified": verified,
+              "ledger_runs": sorted(set(e.get("run_id") for e in ledger if e.get("run_id"))),
               "suite_key": suite_key, "churn": ch, "src_commits_since": src_commits,
-              "flags": [], "notes": notes, "blob": H.tree.get(path, "uncommitted")}
-        cdc = card_data_changes(H, adopt, cards) if adopt else []
+              "flags": [], "notes": notes, "blob": ident or "uncommitted"}
+        if verified:
+            it["notes"].append("VERIFIED %s at %s: %s -- drift is measured from there" % (
+                verified.get("date", "?"), verified["frozen"][:9], verified.get("detail", verified["verdict"])))
+        cdc = card_data_changes(H, base, cards) if base else []
         if cdc:
             it["flags"].append(("card-data", "cards.json changed for %d deck card(s): %s"
                                 % (len(cdc), ", ".join(cdc[:6]) + (" ..." if len(cdc) > 6 else ""))))
@@ -459,7 +559,7 @@ def assess_deck(H, d, cfg, smap):
     prof, raw = keep_paths(d, R)
     if prof:
         adopt = H.last_touch(prof)
-        it = base_item("mulligan", prof, adopt, [])
+        it = base_item("mulligan", prof, adopt, [], H.tree.get(prof) if not H.is_dirty(prof) else None)
         try:
             kt = keep_summary(H, prof, raw)
             bucketed = set(n for b in kt["buckets"] for n in b)
@@ -477,18 +577,17 @@ def assess_deck(H, d, cfg, smap):
                 it["flags"].append(("decklist", "; ".join(txt)))
             it["notes"].append("generated at %s, R=%s" % (kt["commit"], kt["R"]))
             meta = kt["meta"]
-            vp = {}
-            for src in (d.value, d.profile):
-                p = os.path.join(R, src)
-                if os.path.exists(p):
-                    vp = json.load(open(p)).get("value_play", {}) or {}
-                    if "mull_gen_depth" in vp:
-                        break
-            if meta.get("depth") is not None and "mull_gen_depth" in vp:
-                if (meta.get("depth"), meta.get("budget_ms")) != (vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms")):
+            (sd, sb), _ = screened_setting(R, {"value": d.value, "profile": d.profile})
+            if meta.get("depth") is not None and sd is not None:
+                if (meta.get("depth"), meta.get("budget_ms")) != (sd, sb):
                     it["flags"].append(("settings", "generated at d%s b%s, deck now screens d%s b%s"
-                                        % (meta.get("depth"), meta.get("budget_ms"),
-                                           vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms"))))
+                                        % (meta.get("depth"), meta.get("budget_ms"), sd, sb)))
+            inc_R = max([r for r in (kt.get("R"), meta.get("R")) if isinstance(r, int)] or [0]) or None
+            plan = mull_plan(cfg, d.key, inc_R, meta.get("depth"), meta.get("budget_ms"), (sd, sb))
+            it["plan"] = plan
+            it["notes"].append("regen plan: recipe %s%s; %s" % (
+                plan["recipe"], "".join(" %s=%s" % kv for kv in plan["env"].items()),
+                "; ".join(plan["why"]) or "screened setting as-is"))
         except Exception as e:                                  # an unreadable artifact is itself a finding
             it["flags"].append(("unreadable", "could not read %s: %s" % (prof, e)))
         items["mulligan"] = it
@@ -516,7 +615,8 @@ def assess_deck(H, d, cfg, smap):
                 notes.append("trained at %s on %s rows" % (prov.get("regenerated_commit"), prov.get("rows", "?")))
             if not h_now:
                 notes.append("settings-only sidecar (no eval_model): ships NO leaf")
-            it = base_item("valueleaf", d.value, adopt or H.last_touch(d.value), notes)
+            it = base_item("valueleaf", d.value, adopt or H.last_touch(d.value), notes,
+                           ("em:" + h_now[:20]) if h_now else None)
             km = items.get("mulligan")
             if km and km.get("adopted") and it.get("adopted") and \
                     H.pos[H.resolve(km["adopted"])] > H.pos[H.resolve(it["adopted"])]:
@@ -584,7 +684,8 @@ def deck_jobs(items, cfg):
         best = min(q, key=lambda i: i["sort"])
         jobs.append({"deck": deck, "dir": best["dir"], "stages": [k for k in KINDS if k in kinds],
                      "sort": best["sort"], "score": max(i["score"] for i in q),
-                     "blobs": {i["kind"]: i["blob"] for i in its}})
+                     "blobs": {i["kind"]: i["blob"] for i in its},
+                     "ledger_runs": sorted(set(r for i in its for r in i.get("ledger_runs", [])))})
     jobs.sort(key=lambda j: j["sort"])
     return jobs
 
@@ -618,7 +719,7 @@ def cmd_status(a):
         print(json.dumps([{k: v for k, v in it.items() if k != "sort"} for it in items], indent=1))
         return 0
     print("%-6s %-24s %-9s %6s  %-10s %-48s %s" % ("", "deck", "artifact", "score", "adopted",
-                                                    "suite-GT play drift since adoption", "flags"))
+                                                    "suite-GT play drift since adoption or last verdict", "flags"))
     shown = 0
     for it in items:
         if a.all or it["queued"] or it.get("flags") or it.get("mark"):
@@ -628,9 +729,16 @@ def cmd_status(a):
     if hidden:
         print("(%d fresh artifact(s) below min_drift=%.3f turns hidden; --all shows them)" % (hidden, cfg["min_drift"]))
     jobs = deck_jobs(items, cfg)
+    claims = Queue().claims()                 # the LOCAL copy of origin/artifact-queue (`claims` fetches)
+    now = utcnow()
     print("\nDECK JOBS, in claim order (%d):" % len(jobs))
     for i, j in enumerate(jobs, 1):
-        print("  %2d. %-24s %s" % (i, j["deck"], " -> ".join(j["stages"])))
+        c = claims.get(j["deck"])
+        tag = ""
+        if c and claim_blocks(c, j, cfg, None, now):
+            tag = "  [%s by %s%s]" % (c.get("state"), c.get("worker"),
+                                      ", awaiting landing: " + c["result_branch"] if c.get("result_branch") else "")
+        print("  %2d. %-24s %s%s" % (i, j["deck"], " -> ".join(j["stages"]), tag))
     return 0
 
 
@@ -643,6 +751,9 @@ def cmd_explain(a):
         print("== %s / %s  (%s)" % (it["deck"], it["kind"], it["path"]))
         print("   adopted    : %s %s%s" % (it["adopted_date"], (it["adopted"] or "-")[:9],
                                           "  (UNCOMMITTED changes)" if it["uncommitted"] else ""))
+        if it.get("baseline") and it["baseline"] != it["adopted"]:
+            print("   drift from : %s %s (the last VERIFICATION, later than the adoption)" % (
+                it["baseline_date"], it["baseline"][:9]))
         print("   suite key  : %s" % (it["suite_key"] or "-- not in the suite"))
         ch = it["churn"]
         if ch:
@@ -769,6 +880,8 @@ def claim_blocks(c, job, cfg, worker, now):
     """Does an existing claim keep `worker` off this deck job?"""
     if not c:
         return False
+    if c.get("run_id") and c["run_id"] in job.get("ledger_runs", ()):
+        return False                          # its verdict has LANDED: the ledger now governs this deck
     st = c.get("state")
     if st in ("claimed", "running"):
         if c.get("worker") == worker:
@@ -781,8 +894,8 @@ def claim_blocks(c, job, cfg, worker, now):
         same = c.get("blobs") == job["blobs"]
         if not same:
             return False
-        if st == "done" and c.get("result_branch"):
-            return True                       # a result is waiting to be landed: do not redo it
+        if st in ("done", "rejected") and c.get("result_branch"):
+            return True                       # a result/verdict is waiting to be landed: do not redo it
         # rejected / failed / refused, or done with nothing adopted (e.g. a leaf left staged): retryable later
         return (now - parse_iso(c.get("finished", c.get("started")))).days < cfg["retry_rejected_days"]
     return False
@@ -1000,7 +1113,7 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     deck = job["deck"]
     claim = {"deck": deck, "worker": wid, "state": "running", "stages": job["stages"], "stage": job["stages"][0],
              "frozen": frozen, "started": iso(utcnow()), "blobs": job["blobs"], "score": job["score"],
-             "host": socket.gethostname()}
+             "host": socket.gethostname(), "run_id": "%s-%s-%s" % (deck, wid, utcnow().strftime("%Y%m%dT%H%M%S"))}
     if dry:
         f = foreign_engines()
         log(wid, "DRY RUN: would claim %s and run %s at %s%s" % (deck, " -> ".join(job["stages"]), frozen[:9],
@@ -1016,11 +1129,19 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     # a config edit between attempts cannot resume a journal at the wrong R (the 2026-10-02 loss).
     done_stages = prior.get("done_stages", [])
     detail = prior.get("detail", [])
-    recipe = prior.get("recipe") or cfg["recipe_overrides"].get(deck, cfg["mullgen_recipe"])
+    plan = prior.get("plan")                  # the mulligan settings, pinned once computed
+    if prior.get("claim", {}).get("run_id"):
+        claim["run_id"] = prior["claim"]["run_id"]
 
     def save_inflight():
-        json.dump({"job": job, "claim": claim, "done_stages": done_stages, "detail": detail, "recipe": recipe},
+        json.dump({"job": job, "claim": claim, "done_stages": done_stages, "detail": detail, "plan": plan},
                   open(ifp, "w"), indent=1)
+
+    def verdict(kind, v, ident, extra):
+        """Record a stage's verdict in the deck's ledger (in the worktree; it lands with the result branch)."""
+        append_ledger(wt, deck, dict({"run_id": claim["run_id"], "kind": kind, "verdict": v, "ident": ident,
+                                      "frozen": frozen, "src_tree": git("rev-parse", "%s:src" % frozen, cwd=wt).strip(),
+                                      "date": datetime.date.today().isoformat(), "worker": wid}, **extra))
 
     save_inflight()
     hb = Heartbeat(q, deck, claim, cfg)
@@ -1041,24 +1162,60 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                 log(wid, "  (claim update failed, carrying on: %s)" % e)
             if stage == "mulligan":
                 ungzip_incumbent(wt, deckinfo)
-                rc = run_logged(wid, ["bash", "scripts/mullgen.sh", "run", deckinfo["dir"], recipe], wt,
-                                "%s.mulligan.log" % deck)
+                base = os.path.join(wt, deckinfo["dir"], "%s.keepmodel.exhaustive." % deckinfo["stem"])
+                if plan is None:
+                    ek = read_json_any(base + "profile.json").get("exhaustive_keep", {})
+                    meta = read_json_any(base + "raw.json").get("meta", {}) if os.path.exists(base + "raw.json") else {}
+                    inc_R = max([r for r in (ek.get("effective_R"), meta.get("R")) if isinstance(r, int)] or [0]) or None
+                    screened, _ = screened_setting(wt, deckinfo)
+                    plan = mull_plan(cfg, deck, inc_R, meta.get("depth"), meta.get("budget_ms"), screened)
+                    save_inflight()
+                log(wid, "  mulligan plan: recipe %s %s; %s" % (plan["recipe"], plan["env"] or "", "; ".join(plan["why"])))
+                # Raise the generation setting to the incumbent's IN THIS WORKTREE ONLY, restored after the
+                # stage, so the result branch never changes a deck's shipped mull_gen_* (see mull_plan).
+                _, sfile = screened_setting(wt, deckinfo)
+                saved = None
+                if plan["depth"] is not None and sfile:
+                    sp = os.path.join(wt, sfile)
+                    saved = open(sp, "rb").read()
+                    J = json.loads(saved.decode())
+                    J["value_play"]["mull_gen_depth"], J["value_play"]["mull_gen_budget_ms"] = plan["depth"], plan["budget"]
+                    with open(sp, "w") as f:
+                        json.dump(J, f, indent=1)
+                env = dict(os.environ, **plan["env"])
+                try:
+                    rc = run_logged(wid, ["bash", "scripts/mullgen.sh", "run", deckinfo["dir"], plan["recipe"]], wt,
+                                    "%s.mulligan.log" % deck, env=env)
+                finally:
+                    if saved is not None:
+                        open(os.path.join(wt, sfile), "wb").write(saved)
                 regzip(wt, deckinfo)
                 rep = os.path.join(wt, "logs", re.sub(r"[^A-Za-z0-9._-]", "_", deckinfo["dir"][len("decks/"):]) + "_mullgen",
                                    "VALIDATION.txt")
                 text = open(rep).read() if os.path.exists(rep) else ""
+                m = re.findall(r"new-vs-old delta: ([-+0-9.eE]+)t", text)
+                delta = float(m[-1]) if m else None
+                prof_rel = os.path.join(deckinfo["dir"], "%s.keepmodel.exhaustive.profile.json.gz" % deckinfo["stem"])
+                settings = {"recipe": plan["recipe"], "env": plan["env"], "depth": plan["depth"], "budget": plan["budget"]}
                 if rc == 0 and "VALIDATION PASSED" in text:
-                    detail.append("mulligan: ADOPTED (validation passed, recipe %s)" % recipe)
+                    detail.append("mulligan: ADOPTED (new-vs-old %s t, recipe %s)" % (delta, plan["recipe"]))
+                    verdict("mulligan", "adopted", artifact_ident("mulligan", wt, prof_rel),
+                            {"delta": delta, "settings": settings, "detail": detail[-1]})
                 elif rc == 0 and "UNGATED run" in text:
                     detail.append("mulligan: UNGATED -- the A/B was underpowered, the new table was left live "
-                                  "with its verdict recorded (REVIEW before landing; recipe %s)" % recipe)
+                                  "with its verdict recorded (REVIEW before landing; recipe %s)" % plan["recipe"])
+                    verdict("mulligan", "adopted-ungated", artifact_ident("mulligan", wt, prof_rel),
+                            {"delta": delta, "settings": settings, "detail": detail[-1]})
                 elif rc == 3:
                     outcome = "refused"
                     detail.append("mulligan: REFUSED by a driver gate (exit 3) -- see %s.mulligan.log" % deck)
                     break
                 elif "VALIDATION FAILED" in text:
                     outcome = "rejected"
-                    detail.append("mulligan: REJECTED (new table worse; incumbent restored)")
+                    detail.append("mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better "
+                                  "(new-vs-old %s t); incumbent restored" % delta)
+                    verdict("mulligan", "kept-incumbent", job["blobs"].get("mulligan"),
+                            {"delta": delta, "settings": settings, "detail": detail[-1]})
                     break                          # the leaf would be fitted to an unchanged table: skip it
                 else:
                     outcome = "failed"
@@ -1075,9 +1232,16 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                     outcome = "failed"
                     detail.append("valueleaf: FAILED rc=%d" % rc)
                     break
-                adopted = bool(git("status", "--porcelain", "--", deckinfo["value"], cwd=wt).strip())
-                detail.append("valueleaf: %s" % ("ADOPTED (live sidecar replaced)" if adopted else
-                                                 "NOT adopted (left staged in logs/eval -- see the queue DECISIONS.txt)"))
+                new_ident = artifact_ident("valueleaf", wt, deckinfo["value"])
+                adopted = new_ident != job["blobs"].get("valueleaf")
+                dec = os.path.join(wt, "logs", "vlq_" + deck, "DECISIONS.txt")
+                dec_tail = open(dec).read().strip().splitlines()[-6:] if os.path.exists(dec) else []
+                detail.append("valueleaf: %s" % ("ADOPTED (live sidecar's eval_model replaced)" if adopted else
+                                                 "KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged "
+                                                 "in the worker's logs/eval; see logs/vlq_%s/DECISIONS.txt)" % deck))
+                verdict("valueleaf", "adopted" if adopted else "kept-incumbent",
+                        new_ident if adopted else job["blobs"].get("valueleaf"),
+                        {"detail": detail[-1], "decisions": dec_tail})
             done_stages.append(stage)
             save_inflight()
     except MachineFault as e:
@@ -1097,15 +1261,20 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     # Commit whatever the drivers left in the deck folder onto a result branch -- adopted artifacts, a
     # quarantined .DISABLED table, a screened mull_gen setting. Nothing is discarded, ever.
     branch = None
-    if git("status", "--porcelain", "--", deckinfo["dir"], cwd=wt).strip():
+    ledger_rel = os.path.relpath(ledger_path(wt, deck), wt)
+    if git("status", "--porcelain", "--", deckinfo["dir"], ledger_rel, cwd=wt).strip():
         branch = "%s%s-%s" % (RESULT_PREFIX, re.sub(r"[^A-Za-z0-9._-]", "_", deck), utcnow().strftime("%Y%m%d-%H%M"))
         git("checkout", "-q", "-b", branch, cwd=wt)
-        git("add", "-A", "--", deckinfo["dir"], cwd=wt)
-        msg = ("artifact-refresh(%s): %s\n\nRegenerated by the artifact queue worker %s, frozen at %s.\n%s\n\n"
-               "NOT LANDED: rebase onto the working branch, run smoke + regression and accept the GT the\n"
-               "new artifacts move (regression-testing.md), then push.\n\n"
+        git("add", "-A", "--", deckinfo["dir"], ledger_rel, cwd=wt)
+        only_ledger = not git("diff", "--cached", "--name-only", "--", deckinfo["dir"], cwd=wt).strip()
+        landing = ("VERDICT ONLY (no artifact changed, so no play change and no GT to accept): land it as-is so\n"
+                   "the queue measures this deck's drift from the attempt and does not repeat it.\n\n"
+                   if only_ledger else
+                   "NOT LANDED: rebase onto the working branch, run smoke + regression and accept the GT the\n"
+                   "new artifacts move (regression-testing.md), then push.\n\n")
+        msg = ("artifact-refresh(%s): %s\n\nRegenerated by the artifact queue worker %s, frozen at %s.\n%s\n\n%s"
                "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>\n"
-               % (deck, outcome, wid, frozen[:9], "\n".join("  " + x for x in detail)))
+               % (deck, outcome, wid, frozen[:9], "\n".join("  " + x for x in detail), landing))
         git("commit", "-q", "-m", msg, cwd=wt)
         r = subprocess.run(["git", "push", "-q", "origin", branch], cwd=wt, capture_output=True, text=True)
         if r.returncode != 0:
@@ -1156,7 +1325,7 @@ def cmd_run(a):
                     time.sleep(300)
                 continue
         d = next(x for x in shipping_decks(wt) if x.key == job["deck"])
-        deckinfo = {"dir": d.dir, "stem": d.stem, "value": d.value}
+        deckinfo = {"dir": d.dir, "stem": d.stem, "value": d.value, "profile": d.profile}
         if not os.path.exists(inflight) and not a.dry_run:
             if wait_idle(wid, cfg):
                 continue                                # waited for the box: re-sync and re-rank first
@@ -1313,6 +1482,32 @@ def cmd_selftest(a):
               [j["deck"] for j in jobs] == ["c", "b", "a"])
         check("a deck's stages run mulligan before valueleaf",
               all(j["stages"] == [k for k in KINDS if k in j["stages"]] for j in jobs))
+
+        print("regeneration settings never below the incumbent:")
+        P = lambda R, d, b, sd, sb: mull_plan(dict(cfg, recipe_overrides={}), "x", R, d, b, (sd, sb))
+        p1 = P(30, 1, 3, 1, 3)
+        check("R30 incumbent -> fast, screened setting as-is", p1["recipe"] == "fast" and p1["depth"] is None)
+        check("R22 incumbent -> fast (R30 >= 22)", P(22, None, None, 1, 3)["recipe"] == "fast")
+        check("R40 incumbent -> complete", P(40, 1, 1, 1, 1)["recipe"] == "complete")
+        p60 = P(60, None, None, 1, 3)
+        check("R60 incumbent -> complete + MTG_KEEP_ROLLOUTS=60",
+              p60["recipe"] == "complete" and p60["env"] == {"MTG_KEEP_ROLLOUTS": "60"})
+        p2 = P(30, 3, 10, 6, 6)
+        check("incumbent d3 b10 vs screened d6 b6 -> d6 b10 (max per axis)", (p2["depth"], p2["budget"]) == (6, 10))
+        check("incumbent below the screen -> screened as-is", P(30, 1, 1, 2, 3)["depth"] is None)
+        check("recipe_overrides still wins", mull_plan(dict(cfg, recipe_overrides={"x": "fast"}), "x", 60, None, None,
+                                                        (1, 3))["recipe"] == "fast")
+
+        print("verdict ledger:")
+        L = T + "/ledger_root"
+        append_ledger(L, "snow", {"run_id": "r1", "kind": "mulligan", "verdict": "kept-incumbent"})
+        append_ledger(L, "snow", {"run_id": "r2", "kind": "valueleaf", "verdict": "adopted"})
+        check("ledger appends and reads back", [e["run_id"] for e in read_ledger(L, "snow")] == ["r1", "r2"])
+        kept = dict(c, state="rejected", run_id="r9", result_branch=RESULT_PREFIX + "snow-y", finished=iso(utcnow()))
+        check("a kept-incumbent verdict waiting to land blocks a redo, even past the retry window",
+              claim_blocks(kept, job, cfg, "A", utcnow() + datetime.timedelta(days=cfg["retry_rejected_days"] + 30)))
+        check("...and stops blocking once it has landed (the ledger governs)",
+              not claim_blocks(kept, dict(job, ledger_runs=["r9"]), cfg, "A", utcnow()))
     finally:
         shutil.rmtree(T, ignore_errors=True)
         for k, v in saved.items():

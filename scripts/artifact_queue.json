@@ -1,9 +1,8 @@
 {
-  "_doc": "Config + USER marks for scripts/artifact_queue.py (docs/design/artifact-staleness-queue.md). Workers read this file from origin's branch tip, so commit + push an edit for every machine to see it. marks: [{deck, kind: mulligan|valueleaf, why, priority, date}] -- a marked artifact sorts first regardless of measured drift (higher priority first). Set with `artifact_queue.py mark`.",
+  "_doc": "Config + USER marks for scripts/artifact_queue.py (docs/design/artifact-staleness-queue.md). Workers read this file from origin's branch tip, so commit + push an edit for every machine to see it. marks: [{deck, kind: mulligan|valueleaf, why, priority, date}] -- a marked artifact sorts first regardless of measured drift (higher priority first). Set with `artifact_queue.py mark`. recipe_overrides: {deck: fast|complete} -- a USER override of the never-below-the-incumbent plan (mull_plan).",
   "branch": "phase-1-2-deck-analyzer",
   "min_drift": 0.02,
   "kind_weight": {"mulligan": 1.0, "valueleaf": 1.0},
-  "mullgen_recipe": "fast",
   "recipe_overrides": {},
   "leaf_follows_mulligan": false,
   "exclude": [],
