@@ -857,7 +857,9 @@ as a direction, and they share the alias apparatus questioned below.
 * **Haunted Fengraf stays**: *"That is a way to get back a threat. Especially when you can search it up with
   Titan."* Radiant Fountain only with care: *"there are definitely games where titan fetching that Fountain could
   be important. Less common likely than the Fengraf case, but still a real concern."* and *"Titan -> Fountain + Gruul Turf. This
-  means you can play it twice for 4 life."* (the Turf's bounce returns the Fountain) -> Wolf Run's slot is
+  means you can play it twice for 4 life."* (the Turf's bounce returns the Fountain); *"if you are up against burn or aggro this can be handy. The fengraf is the
+  opposite. If control is locking you down you need to be able to get back a critter."* -- matchup insurance the
+  goldfish (no damage, no removal) cannot value -> Wolf Run's slot is
   re-opened: *"We should take a look at the cost of dropping other lands or other things."* The goldfish values
   neither card (it never kills a creature and never deals damage), so their cost is unmeasured by construction.
 
