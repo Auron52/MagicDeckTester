@@ -102,7 +102,9 @@ but never make a line unfindable at large budget; a lossy narrowing needs a held
    s1000664 gi664 27.6 s / 232 MB, T6 (was 6:00 with the FLIP fold, 9:23 without). Paired A/B on seeds
    70000-70199 (`--seed 70000+gi`), 200 games per cell: d3 b10 avg 4.550 -> 4.560 (2 faster / 4 slower,
    net +2 turns), d5 b20 4.515 -> 4.505 (6 faster / 4 slower, net -2); units -20% / -17%; batch peak
-   RSS (12 threads) 4.7 -> 2.1 GB. Quality NEUTRAL within this small sample, so a held-out A/B at
+   RSS (12 threads) 4.7 -> 2.1 GB. Second sample, paired against the ACCEPTED suite GT (the six elementals
+   smoke + regression searched rows, 675 games; the flag-off arm of the patched binary reproduced GT 675/675):
+   13 faster / 9 slower, net -5 turns. Pooled: 1,075 games, net -5 turns. Quality NEUTRAL-to-better so far, so a held-out A/B at
    scale (and the d8 b0 check of each slower game) is the next step IF the USER takes this route. Caveat:
    the breakpoint cache can still carry a narrowed continuation list out of the playout (the experiment
    bypasses only the enum memo).
