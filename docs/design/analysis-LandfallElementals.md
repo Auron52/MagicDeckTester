@@ -353,6 +353,9 @@ The generation-setting screen (`mullgen_finalize.py --write`) aborted twice at t
    Built at d93492f1f~1 (before the 2026-10-19 crack-before-reader twins) the same game finishes, T5 in
    15 s, at **8.4 GB** peak: the explosion predates that change, which more than doubled it past what
    this box can hold.
+   **The time twin:** `--seed 1000664 --game-index 664` (play settings, budgeted d5 b20) takes **9 min 23 s**
+   single-threaded at only 611 MB peak, won T6 -- the 20 ms budget does not bound wall (uncharged work),
+   which a generation's tail would inherit.
 
 ## Stage 5c2 / 5h / verify_deck / backstop screen (2026-10-23, this box: 23.5 GB, 32 cores)
 - **5h viewer audit: PASS** (`audit_viewer_decisions.py`, 40 games from seed 9001): expected
