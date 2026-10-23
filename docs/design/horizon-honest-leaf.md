@@ -407,7 +407,8 @@ land, so opponent-life-at-horizon prices the build-up at zero. Same class as Dra
 | **ALL** | **12,000** | **-20** | **13** | **30** |
 
 43 changed games of 12,000 paired (0.358% binding, above the 20-changed-games floor). Both halves agree:
-**KEEP THE DEFAULT (ON)**. Niv is the combo shape the check warns about, but its build-up is not priced at zero
-the way Snow's and Dragonstorm's is: the draw/ping loop is assembled from a handful of named pieces, not
+**KEEP THE DEFAULT (ON)**. Niv is the combo shape the check warns about; the metric is the bar and it says keep. A
+plausible reading, NOT verified game by game: its build-up is not priced at zero the way Snow's and Dragonstorm's
+is, because the draw/ping loop is assembled from a handful of named pieces, not
 accumulated, and a horizon position that has assembled it usually HAS dealt damage (Niv pings on the turn a
 draw follows it), so opponent life still separates the better no-win lines.
