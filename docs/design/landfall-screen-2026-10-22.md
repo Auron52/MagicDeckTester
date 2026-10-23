@@ -784,3 +784,31 @@ Reading (default engine; nss11 next):
   slightly ahead of an Avenger on the average and the tail, but within one se.
 - **A second six-drop -> 4th Wave or 3rd Phylath adds another ~0.004-0.006** on top (D_t_aw, D_a_tw, D_a_ap).
 - Mountain -> Forest is -0.006 here but was 0 under NSS in round 13: it waits for nss11.
+
+## Phylath (USER question, 2026-10-23) and round 15
+
+USER: *"It's a little surprising to me that Phylath goes that quickly. Isn't it pretty strong at killing the next
+turn?"*, *"It is a lot better than the Baloths"*, *"Even just in the references I made the Phylath copies were a
+big help."*
+
+**The references agree with the USER.** The ten hand-played games in `references/Landfall/` (shipped list) win on
+T5, T7, T5, T6, T6, T8, T8, T5, T5, T5. **Phylath is in six of the ten killing attacks, and four of the five T5
+wins are the same line:** Phylath on T4, then on T5 a land drop plus fetch / Myriad cracks put four landfall
+triggers on ONE Plant (0/1 -> 16/17), and Phylath 5 + Plant 16 = 21, exactly lethal from 20 (gi0, gi7, gi8, gi9).
+The engine models that targeting (the provider orders an un-sick Plant first, then the highest power).
+
+**What the screen says about Phylath, and why its count is 2 so far:**
+- It was cut 4 -> 2 in round 2 only to make room for the Hydras (Hydra for 4 Phylath beat Hydra for 2 Courser
+  + 2 Baloths while keeping 4 Phylath by 0.12 t). Phylath is LEGENDARY: a second copy's ETB still makes Plants,
+  but the legend rule then bins one body, so copies 3-4 are often dead draws.
+- Mossborn Hydra plays the same role (one attacker grown by landfall; 1 -> 16 counters over four landfalls, with
+  trample) at 3 mana, so with four Hydras the marginal Phylath is worth less than in the references' list.
+- Every test since has favoured a 3rd Phylath slightly: for an Avenger -0.007 / -0.010 NSS (round 12), -0.002 /
+  -0.007 (round 13), +-0.006 on top of the 4th Cultivate (round 14); for a Titan -0.003 / -0.005. Cutting the
+  2nd for Courser or Baloths costs +0.005..+0.016. Phylath > Baloths in every reading.
+
+**Round 15 (`logs/landfall_screen/r15.json`, seed 9100000, HELD OUT)** measures the count directly: Phylath 0..4
+around D_t (C1 + 1 Titan -> 4th Cultivate), 20,000 games, centre D_t. Arms: 3rd Phylath for an Avenger / a Titan
+/ a Wave / a Hydra; 4 Phylath for 2 Avenger or Avenger + Titan; 3rd Phylath + a Forest -> Mountain (red); 1
+Phylath (for a Titan or a Wave), 0 Phylath (for Titan + Wave); plus C1 and D_t_aw for reference. NSS bracket 12
+follows, then the non-clairvoyant nc7 (now also holding the 3- and 4-Phylath lists).
