@@ -236,6 +236,10 @@ if [ "$ACCEPT" = 1 ]; then
   fi
 
   echo "Accepted $MODE results into $GT (and $promoted per-game log(s) into test/gt_logs/)."
+  # Record the accepted jobs' measured cost for the next run's scheduling (see JOB_COST_TABLE).
+  if [ -f "$LOGDIR/batch.log" ] && command -v python3 >/dev/null 2>&1; then
+    python3 "$HERE/lib/job_cost.py" update "$HERE/job_cost.tsv" "$LOGDIR/batch.log" "$RESULTS"
+  fi
   # Verify the two halves of the ground truth agree: regression_gt.txt's case digest is an FNV-1a
   # fold of the per-game digests in gt_logs/<key>.wins, so a mismatch means this accept promoted a
   # fingerprint without its matching log (or vice versa). Checked HERE because an accept is the only
@@ -325,6 +329,16 @@ fi
 # core on each config's slowest game). Results are validated byte-identical to the
 # per-case runs, so the ground truth is unchanged. See docs/design/batch-runner.md.
 MANIFEST="$LOGDIR/manifest.json"
+# MEASURED JOB COSTS (test/job_cost.tsv, written by --accept via test/lib/job_cost.py): each known job's
+# work units per game becomes its LPT weight, so the expensive chunks (NivMizzetCombo / Bruna d5 in
+# smoke) are dispatched FIRST and the cheap ones backfill -- USER 2026-10-23, after smoke's makespan sat
+# at 13m15s for ~6.5 min of pooled work. A job with no measurement keeps the rules below. Scheduling
+# only: every game is seeded by its job + index, so order never changes a result.
+JOB_COST_TABLE="$HERE/job_cost.tsv"
+declare -A JOB_COST_U=()
+if [ -f "$JOB_COST_TABLE" ] && command -v python3 >/dev/null 2>&1; then
+  while read -r _jk _ju; do JOB_COST_U[$_jk]=$_ju; done < <(python3 "$HERE/lib/job_cost.py" emit "$JOB_COST_TABLE")
+fi
 {
   echo '{ "jobs": ['
   first=1
@@ -366,6 +380,8 @@ MANIFEST="$LOGDIR/manifest.json"
       extra2hg="${extra2hg}\"abandon_units\": 2000000, "
       [ "$weight" -eq 0 ] && weight=1
     fi
+    # A measured cost wins over both rules above (see JOB_COST_TABLE).
+    [ -n "${JOB_COST_U[$name]-}" ] && weight=${JOB_COST_U[$name]}
     [ $first -eq 1 ] && first=0 || printf ',\n'
     # value_play integration (docs/design/value-leaf-fallback-table.md): every deck ships an ENABLED value_play
     # block that OWNS the play depth. The depth-5 case is the "value_play-driven" case -- we DROP the depth key
