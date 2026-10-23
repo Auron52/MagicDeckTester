@@ -672,6 +672,17 @@ enum Slot : int
     NIV_ORDER_CURIOSITY_FIRST,// MTG_NIV_ORDER_CURIOSITY_FIRST  Ponder ORDER: with a Niv in hand, none on the battlefield and no enabler held, a Curiosity is drawn before a Tandem Lookout that cannot come down before the Niv -- the {U} enabler fits beside the Niv on the go-off turn, the {2}{U} one does not. DEFAULT OFF pending its A/B
     NIV_ORDER_RAMP_NEEDED,    // MTG_NIV_ORDER_RAMP_NEEDED  look ORDER: an accelerator usable now outranks a missing Niv only if it moves the turn that Niv becomes castable; otherwise it orders as a next-turn set-up card, behind the Niv. DEFAULT OFF pending its A/B
     NIV_ORDER_PROBE_HOLD,     // MTG_NIV_ORDER_PROBE_HOLD  look ORDER: while a Niv is in hand and not castable this turn, a Gitaxian Probe goes LAST among the kept cards -- saved as the go-off draw instead of spent now as a free cantrip. DEFAULT OFF pending its A/B
+    LFE_FETCH_ORDER,          // MTG_LFE_FETCH_ORDER  LandfallElementals: the USER's fetch rule (2026-10-23) for Terramorphic Expanse / Myriad Landscape -- fetch the first colour the battlefield still lacks in the order Red -> Green -> Blue -> second Red -> second Green -> Red thereafter (a source = any permanent we control that produces the colour, multi-colour lands and Smokebraider included); Myriad skips Blue. An ORDER plus a PRUNE to that one pick (LandSearchPickWidth = 1). Default ON; =0 -> the base lack-mask order, full fan
+    LFE_HARBINGER_RULE,       // MTG_LFE_HARBINGER_RULE  LandfallElementals: Flamekin Harbinger's tutor by the USER's rule (2026-10-23) -- Mossborn Hydra when none is in hand; Brushfire Elemental once we have a Hydra (hand or battlefield); Incandescent Soulstoke when two or more other Elementals are on our battlefield (the USER's "non-lethal to lethal next turn" case, judged by the search); Smokebraider when short on mana (no land in hand, fewer than 4 lands out). A RESTRICTION + ORDER of the searched tutor axis (the decline variant stays); an empty set keeps the full list. Default ON; =0 -> every legal Elemental
+    LFE_HARBINGER_BRUSHFIRE,  // MTG_LFE_HARBINGER_BRUSHFIRE  amendment to the Harbinger rule (ADOPTED 2026-10-23, DEFAULT ON): Brushfire Elemental is admitted UNCONDITIONALLY, not only once a Hydra is held -- in the 149 games the rule lost on the held-out A/B the unrestricted search fetched Brushfire 56 times and Hydra 5 (Brushfire is a 2-drop with haste; Hydra a 3-drop without)
+    LFE_HARBINGER_WIDE,       // MTG_LFE_HARBINGER_WIDE  amendment (ADOPTED 2026-10-23, DEFAULT ON): also admit the USER's "closest" targets -- Akoum Hellhound, Risen Reef -- and Incandescent Soulstoke unconditionally (the lost games fetched Soulstoke 32, Hellhound 26, Reef 23 times)
+    LFE_HARBINGER_CHAIN,      // MTG_LFE_HARBINGER_CHAIN  amendment (DEFAULT OFF, the USER's call): also admit another Flamekin Harbinger (the chain: with a Reef out each Elemental entry is a look) and Smokebraider without the short-on-mana test -- the 52 games the WIDE arm still lost fetched Harbinger 15 and Smokebraider 14 times unrestricted
+    LFE_HARBINGER_INHAND,     // MTG_LFE_HARBINGER_INHAND  amendment to WIDE (ADOPTED 2026-10-23, DEFAULT ON; USER 2026-10-23: "We could probably also use the one in hand for Risen Reef and Smokebraider" / "just as an additional prune"): Risen Reef is not offered while one is in hand (Smokebraider's test already requires none held)
+    LFE_FETCH_HAND,           // MTG_LFE_FETCH_HAND  amendment to the fetch order (ADOPTED 2026-10-23, DEFAULT ON; USER: "Yes, we should check the hand"): a land in HAND counts as a source of its colours (it is a coming land drop) -- in 5 of the 26 d8b0-lost games the unrestricted search fetched Forest on T1 because the Mountain in hand already covered red (T2 Brushfire)
+    LFE_HARB_SMOKE_EARLY,     // MTG_LFE_HARB_SMOKE_EARLY  amendment (ADOPTED 2026-10-23, DEFAULT ON): Smokebraider is also offered as early ramp -- one or no land on our battlefield and none held (8 of the 26 lost games: T1/T2 Harbinger -> Smokebraider)
+    LFE_HARB_CHAIN_EARLY,     // MTG_LFE_HARB_CHAIN_EARLY  amendment (ADOPTED 2026-10-23, DEFAULT ON): another Flamekin Harbinger is offered on the same early board (one or no land out) when no other Harbinger is in hand (5 of the 26: T1 Harbinger -> Harbinger, cast T2 to tutor again)
+    LFE_HARB_FURY_SOULSTOKE,  // MTG_LFE_HARB_FURY_SOULSTOKE  amendment (DEFAULT OFF; measured 0 / -1 held-out, not adopted): Fury is offered as Incandescent Soulstoke's payload -- a Soulstoke in hand or on our battlefield and no Fury in hand (4 of the 26: Soulstoke puts Fury in with haste for the T4 kill)
+    LFE_HARB_SMOKE_FIRST,     // MTG_LFE_HARB_SMOKE_FIRST  ORDER amendment (ADOPTED 2026-10-23, DEFAULT ON; -12/-12 turns held-out): when the early-ramp condition admits Smokebraider it is ranked FIRST, not last -- smoke d3 gi122: the unrestricted search fetched it on T1 for the ramp and won T4; ranked last, the budgeted search took Brushfire (T5, persists at 16x)
     COUNT
 };
 
@@ -1294,6 +1305,17 @@ inline const char* Name(int slot)
         "MTG_NIV_ORDER_CURIOSITY_FIRST",
         "MTG_NIV_ORDER_RAMP_NEEDED",
         "MTG_NIV_ORDER_PROBE_HOLD",
+        "MTG_LFE_FETCH_ORDER",
+        "MTG_LFE_HARBINGER_RULE",
+        "MTG_LFE_HARBINGER_BRUSHFIRE",
+        "MTG_LFE_HARBINGER_WIDE",
+        "MTG_LFE_HARBINGER_CHAIN",
+        "MTG_LFE_HARBINGER_INHAND",
+        "MTG_LFE_FETCH_HAND",
+        "MTG_LFE_HARB_SMOKE_EARLY",
+        "MTG_LFE_HARB_CHAIN_EARLY",
+        "MTG_LFE_HARB_FURY_SOULSTOKE",
+        "MTG_LFE_HARB_SMOKE_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

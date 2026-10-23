@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 87530921c  date 2026-10-23
+# Regression ground truth -- commit 33347660d  date 2026-10-23
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-22): Periodic overnight rebaseline 2026-10-22 on 519c1f470 (PGO+LTO, 24/24 workers; 41m02s makespan on a loaded host -- same 1,642M units as a 25m29s run an hour earlier): 414 moved + 72 NEW (the UNBUDGETED BACKSTOP rows, USER 2026-10-22); searched 1760 faster / 704 slower, d0 8583 faster / 2518 slower. classify_turn_later (now pooled; d5 replayed at the case's value_play config): 167 churn / 537 PERSISTS, of which 527 are alchemist (346) and landfall (181) -- the keep-table / leaf / play-setting adoptions since 10-19 change which hands are kept, so their games diverge from the first draw; both decks are among the biggest net gains (alchemist searched -0.37t, d0 -0.83t; landfall -0.08t / -0.14t). The rest: edf 6, dragonstorm 3, hinata 1. Net slower groups: fivecolour2hg +0.0125, edf +0.0010, colossus +0.0004, fivecolour/fungusv3/creature_giving/slivers <= +0.0002. FIVECOLOUR IS A KNOWN REGRESSION, NOT CHURN: bisected to 4fc1437a2 (MTG_FS_STRICT_CUT_O1 default ON, 2026-10-21) -- its parent reproduces every moved FiveColour d5 game's GT digest, the commit moves 11 of 12. Held-out on/off at play settings: +0.0053t (0/7, t 2.5) std and +0.0217t (2/12, t 2.6) 2HG at 1.09-1.19x units, i.e. the cut ADDS work on this deck; root-cause open (suspect: the strict cut turns estimated wins into bounded no-wins that the budget-bind veto refuses to store). Carried, standing USER rulings: Galadriel ScryVerdict scry prune (5c85e812; clairvoyant +0.0476t, honest bar -0.0108t); escalation fresh 0.5 x budget_ms floor (per-deck escalation_fresh_frac deleted); MTG_ID_HINT_ROOT default 3 (2026-10-21); AccomplishedAlchemist keep table K=15 + nlfit sidecar + E.7 play setting d4b20. Prior overnight notes dropped deliberately: every cell re-measured; their adoption records (fungusv3/vampires resizes, EDF/Vampires keep tables) are in git.
-# accepted-with-regressions (smoke, 2026-10-23): MTG_ROLLOUT_FAN_NARROW (option 5, tail-rollout-only fan narrowing) default ON: only elementals keys move, net faster; the 2 slower d3 games (gi82, gi91) are budget churn and recover to T4 at 4x budget and at d8 b0
-# accepted-with-regressions (regression, 2026-10-23): MTG_ROLLOUT_FAN_NARROW (option 5) default ON: only elementals keys move, 10 faster / 7 slower net -2; 5 slower are churn, s3003 gi13 persists at 16x at d3 and d5 but every slower game recovers to T4 at d8 b0
+# accepted-with-regressions (smoke, 2026-10-23): LFE provider narrowing (USER fetch order + amended Harbinger rule): only elementals keys move, searched 9 faster / 5 slower; gi16 is post-fetch shuffle variance, gi32 the Fury-as-Soulstoke-payload case (amendment measured flat, off); held-out 3000 games net -26/-37
+# accepted-with-regressions (regression, 2026-10-23): LFE provider narrowing (USER fetch order + amended Harbinger rule): only elementals keys move, searched 19 faster / 5 slower (4 churn recover at 4x; s3003 gi132 persists); held-out 3000 games net -26/-37
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -99,7 +99,7 @@ melira2hg_smoke_d3_s1001=4.8000/3ff86f4df2a8d37d
 pirates2hg_smoke_d3_s1001=4.9200/369001264307757d
 soldiers2hg_smoke_d3_s1001=4.9800/c82966c2d853c139
 colossus2hg_smoke_d3_s1001=4.1200/357602b2af303984
-elementals2hg_smoke_d3_s1001=5.0800/5abfc169cd4f6e58
+elementals2hg_smoke_d3_s1001=5.1200/42193f5e798a2b5e
 pd2hg_smoke_d3_s1001=5.6000/3ec18a53def26c00
 fluctuator_smoke_d0_s1001=4.9870/b9ca221376d42c0c
 fluctuator_smoke_d3_s1001=3.5400/c68eebf8293c6f75
@@ -153,9 +153,9 @@ alchemist_smoke_d0_s1001=6.3250/3623703b1738e51b
 alchemist_smoke_d3_s1001=4.9733/9bfb0deb6e247a18
 alchemist_smoke_d5_s1001=4.9067/742ec521a12a7bf7
 alchemist2hg_smoke_d3_s1001=5.2000/4ad3d68838036e40
-elementals_smoke_d0_s1001=5.7600/13023d3c2fb4df76
-elementals_smoke_d3_s1001=4.5867/8676e1bd571c3b28
-elementals_smoke_d5_s1001=4.5333/fd011caf56657e81
+elementals_smoke_d0_s1001=5.7160/7bdb869e82165e50
+elementals_smoke_d3_s1001=4.5333/4dad838378d58225
+elementals_smoke_d5_s1001=4.5600/0d7816b3d09ace9b
 
 # --- regression ---
 alchemist_regression_d3_s30211=5.0000/a3247d7b297bbf58
@@ -433,11 +433,11 @@ alchemist_regression_d3_s2002=4.9133/6e8f9cced07d1105
 alchemist_regression_d3_s3003=5.1333/f3e6525dd9dca2f5
 alchemist_regression_d5_s2002=4.8667/4443d57ef6098d61
 alchemist_regression_d5_s3003=4.9867/202bdd6a6a9ad30f
-elementals_regression_d0_s2002=5.7320/164a9c255825ec8b
-elementals_regression_d3_s2002=4.4733/5bd2efe744656746
-elementals_regression_d3_s3003=4.4733/8cc6f27ac397f1b2
-elementals_regression_d5_s2002=4.4400/56aff8d3e9a2da03
-elementals_regression_d5_s3003=4.4667/2d7877ae1c53f62e
+elementals_regression_d0_s2002=5.6910/7f3aa583338bf807
+elementals_regression_d3_s2002=4.4800/0e76c07570d0dccb
+elementals_regression_d3_s3003=4.4333/19d468483b824364
+elementals_regression_d5_s2002=4.4000/3276cb1510eaf382
+elementals_regression_d5_s3003=4.3867/393d8800cf676fb6
 
 # --- overnight ---
 alchemist_overnight_d3_s30101=4.8000/e3ed67adcd562587

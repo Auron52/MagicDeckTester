@@ -3344,6 +3344,21 @@ public:
     // narrows; the axis is ADDITIVE (one rollout per extra target). MTG_LFE_TUTOR_WIDTH=0 restores
     // the base 6; MTG_TUTOR_WIDTH still overrides engine-side.
     int TutorSearchWidth() const override;
+    // THE FETCH RULE (USER 2026-10-23, MTG_LFE_FETCH_ORDER, default ON): Terramorphic Expanse / Myriad
+    // Landscape fetch the first colour the battlefield still lacks in the order Red -> Green -> Blue ->
+    // second Red -> second Green -> Red thereafter; Myriad (two basics sharing a type) skips Blue. An
+    // ORDER plus a PRUNE to that one pick, so the search no longer branches over which basic to fetch.
+    // Human play and MTG_UNPRUNE=landpick keep the full fan (LandSearchPickPruned).
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                             bool share_land_type, std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                             bool share_land_type,
+                             const std::vector<std::vector<std::string>>& picks) const override;
+    // THE HARBINGER RULE (USER 2026-10-23, MTG_LFE_HARBINGER_RULE, default ON): Flamekin Harbinger's tutor is
+    // restricted to the USER's short list (Hydra / Brushfire / Soulstoke / Smokebraider by their conditions)
+    // and searched over it; MTG_UNPRUNE=tutor and human play keep every legal Elemental.
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
 };
 
 class LandfallProvider : public DeckProvider

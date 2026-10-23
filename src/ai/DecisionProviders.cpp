@@ -30350,6 +30350,278 @@ int LandfallElementalsProvider::TutorSearchWidth() const
     return heurarm::Flag(heurarm::LFE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
 }
 
+// ---- LandfallElementalsProvider: the USER's fetch rule (2026-10-23) ----------------------------
+// USER: "The order should prioritize Red -> Green -> Blue -> Second Red including mana from lands that can
+// produce all of these or SmokeBraider. Ideally Myriad Landscape would get Red or Green, though Red is
+// preferable." and "Maybe after the second red we can get a second green and then more red."
+// So a basic search fetches the FIRST colour, in the order R(1) -> G(1) -> U(1) -> R(2) -> G(2), whose
+// source count on our battlefield is below that threshold; once all are met, Red. A source is any
+// permanent we control whose `produces` holds the colour: basics, Gruul Turf / Fiery Islet / Waterlogged
+// Grove, the any-colour Secluded Courtyard / Unclaimed Territory, and Smokebraider (the USER counts it).
+// Myriad Landscape (two basics sharing a type) walks the same order without Blue. A colour with no pick
+// in the list (no basic of it left in the library) is skipped, so the rule never prunes to a pick that
+// does not exist; a list holding none of the rule's colours keeps the full fan.
+namespace
+{
+bool LfeFetchOrderOn()
+{
+    static const bool on = EnvOn("MTG_LFE_FETCH_ORDER", true);   // DEFAULT ON; =0 -> base order, full fan
+    return heurarm::Flag(heurarm::LFE_FETCH_ORDER, on);
+}
+struct LfeSources { int u = 0, r = 0, g = 0; };
+LfeSources ReadLfeSources(const GameState& s, int controller)
+{
+    LfeSources out;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        bool u = false, r = false, g = false;
+        for (Color c : d->params.produces)
+        {
+            if (c == Color::Blue) { u = true; } else if (c == Color::Red) { r = true; }
+            else if (c == Color::Green) { g = true; }
+        }
+        out.u += u ? 1 : 0; out.r += r ? 1 : 0; out.g += g ? 1 : 0;
+    }
+    // MTG_LFE_FETCH_HAND (DEFAULT ON; USER 2026-10-23 "Yes, we should check the hand"): a land in hand is a coming
+    // land drop, so it counts as a source of its colours (root cause of 5 of the 26 games the rule lost at d8 b0:
+    // T1 Terramorphic should fetch Forest when the Mountain in hand already covers red, for a T2 Brushfire).
+    static const bool s_hand = EnvOn("MTG_LFE_FETCH_HAND", true);
+    if (heurarm::Flag(heurarm::LFE_FETCH_HAND, s_hand))
+    {
+        for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsLand()) { continue; }
+            bool u = false, r = false, g = false;
+            for (Color col : d->params.produces)
+            {
+                if (col == Color::Blue) { u = true; } else if (col == Color::Red) { r = true; }
+                else if (col == Color::Green) { g = true; }
+            }
+            out.u += u ? 1 : 0; out.r += r ? 1 : 0; out.g += g ? 1 : 0;
+        }
+    }
+    return out;
+}
+// The colour (WUBRG index) of a pick made only of basics of ONE colour, else -1.
+int LfePickColour(const std::vector<std::string>& pick)
+{
+    int col = -1;
+    for (const std::string& nm : pick)
+    {
+        const int ci = BasicColourOf(CardDatabase::Instance().Lookup(nm));
+        if (ci < 0 || (col >= 0 && ci != col)) { return -1; }
+        col = ci;
+    }
+    return col;
+}
+// Index into `picks` of the rule's pick, or -1 when the list holds none of the rule's colours.
+int LfeRulePickIndex(const LfeSources& src, bool share_land_type,
+                     const std::vector<std::vector<std::string>>& picks)
+{
+    constexpr int kU = static_cast<int>(Color::Blue), kR = static_cast<int>(Color::Red),
+                  kG = static_cast<int>(Color::Green);
+    struct Need { int colour; int threshold; };
+    static const Need kOrder[] = { { kR, 1 }, { kG, 1 }, { kU, 1 }, { kR, 2 }, { kG, 2 } };
+    auto have = [&](int c) { return c == kU ? src.u : c == kR ? src.r : src.g; };
+    auto find = [&](int c) -> int
+    {
+        for (std::size_t i = 0; i < picks.size(); ++i) { if (LfePickColour(picks[i]) == c) { return static_cast<int>(i); } }
+        return -1;
+    };
+    for (const Need& n : kOrder)
+    {
+        if (share_land_type && n.colour == kU) { continue; }   // Myriad: Red or Green
+        if (have(n.colour) >= n.threshold) { continue; }
+        const int i = find(n.colour);
+        if (i >= 0) { return i; }
+    }
+    // Every need met (or unfetchable): "then more red"; failing that the order's next colour.
+    for (int c : { kR, kG, kU })
+    {
+        if (share_land_type && c == kU) { continue; }
+        const int i = find(c);
+        if (i >= 0) { return i; }
+    }
+    return -1;
+}
+}   // namespace
+
+bool LandfallElementalsProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
+{
+    DecisionProvider::LandSearchPickOrderKey(s, controller, key);   // the base lack mask (5 bits)
+    if (!LfeFetchOrderOn()) { return true; }
+    // Every state input the rule reads beyond the library multiset (which the memo key holds exactly):
+    // the three source counts, each capped where the rule stops distinguishing them.
+    const LfeSources src = ReadLfeSources(s, controller);
+    key |= static_cast<std::uint64_t>(1) << 5;
+    key |= static_cast<std::uint64_t>(std::min(src.r, 2)) << 6;
+    key |= static_cast<std::uint64_t>(std::min(src.g, 2)) << 8;
+    key |= static_cast<std::uint64_t>(std::min(src.u, 1)) << 10;
+    return true;
+}
+
+void LandfallElementalsProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                                     bool basic_only, bool share_land_type,
+                                                     std::vector<std::vector<std::string>>& picks) const
+{
+    DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, picks);
+    if (!LfeFetchOrderOn() || !basic_only || picks.size() < 2) { return; }
+    const int i = LfeRulePickIndex(ReadLfeSources(s, controller), share_land_type, picks);
+    if (i <= 0) { return; }
+    std::rotate(picks.begin(), picks.begin() + i, picks.begin() + i + 1);   // the rule's pick to the front
+}
+
+int LandfallElementalsProvider::LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                                                    bool basic_only, bool share_land_type,
+                                                    const std::vector<std::vector<std::string>>& picks) const
+{
+    (void)count; (void)to_hand;
+    const int full = static_cast<int>(picks.size());
+    if (!LfeFetchOrderOn() || !basic_only || picks.size() < 2) { return full; }
+    // Prune to the rule's pick only when it IS the front (LandSearchPickOrder put it there).
+    return LfeRulePickIndex(ReadLfeSources(s, controller), share_land_type, picks) == 0 ? 1 : full;
+}
+
+// ---- LandfallElementalsProvider::TutorCandidates: the USER's Harbinger rule (2026-10-23) ---------------
+// USER, verbatim: "For Flamekin Harbinger I would probably recommend getting Mossborn Hydra if we have none in
+// hand and possibly also search a Brushfire Elemental if we need it to curve out and already have a Hydra.
+// Similarily we could consider Smokebraider if we are short on mana. That should be pretty rare. I'm not sure if
+// any of the others are really worth considering over these options. The closest would probably be a Hellhound,
+// Risen Reef or Incandescent Soulstoke, but those seem slower in most situations. Maybe the Soulstoke if it would
+// make the board go from non-lethal to lethal next turn."
+// THE READING (a RESTRICTION + ORDER; the search still scores every admitted target and the decline variant):
+//   * Mossborn Hydra      <=> no Hydra in HAND (the USER's test).
+//   * Brushfire Elemental <=> we already have a Hydra (hand or battlefield); "if we need it to curve out" is
+//     left to the search, which scores Brushfire against the Hydra line. AMENDED (MTG_LFE_HARBINGER_BRUSHFIRE):
+//     always -- the unrestricted search fetched Brushfire 56x and Hydra 5x in the games the rule lost.
+//   * AMENDED (MTG_LFE_HARBINGER_WIDE): Akoum Hellhound and Risen Reef (the USER's "closest") are offered too,
+//     Soulstoke without its board test; MTG_LFE_HARBINGER_INHAND drops Reef while one is in hand.
+//   * Incandescent Soulstoke <=> none held and two or more OTHER Elementals on our battlefield: the board it
+//     can pump into lethal; whether it actually turns non-lethal into lethal is what the search scores.
+//   * Smokebraider        <=> short on mana: no land in hand and fewer than four lands on our battlefield,
+//     and no Smokebraider held.
+// Fury / Fulminator / Foundation Breaker / another Harbinger are never offered (MTG_LFE_HARBINGER_CHAIN, default
+// OFF, admits another Harbinger and Smokebraider unconditionally: measured no better, more work). A set
+// with none of these left in the library keeps the full list (never a forced whiff).
+namespace
+{
+bool LfeHarbingerRuleOn()
+{
+    static const bool on = EnvOn("MTG_LFE_HARBINGER_RULE", true);   // DEFAULT ON; =0 -> every legal Elemental
+    return heurarm::Flag(heurarm::LFE_HARBINGER_RULE, on);
+}
+bool LfeIsHarbingerTutor(const CardParams& pp)
+{
+    if (pp.wish_from_sideboard || pp.tutor_from_graveyard || !pp.tutor_to_top) { return false; }
+    return std::find(pp.tutor_types.begin(), pp.tutor_types.end(), "Elemental") != pp.tutor_types.end();
+}
+}   // namespace
+
+std::vector<std::string> LandfallElementalsProvider::TutorCandidates(const GameState& s, int controller,
+                                                                     const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    // DIAGNOSTIC ONLY (MTG_LFE_HARB_FORCE="<turn>:<card name>", unset = inert): every Harbinger tutor on that turn
+    // is offered ONLY the named card (when it is in the library), in the search and at resolution alike -- what
+    // each alternative target is capable of from the same game. Never set in play or generation.
+    static const std::string s_force = [] { const char* e = std::getenv("MTG_LFE_HARB_FORCE"); return std::string(e ? e : ""); }();
+    if (!s_force.empty() && LfeIsHarbingerTutor(pp))
+    {
+        const std::size_t c = s_force.find(':');
+        if (c != std::string::npos && s.turn_number == std::atoi(s_force.substr(0, c).c_str()))
+        {
+            const std::string nm = s_force.substr(c + 1);
+            if (std::find(all.begin(), all.end(), nm) != all.end()) { return { nm }; }
+        }
+    }
+    if (!LfeIsHarbingerTutor(pp) || !LfeHarbingerRuleOn() || DecisionUnpruned(UnprunedGate::Tutor)) { return all; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    auto hand_has = [&](const char* nm)
+    { for (const Card& c : pl.hand) { if (c.m_name == nm) { return true; } } return false; };
+    int lands_out = 0, other_elementals = 0;
+    bool hydra_out = false, soulstoke_out = false, smoke_out = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand()) { ++lands_out; }
+        const std::string& nm = q.card.m_name;
+        hydra_out     |= nm == "Mossborn Hydra";
+        soulstoke_out |= nm == "Incandescent Soulstoke";
+        smoke_out     |= nm == "Smokebraider";
+        if (d->card.IsCreature() && CardHasSubtype(d->card, "Elemental") && nm != "Incandescent Soulstoke")
+        { ++other_elementals; }
+    }
+    bool land_in_hand = false;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { land_in_hand = true; break; }
+    }
+    // AMENDMENTS (ADOPTED 2026-10-23, USER "Sure, let's try it"; DEFAULT ON, =0 each reverts it):
+    // MTG_LFE_HARBINGER_BRUSHFIRE admits Brushfire whatever the Hydra state; MTG_LFE_HARBINGER_WIDE adds Akoum
+    // Hellhound / Risen Reef and drops Soulstoke's board test. Measured against the rule as written (held-out,
+    // fetch order on, 1,000 games per depth): rule +55 / +34 turns at d3 / d5, +Brushfire +20 / -3, +wide +3 / -20;
+    // wide over three samples (3,000 games per depth) -5 / -48 vs searching every target, -27% / -19% units.
+    static const bool s_brush = EnvOn("MTG_LFE_HARBINGER_BRUSHFIRE", true);
+    static const bool s_wide  = EnvOn("MTG_LFE_HARBINGER_WIDE", true);
+    const bool brush_always = heurarm::Flag(heurarm::LFE_HARBINGER_BRUSHFIRE, s_brush);
+    const bool wide         = heurarm::Flag(heurarm::LFE_HARBINGER_WIDE, s_wide);
+    const bool hydra_in_hand = hand_has("Mossborn Hydra");
+    std::vector<const char*> want;
+    if (!hydra_in_hand) { want.push_back("Mossborn Hydra"); }
+    if (brush_always || hydra_in_hand || hydra_out) { want.push_back("Brushfire Elemental"); }
+    if (!soulstoke_out && !hand_has("Incandescent Soulstoke") && (wide || other_elementals >= 2))
+    { want.push_back("Incandescent Soulstoke"); }
+    // MTG_LFE_HARBINGER_INHAND (DEFAULT ON; USER 2026-10-23, "just as an additional prune"): no Risen Reef while one
+    // is in hand. Smokebraider's own test above already requires none held. Measured on WIDE: -1 / -2 turns.
+    static const bool s_inhand = EnvOn("MTG_LFE_HARBINGER_INHAND", true);
+    const bool inhand = heurarm::Flag(heurarm::LFE_HARBINGER_INHAND, s_inhand);
+    if (wide) { want.push_back("Akoum Hellhound"); }
+    if (wide && !(inhand && hand_has("Risen Reef"))) { want.push_back("Risen Reef"); }
+    // MTG_LFE_HARBINGER_CHAIN (DEFAULT OFF): another Harbinger, and Smokebraider whatever the mana.
+    static const bool s_chain = EnvOn("MTG_LFE_HARBINGER_CHAIN");
+    const bool chain = heurarm::Flag(heurarm::LFE_HARBINGER_CHAIN, s_chain);
+    if (chain) { want.push_back("Flamekin Harbinger"); want.push_back("Smokebraider"); }
+    // ROOT-CAUSE AMENDMENTS (each from the games the rule lost at d8 b0; SMOKE_EARLY and CHAIN_EARLY ADOPTED
+    // 2026-10-23, DEFAULT ON; FURY_SOULSTOKE stays OFF -- measured flat, its cases are mostly library clairvoyance):
+    //   MTG_LFE_HARB_SMOKE_EARLY   Smokebraider as early ramp: one or no land out, none held.
+    //   MTG_LFE_HARB_CHAIN_EARLY   another Harbinger on that early board when no other Harbinger is in hand.
+    //   MTG_LFE_HARB_FURY_SOULSTOKE Fury as Soulstoke's payload: a Soulstoke held, no Fury in hand.
+    static const bool s_smoke_early = EnvOn("MTG_LFE_HARB_SMOKE_EARLY", true);
+    static const bool s_chain_early = EnvOn("MTG_LFE_HARB_CHAIN_EARLY", true);
+    static const bool s_fury_stoke  = EnvOn("MTG_LFE_HARB_FURY_SOULSTOKE");
+    const bool early = lands_out <= 1;
+    const bool smoke_held = smoke_out || hand_has("Smokebraider");
+    const bool smoke_short = !land_in_hand && lands_out < 4 && !smoke_held;
+    const bool smoke_early = heurarm::Flag(heurarm::LFE_HARB_SMOKE_EARLY, s_smoke_early) && early && !smoke_held;
+    // MTG_LFE_HARB_SMOKE_FIRST (ADOPTED 2026-10-23, DEFAULT ON): the early-ramp Smokebraider leads the list (order is
+    // what a budget spends first; ranked last, the budgeted search settled on Brushfire before scoring the ramp line).
+    // Held-out 1,500 games per depth vs the list without it: -12 / -12 turns at d3 / d5, +1.5% units.
+    static const bool s_smoke_first = EnvOn("MTG_LFE_HARB_SMOKE_FIRST", true);
+    if (!chain && smoke_early && heurarm::Flag(heurarm::LFE_HARB_SMOKE_FIRST, s_smoke_first))
+    { want.insert(want.begin(), "Smokebraider"); }
+    else if (!chain && (smoke_short || smoke_early)) { want.push_back("Smokebraider"); }
+    // "no OTHER Harbinger in hand": the axis is sized at turn start, while the Harbinger being cast is still in
+    // hand, so one copy in hand is the caster itself.
+    int harb_in_hand = 0;
+    for (const Card& c : pl.hand) { if (c.m_name == "Flamekin Harbinger") { ++harb_in_hand; } }
+    if (!chain && heurarm::Flag(heurarm::LFE_HARB_CHAIN_EARLY, s_chain_early) && early && harb_in_hand <= 1)
+    { want.push_back("Flamekin Harbinger"); }
+    if (heurarm::Flag(heurarm::LFE_HARB_FURY_SOULSTOKE, s_fury_stoke) && (soulstoke_out || hand_has("Incandescent Soulstoke"))
+        && !hand_has("Fury"))
+    { want.push_back("Fury"); }
+    std::vector<std::string> out;
+    for (const char* w : want)
+    { if (std::find(all.begin(), all.end(), w) != all.end()) { out.emplace_back(w); } }
+    return out.empty() ? all : out;
+}
+
 // ---- GiantsProvider::TutorSearchWidth ---------------------------------------
 // Giant Harbinger's tutor axis must be able to reach every Giant NAME in the list -- seven of them --
 // and the base width 6 left one unreachable per game, chosen by the shuffle (the library-order
