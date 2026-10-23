@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -83,6 +84,12 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
     std::atomic<long long> done_items{ 0 };
     const auto t_start = std::chrono::steady_clock::now();
     std::atomic<long long> next_report{ 30 };          // stderr heartbeat, every 30s
+    // DIAGNOSTIC (inert unless set): MTG_EQUIV_ONLY="<probe>:<candidate name>" runs just that one
+    // rollout -- the SLOW-ROLLOUT stream names exactly this pair -- so a degenerate discovery rollout
+    // can be reproduced and profiled alone. Every other item is skipped (its signature stays 0), so the
+    // clustering that follows is meaningless in this mode; never set it on a real run.
+    const char* only_env = std::getenv("MTG_EQUIV_ONLY");
+    const std::string only = only_env ? only_env : "";
     auto worker = [&]()
     {
         AIEngine ai(rollout_profile, depth, budget_ms);
@@ -93,6 +100,7 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
             if (item >= total) { break; }
             const int i = static_cast<int>(item / N);   // probe
             const int k = static_cast<int>(item % N);   // candidate
+            if (!only.empty() && only != std::to_string(i) + ":" + names[k]) { continue; }
             // Timed + streamed like every other rollout phase: a card that is degenerate to play used
             // to make discovery silently crawl, with no output at all until it finished.
             sig[k][i] = TimedRollout("discovery",
@@ -104,6 +112,12 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
                     ap.hand.push_back(reps[k]);         // hand = base6 + candidate (7 cards)
                     return ai.RolloutKeepWinTurn(s, 0, max_turns);
                 });
+            if (!only.empty())
+            {
+                std::cerr << "[keepgen] MTG_EQUIV_ONLY " << only << " -> win turn " << sig[k][i] << " ("
+                          << static_cast<long long>(std::chrono::duration<double>(
+                                 std::chrono::steady_clock::now() - t_start).count() * 1000) << " ms)\n" << std::flush;
+            }
             const long long d  = done_items.fetch_add(1) + 1;
             const double    el = std::chrono::duration<double>(
                                      std::chrono::steady_clock::now() - t_start).count();
@@ -121,6 +135,9 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
     std::vector<std::thread> pool;
     for (int t = 0; t < nthreads; ++t) { pool.emplace_back(worker); }
     for (std::thread& th : pool) { th.join(); }
+    // The single-rollout diagnostic must never reach clustering: its zeroed signatures would be written
+    // into the discovery cache (whose fingerprint does not know about this filter) and poison it.
+    if (!only.empty()) { std::cerr << "[keepgen] MTG_EQUIV_ONLY: diagnostic done, exiting\n"; std::exit(0); }
 
     // Cluster by SINGLE-LINKAGE at `threshold`: union any two cards whose signature distance is
     // <= threshold. threshold 0 recovers exact-match (distance is 0 only for identical signatures).

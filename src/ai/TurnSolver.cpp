@@ -77895,9 +77895,29 @@ namespace plancache
         if (HiwaterKb() <= 0) { return; }
         const std::size_t kb = ApproxPlansBytes(plans) >> 10;
         if (static_cast<long long>(kb) < HiwaterKb()) { return; }
-        std::fprintf(stderr, "[enum-hiwater] site=%s plans=%zu kb=%zu turn=%d bf=%zu hand=%zu\n",
+        // Axis breakdown of the giant list (counts of plans carrying each pin; one plan may carry
+        // several), so the print says WHICH axis multiplied it, not just that one did.
+        std::size_t c_look = 0, c_tutor = 0, c_lsearch = 0, c_lslot = 0, c_actslot = 0, c_bounce = 0,
+                    c_vial = 0, c_lft = 0, c_bp = 0, c_sac = 0, c_base = 0, max_acts = 0;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            const bool lk = !p.look_top_pins.empty(), tu = p.tutor_choice != -1,
+                       ls = !p.land_search_pins.empty(), sl = p.land_slot != 0,
+                       as = p.land_search_act_slot != -1, bo = p.bounce_choice >= 1,
+                       vi = p.vial_charge_choice >= 0, lf = p.landfall_target_choice >= 0,
+                       bp = p.bp_choice >= 0, sa = !p.sac_pins.empty();
+            c_look += lk; c_tutor += tu; c_lsearch += ls; c_lslot += sl; c_actslot += as; c_bounce += bo;
+            c_vial += vi; c_lft += lf; c_bp += bp; c_sac += sa;
+            c_base += !(lk || tu || ls || sl || as || bo || vi || lf || bp || sa);
+            max_acts = std::max(max_acts, p.actions.size());
+        }
+        std::fprintf(stderr, "[enum-hiwater] site=%s plans=%zu kb=%zu turn=%d bf=%zu hand=%zu"
+                     " | base=%zu look_top=%zu tutor=%zu land_search=%zu land_slot=%zu act_slot=%zu"
+                     " bounce=%zu vial=%zu landfall_tgt=%zu bp=%zu sac=%zu max_acts=%zu\n",
                      site, plans.size(), kb, state.turn_number,
-                     state.battlefield.size(), state.ActivePlayer().hand.size());
+                     state.battlefield.size(), state.ActivePlayer().hand.size(),
+                     c_base, c_look, c_tutor, c_lsearch, c_lslot, c_actslot, c_bounce, c_vial, c_lft,
+                     c_bp, c_sac, max_acts);
     }
 }
 namespace enummemo
