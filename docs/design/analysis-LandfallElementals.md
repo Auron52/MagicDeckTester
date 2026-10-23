@@ -342,6 +342,28 @@ The generation-setting screen (`mullgen_finalize.py --write`) aborted twice at t
    discovery rollout (probe 102 + Risen Reef) is 12.5 s alone (173 s in the contended pool); its T4
    decision enumerated 156,707 plans over 513,816 odometer states for 60,873 billed units.
 
+## Stage 5c2 / 5h / verify_deck / backstop screen (2026-10-23, this box: 23.5 GB, 32 cores)
+- **5h viewer audit: PASS** (`audit_viewer_decisions.py`, 40 games from seed 9001): expected
+  bounce/dig/divide/target/tutor_etb/vial_charge all surfaced (+ discard); oracle-text cross-check clean.
+- **5c2 leaf tie-break: NOT RUN TO COMPLETION.** `leaf_tiebreak_check.py` (24,000 games at play
+  settings d5 b20, 24 threads, RSS cap 14 GB) aborted at the cap after ~1,200 games -- the same
+  plan-fan memory explosion as the mulligan blocker, here in ordinary play WITH mulligans. Slow games
+  it logged (single-game repros, play settings): `--seed 1000162 --game-index 162` (58 s pooled, 11 s
+  / 1.2 GB peak alone, 1.02M units), `--seed 1000467 --game-index 467`, `--seed 1000671 --game-index 671`.
+  Re-run once the explosion is fixed (or at <= ~12 threads).
+- **verify_deck.py (decklist path):** PASS coverage, card_costs, viewer, viewer_wiring, mismatch,
+  play_invariants (8 games / 176 decisions), suite. SKIP card_fields (Scryfall snapshot missing 13 cards),
+  clause_ledger. FAIL regression_tiers (overnight: no GT -- the next periodic overnight run accepts it;
+  NOTE its d5 rows are 4x300 games at d5 b20, which this box may not survive at 32 threads until the
+  explosion is fixed) and claude_sweep (the 2 open flags above).
+- **Unbudgeted backstop rows (owed per the 2026-10-22 rule): NONE ADDED -- no block screens clean.**
+  Budget-0 screen, 10 games x 8 bases (30001..30061, 30101..30161) x d3/d5, abandon_units 2,000,000,
+  8 threads: EVERY d3 block abandons 1-4 games; d5 is clean only on 30001 / 30101 / 30141 / 30161 (max
+  24 / 7 / 6 / 19 s). Worse, games ran 17-19 MINUTES without reaching the 2M-unit ceiling (30021 d3:
+  1,035 s; d5: 1,141 s) -- the enumeration is not charged to the meter, so the backstop's own cap does
+  not bound it. Same root cause as the memory explosion; screen again after it is fixed. (Picking a
+  block to dodge it would hide exactly the defect the rows exist to catch.)
+
 ## Stage 5i — discard: evidence + AUTHORED PROPOSAL (USER-OWNED; not implemented)
 Evidence (Stage 4, 400 games d3): **3 real cleanup sheds**, all ties (multi_optimal 1.0), verdict
 STATUS_QUO_OK. The real-game prize is therefore tiny; the policy's value is doctrine + rollout
