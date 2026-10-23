@@ -961,3 +961,45 @@ Rounds (no keep table on any arm; pinned PGO engines in build/scratch/lfscreen/)
   3-Mountain list, plus the KESSIG WOLF RUN SLOT arms (Wolf Run for one Forest / Mountain / Fountain / Wilds /
   Terramorphic / Myriad / Gruul Turf / Rampant Growth; Fengraf kept; Fountain's burn/aggro value is NOT measured
   here), with MTG_DUMP_CARDS=1 (seen-but-never-cast: Omnath / Moraug red on the 1-Mountain arm). **nss14**: NSS.
+
+### n1 — Scythecat Cub / Scute Swarm around U0 (`logs/landfall_screen/n1.json`, seed 9400000, 20,000 paired games)
+
+No keep table on any arm; pin d7381d0. Average win turn (unwon = 9), paired against U0 (18 creatures). "Buy" is what
+the owner pays for the ADDED copies at the cheapest printing (Cub $27.48, Hydra $13.72, Scute $8.22).
+
+| arm | change from U0 | creatures | vs U0 | se | t | vs shipped | T7+ | buy |
+|---|---|---|---|---|---|---|---|---|
+| **N_cKH** | 4 Cub for 4 Khalni Heart Expedition | 22 | **-0.2660** | 0.0041 | -64.8 | **-1.026** | **1.71%** | $110 |
+| N_cRG | 4 Cub for 4 Rampant Growth | 22 | -0.1865 | 0.0042 | -43.9 | -0.946 | 3.08% | $110 |
+| N_cST | 4 Cub for 4 Search for Tomorrow | 22 | -0.1578 | 0.0047 | -33.7 | -0.918 | 2.72% | $110 |
+| N_c2RG | 2 Cub for 2 Rampant Growth | 20 | -0.0827 | 0.0028 | -29.2 | -0.842 | 2.96% | $55 |
+| N_cF | 1 Cub for a Forest | 19 | -0.0350 | 0.0030 | -11.7 | -0.795 | 3.07% | $27 |
+| U0 | -- | 18 | -- | -- | -- | -0.760 | 3.22% | -- |
+| N_c2s2RG | 2 Cub + 2 Scute for 4 Rampant Growth | 22 | +0.0227 | 0.0047 | +4.9 | -0.737 | 4.54% | $71 |
+| N_s2RG | 2 Scute for 2 Rampant Growth | 20 | +0.1061 | 0.0038 | +28.1 | -0.654 | 4.73% | $16 |
+| N_cH | 4 Cub for the 4 Hydra | 18 | +0.1134 | 0.0049 | +23.2 | -0.646 | 2.60% | $110 (sell 4 Hydra) |
+| N_sST | 4 Scute for 4 Search for Tomorrow | 22 | +0.2279 | 0.0035 | +64.6 | -0.532 | 5.55% | $33 |
+| N_sRG | 4 Scute for 4 Rampant Growth | 22 | +0.2495 | 0.0056 | +44.5 | -0.510 | 7.47% | $33 |
+| N_h2s2 | 2 Scute for 2 Hydra | 18 | +0.2956 | 0.0040 | +73.7 | -0.464 | 4.46% | $16 |
+| N_sH | 4 Scute for the 4 Hydra | 18 | +0.7251 | 0.0051 | +141.6 | -0.035 | 6.87% | $33 |
+| shipped | (2 Courser, 2 Baloths, no Hydra) | 16 | +0.7597 | 0.0055 | +139.2 | -- | 8.60% | -- |
+
+* **Scythecat Cub is a real gain, and the slot matters more than the count.** Four Cubs for the four Khalni Heart
+  Expeditions is the best list of the screen so far: -0.266 t against U0, -1.026 against the shipped list, and it
+  nearly HALVES the slow tail (games still going on turn 7: 1.71% against 3.22%) -- the backup the USER asked for
+  (22 creatures: >=2 threats by T4/T5/T6 96.6/97.9/98.7%, >=3 by T6 93.4%, against U0's 91.0/93.7/95.7%, 83.0%).
+  Khalni is the weakest of the three ramp slots (Rampant Growth -0.187, Search -0.158 for the same four Cubs).
+  Two Cubs buy about 45% of four (-0.083 for Rampant Growth); one Cub for a Forest buys -0.035.
+* **Head to head the Hydra beats the Cub** (Cub for Hydra +0.113): the Cub is an addition, not a replacement, and
+  per dollar the Hydra is the better buy.
+* **Scute Swarm is worse than every card it replaced, ramp included** (+0.106 for 2 Rampant Growth, +0.23-0.25 for
+  four ramp spells, +0.725 for the four Hydras). A 1/1 for three whose landfall tokens are summoning-sick and whose
+  copying needs six lands does not race a goldfish. Drop it.
+* **Clairvoyance caveat:** Khalni, Rampant Growth and Search for Tomorrow are all shuffle effects, so every Cub-for-
+  ramp arm changes the deck's shuffle count -- nss13 (MTG_NO_SEARCH_SHUFFLE=1, first 10,000 games) brackets it.
+* **Speed and a perf fix.** n1 played 280,000 games in 3 h 11 min (11:37-14:48 UTC). The Scute arms carried games of
+  up to 2,951 s (one ran 1.83 h): with hundreds of attacking Scute tokens, Primeval Titan's attack fetch re-found
+  every attacker by number once per attacker through a quadratic scan -- cubic per projected combat, 98.8% of a
+  960 s game. Fixed byte-identically in a16b898b3 (same digest, 8 s on PGO; smoke 148/148 unchanged); nss13, m1
+  and nss14 run on that pin (pin-a16b898). The remaining per-node cost on huge token boards (FireLandfallTriggers'
+  per-watcher scans, the lord/aura power reads) is a follow-up only if Scute were adopted.
