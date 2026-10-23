@@ -550,8 +550,8 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
   sanctioned wave shape; complete at large budget) or by a measured narrowing (lossy; a held-out A/B)?
   Options 1-5 in `docs/design/lfe-plan-fan-explosion.md` sec. 5. MEASURED: option 3 (per-ordinal pin
   sizing) removes nothing; option 5 (skip the reader/look-top fans in the PLAYOUT's per-turn lookahead only,
-  beyond the horizon) bounds both repros (18.9 GB -> 1.2 GB; 9 min -> 28 s) and is quality-neutral on 400
-  paired games (d3 +2 turns, d5 -2 turns), -17-20% units. Recommendation: option 5 as the quick unblock for
+  beyond the horizon) bounds both repros (18.9 GB -> 1.2 GB; 9 min -> 28 s) and is quality-neutral-to-better on
+  1,075 paired games (400 fresh: net 0; 675 vs the accepted suite GT: net -5 turns), -17-20% units. Recommendation: option 5 as the quick unblock for
   the mulligan profile, validated by a large held-out A/B first (the patch is in the design doc), then
   option 1 (staged look-top answers) for the searched nodes. Default until answered: nothing further
   changed; the deck's mulligan profile waits.
