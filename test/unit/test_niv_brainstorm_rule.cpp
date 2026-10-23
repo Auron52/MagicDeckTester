@@ -342,13 +342,13 @@ TEST_CASE("Niv Ponder keep-vs-shuffle: the fan is keep-in-the-rule's-order plus 
 namespace
 {
 GameState LookoutBoard(const std::vector<std::string>& hand, const std::vector<std::string>& library,
-                       bool second_lookout_on_bf = false, bool niv_on_bf = false)
+                       bool second_lookout_on_bf = false, bool niv_on_bf = false, bool servant_on_bf = true)
 {
     GameState s = BoardNb(hand, true, library);
     if (library.empty())   // "no Niv in the library": BoardNb's filler is Islands only
     { REQUIRE(true); }
     PutNb(s, "Tandem Lookout", 10);
-    PutNb(s, "Generator Servant", 11);
+    if (servant_on_bf) { PutNb(s, "Generator Servant", 11); }
     if (second_lookout_on_bf) { PutNb(s, "Tandem Lookout", 12); }
     if (niv_on_bf) { PutNb(s, "Niv-Mizzet, the Firemind", 13); }
     s.deck_has_soulbond  = true;
@@ -421,5 +421,234 @@ TEST_CASE("Niv Lookout rule 2: off -> the base pairing; the twin is enumerated u
     {
         ArmNb arms({ heurarm::NIV_LOOKOUT_RULE2 });   // a Niv in hand: the twin is pruned
         CHECK(twins() == 0);
+    }
+}
+
+// ---- MTG_NIV_LOOKOUT_RULE2_SERVANT: both wait cases may pair with a Generator Servant ----------------------
+// The 2026-10-22 A/B: all 15 case-3 waits refused a Servant, the only non-Niv creature on the board, and every
+// one of those games was slower. A Servant is a temporary partner (sacrificed for the Niv's mana, the pair
+// breaks and the Lookout pairs with the entering Niv), so the default pairs with it and the wait is the
+// searched twin. A wait whose candidates hold no Servant stays a pruned wait.
+TEST_CASE("Niv Lookout rule 2 Servant amendment: both wait cases pair with a Servant, and the wait is searched")
+{
+    ArmNb arms({ heurarm::NIV_LOOKOUT_RULE2, heurarm::NIV_LOOKOUT_RULE2_SERVANT });
+    {   // case 2: a Niv in hand -- pair with the Servant, the twin (wait) searched
+        const GameState s = LookoutBoard({ "Niv-Mizzet, the Firemind" }, {});
+        CHECK(PairFor(s, { 11 }) == 11);
+        CHECK_FALSE(NivProvNb().SoulbondTwinPruned(s));
+    }
+    {   // case 3: no spare source, a Niv in the library -- the same
+        const GameState s = LookoutBoard({ "Island" }, { "Niv-Mizzet, the Firemind" });
+        CHECK(PairFor(s, { 11 }) == 11);
+        CHECK_FALSE(NivProvNb().SoulbondTwinPruned(s));
+    }
+    {   // a wait with no Servant anywhere: the only partner is a second Lookout -- still a pruned wait
+        const GameState s = LookoutBoard({ "Niv-Mizzet, the Firemind" }, {}, /*second_lookout_on_bf=*/true,
+                                         /*niv_on_bf=*/false, /*servant_on_bf=*/false);
+        CHECK(PairFor(s, { 12 }) == 0);
+        CHECK(NivProvNb().SoulbondTwinPruned(s));
+    }
+    {   // a wait offered a Servant AND another Lookout: the Servant
+        const GameState s = LookoutBoard({ "Niv-Mizzet, the Firemind" }, {}, /*second_lookout_on_bf=*/true);
+        CHECK(PairFor(s, { 12, 11 }) == 11);
+    }
+    {   // the permission case and the Niv partner are unchanged
+        const GameState a = LookoutBoard({ "Curiosity" }, { "Niv-Mizzet, Parun" });
+        CHECK(PairFor(a, { 11 }) == 11);
+        const GameState b = LookoutBoard({ "Niv-Mizzet, Parun" }, {}, false, /*niv_on_bf=*/true);
+        CHECK(PairFor(b, { 11, 13 }) == 13);
+    }
+}
+
+TEST_CASE("Niv Lookout rule 2 Servant amendment: inert without rule 2; re-opens the twin rule 2 pruned")
+{
+    const GameState s = LookoutBoard({ "Generator Servant", "Niv-Mizzet, the Firemind" }, {});
+    auto twins = [&]()
+    {
+        int n = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true)) { if (p.soulbond_decline) { ++n; } }
+        return n;
+    };
+    heurarm::Clear();
+    const int base_pick = PairFor(s, { 11 });
+    const int base_twins = twins();
+    REQUIRE(base_twins > 0);
+    {
+        ArmNb arms({ heurarm::NIV_LOOKOUT_RULE2_SERVANT });   // alone: inert
+        CHECK(PairFor(s, { 11 }) == base_pick);
+        CHECK_FALSE(NivProvNb().SoulbondTwinPruned(s));
+        CHECK(twins() == base_twins);
+    }
+    {
+        ArmNb arms({ heurarm::NIV_LOOKOUT_RULE2 });
+        CHECK(twins() == 0);
+    }
+    {
+        ArmNb arms({ heurarm::NIV_LOOKOUT_RULE2, heurarm::NIV_LOOKOUT_RULE2_SERVANT });
+        CHECK(twins() > 0);
+    }
+}
+
+// ---- Niv look ORDER amendments (MTG_NIV_ORDER_*; each default OFF, inert unless MTG_NIV_CANTRIP_RULES) ------
+// Each case is the look of the 2026-10-22 d3 game it came from (seed 69000 + gi, rules + amend, Ponder's full
+// order axis): the rules' order, and the order the full search took and won a turn sooner with -- which the
+// amendment reproduces. Indices are into the looked-at cards, first = drawn first.
+namespace
+{
+struct BfCard { std::string name; bool tapped; };
+GameState OrderBoard(const std::vector<BfCard>& bf, const std::vector<std::string>& hand, bool drop_open,
+                     int floating_u)
+{
+    EnsureCardsNb();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.game_seed           = 6602;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.players[0].lands_played_this_turn = drop_open ? 0 : 1;
+    s.m_provider          = &NivProvNb();
+    int n = 1;
+    for (const BfCard& b : bf) { PutNb(s, b.name, n); s.battlefield.back().tapped = b.tapped; ++n; }
+    int h = 21;
+    for (const std::string& c : hand) { s.players[0].hand.push_back(CardNb(c, h++)); }
+    for (int k = 0; k < 8; ++k) { s.players[0].library.push_back(CardNb("Island", 100 + k)); }
+    s.floating_mana.blue = floating_u;
+    return s;
+}
+std::vector<Card> Looked(const std::vector<std::string>& names)
+{
+    std::vector<Card> v;
+    int n = 60;
+    for (const std::string& c : names) { v.push_back(CardNb(c, n++)); }
+    return v;
+}
+std::vector<int> PonderOrder(const GameState& s, const std::vector<Card>& looked)
+{
+    const TopDisposition d = NivProvNb().TopDispositionPick(s, looked, LookKind::Reorder, 1);
+    REQUIRE_FALSE(d.shuffle);
+    return d.top_order;
+}
+}   // namespace
+
+TEST_CASE("Niv look order: every amendment is inert without MTG_NIV_CANTRIP_RULES")
+{
+    const GameState s = OrderBoard({ { "Island", false }, { "Island", false } }, { "Island", "Niv-Mizzet, the Firemind" },
+                                   true, 0);
+    const std::vector<Card> looked = Looked({ "Preordain", "Spirebluff Canal", "Niv-Mizzet, Parun" });
+    heurarm::Clear();
+    const TopDisposition base = NivProvNb().TopDispositionPick(s, looked, LookKind::Reorder, 1);
+    ArmNb arms({ heurarm::NIV_ORDER_COLOUR_LAND, heurarm::NIV_ORDER_GOOFF_MANA, heurarm::NIV_ORDER_CURIOSITY_FIRST,
+                 heurarm::NIV_ORDER_RAMP_NEEDED, heurarm::NIV_ORDER_PROBE_HOLD });
+    const TopDisposition on = NivProvNb().TopDispositionPick(s, looked, LookKind::Reorder, 1);
+    CHECK(on.shuffle == base.shuffle);
+    CHECK(on.top_order == base.top_order);
+}
+
+// 1 COLOUR_LAND (d3 gi284's shape): two Islands out, an Island and the Firemind in hand, the drop open. The
+// Canal is the red source the Niv still needs; the rules queue it behind the hand's Island (usable next turn)
+// and under Preordain (castable now). Amended, it takes this turn's drop.
+TEST_CASE("Niv look order 1 COLOUR_LAND: a colour-fixing land takes the next drop")
+{
+    const GameState s = OrderBoard({ { "Island", false }, { "Island", false } }, { "Island", "Niv-Mizzet, the Firemind" },
+                                   true, 0);
+    const std::vector<Card> looked = Looked({ "Preordain", "Spirebluff Canal", "Niv-Mizzet, Parun" });
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 0, 1, 2 });
+    }
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND, heurarm::NIV_ORDER_COLOUR_LAND });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 1, 0, 2 });
+        // Preordain's two (a scry keeps the same order): the Canal on top.
+        const std::vector<Card> two = Looked({ "Preordain", "Spirebluff Canal" });
+        const TopDisposition d = NivProvNb().TopDispositionPick(s, two, LookKind::Scry, -1);
+        CHECK(d.top_order == std::vector<int>{ 1, 0 });
+    }
+}
+
+// 2 GOOFF_MANA (d3 gi274): Canal + Skerry out (3 mana a turn), no land in hand, Parun the only Niv. Ponder
+// reads as Parun's go-off draw (845) and goes first; the Niv is not castable within a turn, so amended it
+// orders as plain draw, behind the two lands that get the mana there.
+TEST_CASE("Niv look order 2 GOOFF_MANA: a cantrip is the go-off draw only within a turn of the Niv")
+{
+    const GameState s = OrderBoard({ { "Spirebluff Canal", true }, { "Saprazzan Skerry", true } },
+                                   { "Tandem Lookout", "Izzet Signet", "Generator Servant", "Niv-Mizzet, Parun" }, false, 0);
+    const std::vector<Card> looked = Looked({ "Island", "Ponder", "Spirebluff Canal" });
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 1, 0, 2 });
+    }
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND, heurarm::NIV_ORDER_GOOFF_MANA });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 0, 2, 1 });
+    }
+}
+
+// 3 CURIOSITY_FIRST (d3 gi174): Skerry, Sol Ring, Ferrous Lake out (all tapped, 2 floating), the Firemind in
+// hand with no enabler. The Lookout takes the empty enabler bucket and the Curiosity reads as its duplicate,
+// at the bottom; the Lookout cannot come down before the Niv (both next turn), so amended the Curiosity moves
+// up to just ahead of it -- the {U} enabler fits beside the Niv on the go-off turn.
+TEST_CASE("Niv look order 3 CURIOSITY_FIRST: Curiosity ahead of a Lookout that cannot beat the Niv down")
+{
+    const GameState s = OrderBoard({ { "Saprazzan Skerry", true }, { "Sol Ring", true }, { "Ferrous Lake", true } },
+                                   { "Niv-Mizzet, the Firemind", "Cascade Bluffs", "Izzet Signet", "Preordain" }, false, 2);
+    const std::vector<Card> looked = Looked({ "Generator Servant", "Tandem Lookout", "Curiosity" });
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 0, 1, 2 });
+    }
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND, heurarm::NIV_ORDER_CURIOSITY_FIRST });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 0, 2, 1 });
+        // An enabler already held: the rules' order stands.
+        GameState t = s;
+        t.players[0].hand.push_back(CardNb("Curiosity", 40));
+        heurarm::t_arm[static_cast<int>(heurarm::NIV_ORDER_CURIOSITY_FIRST)] = 0;
+        const std::vector<int> plain = PonderOrder(t, looked);
+        heurarm::t_arm[static_cast<int>(heurarm::NIV_ORDER_CURIOSITY_FIRST)] = 1;
+        CHECK(PonderOrder(t, looked) == plain);
+    }
+}
+
+// 4 RAMP_NEEDED (d3 gi252): Island, Bluffs, Skerry tapped, a Servant ready, 1 floating, no Niv anywhere. The
+// Signet is castable now (tier 1) and goes above the missing Firemind, but the Niv is castable next turn with
+// or without it, so amended the Firemind is drawn first. Without the Servant the Signet DOES move the Niv's
+// turn (never -> next), and keeps its place.
+TEST_CASE("Niv look order 4 RAMP_NEEDED: ramp outranks the missing Niv only if it moves the Niv's turn")
+{
+    const std::vector<std::string> hand = { "Tandem Lookout", "Remand", "Ponder", "Cascade Bluffs" };
+    const std::vector<Card> looked = Looked({ "Niv-Mizzet, the Firemind", "Izzet Signet", "Niv-Mizzet, the Firemind" });
+    const GameState s = OrderBoard({ { "Island", true }, { "Cascade Bluffs", true }, { "Generator Servant", false },
+                                     { "Saprazzan Skerry", true } }, hand, false, 1);
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 1, 0, 2 });
+    }
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND, heurarm::NIV_ORDER_RAMP_NEEDED });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 0, 1, 2 });
+        const GameState t = OrderBoard({ { "Island", true }, { "Cascade Bluffs", true }, { "Saprazzan Skerry", true } },
+                                       hand, false, 2);
+        CHECK(PonderOrder(t, looked) == std::vector<int>{ 1, 0, 2 });
+    }
+}
+
+// 5 PROBE_HOLD (d3 gi35): Canal + Needle tapped, both Nivs, two Islands and two Servants in hand. The
+// amendment lifts the free Probe to the top (castable now); with a Niv in hand and not castable this turn,
+// amended the Probe goes last -- saved as the go-off draw.
+TEST_CASE("Niv look order 5 PROBE_HOLD: Gitaxian Probe last while the Niv waits in hand")
+{
+    const GameState s = OrderBoard({ { "Spirebluff Canal", true }, { "Sandstone Needle", true } },
+                                   { "Niv-Mizzet, Parun", "Island", "Island", "Generator Servant",
+                                     "Niv-Mizzet, the Firemind", "Generator Servant" }, false, 0);
+    const std::vector<Card> looked = Looked({ "Brainstorm", "Sulfur Falls", "Gitaxian Probe" });
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 2, 0, 1 });
+    }
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND, heurarm::NIV_ORDER_PROBE_HOLD });
+        CHECK(PonderOrder(s, looked) == std::vector<int>{ 0, 1, 2 });
     }
 }

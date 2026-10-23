@@ -52658,6 +52658,90 @@ bool NivMizzetComboProvider::KeepReorderTop(const GameState& s, const std::vecto
     return NivKeepLook(s, NivValueLook(s, top));
 }
 
+// ---- LOOK ORDER AMENDMENTS (each its own DEFAULT-OFF flag; inert unless MTG_NIV_CANTRIP_RULES) ----------
+// Proposed from the 2026-10-22 A/B's slower games (rules + amend + Ponder keep/shuffle vs rules + amend, the
+// full order axis): at each of these looks the full search drew a different card first and won a turn
+// sooner. They adjust ONLY the kept cards' ORDER (Ponder, and Preordain's kept cards) -- never which cards
+// are kept, never the bucket values the discard / Brainstorm put-back read.
+//   1 COLOUR_LAND    (d3 gi284) a land that fixes a missing colour takes the next drop.
+//   2 GOOFF_MANA     (d3 gi274) a cantrip is the go-off draw only while the Niv is castable within a turn.
+//   3 CURIOSITY_FIRST(d3 gi174) Curiosity before a Lookout that cannot come down before the Niv.
+//   4 RAMP_NEEDED    (d3 gi252) an accelerator outranks the missing Niv only if it moves the Niv's turn.
+//   5 PROBE_HOLD     (d3 gi35)  Gitaxian Probe last while the Niv is in hand and not castable now.
+static bool NivOrderColourLandOn()  { static const bool on = EnvOn("MTG_NIV_ORDER_COLOUR_LAND");   return heurarm::Flag(heurarm::NIV_ORDER_COLOUR_LAND, on); }
+static bool NivOrderGoOffManaOn()   { static const bool on = EnvOn("MTG_NIV_ORDER_GOOFF_MANA");    return heurarm::Flag(heurarm::NIV_ORDER_GOOFF_MANA, on); }
+static bool NivOrderCuriosityOn()   { static const bool on = EnvOn("MTG_NIV_ORDER_CURIOSITY_FIRST"); return heurarm::Flag(heurarm::NIV_ORDER_CURIOSITY_FIRST, on); }
+static bool NivOrderRampNeededOn()  { static const bool on = EnvOn("MTG_NIV_ORDER_RAMP_NEEDED");   return heurarm::Flag(heurarm::NIV_ORDER_RAMP_NEEDED, on); }
+static bool NivOrderProbeHoldOn()   { static const bool on = EnvOn("MTG_NIV_ORDER_PROBE_HOLD");    return heurarm::Flag(heurarm::NIV_ORDER_PROBE_HOLD, on); }
+
+// The turn a 6-mana Niv becomes castable (0 = now, capped at 4) from the census: this turn's makeable mana,
+// then the board's per-turn mana plus one hand land per turn; `extra_next` adds an accelerator cast now.
+static int NivCastTurn(const NivCensus& c, int extra_next)
+{
+    if (c.avail_now >= 6) { return 0; }
+    const int lands_h = c.hand[static_cast<std::size_t>(kNivLand)];
+    for (int t = 1; t <= 3; ++t) { if (c.mana_amt_bf + extra_next + std::min(t, lands_h) >= 6) { return t; } }
+    return 4;
+}
+static bool NivHeldNiv(const NivCensus& c)
+{ return c.hand[static_cast<std::size_t>(kNivFiremind)] + c.hand[static_cast<std::size_t>(kNivParun)] > 0; }
+static int NivAccelYield(NivRole r) { return r == kNivSolRing ? 2 : r == kNivServant ? 2 : r == kNivRock ? 1 : 0; }
+
+// Rules 1, 2, 4, 5: adjust `wanted` (a local copy -- t_use / want for ORDER only) and fill each entry's tier.
+static void NivApplyOrderAmendments(const GameState& s, std::vector<NivLookVal>& wanted, std::vector<int>& tier)
+{
+    const bool r1 = NivOrderColourLandOn(), r2 = NivOrderGoOffManaOn(), r4 = NivOrderRampNeededOn(),
+               r5 = NivOrderProbeHoldOn();
+    NivCensus c;
+    if (r1 || r2 || r4 || r5) { c = BuildNivCensus(s); }
+    const int  niv_turn   = (r2 || r4 || r5) ? NivCastTurn(c, 0) : 4;
+    const bool niv_on_bf  = c.fire_bf || c.parun_bf;
+    bool missing_niv = false;
+    for (const NivLookVal& x : wanted)
+    { if ((x.role == kNivFiremind || x.role == kNivParun) && x.want >= kNivWantParun) { missing_niv = true; } }
+    for (NivLookVal& x : wanted)
+    {
+        if (r1 && x.role == kNivLand && x.want == kNivWantColour) { x.t_use = c.drop_open ? 0 : 1; }
+        if (r2 && NivIsDraw(x.role) && x.want >= kNivWantGoOffDraw && x.want < kNivWantCuriosity && niv_turn > 1)
+        { x.want = kNivWantDraw; }
+    }
+    for (std::size_t i = 0; i < wanted.size(); ++i)
+    {
+        const NivLookVal& x = wanted[i];
+        int t = NivOrderTier(x);
+        if (r4 && NivIsAccel(x.role) && t == 1 && missing_niv && NivCastTurn(c, NivAccelYield(x.role)) >= niv_turn)
+        { t = 2; }
+        if (r5 && x.role == kNivProbe && NivHeldNiv(c) && !niv_on_bf && niv_turn > 0) { t = 4; }   // last
+        tier[i] = t;
+    }
+}
+
+// Rule 3 (reorders only): move the first Curiosity of the final order to just ahead of the first Tandem
+// Lookout (the cards between shift down one) when the Lookout cannot come down before the Niv. Greedily the
+// Lookout takes the empty enabler bucket and the Curiosity reads as a duplicate, so without this it sits
+// at the bottom of the reorder.
+static void NivCuriosityFirst(const GameState& s, const std::vector<Card>& looked, const std::vector<NivLookVal>& v,
+                              std::vector<int>& top_order)
+{
+    if (!NivOrderCuriosityOn()) { return; }
+    const NivCensus c = BuildNivCensus(s);
+    const bool enabler_held = c.lookout_bf || c.curiosity_on_niv || c.hand[static_cast<std::size_t>(kNivLookout)] > 0
+                           || c.hand[static_cast<std::size_t>(kNivCuriosity)] > 0;
+    if (!NivHeldNiv(c) || c.fire_bf || c.parun_bf || enabler_held) { return; }
+    int pl = -1, pc = -1;
+    for (int k = 0; k < static_cast<int>(top_order.size()); ++k)
+    {
+        const NivRole r = NivRoleOf(CardDatabase::Instance().LookupCached(looked[static_cast<std::size_t>(top_order[k])]));
+        if (r == kNivLookout && pl < 0) { pl = k; }
+        if (r == kNivCuriosity && pc < 0) { pc = k; }
+    }
+    if (pl < 0 || pc < 0 || pc < pl) { return; }
+    int lookout_t = 4;
+    for (const NivLookVal& x : v) { if (x.idx == top_order[static_cast<std::size_t>(pl)]) { lookout_t = x.t_use; } }
+    if (lookout_t < NivCastTurn(c, 0)) { return; }   // the Lookout comes down first: the rules' order stands
+    std::rotate(top_order.begin() + pl, top_order.begin() + pc, top_order.begin() + pc + 1);
+}
+
 TopDisposition NivMizzetComboProvider::TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
                                                           LookKind kind, int keep_decision) const
 {
@@ -52672,19 +52756,26 @@ TopDisposition NivMizzetComboProvider::TopDispositionPick(const GameState& s, co
         return disp;
     }
     // By tier (useful now > next turn / missing key piece > the rest); bucket value, then the turn it
-    // becomes usable, inside a tier.
-    std::stable_sort(wanted.begin(), wanted.end(), [](const NivLookVal& a, const NivLookVal& b)
+    // becomes usable, inside a tier. The ORDER AMENDMENTS (NivApplyOrderAmendments; each its own default-OFF
+    // flag) adjust a LOCAL copy's turn-usable / order value / tier -- the keep decision above is untouched.
+    std::vector<int> tier(wanted.size(), 0);
+    NivApplyOrderAmendments(s, wanted, tier);
+    std::vector<std::size_t> ord(wanted.size());
+    for (std::size_t i = 0; i < ord.size(); ++i) { ord[i] = i; }
+    std::stable_sort(ord.begin(), ord.end(), [&](std::size_t ia, std::size_t ib)
     {
-        const int ta = NivOrderTier(a), tb = NivOrderTier(b);
-        if (ta != tb) { return ta < tb; }
+        const NivLookVal& a = wanted[ia];
+        const NivLookVal& b = wanted[ib];
+        if (tier[ia] != tier[ib]) { return tier[ia] < tier[ib]; }
         if (a.want != b.want) { return a.want > b.want; }
         return a.t_use < b.t_use;
     });
-    for (const NivLookVal& x : wanted) { disp.top_order.push_back(x.idx); }
+    for (std::size_t i : ord) { disp.top_order.push_back(wanted[i].idx); }
     if (kind == LookKind::Reorder || kind == LookKind::ReorderNoShuffle)
     {
         // A reorder cannot bottom: the unwanted cards stay under the wanted ones, best first.
         for (const NivLookVal& x : rest) { disp.top_order.push_back(x.idx); }
+        NivCuriosityFirst(s, looked, v, disp.top_order);   // MTG_NIV_ORDER_CURIOSITY_FIRST (reorders only)
     }
     return disp;
 }
@@ -52923,11 +53014,40 @@ static NivPairCensus BuildNivPairCensus(const GameState& s, int controller)
 }
 // The two WAIT cases (see above): the Lookout waits and the search is not offered the pairing.
 static bool NivLookoutMustWait(const NivPairCensus& c) { return c.niv_hand || (c.draw_sources < 2 && c.niv_lib); }
+// AMENDMENT (MTG_NIV_LOOKOUT_RULE2_SERVANT, DEFAULT OFF; inert unless rule 2 is on). Both wait cases may
+// pair with a Generator Servant. A Servant is a TEMPORARY partner: sacrificing it for the Niv's mana (the
+// haste line, MTG_NIV_SERVANT_FIREMIND_ONLY; the unpair, MTG_NIV_SERVANT_UNPAIR) breaks the pair, and the
+// unpaired Lookout then pairs with the entering Niv (CR 702.46b). The 2026-10-22 A/B (seeds 69000/70000):
+// every one of the 15 case-3 waits refused a Servant -- the only non-Niv creature on the board -- and every
+// one of those games was slower, with or without clairvoyance. The default pairs with the Servant and the
+// twin searches the wait; a wait whose only candidates are not Servants stays a wait. (If a plan's twin is
+// enumerated because a Servant is around but the pairing it reaches offers another Lookout, the twin's
+// "pair anyway" takes that Lookout -- the engine's generic twin, rare here and disclosed.)
+static bool NivLookoutRule2ServantOn()
+{
+    static const bool on = EnvOn("MTG_NIV_LOOKOUT_RULE2_SERVANT");   // DEFAULT OFF pending its A/B
+    return heurarm::Flag(heurarm::NIV_LOOKOUT_RULE2_SERVANT, on);
+}
+static bool NivIsServantDef(const CardDefinition* d) { return d != nullptr && d->params.sac_for_mana_grants_haste; }
+static bool NivServantAround(const GameState& s, int controller)
+{
+    for (const Card& h : s.players[static_cast<std::size_t>(controller)].hand)
+    { if (NivIsServantDef(CardDatabase::Instance().LookupCached(h))) { return true; } }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        if (NivIsServantDef(CardDatabase::Instance().LookupCached(q.card))) { return true; }
+    }
+    return false;
+}
 
 bool NivMizzetComboProvider::SoulbondTwinPruned(const GameState& s) const
 {
     if (!NivLookoutRule2On() || !s.deck_has_draw_ping) { return false; }
-    return NivLookoutMustWait(BuildNivPairCensus(s, s.active_player_index));
+    if (!NivLookoutMustWait(BuildNivPairCensus(s, s.active_player_index))) { return false; }
+    // The amendment: a Servant may take the pairing, so the wait is a searched twin again.
+    if (NivLookoutRule2ServantOn() && NivServantAround(s, s.active_player_index)) { return false; }
+    return true;
 }
 
 int NivMizzetComboProvider::SoulbondPartner(const GameState& s, int controller, const Permanent& source,
@@ -52959,7 +53079,16 @@ int NivMizzetComboProvider::SoulbondPartner(const GameState& s, int controller, 
                          s.turn_number, cs, pc.draw_sources, pc.niv_lib ? 1 : 0);
         }
         if (niv_cand != 0) { return niv_cand; }
-        return NivLookoutMustWait(pc) ? 0 : pick;
+        if (!NivLookoutMustWait(pc)) { return pick; }
+        if (NivLookoutRule2ServantOn())   // the amendment: a Generator Servant may take a waiting pairing
+        {
+            for (int ci : candidate_bf_indices)
+            {
+                const Permanent& q = s.battlefield[static_cast<std::size_t>(ci)];
+                if (!q.def_absent && NivIsServantDef(CardDatabase::Instance().LookupCached(q.card))) { return q.card.m_number; }
+            }
+        }
+        return 0;
     }
     if (pick == 0 || !NivLookoutNivOnlyOn()) { return pick; }   // DEFAULT OFF pending its A/B and the USER
     const CardDefinition* sd = source.def_absent ? nullptr : CardDatabase::Instance().LookupCached(source.card);

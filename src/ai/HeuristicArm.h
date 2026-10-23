@@ -665,6 +665,12 @@ enum Slot : int
     NIV_BRAINSTORM_SINGLE,    // MTG_NIV_BRAINSTORM_SINGLE  NivMizzetCombo: the searched put-back fan is pruned to the rule's pick alone (PutBackSingleCandidate). Inert unless MTG_NIV_CANTRIP_RULES and MTG_NIV_BRAINSTORM_RULE are on. Human play is never pruned. DEFAULT OFF pending its A/B
     NIV_PONDER_KEEP_SHUFFLE,  // MTG_NIV_PONDER_KEEP_SHUFFLE  NivMizzetCombo: Ponder's searched fan is keep-in-the-rule's-order vs shuffle (ReorderKeepShuffleOnly), not every order. USER 2026-10-22: "My ponder idea was allowing for search between shuffle and keep, but not the order." / "That way we avoid the worst situations and just need to make the reorder relatively smart." Inert unless MTG_NIV_CANTRIP_RULES is on. DEFAULT OFF pending its A/B
     NIV_LOOKOUT_RULE2,        // MTG_NIV_LOOKOUT_RULE2  NivMizzetCombo: Tandem Lookout's pairing by the USER's rule (2026-10-22: "Niv in hand means wait for it, whereas extra draw sources without niv are what give us permission to try pairing them with something else"): a Niv candidate is taken; a Niv in hand -> wait, twin pruned; no Niv in hand + a spare draw-on-damage source -> pair, searched (the twin waits); no spare + a Niv in the library -> wait, pruned; no Niv left -> pair, searched as before. Replaces MTG_NIV_LOOKOUT_NIV_ONLY. Human play is never pruned. DEFAULT OFF pending its A/B and the USER
+    NIV_LOOKOUT_RULE2_SERVANT,// MTG_NIV_LOOKOUT_RULE2_SERVANT  amendment of MTG_NIV_LOOKOUT_RULE2 (inert unless it is on): both WAIT cases (a Niv in hand; no spare draw source + a Niv in the library) may pair with a Generator Servant -- a temporary partner, since sacrificing it for the Niv's mana breaks the pair and the unpaired Lookout pairs with the entering Niv. Default pairs with the Servant, the twin (wait) is searched. All 15 case-3 waits of the 2026-10-22 A/B refused a Servant. DEFAULT OFF pending its A/B
+    NIV_ORDER_COLOUR_LAND,    // MTG_NIV_ORDER_COLOUR_LAND  NivMizzetCombo look ORDER (Ponder / Preordain kept order; inert unless MTG_NIV_CANTRIP_RULES): a looked-at land that supplies a colour the Niv still needs (want == colour) takes the next land drop -- usable this turn with the drop open, else next -- instead of queueing behind the hand lands. DEFAULT OFF pending its A/B
+    NIV_ORDER_GOOFF_MANA,     // MTG_NIV_ORDER_GOOFF_MANA  look ORDER: a cantrip counts as the go-off draw (key) only while the Niv is castable within a turn; otherwise it orders as plain draw, behind the lands and set-up cards that get the mana there. DEFAULT OFF pending its A/B
+    NIV_ORDER_CURIOSITY_FIRST,// MTG_NIV_ORDER_CURIOSITY_FIRST  Ponder ORDER: with a Niv in hand, none on the battlefield and no enabler held, a Curiosity is drawn before a Tandem Lookout that cannot come down before the Niv -- the {U} enabler fits beside the Niv on the go-off turn, the {2}{U} one does not. DEFAULT OFF pending its A/B
+    NIV_ORDER_RAMP_NEEDED,    // MTG_NIV_ORDER_RAMP_NEEDED  look ORDER: an accelerator usable now outranks a missing Niv only if it moves the turn that Niv becomes castable; otherwise it orders as a next-turn set-up card, behind the Niv. DEFAULT OFF pending its A/B
+    NIV_ORDER_PROBE_HOLD,     // MTG_NIV_ORDER_PROBE_HOLD  look ORDER: while a Niv is in hand and not castable this turn, a Gitaxian Probe goes LAST among the kept cards -- saved as the go-off draw instead of spent now as a free cantrip. DEFAULT OFF pending its A/B
     COUNT
 };
 
@@ -1280,6 +1286,12 @@ inline const char* Name(int slot)
         "MTG_NIV_BRAINSTORM_SINGLE",
         "MTG_NIV_PONDER_KEEP_SHUFFLE",
         "MTG_NIV_LOOKOUT_RULE2",
+        "MTG_NIV_LOOKOUT_RULE2_SERVANT",
+        "MTG_NIV_ORDER_COLOUR_LAND",
+        "MTG_NIV_ORDER_GOOFF_MANA",
+        "MTG_NIV_ORDER_CURIOSITY_FIRST",
+        "MTG_NIV_ORDER_RAMP_NEEDED",
+        "MTG_NIV_ORDER_PROBE_HOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
