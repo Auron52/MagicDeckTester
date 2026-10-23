@@ -96,9 +96,77 @@ but never make a line unfindable at large budget; a lossy narrowing needs a held
 5. **A rollout-only narrowing** (the monster sits in the PLAYOUT's per-turn lookahead, beyond the horizon,
    where a greedy policy is permitted): skip the reader/position fans inside RolloutPreCombatSolve. A
    playout-policy change -> held-out A/B; does not help a monster board at a SEARCHED node.
+   **MEASURED 2026-10-23 (experiment, NOT shipped; patch in the appendix):** with the reader position
+   twins and the look-top fan skipped inside RolloutPreCombatSolve (and the enum memo bypassed there):
+   the monster s1100011 gi11 FINISHES -- 2.3 s, 1.17 GB peak, T5 (was > 18.9 GB, dead); the time twin
+   s1000664 gi664 27.6 s / 232 MB, T6 (was 6:00 with the FLIP fold, 9:23 without). Paired A/B on seeds
+   70000-70199 (`--seed 70000+gi`), 200 games per cell: d3 b10 avg 4.550 -> 4.560 (2 faster / 4 slower,
+   net +2 turns), d5 b20 4.515 -> 4.505 (6 faster / 4 slower, net -2); units -20% / -17%; batch peak
+   RSS (12 threads) 4.7 -> 2.1 GB. Quality NEUTRAL within this small sample, so a held-out A/B at
+   scale (and the d8 b0 check of each slower game) is the next step IF the USER takes this route. Caveat:
+   the breakpoint cache can still carry a narrowed continuation list out of the playout (the experiment
+   bypasses only the enum memo).
 
 ## 6. Instruments added on the way (all inert unless set)
 
 `MTG_EQUIV_ONLY=<probe>:<card>` (one discovery rollout), `MTG_ENUM_HIWATER_KB` axis breakdown,
 `MTG_AXIS_TRACE=<min plans>` (stage counts while the list grows), `MTG_ENUM_DUPCENSUS=<min plans>`
 (distinct post-apply states + per-axis inert variants; prints and exits).
+
+## Appendix: the option-5 experiment patch (against 9711d6231; `MTG_ROLLOUT_FAN_NARROW=1` arms it)
+
+```diff
+diff --git a/src/ai/TurnSolver.cpp b/src/ai/TurnSolver.cpp
+index b4fd48d05..adf4ea818 100644
+--- a/src/ai/TurnSolver.cpp
++++ b/src/ai/TurnSolver.cpp
+@@ -72335,6 +72335,11 @@ static void AxisTrace(const char* stage, const GameState& state, const std::vect
+ 
+ // MTG_LOOKTOP_FLIP_FOLD (default ON, =0 restores the {0,1} land fan): see the look-top pin axis below.
+ static bool LookTopFlipFoldOn() { static const bool on = EnvOn("MTG_LOOKTOP_FLIP_FOLD", true); return on; }
++// EXPERIMENT (MTG_ROLLOUT_FAN_NARROW, default OFF, uncommitted measurement for docs/design/lfe-plan-fan-explosion.md
++// option 5): inside the PLAYOUT's per-turn lookahead (RolloutPreCombatSolve, beyond the horizon) skip the
++// library-top-reader position twins and the look-top pin fan. A playout-policy change -- lossy, measured only.
++static thread_local bool t_rollout_narrow = false;
++static bool RolloutFanNarrowOn() { static const bool on = EnvOn("MTG_ROLLOUT_FAN_NARROW"); return on; }
+ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
+                                   std::vector<TurnSolver::Plan>& all, bool idle_pass = false,
+                                   PbLazyLayout* pb_lazy = nullptr)
+@@ -75016,7 +75021,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
+         const bool acts_at_end = ResolveProvider(state).LandEntrySpotsRule(state)
+                               && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LandPick);
+         AxisTrace("pre-actslot", state, all);
+-        if (!cont_axes_only && !acts_at_end)
++        if (!cont_axes_only && !acts_at_end && !t_rollout_narrow)
+         {
+             std::vector<TurnSolver::Plan> twins;
+             for (const TurnSolver::Plan& p : all)
+@@ -75687,7 +75692,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
+     // "which order" interact and the tutor axis's additivity argument no longer holds for the order;
+     // the cross product is bounded by the tutor width. Human play never fans: the human answers the
+     // resolution-time `dig` prompts. Gated on the deck constant (one bool test for every other deck).
+-    if (!HumanPlayActive() && state.deck_has_look_top_watcher)
++    if (!HumanPlayActive() && state.deck_has_look_top_watcher && !t_rollout_narrow)
+     {
+         constexpr std::size_t kLookTopProductCap = 16;
+         // A base plan, or a pure tutor-target variant (`tutor_variant`), and nothing else: the other
+@@ -78196,7 +78201,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
+                       // frames that do (2026-10-20: a cached outer list served inside the walk handed it
+                       // its own route plan back).
+                       && !AlchemistComboRouteInProgress()
+-                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
++                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0)
++                      && !t_rollout_narrow;
+     if (!memo_ok)
+     {
+         if (enummemo::StatsOn() && enummemo::Enabled() && !HumanPlayActive())
+@@ -94507,6 +94513,8 @@ static TurnSolver::Plan RolloutPreCombatSolve(const GameState& state, int depth,
+                                               SearchBudget* budget, bool second_main,
+                                               TranspositionTable* tt)
+ {
++    struct NarrowScope { bool prev; NarrowScope() : prev(t_rollout_narrow) { if (RolloutFanNarrowOn()) { t_rollout_narrow = true; } }
++                         ~NarrowScope() { t_rollout_narrow = prev; } } _narrow;
+     const bool finite_budget = (budget != nullptr && !budget->Unlimited());
+     if (depth <= 0 || !m1memo::On() || HumanPlayActive() || g_cantrip_order_site != nullptr
+         || (finite_budget && budget->Overrun()))
+```
