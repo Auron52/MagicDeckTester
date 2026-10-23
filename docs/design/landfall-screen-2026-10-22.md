@@ -895,3 +895,19 @@ Courser + Baloths, all four Phylath) is the best of the four, with the thinnest 
 used one host (Phylath) for all its Hydra arms, so their within-round comparisons are consistent; but A0 itself
 was chosen on round 2's mixed-host reading. x2 (Courser host) and x3 (no table) say how much the host choice
 moves the level.
+
+### x2 — Hydra on COURSER's bucket for every arm (`logs/landfall_screen/x2.json`)
+
+Same seeds (9300000, 20,000 paired games); U0_p0 left out (its Courser is real, so it cannot also host the Hydra).
+
+| arm | Phylath | vs U0 | se | t | vs shipped | T7+ |
+|---|---|---|---|---|---|---|
+| **U0** | 4 | -- | -- | -- | **-0.594** | **2.71%** |
+| U0_p3 | 3 | +0.0249 | 0.0020 | +12.7 | -0.569 | 3.08% |
+| U0_p2 | 2 | +0.0551 | 0.0028 | +19.7 | -0.539 | 3.45% |
+
+**The order holds under the other host, and the Phylath cuts cost MORE (~0.025-0.028 t per copy, vs ~0.007 on
+Phylath's bucket).** What moves with the host is the LEVEL: U0 is -0.7495 vs shipped on Phylath's bucket and
+-0.594 on Courser's, a 0.155 t swing from the keep table alone. So no absolute "vs shipped" number from a
+Hydra arm is worth more than its host; only within-host comparisons are. x3 (no table on any arm) is the
+host-free arbiter of the level.
