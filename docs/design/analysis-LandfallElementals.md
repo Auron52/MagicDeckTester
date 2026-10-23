@@ -342,6 +342,15 @@ The generation-setting screen (`mullgen_finalize.py --write`) aborted twice at t
    discovery rollout (probe 102 + Risen Reef) is 12.5 s alone (173 s in the contended pool); its T4
    decision enumerated 156,707 plans over 513,816 odometer states for 60,873 billed units.
 
+   **The monster game (single-game repro, play settings d5 b20, ONE thread):**
+   `mtg decks/LandfallElementals/LandfallElementals.cod --profile ... --games 1 --seed 1100011 --game-index 11`
+   reaches **18.9 GB RSS in 23 s** and dies at the default cap. A gdb snapshot at 6 GB: ONE main-1
+   enumeration inside a rollout (FSLineWin -> SimulateToEnd -> RolloutPreCombatSolve ->
+   SolveWithLookahead -> EnumeratePlansWithLand), turn 6, `all` = 1,028,168 plans after the
+   act-slot twins, `extra` = 440,049 and growing in the land_search_pins fan (TurnSolver.cpp:74754),
+   the look-top fan still to come. `MTG_ENUM_HIWATER_KB` is SILENT for it (it reports only after an
+   enumeration completes). This game is what killed both 5c2 attempts (in flight in both aborts).
+
 ## Stage 5c2 / 5h / verify_deck / backstop screen (2026-10-23, this box: 23.5 GB, 32 cores)
 - **5h viewer audit: PASS** (`audit_viewer_decisions.py`, 40 games from seed 9001): expected
   bounce/dig/divide/target/tutor_etb/vial_charge all surfaced (+ discard); oracle-text cross-check clean.
