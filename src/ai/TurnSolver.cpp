@@ -72304,6 +72304,35 @@ constexpr int kCombatAuraSwapNoSwap = 0;
 // numbers its fans exactly as the lazy one did.
 static thread_local int t_pb_group_counter = 0;
 
+// DIAGNOSTIC (MTG_AXIS_TRACE=<min plans>, default off): the axis list's size and make-up at each stage of
+// AppendSubdecisionAxes, printed WHILE the list is growing -- MTG_ENUM_HIWATER_KB reports only a
+// finished enumeration, so a list that never finishes (it is aborted at the RSS cap) is silent there.
+static void AxisTrace(const char* stage, const GameState& state, const std::vector<TurnSolver::Plan>& all)
+{
+    static const long long s_min = EnvInt("MTG_AXIS_TRACE", 0);
+    if (s_min <= 0 || static_cast<long long>(all.size()) < s_min) { return; }
+    std::size_t tu = 0, ls = 0, as = 0, lsp = 0, lt = 0, sub = 0;
+    std::size_t max_casts = 0, max_acts = 0;
+    for (const TurnSolver::Plan& p : all)
+    {
+        tu += p.tutor_choice != -1; ls += p.land_slot != 0; as += p.land_search_act_slot != -1;
+        sub += p.land_search_act_slot <= -2; lsp += !p.land_search_pins.empty(); lt += !p.look_top_pins.empty();
+        std::size_t c = 0, a = 0;
+        for (const Action& x : p.actions) { (TurnSolver::IsLandSearchActivation(x) ? a : c) += 1; }
+        max_casts = std::max(max_casts, c); max_acts = std::max(max_acts, a);
+    }
+    std::string hand;
+    for (const Card& c : state.ActivePlayer().hand) { hand += c.m_name.str() + "|"; }
+    std::string bf;
+    for (const Permanent& q : state.battlefield)
+    { if (q.controller_index == state.active_player_index) { bf += q.card.m_name.str() + (q.tapped ? "(t)|" : "|"); } }
+    std::fprintf(stderr, "[axis-trace] %s turn=%d plans=%zu tutor=%zu land_slot=%zu act_slot=%zu (subsets %zu)"
+                 " land_search=%zu look_top=%zu max_casts=%zu max_acts=%zu\n  hand=%s\n  bf=%s\n",
+                 stage, state.turn_number, all.size(), tu, ls, as, sub, lsp, lt, max_casts, max_acts,
+                 hand.c_str(), bf.c_str());
+    std::fflush(stderr);
+}
+
 // MTG_LOOKTOP_FLIP_FOLD (default ON, =0 restores the {0,1} land fan): see the look-top pin axis below.
 static bool LookTopFlipFoldOn() { static const bool on = EnvOn("MTG_LOOKTOP_FLIP_FOLD", true); return on; }
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
@@ -74986,6 +75015,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         //     and MTG_UNPRUNE=landpick keep every position).
         const bool acts_at_end = ResolveProvider(state).LandEntrySpotsRule(state)
                               && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LandPick);
+        AxisTrace("pre-actslot", state, all);
         if (!cont_axes_only && !acts_at_end)
         {
             std::vector<TurnSolver::Plan> twins;
@@ -75074,6 +75104,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             all.insert(all.end(), std::make_move_iterator(twins.begin()),
                                   std::make_move_iterator(twins.end()));
         }
+        AxisTrace("post-actslot", state, all);
         // (1) In-plan pins. Per ordinal a LIST of pin values (values_of), so a credited land-put cast
         //     fans only its restricted picks and a Karoo pick its bounce sub-choices; with neither,
         //     every list is exactly 0 .. width-1 and the variants are the old width fan's.
@@ -75634,6 +75665,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    AxisTrace("pre-looktop", state, all);
     // ---- SEARCHED LOOK-TOP PINS (Risen Reef + Flamekin Harbinger; Plan::look_top_pins, 2026-10-18) --
     // Two decisions the enter cascade raises, both resolved at the true mid-plan state and bound by
     // ORDINAL (core/SpellEffects.h ConsumeScriptedLookTopLandPin / ...OrderPin):
