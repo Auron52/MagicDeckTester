@@ -280,3 +280,55 @@ user-requested run) because the arm that does not matter had become the whole ru
 h4_phy0 changes no shuffle effect, and the non-clairvoyant check matters mainly when a change alters the
 number of shuffle effects (USER 2026-10-22). Dropping it cost nothing the screen needs. **Replaced by nc2**
 (below): base, G6 and round 5's six shuffle-count arms on round 5's seeds, on every core.
+
+## Round 5 — single changes around G6 (`logs/landfall_screen/r5.json`, seed 8100000)
+
+20,000 games, `"centre": "G6"` so every arm is numbered against G6 and differs from it by exactly the copies
+named (k = n on all 13). base 5.7313 (T7+ 6.93%); **G6 4.8952, -0.8361 vs base on fresh seeds** (T7+ 1.59%).
+Deltas below are paired per game against G6 (`logs/landfall_screen/vsref.py`).
+
+| arm | change from G6 | vs G6 | se | T7+ | shuffle count |
+|---|---|---|---|---|---|
+| G6_w5f11 | 2 Forest -> 2 Evolving Wilds (5) | **-0.0238** | 0.0028 | 1.38% | **+2** |
+| G6_w4f12 | Forest -> Evolving Wilds (4) | -0.0128 | 0.0020 | 1.49% | **+1** |
+| G6_f12em1 | Forest -> Elvish Mystic | -0.0112 | 0.0025 | 1.65% | = |
+| G6_f14cu1 | Cultivate -> Forest | -0.0081 | 0.0023 | 1.77% | **-1** |
+| G6_a3w4 | Avenger -> 4th Genesis Wave | -0.0068 | 0.0016 | 1.58% | = |
+| G6_o0p3 | Omnath -> 3rd Phylath | -0.0056 | 0.0018 | 1.35% | = |
+| G6_t3p3 | Primeval Titan -> 3rd Phylath | +0.0017 | 0.0019 | 1.49% | **-1** |
+| G6_hf2w2 | Genesis Wave -> 2nd Craterhoof | +0.0057 | 0.0015 | 1.75% | = |
+| G6_turf2f12 | Forest -> 2nd Gruul Turf | +0.0116 | 0.0019 | 1.57% | = |
+| G6_f12p3 | Forest -> 3rd Phylath | +0.0307 | 0.0025 | 1.91% | = |
+| G6_s3p3 | Search for Tomorrow -> 3rd Phylath | +0.0449 | 0.0025 | 1.91% | **-1** |
+| G6_cu0p4 | 2 Cultivate -> 2 Phylath | +0.0563 | 0.0033 | 2.55% | **-2** |
+
+Reading: the list wants MORE mana, not more threats -- every land or ramp spell cut for a Phylath is worse (by
+0.03-0.06), while a Forest for a fifth one-drop dork is better. The ramp spells are not interchangeable with lands:
+Cultivate -> Forest is mildly better, but cutting Search for Tomorrow or both Cultivates is clearly worse.
+Among threats, a 4th Genesis Wave for an Avenger and a 3rd Phylath for Omnath are small gains; a 2nd Craterhoof
+is worse than the 3rd Wave. Titan -> Phylath is neutral. The two Evolving Wilds arms ADD shuffles, so their gain
+is exactly what clairvoyance would inflate; they go to the brackets (nss2 / nc3), as do the Cultivate, Search and
+Titan arms, which change the shuffle count the other way. Selection bias applies: round 6 re-measures the
+winners, combined, on held-out seeds.
+
+## Non-clairvoyant bracket 2 — round 5's shuffle-count arms (`logs/landfall_screen/nss2.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Round 5's seeds (8100000), 20,000 games, centre G6; only the arms that change the number of shuffle effects
+(USER 2026-10-22: the non-clairvoyant check matters mainly when a change alters the shuffle count).
+base 5.8820 under NSS (0.15 t slower than default again); **G6 -0.8512 vs base** (default -0.8361).
+
+| arm | change from G6 | default vs G6 | NSS vs G6 | NSS se |
+|---|---|---|---|---|
+| G6_w5f11 | 2 Forest -> 2 Evolving Wilds | -0.0238 | **+0.0001** | 0.0030 |
+| G6_w4f12 | Forest -> Evolving Wilds | -0.0128 | -0.0036 | 0.0021 |
+| G6_f14cu1 | Cultivate -> Forest | -0.0081 | -0.0053 | 0.0026 |
+| G6_t3p3 | Primeval Titan -> Phylath | +0.0017 | +0.0004 | 0.0022 |
+| G6_s3p3 | Search for Tomorrow -> Phylath | +0.0449 | +0.0382 | 0.0031 |
+| G6_cu0p4 | 2 Cultivate -> 2 Phylath | +0.0563 | +0.0732 | 0.0040 |
+
+**The Evolving Wilds gain is clairvoyance.** With the post-search shuffle off, the two extra Wilds go from the
+round's best arm (-0.024) to exactly nothing (+0.000); one extra Wilds keeps a third of its gain, inside 2 se.
+That is the user's warning ("clairvoyance loves shuffles so they will be overvalued") measured: the shuffle
+added nothing a real player could use, and the search was picking re-rolls it could see. Do not add Wilds on
+this screen's evidence. Arms that CUT a shuffler hold their sign (Cultivate -> Forest stays a small gain; the
+Search and Cultivate cuts stay clearly worse), as they should if the default overvalues shuffles.
