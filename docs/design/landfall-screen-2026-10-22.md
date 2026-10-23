@@ -555,3 +555,32 @@ the shuffle off the deep-threat games stay deep, as they do for a real player. E
 shrinks the same way, in proportion to the threats it removes. **N1 (2 Avenger, 1 Titan, +2 Fyndhorn) is the
 robust step: -0.034 default, -0.028 NSS, tail level with M0.** The arms are within ~1-2 se of each other under
 NSS; the TAIL is what separates them. Round 11 is re-centred on N1 (it had been queued around N8).
+
+## COURSE CORRECTION (USER 2026-10-23) — no mana creatures; landfall is the staple
+
+On seeing rounds 5-10's lists (G6 / K0 / M0 / N1 / N8: 4 to 14 mana creatures, Craterhoof, and progressively
+fewer Titans, Avengers, Cultivates and Khalnis): *"it seems you went quite off the deep end. I don't want to add
+elves to every deck."* and *"The deck should be centered around landfall which means that lands entering and
+cards that benefit from that must be a staple."*
+
+The drift began in round 1, which read "other cards that might help" as licence to try Llanowar Elves; round 3
+built them into the anchor (F0) and every later round inherited them. So **rounds 3-11 measure lists the deck
+will not play, and none of G6 / K0 / M0 / N1 / N8 is a candidate.** What still stands from them is the
+engine-level reading (Evolving Wilds and low-threat lists are flattered by the clairvoyant shuffle; the NSS
+bracket is the cheap check). The non-clairvoyant sample 6 (`nc6`, dork lists only) and round 11 / NSS bracket 8
+(around N1) were stopped; nc6's partial per-game log is kept as `logs/landfall_screen/nc6.partial.screen.err`.
+
+**Candidate pool from here:** the shipped list's own cards, the cards the USER named (Mossborn Hydra -- itself
+a landfall payoff --, Kessig Wolf Run as a 1-of, more Rampaging Baloths / Omnath / Genesis Wave, Terastodon kept)
+and lands. No mana creatures, no Craterhoof (not a landfall card). The no-dork evidence that already exists is
+rounds 0-2: four Hydra for 2 Phylath + 2 Courser / Baloths / Titan measured -0.727 / -0.725 / -0.723 vs shipped
+(a near tie), and Kessig Wolf Run for Haunted Fengraf a further -0.0085 on that list.
+
+## Round 12 — landfall-package swaps around A0 (`logs/landfall_screen/r12.json`, seed 8800000)
+
+Anchor **A0 = shipped + 4 Mossborn Hydra (for 2 Phylath + 2 Courser) + Kessig Wolf Run (for Haunted Fengraf)**,
+`"centre": "A0"`. Twenty single swaps, every one inside the landfall package: Phylath / Courser / Baloths /
+Omnath / Genesis Wave / Cultivate against Titan, Avenger and each other, the two alternative Hydra cuts
+(2 Baloths or 2 Titan instead of 2 Courser), and the lands (Radiant Fountain, a Mountain, 25 lands with a 3rd
+Cultivate, Evolving Wilds 2 and 4). NSS bracket 9 runs the same spec with the shuffle off. Results below when
+they land.
