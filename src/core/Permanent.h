@@ -573,9 +573,15 @@ struct Permanent
     // Incandescent Soulstoke's put: "Sacrifice it at the beginning of the next end step." A delayed
     // trigger, swept at BOTH end-step sites in lockstep through the shared SacrificePermanentAt (dies /
     // LTB fire, unlike the Twinflame exile). Folded into every sim key beside exile_at_end. Never set
-    // outside tap_put_sac_at_end_step. A 1-bit field in the byte above, so sizeof(Permanent) stays 304.
+    // outside tap_put_sac_at_end_step. A 1-bit field.
+    //
+    // NINE BITS NOW (rebase 2026-10-23): the Scythecat Cub and Moraug bits filled the byte above to eight, so
+    // this ninth bit starts a second byte -- and the plain bool that followed would then have cost a THIRD
+    // (+8 after alignment: 312, caught by Dominance.h's size assert). lifegain_counters_used_this_turn is
+    // therefore a 1-bit field too, sharing this second byte: two bytes, the same footprint as the eight-bit
+    // byte plus the old plain bool, sizeof(Permanent) 304. Nothing takes either field's address.
     bool      sac_at_end_step      : 1 = false;
-    bool      lifegain_counters_used_this_turn = false; // Nykthos Paragon's "Do this only once each
+    bool      lifegain_counters_used_this_turn : 1 = false; // Nykthos Paragon's "Do this only once each
                                            // turn" on "whenever you gain life, you may put that many
                                            // +1/+1 counters on each creature you control". PER
                                            // PERMANENT, not per name (Scryfall ruling 2: multiple
