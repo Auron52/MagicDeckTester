@@ -263,3 +263,20 @@ than twice as much (-0.033). Turntimber Symbiosis also gains more, but NSS does 
 the front face LOOKS at the top seven, which no shuffle setting hides -- so it stays unverified.
 **Nothing in the finalist depends on clairvoyant shuffle re-rolls.** (Cross-round rows compare different seeds
 and, for r0/r1, the pre-pin engine: read them to ~0.01.)
+
+## Non-clairvoyant sample 1 — STOPPED (`logs/landfall_screen/nc1.json`, `MTG_NC_SEARCH=1`)
+
+base / G6 / h4_phy0, 300 games, seed 7800000, 20 workers. Stopped after 80 min (it was our own experiment, not a
+user-requested run) because the arm that does not matter had become the whole run:
+
+* **G6 finished: 300 games, avg 5.2267, 5,693 core-s in total (19 s a game).**
+* **h4_phy0 (4 Hydra for 4 Phylath, Courser still in) was the cost.** ~283 of its 300 games were done, but 17 of
+  the 20 workers were each on one of its games at over 1.1 h (finished ones ran to 4,418 s). The non-clairvoyant
+  engine's reshuffle-averaged search is expensive on boards holding both Courser of Kruphix (a revealed top
+  card) and a Hydra's counter growth; G6, with no Courser, averaged 19 s.
+* **base had barely started** (~15 games). The batch dispatched it last, so it would have waited behind the
+  stragglers on 3 workers, and G6 cannot be read without it.
+
+h4_phy0 changes no shuffle effect, and the non-clairvoyant check matters mainly when a change alters the
+number of shuffle effects (USER 2026-10-22). Dropping it cost nothing the screen needs. **Replaced by nc2**
+(below): base, G6 and round 5's six shuffle-count arms on round 5's seeds, on every core.
