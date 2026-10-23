@@ -357,3 +357,26 @@ Reading: the round-5 singles held out and ADD (J_ao -0.017 vs their r5 sum -0.01
 -0.038). Cultivate is the right slot for the Mystic (J_cuem -0.021 vs Forest -> Mystic -0.013), and a second
 Mystic for a Forest adds another -0.007 on top of J1. The Evolving Wilds rows lead again, but bracket 2 showed
 that gain is the clairvoyant search steering re-rolls; the NSS bracket of this round (nss3) re-checks them.
+
+## Non-clairvoyant bracket 3 — all of round 6 (`logs/landfall_screen/nss3.json`, `MTG_NO_SEARCH_SHUFFLE=1`)
+
+Round 6's seeds (8200000), 20,000 games, centre G6. base 5.8857; G6 -0.8456 vs base.
+
+| arm | default vs G6 | NSS vs G6 | NSS se | the Wilds' own share (vs the arm without them), default -> NSS |
+|---|---|---|---|---|
+| J1_em2 | -0.0433 | **-0.0445** | 0.0042 | |
+| J1 | -0.0364 | **-0.0428** | 0.0034 | |
+| J1_w1 | -0.0485 | -0.0410 | 0.0039 | 1 Wilds on J1: -0.012 -> **+0.002** |
+| J1_w2 | -0.0565 | -0.0363 | 0.0042 | 2 Wilds on J1: -0.020 -> **+0.007** |
+| J3 | -0.0249 | -0.0304 | 0.0036 | |
+| J2 | -0.0280 | -0.0294 | 0.0038 | |
+| J_ao | -0.0167 | -0.0222 | 0.0027 | |
+| J_cuem | -0.0209 | -0.0191 | 0.0023 | |
+| J_ao_w2 | -0.0347 | -0.0176 | 0.0039 | 2 Wilds on J_ao: -0.018 -> **+0.005** |
+| J_em | -0.0132 | -0.0074 | 0.0029 | |
+| J_em_w2 | -0.0286 | -0.0043 | 0.0040 | 2 Wilds on J_em: -0.015 -> **+0.003** |
+
+Held out, the Evolving Wilds artifact replicates on all three hosts: every Wilds share goes from a gain of
+0.012-0.020 to nothing or a small loss. The non-Wilds candidates hold (J1 even grows, as a list that cuts a
+Cultivate should if the default overvalues shuffles). J1_em2's second Mystic over J1 shrinks to -0.002 here
+(default -0.007): J1 and J1_em2 are close; both are ~-0.04 t better than G6.
