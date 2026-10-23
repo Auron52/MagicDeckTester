@@ -465,6 +465,48 @@ inline bool TryDepletionRescue(GameState& s, const ManaCost& cost, const char* f
     return true;
 }
 
+// The castability twin's board (MTG_RB_DEP_CAST=2): apply the rescue a payment short of colour X would make,
+// for the first colour X (WUBRG order) that a freeable ledger source makes, the depletion land does not, and no
+// untapped non-creature source makes now. Returns false (board untouched) when there is no such colour.
+inline bool ApplyGenericDepletionRescue(GameState& s)
+{
+    const int active = s.active_player_index;
+    const PayRollbackLedger& L = s.pay_ledger;
+    int bmask = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || DepletionCountersOn(p) <= 0 || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.enters_tapped_with_depletion > 0) { bmask |= DepletionColourMask(s, active, *d, p); }
+    }
+    int plain = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !PlainSourceForRescue(s, active, p, *d)) { continue; }
+        plain |= IsPaySacSource(*d) ? 31 : DepletionColourMask(s, active, *d, p);
+    }
+    int freeable = 0;
+    for (int k = 0; k < L.n; ++k)
+    {
+        const int ai = FindPermIdx(s, active, L.e[k].source_num);
+        if (ai < 0) { continue; }
+        const Permanent& a = s.battlefield[ai];
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (a.tapped && ad != nullptr && SwapEligible(*ad)) { freeable |= DepletionColourMask(s, active, *ad, a); }
+    }
+    for (int c = 0; c < 5; ++c)
+    {
+        if (!(freeable & (1 << c)) || (bmask & (1 << c)) || (plain & (1 << c))) { continue; }
+        ManaCost x;
+        switch (c) { case 0: x.white = 1; break; case 1: x.blue = 1; break; case 2: x.black = 1; break;
+                     case 3: x.red = 1; break; default: x.green = 1; break; }
+        AppliedDepletion rec;
+        return TryDepletionRescue(s, x, nullptr, &rec);
+    }
+    return false;
+}
+
 // Revert the last TryDepletionRescue (the payment after it failed: a failed payment is side-effect-free).
 inline void UndoDepletion(GameState& s, AppliedDepletion& u)
 {

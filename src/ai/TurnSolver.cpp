@@ -63080,7 +63080,39 @@ static bool BindAuraLateHosts(const GameState& state, bool is_pre_combat, const 
     return true;
 }
 
+static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, bool is_pre_combat);
+// MTG_RB_DEP_CAST=2 (measurement switch, DEFAULT OFF; inert without MTG_PAY_ROLLBACK_DEPLETION): the
+// castability half of the depletion rollback, done on a RESCUED BOARD. While a rescue is live
+// (payroll::DepletionRescueLive) the subsets are also enumerated on a scratch copy with the rescue applied
+// (payroll::ApplyGenericDepletionRescue), through the SAME gates -- so a Gold Rush that funds the Fists after
+// it (the mint credit) is priced exactly as on any board -- and every plan the real board did not offer is
+// appended after the real board's list (ranked last). The payment the apply then makes runs the rescue itself
+// (TapForCostShared / the prepay's joint bill). Mode 1, the as-executed walk, cannot see a mid-line Treasure:
+// it pays without resolving. Guarded against re-entry (the scratch enumeration is not rescued again).
+static thread_local bool t_rb_dep_cast_inner = false;
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
+{
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansCore(state, is_pre_combat);
+    static const int s_mode = EnvInt("MTG_RB_DEP_CAST", 0);
+    if (s_mode != 2 || t_rb_dep_cast_inner || !PayRollbackDepletionOn() || !payroll::DepletionRescueLive(state))
+    { return plans; }
+    GameState rb = state;
+    if (!payroll::ApplyGenericDepletionRescue(rb)) { return plans; }
+    t_rb_dep_cast_inner = true;
+    std::vector<TurnSolver::Plan> extra = EnumeratePlansCore(rb, is_pre_combat);
+    t_rb_dep_cast_inner = false;
+    std::unordered_set<std::string> seen;
+    for (const TurnSolver::Plan& p : plans)
+    { seen.insert((p.land_decided ? p.land_to_play : std::string("-")) + "|" + FsPlanText(p)); }
+    for (TurnSolver::Plan& p : extra)
+    {
+        if (seen.insert((p.land_decided ? p.land_to_play : std::string("-")) + "|" + FsPlanText(p)).second)
+        { plans.push_back(std::move(p)); }
+    }
+    return plans;
+}
+
+static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, bool is_pre_combat)
 {
     routetape::Suspend _rts;       // an enumeration's trial applies are not a route link's own resolutions
     EnumChargeScope enum_charge;   // MTG_ENUM_CHARGE (default off): bills this walk at exit
@@ -63710,8 +63742,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // MTG_RB_DEP_CAST (measurement switch, DEFAULT OFF): on Mirrorwing's 47 changed games it recovered 4 slower
     // games and lost 4 faster ones (unfindable from HOLD's board at budget 0), and on NivMizzetCombo seed 1 it
     // let the search plan a post-draw {U} around a rescue that spent the Needle's last counter (T6 -> T7).
-    static const bool s_rb_dep_cast = EnvOn("MTG_RB_DEP_CAST");
-    const bool dep_rescue_live = s_rb_dep_cast && PayRollbackDepletionOn() && payroll::DepletionRescueLive(state);
+    // =1: the as-executed walk below; =2: the rescued-board enumeration (EnumeratePlans' wrapper).
+    static const int s_rb_dep_cast = EnvInt("MTG_RB_DEP_CAST", 0);
+    const bool dep_rescue_live = s_rb_dep_cast == 1 && PayRollbackDepletionOn() && payroll::DepletionRescueLive(state);
     // Per-candidate half of the same test, hoisted out of the per-subset walk (ManaPayment.h).
     ColorDemandIndex colour_demand;
     BuildColorDemandIndex(cands, colour_demand);
@@ -93253,6 +93286,29 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 static_cast<unsigned long long>(enumstats::g_e_surv.load() - bp_slow_s0),
                 ap.lands_played_this_turn, state.spells_cast_this_turn, state.floating_mana.Total(),
                 ap.hand.size(), hand.c_str(), board.c_str());
+        }
+    }
+    // MTG_BP_DERIVE_TRACE=<turn> (diagnostic, print-only, default 0 = off): every breakpoint-continuation
+    // derivation at that turn -- the frame (untapped own permanents, float, hand) and the derived list,
+    // so a continuation that never reaches the menu (or never reaches a payment) is visible.
+    {
+        static const int s_bpc_turn = EnvInt("MTG_BP_DERIVE_TRACE", 0);
+        if (s_bpc_turn > 0 && state.turn_number == s_bpc_turn)
+        {
+            std::string up, hand;
+            for (const Permanent& p : state.battlefield)
+            { if (p.controller_index == state.active_player_index && !p.tapped) { up += p.card.m_name.str() + ","; } }
+            for (const Card& c : state.ActivePlayer().hand) { hand += c.m_name.str() + ","; }
+            std::fprintf(stderr, "[bpcont] t%d nest=%d depth=%d float=%d oppL=%d untapped=[%s] hand=[%s] plans=%zu\n",
+                         state.turn_number, g_rollout_nest, g_bp_enum_depth, state.floating_mana.Total(),
+                         state.players[1 - state.active_player_index].life, up.c_str(), hand.c_str(), plans.size());
+            for (std::size_t i = 0; i < plans.size() && i < 12; ++i)
+            {
+                std::string c;
+                for (const Action& a : plans[i].actions) { c += a.card_name; c += ","; }
+                std::fprintf(stderr, "[bpcont]   #%zu land=%s %s\n", i,
+                             plans[i].land_decided ? plans[i].land_to_play.c_str() : "-", c.c_str());
+            }
         }
     }
     t_bpd_prefilter = static_cast<long long>(plans.size());

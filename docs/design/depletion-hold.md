@@ -264,3 +264,70 @@ re-paid the Lookout's generic onto the Needle's last counter for a same-phase {U
 the gate); with castability the search plans a post-draw {U} around exactly that rescue (hence castability OFF).
 Seed 6 is T5 under every arm, the unseen-colour fix (A) included -- the Skerry paying the Brainstorm costs nothing
 in outcome on this tree.
+
+## Round 3: the OFF search miss, the menu drops, and the non-clairvoyant check (2026-10-23)
+
+### 1. The OFF search miss is the breakpoint-continuation W^L trade (bp-node-partition.md, "STAGE 3 -- nested")
+
+The 9 faster games whose HOLD line the OFF payer CAN pay (3517, 7459, 14131, 1654, 3707, 4698, 6560, 7474,
+17078): from HOLD's own board at the start of its win turn, OFF does not find the kill at `--depth 5` NOR
+`--depth 8`, `--budget-ms 0` (all 9; HOLD finds it in every one). Not budget.
+
+**Worked example, play gi=1654 T3** (Forest; Gold Rush + Fists of Flame; Fists draws Elvish Mystic +
+Ancestral Anger; Anger draws Anger + Needle; the second Anger is the kill). The menu is fine: every frame
+offers the right plan (`MTG_BP_DERIVE_TRACE=3`: the continuation after the first Anger lists
+`[Ignoble Hierarch], [Elvish Mystic], [Ancestral Anger]`). The payment is fine: the claude-play replay of
+HOLD's line under the OFF payer wins T3 (and under FULL_YIELD). What is missing is the SEARCH of the second
+link: the line needs a non-canonical continuation at TWO breakpoints (Anger at the first, Anger at the
+nested one). The breakpoint machinery searches one deviation per apply (`bp_at`) plus the uniform-index
+policy (`bp_all`); an unchosen nested breakpoint takes the canonical `cands.front()`. Under OFF the two
+Treasures Gold Rush made pay for Hierarch / Mystic too, so each list is 3-6 wide and the Angers sit at
+different indices -- no single (bp_at, k) and no uniform k expresses the line. Under HOLD the Treasures went
+to Fists and only the Needle's {R}{R} is left, every continuation list collapses to `[Ancestral Anger]`,
+and `k = 0` at every breakpoint IS the kill. Proof: replace the drawn Elvish Mystic with a Mountain (so the
+lists narrow) and OFF finds the T3 kill too (both arms). Hosting site 5 as a node (`MTG_BP_NODE_D56`, +
+`KEEPWAVE`, `ROOTTURN=0`), wider W / deeper `MTG_BP_DEPTH` (8, 16), `MTG_BP_CANDS_ORDER`: none finds it --
+none searches the second link. All 9 games are multi-cantrip chains (Anger/Restoration/Fists drawing the
+next link). bp-node-partition.md already names this: "nested -> ... mirrorwing s0 is the outlier at 70.3%
+... needs the nested-hosting design (the L*W-not-W^L trade)".
+
+### 2. The "menu drops" and the castability trigger's losses are the same family
+
+16050, 5855 and 17960 are not menu defects under HOLD: the follow-up (Gold Rush then Fists / Restoration /
+Draught) is genuinely unpayable on HOLD's board -- the cantrip's payment spent the only green (Game Trail,
+Rootbound Crag), the land drop (Game Trail, no Mountain or Forest to reveal) enters tapped, and the held
+Needle makes only red (the claude-play menu at that frame offers Fists or nothing). It is payable only
+THROUGH the depletion rescue. Castability mode 1 (the as-executed walk) admits the single green spell but
+not "Gold Rush, then the spell its Treasures pay for": the walk pays without resolving, so the minted
+Treasures never exist in it. Mode 2 (`MTG_RB_DEP_CAST=2`) enumerates on a rescued scratch board through the
+same gates (mint credit included) and appends what the real board did not offer. Measured (HOLD + ROLLBACK +
+DEPLETION + mode 2, the 47 changed games): **207** turns (no castability 210, mode 1 210; OFF 219, HOLD 229);
+vs OFF 16 faster / 5 slower, vs HOLD 24 faster / 2 slower; the 47 unchanged games byte-identical. It recovers
+exactly the three menu drops (16050, 5855, 17960) plus 19234 and 19305. It loses 7459 and 7474 to HOLD: the
+item-1 mechanism again -- from HOLD's board the single-plan continuation lists (9 and 2 of them) all widen
+(0 single-plan lists, mean width 3.4 -> 4.4 and 3.6 -> 4.6) and the kill becomes unfindable at budget 0.
+NivMizzetCombo seed 1 falls T6 -> T7 under both castability modes (the search plans a post-draw {U} around a
+rescue that spends the Needle's last counter); seed 6 stays T5. Mode 2 stays a measurement arm (DEFAULT OFF).
+
+The 4 faster games the castability trigger lost (3517, 6560, 7474, 17078) are item 1's mechanism:
+HOLD's kill in each needs the canonical continuation at a nested breakpoint, and HOLD's lists there are
+single-plan (6560: `[Ancestral Anger]`, then `[Fists of Flame]`); the rescue makes Hierarch / Restoration
+castable too, the same frame's list grows to 6 plans, and the line now needs two non-canonical links.
+
+**So the general ruling the USER pointed at is the nested breakpoint continuation (Stage 3).** It is what
+the OFF search misses, why HOLD wins those games at all (it narrows the lists by accident), and why any
+castability widening costs games. With it, OFF would find the 9, castability would be safe, and HOLD
+would be judged on the mana it saves rather than on the search it happens to unlock.
+
+### 3. Non-clairvoyant check (`MTG_NC_SEARCH=1 MTG_NC_K=4 MTG_NC_DEPTH=1`)
+
+| set | OFF | HOLD | HOLD + ROLLBACK + DEPLETION |
+|---|---|---|---|
+| the 10 draw-dependent rescue games | 54 | 54 | 54 (no rescue fires) |
+| all 29 slower games | 160 | 160 | 160 (every game identical) |
+| all 18 faster games | 97 | 92 | 92 (HOLD faster in 4: 11566, 12989, 6560, 8880) |
+
+Without clairvoyance the three arms tie on every slower game, and HOLD (with or without the rollback) keeps
+5 turns on the faster set. The 29 slower games -- and the rollback's recovery of 19 of them -- are lines that
+work only because the search knows the cantrips' draws (the USER's 2026-10-13 rule: clairvoyant wins are
+not regressions). The non-clairvoyant ruling on these 47 games is therefore: HOLD loses none and wins 4.
