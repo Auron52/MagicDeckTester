@@ -1,0 +1,1358 @@
+#!/usr/bin/env python3
+"""The ARTIFACT REFRESH QUEUE: rank every deck's generated artifacts by how far the play they were fitted
+to has drifted, and let one or more idle machines regenerate them, most-drifted first.
+
+    python3 scripts/artifact_queue.py status [--json] [--all]   # the ranked list; reads git only, plays nothing
+    python3 scripts/artifact_queue.py explain <deck>             # every axis for one deck
+    python3 scripts/artifact_queue.py mark <deck> <mulligan|valueleaf> "<why>" [--priority N]
+    python3 scripts/artifact_queue.py unmark <deck> <mulligan|valueleaf>
+    python3 scripts/artifact_queue.py claims                     # what every machine is doing (remote)
+    python3 scripts/artifact_queue.py start                      # detach a worker loop (own session, nohup)
+    python3 scripts/artifact_queue.py run [--once] [--dry-run]   # the worker loop, in the foreground
+    python3 scripts/artifact_queue.py stop                       # finish the CURRENT job, then exit
+    python3 scripts/artifact_queue.py selftest                   # claim CAS, .gz round-trip, parsing (no games)
+
+Design + rationale: docs/design/artifact-staleness-queue.md (USER idea, 2026-09-03 / 2026-10-10;
+built 2026-10-23 when inference budget ran short and the CPU was the free resource).
+
+WHAT "STALE" MEANS HERE -- every axis is computed from git and the files themselves, no games played:
+
+  * PLAY DRIFT (the ranking). The regression harness keeps, per suite case, one
+    "<game_index> <win_turn> <decision-stream digest>" line per game (test/gt_logs/*.wins). For each of
+    the deck's cases we take the version first accepted AT OR AFTER the artifact's adoption commit (the
+    first GT that saw the artifact live) and diff it, game by game, with HEAD's. churn = the share of
+    the deck's suite games whose decision stream changed since; |dturn| = mean per-game win-turn
+    change. Taking the first accept AFTER adoption means the artifact's own effect is never counted as
+    drift; the price is that a play change landed between adoption and that accept is missed (an
+    UNDER-estimate, never an over-one). The SCORE is |dturn|; churn is shown but saturates (see score()).
+  * DECKLIST MISMATCH (exact, keep tables): a card the list plays that no bucket names, or a bucketed
+    card the list no longer plays. Every hand holding one misses the table.
+  * CARD DATA (exact): a deck card's cards.json entry (minus name/oracle_text, the same canonicalisation
+    as CardDefHash) changed since the artifact was adopted.
+  * SETTINGS (exact, keep tables): the table was generated at a depth/budget other than the deck's
+    current mull_gen_depth / mull_gen_budget_ms.
+  * PIPELINE ORDER (exact, value leaves): the keep table was re-adopted after the leaf was fitted, so the
+    leaf was fitted to the hands an older table kept (USER order 2026-10-18: profile -> mulligan -> leaf).
+  * MANUAL MARK (USER): scripts/artifact_queue.json "marks" -- puts an artifact at the front regardless
+    of measured drift, with a reason (the 2026-10-10 Snow keep table is the motivating case).
+
+THE WORKER. A machine that runs `run` claims ONE DECK at a time from the shared queue branch
+(`artifact-queue` on origin; a claim is a compare-and-swap push, so two machines can never claim the same
+deck), freezes a dedicated worktree (.claude/worktrees/artifact-worker-<id>) on origin's branch tip, and
+runs that deck's stages STRICTLY SERIALLY through the only sanctioned entry points -- `mullgen.sh run`
+then `valueleaf.sh run` (CLAUDE.md: generation stages are serial, in order, alone on the box). It waits
+while any foreign `mtg`/`mtg-analyze` process is on the box (NOTHING runs alongside a generation), never
+kills anything, renews its lease every 20 min, and when the deck is done commits whatever the drivers
+adopted onto a result branch `artifact-refresh/<deck>-<date>` and pushes it. LANDING that branch (and
+accepting smoke/regression GT for the play it moves) stays a human/agent step: the worker never touches
+the working branch.
+"""
+import argparse
+import datetime
+import gzip
+import hashlib
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+import xml.etree.ElementTree as ET
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import deck_registry   # noqa: E402
+
+CONFIG_REL = "scripts/artifact_queue.json"
+GT_LOGS = "test/gt_logs"
+CARDS_JSON = "src/cards/data/cards.json"
+QUEUE_BRANCH = "artifact-queue"
+RESULT_PREFIX = "artifact-refresh/"
+KINDS = ("mulligan", "valueleaf")
+WINS_RE = re.compile(r"^(?P<key>[a-z0-9_]+?)(?P<hg>2hg)?_(?P<mode>smoke|regression|overnight)_d(?P<d>\d+)_s(?P<s>\d+)\.wins$")
+
+DEFAULT_CONFIG = {
+    "branch": "phase-1-2-deck-analyzer",
+    "min_drift": 0.02,
+    "kind_weight": {"mulligan": 1.0, "valueleaf": 1.0},
+    "mullgen_recipe": "fast",
+    "recipe_overrides": {},
+    "leaf_follows_mulligan": False,
+    "exclude": [],
+    "lease_hours": 3,
+    "heartbeat_minutes": 20,
+    "idle_poll_minutes": 5,
+    "retry_rejected_days": 14,
+    "marks": [],
+}
+
+
+# ------------------------------------------------------------------------------------------------ git
+def git(*args, cwd=ROOT, check=True, inp=None):
+    r = subprocess.run(["git", *args], cwd=cwd, input=inp, capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise RuntimeError("git %s failed: %s" % (" ".join(args), r.stderr.strip()))
+    return r.stdout
+
+
+class Blobs(object):
+    """One long-lived `git cat-file --batch`: reading ~1000 historical files through one pipe instead of
+    one process per file is what makes `status` a few seconds rather than minutes on the 9p mount."""
+
+    def __init__(self, cwd=ROOT):
+        self.p = subprocess.Popen(["git", "cat-file", "--batch"], cwd=cwd, stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE)
+        self.cache = {}
+
+    def get(self, rev, path):
+        spec = "%s:%s" % (rev, path)
+        if spec in self.cache:
+            return self.cache[spec]
+        self.p.stdin.write((spec + "\n").encode())
+        self.p.stdin.flush()
+        head = self.p.stdout.readline().decode().split()
+        if len(head) < 3 or head[1] != "blob":
+            self.cache[spec] = None
+            return None
+        n = int(head[2])
+        data = self.p.stdout.read(n)
+        self.p.stdout.read(1)
+        self.cache[spec] = data
+        return data
+
+    def close(self):
+        try:
+            self.p.stdin.close()
+            self.p.wait(timeout=10)
+        except Exception:
+            self.p.kill()
+
+
+# --------------------------------------------------------------------------------------------- config
+def load_config(root=ROOT):
+    cfg = json.loads(json.dumps(DEFAULT_CONFIG))
+    p = os.path.join(root, CONFIG_REL)
+    if os.path.exists(p):
+        user = json.load(open(p))
+        for k, v in user.items():
+            if k.startswith("_"):
+                continue
+            if isinstance(v, dict) and isinstance(cfg.get(k), dict):
+                cfg[k].update(v)
+            else:
+                cfg[k] = v
+    return cfg
+
+
+def save_marks(marks, root=ROOT):
+    p = os.path.join(root, CONFIG_REL)
+    raw = json.load(open(p)) if os.path.exists(p) else {}
+    raw["marks"] = marks
+    with open(p, "w") as f:
+        json.dump(raw, f, indent=2)
+        f.write("\n")
+
+
+# -------------------------------------------------------------------------------------------- decks
+def main_cards(path, data=None):
+    """-> set of mainboard card names of a .cod (XML) or .txt ("N Name") list."""
+    if data is None:
+        data = open(path, "rb").read()
+    names = set()
+    if path.lower().endswith(".cod"):
+        for z in ET.fromstring(data).iter("zone"):
+            if z.get("name") == "main":
+                for c in z.iter("card"):
+                    names.add(c.get("name"))
+        return names
+    for line in data.decode("utf-8", "replace").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or s.startswith("//"):
+            continue
+        if s.lower().startswith("sideboard") or s.upper().startswith("SB:"):
+            break
+        m = re.match(r"^(\d+)x?\s+(.+)$", s)
+        if m:
+            names.add(m.group(2).strip())
+    return names
+
+
+def suite_map(root=ROOT):
+    """-> {decklist relpath: suite key}, parsed from test/regression_cases.sh (see suite_gate._read_map)."""
+    txt = open(os.path.join(root, "test/regression_cases.sh")).read()
+    m = re.search(r"declare -A DECK_FILE=\((.*?)\n\)", txt, re.S)
+    out = {}
+    if m:
+        for k, v in re.findall(r"\[([A-Za-z0-9_]+)\]=(\"[^\"]*\"|\S+)", m.group(1)):
+            out[v.strip('"')] = k
+    return out
+
+
+def shipping_decks(root=ROOT):
+    """The bare-key decks (the list that ships), never an archived v<N>- folder or a candidate variant."""
+    cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        decks = deck_registry.discover()
+    finally:
+        os.chdir(cwd)
+    out = []
+    for key, d in sorted(decks.items()):
+        if os.path.normpath(d.dir).count(os.sep) != 1:      # decks/<Name> only
+            continue
+        out.append(d)
+    return out
+
+
+def read_json_any(path_or_bytes, gz=False):
+    if isinstance(path_or_bytes, (bytes, bytearray)):
+        b = gzip.decompress(path_or_bytes) if gz else path_or_bytes
+        return json.loads(b.decode("utf-8"))
+    if path_or_bytes.endswith(".gz"):
+        return json.load(gzip.open(path_or_bytes, "rt"))
+    return json.load(open(path_or_bytes))
+
+
+def keep_paths(d, R=ROOT):
+    base = "%s/%s.keepmodel.exhaustive" % (d.dir, d.stem)
+    for prof in (base + ".profile.json.gz", base + ".profile.json"):
+        if os.path.exists(os.path.join(R, prof)):
+            raw = base + ".raw.json.gz"
+            if not os.path.exists(os.path.join(R, raw)):
+                raw = base + ".raw.json"
+            return prof, raw
+    return None, None
+
+
+def eval_model_hash(value_json):
+    em = value_json.get("eval_model")
+    if not em:
+        return None
+    return hashlib.sha256(json.dumps(em, sort_keys=True).encode()).hexdigest()
+
+
+def canon_card(entry):
+    e = dict(entry)
+    e.pop("name", None)
+    e.pop("oracle_text", None)
+    return json.dumps(e, sort_keys=True, separators=(",", ":"))
+
+
+# ------------------------------------------------------------------------------------------ history
+class History(object):
+    """Linear (first-parent) history, positions oldest=0, and per-path commit lists -- built from a FEW
+    whole-history walks up front, because one `git log -- <path>` per artifact cost seconds each on the
+    9p mount. CLAUDE.md forbids merge commits, so first-parent order IS the history."""
+
+    def __init__(self, rev="HEAD", root=ROOT):
+        self.root = root
+        self.rev = rev
+        self.order, self.dates = [], {}
+        for line in git("log", "--first-parent", "--reverse", "--format=%H %cs", rev, cwd=root).splitlines():
+            h, dt = line.split()
+            self.order.append(h)
+            self.dates[h] = dt
+        self.pos = {h: i for i, h in enumerate(self.order)}
+        self.blobs = Blobs(root)
+        self.paths = {}                       # path -> [positions ascending]
+        cur = None
+        out = git("-c", "core.quotePath=false", "log", "--first-parent", "--format=C %H", "--name-only", rev, "--",
+                  "decks", GT_LOGS, CARDS_JSON, cwd=root)
+        for line in out.splitlines():
+            if line.startswith("C "):
+                cur = self.pos.get(line[2:].strip())
+            elif line.strip() and cur is not None:
+                self.paths.setdefault(line.strip(), []).append(cur)
+        for v in self.paths.values():
+            v.sort()
+        self.src_pos = sorted(self.pos[h] for h in git("log", "--first-parent", "--format=%H", rev, "--", "src",
+                                                       cwd=root).split() if h in self.pos)
+        self.tree = {}
+        for line in git("-c", "core.quotePath=false", "ls-tree", "-r", rev, "decks", cwd=root).splitlines():
+            meta, path = line.split("\t", 1)
+            self.tree[path] = meta.split()[2]
+        self.dirty = set()
+        for line in git("-c", "core.quotePath=false", "status", "--porcelain", "--", "decks", cwd=root).splitlines():
+            self.dirty.add(line[3:].strip().strip('"'))
+        self._cards = {}
+
+    def resolve(self, h):
+        """A commit not on the first-parent line (rare) maps to its nearest first-parent descendant."""
+        if h in self.pos:
+            return h
+        out = git("rev-list", "--first-parent", "--ancestry-path", "%s..%s" % (h, self.rev), cwd=self.root,
+                  check=False).split()
+        return out[-1] if out else self.order[-1]
+
+    def last_touch(self, path):
+        p = self.paths.get(path)
+        return self.order[p[-1]] if p else None
+
+    def touches(self, path):
+        """-> commits (newest first) that changed `path`."""
+        return [self.order[i] for i in reversed(self.paths.get(path, []))]
+
+    def src_commits_since(self, h):
+        import bisect
+        return len(self.src_pos) - bisect.bisect_right(self.src_pos, self.pos[self.resolve(h)])
+
+    def is_dirty(self, path):
+        return path in self.dirty or any(x.endswith("/") and path.startswith(x) for x in self.dirty)
+
+    def wins_index(self):
+        """-> {wins filename: [positions ascending]}."""
+        return {os.path.basename(p): v for p, v in self.paths.items() if p.startswith(GT_LOGS + "/")}
+
+    def cards_at(self, rev):
+        """cards.json as of `rev`, keyed by the cards.json commit in force there (so ~70 adoption commits
+        cost a handful of parses of a 1 MB file, not 70)."""
+        import bisect
+        cp = self.paths.get(CARDS_JSON, [])
+        i = bisect.bisect_right(cp, self.pos[self.resolve(rev)]) - 1
+        key = self.order[cp[i]] if i >= 0 else rev
+        if key not in self._cards:
+            b = self.blobs.get(key, CARDS_JSON)
+            m = {}
+            if b:
+                for e in json.loads(b.decode("utf-8")).get("cards", []):
+                    if "name" in e:
+                        m[e["name"]] = canon_card(e)
+            self._cards[key] = m
+        return self._cards[key]
+
+    def short(self, h):
+        return h[:9] if h else "-"
+
+    def date(self, h):
+        return self.dates.get(self.resolve(h), "-") if h else "-"
+
+
+def parse_wins(data):
+    out = {}
+    if not data:
+        return out
+    for line in data.decode().splitlines():
+        p = line.split()
+        if len(p) >= 2:
+            out[int(p[0])] = (int(p[1]), p[2] if len(p) > 2 else "")
+    return out
+
+
+def play_churn(H, suite_key, adopt_pos):
+    """-> dict(games, changed, abs_dturn, net_dturn, cases, cases_with_baseline) over every suite case of
+    the deck (standard and 2HG). See the module docstring for the baseline rule."""
+    idx = H.wins_index()
+    games = changed = 0
+    abs_d = net_d = 0.0
+    cases = with_base = 0
+    for fname, poss in idx.items():
+        m = WINS_RE.match(fname)
+        if not m or m.group("key") != suite_key:
+            continue
+        cur = H.blobs.get(H.rev, "%s/%s" % (GT_LOGS, fname))
+        if cur is None:
+            continue                              # case retired
+        cases += 1
+        after = [p for p in poss if p >= adopt_pos]
+        if not after:
+            continue                              # no accept since adoption: nothing measured to move
+        base = H.blobs.get(H.order[after[0]], "%s/%s" % (GT_LOGS, fname))
+        b, c = parse_wins(base), parse_wins(cur)
+        common = set(b) & set(c)
+        if not common:
+            continue
+        with_base += 1
+        for gi in common:
+            games += 1
+            if b[gi][1] != c[gi][1]:
+                changed += 1
+            dt = c[gi][0] - b[gi][0]
+            abs_d += abs(dt)
+            net_d += dt
+    return {"games": games, "changed": changed, "cases": cases, "cases_measured": with_base,
+            "churn": (changed / games) if games else 0.0,
+            "abs_dturn": (abs_d / games) if games else 0.0,
+            "net_dturn": (net_d / games) if games else 0.0}
+
+
+# ----------------------------------------------------------------------------------------- staleness
+def card_data_changes(H, adopt, cards):
+    then, now = H.cards_at(adopt), H.cards_at(H.rev)
+    return sorted(c for c in cards if then.get(c) != now.get(c) and (c in then or c in now))
+
+
+_KCACHE = None
+
+
+def keep_summary(H, prof, raw):
+    """-> {buckets, commit, R, meta{depth,budget_ms}} of a keep table. Parsing one is ~3 s (176k entries),
+    so the few fields used are cached by git blob id in logs/artifact_queue/keepcache.json; an
+    uncommitted table is keyed by size+mtime instead."""
+    global _KCACHE
+    cp = os.path.join(ROOT, "logs", "artifact_queue", "keepcache.json")
+    if _KCACHE is None:
+        try:
+            _KCACHE = json.load(open(cp))
+        except Exception:
+            _KCACHE = {}
+
+    def key(path):
+        if path in H.tree and not H.is_dirty(path):
+            return H.tree[path]
+        st = os.stat(os.path.join(H.root, path))
+        return "%s:%d:%d" % (path, st.st_size, int(st.st_mtime))
+
+    k = key(prof) + "|" + (key(raw) if raw and os.path.exists(os.path.join(H.root, raw)) else "-")
+    if k not in _KCACHE:
+        ek = read_json_any(os.path.join(H.root, prof)).get("exhaustive_keep", {})
+        meta = {}
+        if raw and os.path.exists(os.path.join(H.root, raw)):
+            m = read_json_any(os.path.join(H.root, raw)).get("meta", {})
+            meta = {"depth": m.get("depth"), "budget_ms": m.get("budget_ms"), "R": m.get("R")}
+        _KCACHE[k] = {"buckets": ek.get("buckets", []), "commit": ek.get("commit", "?"),
+                      "R": ek.get("effective_R", "?"), "meta": meta}
+        os.makedirs(os.path.dirname(cp), exist_ok=True)
+        tmp = cp + ".tmp"
+        json.dump(_KCACHE, open(tmp, "w"))
+        os.replace(tmp, cp)
+    return _KCACHE[k]
+
+
+
+def assess_deck(H, d, cfg, smap):
+    """-> {kind: item} for the deck's artifacts that exist."""
+    R = H.root
+    rel_list = os.path.relpath(d.deck_file, R) if os.path.isabs(d.deck_file) else d.deck_file
+    suite_key = smap.get(rel_list)
+    cards = main_cards(os.path.join(R, rel_list))
+    marks = {(m["deck"], m["kind"]): m for m in cfg.get("marks", [])}
+    items = {}
+    src_now = git("rev-parse", "%s:src" % H.rev, cwd=H.root).strip()
+
+    def base_item(kind, path, adopt, notes):
+        dirty = H.is_dirty(path)
+        ap = H.pos[H.resolve(adopt)] if adopt else len(H.order) - 1
+        ch = play_churn(H, suite_key, ap) if suite_key else None
+        src_commits = H.src_commits_since(adopt) if adopt else 0
+        it = {"deck": d.key, "dir": d.dir, "stem": d.stem, "kind": kind, "path": path,
+              "adopted": adopt, "adopted_date": H.date(adopt), "uncommitted": dirty or not adopt,
+              "suite_key": suite_key, "churn": ch, "src_commits_since": src_commits,
+              "flags": [], "notes": notes, "blob": H.tree.get(path, "uncommitted")}
+        cdc = card_data_changes(H, adopt, cards) if adopt else []
+        if cdc:
+            it["flags"].append(("card-data", "cards.json changed for %d deck card(s): %s"
+                                % (len(cdc), ", ".join(cdc[:6]) + (" ..." if len(cdc) > 6 else ""))))
+        mk = marks.get((d.key, kind))
+        if mk:
+            it["mark"] = mk
+        if not suite_key:
+            it["blocked"] = "not in test/regression_cases.sh (both generators refuse: exit 3)"
+        if d.key in cfg.get("exclude", []):
+            it["blocked"] = "excluded in %s" % CONFIG_REL
+        return it
+
+    # ---- keep table
+    prof, raw = keep_paths(d, R)
+    if prof:
+        adopt = H.last_touch(prof)
+        it = base_item("mulligan", prof, adopt, [])
+        try:
+            kt = keep_summary(H, prof, raw)
+            bucketed = set(n for b in kt["buckets"] for n in b)
+            alias = {a.get("name"): a.get("as") for a in
+                     json.load(open(os.path.join(R, d.profile))).get("mulligan", {}).get("keep_table_alias", [])}
+            missing = sorted(c for c in cards if c not in bucketed)
+            gone = sorted(c for c in bucketed if c not in cards)
+            if missing or gone:
+                txt = []
+                if missing:
+                    txt.append("list cards with NO bucket: " + ", ".join(
+                        "%s%s" % (c, " (aliased as %s, LOSSY)" % alias[c] if c in alias else "") for c in missing))
+                if gone:
+                    txt.append("bucketed cards no longer in the list: " + ", ".join(gone))
+                it["flags"].append(("decklist", "; ".join(txt)))
+            it["notes"].append("generated at %s, R=%s" % (kt["commit"], kt["R"]))
+            meta = kt["meta"]
+            vp = {}
+            for src in (d.value, d.profile):
+                p = os.path.join(R, src)
+                if os.path.exists(p):
+                    vp = json.load(open(p)).get("value_play", {}) or {}
+                    if "mull_gen_depth" in vp:
+                        break
+            if meta.get("depth") is not None and "mull_gen_depth" in vp:
+                if (meta.get("depth"), meta.get("budget_ms")) != (vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms")):
+                    it["flags"].append(("settings", "generated at d%s b%s, deck now screens d%s b%s"
+                                        % (meta.get("depth"), meta.get("budget_ms"),
+                                           vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms"))))
+        except Exception as e:                                  # an unreadable artifact is itself a finding
+            it["flags"].append(("unreadable", "could not read %s: %s" % (prof, e)))
+        items["mulligan"] = it
+
+    # ---- value leaf (only a sidecar carrying an eval_model is a generated leaf; a settings-only
+    # sidecar such as Snow's leaf:'none' has nothing to regenerate unless the USER marks it)
+    vpath = os.path.join(R, d.value)
+    if os.path.exists(vpath):
+        V = json.load(open(vpath))
+        h_now = eval_model_hash(V)
+        if h_now or (d.key, "valueleaf") in marks:
+            adopt = None
+            for c in H.touches(d.value):                    # newest first; walk back while the model is unchanged
+                b = H.blobs.get(c, d.value)
+                try:
+                    hh = eval_model_hash(json.loads(b.decode())) if b else None
+                except Exception:
+                    hh = None
+                if hh != h_now:
+                    break
+                adopt = c
+            notes = []
+            prov = V.get("provenance", {})
+            if prov.get("regenerated_commit"):
+                notes.append("trained at %s on %s rows" % (prov.get("regenerated_commit"), prov.get("rows", "?")))
+            if not h_now:
+                notes.append("settings-only sidecar (no eval_model): ships NO leaf")
+            it = base_item("valueleaf", d.value, adopt or H.last_touch(d.value), notes)
+            km = items.get("mulligan")
+            if km and km.get("adopted") and it.get("adopted") and \
+                    H.pos[H.resolve(km["adopted"])] > H.pos[H.resolve(it["adopted"])]:
+                it["flags"].append(("pipeline-order", "keep table re-adopted %s, after the leaf was fitted (%s)"
+                                    % (km["adopted_date"], it["adopted_date"])))
+            items["valueleaf"] = it
+    for it in items.values():
+        it["src_tree"] = src_now
+        score(it, cfg)
+    return items
+
+
+# Exact axes that the GT drift CANNOT see get a weight; ones whose effect on play already shows up in the
+# measured drift (a card-data edit, a re-ordered pipeline) are reported but not double-counted.
+FLAG_WEIGHT = {"decklist": 1.0, "unreadable": 1.0, "settings": 0.1, "card-data": 0.0, "pipeline-order": 0.0}
+
+
+def score(it, cfg):
+    """Drift score = mean per-game |win-turn change| on the deck's suite games since the artifact went
+    live (turns), plus a fixed weight per exact flag, times the kind weight. A USER mark always sorts
+    first (by its priority). NOT the digest churn: that saturates (50-99% for nearly every artifact,
+    since any play change anywhere moves a game's decision stream) and cannot tell Knights (92% churn,
+    0.010 turns) from Hinata2 (97%, 1.09 turns). Measured 2026-10-23 on the first full status run."""
+    s = it["churn"]["abs_dturn"] if it.get("churn") else 0.0
+    for f, _ in it["flags"]:
+        s += FLAG_WEIGHT.get(f, 0.1)
+    s *= float(cfg["kind_weight"].get(it["kind"], 1.0))
+    it["score"] = round(s, 4)
+    it["queued"] = bool(it.get("mark")) or (s >= float(cfg["min_drift"]) and not it.get("uncommitted"))
+    if it.get("blocked"):
+        it["queued"] = False
+    it["sort"] = (0 if it.get("mark") else 1, -int(it.get("mark", {}).get("priority", 0)), -s)
+
+
+def assess_all(root=ROOT, rev="HEAD", only=None):
+    cfg = load_config(root)
+    H = History(rev, root)
+    smap = suite_map(root)
+    out = []
+    try:
+        for d in shipping_decks(root):
+            if only and d.key != only and d.dir.split("/")[-1] != only:
+                continue
+            out.extend(assess_deck(H, d, cfg, smap).values())
+    finally:
+        H.blobs.close()
+    out.sort(key=lambda it: it["sort"])
+    return out, cfg
+
+
+def deck_jobs(items, cfg):
+    """Fold artifact items into per-DECK jobs. Stages always run mulligan BEFORE valueleaf (USER order
+    2026-10-18), and a deck is one claim so the leaf is fitted to the table this same job produced."""
+    by = {}
+    for it in items:
+        by.setdefault(it["deck"], []).append(it)
+    jobs = []
+    for deck, its in by.items():
+        q = [i for i in its if i["queued"]]
+        if not q:
+            continue
+        kinds = set(i["kind"] for i in q)
+        if "mulligan" in kinds and cfg.get("leaf_follows_mulligan") and any(i["kind"] == "valueleaf" for i in its):
+            kinds.add("valueleaf")
+        best = min(q, key=lambda i: i["sort"])
+        jobs.append({"deck": deck, "dir": best["dir"], "stages": [k for k in KINDS if k in kinds],
+                     "sort": best["sort"], "score": max(i["score"] for i in q),
+                     "blobs": {i["kind"]: i["blob"] for i in its}})
+    jobs.sort(key=lambda j: j["sort"])
+    return jobs
+
+
+# --------------------------------------------------------------------------------------------- report
+def fmt_item(it):
+    ch = it.get("churn")
+    if ch and ch["games"]:
+        c = "|dt| %.3f  net %+.3f  (%4.1f%% of %5d changed)" % (ch["abs_dturn"], ch["net_dturn"],
+                                                              100 * ch["churn"], ch["games"])
+    elif ch:
+        c = "no GT accepted since adoption (%d cases)" % ch["cases"]
+    else:
+        c = "no suite cases"
+    tags = []
+    if it.get("mark"):
+        tags.append("MARKED(p%s)" % it["mark"].get("priority", 0))
+    tags += [f for f, _ in it["flags"]]
+    if it.get("uncommitted"):
+        tags.append("uncommitted")
+    if it.get("blocked"):
+        tags.append("BLOCKED")
+    return "%-6s %-24s %-9s %6.3f  %-10s %-48s %s" % (
+        "QUEUE" if it["queued"] else "", it["deck"][:24], it["kind"], it["score"], it["adopted_date"], c,
+        " ".join(tags))
+
+
+def cmd_status(a):
+    items, cfg = assess_all()
+    if a.json:
+        print(json.dumps([{k: v for k, v in it.items() if k != "sort"} for it in items], indent=1))
+        return 0
+    print("%-6s %-24s %-9s %6s  %-10s %-48s %s" % ("", "deck", "artifact", "score", "adopted",
+                                                    "suite-GT play drift since adoption", "flags"))
+    shown = 0
+    for it in items:
+        if a.all or it["queued"] or it.get("flags") or it.get("mark"):
+            print(fmt_item(it))
+            shown += 1
+    hidden = len(items) - shown
+    if hidden:
+        print("(%d fresh artifact(s) below min_drift=%.3f turns hidden; --all shows them)" % (hidden, cfg["min_drift"]))
+    jobs = deck_jobs(items, cfg)
+    print("\nDECK JOBS, in claim order (%d):" % len(jobs))
+    for i, j in enumerate(jobs, 1):
+        print("  %2d. %-24s %s" % (i, j["deck"], " -> ".join(j["stages"])))
+    return 0
+
+
+def cmd_explain(a):
+    items, cfg = assess_all(only=a.deck)
+    if not items:
+        print("no artifacts found for %s" % a.deck)
+        return 1
+    for it in items:
+        print("== %s / %s  (%s)" % (it["deck"], it["kind"], it["path"]))
+        print("   adopted    : %s %s%s" % (it["adopted_date"], (it["adopted"] or "-")[:9],
+                                          "  (UNCOMMITTED changes)" if it["uncommitted"] else ""))
+        print("   suite key  : %s" % (it["suite_key"] or "-- not in the suite"))
+        ch = it["churn"]
+        if ch:
+            print("   play churn : %d/%d games changed decisions (%.1f%%) over %d/%d cases with a post-adoption accept;"
+                  " mean |dturn| %.3f, net %+.4f" % (ch["changed"], ch["games"], 100 * ch["churn"],
+                                                     ch["cases_measured"], ch["cases"], ch["abs_dturn"], ch["net_dturn"]))
+        print("   src commits since adoption: %d" % it["src_commits_since"])
+        for f, t in it["flags"]:
+            print("   FLAG %-14s %s" % (f, t))
+        for n in it["notes"]:
+            print("   note       : %s" % n)
+        if it.get("mark"):
+            print("   USER MARK  : p%s -- %s" % (it["mark"].get("priority", 0), it["mark"].get("why", "")))
+        if it.get("blocked"):
+            print("   BLOCKED    : %s" % it["blocked"])
+        print("   score %.4f  -> %s" % (it["score"], "QUEUED" if it["queued"] else "not queued"))
+    return 0
+
+
+def cmd_mark(a):
+    if a.kind not in KINDS:
+        print("kind must be one of %s" % ", ".join(KINDS))
+        return 2
+    cfg = load_config()
+    a.deck = deck_registry.slug(a.deck)       # 'Snow' / 'Mirrorwing Dragon' -> the registry key
+    if a.deck not in set(d.key for d in shipping_decks()):
+        print("no shipping deck with key %r (see `status --all`)" % a.deck)
+        return 2
+    marks = [m for m in cfg.get("marks", []) if not (m["deck"] == a.deck and m["kind"] == a.kind)]
+    if a.cmd == "mark":
+        marks.append({"deck": a.deck, "kind": a.kind, "why": a.why, "priority": a.priority,
+                      "date": datetime.date.today().isoformat()})
+    save_marks(marks)
+    print("%s %s/%s in %s -- commit + push it so every worker sees it" % (
+        "marked" if a.cmd == "mark" else "unmarked", a.deck, a.kind, CONFIG_REL))
+    return 0
+
+
+# ---------------------------------------------------------------------------------------- the queue
+def utcnow():
+    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+
+
+def iso(t):
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_iso(s):
+    return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+
+
+class Queue(object):
+    """Claims live on origin's `artifact-queue` branch as claims/<deck>.json. Every write is a commit on
+    top of the tip we read, pushed WITHOUT force, so a concurrent writer makes the push fail and we
+    re-read and retry -- a compare-and-swap on the whole queue. Written with git plumbing only: no
+    working tree, no index, nobody's branch touched (the references-autosave pattern)."""
+
+    def __init__(self, root=ROOT, remote="origin"):
+        self.root = root
+        self.remote = remote
+        self.lock = threading.RLock()     # the heartbeat thread and the job share this queue
+
+    def fetch(self):
+        git("fetch", "-q", self.remote, "+refs/heads/%s:refs/remotes/%s/%s" % (QUEUE_BRANCH, self.remote, QUEUE_BRANCH),
+            cwd=self.root, check=False)
+
+    def tip(self):
+        return git("rev-parse", "-q", "--verify", "refs/remotes/%s/%s" % (self.remote, QUEUE_BRANCH),
+                   cwd=self.root, check=False).strip() or None
+
+    def claims(self):
+        t = self.tip()
+        if not t:
+            return {}
+        out = {}
+        for line in git("ls-tree", t, "claims/", cwd=self.root).splitlines():
+            meta, path = line.split("\t", 1)
+            blob = meta.split()[2]
+            try:
+                c = json.loads(git("cat-file", "blob", blob, cwd=self.root))
+                out[c["deck"]] = c
+            except Exception:
+                pass
+        return out
+
+    def _write(self, deck, claim, expect=None):
+        """CAS write of claims/<deck>.json. `expect(current_claim_or_None) -> bool` must hold on the tip we
+        build on. -> True on success, False if the precondition failed."""
+        with self.lock:
+            return self._write_locked(deck, claim, expect)
+
+    def _write_locked(self, deck, claim, expect):
+        for _ in range(8):
+            self.fetch()
+            t = self.tip()
+            cur = self.claims().get(deck)
+            if expect is not None and not expect(cur):
+                return False
+            entries = []
+            if t:
+                for line in git("ls-tree", t, "claims/", cwd=self.root).splitlines():
+                    meta, path = line.split("\t", 1)
+                    if path != "claims/%s.json" % deck:
+                        entries.append("%s\t%s" % (meta, os.path.basename(path)))
+            blob = git("hash-object", "-w", "--stdin", cwd=self.root,
+                       inp=json.dumps(claim, indent=1, sort_keys=True) + "\n").strip()
+            entries.append("100644 blob %s\t%s.json" % (blob, deck))
+            sub = git("mktree", cwd=self.root, inp="\n".join(sorted(entries, key=lambda e: e.split("\t")[1])) + "\n").strip()
+            top = git("mktree", cwd=self.root, inp="040000 tree %s\tclaims\n" % sub).strip()
+            args = ["commit-tree", top, "-m", "artifact-queue: %s %s by %s" % (deck, claim.get("state"), claim.get("worker"))]
+            if t:
+                args[2:2] = ["-p", t]
+            c = git(*args, cwd=self.root).strip()
+            r = subprocess.run(["git", "push", "-q", self.remote, "%s:refs/heads/%s" % (c, QUEUE_BRANCH)],
+                               cwd=self.root, capture_output=True, text=True)
+            if r.returncode == 0:
+                git("update-ref", "refs/remotes/%s/%s" % (self.remote, QUEUE_BRANCH), c, cwd=self.root)
+                return True
+            time.sleep(3)                       # someone else wrote first: re-read, re-check, retry
+        raise RuntimeError("could not update %s after 8 attempts" % QUEUE_BRANCH)
+
+
+def claim_blocks(c, job, cfg, worker, now):
+    """Does an existing claim keep `worker` off this deck job?"""
+    if not c:
+        return False
+    st = c.get("state")
+    if st in ("claimed", "running"):
+        if c.get("worker") == worker:
+            return False
+        hb = parse_iso(c.get("heartbeat", c.get("started")))
+        return (now - hb).total_seconds() < cfg["lease_hours"] * 3600
+    if st in ("done", "rejected", "failed", "refused"):
+        # A finished claim holds while the artifacts it ran against are still the shipped ones: the
+        # result branch has not landed yet. Rejected/failed ones may be retried after retry_rejected_days.
+        same = c.get("blobs") == job["blobs"]
+        if not same:
+            return False
+        if st == "done" and c.get("result_branch"):
+            return True                       # a result is waiting to be landed: do not redo it
+        # rejected / failed / refused, or done with nothing adopted (e.g. a leaf left staged): retryable later
+        return (now - parse_iso(c.get("finished", c.get("started")))).days < cfg["retry_rejected_days"]
+    return False
+
+
+def cmd_claims(a):
+    q = Queue()
+    q.fetch()
+    cs = q.claims()
+    if not cs:
+        print("no claims on origin/%s" % QUEUE_BRANCH)
+        return 0
+    now = utcnow()
+    for deck, c in sorted(cs.items()):
+        hb = c.get("heartbeat") or c.get("finished") or c.get("started")
+        age = (now - parse_iso(hb)).total_seconds() / 3600 if hb else 0
+        print("%-24s %-9s %-24s stages=%-22s stage=%-10s %5.1fh ago  %s" % (
+            deck, c.get("state"), c.get("worker"), ",".join(c.get("stages", [])), c.get("stage", "-"), age,
+            c.get("result_branch") or c.get("detail", "")))
+    return 0
+
+
+# ------------------------------------------------------------------------------------------- worker
+def worker_id():
+    """MDT_WORKER_ID, else an id minted once per CHECKOUT and kept in logs/artifact_queue/WORKER_ID. Not the
+    bare hostname: in a devcontainer that is the container id, which changes on every rebuild and would
+    orphan an in-flight job's resume state (and its worktree path)."""
+    if os.environ.get("MDT_WORKER_ID"):
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", os.environ["MDT_WORKER_ID"])
+    p = os.path.join(ROOT, "logs", "artifact_queue", "WORKER_ID")
+    if os.path.exists(p):
+        return open(p).read().strip()
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    wid = "%s-%s" % (re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.basename(ROOT)), hashlib.sha1(
+        ("%s%s" % (socket.gethostname(), time.time())).encode()).hexdigest()[:6])
+    open(p, "w").write(wid + "\n")
+    return wid
+
+
+def state_dir(wid):
+    p = os.path.join(ROOT, "logs", "artifact_queue", wid)
+    os.makedirs(p, exist_ok=True)
+    return p
+
+
+def log(wid, msg):
+    line = "[%s] %s" % (iso(utcnow()), msg)
+    print(line, flush=True)
+    with open(os.path.join(state_dir(wid), "worker.log"), "a") as f:
+        f.write(line + "\n")
+
+
+def descendants(pid):
+    kids = {}
+    for p in os.listdir("/proc"):
+        if not p.isdigit():
+            continue
+        try:
+            ppid = int(open("/proc/%s/stat" % p).read().rsplit(")", 1)[1].split()[1])
+        except Exception:
+            continue
+        kids.setdefault(ppid, []).append(int(p))
+    out, todo = set(), [pid]
+    while todo:
+        x = todo.pop()
+        for k in kids.get(x, []):
+            if k not in out:
+                out.add(k)
+                todo.append(k)
+    return out
+
+
+def foreign_engines():
+    """-> [(pid, cmdline)] of mtg / mtg-analyze processes that are NOT ours. Only this container's
+    processes are visible: a generation in a sibling container sharing the host is not."""
+    mine = descendants(os.getpid()) | {os.getpid()}
+    out = []
+    for p in os.listdir("/proc"):
+        if not p.isdigit() or int(p) in mine:
+            continue
+        try:
+            comm = open("/proc/%s/comm" % p).read().strip()
+            if comm in ("mtg", "mtg-analyze"):
+                cmd = open("/proc/%s/cmdline" % p).read().replace("\0", " ")[:160]
+                out.append((int(p), cmd))
+        except Exception:
+            pass
+    return out
+
+
+def wait_idle(wid, cfg):
+    """Block until no foreign engine runs. -> True if it had to wait (the caller then re-ranks)."""
+    warned = False
+    while True:
+        f = foreign_engines()
+        if not f:
+            return warned
+        if not warned:
+            log(wid, "box busy (%d foreign engine process(es), e.g. pid %d: %s) -- waiting; nothing runs alongside "
+                     "another run" % (len(f), f[0][0], f[0][1]))
+            warned = True
+        if stop_requested(wid):
+            return warned
+        time.sleep(cfg["idle_poll_minutes"] * 60)
+
+
+def stop_requested(wid):
+    return os.path.exists(os.path.join(state_dir(wid), "STOP"))
+
+
+def worktree_path(wid):
+    return os.path.join(ROOT, ".claude", "worktrees", "artifact-worker-" + wid)
+
+
+def sync_worktree(wid, cfg):
+    """Freeze the worker's worktree on origin/<branch>'s tip. Never discards anything: tracked edits left
+    over from an interrupted job are committed to a rescue branch first."""
+    wt = worktree_path(wid)
+    br = cfg["branch"]
+    git("fetch", "-q", "origin", br)
+    target = git("rev-parse", "origin/%s" % br).strip()
+    if not os.path.exists(os.path.join(wt, ".git")):
+        os.makedirs(os.path.dirname(wt), exist_ok=True)
+        git("worktree", "add", "--detach", wt, target)
+        return wt, target
+    if git("status", "--porcelain", "--untracked-files=no", cwd=wt).strip():
+        rescue = "%srescue-%s-%s" % (RESULT_PREFIX, wid, utcnow().strftime("%Y%m%dT%H%M%S"))
+        git("checkout", "-q", "-b", rescue, cwd=wt)
+        git("commit", "-q", "-am", "artifact-queue: rescue tracked edits left in the worker worktree", cwd=wt)
+        git("push", "-q", "origin", rescue, cwd=wt, check=False)
+        log(wid, "worktree had tracked edits: committed to %s (pushed) before re-syncing" % rescue)
+    git("checkout", "-q", "--detach", target, cwd=wt)
+    return wt, target
+
+
+def run_logged(wid, cmd, cwd, logname, env=None):
+    p = os.path.join(state_dir(wid), logname)
+    log(wid, "  $ %s   (cwd %s, log %s)" % (" ".join(cmd), cwd, p))
+    with open(p, "a") as f:
+        f.write("\n=== %s  %s\n" % (iso(utcnow()), " ".join(cmd)))
+        f.flush()
+        r = subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, env=env)
+    return r.returncode
+
+
+def ungzip_incumbent(wt, d):
+    """mullgen.sh decides REGENERATION vs FIRST VERSION by `[ -e <stem>.keepmodel.exhaustive.profile.json ]`
+    -- the PLAIN name -- but every deck commits only the .gz. Left alone, a regen would (1) save no
+    incumbent, so it validates with the first-version bar (keep vs static) instead of old-vs-new, and
+    (2) leave the new plain table SHADOWED by the old .gz, which the engine loads first. So in the
+    worker's own worktree the incumbent is unpacked to the plain names first. -> list of (gz, plain)."""
+    done = []
+    for part in ("profile", "raw"):
+        gz = os.path.join(wt, d["dir"], "%s.keepmodel.exhaustive.%s.json.gz" % (d["stem"], part))
+        plain = gz[:-3]
+        if os.path.exists(gz) and not os.path.exists(plain):
+            with gzip.open(gz, "rb") as fi, open(plain, "wb") as fo:
+                shutil.copyfileobj(fi, fo)
+            os.remove(gz)
+            done.append((gz, plain))
+    return done
+
+
+def regzip(wt, d):
+    """After the driver: put the plain artifacts back into their committed .gz form. Unchanged content
+    restores the original .gz byte-for-byte (git checkout) so a rejected regen leaves no diff."""
+    for part in ("profile", "raw"):
+        gz = os.path.join(wt, d["dir"], "%s.keepmodel.exhaustive.%s.json.gz" % (d["stem"], part))
+        plain = gz[:-3]
+        if not os.path.exists(plain):
+            continue
+        rel = os.path.relpath(gz, wt)
+        old = subprocess.run(["git", "show", "HEAD:%s" % rel], cwd=wt, capture_output=True)
+        if old.returncode == 0 and gzip.decompress(old.stdout) == open(plain, "rb").read():
+            os.remove(plain)
+            git("checkout", "-q", "HEAD", "--", rel, cwd=wt)
+            continue
+        with open(plain, "rb") as fi, gzip.GzipFile(gz, "wb", mtime=0) as fo:
+            shutil.copyfileobj(fi, fo)
+        os.remove(plain)
+
+
+class MachineFault(RuntimeError):
+    """A failure of the box (build, disk, git), not of the deck's regeneration."""
+
+
+class Heartbeat(threading.Thread):
+    def __init__(self, q, deck, claim, cfg):
+        super().__init__(daemon=True)
+        self.q, self.deck, self.claim, self.cfg = q, deck, claim, cfg
+        self.ev = threading.Event()
+
+    def run(self):
+        while not self.ev.wait(self.cfg["heartbeat_minutes"] * 60):
+            self.claim["heartbeat"] = iso(utcnow())
+            try:
+                self.q._write(self.deck, self.claim)
+            except Exception:
+                pass
+
+    def stop(self):
+        self.ev.set()
+
+
+def put_claim(q, deck, claim, wid, job=None, cfg=None):
+    """CAS write of our claim. The precondition is the picker's own rule (claim_blocks), so an expired lease
+    the picker chose can actually be taken over; a mismatch here once meant pick -> lose -> pick forever."""
+    claim["heartbeat"] = iso(utcnow())
+    if job is None:                           # stage/heartbeat update of a claim we already hold
+        return q._write(deck, claim, expect=lambda cur: (not cur) or cur.get("worker") == wid)
+    return q._write(deck, claim, expect=lambda cur: not claim_blocks(cur, job, cfg, wid, utcnow()))
+
+
+def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
+    deck = job["deck"]
+    claim = {"deck": deck, "worker": wid, "state": "running", "stages": job["stages"], "stage": job["stages"][0],
+             "frozen": frozen, "started": iso(utcnow()), "blobs": job["blobs"], "score": job["score"],
+             "host": socket.gethostname()}
+    if dry:
+        f = foreign_engines()
+        log(wid, "DRY RUN: would claim %s and run %s at %s%s" % (deck, " -> ".join(job["stages"]), frozen[:9],
+            "; the box is BUSY now (%d foreign engine process(es)), so a real run would wait" % len(f) if f else ""))
+        return "dry"
+    if not put_claim(q, deck, claim, wid, job, cfg):
+        log(wid, "%s: another worker claimed it first -- skipping" % deck)
+        return "lost"
+    ifp = os.path.join(state_dir(wid), "inflight.json")
+    prior = json.load(open(ifp)) if os.path.exists(ifp) else {}
+    # A RESUMED job skips the stages it already finished: re-running `mullgen.sh run` after an adoption
+    # would take the NEW table as the incumbent and regenerate it. The recipe is pinned with the job, so
+    # a config edit between attempts cannot resume a journal at the wrong R (the 2026-10-02 loss).
+    done_stages = prior.get("done_stages", [])
+    detail = prior.get("detail", [])
+    recipe = prior.get("recipe") or cfg["recipe_overrides"].get(deck, cfg["mullgen_recipe"])
+
+    def save_inflight():
+        json.dump({"job": job, "claim": claim, "done_stages": done_stages, "detail": detail, "recipe": recipe},
+                  open(ifp, "w"), indent=1)
+
+    save_inflight()
+    hb = Heartbeat(q, deck, claim, cfg)
+    hb.start()
+    outcome = "done"
+    try:
+        if run_logged(wid, ["./build.sh"], wt, "build.log") != 0:
+            raise MachineFault("./build.sh failed in %s (see build.log)" % wt)
+        for stage in job["stages"]:
+            if stage in done_stages:
+                log(wid, "  %s already finished in an earlier attempt -- skipping" % stage)
+                continue
+            wait_idle(wid, cfg)
+            claim["stage"] = stage
+            try:
+                put_claim(q, deck, claim, wid)
+            except Exception as e:
+                log(wid, "  (claim update failed, carrying on: %s)" % e)
+            if stage == "mulligan":
+                ungzip_incumbent(wt, deckinfo)
+                rc = run_logged(wid, ["bash", "scripts/mullgen.sh", "run", deckinfo["dir"], recipe], wt,
+                                "%s.mulligan.log" % deck)
+                regzip(wt, deckinfo)
+                rep = os.path.join(wt, "logs", re.sub(r"[^A-Za-z0-9._-]", "_", deckinfo["dir"][len("decks/"):]) + "_mullgen",
+                                   "VALIDATION.txt")
+                text = open(rep).read() if os.path.exists(rep) else ""
+                if rc == 0 and "VALIDATION PASSED" in text:
+                    detail.append("mulligan: ADOPTED (validation passed, recipe %s)" % recipe)
+                elif rc == 0 and "UNGATED run" in text:
+                    detail.append("mulligan: UNGATED -- the A/B was underpowered, the new table was left live "
+                                  "with its verdict recorded (REVIEW before landing; recipe %s)" % recipe)
+                elif rc == 3:
+                    outcome = "refused"
+                    detail.append("mulligan: REFUSED by a driver gate (exit 3) -- see %s.mulligan.log" % deck)
+                    break
+                elif "VALIDATION FAILED" in text:
+                    outcome = "rejected"
+                    detail.append("mulligan: REJECTED (new table worse; incumbent restored)")
+                    break                          # the leaf would be fitted to an unchanged table: skip it
+                else:
+                    outcome = "failed"
+                    detail.append("mulligan: FAILED rc=%d -- see %s.mulligan.log" % (rc, deck))
+                    break
+            else:
+                rc = run_logged(wid, ["bash", "scripts/valueleaf.sh", "run", deckinfo["dir"]], wt,
+                                "%s.valueleaf.log" % deck)
+                if rc == 3:
+                    outcome = "refused"
+                    detail.append("valueleaf: REFUSED (exit 3)")
+                    break
+                if rc != 0:
+                    outcome = "failed"
+                    detail.append("valueleaf: FAILED rc=%d" % rc)
+                    break
+                adopted = bool(git("status", "--porcelain", "--", deckinfo["value"], cwd=wt).strip())
+                detail.append("valueleaf: %s" % ("ADOPTED (live sidecar replaced)" if adopted else
+                                                 "NOT adopted (left staged in logs/eval -- see the queue DECISIONS.txt)"))
+            done_stages.append(stage)
+            save_inflight()
+    except MachineFault as e:
+        # Not the deck's fault: release the claim (so another machine can take it) and stop THIS worker,
+        # rather than stamping every deck in the queue "failed" for retry_rejected_days one by one.
+        hb.stop()
+        claim.update({"state": "released", "finished": iso(utcnow()), "detail": "machine fault: %s" % e})
+        q._write(deck, claim)
+        os.remove(ifp)
+        log(wid, "%s RELEASED -- machine fault: %s. Worker stopping; fix the box and `start` again." % (deck, e))
+        raise
+    except Exception as e:
+        outcome = "failed"
+        detail.append("worker error: %s" % e)
+    finally:
+        hb.stop()
+    # Commit whatever the drivers left in the deck folder onto a result branch -- adopted artifacts, a
+    # quarantined .DISABLED table, a screened mull_gen setting. Nothing is discarded, ever.
+    branch = None
+    if git("status", "--porcelain", "--", deckinfo["dir"], cwd=wt).strip():
+        branch = "%s%s-%s" % (RESULT_PREFIX, re.sub(r"[^A-Za-z0-9._-]", "_", deck), utcnow().strftime("%Y%m%d-%H%M"))
+        git("checkout", "-q", "-b", branch, cwd=wt)
+        git("add", "-A", "--", deckinfo["dir"], cwd=wt)
+        msg = ("artifact-refresh(%s): %s\n\nRegenerated by the artifact queue worker %s, frozen at %s.\n%s\n\n"
+               "NOT LANDED: rebase onto the working branch, run smoke + regression and accept the GT the\n"
+               "new artifacts move (regression-testing.md), then push.\n\n"
+               "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>\n"
+               % (deck, outcome, wid, frozen[:9], "\n".join("  " + x for x in detail)))
+        git("commit", "-q", "-m", msg, cwd=wt)
+        r = subprocess.run(["git", "push", "-q", "origin", branch], cwd=wt, capture_output=True, text=True)
+        if r.returncode != 0:
+            detail.append("PUSH FAILED (%s) -- the commit is on local branch %s in %s" % (r.stderr.strip(), branch, wt))
+    claim.update({"state": outcome, "finished": iso(utcnow()), "detail": "; ".join(detail), "result_branch": branch})
+    q._write(deck, claim)
+    os.remove(ifp)
+    log(wid, "%s %s: %s%s" % (deck, outcome.upper(), "; ".join(detail), ("  -> " + branch) if branch else ""))
+    return outcome
+
+
+def cmd_run(a):
+    wid = worker_id()
+    cfg = load_config()
+    q = Queue()
+    log(wid, "worker %s starting (pid %d)%s" % (wid, os.getpid(), " DRY RUN" if a.dry_run else ""))
+    try:
+        os.remove(os.path.join(state_dir(wid), "STOP"))
+    except OSError:
+        pass
+    refuse_temp_root()
+    fails = 0
+    while not stop_requested(wid):
+        inflight = os.path.join(state_dir(wid), "inflight.json")
+        if os.path.exists(inflight):
+            # Interrupted mid-job: resume in the SAME frozen worktree (both drivers resume from their own
+            # markers/journals). Re-syncing here would re-freeze on a newer commit under a half-done run.
+            st = json.load(open(inflight))
+            wt, frozen = worktree_path(wid), st["claim"]["frozen"]
+            job = st["job"]
+            log(wid, "resuming in-flight %s at %s" % (job["deck"], frozen[:9]))
+        else:
+            wt, frozen = (ROOT, "HEAD") if a.dry_run else sync_worktree(wid, cfg)
+            cfg = load_config(wt)                       # marks/config as landed on the branch
+            items, _ = assess_all(root=wt)
+            jobs = deck_jobs(items, cfg)
+            q.fetch()
+            claims = q.claims()
+            now = utcnow()
+            job = next((j for j in jobs if not claim_blocks(claims.get(j["deck"]), j, cfg, wid, now)), None)
+            if job is None:
+                log(wid, "nothing to do (%d deck job(s), all claimed or done); sleeping 1 h" % len(jobs))
+                if a.once:
+                    return 0
+                for _ in range(12):
+                    if stop_requested(wid):
+                        break
+                    time.sleep(300)
+                continue
+        d = next(x for x in shipping_decks(wt) if x.key == job["deck"])
+        deckinfo = {"dir": d.dir, "stem": d.stem, "value": d.value}
+        if not os.path.exists(inflight) and not a.dry_run:
+            if wait_idle(wid, cfg):
+                continue                                # waited for the box: re-sync and re-rank first
+            if stop_requested(wid):
+                break
+            q.fetch()
+            if claim_blocks(q.claims().get(job["deck"]), job, cfg, wid, utcnow()):
+                continue                                # lost the race to another machine
+        try:
+            outcome = run_job(wid, cfg, q, job, wt, frozen if frozen != "HEAD" else git("rev-parse", "HEAD").strip(),
+                              deckinfo, a.dry_run)
+        except MachineFault:
+            return 1
+        fails = fails + 1 if outcome == "failed" else 0
+        if fails >= 3:
+            log(wid, "3 deck jobs FAILED in a row -- stopping this worker: that is the box, not the decks. "
+                     "See the per-deck logs in %s." % state_dir(wid))
+            return 1
+        if a.once or a.dry_run:
+            return 0
+    log(wid, "STOP requested -- exiting between jobs")
+    return 0
+
+
+def refuse_temp_root():
+    """The worker's worktree, journals and in-flight state live under this checkout; a temp root loses them
+    with the container (the /tmp references loss, CLAUDE.md). Same stance as tools/play/refsafe.js."""
+    import tempfile
+    r = os.path.realpath(ROOT)
+    for t in {"/tmp", "/var/tmp", os.path.realpath(tempfile.gettempdir())}:
+        if r == t or r.startswith(t.rstrip("/") + "/"):
+            raise SystemExit("REFUSING: %s is under %s -- run the worker from a persistent checkout" % (ROOT, t))
+
+
+def cmd_start(a):
+    refuse_temp_root()
+    wid = worker_id()
+    lp = os.path.join(state_dir(wid), "worker.out")
+    pidf = os.path.join(state_dir(wid), "worker.pid")
+    if os.path.exists(pidf):
+        try:
+            pid = int(open(pidf).read())
+            os.kill(pid, 0)
+            print("worker %s already running (pid %d); log %s" % (wid, pid, lp))
+            return 1
+        except (OSError, ValueError):
+            pass
+    with open(lp, "a") as out:
+        p = subprocess.Popen(["nohup", sys.executable, os.path.abspath(__file__), "run"], cwd=ROOT,
+                             stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+    open(pidf, "w").write(str(p.pid))
+    print("worker %s started (pid %d). log: %s   stop: %s stop" % (wid, p.pid, lp, sys.argv[0]))
+    return 0
+
+
+def cmd_stop(a):
+    wid = worker_id()
+    open(os.path.join(state_dir(wid), "STOP"), "w").write(iso(utcnow()))
+    print("STOP requested for worker %s: it exits after the CURRENT job (never mid-generation)." % wid)
+    return 0
+
+
+def cmd_selftest(a):
+    """Everything that can be checked without a generation: the claim CAS against a throwaway local bare
+    repo (no push to origin), the lease/landing rules, the .gz incumbent round-trip, decklist parsing,
+    case-key matching and job ordering. Run it on a new machine before `start`."""
+    import tempfile
+    ok = [0, 0]
+
+    def check(name, cond):
+        ok[0 if cond else 1] += 1
+        print("  %s  %s" % ("ok  " if cond else "FAIL", name))
+
+    T = tempfile.mkdtemp(prefix="aq_selftest_")
+    env_keys = ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL")
+    saved = {k: os.environ.get(k) for k in env_keys}
+    os.environ.update({"GIT_AUTHOR_NAME": "selftest", "GIT_COMMITTER_NAME": "selftest",
+                       "GIT_AUTHOR_EMAIL": "selftest@localhost", "GIT_COMMITTER_EMAIL": "selftest@localhost"})
+    try:
+        print("claim queue (local bare repo %s):" % T)
+        git("init", "-q", "--bare", T + "/origin.git", cwd=T)
+        for c in ("a", "b"):
+            git("clone", "-q", T + "/origin.git", T + "/" + c, cwd=T)
+        cfg = load_config()
+        qa, qb = Queue(T + "/a"), Queue(T + "/b")
+        job = {"deck": "snow", "blobs": {"mulligan": "x"}}
+        mk = lambda w, st="running", **kw: dict({"deck": "snow", "worker": w, "state": st, "started": iso(utcnow()),
+                                                 "blobs": job["blobs"]}, **kw)
+        check("A claims a free deck", put_claim(qa, "snow", mk("A"), "A", job, cfg))
+        qb.fetch()
+        check("B sees A's live claim as blocking", claim_blocks(qb.claims().get("snow"), job, cfg, "B", utcnow()))
+        check("B's claim of the same deck is refused", not put_claim(qb, "snow", mk("B"), "B", job, cfg))
+        qa._write("hinata", {"deck": "hinata", "worker": "A", "state": "running", "started": iso(utcnow())})
+        qb._write("burn", {"deck": "burn", "worker": "B", "state": "running", "started": iso(utcnow())})
+        qa.fetch()
+        check("independent decks coexist", sorted(qa.claims()) == ["burn", "hinata", "snow"])
+        old = iso(utcnow() - datetime.timedelta(hours=cfg["lease_hours"] + 1))
+        qa._write("snow", mk("A", heartbeat=old, started=old))
+        check("B takes over an EXPIRED lease", put_claim(qb, "snow", mk("B"), "B", job, cfg))
+        qb._write("snow", mk("B", "done", finished=iso(utcnow()), result_branch=RESULT_PREFIX + "snow-x"))
+        qa.fetch()
+        c = qa.claims()["snow"]
+        check("a done claim with a result to land holds", claim_blocks(c, job, cfg, "A", utcnow()))
+        check("...and releases once the artifacts change",
+              not claim_blocks(c, {"deck": "snow", "blobs": {"mulligan": "y"}}, cfg, "A", utcnow()))
+        c2 = dict(c, result_branch=None)
+        check("a done claim with NOTHING adopted is retryable after the window",
+              not claim_blocks(c2, job, cfg, "A", utcnow() + datetime.timedelta(days=cfg["retry_rejected_days"] + 1)))
+        check("a rejected claim holds inside the retry window",
+              claim_blocks(dict(c, state="rejected"), job, cfg, "A", utcnow()))
+        check("a released claim never blocks", not claim_blocks(dict(c, state="released"), job, cfg, "A", utcnow()))
+
+        print(".gz incumbent round-trip:")
+        W = T + "/wt"
+        os.makedirs(W + "/decks/X")
+        git("init", "-q", cwd=W)
+        for part, body in (("profile", b'{"a":1}'), ("raw", b'{"m":1}')):
+            with gzip.GzipFile("%s/decks/X/X.keepmodel.exhaustive.%s.json.gz" % (W, part), "wb") as f:
+                f.write(body)
+        git("add", "-A", cwd=W)
+        git("commit", "-qm", "i", cwd=W)
+        d = {"dir": "decks/X", "stem": "X"}
+        ungzip_incumbent(W, d)
+        check("incumbent unpacked to the plain names the driver tests for",
+              sorted(os.listdir(W + "/decks/X")) == ["X.keepmodel.exhaustive.profile.json", "X.keepmodel.exhaustive.raw.json"])
+        regzip(W, d)
+        check("unchanged -> original .gz restored byte-for-byte", not git("status", "--porcelain", cwd=W).strip())
+        ungzip_incumbent(W, d)
+        open(W + "/decks/X/X.keepmodel.exhaustive.profile.json", "w").write('{"a":2}')
+        regzip(W, d)
+        check("changed -> re-packed .gz carries the new table",
+              gzip.open(W + "/decks/X/X.keepmodel.exhaustive.profile.json.gz").read() == b'{"a":2}'
+              and not os.path.exists(W + "/decks/X/X.keepmodel.exhaustive.profile.json"))
+
+        print("parsing + ranking:")
+        open(T + "/l.txt", "w").write("# c\n4 Lightning Bolt\n20 Mountain\n\nSideboard\n2 Smash\n")
+        check(".txt mainboard stops at Sideboard", main_cards(T + "/l.txt") == {"Lightning Bolt", "Mountain"})
+        open(T + "/l.cod", "w").write('<cockatrice_deck><zone name="main"><card number="4" name="Skred"/></zone>'
+                                      '<zone name="side"><card number="1" name="X"/></zone></cockatrice_deck>')
+        check(".cod mainboard only", main_cards(T + "/l.cod") == {"Skred"})
+        m1, m2 = WINS_RE.match("fungus_overnight_d3_s4004.wins"), WINS_RE.match("fungusv32hg_smoke_d3_s1001.wins")
+        check("case keys do not bleed (fungus vs fungusv3 2HG)",
+              m1.group("key") == "fungus" and m2.group("key") == "fungusv3" and m2.group("hg"))
+        check(".wins lines parse", parse_wins(b"0 7 ab\n1 4 cd\n") == {0: (7, "ab"), 1: (4, "cd")})
+        mkit = lambda deck, kind, dt, flags=(), mark=None: dict(
+            {"deck": deck, "dir": "decks/" + deck, "kind": kind, "flags": list(flags), "blob": deck + kind,
+             "churn": {"abs_dturn": dt}}, **({"mark": mark} if mark else {}))
+        its = [mkit("a", "valueleaf", 0.9), mkit("a", "mulligan", 0.01), mkit("b", "mulligan", 0.3, [("decklist", "")]),
+               mkit("c", "mulligan", 0.001, mark={"priority": 1}), mkit("d", "mulligan", 0.001)]
+        for it in its:
+            score(it, cfg)
+        jobs = deck_jobs(sorted(its, key=lambda i: i["sort"]), cfg)
+        check("USER mark first, then a decklist mismatch, then drift; fresh decks not queued",
+              [j["deck"] for j in jobs] == ["c", "b", "a"])
+        check("a deck's stages run mulligan before valueleaf",
+              all(j["stages"] == [k for k in KINDS if k in j["stages"]] for j in jobs))
+    finally:
+        shutil.rmtree(T, ignore_errors=True)
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    print("%d passed, %d FAILED" % tuple(ok))
+    return 1 if ok[1] else 0
+
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sp = ap.add_subparsers(dest="cmd", required=True)
+    s = sp.add_parser("status")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--all", action="store_true")
+    s = sp.add_parser("explain")
+    s.add_argument("deck")
+    for name in ("mark", "unmark"):
+        s = sp.add_parser(name)
+        s.add_argument("deck")
+        s.add_argument("kind")
+        if name == "mark":
+            s.add_argument("why")
+            s.add_argument("--priority", type=int, default=0)
+    sp.add_parser("claims")
+    s = sp.add_parser("run")
+    s.add_argument("--once", action="store_true", help="one deck job, then exit")
+    s.add_argument("--dry-run", action="store_true", help="rank and pick, claim nothing, run nothing")
+    sp.add_parser("start")
+    sp.add_parser("stop")
+    sp.add_parser("selftest")
+    a = ap.parse_args()
+    fn = {"status": cmd_status, "explain": cmd_explain, "mark": cmd_mark, "unmark": cmd_mark, "claims": cmd_claims,
+          "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "selftest": cmd_selftest}[a.cmd]
+    return fn(a)
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    sys.exit(main())

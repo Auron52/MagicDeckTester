@@ -911,6 +911,18 @@ measure keep alone. That is the harness's business, not a knob to reach for.
 the policy by months and caused a shipped adoption to be hedged as though enabling bottoming had
 been an agent's call.)*
 
+## Artifact Refresh Queue
+
+When the user asks **which artifacts are stale**, to **regenerate out-of-date keep tables / value leaves**,
+or to **put an idle machine to work**, use `python3 scripts/artifact_queue.py` (`status` / `explain <deck>`
+read git only; `start` / `stop` / `claims` drive the worker). It ranks every shipped deck's keep table and
+value leaf by **measured play churn** (share of the deck's suite games whose GT decision digest changed
+since the artifact was adopted) plus exact axes (decklist mismatch, card data, settings, pipeline order)
+and USER marks, and a worker claims one deck at a time from origin's `artifact-queue` branch, runs
+`mullgen.sh run` then `valueleaf.sh run` in its own frozen worktree when the box is idle, and pushes the
+result to `artifact-refresh/<deck>-<date>` for landing (GT accept stays a separate step). Design, the
+claim protocol and open questions: `docs/design/artifact-staleness-queue.md`.
+
 ## Claude-Play Runner Skill
 
 When the user asks to **run the claude-play oracle / claude runner**, **have Claude play a deck**, or **sweep games with Claude to find bugs/misplays**, read `.claude/skills/claude-play.md` first. It is the authoritative guide for the opt-in `--claude-play` mode (a Claude agent drives main-phase decisions for verification).

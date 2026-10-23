@@ -1,8 +1,11 @@
 # Artifact staleness queue — regenerate the most out-of-date artifacts, in order
 
-**Status: PARKED (USER 2026-09-03; re-raised 2026-10-10, still parked -- see the update at the end).
-The USER's idea, recorded verbatim in spirit; parked purely for CPU cost, not for design doubts. Do not
-build without the USER re-opening it.**
+**Status: BUILT 2026-10-23, UNTESTED END-TO-END (USER re-opened it: "focus on making a script/application
+that focuses on using CPU effectively when we don't have inference budget ... prioritize those that have
+drifted the most first"). The tool is `scripts/artifact_queue.py` + `scripts/artifact_queue.json`; see
+"2026-10-23: what was built" at the end. `status`/`explain` were exercised read-only; the worker loop
+(`run`) has NOT been run yet -- the box had a mulligan generation on it, and the USER is freeing a second
+machine to try it on. History below is kept as the record of the design.**
 
 ## The idea (USER)
 
@@ -88,3 +91,97 @@ machine), and on ordering:
   generation). Example of plain play drift: Bruna's value leaf predates the 2026-10-10 width collapses.
 * Still open: the claim/lock protocol between machines, where the queue lives, and whether an idle box
   may regenerate while it also runs suite tiers (contention makes timing-based outputs wrong).
+
+## 2026-10-23: what was built (`scripts/artifact_queue.py`)
+
+```
+python3 scripts/artifact_queue.py status [--all|--json]   # ranked artifacts + deck jobs; git reads only
+python3 scripts/artifact_queue.py explain <deck>          # every axis for one deck
+python3 scripts/artifact_queue.py mark <deck> mulligan|valueleaf "<why>" [--priority N]   # USER mark
+python3 scripts/artifact_queue.py claims                  # what every machine is doing (origin/artifact-queue)
+python3 scripts/artifact_queue.py start | stop            # detached worker loop; stop = after the CURRENT job
+python3 scripts/artifact_queue.py run --dry-run           # rank + pick, claim nothing, run nothing
+python3 scripts/artifact_queue.py selftest                # claim CAS on a local bare repo, .gz round-trip,
+                                                          # parsing, ranking -- no games; run it on a new box first
+```
+
+**Trying it on a new machine:** a persistent checkout (the worker refuses a temp root), `gh`/git push
+access to origin, then `selftest`, `status`, `run --dry-run`, and `start` once the box is known to be
+free. `MDT_WORKER_ID` names the machine; otherwise an id is minted once per checkout into
+`logs/artifact_queue/WORKER_ID` (NOT the hostname: a devcontainer's is the container id, which changes on
+every rebuild and would orphan an in-flight job). Worker log: `logs/artifact_queue/<id>/worker.log`, with
+per-deck driver logs beside it.
+
+**The drift metric is measured play churn, and it costs nothing.** The harness keeps one
+`<game_index> <win_turn> <decision-stream digest>` line per suite game (`test/gt_logs/*.wins`). For each of
+the deck's cases (standard and 2HG, every tier), the baseline is the version FIRST ACCEPTED AT OR AFTER the
+artifact's adoption commit (the first GT that saw it live), and churn = the share of the deck's suite games
+whose decision digest differs between that and HEAD -- and the SCORE is the mean per-game |win-turn change|
+over the same games, because churn saturated on the first full run (50-99% for nearly every artifact:
+Knights 92% churn at 0.010 turns vs Hinata2 97% at 1.09). The artifact's own effect is never counted;
+a play change landed between adoption and that first accept is missed (an under-estimate, never an
+over-one). Net dturn and churn are reported beside it. The adoption commit is the last
+commit touching the keep table's `.gz`, and for a leaf the oldest commit in the newest unbroken run of the
+same `eval_model` (so a `value_play` settings edit does not reset the leaf's age).
+
+**Exact axes** (`FLAG_WEIGHT`), weighted only where GT drift cannot see them: decklist mismatch (1.0; a
+list card no bucket names, or a bucketed card the list dropped -- an alias counts, it is lossy),
+unreadable artifact (1.0), settings drift (0.1; table generated at a depth/budget other than the deck's
+current `mull_gen_*`, only when the raw recorded one). Reported at weight 0 because their play effect is
+already in the drift: cards.json change to a deck card since adoption (canonicalised exactly as
+`CardDefHash`), pipeline order (leaf fitted before the current keep table was adopted). A USER mark sorts first
+regardless of score. An artifact is queued when score >= `min_drift` (0.02 turns), it is committed, and its deck
+is in the suite (both drivers refuse otherwise). A settings-only sidecar (no `eval_model`, e.g. Snow's
+`leaf: none`) is not a leaf and is not queued unless marked.
+
+**The queue unit is a DECK, and stages run mulligan -> valueleaf** (USER order 2026-10-18), so a leaf
+regenerated in the same job is fitted to the table that job produced. `leaf_follows_mulligan` (default
+false) would add the leaf stage whenever the keep table is regenerated -- see open question 2.
+
+**Claims (multi-machine).** origin branch `artifact-queue`, one `claims/<deck>.json` per deck, written
+with git plumbing (no working tree). Every write is a commit on the tip just read, pushed without force,
+so a concurrent writer makes the push fail and the writer re-reads and retries: a compare-and-swap on the
+whole queue. A running claim is renewed every 20 min and is stealable after 3 h without a heartbeat. A
+finished claim holds while the deck's artifacts on the branch are still the blobs it ran against (i.e.
+until its result lands) -- but only when it produced a result branch; one that adopted nothing (a leaf left
+staged) is retryable like a rejected/failed/refused one, after 14 days. A taken-over lease uses the same
+rule as the picker, so the two cannot disagree. A MACHINE fault (`./build.sh` failing) releases the claim
+and stops that worker instead of stamping every deck "failed" one after another, and three failed deck
+jobs in a row also stop it.
+
+**The worker.** Per machine (`MDT_WORKER_ID`, default hostname): a worktree at
+`.claude/worktrees/artifact-worker-<id>` (persistent location; build/ goes to the volume via build.sh),
+re-frozen on `origin/<branch>` ONLY between jobs (tracked leftovers are committed to a pushed rescue branch
+first, never discarded); `./build.sh`; then for each stage it waits until no foreign `mtg`/`mtg-analyze`
+process is on the box, and runs `bash scripts/mullgen.sh run <deck> <recipe>` /
+`bash scripts/valueleaf.sh run <deck>` -- the sanctioned entry points, unchanged. An interrupted job
+resumes in the same frozen worktree from `logs/artifact_queue/<id>/inflight.json` (both drivers resume from
+their own markers/journals). Whatever TRACKED change the drivers leave in the deck folder (an adopted
+table re-packed to `.gz`, an adopted sidecar, a screened `mull_gen_*`) is committed to
+`artifact-refresh/<deck>-<date>` and pushed; gitignored leftovers (a quarantined `.DISABLED` table, `.PREV`,
+journals and their backups) stay in the worker's worktree, which is on the persistent host drive. **Landing
+is a human/agent step**: rebase it onto the branch, run smoke + regression, accept the GT it moves.
+Nothing is ever killed: `stop` takes effect between jobs.
+
+**A `mullgen.sh` regeneration trap the worker works around (found while building this).** The driver
+decides REGENERATION vs FIRST VERSION with `[ -e <stem>.keepmodel.exhaustive.profile.json ]`, the PLAIN
+name, and every deck commits only the `.gz`. So `mullgen.sh run` on a committed deck (1) saves no
+incumbent, which makes it validate with the first-version bar (keep vs static, confounded bottoming)
+instead of the old-vs-new versus A/B, and (2) leaves the new plain table SHADOWED by the old `.gz`, which
+the engine loads first (`MulliganProfileIO.h`, `.gz` before plain). The worker unpacks the incumbent to
+the plain names in its own worktree before the driver runs, and re-packs afterwards (byte-identical
+restore when unchanged). The driver itself was NOT edited (a generation was running on the box); the
+proper fix is in `mullgen.sh` line ~658 (resolve the `.gz` incumbent the way `validate_preflight` already
+does) and in whatever made the new plain file live. Anyone who has hand-run a regen recently should check
+which validation it ran.
+
+**Open questions (USER):**
+1. `mullgen_recipe` default is `fast` (the driver's own default, USER 2026-10-19). A table currently at R=40
+   regenerated at R=30 is a like-for-unlike swap that the old-vs-new A/B then judges; matching the
+   incumbent's R instead is the alternative. Per-deck `recipe_overrides` exist either way.
+2. Should a keep-table regeneration always be followed by that deck's leaf (`leaf_follows_mulligan`)? It
+   is exactly the pipeline-order axis, but it costs a leaf run per table, and the leaf is currently the
+   weaker evaluator (USER 2026-10-18).
+3. Weights (`FLAG_WEIGHT`, `kind_weight`, `min_churn`) are first guesses; churn alone is the measured part.
+4. Idle detection sees only this container's processes. A sibling container's generation on the same host
+   is invisible to it: on the shared box, start the worker only when the box is known to be free.
