@@ -172,6 +172,26 @@ OUTER turn-6 enumeration at the rollout's own searched decision: 160-300k plans 
 reach it (that node is in the window at d1). The enumeration is uncharged, so at d1 b1 the decision builds
 millions of plans to score a few hundred.
 
+**Measured since (2026-10-23 PM), all uncommitted levers, patch `logs/lfe/reef_land_levers.patch`:**
+* A keep-gen gate serialising giant enumerations across workers (play-identical) CANNOT work: alone on one thread
+  the 19 heavy rollouts peak at 1.3-9.8 GB (8), 11.9-19.9 GB (7) and over 18 GB (4), against ~11 GB of headroom
+  over the generation's ~9 GB baseline (cell tables).
+* `MTG_LFE_REEF_LAND_DEFAULT` (the Reef land answer is the provider default only; Harbinger ORDER entries still
+  fan) fixes it -- all 19 finish together at 11.4 GB -- at +13 turns over 15,000 held-out paired games (three
+  samples, d1/d3/d5) with 8 of 21 slower games not recovering at d8 b0. One root cause is local (a Terramorphic
+  to hand and cracked the same turn; two reveals sharing one drop), the other is not: the pruned search steers
+  away from early Reef lines because their future flips are gone (d5 s380967 gi967).
+* `MTG_LFE_REEF_LAND_DROP_USED` (prune only where every look resolves with the drop used) is ~neutral (+1 over
+  4,500 games, d1 digest identical) but does not fix memory: the heavy plans do not play their land first.
+
+**Option 2 scope (play-identical; not started).** Hold the look-top variants lazily like the put-back clones
+(`PbLazyLayout` / `CandSeq`): generalise the layout to several blocks (`Locate`/`Synth`, `PbLazyMaterialize`,
+`PbLazyOrderFs`/`RotateFs`, per-block `fan_bp_base`, `PbLazyListBytes`), emit one prototype per base plus a pin
+table, and teach `PutBounceFold::BuildInPlan` (and `Build`/`BuildMasked`, the combat-pin share) to skip the block
+rather than materialise it -- on this deck `deck_has_land_search` forces `bp_variants_here`, so BuildInPlan
+materialises every lazy pre-combat list today and nothing would be saved. Hosts: FSLineWin and SolveWithLookahead
+only; continuation lists and the m2 host stay full. ~300-500 lines; one decision ~1 GB instead of ~9.8 GB.
+
 ## Appendix: the option-5 experiment patch (against 9711d6231; `MTG_ROLLOUT_FAN_NARROW=1` arms it)
 
 ```diff
