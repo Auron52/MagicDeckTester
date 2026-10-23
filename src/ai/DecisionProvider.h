@@ -590,6 +590,12 @@ public:
     // full fan.
     virtual int PutBackTopChoices(const GameState& s) const { (void)s; return 0; }
 
+    // PutBackFanCap -- W > 0 caps the searched put-back fan at the FIRST W candidates of the provider-
+    // ordered list (PutBackCandidates' order: the most expendable SET first, the better card of a set on
+    // top; rank 0 the default). The list itself is unchanged -- a provider-owned RESTRICT of options it
+    // has already ORDERED, never a pick. Default 0 -> the full fan.
+    virtual int PutBackFanCap(const GameState& s) const { (void)s; return 0; }
+
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
     // order? When true (the default, and true of every bucket rule in the suite -- they choose which

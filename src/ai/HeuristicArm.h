@@ -672,6 +672,7 @@ enum Slot : int
     NIV_ORDER_RAMP_NEEDED,    // MTG_NIV_ORDER_RAMP_NEEDED  look ORDER: an accelerator usable now outranks a missing Niv only if it moves the turn that Niv becomes castable; otherwise it orders as a next-turn set-up card, behind the Niv. DEFAULT OFF pending its A/B
     NIV_BRAINSTORM_MIDDLE,    // MTG_NIV_BRAINSTORM_MIDDLE  NivMizzetCombo Brainstorm put-back, the MIDDLE prune (inert unless MTG_NIV_CANTRIP_RULES + MTG_NIV_BRAINSTORM_RULE): the rule fixes the deepest card and the order, the search picks only the TOP card (the next draw) among the rule's first 3 distinct choices (DecisionProvider::PutBackTopChoices = 3). Replaces BRAINSTORM_SINGLE while on. USER 2026-10-23: "it seems to me like we should be able to actually prune the choices more" / "we should consider whether there is a better option to adopt." DEFAULT OFF pending its A/B
     NIV_BRAINSTORM_MIDDLE2,   // MTG_NIV_BRAINSTORM_MIDDLE2  the narrower middle: the top card among the rule's first 2 choices (PutBackTopChoices = 2; wins over MTG_NIV_BRAINSTORM_MIDDLE). DEFAULT OFF pending its A/B
+    NIV_BRAINSTORM_BAND,      // MTG_NIV_BRAINSTORM_BAND  NivMizzetCombo Brainstorm put-back, the BAND prune (inert unless MTG_NIV_CANTRIP_RULES + MTG_NIV_BRAINSTORM_RULE): the search fans only the FIRST 5 candidates of the rule-ordered list (DecisionProvider::PutBackFanCap = 5) -- the rule's pair in both orders and its nearest neighbours. Every real put-back where the full fan left the rule's pick in the 2026-10-22 A/B's SINGLE-slower games took rank 1, 1, 1, 3 or 4 (three of them the rule's own pair reversed, which the top-only MIDDLE cannot express). Replaces BRAINSTORM_SINGLE while on. DEFAULT OFF pending its A/B
     NIV_ORDER_PROBE_HOLD,     // MTG_NIV_ORDER_PROBE_HOLD  look ORDER: while a Niv is in hand and not castable this turn, a Gitaxian Probe goes LAST among the kept cards -- saved as the go-off draw instead of spent now as a free cantrip. DEFAULT OFF pending its A/B
     COUNT
 };
@@ -1296,6 +1297,7 @@ inline const char* Name(int slot)
         "MTG_NIV_ORDER_PROBE_HOLD",
         "MTG_NIV_BRAINSTORM_MIDDLE",
         "MTG_NIV_BRAINSTORM_MIDDLE2",
+        "MTG_NIV_BRAINSTORM_BAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

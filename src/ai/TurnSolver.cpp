@@ -72306,6 +72306,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (const int top_k = ResolveProvider(state).PutBackTopChoices(state);
                     top_k > 0 && ResolveProvider(state).PutBackRankingPerCard(state))
                 { w = std::min(w, top_k); }
+                // The BAND cap (DecisionProvider::PutBackFanCap): the first W ranks of the same list.
+                if (const int band = ResolveProvider(state).PutBackFanCap(state); band > 0) { w = std::min(w, band); }
                 // The fan's sibling identity for the put-back fold (PutBackFoldMemo): on the variants
                 // now, on the base after every axis has cloned (putback_based, below).
                 static thread_local int s_putback_group = 0;

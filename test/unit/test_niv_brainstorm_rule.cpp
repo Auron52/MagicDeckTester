@@ -101,7 +101,8 @@ void NivAllOffNb()
                               heurarm::NIV_PONDER_KEEP_SHUFFLE, heurarm::NIV_LOOKOUT_RULE2, heurarm::NIV_LOOKOUT_RULE2_SERVANT,
                               heurarm::NIV_ORDER_COLOUR_LAND, heurarm::NIV_ORDER_GOOFF_MANA, heurarm::NIV_ORDER_CURIOSITY_FIRST,
                               heurarm::NIV_ORDER_RAMP_NEEDED, heurarm::NIV_ORDER_PROBE_HOLD,
-                              heurarm::NIV_BRAINSTORM_MIDDLE, heurarm::NIV_BRAINSTORM_MIDDLE2 })
+                              heurarm::NIV_BRAINSTORM_MIDDLE, heurarm::NIV_BRAINSTORM_MIDDLE2,
+                              heurarm::NIV_BRAINSTORM_BAND })
     { heurarm::t_arm[static_cast<int>(sl)] = 0; }
 }
 
@@ -805,5 +806,58 @@ TEST_CASE("Niv Brainstorm MIDDLE: the fan is K-1 variants per Brainstorm plan, a
             ArmNb arms({ heurarm::NIV_BRAINSTORM_RULE, mid });   // inert without the rules: the full fan
             CHECK(NivProvNb().PutBackTopChoices(board) == 0);
         }
+    }
+}
+
+// ---- THE BAND PUT-BACK PRUNE (MTG_NIV_BRAINSTORM_BAND): the first 5 rule-ordered candidates ----------------
+// The list is untouched (rank k still resolves to PutBackPickAt's rank k); only the fan is cut to ranks 0..4,
+// and BAND replaces BRAINSTORM_SINGLE while on.
+TEST_CASE("Niv Brainstorm BAND: the fan is the first 5 ranks of the unchanged list, and it replaces SINGLE")
+{
+    const GameState board = BoardNb({ "Brainstorm", "Niv-Mizzet, the Firemind", "Tandem Lookout", "Island" }, false,
+                                    { "Preordain", "Sol Ring", "Curiosity", "Island", "Gitaxian Probe" });
+    auto fan = [&](int& variants, int& widest_group, int& max_rank)
+    {
+        variants = 0; widest_group = 0; max_rank = 0;
+        std::map<int, int> per_group;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(board, true))
+        {
+            if (p.putback_choice >= 1) { ++variants; ++per_group[p.putback_group]; max_rank = std::max(max_rank, p.putback_choice); }
+        }
+        for (const auto& g : per_group) { widest_group = std::max(widest_group, g.second); }
+    };
+    int full = 0, full_w = 0, full_r = 0, v = 0, w = 0, r = 0;
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_BRAINSTORM_RULE });
+        fan(full, full_w, full_r);
+        REQUIRE(full_w > 4);
+    }
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_BRAINSTORM_RULE, heurarm::NIV_BRAINSTORM_BAND });
+        fan(v, w, r);
+        CHECK(v > 0);
+        CHECK(v < full);
+        CHECK(w <= 4);
+        CHECK(r <= 4);
+        // The list is the full one: rank k is the same candidate with and without the band.
+        GameState t = board;
+        t.players[0].hand.push_back(CardNb("Preordain", 90));
+        t.players[0].hand.push_back(CardNb("Sol Ring", 91));
+        const std::vector<std::vector<int>> banded = PutBackCandidates(t, 0, 2);
+        heurarm::t_arm[static_cast<int>(heurarm::NIV_BRAINSTORM_BAND)] = 0;
+        CHECK(PutBackCandidates(t, 0, 2) == banded);
+        heurarm::t_arm[static_cast<int>(heurarm::NIV_BRAINSTORM_BAND)] = 1;
+    }
+    {
+        ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_BRAINSTORM_RULE, heurarm::NIV_BRAINSTORM_SINGLE,
+                     heurarm::NIV_BRAINSTORM_BAND });
+        CHECK_FALSE(NivProvNb().PutBackSingleCandidate(board));
+        int v2 = 0, w2 = 0, r2 = 0;
+        fan(v2, w2, r2);
+        CHECK(v2 == v);
+    }
+    {
+        ArmNb arms({ heurarm::NIV_BRAINSTORM_RULE, heurarm::NIV_BRAINSTORM_BAND });   // inert without the rules
+        CHECK(NivProvNb().PutBackFanCap(board) == 0);
     }
 }

@@ -52927,8 +52927,24 @@ bool NivMizzetComboProvider::PutBackRankingPerCard(const GameState& s) const
 
 bool NivMizzetComboProvider::PutBackSingleCandidate(const GameState& s) const
 {
-    // The middle prune, while on, REPLACES the one-option prune (its fan is the middle list).
-    return NivPutBackRuleLive() && NivBrainstormSingleOn() && PutBackTopChoices(s) == 0;
+    // The middle and band prunes, while on, REPLACE the one-option prune.
+    return NivPutBackRuleLive() && NivBrainstormSingleOn() && PutBackTopChoices(s) == 0 && PutBackFanCap(s) == 0;
+}
+
+// THE BAND PUT-BACK PRUNE (MTG_NIV_BRAINSTORM_BAND, DEFAULT OFF): the first 5 candidates of the rule-ordered
+// list. Built from the replays of the games where the full fan beat BRAINSTORM_SINGLE (2026-10-22 A/B): every
+// real put-back that left the rule's pick took rank 1 (d3 gi221, 288; play gi69 -- the rule's pair REVERSED),
+// 3 (play gi36: both Lookouts, Curiosity kept) or 4 (play gi30: Preordain on top of the rule's deepest card).
+// The top-only MIDDLE reaches only the last of those. Same list, same order; only the fan is cut.
+static bool NivBrainstormBandOn()
+{
+    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_BAND");   // DEFAULT OFF pending its A/B
+    return heurarm::Flag(heurarm::NIV_BRAINSTORM_BAND, on);
+}
+int NivMizzetComboProvider::PutBackFanCap(const GameState& s) const
+{
+    (void)s;
+    return NivPutBackRuleLive() && NivBrainstormBandOn() ? 5 : 0;
 }
 
 // THE MIDDLE PUT-BACK PRUNE (USER 2026-10-23, on adopting the ranking + BRAINSTORM_SINGLE: "it seems to me
