@@ -806,8 +806,12 @@ Phylath line T5.
 
 **What the screen says about Phylath, and why its count is 2 so far:**
 - It was cut 4 -> 2 in round 2 only to make room for the Hydras (Hydra for 4 Phylath beat Hydra for 2 Courser
-  + 2 Baloths while keeping 4 Phylath by 0.12 t). Phylath is LEGENDARY: a second copy's ETB still makes Plants,
-  but the legend rule then bins one body, so copies 3-4 are often dead draws.
+  + 2 Baloths while keeping 4 Phylath by 0.12 t).
+- **Legendary costs little here (USER):** *"legendary doesn't hurt much if the card kills on its own. In that case
+  having access to one is what matters."* A second copy only matters in a game the first did not already win.
+  What copies 3-4 buy is ACCESS: P(a Phylath among the 11 cards seen by T4 on the draw) is 34% at 2 copies, 46%
+  at 3, 57% at 4. Their small measured gain is about what they REPLACE -- an Avenger or Titan, which also wins on
+  its own, or the ramp that puts Phylath down on T4 -- so it is finisher-for-finisher, not finisher-for-nothing.
 - Mossborn Hydra plays the same role (one attacker grown by landfall; 1 -> 16 counters over four landfalls, with
   trample) at 3 mana, so with four Hydras the marginal Phylath is worth less than in the references' list.
 - Every test since has favoured a 3rd Phylath slightly: for an Avenger -0.007 / -0.010 NSS (round 12), -0.002 /
