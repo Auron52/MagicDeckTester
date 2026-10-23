@@ -1092,3 +1092,44 @@ reached hand in which no copy was cast / played):
 Wolf Run is bracketed at [-0.003, -0.013] in Fountain's slot and [+0.002, -0.007] in a Mountain's -- a small gain
 at best, before its unmeasured blocker value and Fountain's unmeasured life. The arms that cut a shuffle effect
 (Rampant Growth, Wilds, Terramorphic, Moraug for ramp) gain 0.02-0.03 without the clairvoyant shuffle, as in nss13.
+
+### n2 — the Khalni slot, priced (`logs/landfall_screen/n2.json`, seed 9600000, 20,000 paired games, HELD OUT from n1)
+
+No keep table on any arm; pin a16b898. 340,000 games 19:56-21:44 UTC including the card-score pooling (1 h 48 min).
+Backup odds = P(>=2 threats by T4/T5/T6 on the draw), P(>=3 by T6); 21 creatures 95.6/97.2/98.3%, 91.4%; 24 creatures
+98.0/98.9/99.4%, 96.2% (the others are in the New cards section).
+
+| arm | change from U0 | creatures | vs U0 | se | t | vs shipped | T7+ | buy |
+|---|---|---|---|---|---|---|---|---|
+| **K0** | 4 Cub for 4 Khalni | 22 | **-0.2632** | 0.0042 | -63.3 | **-1.029** | **1.77%** | $110 |
+| K0_mw | K0 + 2 Moraug for 2 Genesis Wave | 24 | -0.2627 | 0.0042 | -62.3 | -1.028 | 1.78% | $114 |
+| K_mix | 4 Cub for 2 Khalni + 2 Rampant Growth | 22 | -0.2374 | 0.0040 | -58.8 | -1.003 | 2.14% | $110 |
+| K_c3 | 3 Cub for 3 Khalni | 21 | -0.1885 | 0.0036 | -52.6 | -0.954 | 2.02% | $82 |
+| K0_b2RG | K0 + 2 Baloths for 2 Rampant Growth | 24 | -0.1872 | 0.0054 | -35.0 | -0.953 | 2.84% | $111 |
+| K0_b2ST | K0 + 2 Baloths for 2 Search | 24 | -0.1705 | 0.0047 | -36.2 | -0.936 | 2.46% | $111 |
+| K_c2 | 2 Cub for 2 Khalni | 20 | -0.1132 | 0.0028 | -40.2 | -0.879 | 2.32% | $55 |
+| K_c2F2 | 2 Cub + 2 Forest for 4 Khalni | 20 | -0.1104 | 0.0048 | -23.2 | -0.876 | 2.19% | $55 |
+| K_c1 | 1 Cub for 1 Khalni | 19 | -0.0480 | 0.0018 | -26.2 | -0.813 | 2.67% | $27 |
+| K_c2b2 | 2 Cub + 2 Baloths for 4 Khalni | 22 | -0.0357 | 0.0045 | -7.9 | -0.801 | 3.23% | $56 |
+| M_2W | 2 Moraug for 2 Genesis Wave | 20 | -0.0237 | 0.0015 | -15.5 | -0.789 | 3.04% | $4 |
+| U0 | -- | 18 | -- | -- | -- | -0.765 | 3.19% | -- |
+| W_b2 | 2 Baloths for 2 Genesis Wave | 20 | +0.0331 | 0.0014 | +24.5 | -0.732 | 3.77% | $1 |
+| K_F | 4 Forest for 4 Khalni | 18 | +0.0704 | 0.0056 | +12.6 | -0.695 | 3.14% | -- |
+| K_b4_mw | 4 Baloths for Khalni + 2 Moraug for Wave | 22 | +0.1969 | 0.0056 | +35.3 | -0.568 | 6.14% | $5 |
+| K_b4 | 4 Baloths for 4 Khalni | 22 | +0.2333 | 0.0055 | +42.7 | -0.532 | 6.72% | $1 |
+| shipped | | 16 | +0.7653 | 0.0054 | +141.0 | -- | 8.35% | -- |
+
+* **K0 replicates on held-out seeds** (-0.263 against n1's -0.266) and stays the best list: -1.03 against the shipped
+  list, slow tail (T7+) 1.77% against 3.19%.
+* **The gain is the Cub, not the cut.** Four Forests for the four Khalnis is WORSE (+0.070), so Khalni is worth ~0.018
+  a copy over a Forest and the Cub ~0.066 a copy over Khalni. Two Cubs with the other two Khalnis cut to Forests (K_c2F2,
+  -0.110) is the same as keeping them (K_c2, -0.113).
+* **The Cub ladder is close to linear, i.e. a budget can stop anywhere**: 1 / 2 / 3 / 4 Cubs = -0.048 / -0.113 / -0.189
+  / -0.263 ($27 / $55 / $82 / $110; ~0.024-0.028 t per $10 at every step). Cutting ramp beside Khalni costs a little
+  (4 Cubs for 2 Khalni + 2 Rampant Growth -0.237 against -0.263).
+* **Rampaging Baloths is the wrong cheap threat.** Every Baloths arm loses to the card it replaces: 4 for Khalni +0.233,
+  2 for Wave +0.033, 2 for a ramp spell next to four Cubs +0.076 to +0.093. A 6-mana 6/6 does not race a goldfish that
+  wins on turn 5 even when it adds threat density (24 creatures in K0_b2RG and still worse than K0).
+* **Moraug is a real but small gain over Genesis Wave on its own (-0.024; Baloths there +0.033, so it is Moraug, not
+  just a creature), and adds NOTHING beside four Cubs** (K0_mw -0.2627 against K0 -0.2632). With four Cubs the deck
+  already wins before a six-drop's second combat matters.
