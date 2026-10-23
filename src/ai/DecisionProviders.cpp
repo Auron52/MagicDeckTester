@@ -52253,6 +52253,9 @@ bool ColossusHammerProvider::CleanupDiscardShedStable() const { return !Colossus
 // NivMizzetCombo -- the USER's bucket categories (2026-10-22), ONE classifier with three consumers:
 // Preordain's keep/bottom and Ponder's keep/shuffle + order (MTG_NIV_CANTRIP_RULES), Ponder's search
 // prune to that pick (MTG_NIV_PONDER_SINGLE), and the cleanup discard (MTG_NIV_BUCKET_DISCARD).
+// ADOPTED 2026-10-23 (DEFAULT ON): CANTRIP_RULES, CANTRIP_AMEND (kNivCantripAmendDefault, the open item),
+// PONDER_KEEP_SHUFFLE, BUCKET_DISCARD, BRAINSTORM_RULE, BRAINSTORM_SINGLE. Still OFF: PONDER_SINGLE,
+// LOOKOUT_RULE2 (+ its Servant amendment), SERVANT_UNPAIR, the MTG_NIV_ORDER_* rules.
 //
 // USER: "We should probably create some rules for Preordain and Ponder to help decide what we bottom
 // and how we order the top 3. Searching every option is too expensive." / "It essentially comes down
@@ -52548,9 +52551,13 @@ int NivTurnsUntilUsable(const NivCensus& c, const CardDefinition* d)
     return t_cast(cost);
 }
 
+// MTG_NIV_CANTRIP_RULES: ADOPTED DEFAULT ON 2026-10-23 as the measured package (rules + amend + Ponder keep/shuffle + bucket
+// discard + Brainstorm ranking + BRAINSTORM_SINGLE; 2026-10-22 A/B: d3 -0.0337, play +0.0085, 0.21x/0.27x
+// units). USER: "it makes sense to adopt this, but then we should consider whether there is a better option
+// to adopt." =0 disables.
 bool NivCantripRulesOn()
 {
-    static const bool on = EnvOn("MTG_NIV_CANTRIP_RULES");   // DEFAULT OFF pending its A/B and the USER
+    static const bool on = EnvOn("MTG_NIV_CANTRIP_RULES", true);
     return heurarm::Flag(heurarm::NIV_CANTRIP_RULES, on);
 }
 bool NivPonderSingleOn()
@@ -52560,14 +52567,17 @@ bool NivPonderSingleOn()
 }
 bool NivBucketDiscardOn()
 {
-    static const bool on = EnvOn("MTG_NIV_BUCKET_DISCARD");  // DEFAULT OFF pending its A/B and the USER
+    static const bool on = EnvOn("MTG_NIV_BUCKET_DISCARD", true);   // ADOPTED DEFAULT ON 2026-10-23 (the package)
     return heurarm::Flag(heurarm::NIV_BUCKET_DISCARD, on);
 }
 // The amendment arm (see HeuristicArm.h NIV_CANTRIP_AMEND): the two rule gaps the 2026-10-22 attribution
 // of the Ponder prune's slower games found on VISIBLE information. Inert unless the rules are on.
+// THE ONE-LINE SWITCH for the amendment's default -- the package's single open item, settled by the
+// 2026-10-23 held-out run (seeds 71000 / 72000). ON = the package exactly as measured on 2026-10-22.
+static constexpr bool kNivCantripAmendDefault = true;
 bool NivCantripAmendOn()
 {
-    static const bool on = EnvOn("MTG_NIV_CANTRIP_AMEND");   // DEFAULT OFF pending its A/B and the USER
+    static const bool on = EnvOn("MTG_NIV_CANTRIP_AMEND", kNivCantripAmendDefault);
     return heurarm::Flag(heurarm::NIV_CANTRIP_AMEND, on);
 }
 
@@ -52793,7 +52803,7 @@ bool NivMizzetComboProvider::ReorderSingleCandidate(const GameState& s) const
 // rules decide keep vs shuffle too) is the agent's narrower prune, not the USER's.
 static bool NivPonderKeepShuffleOn()
 {
-    static const bool on = EnvOn("MTG_NIV_PONDER_KEEP_SHUFFLE");   // DEFAULT OFF pending its A/B
+    static const bool on = EnvOn("MTG_NIV_PONDER_KEEP_SHUFFLE", true);   // ADOPTED DEFAULT ON 2026-10-23 (the package)
     return heurarm::Flag(heurarm::NIV_PONDER_KEEP_SHUFFLE, on);
 }
 bool NivMizzetComboProvider::ReorderKeepShuffleOnly(const GameState& s) const
@@ -52837,12 +52847,12 @@ bool NivMizzetComboProvider::ReorderKeepShuffleOnly(const GameState& s) const
 // never pruned (the rule's pick is only its default).
 static bool NivBrainstormRuleOn()
 {
-    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_RULE");     // DEFAULT OFF pending its A/B and the USER
+    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_RULE", true);     // ADOPTED DEFAULT ON 2026-10-23 (the package)
     return heurarm::Flag(heurarm::NIV_BRAINSTORM_RULE, on);
 }
 static bool NivBrainstormSingleOn()
 {
-    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_SINGLE");   // DEFAULT OFF pending its A/B
+    static const bool on = EnvOn("MTG_NIV_BRAINSTORM_SINGLE", true);   // ADOPTED DEFAULT ON 2026-10-23 (the package)
     return heurarm::Flag(heurarm::NIV_BRAINSTORM_SINGLE, on);
 }
 static bool NivPutBackRuleLive() { return NivCantripRulesOn() && NivBrainstormRuleOn(); }

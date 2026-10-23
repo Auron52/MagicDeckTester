@@ -17,6 +17,7 @@
 #include "ai/TurnSolver.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -88,10 +89,25 @@ GameState BoardNb(const std::vector<std::string>& hand, bool drop_spent,
     return s;
 }
 
+// Every Niv lever forced OFF. Since the 2026-10-23 adoption several are DEFAULT ON, so a case that wants
+// "the rules off" or "only these on" must say so for every Niv slot -- heurarm::Clear() means the defaults.
+void NivAllOffNb()
+{
+    heurarm::Clear();
+    for (heurarm::Slot sl : { heurarm::NIV_CANTRIP_RULES, heurarm::NIV_PONDER_SINGLE, heurarm::NIV_BUCKET_DISCARD,
+                              heurarm::NIV_CANTRIP_AMEND, heurarm::NIV_LOOKOUT_NIV_ONLY, heurarm::NIV_SERVANT_FIREMIND_ONLY,
+                              heurarm::NIV_SERVANT_UNPAIR, heurarm::NIV_BRAINSTORM_RULE, heurarm::NIV_BRAINSTORM_SINGLE,
+                              heurarm::NIV_PONDER_KEEP_SHUFFLE, heurarm::NIV_LOOKOUT_RULE2, heurarm::NIV_LOOKOUT_RULE2_SERVANT,
+                              heurarm::NIV_ORDER_COLOUR_LAND, heurarm::NIV_ORDER_GOOFF_MANA, heurarm::NIV_ORDER_CURIOSITY_FIRST,
+                              heurarm::NIV_ORDER_RAMP_NEEDED, heurarm::NIV_ORDER_PROBE_HOLD })
+    { heurarm::t_arm[static_cast<int>(sl)] = 0; }
+}
+
+// Exactly the listed Niv levers ON, every other Niv lever OFF.
 struct ArmNb
 {
     explicit ArmNb(std::initializer_list<heurarm::Slot> on)
-    { for (heurarm::Slot sl : on) { heurarm::t_arm[static_cast<int>(sl)] = 1; } }
+    { NivAllOffNb(); for (heurarm::Slot sl : on) { heurarm::t_arm[static_cast<int>(sl)] = 1; } }
     ~ArmNb() { heurarm::Clear(); }
 };
 
@@ -113,7 +129,7 @@ TEST_CASE("Niv Brainstorm rule: inert unless MTG_NIV_CANTRIP_RULES and MTG_NIV_B
     const std::vector<int> base = NivProvNb().DecisionProvider::PutBackRanking(s, 0);
     for (int arm = 0; arm < 3; ++arm)
     {
-        heurarm::Clear();
+        NivAllOffNb();
         if (arm == 1) { heurarm::t_arm[static_cast<int>(heurarm::NIV_CANTRIP_RULES)] = 1; }
         if (arm == 2) { heurarm::t_arm[static_cast<int>(heurarm::NIV_BRAINSTORM_RULE)] = 1;
                         heurarm::t_arm[static_cast<int>(heurarm::NIV_BRAINSTORM_SINGLE)] = 1; }
@@ -412,7 +428,7 @@ TEST_CASE("Niv Lookout rule 2: off -> the base pairing; the twin is enumerated u
         for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true)) { if (p.soulbond_decline) { ++n; } }
         return n;
     };
-    heurarm::Clear();
+    NivAllOffNb();
     CHECK(PairFor(s, { 11 }) == NivProvNb().DecisionProvider::SoulbondPartner(
               s, 0, s.battlefield[static_cast<std::size_t>(BfIndex(s, 10))], { BfIndex(s, 11) }));
     CHECK_FALSE(NivProvNb().SoulbondTwinPruned(s));
@@ -469,7 +485,7 @@ TEST_CASE("Niv Lookout rule 2 Servant amendment: inert without rule 2; re-opens 
         for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true)) { if (p.soulbond_decline) { ++n; } }
         return n;
     };
-    heurarm::Clear();
+    NivAllOffNb();
     const int base_pick = PairFor(s, { 11 });
     const int base_twins = twins();
     REQUIRE(base_twins > 0);
@@ -536,7 +552,7 @@ TEST_CASE("Niv look order: every amendment is inert without MTG_NIV_CANTRIP_RULE
     const GameState s = OrderBoard({ { "Island", false }, { "Island", false } }, { "Island", "Niv-Mizzet, the Firemind" },
                                    true, 0);
     const std::vector<Card> looked = Looked({ "Preordain", "Spirebluff Canal", "Niv-Mizzet, Parun" });
-    heurarm::Clear();
+    NivAllOffNb();
     const TopDisposition base = NivProvNb().TopDispositionPick(s, looked, LookKind::Reorder, 1);
     ArmNb arms({ heurarm::NIV_ORDER_COLOUR_LAND, heurarm::NIV_ORDER_GOOFF_MANA, heurarm::NIV_ORDER_CURIOSITY_FIRST,
                  heurarm::NIV_ORDER_RAMP_NEEDED, heurarm::NIV_ORDER_PROBE_HOLD });
@@ -651,4 +667,23 @@ TEST_CASE("Niv look order 5 PROBE_HOLD: Gitaxian Probe last while the Niv waits 
         ArmNb arms({ heurarm::NIV_CANTRIP_RULES, heurarm::NIV_CANTRIP_AMEND, heurarm::NIV_ORDER_PROBE_HOLD });
         CHECK(PonderOrder(s, looked) == std::vector<int>{ 0, 1, 2 });
     }
+}
+
+// THE 2026-10-23 ADOPTION: with no per-job arm and no env override, the package is ON (rules, Ponder
+// keep/shuffle, Brainstorm ranking + its single-option prune) and the levers left out of it are OFF.
+TEST_CASE("Niv package adoption: the adopted levers are DEFAULT ON, the rest DEFAULT OFF")
+{
+    for (const char* e : { "MTG_NIV_CANTRIP_RULES", "MTG_NIV_PONDER_KEEP_SHUFFLE", "MTG_NIV_BRAINSTORM_RULE",
+                           "MTG_NIV_BRAINSTORM_SINGLE", "MTG_NIV_BUCKET_DISCARD", "MTG_NIV_PONDER_SINGLE",
+                           "MTG_NIV_LOOKOUT_RULE2" })
+    {
+        if (std::getenv(e) != nullptr) { MESSAGE("skipped: ", e, " is set in the environment"); return; }
+    }
+    heurarm::Clear();
+    const GameState s = LookoutBoard({ "Niv-Mizzet, the Firemind", "Brainstorm" }, {});
+    CHECK(NivProvNb().PutBackRankingPerCard(s));        // CANTRIP_RULES + BRAINSTORM_RULE
+    CHECK(NivProvNb().PutBackSingleCandidate(s));       // + BRAINSTORM_SINGLE
+    CHECK(NivProvNb().ReorderKeepShuffleOnly(s));       // PONDER_KEEP_SHUFFLE
+    CHECK_FALSE(NivProvNb().ReorderSingleCandidate(s)); // PONDER_SINGLE stays off
+    CHECK_FALSE(NivProvNb().SoulbondTwinPruned(s));     // LOOKOUT_RULE2 stays off (a Niv in hand would prune)
 }

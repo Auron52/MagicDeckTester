@@ -3246,17 +3246,18 @@ public:
     // The USER's bucket categories (2026-10-22), one classifier shared by three consumers (see the
     // NivMizzetCombo block in DecisionProviders.cpp): Preordain's keep/bottom and Ponder's
     // keep/shuffle + order (MTG_NIV_CANTRIP_RULES), Ponder's search prune to that pick
-    // (MTG_NIV_PONDER_SINGLE), and the cleanup discard (MTG_NIV_BUCKET_DISCARD). All DEFAULT OFF.
+    // (MTG_NIV_PONDER_SINGLE), and the cleanup discard (MTG_NIV_BUCKET_DISCARD). The rules and the bucket
+    // discard are ADOPTED DEFAULT ON (2026-10-23); PONDER_SINGLE stays OFF.
     bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
     int SituationalCardRank(const GameState& s, const Card& card) const override;
     bool KeepReorderTop(const GameState& s, const std::vector<Card>& top) const override;
     TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
                                       LookKind kind, int keep_decision) const override;
     bool ReorderSingleCandidate(const GameState& s) const override;
-    // Ponder searched as keep-in-the-rule's-order vs shuffle (MTG_NIV_PONDER_KEEP_SHUFFLE, DEFAULT OFF).
+    // Ponder searched as keep-in-the-rule's-order vs shuffle (MTG_NIV_PONDER_KEEP_SHUFFLE, ADOPTED DEFAULT ON).
     bool ReorderKeepShuffleOnly(const GameState& s) const override;
     // Brainstorm's put-back by the same buckets (MTG_NIV_BRAINSTORM_RULE) and its one-option prune
-    // (MTG_NIV_BRAINSTORM_SINGLE). Both DEFAULT OFF, inert unless MTG_NIV_CANTRIP_RULES is on.
+    // (MTG_NIV_BRAINSTORM_SINGLE). Both ADOPTED DEFAULT ON (2026-10-23), inert unless MTG_NIV_CANTRIP_RULES is on.
     std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
     bool PutBackRankingPerCard(const GameState& s) const override;
     bool PutBackSingleCandidate(const GameState& s) const override;
