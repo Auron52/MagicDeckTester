@@ -166,7 +166,7 @@ behind; derivations charge no units. Verified: smoke 149/149 byte-identical; 1,2
 194,466 front-only derivations, 0 mismatches. Replays of the 11 stuck rollouts: 438 s -> 16-21 s and 990 s -> 173 s
 for the two that finish under a 1.7 GB per-process cap.
 
-**Layer 2 (OPEN, the USER's call -- section 5 option 1 / 4):** the other nine still exceed 1.7 GB, now in the
+**Layer 2 (fixed play-identically by the lazy look-top block below; the lossy alternatives are section 5 option 1 / 4):** the other nine still exceed 1.7 GB, now in the
 OUTER turn-6 enumeration at the rollout's own searched decision: 160-300k plans before the look-top fan (about
 100k tutor variants and 100k land_slot twins over 7-cast plans), which the fan then multiplies. Option 5 does not
 reach it (that node is in the window at d1). The enumeration is uncharged, so at d1 b1 the decision builds
@@ -184,13 +184,21 @@ millions of plans to score a few hundred.
 * `MTG_LFE_REEF_LAND_DROP_USED` (prune only where every look resolves with the drop used) is ~neutral (+1 over
   4,500 games, d1 digest identical) but does not fix memory: the heavy plans do not play their land first.
 
-**Option 2 scope (play-identical; not started).** Hold the look-top variants lazily like the put-back clones
-(`PbLazyLayout` / `CandSeq`): generalise the layout to several blocks (`Locate`/`Synth`, `PbLazyMaterialize`,
-`PbLazyOrderFs`/`RotateFs`, per-block `fan_bp_base`, `PbLazyListBytes`), emit one prototype per base plus a pin
-table, and teach `PutBounceFold::BuildInPlan` (and `Build`/`BuildMasked`, the combat-pin share) to skip the block
-rather than materialise it -- on this deck `deck_has_land_search` forces `bp_variants_here`, so BuildInPlan
-materialises every lazy pre-combat list today and nothing would be saved. Hosts: FSLineWin and SolveWithLookahead
-only; continuation lists and the m2 host stay full. ~300-500 lines; one decision ~1 GB instead of ~9.8 GB.
+**Option 2 LANDED: the lazy look-top block (`MTG_PB_LAZY_LOOKTOP`, default ON, =0 materialises).** The put-back
+lazy layout (`PbLazyLayout` / `CandSeq`) gained a per-fan KIND: a look-top fan holds one prototype per base (the
+base as the axis copied it) plus its pin rows (`pin_flat`), and `Edit` writes the one varied field for either kind.
+The look-top axis emits into it whenever the host asked for a lazy list and no put-back block holds the layout --
+the block sits at the end of the list, exactly where the eager `extra` lands, so full-list indices are unchanged.
+`PutBounceFold::BuildInPlanView` replaces the vector-only `BuildInPlan` in both hosts (FSLineWin,
+SolveWithLookahead): it builds the same arrays over the view, inserting synthesised entries into the base map
+where the vector form would (their hash is their prototype's) and skipping them at the equality (a synthesised
+entry never equals a single-deviation one). That fold materialised every lazy pre-combat list on any deck with a
+land search, so before this change even the put-back block saved nothing there. Measured: 1,200 held-out LFE games
+(d1/d3/d5) identical digests AND units with 18,814 lists held lazily and 0 materialised (669k variants never
+built); the 19 heavy keep-gen rollouts pooled under the 20 GB cap all finish (576 s, 9.07 GB peak, 43M variants
+never built) where they went past 20 GB before. `MTG_PB_LAZY_CANDS_VERIFY` cannot judge this deck: it reports
+mismatches on the committed binary too, with no lazy list at all (its second, eager enumeration does not replay
+every per-call counter), so identity rests on the digest checks and the suite.
 
 ## Appendix: the option-5 experiment patch (against 9711d6231; `MTG_ROLLOUT_FAN_NARROW=1` arms it)
 

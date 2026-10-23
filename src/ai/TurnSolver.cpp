@@ -25141,7 +25141,7 @@ struct BounceFoldMemo
 // variants reaching exactly a sibling's state. The combat-pin fold / post-apply dedup refused to SCORE
 // them, but only after the unit charge, the apply and (attack) the combat: gap 3 cost +2.4% to +10%
 // units over gap 2 alone on Landfall with no play change. With this fold (ATTACK mode below, IN-PLAN
-// mode at BuildInPlan) gap 2+3 plays byte-identically to gap 2 alone on those 240 games, at +0.2% to
+// mode at BuildInPlanView) gap 2+3 plays byte-identically to gap 2 alone on those 240 games, at +0.2% to
 // +5.1% units; verify mode: 4,875,783 would-be declines, every one skipped by the fold it pre-empts.
 // The residual is mostly the BREAKPOINT-NODE children of a pending attack variant (fs_bp_node), which
 // host every continuation per variant with no pin fold -- docs/design/land-search-cluster.md, gap 3.
@@ -25177,7 +25177,7 @@ struct BounceFoldMemo
 struct PutBounceFold
 {
     bool on = false;
-    bool in_plan = false;       // IN-PLAN mode (BuildInPlan): the ETB / in-plan pins, probed over the APPLY
+    bool in_plan = false;       // IN-PLAN mode (BuildInPlanView): the ETB / in-plan pins, probed over the APPLY
     std::vector<int>  base_of;  // per candidate: its attack-pin base's index (-1 = none)
     std::vector<char> is_base;  // per candidate: some variant names it as base
     std::vector<char> clean;    // per candidate (FSLineWin): its apply was proven pin-blind (header)
@@ -25293,30 +25293,45 @@ struct PutBounceFold
     // variant resolving to a recorded one IS that sibling's apply: same post-apply key (already in the
     // post-apply dedup set, which would skip it) and the same breakpoint-counter deltas (ApplyTrace,
     // which the skip replays into the walker's records).
-    void BuildInPlan(std::vector<TurnSolver::Plan>& cands, bool enabled)
+    // Built over a candidate VIEW (CandSeq: the vector, or a lazy list, optionally ordered), indexed by
+    // POSITION exactly as the materialised list would be -- so a host keeps its lazy block instead of materialising
+    // it for this fold (MTG_PB_LAZY_LOOKTOP). A synthesised entry -- a put-back clone or a look-top pin
+    // variant -- is never a single-deviation entry (both have empty land_search_pins: their bases did) and
+    // never EQUALS one (a deviation entry has putback_choice -1 and no look_top_pins, the synthesised one
+    // does not), so it is inserted into the base map exactly where the vector form would (its MaskedHash is
+    // its prototype's: the hash reads neither varied field) and skipped at the equality. Same arrays, same
+    // matches, same order as building over the materialised list.
+    template <class View>
+    void BuildInPlanView(std::vector<TurnSolver::Plan>& real, const View& view, bool enabled)
     {
         on = false;
         in_plan = true;
         if (!enabled || !KarooBounceSearchOn()) { return; }
+        const std::size_t N = view.size();
+        std::vector<std::size_t> li_of(N, SIZE_MAX);   // position -> index into `real` (SIZE_MAX: synthesised)
         bool any = false;
-        for (const TurnSolver::Plan& p : cands)
+        for (std::size_t i = 0; i < N; ++i)
         {
+            std::size_t li = 0;
+            if (!view.RealIndex(i, li)) { continue; }
+            li_of[i] = li;
             int ord = -1, val = 0;
-            if (SingleDeviationInPlan(p, ord, val)) { any = true; break; }
+            if (!any && SingleDeviationInPlan(real[li], ord, val)) { any = true; }
         }
         if (!any) { return; }
-        Reset(cands.size());
+        Reset(N);
         std::unordered_multimap<std::uint64_t, int> bases;
-        for (std::size_t i = 0; i < cands.size(); ++i)
+        for (std::size_t i = 0; i < N; ++i)
         {
-            const TurnSolver::Plan& p = cands[i];
-            if (p.land_search_pins.empty() && p.bounce_group == 0 && p.bp_choice < 0)
-            { bases.emplace(MaskedHash(p, false), static_cast<int>(i)); }
+            const TurnSolver::Plan* p = li_of[i] != SIZE_MAX ? &real[li_of[i]] : view.Proto(i);
+            if (p->land_search_pins.empty() && p->bounce_group == 0 && p->bp_choice < 0)
+            { bases.emplace(MaskedHash(*p, false), static_cast<int>(i)); }
         }
         std::vector<int> saved_pins;
-        for (std::size_t i = 0; i < cands.size(); ++i)
+        for (std::size_t i = 0; i < N; ++i)
         {
-            TurnSolver::Plan& v = cands[i];
+            if (li_of[i] == SIZE_MAX) { continue; }
+            TurnSolver::Plan& v = real[li_of[i]];
             int ord = -1, val = 0;
             if (!SingleDeviationInPlan(v, ord, val)) { continue; }
             saved_pins.swap(v.land_search_pins);
@@ -25326,7 +25341,9 @@ struct PutBounceFold
             const auto rng = bases.equal_range(MaskedHash(v, false));
             for (auto it = rng.first; it != rng.second; ++it)
             {
-                const TurnSolver::Plan& q = cands[static_cast<std::size_t>(it->second)];
+                const std::size_t qi = li_of[static_cast<std::size_t>(it->second)];
+                if (qi == SIZE_MAX) { continue; }   // a synthesised entry never equals a deviation entry
+                const TurnSolver::Plan& q = real[qi];
                 v.bp_self  = q.bp_self;
                 v.bp_wave0 = q.bp_wave0;
                 if (q == v) { b = it->second; break; }
@@ -71042,6 +71059,24 @@ struct PbLazyLayout
     std::vector<std::size_t> fan_end;       // per fan: the end of its clones within the block (prefix sums)
     std::vector<TurnSolver::Plan> protos;   // per fan: the rank-1 clone, with every later write applied
     std::size_t P = 0;                      // the clone block's length (sum of fan_n)
+    // THE LOOK-TOP BLOCK (MTG_PB_LAZY_LOOKTOP): a fan may instead hold one base's look-top pin variants
+    // (the Risen Reef axis). Then its prototype is the base as the axis copied it (look_top_pins empty) and
+    // its entry k (1..fan_n) is the prototype with look_top_pins = the k-th row of `pin_flat` from
+    // `fan_pin_off`, `fan_pin_w` ints wide. fan_kind empty = every fan is a put-back fan.
+    std::vector<char> fan_kind;             // per fan: 0 put-back (putback_choice = k), 1 look-top pins
+    std::vector<std::size_t> fan_pin_off;   // per fan (kind 1): its first row in pin_flat
+    std::vector<int> fan_pin_w;             // per fan (kind 1): the row width (the plan's look-top ordinals)
+    std::vector<int> pin_flat;
+    bool LookTopFan(std::size_t f) const { return f < fan_kind.size() && fan_kind[f] == 1; }
+    // Entry k of fan f, from its prototype already copied into `out`: the one field the fan varies.
+    void Edit(TurnSolver::Plan& out, std::size_t f, int k) const
+    {
+        if (!LookTopFan(f)) { out.putback_choice = k; return; }
+        const std::size_t w = static_cast<std::size_t>(fan_pin_w[f]);
+        const std::size_t at = fan_pin_off[f] + static_cast<std::size_t>(k - 1) * w;
+        out.look_top_pins.assign(pin_flat.begin() + static_cast<std::ptrdiff_t>(at),
+                                 pin_flat.begin() + static_cast<std::ptrdiff_t>(at + w));
+    }
     // The twins of the clones (AppendSoulbondDeclineVariants): per fan, does it twin them; where (in L) the
     // block of twins sits; its length. Q == 0 when the deck has no soulbond or no fan is twinned.
     std::vector<char> fan_twin;
@@ -71088,7 +71123,7 @@ struct PbLazyLayout
         bool twin = false;
         if (!Locate(i, li, f, k, twin)) { return false; }
         out = protos[f];
-        out.putback_choice = k;
+        Edit(out, f, k);
         if (twin) { out.soulbond_decline = true; out.bp_wave0 = false; }
         return true;
     }
@@ -71173,8 +71208,31 @@ public:
         std::size_t li = 0, f = 0;
         bool twin = false;
         if (!lz->Locate(Orig(i), li, f, k, twin)) { return false; }
+        if (lz->LookTopFan(f)) { return false; }   // a look-top entry is not a put-back clone
         proto = &lz->protos[f];
         return true;
+    }
+    // Position i's fan prototype when it is a synthesised entry (any kind), else nullptr. The prototype
+    // carries every field of the entry except the one its fan varies (putback_choice / look_top_pins) and,
+    // under an order, bp_self / bp_base.
+    const TurnSolver::Plan* Proto(std::size_t i) const
+    {
+        const PbLazyLayout* lz = Live();
+        if (lz == nullptr) { return nullptr; }
+        std::size_t li = 0, f = 0;
+        int k = 0;
+        bool twin = false;
+        return lz->Locate(Orig(i), li, f, k, twin) ? &lz->protos[f] : nullptr;
+    }
+    // Is position i a REAL entry of the vector? Then `li` is its index there (false: a synthesised entry).
+    bool RealIndex(std::size_t i, std::size_t& li) const
+    {
+        const PbLazyLayout* lz = Live();
+        if (lz == nullptr) { li = i; return true; }
+        std::size_t f = 0;
+        int k = 0;
+        bool twin = false;
+        return !lz->Locate(Orig(i), li, f, k, twin);
     }
     const TurnSolver::Plan& At(std::size_t i, TurnSolver::Plan& storage) const
     {
@@ -71209,7 +71267,7 @@ private:
         bool twin = false;
         if (!lz.Locate(orig, li, f, k, twin)) { return false; }
         out = lz.protos[f];
-        out.putback_choice = k;
+        lz.Edit(out, f, k);
         if (twin) { out.soulbond_decline = true; out.bp_wave0 = false; }
         if (m_ord != nullptr)
         {
@@ -75753,8 +75811,45 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && !p.soulbond_decline;
         };
         std::vector<TurnSolver::Plan> extra;
-        for (const TurnSolver::Plan& p : all)
+        // THE LAZY LOOK-TOP BLOCK (MTG_PB_LAZY_LOOKTOP, DEFAULT ON; =0 materialises every variant). A host that
+        // asked for a lazy list (PbLazyLayout) gets this fan as ONE prototype per base plus its pin rows instead
+        // of a whole Plan per variant -- the same entries, in the same order, at the same full-list indices
+        // (the block is appended at the end of the list, exactly where `extra` lands). Only when no put-back
+        // block holds the layout already (the layout holds ONE block). LandfallElementals 2026-10-23: one
+        // turn-6 FSLineWin list was 1.64M variants of 161k bases, ~9.8 GB materialised.
+        static const bool s_lt_lazy = EnvOn("MTG_PB_LAZY_LOOKTOP", true);
+        PbLazyLayout* const lt_lz = (s_lt_lazy && pb_lazy != nullptr && !pb_lazy->active) ? pb_lazy : nullptr;
+        if (lt_lz != nullptr) { *lt_lz = PbLazyLayout{}; lt_lz->e0 = all.size(); }
+        std::size_t lt_fan_of = SIZE_MAX;   // the base index whose fan is open (lazy mode)
+        auto emit = [&](std::size_t pi, const std::vector<int>& pins)
         {
+            if (lt_lz == nullptr)
+            {
+                TurnSolver::Plan v = all[pi];
+                v.look_top_pins = pins;
+                extra.push_back(std::move(v));
+                return;
+            }
+            if (lt_fan_of != pi)
+            {
+                lt_fan_of = pi;
+                lt_lz->protos.push_back(all[pi]);
+                lt_lz->fan_n.push_back(0);
+                lt_lz->fan_base.push_back(pi);
+                lt_lz->fan_end.push_back(lt_lz->P);
+                lt_lz->fan_kind.push_back(1);
+                lt_lz->fan_pin_off.push_back(lt_lz->pin_flat.size());
+                lt_lz->fan_pin_w.push_back(static_cast<int>(pins.size()));
+            }
+            lt_lz->pin_flat.insert(lt_lz->pin_flat.end(), pins.begin(), pins.end());
+            ++lt_lz->fan_n.back();
+            ++lt_lz->P;
+            lt_lz->fan_end.back() = lt_lz->P;
+        };
+        std::vector<int> lt_pins;
+        for (std::size_t pi = 0, n_all = all.size(); pi < n_all; ++pi)
+        {
+            const TurnSolver::Plan& p = all[pi];
             bool tutor_variant = false;
             if (!look_top_base(p, tutor_variant)) { continue; }
             // A DECLINED search has no order to choose (the tutor never resolves): nothing to fan.
@@ -75810,14 +75905,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     { all_default = w[static_cast<std::size_t>(k)][static_cast<std::size_t>(digit[static_cast<std::size_t>(k)])] == -1; }
                     if (!all_default)
                     {
-                    TurnSolver::Plan v = p;
-                    v.look_top_pins.resize(static_cast<std::size_t>(n));
+                    lt_pins.resize(static_cast<std::size_t>(n));
                     for (int k = 0; k < n; ++k)
                     {
-                        v.look_top_pins[static_cast<std::size_t>(k)] =
+                        lt_pins[static_cast<std::size_t>(k)] =
                             w[static_cast<std::size_t>(k)][static_cast<std::size_t>(digit[static_cast<std::size_t>(k)])];
                     }
-                    extra.push_back(std::move(v));
+                    emit(pi, lt_pins);
                     }
                     int i = 0;
                     while (i < n)
@@ -75838,18 +75932,27 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     for (int val : w[static_cast<std::size_t>(j)])
                     {
-                        TurnSolver::Plan v = p;
-                        v.look_top_pins.resize(static_cast<std::size_t>(n));
+                        lt_pins.resize(static_cast<std::size_t>(n));
                         for (int k = 0; k < n; ++k)
-                        { v.look_top_pins[static_cast<std::size_t>(k)] = k < n_order ? kLookTopOrderBase : -1; }
-                        v.look_top_pins[static_cast<std::size_t>(j)] = val;
-                        extra.push_back(std::move(v));
+                        { lt_pins[static_cast<std::size_t>(k)] = k < n_order ? kLookTopOrderBase : -1; }
+                        lt_pins[static_cast<std::size_t>(j)] = val;
+                        emit(pi, lt_pins);
                     }
                 }
             }
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+        if (lt_lz != nullptr)
+        {
+            lt_lz->active = lt_lz->P > 0;
+            if (lt_lz->active)
+            {
+                pblazycands::g_lazy.fetch_add(1, std::memory_order_relaxed);
+                pblazycands::g_avoided.fetch_add(static_cast<long long>(lt_lz->P), std::memory_order_relaxed);
+            }
+            else { *lt_lz = PbLazyLayout{}; }
+        }
     }
 
     // Axis-variant attribution (MTG_BRANCH_STATS; see branchstats::RecordAxis). Classified by
@@ -78204,7 +78307,8 @@ static long long PbLazyListBytes(const std::vector<TurnSolver::Plan>& real, cons
     std::size_t b = plancache::ApproxPlansBytes(real) + (lz.P + lz.Q) * sizeof(TurnSolver::Plan);
     for (std::size_t fi = 0; fi < lz.protos.size(); ++fi)
     {
-        const std::size_t per = ApproxPlanBytes(lz.protos[fi]) - sizeof(TurnSolver::Plan);
+        const std::size_t per = ApproxPlanBytes(lz.protos[fi]) - sizeof(TurnSolver::Plan)
+                              + (lz.LookTopFan(fi) ? static_cast<std::size_t>(lz.fan_pin_w[fi]) * sizeof(int) : 0);
         const std::size_t n   = static_cast<std::size_t>(lz.fan_n[fi])
                               * ((fi < lz.fan_twin.size() && lz.fan_twin[fi] != 0) ? 2 : 1);
         b += per * n;
@@ -85369,7 +85473,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // budget for nothing. Key every candidate's POST-APPLY state, but only ever SKIP a plan that
     // carries a bp_choice: ordinary plans are never deduped, so a deck with no variants (and any
     // run with MTG_BP_SEARCH=0) is byte-identical. Reuses the apply already done below.
-    bool bp_variants_here = pre_view.Lazy();   // a lazy block is all put-back clones: PlanDupSkippable
+    bool bp_variants_here = pre_view.Lazy();   // every lazy entry (put-back clone, look-top variant) is PlanDupSkippable
     for (const TurnSolver::Plan& p : pre) { if (bp_variants_here) { break; } if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
     // MTG_COMBAT_PIN_FOLD (see CombatPinFoldOn): this frontier's post-combat states, armed only when
@@ -85435,15 +85539,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                               && PutBounceFoldOn() && !BounceFoldVerifyOn() && !ArmNewVerifyOn()
                               && !fsw_verify);
     const bool put_fold_verify = put_fold.on && PutBounceFoldVerifyOn();
-    // ...and its IN-PLAN mode (PutBounceFold::BuildInPlan): the ETB / in-plan sub-choices, declined
+    // ...and its IN-PLAN mode (PutBounceFold::BuildInPlanView): the ETB / in-plan sub-choices, declined
     // where the post-apply dedup they repeat runs.
     PutBounceFold etb_fold;
-    if (bp_variants_here && state.deck_has_land_search && !HumanPlayActive() && PutBounceFoldOn()
-        && !BounceFoldVerifyOn() && !ArmNewVerifyOn() && !fsw_verify)
-    { PbLazyMaterializeOrdered(pre, pre_lazy, pre_ord); }   // the fold indexes the whole list
-    etb_fold.BuildInPlan(pre, bp_variants_here && state.deck_has_land_search && !HumanPlayActive()
-                              && PutBounceFoldOn() && !BounceFoldVerifyOn() && !ArmNewVerifyOn()
-                              && !fsw_verify);
+    // Built over the VIEW, so a lazy block stays lazy (BuildInPlanView; MTG_PB_LAZY_LOOKTOP).
+    etb_fold.BuildInPlanView(pre, pre_view, bp_variants_here && state.deck_has_land_search && !HumanPlayActive()
+                                            && PutBounceFoldOn() && !BounceFoldVerifyOn() && !ArmNewVerifyOn()
+                                            && !fsw_verify);
     const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
     // THE ETB-COUNTER FOLD (see EtbcFold). Only where the post-apply dedup it pre-empts runs
     // (bp_variants_here: every etbcounter variant is PlanDupSkippable, so it always does), and off
@@ -85954,7 +86056,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                          [&] { return BuildDedupKey(s); });
         if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(s), state.turn_number); }
         // The in-plan probe records only an apply that spent no unit and stopped at no breakpoint node
-        // (see BuildInPlan), with what the walker's records read from it.
+        // (see BuildInPlanView), with what the walker's records read from it.
         if (etb_fold.armed == static_cast<int>(pre_i))
         {
             PutBounceFold::ApplyTrace tr;
@@ -91945,20 +92047,19 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // Searched-breakpoint variant dedup -- see the identical guard in FSLineWin. Records every
         // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
         // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
-        bool bp_variants_here = cands.Lazy();   // a lazy block is all put-back clones: PlanDupSkippable
+        bool bp_variants_here = cands.Lazy();   // every lazy entry (put-back clone, look-top variant) is PlanDupSkippable
         for (const Plan& p : candidates) { if (bp_variants_here) { break; } if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
         // The bounce fold (see BounceFoldMemo), wherever the post-apply dedup it replaces runs.
         BounceFoldMemo bounce_fold;
         bounce_fold.on     = bp_variants_here && BounceFoldOn();
         bounce_fold.verify = bounce_fold.on && BounceFoldVerifyOn();
-        // ...and the put-bounce fold's IN-PLAN mode (see PutBounceFold::BuildInPlan): the ETB / in-plan
+        // ...and the put-bounce fold's IN-PLAN mode (see PutBounceFold::BuildInPlanView): the ETB / in-plan
         // sub-choices, declined where the post-apply dedup they repeat runs.
         PutBounceFold etb_fold;
-        if (is_pre_combat && bp_variants_here && state.deck_has_land_search && !HumanPlayActive() && PutBounceFoldOn())
-        { PbLazyMaterialize(candidates, pb_lazy); }
-        etb_fold.BuildInPlan(candidates, is_pre_combat && bp_variants_here && state.deck_has_land_search
-                                         && !HumanPlayActive() && PutBounceFoldOn());
+        // Built over the VIEW, so a lazy block stays lazy (BuildInPlanView; MTG_PB_LAZY_LOOKTOP).
+        etb_fold.BuildInPlanView(candidates, cands, is_pre_combat && bp_variants_here && state.deck_has_land_search
+                                                    && !HumanPlayActive() && PutBounceFoldOn());
         const bool etb_fold_verify = etb_fold.on && PutBounceFoldVerifyOn();
         // ...and the ETB-counter fold (see EtbcFold), where the post-apply dedup it pre-empts runs.
         // A combat-pin share candidate (base or variant) is left alone: its apply feeds cp_cache.
@@ -92554,7 +92655,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(copy), state.turn_number); }
                     po_record(plan, po_h, copy);
                     po_verify_check(plan, po_expect, copy);
-                    // The in-plan probe records only an apply that spent no unit (see BuildInPlan), with
+                    // The in-plan probe records only an apply that spent no unit (see BuildInPlanView), with
                     // what the walker's records read from it.
                     if (etb_fold.armed == static_cast<int>(cp_i))
                     {
