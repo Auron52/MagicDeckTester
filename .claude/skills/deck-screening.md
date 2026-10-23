@@ -268,6 +268,16 @@ global-env tiny spec) and report the card's gain from that bracket, not from the
 `MTG_SHUFFLE_SALT_SEARCH=1` moved the Heath result by only +0.0002, so do not rely on it as the
 decoupling until it is shown to reach batch play. Open questions: `docs/design/fetchland-shuffle-gain.md`.
 
+**Scope: bracket the arms that change the NUMBER of shuffle effects, not every arm** (USER 2026-10-22:
+*"Non-clairvoyant is mostly important when changing the number of shuffle effects. It isn't so necessary for
+other changes."*). A swap that keeps the shuffle count (a threat for a threat, a land for a non-fetching land)
+needs no non-clairvoyant run. Count a card that turns shuffles into re-rolled information (Courser of Kruphix's
+revealed top) with the shufflers. The two instruments: `MTG_NO_SEARCH_SHUFFLE=1` (cheap, same cost as the
+screen) and the non-clairvoyant engine `MTG_NC_SEARCH=1` (expensive -- Landfall ~1-2 min and up to ~6 GB per
+game; give the batch fewer threads, and keep the flag OFF the driver's `mtg-analyze` card-score pooling, which
+inherits the environment: pre-build the pool with a `--dry-run` first so the real run reuses it). Landfall's
+worked example: `docs/design/landfall-screen-2026-10-22.md`.
+
 ## The new-card route
 
 A card that is not in the base deck at all costs a one-time implementation, then joins the pool.
