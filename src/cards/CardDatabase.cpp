@@ -870,6 +870,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.landfall_double_self_counters  = params.value("landfall_double_self_counters", false);   // Mossborn Hydra
     p.landfall_self_pump_power       = params.value("landfall_self_pump_power", 0);
     p.landfall_self_pump_toughness   = params.value("landfall_self_pump_toughness", 0);
+    p.landfall_additional_combat     = params.value("landfall_additional_combat", false);      // Moraug
     p.etb_tokens_per_land            = params.value("etb_tokens_per_land", 0);
     p.etb_tokens_per_land_basic_only = params.value("etb_tokens_per_land_basic_only", false);
     // Courser of Kruphix's two static clauses (CardParams' LIBRARY TOP block).
@@ -935,6 +936,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.devour           = params.value("devour", 0);
     // "This creature enters with N +1/+1 counters on it" (Mossborn Hydra) -- see CardParams.
     p.enters_with_plus_counters = params.value("enters_with_plus_counters", 0);
+    // "Each creature you control gets +1/+0 for each time it has attacked this turn" (Moraug) -- see CardParams.
+    p.attack_count_team_power = params.value("attack_count_team_power", false);
     if (params.contains("tap_token_cost"))
         p.tap_token_cost = ManaCostFromString(params["tap_token_cost"].get<std::string>());
     p.tap_token_power     = params.value("tap_token_power", 0);

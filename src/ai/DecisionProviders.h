@@ -3861,9 +3861,31 @@ inline const DecisionProvider& ResolveProvider(const GameState& s)
 // beside UntapSecondMainLive / DigSecondMainLive at every post-combat site. Never on a deck that
 // already plays a full second main: its phase is open anyway, and the restricted menu must not
 // narrow it. One virtual call that returns false for every other provider.
+inline bool ProviderSecondMainLive(const GameState& s);   // below
+// Is an ADDITIONAL-COMBAT source (Moraug, Fury of Akoum: landfall_additional_combat) on OUR battlefield? Then
+// THIS turn's post-combat main is live: a land that enters there queues a combat after it, which no main-1
+// line can produce (a main-1 landfall's combat precedes the regular one, and the regular one does not untap
+// -- so under Moraug a land held for main 2 is worth one more attack). Read off the post-combat state at
+// every post-combat site of both worlds, beside the provider's restricted main 2 below (a pure function of
+// the state: lockstep, nothing to fold). The phase's menu is the FULL one -- no restriction is applied for
+// it -- and the held-land bar and the main-2 drop gate exempt it (TurnSolver ExtraCombatMain2Exempt).
+// Deck constant first, so every other deck pays one bool test.
+inline bool ExtraCombatSecondMainLive(const GameState& s)
+{
+    if (!s.deck_has_extra_combat) { return false; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.landfall_additional_combat) { return true; }
+    }
+    return false;
+}
 inline bool ProviderSecondMainLive(const GameState& s)
 {
-    return !s.uses_second_main && ResolveProvider(s).RestrictedSecondMainLive(s);
+    if (s.uses_second_main) { return false; }
+    return ExtraCombatSecondMainLive(s) || ResolveProvider(s).RestrictedSecondMainLive(s);
 }
 
 // MTG_TOP_RESOLVE as THIS game's deck plays it: the global lever (EngineFlags.h TopResolveEnabled,

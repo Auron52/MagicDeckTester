@@ -543,6 +543,26 @@ struct Permanent
     // without the param -> byte-identical elsewhere.
     bool      landfall_resolved_once  : 1 = false;
     bool      landfall_resolved_twice : 1 = false;
+    // "for each time it has attacked this turn" (Moraug, Fury of Akoum's static; 2026-10-23): how many times
+    // this creature was DECLARED as an attacker this turn (CR 508.1 -- a token put onto the battlefield
+    // attacking never was, CR 508.4), a 3-bit count in the last three bits of the same byte (sizeof stays
+    // 304), read and written ONLY through AttacksThisTurn / NoteAttackDeclared below. SATURATES AT 7: an
+    // eighth attack in one turn can only follow seven unblocked attacks by the same creature, each worth at
+    // least the +1, 1 + 2 + ... + 7 = 28 >= 20 -- the passive opponent is dead before it (a 30-life 2HG team
+    // could in principle survive seven attacks by a 0-power body; disclosed). Bumped at declare-attackers in
+    // both worlds only for a deck holding an attack-count reader (GameState::deck_has_extra_combat), reset at
+    // OUR untap step in both worlds, and FLIPS MID-TURN, so it carries the once_per_turn_used fold treatment.
+    bool      attacks_b0 : 1 = false;
+    bool      attacks_b1 : 1 = false;
+    bool      attacks_b2 : 1 = false;
+    int  AttacksThisTurn() const
+    { return (attacks_b0 ? 1 : 0) | (attacks_b1 ? 2 : 0) | (attacks_b2 ? 4 : 0); }
+    void SetAttacksThisTurn(int n)
+    {
+        n = n < 0 ? 0 : (n > 7 ? 7 : n);
+        attacks_b0 = (n & 1) != 0; attacks_b1 = (n & 2) != 0; attacks_b2 = (n & 4) != 0;
+    }
+    void NoteAttackDeclared() { SetAttacksThisTurn(AttacksThisTurn() + 1); }
     // DERIVED conditional haste (Bloodghast: "has haste as long as an opponent has 10 or less life";
     // CardParams::haste_if_opp_life_at_most). Read by CanAttackFull (both overloads) and CanTapNow
     // beside temp_haste, and RECOMPUTED (set AND cleared) by RefreshOppLifeHaste -- at the permanent's

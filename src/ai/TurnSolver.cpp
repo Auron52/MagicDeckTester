@@ -663,7 +663,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.storied_draw_used_this_turn ? 262144ull : 0ull)       // Kili once-each-turn draw
          | (p.once_per_turn_used ? 524288ull : 0ull)                // Stromkirk Condemned once-each-turn activation (1<<19)
          | (p.landfall_resolved_once ? 1048576ull : 0ull)           // Scythecat Cub resolved once this turn (1<<20)
-         | (p.landfall_resolved_twice ? 2097152ull : 0ull));        // ... and twice (1<<21)
+         | (p.landfall_resolved_twice ? 2097152ull : 0ull)          // ... and twice (1<<21)
+         | (static_cast<uint64_t>(p.AttacksThisTurn()) << 22));     // Moraug's per-turn attack count (bits 22-24)
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -3101,13 +3102,21 @@ static bool GyLandfallHeldLandExempt(const GameState& s)
     }
     return false;
 }
+// THE MORAUG EXEMPTION (2026-10-23; the USER's call, PROVISIONAL -- surfaced): with an additional-combat
+// source on our battlefield (ExtraCombatSecondMainLive) the rule's premise is false too: a land played in
+// main 2 queues an additional combat AFTER main 2, which untaps our creatures and attacks again, while the
+// same land in main 1 queues one BEFORE the regular combat, which then does not untap -- one attack fewer. So
+// the held land is a real main-2 line, and the main-2 drop is live, exactly while such a source is ours.
+static bool ExtraCombatMain2Exempt(const GameState& s) { return ExtraCombatSecondMainLive(s); }
 static bool HeldLandBarredFromMain2(const GameState& s, const Card& c)
 {
-    return !HumanPlayActive() && s.HeldSinceMain1(c) && !GyLandfallHeldLandExempt(s);
+    return !HumanPlayActive() && s.HeldSinceMain1(c) && !GyLandfallHeldLandExempt(s)
+        && !ExtraCombatMain2Exempt(s);
 }
 static bool M2DropLive(const GameState& s)
 {
     if (Main2DropEnabled()) { return true; }
+    if (ExtraCombatMain2Exempt(s)) { return true; }   // Moraug (see ExtraCombatMain2Exempt)
     if (!M2ReconsiderEnabled()) { return false; }
     const Player& p = s.ActivePlayer();
     if (p.lands_played_this_turn >= p.LandDropsAvailable()) { return false; }
@@ -6095,6 +6104,9 @@ static bool SecondMainUnproductive(const GameState& state)
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
     static const bool s_force = EnvOn("MTG_M2_PRODUCTIVE");
     if (s_kill || HumanPlayActive()) { return false; }
+    // Moraug: any landfall main 2 can make (a held land, a ramp spell main 1 could have cast, a fetch to crack)
+    // buys an additional combat, so the phase is never skipped as a re-run of main 1 while the source is ours.
+    if (ExtraCombatSecondMainLive(state)) { return false; }
     // AN UNUSED LAND DROP IS A MAIN-2 OPTION. Both rules below ask only whether combat or main 1
     // left a CAST or a free ACTIVATION for main 2; they predate the searched main-2 land drop
     // (M2DropLive, always on since 2026-09-30), so they read "nothing to cast" as "nothing to do"
@@ -16260,6 +16272,8 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     if (p.once_per_turn_used)               { return false; }
     // Scythecat Cub: its next landfall puts a counter, doubles, or puts again by how often it resolved.
     if (p.landfall_resolved_once || p.landfall_resolved_twice) { return false; }
+    // Moraug: a creature that attacked this turn hits harder in the next combat than one that did not.
+    if (p.AttacksThisTurn() != 0) { return false; }
     why = foldcensus::kChosenColor;
     if (p.chosen_color != -1) { return false; }
     why = foldcensus::kIceAge;
@@ -42008,7 +42022,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // already plays a full second main, so this never narrows one. Human play is exempt: the viewer is
     // never narrowed. The soundness argument (a refused option was reachable, weakly better, in main 1)
     // lives with the provider's rule, beside its goldfish-only caveat.
-    if (!is_pre_combat && !actions.empty() && !HumanPlayActive() && ProviderSecondMainLive(state))
+    // (Moraug's extra-combat main 2 is a FULL main: it never takes the provider's restricted menu.)
+    if (!is_pre_combat && !actions.empty() && !HumanPlayActive() && ProviderSecondMainLive(state)
+        && !ExtraCombatSecondMainLive(state))
     {
         const DecisionProvider& rprov = ResolveProvider(state);
         actions.erase(std::remove_if(actions.begin(), actions.end(),
@@ -47299,6 +47315,7 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
 }
 
 static void SimulateCombat(GameState& state);   // defined below
+static bool RunPostMain2ExtraCombats(GameState& state);   // defined below (Moraug's main-2 combats)
 
 // ---- BOARD-LETHAL CUT VERIFICATION (MTG_LETHAL_CUT_VERIFY, DEFAULT ON; see EngineFlags.h) -------
 // The board-lethal short-circuit (both hosts, below) collapses a frame to its attack-only plan on the
@@ -47321,6 +47338,7 @@ static bool LethalCutKillIsReal(const GameState& state, const TurnSolver::Plan& 
         if (land_played) { probe.land_decided = true; }
         ApplyPlanDirect(copy, probe, is_pre_combat);
         if (is_pre_combat && !OpponentHasLost(copy)) { SimulateCombat(copy); }
+        if (!is_pre_combat && !OpponentHasLost(copy)) { RunPostMain2ExtraCombats(copy); }   // Moraug
     }
     const bool real = OpponentHasLost(copy);
     if (!real)
@@ -53832,6 +53850,7 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.once_per_turn_used == b.once_per_turn_used && a.cond_haste == b.cond_haste
         && a.landfall_resolved_once == b.landfall_resolved_once
         && a.landfall_resolved_twice == b.landfall_resolved_twice
+        && a.AttacksThisTurn() == b.AttacksThisTurn()
         && a.lifegain_counters_used_this_turn == b.lifegain_counters_used_this_turn
         && a.chosen_color == b.chosen_color && a.garth_chosen_mask == b.garth_chosen_mask
         && a.chosen_keyword_mask == b.chosen_keyword_mask && a.chosen_subtype_id == b.chosen_subtype_id
@@ -61616,7 +61635,10 @@ static void MergeStagedToHandEnd(GameState& state)
 void TurnSolver::LayStagedCardsLast(GameState& state) { MergeStagedToHandEnd(state); }
 
 // Deal combat damage: all eligible attackers hit the opponent.
-static void SimulateCombat(GameState& state)
+// ONE combat phase (the body of SimulateCombat below). `additional`: an ADDITIONAL combat (Moraug, Fury of
+// Akoum) -- our creatures untap at its beginning (GameEngine::CombatPhase(additional), lockstep). Leaves the
+// phase and the main-2 head (PostCombatMain, the staged merge) to its caller.
+static void SimulateOneCombat(GameState& state, bool additional)
 {
     // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
     // floated this main phase so it cannot fund combat or the post-combat main. Mirrors
@@ -61627,11 +61649,12 @@ static void SimulateCombat(GameState& state)
                                       state.floating_haste_c = 0; }
     ApplyPendingEtbTaps(state);   // Colossification's responded-to ETB tap (lockstep w/ GameEngine::CombatPhase)
     int active  = state.active_player_index;
-
-    // Stamp the post-combat productivity markers BEFORE anything in combat can move a card
-    // (GameState.h). Two size reads, no allocation.
-    state.hand_size_at_combat   = static_cast<int>(state.ActivePlayer().hand.size());
-    state.battlefield_at_combat = static_cast<int>(state.battlefield.size());
+    // Moraug: the rollout keeps GameState::phase faithful for a deck that reads it (the landfall "if it's your
+    // main phase" -- Primeval Titan's attack fetch queues no combat). Write-only for every other deck, which
+    // keeps the inherited value it always had (MirrorwingProvider reads phase).
+    if (state.deck_has_extra_combat) { state.phase = Phase::Combat; }
+    // Moraug's delayed trigger: "At the beginning of that combat, untap all creatures you control."
+    if (additional) { UntapOwnCreaturesForCombat(state, active); }
 
     // Legend rule before declaring attackers (mirror GameEngine::CombatPhase): a duplicate
     // legendary lord cannot double-count its buff. No-op without legendaries.
@@ -61649,6 +61672,8 @@ static void SimulateCombat(GameState& state)
 
     // Eligible attacker indices BEFORE any token creation (push_back keeps indices stable).
     std::vector<int> atk_idx = DeclareAttackerIndices(state);
+    // Moraug's "for each time it has attacked this turn": the DECLARED attackers (lockstep w/ CombatPhase).
+    NoteAttacksDeclared(state, active, atk_idx);
 
     // Beastmaster Ascension's quest counters: one trigger per DECLARED attacker, resolving in the
     // declare-attackers step so the +5/+5 applies to this same combat. Fired BEFORE the Adeline
@@ -61787,7 +61812,9 @@ static void SimulateCombat(GameState& state)
     // sets it in GameEngine; no shared-resolution code read it), which left rollout states stuck on
     // the phase inherited from the top-level solve. MirrorwingProvider::LegendKeepIndex now reads
     // it (keep-the-copy is only sane while combat is still ahead), so keep it faithful here and at
-    // the turn boundary. Write-only for every other deck -> byte-identical.
+    // the turn boundary. Write-only for every other deck -> byte-identical. (An additional combat
+    // before the regular one re-stamps Combat at the regular one's head; one after main 2 is followed
+    // by the end step, which the rollout stamps for a Moraug deck.)
     state.phase = Phase::PostCombatMain;
 
     // MTG_FB_SBA (default ON; =0 restores the phantom for attribution): a firebreathing pump paid
@@ -61802,7 +61829,41 @@ static void SimulateCombat(GameState& state)
     // combat.
     static const bool s_fb_sba = EnvOn("MTG_FB_SBA", true);
     if (s_fb_sba) { SacrificeDepletedLands(state); }
+}
+
+// The turn's combat, from the end of main 1 to the head of main 2: the ADDITIONAL combats main 1's landfalls
+// queued (Moraug, Fury of Akoum; GameState::pending_extra_combats) FIRST, each untapping our creatures, then the
+// regular combat, which does not untap (Scryfall ruling 2020-09-25) -- no main phase between them. Lockstep with
+// GameEngine::RunTurnFrom. A queue of 0 (every deck without the card) runs exactly the one combat it always did.
+static void SimulateCombat(GameState& state)
+{
+    // Stamp the post-combat productivity markers BEFORE anything in combat can move a card
+    // (GameState.h). Two size reads, no allocation. Once per turn's combat, so what an additional
+    // combat produced counts for main 2 too.
+    state.hand_size_at_combat   = static_cast<int>(state.ActivePlayer().hand.size());
+    state.battlefield_at_combat = static_cast<int>(state.battlefield.size());
+    while (state.pending_extra_combats > 0)
+    {
+        --state.pending_extra_combats;
+        SimulateOneCombat(state, /*additional=*/true);
+        if (OpponentHasLost(state)) { state.pending_extra_combats = 0; return; }
+    }
+    SimulateOneCombat(state, /*additional=*/false);
     MergeStagedToHandEnd(state);   // main 2's head: the executor's staged merge (see the helper)
+}
+
+// Moraug: the additional combats MAIN 2's landfalls queued, after main 2 and before the end step (no main phase
+// follows them). Called at every site that applies a post-combat main, right after the apply and before its win
+// test; a no-op on a queue of 0. Returns true if one of them won. Lockstep with GameEngine::RunTurnFrom.
+static bool RunPostMain2ExtraCombats(GameState& state)
+{
+    while (state.pending_extra_combats > 0)
+    {
+        --state.pending_extra_combats;
+        SimulateOneCombat(state, /*additional=*/true);
+        if (OpponentHasLost(state)) { state.pending_extra_combats = 0; return true; }
+    }
+    return false;
 }
 
 // Provider-visible combat simulation (MirrorwingProvider::LegendKeepIndex): decide a legend-rule
@@ -61810,6 +61871,7 @@ static void SimulateCombat(GameState& state)
 // the projection can over-count vs ApplyPlanDirect+SimulateCombat (see the commit-the-line note),
 // and over-counting here would throw away the original Zada for a phantom lethal.
 void RolloutSimulateCombat(GameState& state) { SimulateCombat(state); }
+bool RolloutRunPostMain2ExtraCombats(GameState& state) { return RunPostMain2ExtraCombats(state); }
 
 
 // End-of-turn cleanup + start of next turn (untap, draw).
@@ -61817,6 +61879,10 @@ void RolloutSimulateCombat(GameState& state) { SimulateCombat(state); }
 static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
+    // Moraug: the end step and the next turn's beginning phase are not main phases (a land entering there --
+    // a suspended Search for Tomorrow in the upkeep -- queues no additional combat). Stamped only for a deck
+    // that reads it; every other deck keeps the PostCombatMain it always carried here (byte-identical).
+    if (state.deck_has_extra_combat) { state.phase = Phase::Ending; state.pending_extra_combats = 0; }
 
     // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
     // Permanent::exile_at_end): swept FIRST, before the cleanup discard below, mirroring
@@ -62001,6 +62067,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 
     // Start of next turn
     ++state.turn_number;
+    if (state.deck_has_extra_combat) { state.phase = Phase::Beginning; }   // Moraug (see the head of this function)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.floating_creature_mana   = ManaPool{};   // creature-only reserve too (lockstep w/ UntapStep)
@@ -62024,6 +62091,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_aura_swap = -1;          // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;       // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;        // searched Primeval Titan attack pick (same lockstep)
+    state.pending_extra_combats = 0;   // Moraug: drained every turn; a turn boundary never carries one
     state.scripted_combat_land_search_crack = -1;  // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
@@ -62088,6 +62156,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
             p.landfall_resolved_once  = false;            // Scythecat Cub's "second time this turn" (PER COPY)
             p.landfall_resolved_twice = false;
+            p.SetAttacksThisTurn(0);                       // Moraug's per-turn attack count (PER COPY)
             p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
@@ -66263,6 +66332,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 GameState copy = state;
                 ApplyPlanDirect(copy, probe, is_pre_combat);
                 if (is_pre_combat) { SimulateCombat(copy); }
+                else               { RunPostMain2ExtraCombats(copy); }   // Moraug's main-2 combats
                 const bool really_lethal = (OpponentHasLost(copy));
                 // Is the sac-land burn a STAGED (Light Up the Stage) card? Those expire at the end of
                 // our next turn, so "hold it" can mean "lose it" -- the one real drawback to holding.
@@ -75328,20 +75398,43 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         // (2) Primeval Titan's attack pin (packed per attacking Titan, battlefield order -- the order
         //     DeclareAttackerIndices / DeclareAttackers list them in).
-        if (!cont_axes_only && is_pre_combat)
+        //     MORAUG (ExtraCombatSecondMainLive): every ADDITIONAL combat this turn is a further round of the
+        //     same packed stream (FireAttackLandSearch consumes it per attacking Titan, combat after combat),
+        //     so the fan sizes the stream for those rounds too -- in main 1 (its extras precede the regular
+        //     combat) AND in main 2 (its extras follow it), a tapped Titan counting because each additional
+        //     combat untaps it first. How many combats the plan's landfalls queue is not known before it is
+        //     applied, so the rounds fill the stream (kLandSearchPinOrdinals in all); a round no combat reads
+        //     leaves its variant on its base plan's state, which the post-apply dedup folds. Additive, like
+        //     the rest of this fan. DISCLOSED CAP: past the stream's five ordinals a later trigger takes the
+        //     provider's front (the packed-pin cap this fan already carries for several Titans).
+        const bool xc_live = ExtraCombatSecondMainLive(state);
+        if (!cont_axes_only && (is_pre_combat || xc_live))
         {
             std::vector<std::size_t> tw;            // width per attacking-Titan ordinal (the crack fan's offset)
             std::vector<const CardDefinition*> tdef;   // ...and its definition (the pin values, per plan)
             for (const Permanent& q : state.battlefield)
             {
-                if (q.controller_index != me || q.def_absent || q.tapped) { continue; }
+                if (q.controller_index != me || q.def_absent || (q.tapped && !xc_live)) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
                 if (d == nullptr || !d->params.land_search_on_enter_or_attack
                     || d->params.land_search_count <= 0 || !d->card.IsCreature()) { continue; }
-                if (!CanAttackFull(q, state.battlefield, me)) { continue; }
+                // Sickness, not the tap: an additional combat untaps it (CanAttackFull reads both).
+                Permanent qu = q;
+                qu.tapped = false;
+                if (!CanAttackFull(xc_live ? qu : q, state.battlefield, me)) { continue; }
                 if (static_cast<int>(tw.size()) >= kLandSearchPinOrdinals) { break; }
                 tw.push_back(std::min<std::size_t>(width_of(d), kLandSearchPinMask + 1));
                 tdef.push_back(d);
+            }
+            const std::size_t titans_per_combat = tw.size();   // the first combat's Titans (the crack fan's offset)
+            if (xc_live && !tw.empty())
+            {
+                // The further rounds (see above): main 1 feeds its regular combat's round as well.
+                const std::size_t per = tw.size();
+                for (std::size_t r = 0; tw.size() + per <= static_cast<std::size_t>(kLandSearchPinOrdinals); ++r)
+                {
+                    for (std::size_t j = 0; j < per; ++j) { tw.push_back(tw[j]); tdef.push_back(tdef[j]); }
+                }
             }
             if (!tw.empty())
             {
@@ -75420,7 +75513,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     }
                     e = std::min(e, 3);
                     if (e <= 0) { continue; }
-                    const int titans = static_cast<int>(tw.size());
+                    // The cracks' picks follow the FIRST combat's Titans in the stream (a Moraug turn's later
+                    // rounds sit after them; the crack mask is read by that first combat).
+                    const int titans = static_cast<int>(titans_per_combat);
                     if (StatePinFrontIsVariant(crack_inh, 0))
                     {
                         TurnSolver::Plan v = p;
@@ -78841,6 +78936,10 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     Fold(k, static_cast<uint64_t>(state.active_player_index));
     Fold(k, state.on_the_play ? 1u : 0u);
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
+    // Moraug's queued ADDITIONAL combats: future-determining (an extra attack with the whole team) and flips
+    // mid-turn, so in the key -- value-gated, so every deck that never queues one keeps its exact key.
+    if (state.pending_extra_combats != 0)
+    { Fold(k, 0xE7C0000ull + static_cast<uint64_t>(state.pending_extra_combats)); }
     Fold(k, static_cast<uint64_t>(state.vial_target_mv));
     Fold(k, static_cast<uint64_t>(state.stack.size()));
     // Floating mana: future-determining (a mid-turn re-solve state with {R}{R} floated solves
@@ -79575,6 +79674,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.once_per_turn_used)               { Fold(tk, 0x0CE7A); }   // Stromkirk Condemned (Vampires A2)
         if (perm.landfall_resolved_once)           { Fold(tk, 0x5C7C1); }   // Scythecat Cub (resolved once)
         if (perm.landfall_resolved_twice)          { Fold(tk, 0x5C7C2); }   // ... and twice
+        if (perm.AttacksThisTurn() != 0)           { Fold(tk, 0xA77C0 + perm.AttacksThisTurn()); }   // Moraug
         // Marked damage: coarse drop #3 (combat leftovers; state-based actions already ran, so
         // by the time an m2 solve sees the board the survivors' damage is history, not future).
         if (g_simkey_m2coarse == 0)
@@ -80014,7 +80114,9 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
     if (fix) { g_bp_fired_last = 0; }
     ApplyPlanDirect(copy, post, false);
     if (OpponentHasLost(copy)) { return true; }
-    if (!fix || g_bp_fired_last <= 0) { return false; }
+    // Every "main 2 is over" return below first runs the additional combats main 2 queued (Moraug; a no-op on
+    // an empty queue), so a kill they deal is this function's kill.
+    if (!fix || g_bp_fired_last <= 0) { return RunPostMain2ExtraCombats(copy); }
     // A follow-on m2 plan is a fresh executor TakeTurn pass, which re-merges staged cards at the end.
     MergeStagedToHandEnd(copy);
     // LETHAL-ONLY KILL-SCAN, probed on COPIES and committed only on a kill. Two rejected forms
@@ -80045,6 +80147,7 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
         GameState probe = copy;
         ApplyPlanDirect(probe, e, false);
         if (probe.ActivePlayer().life <= 0) { continue; }
+        RunPostMain2ExtraCombats(probe);   // Moraug: main 2's queued combats are part of the probed line
         if (OpponentHasLost(probe)) { copy = std::move(probe); return true; }
     }
     // ---- MODE 2: gated full RE-SOLVE (M2FixpointMode; see the mode-2 helpers above) --------
@@ -80058,7 +80161,7 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
         if (M2FixActionable(fx, drawn))
         {
             if (AnytimeStop(budget))
-            { ++g_fs_trunc_events; return false; }
+            { ++g_fs_trunc_events; return RunPostMain2ExtraCombats(copy); }
             ++g_m2fix_nest;
             TurnSolver::Plan post2 = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                              second_main, tt, in_rollout);
@@ -80068,7 +80171,7 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
             if (OpponentHasLost(copy)) { return true; }
         }
     }
-    return false;
+    return RunPostMain2ExtraCombats(copy);
 }
 
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
@@ -80354,6 +80457,11 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             if (m2fix_here && g_bp_fired_last > 0
                 && ApplySecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
                                            /*in_rollout=*/true))
+            { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
+              return state.turn_number; }
+            // Moraug: the additional combats main 2 queued, after the whole main 2 (a fixpoint pass above
+            // already ran them; then this is a no-op) and before the end step.
+            if (RunPostMain2ExtraCombats(state))
             { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
               return state.turn_number; }
         }
@@ -83769,6 +83877,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 std::vector<Action> bp2;
                 ApplyPlanDirect(probe, e, false, &bp2);
                 if (probe.ActivePlayer().life <= 0) { continue; }
+                RunPostMain2ExtraCombats(probe);   // Moraug: main 2's queued combats are part of the probed line
                 if (OpponentHasLost(probe))
                 {
                     if (m2t_here)
@@ -84107,6 +84216,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         q_rec.breakpoint_actions = std::move(bp3);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
                     }
+                    if (RunPostMain2ExtraCombats(s3))   // Moraug: main 2's queued combats won
+                    {
+                        TurnSolver::Plan q_rec = std::move(v);
+                        q_rec.breakpoint_actions = std::move(bp3);
+                        return { state.turn_number, { { false, std::move(q_rec) } } };
+                    }
                     if (!SimulateEndAndStartNextTurn(s3)) { continue; }
                     ExpireStagedCards(s3);
                     TurnSolver::SearchLine sub =
@@ -84192,6 +84307,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 const int fx = m2_fixpoint(q, s2, bp, fx_ret);
                 if (fx == kM2FixReturn)  { return fx_ret; }
                 if (fx == kM2FixHandled) { continue; }   // the re-entry scored this line's tail
+            }
+            if (RunPostMain2ExtraCombats(s2))   // Moraug: main 2's queued combats won
+            {
+                TurnSolver::Plan q_rec = q;
+                q_rec.breakpoint_actions = std::move(bp);
+                return { state.turn_number, { { false, std::move(q_rec) } } };
             }
             const bool m2t_skip3 = m2t_here && EnvInt("MTG_M2T_TRACE", 0) >= 3;
             if (!SimulateEndAndStartNextTurn(s2))
@@ -84316,6 +84437,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         const int fx = m2_fixpoint(v, s, bp, fx_ret);
                         if (fx == kM2FixReturn)  { return fx_ret; }
                         if (fx == kM2FixHandled) { continue; }   // the re-entry scored this line's tail
+                    }
+                    if (RunPostMain2ExtraCombats(s))   // Moraug: main 2's queued combats won
+                    {
+                        TurnSolver::Plan q_rec = v;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        return { state.turn_number, { { false, std::move(q_rec) } } };
                     }
                     if (!SimulateEndAndStartNextTurn(s)) { continue; }
                     ExpireStagedCards(s);
@@ -84455,6 +84582,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     {
                         tranchestats::g_rescues.fetch_add(1, std::memory_order_relaxed);
                         if (s_tr_trace) { tr_emit(q, true, best.win_turn, state.turn_number); }
+                        TurnSolver::Plan q_rec = q;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        return { state.turn_number, { { false, std::move(q_rec) } } };
+                    }
+                    if (RunPostMain2ExtraCombats(s2))   // Moraug: main 2's queued combats won
+                    {
                         TurnSolver::Plan q_rec = q;
                         q_rec.breakpoint_actions = std::move(bp);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
@@ -88522,6 +88655,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             fd_sink.clear();
             if (pp.is_pre_combat && !first)
             {
+                RunPostMain2ExtraCombats(copy);   // Moraug: the previous turn's main-2 combats
                 if (!SimulateEndAndStartNextTurn(copy)) { break; }
                 ExpireStagedCards(copy);
             }
@@ -90994,6 +91128,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                             second_main, nullptr);
                         ApplyPlanDirect(s, post, false);
                     }
+                    RunPostMain2ExtraCombats(s);   // Moraug: main 2's queued combats (a no-op otherwise)
                     if (OpponentHasLost(s)) { wt = turn; }
                     else
                     {
@@ -92959,6 +93094,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (bounce_expect != nullptr)
                 { BounceFoldMemo::CountVerify(BuildDedupKey(copy) == *bounce_expect); }
                 w0len_record(plan);
+                // Moraug: the additional combats this main-2 candidate queued run before its win test.
+                RunPostMain2ExtraCombats(copy);
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 if (candcensus::On())
                 {
@@ -93408,6 +93545,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
+                        RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
                         if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
@@ -93525,6 +93663,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 else
                 {
                     ApplyPlanDirect(copy, v, false);
+                    RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
                     if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                 }
@@ -93669,6 +93808,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 else
                 {
                     ApplyPlanDirect(copy, plan, false);
+                    RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                     if (OpponentHasLost(copy)) { return state.turn_number; }
                 }
                 if (!SimulateEndAndStartNextTurn(copy)) { return max_turns + 1; }

@@ -1176,6 +1176,17 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // casts deferred INTO one (defer == delete there). Stamped from the same detector the runner
     // uses to decide whether to play post-combat mains, so the two can never disagree.
     state.uses_second_main     = DeckUsesSecondMain(deck);
+    // Moraug, Fury of Akoum (2026-10-23): extra combats and the per-attack count are only ever live in a deck
+    // that runs an additional-combat landfall card or an attack-count pump. MAINBOARD ONLY, for the Jorn
+    // stamp's reason below (a sideboard card cannot fire, and over-arming would split a screen's arms).
+    state.deck_has_extra_combat = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && (d->params.landfall_additional_combat || d->params.attack_count_team_power)) { return true; }
+        }
+        return false;
+    }();
     // Jorn's per-turn main 2 (UntapSecondMainLive) is only ever live in a deck that runs the card.
     state.deck_has_attack_untap = [&deck]{
         for (const Card& c : deck.mainboard)

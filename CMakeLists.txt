@@ -391,6 +391,7 @@ add_executable(mtg-test
     test/unit/test_landfall.cpp
     test/unit/test_mossborn_hydra.cpp
     test/unit/test_scute_cub.cpp
+    test/unit/test_moraug.cpp
     test/unit/test_kessig_wolf_run.cpp
     test/unit/test_landfall_self_payoffs.cpp
     test/unit/test_galadriel.cpp

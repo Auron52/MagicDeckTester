@@ -873,6 +873,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Bloodline Keeper's in-combat transform mask (Vampires B): the same class, its own domain tag.
     if (s.scripted_combat_transform >= 0)
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
+    // Moraug's queued additional combats (GameState::pending_extra_combats): future-determining, value-gated.
+    if (s.pending_extra_combats != 0)
+    { fold(0xE7C0000ull + static_cast<std::uint64_t>(s.pending_extra_combats)); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP
@@ -1279,6 +1282,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // Scythecat Cub's "second time this turn" bits: exact-match, gated on SET (the same shape).
         if (p.landfall_resolved_once)           { mfold(0x5C7C1ull); }
         if (p.landfall_resolved_twice)          { mfold(0x5C7C2ull); }
+        // Moraug's per-turn attack count: exact-match, gated on nonzero (it changes the creature's power).
+        if (p.AttacksThisTurn() != 0)           { mfold(0xA77C0ull + static_cast<std::uint64_t>(p.AttacksThisTurn())); }
         if (wired)
         {
             mfold(0xA77Aull);

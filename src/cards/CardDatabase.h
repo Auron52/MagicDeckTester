@@ -287,6 +287,15 @@ struct CardParams
     // landfall payload in the pool (none of them puts a counter on the doubling creature), so the
     // sequential-entry argument in OnLandEntered's contract still holds.
     bool                     landfall_double_self_counters = false;
+    // "Landfall -- Whenever a land you control enters, if it's your main phase, there's an additional combat
+    // phase after this phase. At the beginning of that combat, untap all creatures you control." (Moraug,
+    // Fury of Akoum; 2026-10-23). An intervening "if" (CR 603.4): only while OUR main phase is the current
+    // phase (GameState::phase, kept faithful in both worlds for a deck that runs one). Each trigger queues one
+    // ADDITIONAL COMBAT (GameState::pending_extra_combats) that runs after the main phase it came from -- from
+    // main 1 BEFORE the regular combat, from main 2 before the end step -- with NO additional main phase after
+    // it (Scryfall ruling 2020-09-25), each untapping our creatures at its beginning (the regular combat does
+    // not untap). MANDATORY, no target, no choice.
+    bool                     landfall_additional_combat    = false;
 
     // ETB per-land tokens (Avenger of Zendikar: "create a 0/1 green Plant creature token for each
     // land you control"; Phylath, World Sculptor: "...for each BASIC land you control"). N tokens of
@@ -538,6 +547,14 @@ struct CardParams
     // EntersWithPreappliedScope, SpellEffects.h), so a co-entrant's enter trigger resolving first
     // already sees the counters. 0 = none -> byte-identical for every other card.
     int enters_with_plus_counters = 0;
+
+    // ---- "EACH CREATURE YOU CONTROL GETS +1/+0 FOR EACH TIME IT HAS ATTACKED THIS TURN" (Moraug; 2026-10-23) --
+    // A static ability (CR 611.3a, layer 7c): read in ComputeLordBonus off the creature's own count of
+    // attacks this turn (Permanent::AttacksThisTurn, set at each declare-attackers in both worlds, reset at
+    // our untap step), times the number of such sources we control. It counts attacks made before the
+    // source arrived and stops applying when it leaves (Scryfall ruling 2020-09-25); the first attack of a
+    // turn already counts for that combat's damage. false = no pump -> byte-identical for every other card.
+    bool attack_count_team_power = false;
 
     // Tap-and-pay activated token creation: {tap_token_cost}, {T} creates 1 token
     // with the given power/toughness/subtypes. Only activatable when at least one
@@ -4494,7 +4511,8 @@ inline bool DefHasLandfallTrigger(const CardParams& p)
         || p.landfall_lifegain > 0
         || p.landfall_quest_counters > 0
         || p.landfall_self_pump_power > 0 || p.landfall_self_pump_toughness > 0
-        || p.landfall_double_self_counters;
+        || p.landfall_double_self_counters    // Mossborn Hydra (2026-10-22)
+        || p.landfall_additional_combat;      // Moraug, Fury of Akoum (2026-10-23)
 }
 
 // Codegen hints for CardDatabase::LookupCached (the hottest call in the search; see its comment).

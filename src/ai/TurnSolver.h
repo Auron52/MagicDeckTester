@@ -3567,6 +3567,9 @@ const std::function<bool(GameState&, const ManaCost&)>& RolloutMadnessPayer();
 // over-counting there would discard the original Zada for a phantom lethal. Mutates `state`
 // (damage, taps, pumps): call on a throwaway copy only.
 void RolloutSimulateCombat(GameState& state);
+// Moraug: the additional combats a post-combat main queued (TurnSolver.cpp RunPostMain2ExtraCombats), for the
+// unit tests and any provider that simulates a main 2. Returns true if they won.
+bool RolloutRunPostMain2ExtraCombats(GameState& state);
 
 // TEST HOOK (chunk P copy/host folds): this THREAD's running count of enumerations in which the fold
 // armed -- 0 = hand-copy classes built (MTG_HAND_COPY_CLASS_FOLD), 1 = land-Aura host prefix armed

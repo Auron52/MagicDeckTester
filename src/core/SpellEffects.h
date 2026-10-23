@@ -4999,6 +4999,22 @@ inline std::pair<int,int> ComputeLordBonus(
     const int emblems = state.players[controller_index].emblem_team_pump;
     if (emblems > 0) { pb += emblems; tb += emblems; }
 
+    // "Each creature you control gets +1/+0 for each time it has attacked this turn" (Moraug, Fury of Akoum;
+    // CardParams::attack_count_team_power). The creature's OWN count (Permanent::AttacksThisTurn, set only for a
+    // deck with the card), times the sources we control NOW -- attacks made before the source arrived count, and
+    // the bonus stops when it leaves (Scryfall ruling 2020-09-25). One byte test on every other creature.
+    if (self != nullptr && self->AttacksThisTurn() > 0)
+    {
+        int sources = 0;
+        for (const Permanent& q : battlefield)
+        {
+            if (q.controller_index != controller_index || q.def_absent) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd != nullptr && qd->params.attack_count_team_power) { ++sources; }
+        }
+        pb += sources * self->AttacksThisTurn();
+    }
+
     // CONDITIONAL anthem (Neheb, the Worthy: "As long as you have one or fewer cards in hand,
     // Minotaurs you control get +2/+0"). Deliberately NOT folded into process_lord above: the
     // source is not an IsLordPermanent (its static power_bonus is 0), so it is absent from the
@@ -7760,7 +7776,8 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.storage_hold_this_turn || p.loyalty_activated_this_turn
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
         || p.lifegain_counters_used_this_turn || p.once_per_turn_used
-        || p.landfall_resolved_once || p.landfall_resolved_twice)                 { return false; }
+        || p.landfall_resolved_once || p.landfall_resolved_twice
+        || p.AttacksThisTurn() != 0)                                              { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty())           { return false; }
@@ -8218,6 +8235,25 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
                                   + std::to_string(before + added) + ")");
                 }
                 break;
+            }
+        }
+
+        // "If it's your main phase, there's an additional combat phase after this phase" (Moraug, Fury of
+        // Akoum). The intervening "if" (CR 603.4) reads GameState::phase -- OUR turn, a MAIN phase -- which both
+        // worlds keep faithful for a deck with the card (deck_has_extra_combat: the rollout stamps Combat /
+        // Ending / Beginning too). A land Primeval Titan's attack fetches, or one entering in the upkeep, queues
+        // nothing. The queue is drained by the combat after this phase (GameState::pending_extra_combats).
+        if (wp.landfall_additional_combat && state.deck_has_extra_combat
+            && controller == state.active_player_index
+            && (state.phase == Phase::PreCombatMain || state.phase == Phase::PostCombatMain))
+        {
+            if (state.pending_extra_combats < 255) { ++state.pending_extra_combats; }
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x8C\x8D " + wname + " (landfall: " + land_name
+                              + "): an additional combat phase after this main phase ("
+                              + std::to_string(static_cast<int>(state.pending_extra_combats)) + " queued)");
             }
         }
     }
@@ -19613,6 +19649,35 @@ inline void UntapSnowPermanents(GameState& state, int controller)
         if (p.controller_index != controller || !p.tapped) { continue; }
         if (p.card.HasSupertype(Supertype::Snow) || (ice_grants && p.ice_counters > 0))
         { p.tapped = false; }
+    }
+}
+
+// ---- MORAUG, FURY OF AKOUM (2026-10-23): the additional combat's two shared bodies -------------------------
+// "At the beginning of that combat, untap all creatures you control." A delayed trigger of the ADDITIONAL
+// combat only (the regular combat does not untap -- Scryfall ruling 2020-09-25), resolved at its beginning,
+// before attackers are declared, in BOTH worlds (GameEngine::CombatPhase(additional) and TurnSolver's
+// SimulateOneCombat(additional)). Every creature we control, sick or not (an untapped sick creature still
+// cannot attack); an animated land is a creature. An untap EFFECT for the payment-rollback ledger.
+inline void UntapOwnCreaturesForCombat(GameState& state, int controller)
+{
+    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.tapped) { continue; }
+        if (p.card.IsCreature() || p.is_animated) { p.tapped = false; }
+    }
+}
+// "...for each time it has attacked this turn": one more declared attack on each DECLARED attacker (CR 508.1;
+// called before any token joins the list, CR 508.4), both worlds at declare-attackers. Only for a deck with an
+// attack-count reader (deck_has_extra_combat), so every other deck's permanents never carry a count.
+inline void NoteAttacksDeclared(GameState& state, int controller, const std::vector<int>& declared)
+{
+    if (!state.deck_has_extra_combat) { return; }
+    for (int i : declared)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        Permanent& a = state.battlefield[static_cast<std::size_t>(i)];
+        if (a.controller_index == controller) { a.NoteAttackDeclared(); }
     }
 }
 
@@ -39360,6 +39425,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.once_per_turn_used ? 4194304 : 0)   // Stromkirk Condemned's once-each-turn activation
         | (p.sac_at_end_step ? 8388608 : 0)
         | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0));   // Scythecat Cub
+    if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);

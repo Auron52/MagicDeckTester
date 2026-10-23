@@ -239,6 +239,10 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     { NoteOwnDeath(state); return; }
     if (at <= static_cast<int>(ResumeAt::Combat))
     {
+        // Moraug, Fury of Akoum: the additional combats main 1's landfalls queued come FIRST, each untapping
+        // our creatures at its beginning; the regular combat after them does not untap (Scryfall ruling
+        // 2020-09-25). No main phase between them. Lockstep with TurnSolver's SimulateCombat wrapper.
+        if (RunQueuedExtraCombats(state)) { return; }
         CombatPhase(state);
         // State-based action (CR 704.5a / 104.3a): a player at 0 or less life loses
         // immediately -- before its controller gets priority for the post-combat main. Without
@@ -253,6 +257,8 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     if (at <= static_cast<int>(ResumeAt::Main2)) { MainPhase(state, /*is_pre_combat=*/false); }
     if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state))
     { NoteOwnDeath(state); return; }
+    // ...and the ones main 2 queued run after it, before the end step (no main phase follows them).
+    if (RunQueuedExtraCombats(state)) { return; }
     // MTG_LANDDRAW_CENSUS (diagnostic only, a no-op unless set): did this turn's dig chain draw a
     // land with the drop open and end with the drop unused? Read before the end step changes nothing.
     AIEngine::LandDrawCensusEndTurn(state);
@@ -297,6 +303,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
     state.scripted_combat_aura_swap_in = -1;   // ...and its fixed Aura (human deferred swap)
     state.scripted_attack_land_search = -1;    // searched Primeval Titan attack pick (same lockstep)
+    state.pending_extra_combats = 0;   // Moraug: drained every turn; a turn boundary never carries one
     state.scripted_combat_land_search_crack = -1;   // ...and the in-combat Khalni crack (same lockstep)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
@@ -370,6 +377,7 @@ void GameEngine::UntapStep(GameState& state)
             p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
             p.landfall_resolved_once  = false;            // Scythecat Cub's "second time this turn" (PER COPY)
             p.landfall_resolved_twice = false;
+            p.SetAttacksThisTurn(0);                       // Moraug's per-turn attack count (PER COPY)
             p.storied_draw_used_this_turn      = false;   // Kili once-each-turn draw (PER COPY)
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
@@ -689,7 +697,18 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     }
 }
 
-void GameEngine::CombatPhase(GameState& state)
+bool GameEngine::RunQueuedExtraCombats(GameState& state)
+{
+    while (state.pending_extra_combats > 0)
+    {
+        --state.pending_extra_combats;
+        CombatPhase(state, /*additional=*/true);
+        if (CheckWinCondition(state)) { state.pending_extra_combats = 0; return true; }
+    }
+    return false;
+}
+
+void GameEngine::CombatPhase(GameState& state, bool additional)
 {
     // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
     // floated this main phase. Mirrors TurnSolver::SimulateCombat (lockstep). Off
@@ -704,6 +723,8 @@ void GameEngine::CombatPhase(GameState& state)
 
     state.step = Step::BeginCombat;
     ResolveStack(state);
+    // Moraug's delayed trigger: "At the beginning of that combat, untap all creatures you control."
+    if (additional) { UntapOwnCreaturesForCombat(state, state.active_player_index); }
 
     // Legend rule (CR 704.5j): a duplicate legendary (e.g. a second Haytham Kenway) is
     // put into the graveyard before attackers are declared, so duplicate legendary lords
@@ -747,6 +768,8 @@ void GameEngine::CombatPhase(GameState& state)
     {
         atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
     }
+    // Moraug's "for each time it has attacked this turn": the DECLARED attackers (before any token joins).
+    NoteAttacksDeclared(state, state.active_player_index, atk_idx);
 
     // Beastmaster Ascension's quest counters: one trigger per DECLARED attacker, resolving in the
     // declare-attackers step so the +5/+5 applies to this same combat. Fired BEFORE the Adeline

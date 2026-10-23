@@ -70,7 +70,11 @@ private:
     void UpkeepTail(GameState& state);
     void DrawStep(GameState& state);
     void MainPhase(GameState& state, bool is_pre_combat);
-    void CombatPhase(GameState& state);
+    // `additional`: an ADDITIONAL combat phase (Moraug, Fury of Akoum) -- untaps our creatures at its beginning.
+    void CombatPhase(GameState& state, bool additional = false);
+    // Moraug: run the additional combats the just-finished main phase queued (GameState::pending_extra_combats).
+    // Returns true if one of them won the game.
+    bool RunQueuedExtraCombats(GameState& state);
     void EndStep(GameState& state);
     void CleanupStep(GameState& state);
 

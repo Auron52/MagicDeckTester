@@ -12254,6 +12254,31 @@
    }
   },
   {
+   "name": "Moraug, Fury of Akoum",
+   "mana_cost": "{4}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Warrior"
+   ],
+   "keywords": [
+    "Landfall"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Each creature you control gets +1/+0 for each time it has attacked this turn.\nLandfall — Whenever a land you control enters, if it's your main phase, there's an additional combat phase after this phase. At the beginning of that combat, untap all creatures you control. [Added 2026-10-23 as a Landfall SCREENING candidate (USER: \"Let's add Moraug, Fury of Akoum\"; not in the shipped list). STATIC (clause 1): attack_count_team_power -- each creature we control gets +1/+0 per time it was DECLARED as an attacker this turn (Permanent::AttacksThisTurn, bumped at declare-attackers in both worlds by NoteAttacksDeclared, reset at our untap step), times the copies we control, read in ComputeLordBonus (layer 7c) so every combat-damage and power read sees it; attacks made before Moraug arrived count and the bonus stops when it leaves; the first attack of a turn already counts for that combat (Scryfall rulings 2020-09-25). A token put onto the battlefield attacking was never declared (CR 508.4). The count saturates at 7 (three bits): an eighth attack follows seven unblocked ones by the same creature, worth at least 1+...+7 = 28 -- the passive opponent is dead first (a 30-life 2HG team is the disclosed exception). LANDFALL (clause 2): landfall_additional_combat -- the intervening 'if it's your main phase' (CR 603.4) reads GameState::phase, kept faithful in both worlds for a deck with the card (the rollout stamps Combat / Ending / Beginning: Primeval Titan's attack fetch and an upkeep Search for Tomorrow queue nothing). Each trigger queues ONE additional combat (GameState::pending_extra_combats) after the main phase it resolved in, with NO main phase after it: from main 1 the additional combats run BEFORE the regular combat, from main 2 after it and before the end step (GameEngine::RunTurnFrom / TurnSolver SimulateCombat + RunPostMain2ExtraCombats, lockstep). AT THE BEGINNING of each additional combat every creature we control untaps (UntapOwnCreaturesForCombat); the regular combat does not untap -- so a main-1 land adds no attack and a main-2 land adds one (rulings). Every attack trigger fires in every combat (Primeval Titan's fetch: the packed attack-pick stream runs across the combats and the search fans it for them, up to its five ordinals -- DISCLOSED cap). SECOND MAIN (2c-bis): while Moraug is OUR permanent the post-combat main is live (ExtraCombatSecondMainLive, beside Jorn's per-turn gate) with its FULL menu, the main-2 land drop is live and a land held since main 1 may be played there (the USER's newly-arrived-lands rule is exempted for it -- PROVISIONAL, surfaced). Attacking is the standing all-out exemption against the passive goldfish, per combat. LEGENDARY: the legend rule applies. NO CHOICE beyond those, so the viewer needs no new decision (bucket A); each additional combat is logged as its own COMBAT phase.]",
+   "template": "custom",
+   "parameters": {
+    "attack_count_team_power": true,
+    "landfall_additional_combat": true
+   }
+  },
+  {
    "name": "Avenger of Zendikar",
    "mana_cost": "{5}{G}{G}",
    "types": [

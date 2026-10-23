@@ -6146,5 +6146,16 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Insect"
+  },
+  "Moraug, Fury of Akoum": {
+    "cmc": 6.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "Each creature you control gets +1/+0 for each time it has attacked this turn.\nLandfall — Whenever a land you control enters, if it's your main phase, there's an additional combat phase after this phase. At the beginning of that combat, untap all creatures you control.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Legendary Creature — Minotaur Warrior"
   }
 }

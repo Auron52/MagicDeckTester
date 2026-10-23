@@ -790,6 +790,8 @@ INERT_PARAMS = {
     # ---- Scute Swarm / Scythecat Cub (2026-10-23, Landfall screening candidates) -- PROVISIONAL, pending the user's OK ----
     "landfall_copy_self_at_lands": "Scute Swarm's 'if you control six or more lands, create a token that's a copy of this creature instead' -- a resolution-time CONDITION on the landfall token, MANDATORY, no target, no choice",
     "landfall_target_any_creature": "landfall target filter 'target creature you control' (Scythecat Cub; rides landfall_target_counters, which IS surfaced through the `target` board-click)",
+    "landfall_additional_combat": "Moraug's 'if it's your main phase, there's an additional combat phase after this phase ... untap all creatures you control' -- MANDATORY, no target, no choice; each additional combat re-asks the existing per-combat pickers and is logged as its own COMBAT phase -- PROVISIONAL",
+    "attack_count_team_power": "Moraug's static '+1/+0 for each time it has attacked this turn' -- automatic, no choice",
     "landfall_target_second_doubles": "Scythecat Cub's 'if this is the second time this ability has resolved this turn, double the counters instead' -- WHICH resolution doubles is fixed by the rules, not chosen; its target rides the same surfaced `target` board-click",
     "landfall_lifegain": "automatic landfall lifegain (Courser of Kruphix), through GainLife -- no target, no choice",
     "land_search_count": "how many lands the search may find ('up to N') -- the pick itself rides the land-search fire-site param -> tutor_etb; 'up to' is collapsed for the search to the maximal picks by dominance (PROVISIONAL), the human may stop early with -1",

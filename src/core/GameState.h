@@ -359,6 +359,18 @@ struct GameState
     // hand-source steal scan. Deck constants: never folded into any key.
     bool                     deck_has_transform           = true;
     bool                     deck_has_tap_steal           = true;
+    // MORAUG, FURY OF AKOUM (2026-10-23), in the same padding (sizeof(GameState) unchanged):
+    //   deck_has_extra_combat -- DECK CONSTANT (StampDeckTraits): the list holds a landfall_additional_combat
+    //     or attack_count_team_power card. Gates the rollout's faithful phase stamps (Combat / Ending /
+    //     Beginning -- the intervening "if it's your main phase" reads GameState::phase) and the per-attack
+    //     count (Permanent::NoteAttackDeclared). DEFAULT FALSE: an unstamped state behaves exactly as before
+    //     (it neither counts attacks nor queues a combat -- the watcher's queue below is gated on it too).
+    //   pending_extra_combats -- the ADDITIONAL COMBATS queued by this main phase's landfall triggers and not
+    //     yet run. FUTURE-DETERMINING and flips mid-turn: folded value-gated into the sim key and the dominance
+    //     key. Drained by the combat that follows the main phase (the main-1 queue before the regular combat,
+    //     the main-2 queue before the end step), so it is 0 at every turn boundary. Saturates at 255.
+    bool                     deck_has_extra_combat        = false;
+    std::uint8_t             pending_extra_combats        = 0;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack

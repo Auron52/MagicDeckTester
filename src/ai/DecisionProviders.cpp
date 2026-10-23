@@ -3546,7 +3546,7 @@ const char* LandfallProvider::CastOrderTierName(int rank) const
 //             fastest"), the rest by CASTABILITY (USER: "If we can't cast the threat we should use another"),
 //             the shared discard_dist factor (Genesis Wave priced at X = 3); exact ties by the author's rank
 //             Avenger > Primeval Titan > Rampaging Baloths > Genesis Wave > Omnath > Terastodon > Courser
-//             (a screened Mossborn Hydra slots after Baloths, then Scythecat Cub, then Scute Swarm --
+//             (a screened Moraug slots right after Baloths, then Mossborn Hydra, Scythecat Cub, Scute Swarm --
 //             PROVISIONAL, the USER's call).
 //             AT MOST ONE Primeval Titan (USER: no kill potential in this list) and one copy of a legend,
 //             net of board.
@@ -3680,10 +3680,13 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
     // Scythecat Cub and Scute Swarm (2026-10-23, SCREENING candidates): PROVISIONAL slots right after the
     // Hydra (the cheap landfall bodies together), ahead of Genesis Wave -- the default taken while the USER
     // decides. Relative order only, so the renumbering is byte-identical without them.
+    // Moraug, Fury of Akoum (2026-10-23, a SCREENING candidate): PROVISIONAL slot beside the other six-drop
+    // finisher, right after Rampaging Baloths (a legend: the "one copy of a legend, net of board" rule applies).
     static const std::pair<const char*, int> kThreatRank[] = {   // higher = kept first
-        {"Phylath, World Sculptor", 11}, {"Avenger of Zendikar", 10}, {"Primeval Titan", 9},
-        {"Rampaging Baloths", 8}, {"Mossborn Hydra", 7}, {"Scythecat Cub", 6}, {"Scute Swarm", 5},
-        {"Genesis Wave", 4}, {"Omnath, Locus of Rage", 3}, {"Terastodon", 2}, {"Courser of Kruphix", 1},
+        {"Phylath, World Sculptor", 12}, {"Avenger of Zendikar", 11}, {"Primeval Titan", 10},
+        {"Rampaging Baloths", 9}, {"Moraug, Fury of Akoum", 8}, {"Mossborn Hydra", 7}, {"Scythecat Cub", 6},
+        {"Scute Swarm", 5}, {"Genesis Wave", 4}, {"Omnath, Locus of Rage", 3}, {"Terastodon", 2},
+        {"Courser of Kruphix", 1},
     };
     auto threat_rank = [&](const Card& c)
     { for (const auto& [name, r] : kThreatRank) { if (c.m_name == name) { return r; } } return 0; };

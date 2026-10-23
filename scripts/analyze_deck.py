@@ -540,6 +540,15 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
                 and not is_d("copy of this creature"):
             gaps.append("landfall 'create a token that's a copy of this creature instead' in oracle text "
                         "but landfall_copy_self_at_lands not set")
+        if re.search(r"there's an additional combat phase after this phase", oracle, re.I) \
+                and "Landfall" in oracle and not params.get("landfall_additional_combat") \
+                and not is_d("additional combat"):
+            gaps.append("landfall 'additional combat phase after this phase' in oracle text but "
+                        "landfall_additional_combat not set")
+        if re.search(r"for each time it has attacked this turn", oracle, re.I) \
+                and not params.get("attack_count_team_power") and not is_d("attacked this turn"):
+            gaps.append("'+1/+0 for each time it has attacked this turn' in oracle text but "
+                        "attack_count_team_power not set")
         if re.search(r"second time this ability has resolved this turn, double", oracle, re.I) \
                 and not params.get("landfall_target_second_doubles") and not is_d("second time"):
             gaps.append("'second time this ability has resolved this turn, double' in oracle text but "

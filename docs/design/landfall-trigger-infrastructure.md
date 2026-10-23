@@ -39,6 +39,20 @@ card pays one bool test per land entry.
 * A put of several lands and nothing else may call `EnterLand` once per land: every payload in the
   pool commutes and none makes a permanent another landfall trigger can target. A future payload that
   makes a target-subtype permanent breaks that and must take the snapshot shape.
+* **The token floor (2026-10-23, `LandfallSimultaneousScope`).** Scute Swarm's copy is a payload that
+  MAKES A WATCHER, and Scythecat Cub's target is "any creature", so the sequential per-land resolution of a
+  multi-land put could let a token made by an earlier land's trigger trigger for, or be targeted by, a later
+  land of the same event. A land search's battlefield picks (Primeval Titan's two) and Genesis Wave now run
+  under a scope that records the event's token floor (`next_token_number`, raised past any token already on
+  a hand-stamped board); `FireLandfallTriggers` collects no TOKEN watcher at or above it and offers no such
+  token as a target. Outside a scope the floor is taken at the trigger walk, so a token made earlier in the
+  same land's cascade (a Baloths Beast) is not a Cub target. Byte-identical for every list without a token
+  watcher or an any-creature target (verified: smoke 148/148, regression 282/282, 656 references).
+* **Doublings last.** Within one land's triggers, a watcher whose payload THIS TIME doubles +1/+1 counters
+  (Mossborn Hydra; the Cub's second resolution of the turn) resolves after the others -- the controller's
+  CR 603.3b order, by dominance: 2(c+a) >= 2c+a, and counters never hurt against the passive goldfish.
+  Known simplification: a simultaneous multi-land put still resolves land by land, so a Cub's THIRD +1 inside
+  one such event cannot move before an earlier land's doublings (under-credits only).
 
 ## 2. Payload params (`CardParams`, LANDFALL TRIGGERS block)
 
@@ -52,6 +66,43 @@ through the shared `DoublePlusCounters` -- a "put", so a counter doubler applies
 `enters_with_plus_counters` (Mossborn Hydra's one counter; a CR 614.1c replacement applied at the top
 of `FireEtbWatchers`, and in pass 1 of a simultaneous multi-put such as Genesis Wave, so a
 co-entrant's trigger resolving first already sees it -- `EntersWithPreappliedScope`).
+
+2026-10-23 (Landfall screening candidates): `landfall_copy_self_at_lands` (Scute Swarm: with N+ lands at
+resolution the token is a COPY of the watcher, `CreateTokenCopyOfCard`); `landfall_target_any_creature` +
+`landfall_target_second_doubles` (Scythecat Cub: the targeted payload over every creature we control, and
+its second resolution each turn -- per-object `Permanent::landfall_resolved_once/_twice` -- doubles the
+target's counters, ordered by `DecisionProvider::LandfallDoubleTargetOrder`); `DefHasTargetedLandfall` is the
+one predicate for "a targeted landfall payload". `landfall_additional_combat` (Moraug, Fury of Akoum): see
+section 3c.
+
+## 3c. Additional combat phases (Moraug, Fury of Akoum, 2026-10-23)
+
+* **The trigger.** "If it's your main phase, there's an additional combat phase after this phase" is an
+  intervening if (CR 603.4) on `GameState::phase`. The executor always kept the phase; the rollout now stamps
+  Combat / Ending / Beginning too, for a deck stamped `deck_has_extra_combat` only (every other deck keeps the
+  phase values it always carried, which MirrorwingProvider reads). Each trigger increments
+  `GameState::pending_extra_combats`.
+* **Where the combats run.** A main-1 queue runs BEFORE the regular combat (`TurnSolver` `SimulateCombat` is
+  now a wrapper over `SimulateOneCombat(additional)`; `GameEngine::RunTurnFrom` runs
+  `RunQueuedExtraCombats` before `CombatPhase`); a main-2 queue runs after main 2 and before the end step
+  (`RunPostMain2ExtraCombats` at every search site where a post-combat main ends -- before each
+  `SimulateEndAndStartNextTurn` that follows one, in the root and wave candidate loops, the honest label,
+  the escalation re-score, FSLineWin's base / pend / walker / tranche loops, the m2 fixpoint probes and the
+  lethal-cut probes). No main phase follows an additional combat. Each additional combat untaps our creatures
+  at its beginning (`UntapOwnCreaturesForCombat`); the regular one does not (Scryfall ruling 2020-09-25).
+* **The static.** `attack_count_team_power`: +1/+0 per declared attack this turn
+  (`Permanent::AttacksThisTurn`, a 3-bit count saturating at 7 -- an eighth attack follows at least 28
+  unblocked damage), read in `ComputeLordBonus`.
+* **The second main.** `ExtraCombatSecondMainLive` (a Moraug on our battlefield) opens the post-combat main
+  through `ProviderSecondMainLive` at every post-combat site of both worlds, with the FULL menu; the main-2
+  land drop is live and a land held since main 1 is exempt from the newly-arrived-lands rule
+  (`ExtraCombatMain2Exempt`), and `SecondMainUnproductive` never skips it -- under Moraug a main-2 land is
+  worth one more attack than the same land in main 1. PROVISIONAL: the USER's call.
+* **Attack-trigger picks.** Primeval Titan's attack fetch consumes the packed attack-pick stream across the
+  combats, and the main-1 and main-2 fans size it for further rounds (five ordinals; past them a trigger takes
+  the provider's front -- disclosed). The in-combat Khalni crack keeps its first-combat offset.
+* **Keys.** `pending_extra_combats` is folded value-gated into the sim key and the dominance key; the attack
+  count takes the per-permanent fold treatment of `once_per_turn_used`.
 
 ## 3. Searched axes added
 
