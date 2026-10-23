@@ -301,6 +301,18 @@ this rebase superseded, so it is moot.
     restricted unit. Smokebraider + one land pays it exactly. Legal but wasteful; in 62006 the extra
     tapped land makes the main-2 Flamekin Harbinger {R} uncastable. Win turn unchanged in both games.
     ManaPayment (the loop-1 `RestrictedMayHoldForAttack` / `RestrictedIneligOwedLater` path) -- OPEN.
+    CAUSE: `restricted_hold_ok` (hold Smokebraider for its attack) is only re-tested when the line still
+    owes mana (`line_owed > 0`); with nothing owed after this payment the hold stays on even when the
+    general sources cannot cover the payment, so Smokebraider taps anyway but ranks last and pays the
+    final pip only. TRIED AND REVERTED (2026-10-23): re-testing the hold on every payment (restricted
+    pays first once it must tap) fixed 62007 but moved smoke elementals d0 gi480 (seed 1481) T5 -> T6:
+    Risen Reef {1}{G}{U} from Waterlogged Grove / Secluded Courtyard / Smokebraider, then Akoum Hellhound
+    {R}. The old payment (Grove + Courtyard + 1 Smokebraider unit) floated an any-colour unit that cast
+    Hellhound; restricted-first paid Smokebraider 2 + Courtyard and left only Grove (G/U), no {R}. The
+    DOMINANT payment is Smokebraider 2 + GROVE, keeping Courtyard (any colour for a creature, and an
+    untapped land survives into main 2 where a float does not). So the fix is in the LAND choice once
+    the restricted source must tap: spend both its units and keep the most flexible general source
+    (needs-aware), not a rank flip. Searched rows were unmoved in score (8 play-changed, 0/0).
   * Fulminator Mage plans listed 7x on the 62006 T4 viewer menu (identical summaries, byte-identical
     boards): an unlabeled axis or real duplicates -- under investigation with the plan-fan explosion
     below.
