@@ -911,3 +911,22 @@ Phylath's bucket).** What moves with the host is the LEVEL: U0 is -0.7495 vs shi
 -0.594 on Courser's, a 0.155 t swing from the keep table alone. So no absolute "vs shipped" number from a
 Hydra arm is worth more than its host; only within-host comparisons are. x3 (no table on any arm) is the
 host-free arbiter of the level.
+
+### x3 — NO keep table on any arm (`logs/landfall_screen/x3.json`)
+
+Same seeds; the table is dropped from EVERY arm, base included (the Hydra is not bucketed and `pool_table` is
+false), so every arm mulligans with the deck's default keep rules -- the host-free measurement.
+
+| arm | Phylath | vs U0 | se | t | vs shipped (no table either) | T7+ |
+|---|---|---|---|---|---|---|
+| **U0** | 4 | -- | -- | -- | **-0.780** | **3.02%** |
+| U0_p3 | 3 | +0.0180 | 0.0010 | +18.8 | -0.762 | 3.24% |
+| U0_p2 | 2 | +0.0369 | 0.0014 | +27.1 | -0.743 | 3.39% |
+| U0_p0 | 0 | +0.0795 | 0.0022 | +36.3 | -0.700 | 4.07% |
+
+**Settled: U0 is the best of the four under all three apparatus** (Phylath's bucket, Courser's bucket, no
+table), each Phylath cut costing 0.007-0.028 t per copy by host and 0.018-0.020 with no table. The level
+moves with the apparatus (U0 vs shipped: -0.750 / -0.594 / -0.780) because a Hydra arm riding another card's
+keep bucket mulligans like a different deck; with no table both sides keep alike. **Apparatus for the
+new-card rounds: no keep table on any arm** (x3's shape) -- slower (~74 min per 100k games against ~12 with
+a table) but free of the host choice that produced round 2's artefact.
