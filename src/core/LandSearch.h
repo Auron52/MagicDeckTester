@@ -59,6 +59,7 @@
 #include <functional>
 #include <string>
 #include <typeinfo>
+#include <unordered_map>
 #include <vector>
 
 // One identity class of legal library lands for a search. `rep` = the lexicographically smallest
@@ -958,10 +959,37 @@ inline void ApplyLandSearchActivation(GameState& state, int controller, int src_
 // relative order of the survivors, so the j-th occurrence of a number among `nums` maps to the j-th
 // battlefield permanent carrying it -- exact even if two entries share a number. A permanent that
 // is gone is dropped (an attacker cannot leave this way; the guard is for completeness).
+//
+// LINEAR for a wide list (2026-10-23): the scan below is O(n^2 + n*B), and a Scute Swarm board swings
+// with hundreds of attackers, so a Titan's attack fetch (FireAttackLandSearch) spent 98.8% of a
+// 976-second Landfall game here. Past kRefindScanMax entries each number's battlefield slots are
+// gathered once, in order, and handed out through a per-number cursor -- the cursor counts the earlier
+// entries carrying the number whether or not they hit, which is exactly `seen_before`, so the output
+// is identical. The short list keeps the scan (no allocation for the 1-5 attackers of a normal turn).
 inline std::vector<int> RefindByNumberInOrder(const GameState& state, const std::vector<int>& nums)
 {
     std::vector<int> out;
     out.reserve(nums.size());
+    constexpr std::size_t kRefindScanMax = 16;
+    if (nums.size() > kRefindScanMax)
+    {
+        struct Slots { std::vector<int> at; std::size_t next = 0; };
+        std::unordered_map<int, Slots> by_num;
+        by_num.reserve(nums.size() * 2);
+        for (const int n : nums) { by_num.try_emplace(n); }
+        for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+        {
+            const auto it = by_num.find(state.battlefield[static_cast<std::size_t>(j)].card.m_number);
+            if (it != by_num.end()) { it->second.at.push_back(j); }
+        }
+        for (const int n : nums)
+        {
+            Slots& sl = by_num.find(n)->second;
+            const std::size_t c = sl.next++;
+            if (c < sl.at.size()) { out.push_back(sl.at[c]); }
+        }
+        return out;
+    }
     for (std::size_t i = 0; i < nums.size(); ++i)
     {
         int seen_before = 0;
@@ -1027,9 +1055,12 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
     if (!any) { return; }
     const CombatLandfallTargetScope _clt(state);   // the combat landfalls' target rank (above)
     int attack_ordinal = 0;   // the packed stream's ordinal (the put-bounce probe's key)
+    // Re-found only after a search: PerformLandSearch is the one call below that touches the
+    // battlefield, so between searches `now` cannot change (re-finding per attacker made a wide swing
+    // cubic -- see RefindByNumberInOrder).
+    std::vector<int> now = RefindByNumberInOrder(state, nums);
     for (std::size_t ai = 0; ai < nums.size(); ++ai)
     {
-        const std::vector<int> now = RefindByNumberInOrder(state, nums);
         if (ai >= now.size()) { break; }
         const int slot = now[ai];
         if (state.battlefield[static_cast<std::size_t>(slot)].controller_index != controller) { continue; }
@@ -1045,6 +1076,7 @@ inline void FireAttackLandSearch(GameState& state, int controller, std::vector<i
                           d->card.m_name.str(), pin, " (attack)");
         if (probe != nullptr) { probe->ordinal = -1; }
         ++attack_ordinal;
+        now = RefindByNumberInOrder(state, nums);
     }
     // Repair the attacker indices (a Karoo bounce erased a slot; appended lands shifted nothing
     // before them, but the erase may have).

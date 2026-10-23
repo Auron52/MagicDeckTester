@@ -904,3 +904,47 @@ TEST_CASE("Landfall fetch rule: basic searches are PRUNED to the rule's one pick
     CHECK(lp.LandSearchPickOrderKey(mh, 0, k3));
     CHECK(k0 != k1); CHECK(k0 != k2); CHECK(k0 != k3);
 }
+
+TEST_CASE("RefindByNumberInOrder: the wide (map) path returns exactly what the occurrence scan does")
+{
+    // The reference is the scan itself (the helper's short-list path, copied): for nums[i], the
+    // (number of earlier entries carrying nums[i])-th battlefield slot with that number, dropped if
+    // there are not that many. Duplicated numbers, missing numbers and 0 are all exercised.
+    auto scan = [](const GameState& s, const std::vector<int>& nums)
+    {
+        std::vector<int> out;
+        for (std::size_t i = 0; i < nums.size(); ++i)
+        {
+            int seen_before = 0;
+            for (std::size_t k = 0; k < i; ++k) { if (nums[k] == nums[i]) { ++seen_before; } }
+            for (int j = 0; j < static_cast<int>(s.battlefield.size()); ++j)
+            {
+                if (s.battlefield[static_cast<std::size_t>(j)].card.m_number != nums[i]) { continue; }
+                if (seen_before-- == 0) { out.push_back(j); break; }
+            }
+        }
+        return out;
+    };
+    unsigned x = 12345u;
+    auto rnd = [&x](unsigned m) { x = x * 1103515245u + 12345u; return static_cast<int>((x >> 8) % m); };
+    for (int trial = 0; trial < 200; ++trial)
+    {
+        GameState s;
+        const int b = 1 + rnd(300);
+        for (int j = 0; j < b; ++j)
+        {
+            Permanent p;
+            p.card.m_number = rnd(4) == 0 ? rnd(8) : rnd(400);   // some heavy duplicates
+            s.battlefield.push_back(p);
+        }
+        std::vector<int> nums;
+        const int n = 1 + rnd(250);
+        for (int i = 0; i < n; ++i)
+        {
+            const int r = rnd(10);
+            nums.push_back(r == 0 ? 0 : r == 1 ? 1000 + rnd(50)   // absent
+                         : s.battlefield[static_cast<std::size_t>(rnd(static_cast<unsigned>(b)))].card.m_number);
+        }
+        CHECK(RefindByNumberInOrder(s, nums) == scan(s, nums));
+    }
+}
