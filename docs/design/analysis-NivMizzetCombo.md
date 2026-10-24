@@ -31,6 +31,24 @@ generic).
 - One heavy job (build or batch) at a time; total threads <= 24. Other sessions share this box.
 - Agents: no `cd` in compound commands, no `rm` / `rm -rf`, no `timeout`.
 
+## STATUS 2026-10-24 ~11:45 UTC -- the keep table is ADOPTED; the value leaf is NOT
+- **Keep table ADOPTED** (`decks/NivMizzetCombo/NivMizzetCombo.keepmodel.exhaustive.*`, fast R30, K=16, gen d1
+  b1; 18.4 h, 5.09M rollouts on `cd4048e7e`). VALIDATION PASSED: keep -0.1528t (t -11.7, 4/4 seeds),
+  confounded bottoming -0.0693t (t -8.5, 4/4). The overnight rows were first resized to Hinata's shape (4x400 b10
+  / 4x300 b20 / 2hg 4x100) and accepted table-ABSENT (every pre-existing game identical). Adoption, overnight
+  tier: searched d3 -0.050, d5 -0.040, 2hg +0.003 (flat), d0 about -0.15; every regression row faster. The overnight
+  tier's Niv cost fell from 4m45s to 1m8s of makespan. keep_adoption_attribution explains every changed game but
+  one per deck key, and that one is the no-table side's bottoming rollouts leaving memo entries behind
+  (`docs/design/bottoming-rollout-cache-carry.md`, OPEN).
+- **Value leaf: NOT adopted** (`valueleaf.sh run`, 2026-10-23 23:07 -> 10-24 10:12 UTC, on `cd4048e7e` with the
+  keep table live). Phase E vs live play (8 seeds x 1000 paired games, d5 b20): staged leaf +0.0035t at 1.99x units
+  (rejected: worse and dearer); leafless escalation (NLESC) -0.0115t (t -6.2, 8/0 seeds) at 1.54x; leafless fitted
+  (NLFIT) -0.0080t (t -2.6) at 1.56x; emulated ladder (EMUL) -0.0108t (t -13.1, 8/0) at 1.29x. All three gains are
+  TRADES, so the USER decides (the agent's recommendation: stay leafless this week; EMUL is the best trade if
+  wanted). Artifacts: the niv-mullgen worktree's `logs/vlq_nivmizzetcombo/` (DECISIONS.txt has the copy commands).
+  Phase C matrix: H5 4.3913 at 26.3 s/game vs V7 4.3913 at 24.0 s; trust depth UNSET (V5 gap +0.0057
+  inconclusive).
+
 ## STATUS 2026-10-23 ~03:45 UTC -- supersedes the 10-18 hand-off below where they differ
 - **In the regression suite** since 2026-10-22 (`9cb575dbd`, all three tiers, GT `01172bba8`); buckets K19 -> 16
   (USER: "somewhat reasonable"). The unbudgeted backstop block is still owed (item 5 below).
@@ -493,5 +511,12 @@ WhiteKnights signature on Silverblade's payload (`9c9adecaa`).
   entirely, but the suite gate comes before the keep table. NOT taken.
 - **Q16 (the 25x overrun ceiling is global).** 45-99% of Niv's units sit in passes that ran to it and
   were thrown away. A settings question across every deck; no change proposed yet.
+- **Q17 (value leaf, 2026-10-24 -- a cost/quality TRADE, the user's).** No candidate is cheaper than live
+  play, so none was adopted: EMUL -0.0108t at 1.29x units (8/0 seeds), NLESC -0.0115t at 1.54x, NLFIT
+  -0.0080t at 1.56x; the staged leaf itself is worse (+0.0035t) at 1.99x. Agent default: stay leafless (USER
+  10-23: no compute budget this week); EMUL if the gain is wanted (copy command in the run's DECISIONS.txt,
+  then re-run `valueleaf.sh run` for E.7 / E.7b / E.6).
+- **Q15 is moot since the keep-table adoption (2026-10-24):** the table replaces the bottom-eval rollouts
+  for every tabled hand, so the setting no longer matters for Niv.
 
 ## Approved deferrals
