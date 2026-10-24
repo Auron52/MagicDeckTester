@@ -1216,6 +1216,82 @@ tier from 03:15, so the wall clock is no speed reading).
 -0.019, 2 Cubs -0.022, 1 Cub -0.008). **S_k2w2 = U0 + 4 Scythecat Cub for 2 Khalni Heart Expedition + 2 Genesis Wave
 is the best list: -1.05 t against the shipped list.**
 
+### hl1 — the Harrow family and the budget ladder (`logs/landfall_screen/hl1.json`, seed 9900000, 20,000 paired games)
+
+USER 2026-10-24: *"It might be worth looking at the best option at each budget and listing those in our final report,
+since the user will need to decide on what they want to go with for now and potentially fill it in more later. Also, we
+should look at how cards like Harrow perform."* Four new cards (commit 743586a37): **Harrow** ($0.34; {2}{G} instant,
+sacrifice a land: two basics UNTAPPED), **Explosive Vegetation** ($0.28; {3}{G}: two basics tapped), **Skyshroud Claim**
+($0.88; {3}{G}: two Forests untapped), **Nature's Lore** ($2.15; {1}{G}: a Forest untapped). Roiling Regrowth (Harrow
+with tapped lands, same price) is dominated and was not built. One pooled batch of 31 arms + the shipped list, no keep
+table, pin 743586a: 640,000 games 04:20-10:08 UTC (5 h 48 min; the shipped list and the low-Hydra rungs are the cost --
+the shipped arm alone was 48,174 core-s against S0's 7,034). "Threats" = creatures other than Courser of Kruphix;
+backup odds = P(>=2 threats by T4/T5/T6 on the draw), P(>=3 by T6): 16 threats 86.2/89.7/92.5%, 74.7%; 17 threats
+88.8/91.9/94.2%, 79.1% (18-24 in the sections above).
+
+**h1 -- the Harrow family in the best list (S0 = U0 + 4 Scythecat Cub for 2 Khalni + 2 Genesis Wave) and in U0:**
+
+| arm | change | vs its list | se | t | vs shipped | T7+ | buy |
+|---|---|---|---|---|---|---|---|
+| **S_hCU2** | S0 + 2 Harrow for 2 Cultivate | **-0.0458** | 0.0016 | -27.9 | **-1.096** | 1.46% | $0.68 |
+| **S_hK2** | S0 + 2 Harrow for the 2 Khalni | **-0.0416** | 0.0030 | -13.8 | -1.091 | 1.32% | $0.68 |
+| S_nRG4 | S0 + 4 Nature's Lore for 4 Rampant Growth | -0.0255 | 0.0013 | -19.6 | -1.075 | 1.49% | $8.60 |
+| S_hRG4 | S0 + 4 Harrow for 4 Rampant Growth | -0.0206 | 0.0043 | -4.8 | -1.070 | 2.23% | $1.36 |
+| S_hRG2 | S0 + 2 Harrow for 2 Rampant Growth | -0.0185 | 0.0028 | -6.5 | -1.068 | 1.71% | $0.68 |
+| S_sCU2 | S0 + 2 Skyshroud Claim for 2 Cultivate | -0.0154 | 0.0015 | -10.5 | -1.065 | 1.55% | $1.76 |
+| S_eK2 / S_eCU2 | S0 + 2 Explosive Vegetation for 2 Khalni / 2 Cultivate | -0.0003 / +0.0008 | 0.003 / 0.001 | | -1.050 | 1.35 / 1.61% | $0.56 |
+| S_hF2 | S0 + 2 Harrow for 2 Forest | +0.0061 | 0.0031 | +2.0 | -1.044 | 2.07% | $0.68 |
+| S_hST4 | S0 + 4 Harrow for 4 Search for Tomorrow | +0.0115 | 0.0024 | +4.8 | -1.038 | 1.78% | $1.36 |
+| S_nST4 | S0 + 4 Nature's Lore for 4 Search for Tomorrow | +0.0208 | 0.0033 | +6.3 | -1.029 | 1.46% | $8.60 |
+| U_nRG4 | U0 + 4 Nature's Lore for 4 Rampant Growth | -0.0205 | 0.0013 | -15.2 | -0.793 | 2.89% | $8.60 |
+| U_hK4 | U0 + 4 Harrow for 4 Khalni | -0.0150 | 0.0052 | -2.9 | -0.787 | 3.04% | $1.36 |
+| U_hRG4 | U0 + 4 Harrow for 4 Rampant Growth | **+0.0413** | 0.0052 | +8.0 | -0.731 | 4.69% | $1.36 |
+| L_hRG4 | SHIPPED + 4 Harrow for 4 Rampant Growth | **+0.0604** | 0.0045 | +13.3 | +0.060 | 12.26% | $1.36 |
+
+* **Harrow is the best of the four, in the RIGHT slot: the other three-mana land search.** 2 Harrow for 2 Cultivate
+  (-0.046) or for the last 2 Khalni (-0.042) beside four Cubs, for $0.68. A spot-checked game (S_hCU2 gi 2, T5 -> T4)
+  shows the mechanism: T4 land, Rampant Growth, then Harrow sacrificing a land already tapped for its mana -- four
+  landfalls on a turn-3 Mossborn Hydra, 2 -> 32, lethal a turn early. 1,015 games faster, 100 slower.
+* **Harrow for a TWO-mana ramp spell depends on the list.** Beside four Cubs it gains a little (4 for Rampant Growth
+  -0.021, with a fatter slow tail); in U0 it loses (+0.041) and in the shipped list it loses badly (+0.060, T7+ 8.4% ->
+  12.3%) -- those lists' turn-2 play IS Rampant Growth, and Harrow costs three. Search for Tomorrow ({G} suspend on
+  turn 1) is never the slot.
+* **Nature's Lore (an untapped Rampant Growth that finds only Forests) is a steady small gain** (-0.026 / -0.021 for
+  four), but at $8.60 a set. Skyshroud Claim is a smaller Harrow (-0.015); Explosive Vegetation is neutral; Harrow
+  never replaces a land.
+* hl2 measures the Harrow packages, with Nature's Lore and Moraug, at each budget rung on held-out seeds.
+
+**The budget ladder (from the SHIPPED list; buy = the cards to add at the cheapest printing):**
+
+| rung | change from the shipped list | threats | vs shipped | se | T7+ | buy |
+|---|---|---|---|---|---|---|
+| shipped | -- | 16 | -- | -- | 8.43% | $0 |
+| L_m2w | 2 Moraug for 2 Genesis Wave | 18 | -0.135 | 0.003 | 6.88% | $3.86 |
+| **L_h1b** | 1 Mossborn Hydra for 1 Rampaging Baloths | 16 | **-0.262** | 0.004 | 6.22% | $13.72 |
+| L_h1c | 1 Hydra for 1 Courser | 17 | -0.252 | 0.004 | 6.50% | $13.72 |
+| L_c1w | 1 Scythecat Cub for 1 Genesis Wave | 17 | -0.161 | 0.003 | 6.37% | $27.48 |
+| **L_h2b** | 2 Hydra for 2 Baloths | 16 | **-0.473** | 0.005 | 4.62% | $27.44 |
+| L_h2m / L_h2c | 2 Hydra for 1 Baloths + 1 Courser / 2 Courser | 17 / 18 | -0.466 / -0.457 | 0.005 | 4.90 / 5.02% | $27.44 |
+| **L_h3b** | 3 Hydra for 2 Baloths + 1 Courser | 17 | **-0.637** | 0.005 | 3.71% | $41.16 |
+| L_h3c | 3 Hydra for 2 Courser + 1 Baloths | 18 | -0.632 | 0.005 | 3.82% | $41.16 |
+| L_h2c1 | 2 Hydra for 2 Baloths + 1 Cub for 1 Wave | 17 | -0.573 | 0.005 | 3.62% | $54.92 |
+| L_c2w | 2 Cub for 2 Genesis Wave | 18 | -0.314 | 0.004 | 5.04% | $54.96 |
+| **U0** | 4 Hydra for 2 Courser + 2 Baloths | 18 | **-0.772** | 0.006 | 2.94% | $54.88 |
+| **L_u0c1** | U0 + 1 Cub for 1 Genesis Wave | 19 | **-0.840** | 0.006 | 2.42% | $82.36 |
+| **L_u0c2** | U0 + 2 Cub for 2 Genesis Wave | 20 | **-0.912** | 0.006 | 2.14% | $109.84 |
+| **L_c3** | U0 + 3 Cub for 2 Wave + 1 Khalni | 21 | **-0.978** | 0.006 | 1.77% | $137.32 |
+| **S0** | U0 + 4 Cub for 2 Wave + 2 Khalni | 22 | **-1.050** | 0.006 | 1.52% | $164.80 |
+
+* **Hydras first, all four, then Cubs.** Each Hydra is worth -0.13 to -0.26 for $13.72; each Cub -0.07 for $27.48.
+  At every price point the Hydra rung beats the Cub alternative (1 Cub -0.161 against 2 Hydra -0.473 for the same
+  $27; 2 Cubs -0.314 against 4 Hydra -0.772 for the same $55; 2 Hydra + 1 Cub -0.573 against 3 Hydra -0.637).
+* **Cut Baloths before Courser** (-0.262 / -0.252 for one Hydra, -0.473 / -0.457 for two) -- a small margin; the
+  Courser-first rungs keep one more threat.
+* **The rungs are incremental**: every step only ADDS cards to the previous one (Hydras into Baloths' then Courser's
+  slots, then Cubs into the Waves' and then the Khalnis' slots), so the owner can stop at any rung and fill in later.
+* **Moraug is the cheap $4 step at the bottom** (-0.135 on the shipped list, against -0.024 once four Hydras are in
+  and nothing beside Cubs): it is the best thing $4 buys, but the Cub rungs later take the Waves' slots it occupies.
+
 ## Where the screen stands (2026-10-23, end of the new-card rounds)
 
 * **Best list: K0 = U0 + 4 Scythecat Cub for the 4 Khalni Heart Expeditions** -- -1.03 t against the shipped list on
