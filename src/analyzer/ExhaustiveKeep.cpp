@@ -960,6 +960,70 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
                         << " fingerprint MISMATCH -- re-discovering\n" << std::flush; }
         }
     }
+    // INCUMBENT BUCKETS (MTG_KEEP_BUCKETS_FROM=<keep table .json>, USER 2026-10-24: "we could actually
+    // save the bucketing used"). A REGENERATION re-uses the bucketing of the table it replaces instead of
+    // re-discovering it: discovery is a clustering of integer win-turn deltas, so a play change that is
+    // irrelevant to the keep decision can still split or merge a borderline pair (Mirrorwing 2026-10-24:
+    // Game Trail + Rootbound Crag merged, K 16 -> 15, and the K check refused the run), and on a heavy
+    // deck it is also the slowest phase (Hinata2's ran 4+ h at play depth on 5 of 32 cores). Only the
+    // member lists are read -- nothing downstream of discovery reads a class signature. Accepted ONLY
+    // when the buckets partition this deck's distinct main-deck cards exactly and honour the bucket
+    // policy's keep_apart; anything else (a decklist edit, a new ruling) falls back to discovery, loudly.
+    if (!eq_loaded)
+    {
+        const char* bf = std::getenv("MTG_KEEP_BUCKETS_FROM");
+        if (bf && *bf)
+        {
+            std::set<std::string> deck_names;
+            for (const Card& c : deck.mainboard) { deck_names.insert(c.m_name.str()); }
+            std::string why;
+            EquivReport inc;
+            try
+            {
+                std::ifstream bfs(bf);
+                nlohmann::json bj; bfs >> bj;
+                const nlohmann::json& ek = bj.contains("exhaustive_keep") ? bj["exhaustive_keep"] : bj;
+                std::set<std::string> seen;
+                for (const auto& jb : ek.at("buckets"))
+                {
+                    EquivClass ec;
+                    ec.members = jb.get<std::vector<std::string>>();
+                    for (const std::string& m : ec.members)
+                    {
+                        if (!deck_names.count(m)) { why = "bucket card '" + m + "' is not in the deck"; }
+                        else if (!seen.insert(m).second) { why = "card '" + m + "' is in two buckets"; }
+                    }
+                    if (cfg.policy != nullptr)
+                        for (std::size_t a = 0; a < ec.members.size(); ++a)
+                            for (std::size_t b = a + 1; b < ec.members.size(); ++b)
+                                if (cfg.policy->MustKeepApart(ec.members[a], ec.members[b]))
+                                { why = "bucket joins keep_apart pair " + ec.members[a] + " / " + ec.members[b]; }
+                    inc.classes.push_back(std::move(ec));
+                }
+                if (why.empty() && seen.size() != deck_names.size())
+                {
+                    for (const std::string& n : deck_names)
+                        if (!seen.count(n)) { why = "deck card '" + n + "' is in no bucket"; break; }
+                }
+                if (why.empty() && inc.classes.empty()) { why = "no buckets"; }
+            }
+            catch (const std::exception& e) { why = std::string("unreadable: ") + e.what(); }
+            if (why.empty())
+            {
+                inc.probes         = cfg.probes;
+                inc.distinct_cards = static_cast<int>(deck_names.size());
+                eq = std::move(inc);
+                eq_loaded = true;
+                std::cerr << "[keepgen] equivalence discovery: INCUMBENT BUCKETS (" << eq.classes.size()
+                          << " buckets from " << bf << ", MTG_KEEP_BUCKETS_FROM) -- skipped\n" << std::flush;
+            }
+            else
+            {
+                std::cerr << "[keepgen] MTG_KEEP_BUCKETS_FROM " << bf << " REJECTED (" << why
+                          << ") -- re-discovering\n" << std::flush;
+            }
+        }
+    }
     if (!eq_loaded)
     {
         std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.equiv_depth
