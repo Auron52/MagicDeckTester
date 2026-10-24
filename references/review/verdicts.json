@@ -81,6 +81,22 @@
    "search_win": 3,
    "source": "handoff_T3.json",
    "verdict": "promoted"
+  },
+  "Auras/claude_s3_gi2.json": {
+   "at": "2026-10-24T11:32:03+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Auras/human_s3_gi2.json",
+   "human_win": 4,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 3,
+   "reference": "references/Auras/claude_s3_gi2.json",
+   "search_digest": "4ef3b6ad1d0352b7",
+   "search_win": 3,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
   }
  }
 }
