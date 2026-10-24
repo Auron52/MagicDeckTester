@@ -1,0 +1,11 @@
+{
+ "keep_apart": [
+  {
+   "cards": [
+    "Lightning Greaves",
+    "Pyroclasm"
+   ],
+   "why": "USER RULING 2026-10-24: 'Giants should have those split as well.' Discovery merged Lightning Greaves (equip {0}, haste + shroud) with Pyroclasm, which does nothing in a goldfish. Haste moves a whole win turn on too few of the 400 probes for the 0.01 threshold to see it, but Greaves is a live card and a sweeper is not. Same ruling as Angels."
+  }
+ ]
+}
