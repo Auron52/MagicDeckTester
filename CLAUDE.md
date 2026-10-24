@@ -289,10 +289,11 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   * **How.** In the same turn that launches the chain, create the timer with `CronCreate`: a
     recurring 2-hourly cron on an off-minute (e.g. `7 */2 * * *`), **`durable: false` (session-only) --
     NEVER `durable: true`** (USER 2026-10-24: *"We should not be creating them this way."*). A durable job
-    lives in the SHARED `.claude/scheduled_tasks.json`, so every session in this checkout loads it and
-    fires it, and a `CronDelete` removes it from the file but NOT from the other sessions that already
-    loaded it: the LFE mullgen timer kept firing in three sessions for hours after its run finished and
-    the job was deleted, with no way to remove it short of restarting each one. Durability buys nothing
+    lives in the SHARED `.claude/scheduled_tasks.json`, and every session in this checkout reads that file,
+    lists the job and FIRES it -- so one agent's timer lands in every other session, prompting each to
+    act on a run it does not own. 2026-10-23/24: the LFE mullgen timer fired in three sessions, and kept
+    arriving for hours after its run finished and the file entry was deleted (mechanism unconfirmed;
+    no session's CronList showed it any more, so nothing could cancel it). Durability buys nothing
     anyway: the harness-tracked run is a child of the session, so a closed session loses the run's
     waiter too. Its prompt names the OWNER session (so a stray copy is recognisably someone else's),
     the chain and where its status lives (log file, DONE/STOPPED markers, pid). On every fire, read that status. If the chain stopped, stalled, or left the box
