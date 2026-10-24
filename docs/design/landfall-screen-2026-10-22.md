@@ -1154,6 +1154,68 @@ Backup odds = P(>=2 threats by T4/T5/T6 on the draw), P(>=3 by T6); 21 creatures
 -0.063 / -0.140 / -0.225 / -0.312 for 1-4), and the Baloths arms lose more. K0_mw against K0 is -0.0035 here and
 +0.0005 in n2: Moraug beside four Cubs is within noise of nothing either way.
 
+### n3 — which slot the Cubs take (`logs/landfall_screen/n3.json`, seed 9700000, 20,000 paired games, HELD OUT)
+
+USER 2026-10-24: *"Is Khalni the best thing to replace for additional cubs?"* n1 / n2 had tried the Cubs only in the
+Khalni / Rampant Growth / Search for Tomorrow / Hydra slots and one Cub for a Forest. n3 adds the untested slots --
+Cultivate, Genesis Wave, a Forest at scale -- as 4-Cub mixes with Khalni and as 1- and 2-Cub budget arms in each slot.
+No keep table on any arm; pin a16b898; 360,000 games 00:01-01:47 UTC (1 h 47 min). **nss16** = its first 10,000 games
+with `MTG_NO_SEARCH_SHUFFLE=1` (Khalni and Cultivate shuffle, Genesis Wave and a Forest do not, so these arms differ in
+shuffle count), 01:47-02:48 UTC.
+
+| arm | Cubs replace | creatures | vs U0 | se | vs K0 | nss16 vs K0 | T7+ | buy |
+|---|---|---|---|---|---|---|---|---|
+| **S_k2w2** | **2 Khalni + 2 Genesis Wave** | 22 | **-0.2835** | 0.0045 | **-0.0202** (t -4.9) | **-0.0249** (t -3.9) | **1.50%** | $110 |
+| S_k3w1 | 3 Khalni + 1 Genesis Wave | 22 | -0.2734 | 0.0043 | -0.0101 | -0.0121 | 1.58% | $110 |
+| S_cu2w2 | 2 Cultivate + 2 Genesis Wave (4 Khalni kept) | 22 | -0.2699 | 0.0046 | -0.0066 | -0.0005 | 1.80% | $110 |
+| K0 | 4 Khalni | 22 | -0.2633 | 0.0042 | -- | -- | 1.64% | $110 |
+| S_k3cu1 | 3 Khalni + 1 Cultivate | 22 | -0.2605 | 0.0042 | +0.0029 | +0.0090 | 1.65% | $110 |
+| S_k2cu2 | 2 Khalni + 2 Cultivate | 22 | -0.2573 | 0.0044 | +0.0060 | +0.0147 | 1.77% | $110 |
+| S_k3f1 | 3 Khalni + 1 Forest | 22 | -0.2443 | 0.0046 | +0.0190 | +0.0221 | 1.83% | $110 |
+| S_k2f2 | 2 Khalni + 2 Forest | 22 | -0.2182 | 0.0049 | +0.0451 | +0.0570 | 2.23% | $110 |
+| **B2_w2** | **2 Genesis Wave** | 20 | **-0.1409** | 0.0035 | | | 2.09% | $55 |
+| B2_cu2 | 2 Cultivate | 20 | -0.1142 | 0.0034 | | | 2.54% | $55 |
+| K_c2 | 2 Khalni | 20 | -0.1139 | 0.0028 | | | 2.10% | $55 |
+| B2_f2 | 2 Forest | 20 | -0.0741 | 0.0042 | | | 2.91% | $55 |
+| **B1_w** | **1 Genesis Wave** | 19 | **-0.0657** | 0.0024 | | | 2.54% | $27 |
+| B1_cu | 1 Cultivate | 19 | -0.0531 | 0.0024 | | | 2.67% | $27 |
+| K_c1 | 1 Khalni | 19 | -0.0512 | 0.0018 | | | 2.48% | $27 |
+| B1_f | 1 Forest | 19 | -0.0345 | 0.0030 | | | 2.86% | $27 |
+| U0 | -- | 18 | -- | -- | | | 2.93% | -- |
+| shipped | | 16 | +0.7637 | 0.0054 | | | 8.20% | -- |
+
+* **Khalni is not the best first slot: Genesis Wave is, at every count.** The 2-Cub and 1-Cub arms rank Wave > Cultivate
+  ~= Khalni > Forest (2 Cubs: -0.141 / -0.114 / -0.114 / -0.074), and among the 4-Cub mixes each Wave cut is worth
+  ~0.010 more than a Khalni cut (1 Wave -0.010, 2 Waves -0.020 against K0). With both Waves gone the next two Cubs go to
+  Khalni (Khalni a little ahead of Cultivate: S_cu2w2 -0.007 against S_k2w2 -0.020). nss16 keeps the order (S_k2w2
+  -0.025 against K0) -- the Wave gain is not the clairvoyant shuffle.
+* **Never cut a land for a Cub** (each Forest cut costs ~0.02 beside four Cubs; 2 Cubs for 2 Forests keep only half of
+  the Wave arm's gain).
+* **What the measurement cannot see (USER):** Genesis Wave is the deck's recovery card after a board wipe, which a
+  goldfish never casts. The USER: *"it is not required to be in the list"*, *"If we have enough threats that may be
+  sufficient"* -- each Cub-for-Wave arm keeps the creature count of its Khalni twin (22 / 20 / 19).
+* S_k2w2 is a 17-arm winner (selection-biased); **n4** re-measures the Wave arms against their Khalni twins on disjoint
+  seeds.
+
+### n4 — the Wave slot, held out (`logs/landfall_screen/n4.json`, seed 9800000, 20,000 paired games)
+
+n3's Wave arms and their Khalni twins only, pin a16b898, 02:50-04:09 UTC (shared with a Release build and the smoke
+tier from 03:15, so the wall clock is no speed reading).
+
+| arm | Cubs replace | vs U0 | se | vs K0 | se | n3 vs K0 | T7+ |
+|---|---|---|---|---|---|---|---|
+| **S_k2w2** | 2 Khalni + 2 Genesis Wave | **-0.2875** | 0.0044 | **-0.0193** | 0.0041 | -0.0202 | 1.55% |
+| S_k3w1 | 3 Khalni + 1 Genesis Wave | -0.2807 | 0.0043 | -0.0125 | 0.0031 | -0.0101 | 1.54% |
+| S_cu2w2 | 2 Cultivate + 2 Genesis Wave | -0.2752 | 0.0046 | -0.0071 | 0.0053 | -0.0066 | 1.93% |
+| K0 | 4 Khalni | -0.2681 | 0.0042 | -- | -- | -- | 1.58% |
+| B2_w2 / K_c2 | 2 Genesis Wave / 2 Khalni | -0.1397 / -0.1181 | 0.003 | | | | 2.31% / 2.12% |
+| B1_w / K_c1 | 1 Genesis Wave / 1 Khalni | -0.0619 / -0.0537 | 0.002 | | | | 2.65% / 2.50% |
+| shipped | | +0.7638 | 0.0054 | | | | 8.73% |
+
+**Replicated.** Cubs in the Wave slots beat Cubs in the Khalni slots on held-out seeds by the same margins (4 Cubs
+-0.019, 2 Cubs -0.022, 1 Cub -0.008). **S_k2w2 = U0 + 4 Scythecat Cub for 2 Khalni Heart Expedition + 2 Genesis Wave
+is the best list: -1.05 t against the shipped list.**
+
 ## Where the screen stands (2026-10-23, end of the new-card rounds)
 
 * **Best list: K0 = U0 + 4 Scythecat Cub for the 4 Khalni Heart Expeditions** -- -1.03 t against the shipped list on
