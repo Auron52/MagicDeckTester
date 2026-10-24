@@ -26,6 +26,18 @@
    "search_win": 6,
    "verdict": "clairvoyance"
   },
+  "Anti-Lifegain/claude_s17_gi16.json": {
+   "at": "2026-10-24T11:20:43+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "search_digest": "04a5072b3834df82",
+   "search_win": 4,
+   "verdict": "clairvoyance"
+  },
   "Anti-Lifegain/claude_s2_gi1.json": {
    "at": "2026-10-24T10:53:58+00:00",
    "hint": "likely-clairvoyance",
