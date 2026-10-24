@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 629904633  date 2026-10-24
+# Regression ground truth -- commit 50f81d2b2  date 2026-10-24
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; smoke searched 54 faster / 30 slower, d0 217 / 144
 # accepted-with-regressions (regression, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; regression searched 79 faster / 46 slower, d0 205 / 157
@@ -961,18 +961,18 @@ niv_overnight_d0_s4004=6.2400/7e12e32298cb21d9
 niv_overnight_d0_s6006=6.2595/6a9f346e4086ac89
 niv_overnight_d0_s8008=6.2020/e1b502ad77289fff
 niv_overnight_d0_s10010=6.2470/152e3cb8c36fc505
-niv_overnight_d3_s4004=4.6600/63a9f6f0c5ea144c
-niv_overnight_d3_s5005=4.6320/b5ae63bd586f017e
-niv_overnight_d3_s6006=4.5560/69ad8ccd06e7fa3c
-niv_overnight_d3_s7007=4.5760/3ca9b112ea0c551f
-niv_overnight_d5_s4004=4.6200/2cba610d236bab74
-niv_overnight_d5_s5005=4.5467/56ee975792e2c3e3
-niv_overnight_d5_s6006=4.5200/d8dc15877675b2f1
-niv_overnight_d5_s7007=4.6267/9708971635765df4
-niv2hg_overnight_d5_s4004=4.6000/7bd475a099f3721b
-niv2hg_overnight_d5_s5005=4.5400/b3dc9abac0b6fd6d
-niv2hg_overnight_d5_s6006=4.5600/07c9e927bdd4b5a9
-niv2hg_overnight_d5_s7007=4.6800/97f496459a30fc27
+niv_overnight_d3_s4004=4.6700/7ad1664ca502dc61
+niv_overnight_d3_s5005=4.6250/34a9e44c10291b37
+niv_overnight_d3_s6006=4.5575/45533047221fef0f
+niv_overnight_d3_s7007=4.6125/4cac377c7b1fd6f3
+niv_overnight_d5_s4004=4.6867/754675b564b430ae
+niv_overnight_d5_s5005=4.5967/c8ec11e1acd3128c
+niv_overnight_d5_s6006=4.5133/97abb446808936e3
+niv_overnight_d5_s7007=4.5633/16849fc94fc8a26d
+niv2hg_overnight_d5_s4004=4.5700/c1fc6e0f0ee90611
+niv2hg_overnight_d5_s5005=4.5800/d40ef6761f460706
+niv2hg_overnight_d5_s6006=4.5200/88e0b21782a7f17f
+niv2hg_overnight_d5_s7007=4.6200/31532e619465028e
 colossus_overnight_d0_s4004=4.3635/e3789421e6d183e4
 colossus_overnight_d0_s6006=4.3820/fe58fbd7e62e11a4
 colossus_overnight_d0_s8008=4.4325/ff17112d76d792a4
