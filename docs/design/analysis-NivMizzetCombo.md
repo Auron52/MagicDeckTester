@@ -48,6 +48,12 @@ generic).
   wanted). Artifacts: the niv-mullgen worktree's `logs/vlq_nivmizzetcombo/` (DECISIONS.txt has the copy commands).
   Phase C matrix: H5 4.3913 at 26.3 s/game vs V7 4.3913 at 24.0 s; trust depth UNSET (V5 gap +0.0057
   inconclusive).
+- **Why every leafless shape measured dearer than the rollout ladder, PARKED (USER 2026-10-24):**
+  `docs/design/niv-rollout-ladder-vs-leafless-shapes.md`. USER: the rollout ladder should be replaceable by a
+  leafless shape up to the final rollout. Measured on Niv: earlier rollout passes are 13.9% of the ladder's
+  units; the built variants (emulated ladder, NLESC, NLFIT, reserved single pass) all cost 1.01-1.59x. That doc
+  gives the root causes and the proposal (A: a frozen-R leafless-warm-up shape that cannot lose to the ladder;
+  B: cut the final pass, the put-back dedup).
 
 ## STATUS 2026-10-23 ~03:45 UTC -- supersedes the 10-18 hand-off below where they differ
 - **In the regression suite** since 2026-10-22 (`9cb575dbd`, all three tiers, GT `01172bba8`); buckets K19 -> 16
