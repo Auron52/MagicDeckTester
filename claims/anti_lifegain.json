@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "a05761aa2dc5aa06b1e39821425f2a72d82ed9a4",
+  "valueleaf": "em:41ed117cf72bdf079d5f"
+ },
+ "deck": "anti_lifegain",
+ "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
+ "heartbeat": "2026-10-24T20:10:05Z",
+ "host": "8854e545ddab",
+ "run_id": "anti_lifegain-MagicDeckTester2-76d2cc-20261024T201005",
+ "score": 0.9852,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-24T20:10:05Z",
+ "state": "running",
+ "worker": "MagicDeckTester2-76d2cc"
+}
