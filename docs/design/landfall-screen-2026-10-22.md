@@ -1292,13 +1292,88 @@ backup odds = P(>=2 threats by T4/T5/T6 on the draw), P(>=3 by T6): 16 threats 8
 * **Moraug is the cheap $4 step at the bottom** (-0.135 on the shipped list, against -0.024 once four Hydras are in
   and nothing beside Cubs): it is the best thing $4 buys, but the Cub rungs later take the Waves' slots it occupies.
 
-## Where the screen stands (2026-10-23, end of the new-card rounds)
+### hl2 -- the cheap packages at every budget rung (`logs/landfall_screen/hl2.json`, seed 10000000, 20,000 paired games, HELD OUT)
 
-* **Best list: K0 = U0 + 4 Scythecat Cub for the 4 Khalni Heart Expeditions** -- -1.03 t against the shipped list on
-  held-out seeds (bracket -0.263 / -0.312 against U0 with / without the search shuffle), 22 creatures, slow tail
-  halved. Cost over U0: $110 (U0 itself is 4 Mossborn Hydra over the shipped list, $55).
-* **Budget versions**: the Cub ladder is near-linear, so 1-3 Cubs in the Khalni slot keep 18% / 43% / 72% of it.
-* **No:** Scute Swarm (loses everywhere), Rampaging Baloths as the cheap threat (loses everywhere), Moraug beside
-  Cubs (nothing). **Small yes without Cubs:** 2 Moraug for 2 Genesis Wave (-0.024 / -0.039, $4).
+hl1 priced the rungs and the Harrow family separately; hl2 puts the cheap packages ON each rung, on seeds neither
+earlier round used. Rungs: the shipped list (R0), R2 (2 Mossborn Hydra for 2 Rampaging Baloths), U0 (4 Hydra for 2
+Baloths + 2 Courser), R6 (U0 + 2 Scythecat Cub for 2 Genesis Wave), S0 (U0 + 4 Cub for 2 Wave + 2 Khalni). Packages:
+**P1** = 2 Harrow for 2 Cultivate; **P3** = P1 + 2 Harrow for 2 Khalni Heart Expedition; **P4** = P3 + 4 Nature's Lore
+for 4 Rampant Growth; **M** = 2 Moraug, Fury of Akoum for 2 Genesis Wave (only where the Waves are still in); **MP3** =
+M + P3. One pooled batch of 26 arms, no keep table, pin 743586a: 520,000 games 10:08-15:56 UTC (5 h 48 min). Every
+swap trades one search-and-shuffle for another, or touches no shuffle at all (Wave, Moraug, Cub), so the shuffle count
+is unchanged and no no-search-shuffle bracket was run (the n-round rule).
+
+**The rungs replicate hl1 on the new seeds** (vs shipped): R2 -0.474 (hl1 -0.473), U0 -0.769 (-0.772), R6 -0.908
+(-0.912), S0 -1.057 (-1.050).
+
+**Each package, against the rung it sits on** (se 0.002-0.006 throughout; t from -3.6 to -29):
+
+| rung | threats | P1 ($0.68) | P3 ($1.36) | P4 ($9.96) | M ($3.86) | MP3 ($5.22) |
+|---|---|---|---|---|---|---|
+| R0 (shipped) | 16 | -0.017 | -0.014 | -0.044 | **-0.142** | **-0.161** |
+| R2 | 16 | -0.041 | -0.053 | -0.076 | -0.068 | **-0.123** |
+| U0 | 18 | -0.058 | -0.075 | -0.093 | -0.025 | **-0.106** |
+| R6 | 20 | -0.053 | -0.089 | **-0.110** | -- | -- |
+| S0 | 22 | -0.042 | -0.077 | **-0.098** | -- | -- |
+
+* **2 Harrow for 2 Cultivate gains on every rung** (-0.017 shipped, -0.04 to -0.06 with Hydras), replicating hl1's
+  -0.046 beside four Cubs. On the Cub-less rungs it fattens the slow tail a hair (T7+ 8.79% -> 9.27% shipped, 4.98% ->
+  5.12% on R2) while speeding the average.
+* **The second Harrow pair (for 2 Khalni) grows with the threat count**: +0.004 on the shipped list (nothing), -0.012
+  on R2, -0.017 on U0, -0.036 on R6 and S0. Four Harrows are right once Hydras are in.
+* **Nature's Lore for Rampant Growth is a steady -0.018 to -0.031 on every rung**, for $8.60 a set.
+* **Moraug's two slots are worth a lot only while the list is short of threats**: -0.142 on the shipped list, -0.068
+  on R2, -0.025 on U0 (hl1: -0.135 / -0.024). On U0, M + P3 (-0.106) still beats P4 (-0.093) for half the price.
+
+## FINAL BUDGET LADDER (2026-10-24)
+
+The owner keeps every card the shipped list already holds; "buy" is the new cards only, at the cheapest printing
+(Scryfall, fetched 2026-10-24: Scythecat Cub $27.48, Mossborn Hydra $13.72, Nature's Lore $2.15, Moraug $1.93, Harrow
+$0.34). Every step ADDS to the one above, so the owner can stop on any row and fill in later. Measured rows are hl2
+(held out, vs shipped); the two rows marked "est." were not played. Backup odds = P(at least 2 threats by T4 / T5 / T6
+on the draw), and P(at least 3 by T6); "threats" = creatures other than Courser of Kruphix.
+
+| step | buy | total spent | list | threats | vs shipped | T7+ | backup T4 / T5 / T6, 3 by T6 |
+|---|---|---|---|---|---|---|---|
+| 0 | -- | $0 | shipped | 16 | -- | 8.79% | 86.2 / 89.7 / 92.5, 74.7 |
+| 1 | 2 Harrow for 2 Cultivate | $0.68 | R0_P1 | 16 | -0.017 | 9.27% | 86.2 / 89.7 / 92.5, 74.7 |
+| 2 | 2 Moraug for 2 Genesis Wave, 2 Harrow for 2 Khalni | $5.22 | **R0_MP3** | 18 | **-0.161** | 6.96% | 91.0 / 93.7 / 95.7, 83.0 |
+| 3 | 1 Mossborn Hydra for 1 Rampaging Baloths | $18.94 | R0_MP3 + 1 Hydra | 18 | est. -0.4 | -- | 91.0 / 93.7 / 95.7, 83.0 |
+| 4 | 1 Hydra for the other Baloths | $32.66 | **R2_MP3** | 18 | **-0.597** | 4.01% | 91.0 / 93.7 / 95.7, 83.0 |
+| 5 | 2 Hydra for 2 Courser of Kruphix | $60.10 | **U0_MP3** | 20 | **-0.875** | 2.91% | 94.4 / 96.3 / 97.6, 89.1 |
+| 6 | 4 Nature's Lore for 4 Rampant Growth | $68.70 | U0_MP3 + NL | 20 | est. -0.89 | -- | 94.4 / 96.3 / 97.6, 89.1 |
+| 7 | 2 Scythecat Cub for the 2 Moraug | $123.66 | **R6_P4** | 20 | **-1.018** | 1.81% | 94.4 / 96.3 / 97.6, 89.1 |
+| 8 | 2 Cub for the last 2 Khalni | $178.62 | **S0_P4** | 22 | **-1.155** | 1.45% | 96.6 / 97.9 / 98.7, 93.4 |
+
+* **The best list overall is S0_P4**: the shipped list with 4 Hydra (for 2 Baloths + 2 Courser), 4 Cub (for 2 Wave + 2
+  Khalni), 4 Harrow (for 2 Cultivate + the last 2 Khalni) and 4 Nature's Lore (for 4 Rampant Growth). It is -1.155
+  turns against the shipped list, and the slow tail (T7+) falls from 8.8% to 1.45%. Buying it directly, without
+  the Moraugs, costs $174.76.
+* **Why this order**: turns per dollar. Moraug + Harrow on the shipped list is 0.031 turns/$, the first two Hydras
+  0.015-0.019, the last two 0.010, Nature's Lore 0.002-0.004, a Cub 0.0025. Rows 3 and 6 are estimates: the first
+  Hydra was worth more than the second in hl1 (-0.262 / -0.211), which puts row 3 near -0.4 between rows 2 and 4; and
+  Nature's Lore added -0.018 to -0.023 on every Hydra rung, which puts row 6 near -0.89.
+* **The Moraugs are a stopgap.** They are the best $4 on the shipped list, but at step 7 the Cubs take their slots
+  (the Wave slots) and $3.86 of cards goes to the bench. An owner who already knows they will reach the Cubs can skip
+  them; the Hydras are needed anyway.
+* **If the owner wants to keep Genesis Wave** (USER: it is a strong card after a board wipe, and a goldfish never sees
+  one, so that value is UNMEASURED here): the best measured list with both Waves at each spend is R0_P4 ($9.96,
+  -0.044), R2_P4 ($37.40, -0.550), U0_P4 ($64.84, -0.862), and then Cubs into the four Khalni slots (K0, n3: +0.019
+  behind S0; not played with the Harrow packages). Keeping the Waves costs 0.07-0.15 turns on the cheap rungs, where
+  Moraug would take their slots; from U0 up it costs only about 0.01-0.03.
+
+## Where the screen stands (2026-10-24, final)
+
+* **Recommendation: buy along the FINAL BUDGET LADDER above and stop wherever the budget does.** Cheapest real step:
+  $5.22 (2 Moraug + 4 Harrow, -0.161). The big step: the four Hydras ($54.88, -0.77 alone). Top: S0_P4 (-1.155,
+  $174.76 without the Moraugs).
+* **No:** Scute Swarm (loses everywhere), Rampaging Baloths as the cheap threat, Explosive Vegetation (neutral),
+  Skyshroud Claim (a smaller Harrow), Harrow for a land, for Search for Tomorrow, or for Rampant Growth on a Cub-less
+  list (+0.04 to +0.06), Moraug beside Cubs (nothing).
 * **Kessig Wolf Run:** neutral to a small gain in Fountain's or a Mountain's slot (blocker value unmeasured).
-* Adoption (USER decision): mulligan keep table on the adopted list, then its value leaf.
+* **Caveats:** no arm had a keep table (every arm shares the default mulligan, which is the fair comparison but not
+  the deck's final play); Genesis Wave's post-wipe value and Wolf Run's blocker value are unmeasured; the new cards'
+  PROVISIONAL rules (Harrow's instant timing played as a main-phase cast, cast tiers, the discard and Khalni counts)
+  are listed in the report and await the USER.
+* **Adoption (USER decision):** which rung to ship. Then the mulligan keep table on that list (`mullgen.sh run`), then
+  its value leaf; the old list is archived as `decks/Landfall/v<N>-<slug>/` with its references.
