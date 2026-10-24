@@ -1921,10 +1921,10 @@ bool DecisionProvider::LandSearchPickOrderKey(const GameState& s, int controller
 }
 
 void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
-                                           bool basic_only, bool share_land_type,
+                                           bool basic_only, bool share_land_type, std::uint16_t subtype,
                                            std::vector<std::vector<std::string>>& picks) const
 {
-    (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
+    (void)count; (void)to_hand; (void)basic_only; (void)share_land_type; (void)subtype;
     if (picks.size() < 2) { return; }
     // Colours we NEED (a coloured pip on a nonland card in hand) and LACK (no permanent we control
     // produces it) -- LandSearchLackMask, shared with the memo key above.
@@ -2457,11 +2457,14 @@ bool LandfallProvider::LandSearchPickOrderKey(const GameState& s, int controller
 }
 
 void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
-                                           bool basic_only, bool share_land_type,
+                                           bool basic_only, bool share_land_type, std::uint16_t subtype,
                                            std::vector<std::vector<std::string>>& picks) const
 {
-    DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, picks);
-    if (!basic_only)
+    DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, subtype,
+                                          picks);
+    // Primeval Titan's ANY-land search: neither basic-only nor a "<Subtype> card" filter (Nature's Lore's
+    // "Forest card" may find a basic Forest, so it takes the colour rule below, not Titan's).
+    if (!basic_only && subtype == SubtypeRegistry::kNone)
     {
         // Titan: the rule's picks to the front, and within each part the picks holding a basic LAST
         // ("never search for a basic" -- the autonomous list has none; this keeps a basic off the human
@@ -2505,20 +2508,22 @@ void LandfallProvider::LandSearchPickOrder(const GameState& s, int controller, i
 }
 
 bool LandfallProvider::LandSearchAdmitsLand(const GameState& s, int controller, int count, int to_hand,
-                                            bool basic_only, bool share_land_type, const CardDefinition& land) const
+                                            bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                            const CardDefinition& land) const
 {
     (void)s; (void)controller; (void)count; (void)to_hand; (void)share_land_type;
     // USER 2026-10-16: "Primeval Titan must never search for a basic in my opinion." -- "basics are a
     // resource in the deck. You don't want to waste them when being able to choose any land." Titan's
-    // is this list's only any-land search; a basic search admits its basics, of course.
-    return basic_only || !IsBasicLandCard(land);
+    // is this list's only any-land search; a basic search admits its basics, of course, and so does a
+    // "Forest card" search (Nature's Lore, Skyshroud Claim), which is not an any-land search.
+    return basic_only || subtype != SubtypeRegistry::kNone || !IsBasicLandCard(land);
 }
 
 int LandfallProvider::LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
-                                          bool basic_only, bool share_land_type,
+                                          bool basic_only, bool share_land_type, std::uint16_t subtype,
                                           const std::vector<std::vector<std::string>>& picks) const
 {
-    if (!basic_only)
+    if (!basic_only && subtype == SubtypeRegistry::kNone)   // Titan's any-land search (see the order)
     {
         // Titan: keep the rule's picks -- LandSearchPickOrder put them first, so they are a prefix (with
         // MTG_LANDFALL_TITAN_MIXED the amendment's extras follow them, still a prefix); a list the rule
@@ -3742,7 +3747,10 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
     for (int i : ramp)
     {
         const CardDefinition* d = def_of(ap.hand[i]);
-        const bool suspend = early && d->params.land_search_to_hand == 0 && LandSearchPutsUntapped(*d);
+        // The {G} suspend price is Search for Tomorrow's own (suspend_time_counters), not every untapped
+        // land search's -- Harrow / Nature's Lore have none.
+        const bool suspend = early && d->params.land_search_to_hand == 0 && LandSearchPutsUntapped(*d)
+                          && d->params.suspend_time_counters > 0;
         ramp_fac[static_cast<std::size_t>(i)] = discard_dist::CastFactorFor(census, *d, hand_drops, suspend ? 1 : -1);
     }
     std::stable_sort(ramp.begin(), ramp.end(), [&](int a, int b)
@@ -3817,7 +3825,10 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
         for (int i : keep)
         {
             const CardDefinition* d = def_of(ap.hand[i]);
-            if (d != nullptr && !d->card.IsLand() && d->params.land_search_on_resolve) { ++landfalls; }
+            // One landfall per land the spell puts onto the battlefield: 1 for Rampant Growth, Search for
+            // Tomorrow and Cultivate (its other basic goes to hand), 2 for Harrow / Explosive Vegetation.
+            if (d != nullptr && !d->card.IsLand() && d->params.land_search_on_resolve)
+            { landfalls += std::max(1, d->params.land_search_count - d->params.land_search_to_hand); }
         }
         for (const Permanent& perm : s.battlefield)
         {
@@ -30496,10 +30507,11 @@ bool LandfallElementalsProvider::LandSearchPickOrderKey(const GameState& s, int 
 }
 
 void LandfallElementalsProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
-                                                     bool basic_only, bool share_land_type,
+                                                     bool basic_only, bool share_land_type, std::uint16_t subtype,
                                                      std::vector<std::vector<std::string>>& picks) const
 {
-    DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, picks);
+    DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, subtype,
+                                          picks);
     if (!LfeFetchOrderOn() || !basic_only || picks.size() < 2) { return; }
     const int i = LfeRulePickIndex(ReadLfeSources(s, controller), share_land_type, picks);
     if (i <= 0) { return; }
@@ -30507,10 +30519,10 @@ void LandfallElementalsProvider::LandSearchPickOrder(const GameState& s, int con
 }
 
 int LandfallElementalsProvider::LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
-                                                    bool basic_only, bool share_land_type,
+                                                    bool basic_only, bool share_land_type, std::uint16_t subtype,
                                                     const std::vector<std::vector<std::string>>& picks) const
 {
-    (void)count; (void)to_hand;
+    (void)count; (void)to_hand; (void)subtype;
     const int full = static_cast<int>(picks.size());
     if (!LfeFetchOrderOn() || !basic_only || picks.size() < 2) { return full; }
     // Prune to the rule's pick only when it IS the front (LandSearchPickOrder put it there).

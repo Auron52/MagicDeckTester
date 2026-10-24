@@ -18,6 +18,10 @@
 //   Myriad Landscape           2 basic sharing a land type, tapped     {2},{T}, sac: SacLandSearch
 //   Khalni Heart Expedition    2 basic, tapped                         3 quest ctrs + sac: QuestSac...
 //   Primeval Titan             2 ANY lands, tapped, optional           ETB + attack trigger
+//   Harrow                     2 basic, untapped (+ sacrifice a land)  spell resolution (the cost is paid first)
+//   Explosive Vegetation       2 basic, tapped                         spell resolution
+//   Nature's Lore              1 Forest card, untapped                 spell resolution
+//   Skyshroud Claim            2 Forest cards, untapped                spell resolution
 //
 // WHY NOT the fetchland collapse (fetch_land_types / PerformFetch): the fetchland never enters the
 // battlefield (so its own landfall and the hold line vanish), pays 1 life, filters by SUBTYPE and
@@ -79,6 +83,8 @@ inline bool LandSearchLegal(const CardDefinition* d, const LandSearchSpec& spec)
 {
     if (d == nullptr || !d->card.IsLand()) { return false; }
     if (spec.basic_only && !IsBasicLandCard(*d)) { return false; }
+    // "a Forest card": the land subtype off the definition (a basic Forest, a Stomping Ground).
+    if (spec.subtype != SubtypeRegistry::kNone && !d->card.m_subtypes.HasId(spec.subtype)) { return false; }
     return true;
 }
 
@@ -163,7 +169,7 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         cls.erase(std::remove_if(cls.begin(), cls.end(), [&](const LandSearchClass& k)
                   { return k.def == nullptr
                         || !prov.LandSearchAdmitsLand(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
-                                                      spec.share_land_type, *k.def); }),
+                                                      spec.share_land_type, spec.subtype, *k.def); }),
                   cls.end());
     }
     const int n = static_cast<int>(cls.size());
@@ -242,12 +248,13 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         }
         for (auto& v : splits) { out.push_back(std::move(v)); }
     }
-    prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type, out);
+    prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
+                             spec.subtype, out);
     // The provider's NARROWING (LandSearchPickWidth): autonomous play only; see LandSearchPickPruned.
     if (LandSearchPickPruned())
     {
         const int w = prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
-                                               spec.share_land_type, out);
+                                               spec.share_land_type, spec.subtype, out);
         if (w >= 1 && w < static_cast<int>(out.size())) { out.resize(static_cast<std::size_t>(w)); }
     }
     return out;
@@ -260,7 +267,7 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
 // LandSearchPicks 20.2% of the game's samples (inclusive), PerformLandSearch 37.3%.
 //
 // EXACT, so play is BYTE-IDENTICAL. The result is a pure function of
-//   (a) spec.count / basic_only / share_land_type / to_hand (tapped / optional never enter it);
+//   (a) spec.count / basic_only / share_land_type / to_hand / subtype (tapped / optional never enter it);
 //   (b) the MULTISET of DEFINITIONS of the legal land cards in ctrl's library -- the classes, their
 //       representatives, copy counts and the shared-type test are all functions of it; library ORDER
 //       never enters (LandSearchClasses sorts by representative name);
@@ -278,6 +285,7 @@ struct Key
     std::uint64_t         prov_key  = 0;
     int                   count = 0, to_hand = 0;
     bool                  basic_only = false, share = false;
+    std::uint16_t         subtype = 0;      // LandSearchSpec::subtype (Nature's Lore's "Forest card")
     bool                  pruned = false;   // LandSearchPickPruned() -- the provider's narrowing applied
     int                   n = 0;
     const CardDefinition* defs[kMaxDefs] = {};
@@ -286,7 +294,7 @@ struct Key
     {
         if (prov_type != o.prov_type || prov_key != o.prov_key || count != o.count
             || to_hand != o.to_hand || basic_only != o.basic_only || share != o.share
-            || pruned != o.pruned || n != o.n)
+            || subtype != o.subtype || pruned != o.pruned || n != o.n)
         { return false; }
         for (int i = 0; i < n; ++i)
         { if (defs[i] != o.defs[i] || copies[i] != o.copies[i]) { return false; } }
@@ -303,7 +311,8 @@ struct Key
         };
         mix(prov_type); mix(prov_key);
         mix(static_cast<std::uint64_t>(count) | (static_cast<std::uint64_t>(to_hand) << 8)
-            | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull) | (pruned ? 1ull << 18 : 0ull));
+            | (basic_only ? 1ull << 16 : 0ull) | (share ? 1ull << 17 : 0ull) | (pruned ? 1ull << 18 : 0ull)
+            | (static_cast<std::uint64_t>(subtype) << 19));
         for (int i = 0; i < n; ++i)
         {
             mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(defs[i])));
@@ -364,6 +373,7 @@ inline const landsearchmemo::Slot& LandSearchMemoSlot(const GameState& s, int ct
     k.to_hand    = spec.to_hand;
     k.basic_only = spec.basic_only;
     k.share      = spec.share_land_type;
+    k.subtype    = spec.subtype;
     k.pruned     = LandSearchPickPruned();
     bool ok = true;
     if (spec.count > 0)

@@ -58580,6 +58580,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // arming at the end of this lambda, so Cultivate's hand basic opens site 10. The pick is
         // this resolution's in-plan land-search pin (Plan::land_search_pins). Executor twin:
         // EffectHandler::ResolveImpl -- the same helper, the same pin consumer.
+        // HARROW: a sacrifice-a-land ADDITIONAL COST on a land search is paid at CAST (CR 601.2h), so it
+        // goes BEFORE the search -- a land the search puts is never a legal victim (Crop Rotation's rule,
+        // above). The executor pays it at cast too (AIEngine's cast path), so the victim ranking and the
+        // searched sac pin index the SAME board in both worlds. The trailing generic block skips it.
+        const bool sac_before_land_search = is_sacrifice && def.params.land_search_on_resolve
+                                         && def.params.land_search_count > 0;
+        if (sac_before_land_search) { PerformSacrificeLandCost(state, name); }
         if (!remand_countered && def.params.land_search_on_resolve && def.params.land_search_count > 0
             && (def.card.IsInstant() || def.card.IsSorcery()))
         {
@@ -58628,12 +58635,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else { ap.graveyard.push_back(UnkickedSpellCard(def, def.card)); }
         }
 
-        if (is_sacrifice && !def.params.tutor_land_to_battlefield)
+        if (is_sacrifice && !def.params.tutor_land_to_battlefield && !sac_before_land_search)
         {
             // Shard Volley's additional cost: paid post-resolution here (order-irrelevant for a
             // damage spell -- the sacrificed land and the effect never interact). Crop Rotation
             // paid its sacrifice PRE-resolution in the tutor_land_to_battlefield branch above
-            // (the fetched land must not be a candidate), so it skips this. Body extracted to
+            // (the fetched land must not be a candidate), so it skips this; so does Harrow (paid
+            // before its land search). Body extracted to
             // the shared PerformSacrificeLandCost (SpellEffects.h) -- byte-identical logic:
             // provider-ranked tapped-first default + human chooser override.
             PerformSacrificeLandCost(state, name);

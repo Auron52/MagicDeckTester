@@ -12,7 +12,10 @@
 //  * the activations: Khalni's counter cost + sacrifice, the stale-plan no-op;
 //  * suspend: the {G} is paid, the off-suspend sorcery resolves and goes to the graveyard;
 //  * Titan's attack trigger repairs attacker indices after a fetched Gruul Turf's bounce;
-//  * Fengraf's draw is a function of the eligible multiset (storage order does not matter).
+//  * Fengraf's draw is a function of the eligible multiset (storage order does not matter);
+//  * Harrow pays its sacrifice-a-land cost BEFORE its search, in both worlds; Explosive Vegetation's two
+//    basics are tapped; Nature's Lore / Skyshroud Claim find "Forest cards" (the subtype, basic or not),
+//    and the Landfall provider does not mistake them for Primeval Titan's any-land search.
 #include <doctest/doctest.h>
 
 #include "cards/CardDatabase.h"
@@ -23,6 +26,9 @@
 #include "ai/DecisionProviders.h"
 #include "ai/TurnSolver.h"
 #include "runner/GoldFishRunner.h"
+#include "ai/AIEngine.h"
+#include "core/EffectHandler.h"
+#include "mtg_test_seam.h"
 
 #include <algorithm>
 #include <string>
@@ -947,4 +953,151 @@ TEST_CASE("RefindByNumberInOrder: the wide (map) path returns exactly what the o
         }
         CHECK(RefindByNumberInOrder(s, nums) == scan(s, nums));
     }
+}
+
+namespace
+{
+void ResolveAllLs(GameState& st)
+{
+    while (!st.stack.empty())
+    {
+        const StackEntry e = st.stack.back();
+        st.stack.pop_back();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+        if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+    }
+}
+
+Action CastLs(const GameState& s, const std::string& name)
+{
+    const CardDefinition& d = D(name);
+    Action a;
+    a.kind           = Action::Kind::CastFromHand;
+    a.card_name      = d.card.m_name;
+    a.def            = &d;
+    a.cost           = d.card.m_mana_cost;
+    a.is_noncreature = !d.card.IsCreature();
+    a.card_mv        = d.card.m_mana_cost.ManaValue();
+    a.sacrifice_land = d.params.sacrifice_land;   // as the enumerator stamps it
+    for (int i = 0; i < static_cast<int>(s.players[0].hand.size()); ++i)
+    { if (s.players[0].hand[static_cast<std::size_t>(i)].m_name == d.card.m_name) { a.hand_index = i; break; } }
+    return a;
+}
+}   // namespace
+
+TEST_CASE("Harrow: the sacrifice is paid at CAST, before the search -- a fetched basic is never the victim (both worlds)")
+{
+    LoadCards();
+    // Forests 10, 11, 12 pay {2}{G}; the Khalni counts landfalls. Sac pin 3 = the FOURTH candidate of the
+    // tapped-first ranking. Paid before the search (CR 601.2h) the board holds three lands, so the pin clamps
+    // to one of them; paid after it (the defect), the two fetched basics are candidates four and five and the
+    // pin would sacrifice one of them.
+    GameState s = LfState(/*lib_forests=*/2, /*lib_mountains=*/1, /*bf_forests=*/3);
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    Put(s, "Khalni Heart Expedition", 20, false);
+    Hand(s, "Harrow", 30);
+    const int sc0 = s.search_count;
+    TurnSolver::Plan line;
+    line.land_decided = true;
+    line.actions      = { CastLs(s, "Harrow") };
+    line.sac_pins     = { 3 };
+    auto check = [&](const GameState& st, const char* world)
+    {
+        std::string bf, gy;
+        for (const Permanent& q : st.battlefield)
+        { bf += q.card.m_name.str() + "#" + std::to_string(q.card.m_number) + (q.tapped ? "(T) " : " "); }
+        for (const Card& c : st.players[0].graveyard) { gy += c.m_name.str() + "#" + std::to_string(c.m_number) + " "; }
+        INFO(world << " bf: " << bf << "| gy: " << gy);
+        CHECK(CountIn(st.players[0].graveyard, "Harrow") == 1);
+        int victims = 0, fetched_victims = 0;
+        for (const Card& c : st.players[0].graveyard)
+        {
+            if (!c.IsLand()) { continue; }
+            ++victims;
+            if (c.m_number >= 50) { ++fetched_victims; }
+        }
+        CHECK(victims == 1);
+        CHECK(fetched_victims == 0);
+        int old_tapped = 0, new_untapped = 0, khalni = -1;
+        for (const Permanent& q : st.battlefield)
+        {
+            if (q.card.m_number == 20) { khalni = q.quest_counters; }
+            if (!q.card.IsLand()) { continue; }
+            if (q.card.m_number < 50 && q.tapped) { ++old_tapped; }
+            if (q.card.m_number >= 50 && !q.tapped) { ++new_untapped; }
+        }
+        CHECK(old_tapped == 2);      // the three payers, less the victim
+        CHECK(new_untapped == 2);    // both basics UNTAPPED
+        CHECK(khalni == 2);          // two landfalls
+        CHECK(st.search_count == sc0 + 1);
+    };
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, line, /*is_pre_combat=*/true);
+    check(roll, "rollout");
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, line, true);
+    GameState exec = s;
+    eng.TakeTurn(exec, true, ResolveAllLs);
+    check(exec, "executor");
+}
+
+TEST_CASE("Explosive Vegetation: two basics, TAPPED, one shuffle")
+{
+    LoadCards();
+    GameState s = Fresh();
+    Lib(s, "Forest", 50); Lib(s, "Forest", 51); Lib(s, "Mountain", 52);
+    const int sc0 = s.search_count;
+    PerformLandSearch(s, 0, LandSearchSpecOf(D("Explosive Vegetation").params), "Explosive Vegetation", -1);
+    CHECK(CountOnBf(s, "Forest", true) + CountOnBf(s, "Mountain", true) == 2);
+    CHECK(CountOnBf(s, "Forest", false) + CountOnBf(s, "Mountain", false) == 0);
+    CHECK(s.search_count == sc0 + 1);
+}
+
+TEST_CASE("Nature's Lore / Skyshroud Claim: a 'Forest card' is the Forest subtype, basic or not -- never a Mountain")
+{
+    LoadCards();
+    const bool shock = CardDatabase::Instance().Lookup("Stomping Ground") != nullptr;
+    GameState s = Fresh();
+    Lib(s, "Mountain", 50); Lib(s, "Forest", 51); Lib(s, "Forest", 52);
+    if (shock) { Lib(s, "Stomping Ground", 53); }
+    const LandSearchSpec nl = LandSearchSpecOf(D("Nature's Lore").params);
+    const LandSearchSpec sc = LandSearchSpecOf(D("Skyshroud Claim").params);
+    CHECK(nl.subtype != SubtypeRegistry::kNone);
+    CHECK_FALSE(nl.basic_only);
+    for (const auto& pk : LandSearchPicks(s, 0, nl))
+    { for (const std::string& nm : pk) { CHECK(nm != "Mountain"); } }
+    CHECK(HasPick(LandSearchPicks(s, 0, nl), { "Forest" }));
+    if (shock) { CHECK(HasPick(LandSearchPicks(s, 0, nl), { "Stomping Ground" })); }
+    for (const auto& pk : LandSearchPicks(s, 0, sc))
+    {
+        CHECK(pk.size() == 2);
+        for (const std::string& nm : pk) { CHECK(nm != "Mountain"); }
+    }
+    // The memo keys on the filter: a basic search over the SAME library still offers the Mountain.
+    CHECK(HasPick(LandSearchPicks(s, 0, LandSearchSpecOf(D("Rampant Growth").params)), { "Mountain" }));
+    // Resolution: Skyshroud's two Forests enter UNTAPPED (a basic's own entry); the Mountain stays.
+    GameState r = Fresh();
+    Lib(r, "Mountain", 50); Lib(r, "Forest", 51); Lib(r, "Forest", 52);
+    PerformLandSearch(r, 0, sc, "Skyshroud Claim", -1);
+    CHECK(CountOnBf(r, "Forest", /*tapped=*/false) == 2);
+    CHECK(LibCount(r, "Mountain") == 1);
+}
+
+TEST_CASE("Landfall provider: a 'Forest card' search is not Primeval Titan's any-land search -- it may take a basic")
+{
+    LoadCards();
+    // The Titan rule admits no basic for an any-land search; Nature's Lore finds only Forests, which here are
+    // all basics, so taking the Titan branch would whiff it.
+    GameState s = LfState(/*lib_forests=*/3, /*lib_mountains=*/2, /*bf_forests=*/2);
+    Lib(s, "Gruul Turf", 70);
+    const LandSearchSpec nl = LandSearchSpecOf(D("Nature's Lore").params);
+    const Picks p = LandSearchPicks(s, 0, nl);
+    REQUIRE_FALSE(p.empty());
+    CHECK(p[0] == std::vector<std::string>{ "Forest" });
+    PerformLandSearch(s, 0, nl, "Nature's Lore", -1);
+    CHECK(CountOnBf(s, "Forest", /*tapped=*/false) == 3);
+    // ...while Titan's search keeps the rule: no basic.
+    for (const auto& pk : LandSearchPicks(s, 0, LandSearchSpecOf(D("Primeval Titan").params)))
+    { for (const std::string& nm : pk) { CHECK(nm != "Forest"); CHECK(nm != "Mountain"); } }
 }

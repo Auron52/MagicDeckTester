@@ -2496,12 +2496,17 @@ struct CardParams
     //   tapped           battlefield entries are FORCED tapped (EnterLand's LandEntryTap::ForcedTapped:
     //                    the land's own enters-tapped / shock rule is not consulted -- no life is paid).
     //   optional         "you MAY search" (Primeval Titan): only the HUMAN is offered the decline.
+    //   subtype          "a <Subtype> card" (Nature's Lore, Skyshroud Claim: "Forest card(s)"): only a library
+    //                    land with that land subtype is a legal find -- a Stomping Ground qualifies, a
+    //                    Mountain does not. JSON "land_search_subtype"; held as the interned SubtypeRegistry
+    //                    id (kNone = no filter), resolved at load.
     int  land_search_count            = 0;
     bool land_search_basic_only       = false;
     bool land_search_share_land_type  = false;
     int  land_search_to_hand          = 0;
     bool land_search_tapped           = false;
     bool land_search_optional         = false;
+    std::uint16_t land_search_subtype_id = 0;
     // WHERE it fires. on_resolve: an instant/sorcery's resolution (Rampant Growth, Search for
     // Tomorrow -- also off suspend -- Cultivate). on_enter_or_attack: ONE printed trigger with two
     // fire sites (Primeval Titan): FireOwnEtbTriggers and FireAttackLandSearch (declare-attackers,

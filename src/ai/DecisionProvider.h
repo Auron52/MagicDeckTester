@@ -3206,8 +3206,10 @@ public:
     // `basic_only` / `share_land_type` are the search's own spec flags (LandSearchSpec), so a provider
     // can tell a Myriad Landscape pair (share_land_type) or a Primeval Titan pick (any land) from a
     // plain basic fetch; both are already in the memo key (core/LandSearch.h, landsearchmemo::Key).
+    // `subtype` (SubtypeRegistry id, kNone = none) is the "<Subtype> card" filter (Nature's Lore: Forest),
+    // also in the memo key: an any-land search is !basic_only AND no subtype.
     virtual void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
-                                     bool basic_only, bool share_land_type,
+                                     bool basic_only, bool share_land_type, std::uint16_t subtype,
                                      std::vector<std::vector<std::string>>& picks) const;
     // LandSearchPickOrderKey -- EVERYTHING LandSearchPickOrder reads from the STATE (beyond the pick
     // list it is handed), folded into one 64-bit key, so core/LandSearch.h can MEMOIZE the ordered list
@@ -3227,10 +3229,10 @@ public:
     // MTG_UNPRUNE=landpick lifts it for the standing pruned-vs-unpruned A/B. It may read ONLY what
     // LandSearchPickOrderKey keys (the result is memoized with the list). Base: no narrowing.
     virtual int LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
-                                    bool basic_only, bool share_land_type,
+                                    bool basic_only, bool share_land_type, std::uint16_t subtype,
                                     const std::vector<std::vector<std::string>>& picks) const
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
-      return static_cast<int>(picks.size()); }
+      (void)subtype; return static_cast<int>(picks.size()); }
     // LandSearchAdmitsLand -- the same narrowing at the CLASS level: may the autonomous world's pick hold
     // this land at all? Applied BEFORE the maximal-pick walk, so the picks are re-formed without the
     // rejected lands -- "up to N" then reaches a smaller complete pick, or none (the search finds
@@ -3239,9 +3241,10 @@ public:
     // definition and the spec flags: the memo key carries the provider's type and the pruned bit, not
     // this answer. Base: every legal land.
     virtual bool LandSearchAdmitsLand(const GameState& s, int controller, int count, int to_hand,
-                                      bool basic_only, bool share_land_type, const CardDefinition& land) const
+                                      bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                      const CardDefinition& land) const
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
-      (void)land; return true; }
+      (void)subtype; (void)land; return true; }
 
     // LandEntrySpotsRule -- does this deck rule WHERE its land entries go around its landfall sources?
     // When true (and the land-pick prune is in force: not human play, not MTG_UNPRUNE=landpick), the plan

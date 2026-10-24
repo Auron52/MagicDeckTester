@@ -1396,6 +1396,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.land_search_to_hand             = params.value("land_search_to_hand", 0);
     p.land_search_tapped              = params.value("land_search_tapped", false);
     p.land_search_optional            = params.value("land_search_optional", false);
+    p.land_search_subtype_id          = SubtypeRegistry::Instance().Intern(
+                                            params.value("land_search_subtype", std::string()));
     p.land_search_on_resolve          = params.value("land_search_on_resolve", false);
     p.land_search_on_enter_or_attack  = params.value("land_search_on_enter_or_attack", false);
     p.land_search_for_removal_controller = params.value("land_search_for_removal_controller", false);

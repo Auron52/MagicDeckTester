@@ -1878,6 +1878,7 @@ struct LandSearchSpec
     int  to_hand         = 0;      // how many picks go to HAND (the rest: battlefield)
     bool tapped          = false;  // battlefield entries forced tapped
     bool optional        = false;  // "you MAY search" -- human-only decline
+    std::uint16_t subtype = 0;     // "a <Subtype> card" (Nature's Lore: Forest) -- SubtypeRegistry id; 0 = any
 };
 inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
 {
@@ -1888,6 +1889,7 @@ inline LandSearchSpec LandSearchSpecOf(const CardParams& p)
     s.to_hand         = p.land_search_to_hand;
     s.tapped          = p.land_search_tapped;
     s.optional        = p.land_search_optional;
+    s.subtype         = p.land_search_subtype_id;
     return s;
 }
 

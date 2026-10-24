@@ -13661,6 +13661,72 @@
     "tap_target_pump_tough": 0,
     "tap_target_pump_grants_trample": true
    }
+  },
+  {
+   "name": "Harrow",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nSearch your library for up to two basic land cards, put them onto the battlefield, then shuffle. [sacrifice_land = the shared additional-cost path, paid at CAST before the search (CR 601.2h): AIEngine's cast path and apply_one's pre-search payment, so a land the search puts is never a victim and both worlds rank the SAME board. WHICH land = the searched sac pin (Plan::sac_pins) over the provider's SacrificeLandCandidates (tapped first), the human picking at the viewer (g_play_sacrifice_chooser); the payment taps the victim first where it can (SacLandPayVictim), i.e. the usual tap-it-then-sacrifice-it. land_search_on_resolve + count 2 + basic_only, UNTAPPED: PerformLandSearch puts both basics through EnterLand -- two landfalls -- then ONE shuffle; untapped basics are LAND-PUT CREDITED (LandSearchCreditGroups), so their mana funds the same main phase. 'Up to two' is collapsed for the search to as many as the library allows (dominance, as Rampant Growth; PROVISIONAL); the human picks each land at resolution (two `tutor_etb` prompts) and may stop early. INSTANT: cast in our main phases, which against the passive goldfish reaches every line an instant-speed cast does -- its landfall counters land before attackers are declared either way, a combat cast could not trigger Moraug's main-phase-only extra combat, and there is no opponent turn to cast it in (PROVISIONAL).]",
+   "template": "custom",
+   "parameters": {
+    "sacrifice_land": true,
+    "land_search_on_resolve": true,
+    "land_search_count": 2,
+    "land_search_basic_only": true
+   }
+  },
+  {
+   "name": "Explosive Vegetation",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. [land_search_on_resolve + count 2 + basic_only + tapped: PerformLandSearch puts both basics TAPPED through EnterLand(LandEntryTap::ForcedTapped) -- two landfalls, no shock life -- then ONE shuffle: Khalni Heart Expedition's crack as a spell. WHICH basics = the in-plan land-search pin over the provider-ordered LandSearchPicks; 'up to two' collapsed to as many as the library allows (dominance, as Rampant Growth; PROVISIONAL); the human picks each land at resolution (two `tutor_etb` prompts) and may stop early.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 2,
+    "land_search_basic_only": true,
+    "land_search_tapped": true
+   }
+  },
+  {
+   "name": "Nature's Lore",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a Forest card, put that card onto the battlefield, then shuffle. [land_search_on_resolve + count 1 + land_search_subtype Forest: 'a Forest card' is the Forest LAND SUBTYPE off the definition (LandSearchLegal), so a basic Forest or a nonbasic Forest (a Stomping Ground) qualifies and a Mountain does not; NOT basic-only. The land enters by its OWN entry rule (untapped for a basic; a shock land's pay-or-tap, a tapland tapped) through EnterLand -- a landfall -- then ONE shuffle. An untapped basic is LAND-PUT CREDITED, so it funds the same main phase (a nonbasic pick withdraws the credit -- fail toward not crediting). WHICH Forest = the in-plan land-search pin; the human picks at resolution (`tutor_etb`). 'May fail to find' is not offered to the search (dominance, as Rampant Growth; PROVISIONAL).]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 1,
+    "land_search_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Skyshroud Claim",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for up to two Forest cards, put them onto the battlefield, then shuffle. [land_search_on_resolve + count 2 + land_search_subtype Forest: two 'Forest cards' -- the Forest LAND SUBTYPE off the definition, basic or not (Nature's Lore's filter) -- each entering by its own entry rule (untapped for a basic) through EnterLand: two landfalls, then ONE shuffle. Untapped basics are LAND-PUT CREDITED (both fund the same main phase). 'Up to two' collapsed to as many as the library allows (dominance; PROVISIONAL); the human picks each land at resolution (two `tutor_etb` prompts) and may stop early.]",
+   "template": "custom",
+   "parameters": {
+    "land_search_on_resolve": true,
+    "land_search_count": 2,
+    "land_search_subtype": "Forest"
+   }
   }
  ]
 }
