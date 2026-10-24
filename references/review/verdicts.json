@@ -82,6 +82,22 @@
    "source": "handoff_T3.json",
    "verdict": "promoted"
   },
+  "Auras/claude_s12_gi11.json": {
+   "at": "2026-10-24T11:34:16+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Auras/human_s12_gi11.json",
+   "human_win": 7,
+   "lost_turns": [
+    4
+   ],
+   "note": "",
+   "promoted_win": 6,
+   "reference": "references/Auras/claude_s12_gi11.json",
+   "search_digest": "97d9af67e80449dd",
+   "search_win": 6,
+   "source": "handoff_T4.json",
+   "verdict": "promoted"
+  },
   "Auras/claude_s3_gi2.json": {
    "at": "2026-10-24T11:32:03+00:00",
    "hint": "likely-misplay",
