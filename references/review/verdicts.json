@@ -141,6 +141,22 @@
    "search_win": 4,
    "source": "handoff_T3.json",
    "verdict": "promoted"
+  },
+  "Vampires/claude_s4_gi3.json": {
+   "at": "2026-10-24T12:14:35+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Vampires/human_s4_gi3.json",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Vampires/claude_s4_gi3.json",
+   "search_digest": "8704443bf0086849",
+   "search_win": 4,
+   "source": "handoff_T2.json",
+   "verdict": "promoted"
   }
  }
 }
