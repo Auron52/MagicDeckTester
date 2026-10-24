@@ -4,9 +4,12 @@
   "valueleaf": "em:e650fa5b1a96f6292645"
  },
  "deck": "mirrorwing_dragon",
+ "detail": "mulligan: FAILED rc=1 -- see mirrorwing_dragon.mulligan.log",
+ "finished": "2026-10-24T21:58:12Z",
  "frozen": "d09d1afa900ebcbbbf9ff7324a094f0070f756eb",
  "heartbeat": "2026-10-24T21:49:49Z",
  "host": "550a08fdc1f3",
+ "result_branch": null,
  "run_id": "mirrorwing_dragon-artifact-queue-d7d6a5-20261024T214919",
  "score": 1.1414,
  "stage": "mulligan",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-24T21:49:19Z",
- "state": "running",
+ "state": "failed",
  "worker": "artifact-queue-d7d6a5"
 }
