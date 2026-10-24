@@ -274,8 +274,9 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   cheap; guessing wrong in the protective direction costs only a couple of cores, guessing
   wrong the other way destroys user work.
 
-- **EVERY OVERNIGHT RUN GETS A SEPARATE 1-HOUR STATUS TIMER — NO EXCEPTIONS (user directive,
-  2026-10-17).** The user's words: *"Any time I give you instructions to run something overnight
+- **EVERY OVERNIGHT RUN GETS A SEPARATE 2-HOUR STATUS TIMER — NO EXCEPTIONS (user directive,
+  2026-10-17; interval changed from 1 h to 2 h by the USER 2026-10-24: *"Every hour is just a bit too
+  often."*).** The user's words: *"Any time I give you instructions to run something overnight
   you MUST set up an additional 1hr timer to check the status of the chain."* and *"I'm tired of
   broken overnight chains wasting hours of compute time."*
   * **What it cost.** 2026-10-17, Landfall mulligan profile. The agent launched a detached chain to
@@ -286,7 +287,7 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     detached process cannot notify the agent and nothing else was watching, so the box sat idle until
     the user asked at 21:18. The user: *"You failed badly here and wasted the overnight."*
   * **How.** In the same turn that launches the chain, create the timer with `CronCreate`: a
-    recurring hourly cron on an off-minute (e.g. `7 * * * *`), `durable: true` if the session might be
+    recurring 2-hourly cron on an off-minute (e.g. `7 */2 * * *`), `durable: true` if the session might be
     closed overnight. Its prompt names the chain and where its status lives (log file, DONE/STOPPED
     markers, pid). On every fire, read that status. If the chain stopped, stalled, or left the box
     idle, take the next step yourself: fix and relaunch it, or run the step it should have reached.
@@ -297,7 +298,7 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     wait on the process and set an extra waiter when it is overnight. I guess I didn't say that it was, but if
     it is anywhere in the 5:30 AM - 1:00 PM PDT range you should use the waiter."* So ANY long run whose span
     touches **5:30 AM - 1:00 PM Pacific (12:30 - 20:00 UTC under PDT, 13:30 - 21:00 UTC under PST)** gets the
-    hourly `CronCreate` timer above, whether or not the user called it overnight -- and EVERY long run, in or
+    2-hourly `CronCreate` timer above, whether or not the user called it overnight -- and EVERY long run, in or
     out of the window, gets a `run_in_background` waiter. 2026-10-22: a Landfall screen round finished at
     16:49 UTC with neither working, and the box sat idle ~4.5 h until the user asked "What's going on?".
   * **A waiter keys on the PID, never on `pgrep -f`.** `while pgrep -f "deck_compare.py spec.json"; do sleep 30;
