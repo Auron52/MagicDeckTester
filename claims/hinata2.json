@@ -9,6 +9,7 @@
  "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
  "heartbeat": "2026-10-24T21:38:22Z",
  "host": "550a08fdc1f3",
+ "released": "2026-10-24T21:48:35Z",
  "result_branch": null,
  "run_id": "hinata2-artifact-queue-d7d6a5-20261024T171638",
  "score": 1.089,
@@ -18,6 +19,7 @@
   "valueleaf"
  ],
  "started": "2026-10-24T17:16:38Z",
- "state": "failed",
+ "state": "released",
+ "why": "stopped in a 4h discovery tail; d09d1afa9 skips discovery on a regeneration",
  "worker": "artifact-queue-d7d6a5"
 }
