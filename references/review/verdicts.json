@@ -1,0 +1,21 @@
+{
+ "schema": 1,
+ "verdicts": {
+  "Anti-Lifegain/claude_s2_gi1.json": {
+   "at": "2026-10-24T10:53:58+00:00",
+   "hint": "likely-clairvoyance",
+   "human_line_kept_at": "references/review/replaced/Anti-Lifegain/human_s2_gi1.json",
+   "human_win": 5,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Anti-Lifegain/claude_s2_gi1.json",
+   "search_digest": "1c187ed8d0872790",
+   "search_win": 4,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  }
+ }
+}
