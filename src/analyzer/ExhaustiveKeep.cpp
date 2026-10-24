@@ -909,7 +909,11 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     const std::string eq_cache_path = !eq_cache_s.empty() ? eq_cache_s : cfg.gen_cache;
     const char*       eq_cache      = eq_cache_path.empty() ? nullptr : eq_cache_path.c_str();
     bool eq_loaded = false;
-    if (eq_cache && *eq_cache && std::filesystem::exists(eq_cache))
+    // MTG_KEEP_BUCKETS_FROM (below) outranks the discovery cache: a cache written by an earlier
+    // re-discovery of the SAME inputs is exactly the drifted bucketing the incumbent is there to
+    // override (Mirrorwing 2026-10-24: the failed run's K=15 cache hit before the incumbent was read).
+    const bool eq_incumbent_set = []{ const char* s = std::getenv("MTG_KEEP_BUCKETS_FROM"); return s && *s; }();
+    if (!eq_incumbent_set && eq_cache && *eq_cache && std::filesystem::exists(eq_cache))
     {
         std::ifstream cf(eq_cache);
         nlohmann::json cj; bool ok = true;
