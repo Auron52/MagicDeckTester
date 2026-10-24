@@ -111,6 +111,8 @@ free. `MDT_WORKER_ID` names the machine; otherwise an id is minted once per chec
 `logs/artifact_queue/WORKER_ID` (NOT the hostname: a devcontainer's is the container id, which changes on
 every rebuild and would orphan an in-flight job). Worker log: `logs/artifact_queue/<id>/worker.log`, with
 per-deck driver logs beside it.
+**Agents running, joining or watching a worker:** read `docs/design/artifact-queue-for-agents.md` (where to
+look, the watch, what to leave alone).
 
 **The drift metric is measured play churn, and it costs nothing.** The harness keeps one
 `<game_index> <win_turn> <decision-stream digest>` line per suite game (`test/gt_logs/*.wins`). For each of
@@ -149,7 +151,7 @@ rule as the picker, so the two cannot disagree. A MACHINE fault (`./build.sh` fa
 and stops that worker instead of stamping every deck "failed" one after another, and three failed deck
 jobs in a row also stop it.
 
-**The worker.** Per machine (`MDT_WORKER_ID`, default hostname): a worktree at
+**The worker.** Per machine (`MDT_WORKER_ID`, else the id minted into `logs/artifact_queue/WORKER_ID`): a worktree at
 `.claude/worktrees/artifact-worker-<id>` (persistent location; build/ goes to the volume via build.sh),
 re-frozen on `origin/<branch>` ONLY between jobs (tracked leftovers are committed to a pushed rescue branch
 first, never discarded); `./build.sh`; then for each stage it waits until no foreign `mtg`/`mtg-analyze`
@@ -207,6 +209,8 @@ which validation it ran.
 2. Should a keep-table regeneration always be followed by that deck's leaf (`leaf_follows_mulligan`)? It
    is exactly the pipeline-order axis, but it costs a leaf run per table, and the leaf is currently the
    weaker evaluator (USER 2026-10-18).
-3. Weights (`FLAG_WEIGHT`, `kind_weight`, `min_churn`) are first guesses; churn alone is the measured part.
-4. Idle detection sees only this container's processes. A sibling container's generation on the same host
-   is invisible to it: on the shared box, start the worker only when the box is known to be free.
+3. Weights (`FLAG_WEIGHT`, `kind_weight`, `min_drift`) are first guesses; the drift score alone is the measured part.
+4. Idle detection sees this container's processes plus the 1-minute load average (`idle_max_load`, default
+   half the cores; VM-wide under WSL2, so it usually catches a sibling container's generation, but a
+   sibling's single-threaded phase can slip under it): on a shared box, start the worker only when the box
+   is known to be free.

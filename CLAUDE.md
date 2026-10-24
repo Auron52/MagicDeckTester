@@ -916,12 +916,14 @@ been an agent's call.)*
 When the user asks **which artifacts are stale**, to **regenerate out-of-date keep tables / value leaves**,
 or to **put an idle machine to work**, use `python3 scripts/artifact_queue.py` (`status` / `explain <deck>`
 read git only; `start` / `stop` / `claims` drive the worker). It ranks every shipped deck's keep table and
-value leaf by **measured play churn** (share of the deck's suite games whose GT decision digest changed
-since the artifact was adopted) plus exact axes (decklist mismatch, card data, settings, pipeline order)
+value leaf by **measured play drift** (mean per-game |win-turn change| across the deck's suite games since
+the artifact was adopted or last verified) plus exact axes (decklist mismatch, card data, settings, pipeline order)
 and USER marks, and a worker claims one deck at a time from origin's `artifact-queue` branch, runs
 `mullgen.sh run` then `valueleaf.sh run` in its own frozen worktree when the box is idle, and pushes the
 result to `artifact-refresh/<deck>-<date>` for landing (GT accept stays a separate step). Design, the
-claim protocol and open questions: `docs/design/artifact-staleness-queue.md`.
+claim protocol and open questions: `docs/design/artifact-staleness-queue.md`. **Before running, joining or
+watching a worker, read `docs/design/artifact-queue-for-agents.md`** (where each machine's state lives, the
+watch, what to leave alone).
 
 ## Claude-Play Runner Skill
 
