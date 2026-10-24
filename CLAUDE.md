@@ -287,9 +287,15 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     detached process cannot notify the agent and nothing else was watching, so the box sat idle until
     the user asked at 21:18. The user: *"You failed badly here and wasted the overnight."*
   * **How.** In the same turn that launches the chain, create the timer with `CronCreate`: a
-    recurring 2-hourly cron on an off-minute (e.g. `7 */2 * * *`), `durable: true` if the session might be
-    closed overnight. Its prompt names the chain and where its status lives (log file, DONE/STOPPED
-    markers, pid). On every fire, read that status. If the chain stopped, stalled, or left the box
+    recurring 2-hourly cron on an off-minute (e.g. `7 */2 * * *`), **`durable: false` (session-only) --
+    NEVER `durable: true`** (USER 2026-10-24: *"We should not be creating them this way."*). A durable job
+    lives in the SHARED `.claude/scheduled_tasks.json`, so every session in this checkout loads it and
+    fires it, and a `CronDelete` removes it from the file but NOT from the other sessions that already
+    loaded it: the LFE mullgen timer kept firing in three sessions for hours after its run finished and
+    the job was deleted, with no way to remove it short of restarting each one. Durability buys nothing
+    anyway: the harness-tracked run is a child of the session, so a closed session loses the run's
+    waiter too. Its prompt names the OWNER session (so a stray copy is recognisably someone else's),
+    the chain and where its status lives (log file, DONE/STOPPED markers, pid). On every fire, read that status. If the chain stopped, stalled, or left the box
     idle, take the next step yourself: fix and relaunch it, or run the step it should have reached.
     Then report what you did. `CronDelete` the timer once the chain has finished and its result is
     reported. The timer comes IN ADDITION to a `run_in_background` waiter on the chain's markers (the
