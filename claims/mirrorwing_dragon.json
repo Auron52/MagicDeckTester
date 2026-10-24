@@ -9,6 +9,7 @@
  "frozen": "d09d1afa900ebcbbbf9ff7324a094f0070f756eb",
  "heartbeat": "2026-10-24T21:49:49Z",
  "host": "550a08fdc1f3",
+ "released": "2026-10-24T22:00:46Z",
  "result_branch": null,
  "run_id": "mirrorwing_dragon-artifact-queue-d7d6a5-20261024T214919",
  "score": 1.1414,
@@ -18,6 +19,7 @@
   "valueleaf"
  ],
  "started": "2026-10-24T21:49:19Z",
- "state": "failed",
+ "state": "released",
+ "why": "K=15 discovery cache outranked the incumbent; fixed in the next commit after d09d1afa9",
  "worker": "artifact-queue-d7d6a5"
 }
