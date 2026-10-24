@@ -15,7 +15,7 @@
    "verdict": "clairvoyance"
   },
   "Anti-Lifegain/claude_s12_gi11.json": {
-   "at": "2026-10-24T11:12:12+00:00",
+   "at": "2026-10-24T11:12:18+00:00",
    "hint": "likely-clairvoyance",
    "human_win": 7,
    "lost_turns": [
