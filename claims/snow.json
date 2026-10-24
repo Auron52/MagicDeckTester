@@ -1,0 +1,18 @@
+{
+ "blobs": {
+  "mulligan": "d9c72c705c6634318ee67531e09bc6ffd8b3b7cb"
+ },
+ "deck": "snow",
+ "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
+ "heartbeat": "2026-10-24T16:01:20Z",
+ "host": "58199181d02e",
+ "run_id": "snow-artifact-queue-tool-647f24-20261024T160120",
+ "score": 1.2308,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan"
+ ],
+ "started": "2026-10-24T16:01:20Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
