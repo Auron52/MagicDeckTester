@@ -98,6 +98,18 @@
    "source": "handoff_T4.json",
    "verdict": "promoted"
   },
+  "Auras/claude_s14_gi13.json": {
+   "at": "2026-10-24T11:46:28+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "search_digest": "dfcb72fc63108226",
+   "search_win": 4,
+   "verdict": "clairvoyance"
+  },
   "Auras/claude_s3_gi2.json": {
    "at": "2026-10-24T11:32:03+00:00",
    "hint": "likely-misplay",
