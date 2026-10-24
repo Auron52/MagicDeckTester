@@ -85,6 +85,7 @@ DEFAULT_CONFIG = {
     "lease_hours": 3,
     "heartbeat_minutes": 20,
     "idle_poll_minutes": 5,
+    "idle_max_load": None,
     "retry_rejected_days": 14,
     "marks": [],
 }
@@ -986,16 +987,29 @@ def foreign_engines():
     return out
 
 
+def busy_reason(cfg):
+    """-> why the box is busy, or None. Two signals: a foreign mtg / mtg-analyze in THIS container, and the
+    1-min load average -- which in WSL2 is the whole VM's, so it also sees a generation running in a sibling
+    container that the process scan cannot. Only consulted between stages, when none of our own work runs."""
+    f = foreign_engines()
+    if f:
+        return "%d foreign engine process(es), e.g. pid %d: %s" % (len(f), f[0][0], f[0][1])
+    lim = cfg.get("idle_max_load") or 0.5 * (os.cpu_count() or 1)
+    la = os.getloadavg()[0]
+    if la > lim:
+        return "load average %.1f > %.1f (another container may be running a generation)" % (la, lim)
+    return None
+
+
 def wait_idle(wid, cfg):
-    """Block until no foreign engine runs. -> True if it had to wait (the caller then re-ranks)."""
+    """Block until the box is free (busy_reason). -> True if it had to wait (the caller then re-ranks)."""
     warned = False
     while True:
-        f = foreign_engines()
-        if not f:
+        why = busy_reason(cfg)
+        if not why:
             return warned
         if not warned:
-            log(wid, "box busy (%d foreign engine process(es), e.g. pid %d: %s) -- waiting; nothing runs alongside "
-                     "another run" % (len(f), f[0][0], f[0][1]))
+            log(wid, "box busy (%s) -- waiting; nothing runs alongside another run" % why)
             warned = True
         if stop_requested(wid):
             return warned
@@ -1115,9 +1129,9 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
              "frozen": frozen, "started": iso(utcnow()), "blobs": job["blobs"], "score": job["score"],
              "host": socket.gethostname(), "run_id": "%s-%s-%s" % (deck, wid, utcnow().strftime("%Y%m%dT%H%M%S"))}
     if dry:
-        f = foreign_engines()
+        why = busy_reason(cfg)
         log(wid, "DRY RUN: would claim %s and run %s at %s%s" % (deck, " -> ".join(job["stages"]), frozen[:9],
-            "; the box is BUSY now (%d foreign engine process(es)), so a real run would wait" % len(f) if f else ""))
+            "; the box is BUSY now (%s), so a real run would wait" % why if why else "; the box is free"))
         return "dry"
     if not put_claim(q, deck, claim, wid, job, cfg):
         log(wid, "%s: another worker claimed it first -- skipping" % deck)
@@ -1134,8 +1148,8 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
         claim["run_id"] = prior["claim"]["run_id"]
 
     def save_inflight():
-        json.dump({"job": job, "claim": claim, "done_stages": done_stages, "detail": detail, "plan": plan},
-                  open(ifp, "w"), indent=1)
+        json.dump({"job": job, "claim": claim, "done_stages": done_stages, "detail": detail, "plan": plan,
+                   "vl_queue_fresh": prior.get("vl_queue_fresh", False)}, open(ifp, "w"), indent=1)
 
     def verdict(kind, v, ident, extra):
         """Record a stage's verdict in the deck's ledger (in the worktree; it lands with the result branch)."""
@@ -1183,6 +1197,12 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                     with open(sp, "w") as f:
                         json.dump(J, f, indent=1)
                 env = dict(os.environ, **plan["env"])
+                # This attempt's verdict must come from THIS attempt's report: a run that dies before the driver
+                # rewrites VALIDATION.txt would otherwise be read off an earlier job's "VALIDATION PASSED".
+                rep0 = os.path.join(wt, "logs", re.sub(r"[^A-Za-z0-9._-]", "_", deckinfo["dir"][len("decks/"):]) + "_mullgen",
+                                    "VALIDATION.txt")
+                if os.path.exists(rep0):
+                    os.rename(rep0, rep0[:-4] + ".prev-%s.txt" % utcnow().strftime("%Y%m%dT%H%M%S"))
                 try:
                     rc = run_logged(wid, ["bash", "scripts/mullgen.sh", "run", deckinfo["dir"], plan["recipe"]], wt,
                                     "%s.mulligan.log" % deck, env=env)
@@ -1197,6 +1217,14 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                 delta = float(m[-1]) if m else None
                 prof_rel = os.path.join(deckinfo["dir"], "%s.keepmodel.exhaustive.profile.json.gz" % deckinfo["stem"])
                 settings = {"recipe": plan["recipe"], "env": plan["env"], "depth": plan["depth"], "budget": plan["budget"]}
+                saved_inc = "regeneration: incumbent saved" in text
+                if rc != 3 and text and not saved_inc:
+                    # The driver did not see an incumbent, so it validated with the FIRST-VERSION bar (keep vs
+                    # static), not old-vs-new: whatever it decided is not a replacement verdict.
+                    outcome = "failed"
+                    detail.append("mulligan: FAILED -- the driver ran FIRST-VERSION validation (no incumbent saved), "
+                                  "so this is not an old-vs-new verdict; rc=%d, see %s.mulligan.log" % (rc, deck))
+                    break
                 if rc == 0 and "VALIDATION PASSED" in text:
                     detail.append("mulligan: ADOPTED (new-vs-old %s t, recipe %s)" % (delta, plan["recipe"]))
                     verdict("mulligan", "adopted", artifact_ident("mulligan", wt, prof_rel),
@@ -1210,7 +1238,7 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                     outcome = "refused"
                     detail.append("mulligan: REFUSED by a driver gate (exit 3) -- see %s.mulligan.log" % deck)
                     break
-                elif "VALIDATION FAILED" in text:
+                elif "VALIDATION FAILED -- new profile is worse than the old" in text:
                     outcome = "rejected"
                     detail.append("mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better "
                                   "(new-vs-old %s t); incumbent restored" % delta)
@@ -1222,8 +1250,23 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                     detail.append("mulligan: FAILED rc=%d -- see %s.mulligan.log" % (rc, deck))
                     break
             else:
+                # valueleaf.sh resumes from logs/vlq_<key> markers. A NEW job must not inherit the markers,
+                # rows and freeze of an earlier, finished job on this deck: move them aside (never delete).
+                vlq = os.path.join(wt, "logs", "vlq_" + deck)
+                if os.path.isdir(vlq) and not prior.get("vl_queue_fresh"):
+                    aside = "%s.prev-%s" % (vlq, utcnow().strftime("%Y%m%dT%H%M%S"))
+                    os.rename(vlq, aside)
+                    log(wid, "  moved the earlier value-leaf queue aside -> %s" % aside)
+                prior["vl_queue_fresh"] = True
+                save_inflight()
                 rc = run_logged(wid, ["bash", "scripts/valueleaf.sh", "run", deckinfo["dir"]], wt,
                                 "%s.valueleaf.log" % deck)
+                vtxt = open(os.path.join(state_dir(wid), "%s.valueleaf.log" % deck)).read()
+                vtxt = vtxt[vtxt.rfind("\n=== 20"):]                  # this attempt's output only
+                if rc == 0 and "=== COMPLETE" not in vtxt:
+                    outcome = "failed"
+                    detail.append("valueleaf: exit 0 WITHOUT the COMPLETE line -- not a verdict; see %s.valueleaf.log" % deck)
+                    break
                 if rc == 3:
                     outcome = "refused"
                     detail.append("valueleaf: REFUSED (exit 3)")
