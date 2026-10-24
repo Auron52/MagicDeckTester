@@ -20,6 +20,13 @@
       "why": "USER bucket ruling 2026-10-24 (10f2b5680): Lightning Greaves kept apart from Swords/Unexpectedly Absent, K 15 -> 16; the shipped table still has the merged bucket",
       "priority": 5,
       "date": "2026-10-24"
+    },
+    {
+      "deck": "giants",
+      "kind": "mulligan",
+      "why": "USER bucket ruling 2026-10-24: Lightning Greaves kept apart from Pyroclasm, K 13 -> 14; the shipped table still has the merged bucket",
+      "priority": 5,
+      "date": "2026-10-24"
     }
   ]
 }
