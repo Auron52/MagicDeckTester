@@ -1674,23 +1674,27 @@ OVERNIGHT_CASES=(
   "galadriel2hg 5 5005 170 40"
   "galadriel2hg 5 6006 170 40"
   "galadriel2hg 5 7007 170 40"
-  # niv: see the SMOKE block. Landfall's smaller-than-entry set until the keep table (expand then).
+  # niv: see the SMOKE block. FULL set at the keep-table adoption (2026-10-24), resized from Landfall's
+  # smaller-than-entry set (4x250 b10 / 4x150 b20 / 2hg 4x50) to HINATA'S shape, not the standard one: Niv
+  # is a heavy deck (regression-testing.md "Sizing a deck's overnight rows"). Measured table-ABSENT on this
+  # set 2026-10-24 (PGO, thread-wall under host contention): ~1.6 s/game at d3, ~2.3 s/game at d5, ~2.6 s at
+  # 2hg d5 -- 1.8 worker-h. Accepted table-ABSENT first (every pre-existing game identical), then the adoption.
   "niv 0 4004 2000 0"
   "niv 0 6006 2000 0"
   "niv 0 8008 2000 0"
   "niv 0 10010 2000 0"
-  "niv 3 4004  250 10"
-  "niv 3 5005  250 10"
-  "niv 3 6006  250 10"
-  "niv 3 7007  250 10"
-  "niv 5 4004  150 20"
-  "niv 5 5005  150 20"
-  "niv 5 6006  150 20"
-  "niv 5 7007  150 20"
-  "niv2hg 5 4004  50 20"
-  "niv2hg 5 5005  50 20"
-  "niv2hg 5 6006  50 20"
-  "niv2hg 5 7007  50 20"
+  "niv 3 4004  400 10"
+  "niv 3 5005  400 10"
+  "niv 3 6006  400 10"
+  "niv 3 7007  400 10"
+  "niv 5 4004  300 20"
+  "niv 5 5005  300 20"
+  "niv 5 6006  300 20"
+  "niv 5 7007  300 20"
+  "niv2hg 5 4004 100 20"
+  "niv2hg 5 5005 100 20"
+  "niv2hg 5 6006 100 20"
+  "niv2hg 5 7007 100 20"
   # colossus: see the SMOKE block. FULL set (standard shape) since the 2026-10-19 keep-table adoption,
   # resized from the ENTRY set (4x400 b10 / 4x300 b20) and accepted table-ABSENT first (regression-testing.md
   # "Sizing a deck's overnight rows"). ~7 ms/game in the regression tier vs galadriel's 79 on this shape.
