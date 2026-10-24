@@ -5,11 +5,11 @@
  },
  "deck": "stompysurprise",
  "frozen": "c70c645741987e1c63722e6bcfe7ca56fc591f31",
- "heartbeat": "2026-10-24T19:51:36Z",
+ "heartbeat": "2026-10-24T19:57:22Z",
  "host": "8854e545ddab",
  "run_id": "stompysurprise-MagicDeckTester2-76d2cc-20261024T130740",
  "score": 1.2722,
- "stage": "mulligan",
+ "stage": "valueleaf",
  "stages": [
   "mulligan",
   "valueleaf"
