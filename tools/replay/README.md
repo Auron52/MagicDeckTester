@@ -59,8 +59,61 @@ flagged game is exactly reproducible):
 - `ABILITY` actions carry `card`/`cardName` (the source) and `ability` (description). Logged for
   audit; the non-tap visual is not drawn yet (mana taps are already shown via `tapped`).
 
+## Review mode — references where the search beat your line
+
+```
+python3 scripts/ref_review.py build     # find + localise + lay out the games (logs/ref_review/)
+./review.sh                             # http://localhost:8090
+python3 scripts/ref_review.py status    # the same table in the terminal
+```
+
+`build` plays every saved reference in `references/` with the shipped search from your exact opening
+hand, in one pooled batch, and keeps each game the search wins **earlier**. `references/suboptimal/`
+is not reviewed: a game there is your note that the viewer would not let you reach the optimal turn,
+so the search beating it is expected (`ref_bench.py --suboptimal --require-beat` checks that). For each one it then hands the search *your* board at the start of each of your turns:
+that **hand-off ladder** shows the turn(s) on which your line lost ground (the search's win turn from
+your board gets worse across them). The ladder is run a second time under the engine's
+**non-clairvoyant** search (`MTG_NC_SEARCH=1`). If a blind search also gains on that turn, the hint
+is `likely-misplay`; if it doesn't, `likely-clairvoyance`. It is only a hint.
+
+The review page lists the games. For each one it shows the ladder and **your game and the search's
+side by side, turn by turn**: identical turns fold away, the lost turn is highlighted, and cards one
+side holds and the other does not are outlined. The right column can be the search from turn 1, or
+"your turns 1..k-1, then the search", which is the cleanest comparison because both columns share
+the same board up to turn k. Each log also opens in the ordinary step viewer (`index.html?log=…`).
+
+Settle each game one of four ways (keys `1`–`4`, `j`/`k` to move between games):
+
+- **Promote search line**: the line in the right-hand column (the search from turn 1, or your
+  turns 1..k-1 then the search) becomes the reference for this game. `scripts/ref_promote.py`
+  replays the game in the play engine and picks, at each main-phase frame, the plan that does what
+  the search did. It writes the result only if the engine-written file wins on the search's turn and
+  replays as a literal reference. Otherwise it refuses, says why and at which turn, and you can
+  replay that game yourself. Your own line is kept byte for byte at
+  `references/review/replaced/<deck>/human_s<S>_gi<G>.json`. That is outside every `claude_s*_gi*.json`
+  glob, so nothing replays or benches it, but the reference safety scan still covers it.
+- **Clairvoyance**: the search's line needs to know the library.
+- **Bug**: the search's line relies on an engine defect (name it in the note).
+- **Replay manually**: your line is beatable but not this way. This is just a marker; re-save the
+  game yourself in the play viewer.
+
+Verdicts (and promoted references) are saved to the tracked `references/review/verdicts.json` /
+`references/` and protected like reference games: a backup outside the repo, a commit to
+`references-autosave`, and a push. So `review.sh`, like `play.sh`, refuses to start from a temp
+directory or a linked worktree. Each verdict records the search line it judged; after an engine
+change, a game whose search line moved shows its verdict as **stale** for re-checking.
+
+`logs/ref_review/<ref dir>/<game>/` holds `human.json` (your game as a replay log: its boards are exact,
+but replaying a choice stream does not log the plays, so the page reads your plays from the reference's
+decisions), `search.json`,
+`handoff_T<k>.json`, a copy of the reference, and `review.json` (the ladder, hints and pasteable
+repro commands). Re-run `build` after an engine change; verdicts carry over, and finished engine games
+are cached (keyed by the command and the engine), so a rerun only plays what changed. Games become
+reviewable as soon as their own ladder is in; the page shows a build in progress and fills in the
+non-clairvoyant hints as they land (on the combo decks those take the longest).
+
 ## Planned
 
 - **Non-tap ability visuals** — sac / pay-life / discard-cost abilities are logged (`ABILITY`)
   but not yet drawn distinctly; add when a deck uses them.
-- A human-play / compare mode is a later phase.
+- A human-play mode is a later phase (compare mode: see "Review mode" above).

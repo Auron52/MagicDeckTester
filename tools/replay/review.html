@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MagicDeckTester — Reference Review</title>
+<!-- Served by tools/replay/review_server.js (./review.sh). Games come from scripts/ref_review.py build;
+     the card/board helpers below follow tools/replay/index.html so both pages draw a board the same way. -->
+<style>
+  :root { --bg:#1a1c20; --panel:#24272d; --ink:#e8e8ea; --muted:#9aa0a8; --acc:#5aa9e6;
+          --good:#5ad17a; --bad:#e6695a; --warn:#d6b84c; --land:#caa46a; --spell:#7fb3ff; --line:#33373e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
+           display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; color:var(--acc); }
+  select, button, textarea { background:#2e323a; color:var(--ink); border:1px solid var(--line); border-radius:6px; font:inherit; }
+  select { padding:4px; }
+  button { padding:5px 11px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  main { display:grid; grid-template-columns:330px 1fr; height:calc(100vh - 49px); }
+  #list { background:var(--panel); border-right:1px solid var(--line); overflow:auto; }
+  #list h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:14px 14px 4px; }
+  .item { padding:6px 14px; cursor:pointer; border-left:3px solid transparent; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .item:hover { background:#2b2f36; }
+  .item.sel { background:#2e3540; border-left-color:var(--acc); }
+  .item .nm { flex:1; min-width:120px; }
+  .item .res { color:var(--muted); font-size:12px; }
+  #detail { overflow:auto; padding:14px 20px 40px; }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+  .hint { color:var(--muted); font-size:12px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; white-space:nowrap; }
+  .p-clair { background:rgba(127,179,255,.16); color:var(--spell); }
+  .p-mis { background:rgba(230,105,90,.16); color:var(--bad); }
+  .p-mixed { background:rgba(214,184,76,.16); color:var(--warn); }
+  .p-unclear { background:#2e323a; color:var(--muted); }
+  .v-clairvoyance { background:rgba(127,179,255,.3); color:#cfe0ff; }
+  .v-promoted { background:rgba(90,209,122,.25); color:var(--good); }
+  .v-bug { background:rgba(230,105,90,.3); color:#ffc4ba; }
+  .v-replay_manually { background:rgba(200,200,200,.18); color:var(--ink); }
+  #vbar button.promote { border-color:rgba(90,209,122,.5); }
+  .v-stale { outline:1px dashed var(--warn); }
+  h2.game { margin:0 0 4px; font-size:18px; }
+  .row2 { display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; margin:10px 0; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 14px; }
+  .box h3 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
+  table { border-collapse:collapse; }
+  .ladder td, .ladder th { padding:3px 10px; border-bottom:1px solid var(--line); text-align:left; font-size:13px; }
+  .ladder th { color:var(--muted); font-weight:500; font-size:12px; }
+  .ladder tr.lost td { background:rgba(230,105,90,.10); }
+  .ladder tr.pick { cursor:pointer; }
+  .ladder tr.pick:hover td { background:#2b2f36; }
+  .ladder tr.cur td { box-shadow:inset 3px 0 0 var(--acc); }
+  #vbar button.on { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc); }
+  #vbar textarea { width:100%; min-height:44px; margin-top:8px; padding:6px; }
+  .banner { padding:6px 10px; border-radius:6px; margin-top:8px; font-size:12px; }
+  .banner.ok { background:rgba(90,209,122,.12); color:var(--good); }
+  .banner.bad { background:rgba(230,105,90,.2); color:#ffb4a8; border:1px solid var(--bad); }
+  /* side by side */
+  .cmp { width:100%; table-layout:fixed; margin-top:12px; }
+  .cmp th { position:sticky; top:-14px; background:var(--bg); z-index:3; text-align:left; padding:8px 10px; font-size:13px; border-bottom:2px solid var(--line); }
+  .cmp td { vertical-align:top; padding:8px 10px; border-bottom:1px solid var(--line); }
+  .cmp td.tn { width:62px; font-weight:700; color:var(--acc); font-size:16px; }
+  .cmp tr.same td.side { opacity:.5; }
+  .cmp tr.lost td { background:rgba(230,105,90,.07); }
+  .cmp tr.lost td.tn { color:var(--bad); }
+  .cmp tr.collapsed td.side > .full { display:none; }
+  .cmp tr:not(.collapsed) td.side > .short { display:none; }
+  .ph { font-size:11px; text-transform:uppercase; color:var(--muted); letter-spacing:.05em; margin:6px 0 2px; }
+  .acts { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+  .act { background:rgba(90,169,230,.12); border:1px solid rgba(90,169,230,.3); border-radius:6px; padding:2px 7px; font-size:12px; }
+  .act.land { color:var(--land); border-color:rgba(202,164,106,.4); background:rgba(202,164,106,.08); }
+  .act.draw { color:var(--muted); background:none; border-style:dashed; }
+  .act.atk { color:#ffcf9a; border-color:rgba(255,170,90,.35); background:rgba(255,170,90,.07); }
+  .act.win { color:var(--good); border-color:rgba(90,209,122,.5); background:rgba(90,209,122,.12); }
+  .mana { color:var(--muted); font-size:11px; }
+  .endb { margin-top:6px; padding-top:5px; border-top:1px dashed var(--line); }
+  .zl { font-size:11px; color:var(--muted); margin-right:4px; }
+  .thumbs { display:inline-flex; flex-wrap:wrap; gap:4px; vertical-align:middle; }
+  .thumb { width:54px; text-align:center; cursor:help; position:relative; }
+  .thumb img { width:100%; border-radius:4px; display:block; background:#0b0c0e; min-height:40px; }
+  .thumb.tapped img { transform:rotate(90deg) scale(.8); }
+  .thumb em { font-style:normal; font-size:9px; color:var(--muted); display:block; line-height:1.1; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card { padding:1px 6px; border-radius:4px; background:#2e323a; font-size:12px; cursor:help; display:inline-block; margin:1px; }
+  .card.land { color:var(--land); } .card.spell { color:var(--spell); }
+  .diffcard { box-shadow:0 0 0 1px var(--warn); }
+  .thumb.diffcard { box-shadow:none; }
+  .thumb.diffcard img { box-shadow:0 0 0 2px var(--warn); }
+  .thumb.land { width:44px; }
+  .thumb.land.tapped { margin:6px 10px; }
+  .endb > div { margin-top:4px; }
+  .endb .zl { display:inline-block; width:66px; vertical-align:top; padding-top:14px; }
+  a { color:var(--acc); }
+  #pop { position:fixed; display:none; z-index:50; pointer-events:none; }
+  #pop img { width:244px; border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.65); display:block; background:#0b0c0e; }
+  kbd { background:#2e323a; border:1px solid var(--line); border-radius:3px; padding:0 4px; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Reference Review — games where the search beat your line</h1>
+  <select id="filter" title="Which games to list">
+    <option value="all">All games</option>
+    <option value="todo" selected>Needs a verdict (unreviewed + stale)</option>
+    <option value="done">Reviewed</option>
+  </select>
+  <span class="hint" id="counts"></span>
+  <span class="hint" style="margin-left:auto"><kbd>j</kbd>/<kbd>k</kbd> next/prev game · <kbd>1</kbd> promote · <kbd>2</kbd> clairvoyance · <kbd>3</kbd> bug · <kbd>4</kbd> replay manually · <kbd>e</kbd> expand all turns</span>
+</header>
+<main>
+  <aside id="list"><div class="empty">Loading…</div></aside>
+  <section id="detail"><div class="empty">Pick a game on the left.</div></section>
+</main>
+<script>
+let INDEX=null, CUR=null, LOGS={}, RIGHT=null, EXPAND=false;
+// Label verdicts (buttons 2-4). "promoted" is set by the Promote ACTION (button 1), never by a label click.
+const VLABEL={promoted:'Promoted', clairvoyance:'Clairvoyance', bug:'Bug', replay_manually:'Replay manually'};
+const LABELS=['clairvoyance','bug','replay_manually'];
+const HCLASS={'likely-clairvoyance':'p-clair','likely-misplay':'p-mis','mixed':'p-mixed','unclear':'p-unclear','pending':'p-unclear'};
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const fw=w=>(w===null||w===undefined)?'no win':'T'+w;
+
+// ---- card helpers (same conventions as index.html) ----
+let INV={}, IMAGE_REFS={};
+function invert(n){ const m={}; for(const k in n) for(const id of n[k]) m[id]=k; return m; }
+const nm=id=>INV[id]||('#'+id);
+const cardOf=x=>(x&&typeof x==='object')?(x.cardName||nm(x.card)):nm(x);
+function scryImg(name,ver){ return IMAGE_REFS[name] ? 'https://api.scryfall.com/cards/'+IMAGE_REFS[name]+'?format=image&version='+(ver||'small') : 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small'); }
+const landOf=x=>!!(x&&typeof x==='object'&&x.isLand);
+function thumb(x,cls){ const n=cardOf(x); const t=x&&typeof x==='object'&&x.tapped;
+  return `<span class="thumb ${t?'tapped':''} ${cls||''}" data-name="${esc(n)}"><img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/><em>${esc(n)}</em></span>`; }
+
+// ---- log -> turns ----
+function turnsOf(log){
+  const m=new Map();
+  for(const s of (log.turns||[])){ if(!m.has(s.turn)) m.set(s.turn,[]); m.get(s.turn).push(s); }
+  return m;
+}
+// "Same turn" = the same END-OF-TURN board (battlefield, hand, life totals). Not the action lists: a log
+// replayed from a reference's choices does not name the human's own plays (see humanPlays).
+function boardSig(steps){ const b=(steps[steps.length-1]||{}).boardAfter||{};
+  return JSON.stringify([(b.battlefield||[]).map(x=>x.cardName||x.card).sort(),(b.hand||[]).slice().sort(),b.playerLife,b.opponentLife]); }
+// Your plays, from the REFERENCE: the game log written by replaying its choice stream records the
+// boards but not the plays made through those choices, so each turn's line is read back from the
+// recorded decisions -- the plan you committed at each main-phase frame (its own summary), and your
+// pick at every other decision.
+function humanPlays(ref){
+  const m=new Map(); if(!ref) return m;
+  const add=(t,ph,txt,cls)=>{ if(!m.has(t)) m.set(t,[]); m.get(t).push({ph,txt,cls}); };
+  for(const rec of (ref.decisions||[])){
+    const d=rec.decision||{}; let c=rec.chosen; if(Array.isArray(c)&&c.length===1) c=c[0];
+    if(d.type==='mulligan'||d.type==='bottom') continue;
+    if(d.type==='main_phase'){
+      if(c===-1||c===null||c===undefined) continue;
+      const p=(d.plans||[]).find(x=>x.index===c)||(d.plans||[])[c];
+      if(p) add(d.turn,d.phase,p.summary||'?','play');
+      continue;
+    }
+    const opts=d.options||d.candidates||d.choices||d.cards||null;
+    let lab=null;
+    if(Array.isArray(opts)){ const pick=Array.isArray(c)?c.map(i=>opts[i]):[opts[c]];
+      lab=pick.filter(x=>x!=null).map(o=>typeof o==='object'?(o.label||o.summary||o.name||o.cardName||JSON.stringify(o)):String(o)).join(', '); }
+    add(d.turn,d.phase||'',`${d.type.replace(/_/g,' ')}: ${lab!=null&&lab!==''?lab:JSON.stringify(c)}`,'pick');
+  }
+  return m;
+}
+function actionHtml(a){
+  const n=a.cardName||(a.card!=null?nm(a.card):'');
+  const dn=n?`data-name="${esc(n)}"`:'';
+  switch(a.type){
+    case 'PLAY_LAND': return `<span class="act land" ${dn}>▣ ${esc(n)}</span>`;
+    case 'CAST_SPELL': {
+      const x=(a.chosenX!=null&&a.chosenX>=0)?` X=${a.chosenX}`:'';
+      const tg=(a.targets&&a.targets.length)?' → '+a.targets.map(t=>t.kind==='player'?(t.who==='opponent'?'opp':'you'):(t.cardName||nm(t.card))).map(esc).join(', '):'';
+      return `<span class="act" ${dn}>✦ ${esc(n)} <span class="mana">${esc(a.manaPaid||'')}${x}${esc(tg)}</span></span>`; }
+    case 'DRAW': return `<span class="act draw" ${dn}>draw ${esc(n)}</span>`;
+    case 'ATTACK': return `<span class="act atk">⚔ ${a.damage??'?'} dmg${a.oppLife!=null?` (opp → ${a.oppLife})`:''}</span>`;
+    case 'DISCARD': return `<span class="act" ${dn}>⤓ discard ${esc(n)}</span>`;
+    case 'REVEAL': {
+      const kept=new Set(a.kept||[]);
+      const seen=(a.lookedAt||[]).map(c=>`<span class="card ${kept.has(c.card)?'spell':''}" data-name="${esc(c.cardName||nm(c.card))}">${kept.has(c.card)?'▲':'▼'} ${esc(c.cardName||nm(c.card))}</span>`).join('');
+      return `<span class="act" ${dn}>👁 ${esc(a.source||'reveal')}: ${seen}</span>`; }
+    default: {
+      const verb=(a.type||'?').replace(/_/g,' ').toLowerCase();
+      const win=/win|lethal/.test(verb);
+      return `<span class="act ${win?'win':''}" ${dn}>${esc(verb)}${n?' '+esc(n):''}${a.ability?': '+esc(a.ability):''}</span>`; }
+  }
+}
+function boardHtml(b, other){
+  if(!b) return '';
+  const names=arr=>new Map((arr||[]).reduce((m,x)=>{const k=cardOf(x); m.set(k,(m.get(k)||0)+1); return m;},new Map()));
+  // Highlight cards one side has and the other does not (by name multiset), so a divergence pops out.
+  const diff=(arr,oarr)=>{ if(!oarr) return ()=>''; const o=names(oarr); const seen=new Map();
+    return x=>{ const k=cardOf(x); const c=(seen.get(k)||0)+1; seen.set(k,c); return c>(o.get(k)||0)?'diffcard':''; }; };
+  const bf=b.battlefield||[], obf=other&&other.battlefield;
+  const perms=bf.filter(x=>!landOf(x)), lands=bf.filter(landOf);
+  const dp=diff(perms, obf&&obf.filter(x=>!landOf(x))), dl=diff(lands, obf&&obf.filter(landOf)), dh=diff(b.hand, other&&other.hand);
+  let h=`<div class="endb"><span class="zl">life</span><b>${b.playerLife??'?'}</b> <span class="zl">· opp</span><b style="color:var(--bad)">${b.opponentLife??'?'}</b>`;
+  if(perms.length) h+=`<div><span class="zl">permanents</span><span class="thumbs">${perms.map(x=>thumb(x,dp(x))).join('')}</span></div>`;
+  h+=`<div><span class="zl">lands</span>${lands.length?`<span class="thumbs">${lands.map(x=>thumb(x,'land '+dl(x))).join('')}</span>`:'<span class="hint">none</span>'}</div>`;
+  h+=`<div><span class="zl">hand</span>${(b.hand||[]).length?`<span class="thumbs">${(b.hand||[]).map(x=>thumb(x,dh(x))).join('')}</span>`:'<span class="hint">empty</span>'}</div>`;
+  if(b.staged&&b.staged.length) h+=`<div><span class="zl">staged</span><span class="thumbs">${b.staged.map(x=>thumb(x)).join('')}</span></div>`;
+  return h+'</div>';
+}
+function cellHtml(steps, otherSteps, plays){
+  if(!steps) return '<span class="hint">— game over —</span>';
+  let full='', short=[];
+  if(plays&&plays.length){
+    full+=`<div class="ph">your plays</div><div class="acts">${plays.map(p=>`<span class="act ${p.cls==='pick'?'draw':''}" title="${esc(p.ph)}">${p.cls==='play'?'▶ ':''}${esc(p.txt)}</span>`).join('')}</div>`;
+    for(const p of plays) if(p.cls==='play') short.push(esc(p.txt));
+  }
+  for(const s of steps){
+    const acts=(s.actions||[]);
+    if(!acts.length) continue;
+    full+=`<div class="ph">${esc((s.phase||'').replace(/_/g,' '))}</div><div class="acts">${acts.map(actionHtml).join('')}</div>`;
+    if(!plays) for(const a of acts) if(a.type==='PLAY_LAND'||a.type==='CAST_SPELL') short.push(esc(a.cardName||nm(a.card)));
+  }
+  const end=steps[steps.length-1].boardAfter, oend=otherSteps?otherSteps[otherSteps.length-1].boardAfter:null;
+  full+=boardHtml(end, oend);
+  return `<div class="short hint">${short.join(' · ')||'(nothing played)'} — click to expand</div><div class="full">${full||'<span class="hint">no actions</span>'}</div>`;
+}
+
+// ---- list ----
+function stateOf(g){ return g.verdict_state; }
+function vchip(g){ if(!g.verdict) return ''; return `<span class="pill v-${g.verdict.verdict} ${g.verdict_state==='stale'?'v-stale':''}" title="${g.verdict_state==='stale'?'STALE: the search line changed since you marked it':''}">${esc(VLABEL[g.verdict.verdict])}${g.verdict_state==='stale'?' (stale)':''}</span>`; }
+function hchip(h,t){ return `<span class="pill ${HCLASS[h]||'p-unclear'}" title="${esc(t||'')}">${esc(h)}</span>`; }
+// The open game stays listed whatever the filter, so marking it does not yank it out from under you;
+// j/k moves on.
+function visible(){ const f=document.getElementById('filter').value;
+  return INDEX.games.filter(g=>f==='all'||(CUR&&g.key===CUR.key)||(f==='todo'?stateOf(g)!=='current':stateOf(g)==='current')); }
+function renderList(){
+  const gs=visible(); const L=document.getElementById('list');
+  const n=INDEX.games.length, done=INDEX.games.filter(g=>stateOf(g)==='current').length, stale=INDEX.games.filter(g=>stateOf(g)==='stale').length;
+  const m=INDEX.meta||{};
+  document.getElementById('counts').textContent=`${n} games · ${done} reviewed · ${stale} stale · ${n-done-stale} unreviewed`+
+    (m.src?` · built ${m.generated_at} @ src ${m.src.slice(0,10)}`:'')+
+    (m.complete===false?` · BUILDING: ${m.games_laid_out||0}/${m.games_total} games ready, hints still filling in`:'');
+  if(!gs.length){ L.innerHTML='<div class="empty">Nothing here.</div>'; return; }
+  let h='', dir=null;
+  for(const g of gs){
+    if(g.ref_dir!==dir){ dir=g.ref_dir; h+=`<h2>${esc(dir)}</h2>`; }
+    h+=`<div class="item ${CUR&&CUR.key===g.key?'sel':''}" data-key="${esc(g.key)}"><span class="nm">s${g.seed} gi${g.gi}</span>`+
+       `<span class="res">you ${fw(g.human_win)} → ${fw(g.search_win)}</span>${hchip(g.hint,g.hint_detail)}${vchip(g)}</div>`;
+  }
+  L.innerHTML=h;
+  L.querySelectorAll('.item').forEach(el=>el.onclick=()=>select(el.dataset.key));
+}
+
+// ---- detail ----
+async function getLog(g,file){
+  const url=`/review/${g.dir}/${file}`;
+  if(!LOGS[url]){ const r=await fetch(url); LOGS[url]=r.ok?await r.json():null; }
+  return LOGS[url];
+}
+function defaultRight(g){
+  const lost=(g.lost_turns||[])[0];
+  if(lost){ const r=(g.ladder||[]).find(x=>x.turn===lost.turn); if(r&&r.cv_log) return r.cv_log; }
+  return g.files.search?'search.json':null;
+}
+async function select(key){
+  CUR=INDEX.games.find(g=>g.key===key); if(!CUR) return;
+  RIGHT=defaultRight(CUR);
+  history.replaceState(null,'','#'+encodeURIComponent(key));
+  renderList(); await renderDetail();
+  document.querySelector('.item.sel')?.scrollIntoView({block:'nearest'});
+}
+async function renderDetail(){
+  const g=CUR, D=document.getElementById('detail');
+  const lostSet=new Set((g.lost_turns||[]).map(x=>x.turn));
+  const lostBy=Object.fromEntries((g.lost_turns||[]).map(x=>[x.turn,x]));
+  let h=`<h2 class="game">${esc(g.key)}</h2>`;
+  h+=`<div>You won <b>${fw(g.human_win)}</b>; the shipped search wins <b style="color:var(--good)">${fw(g.search_win)}</b> from the same opening hand (${g.delta} turn${g.delta===1?'':'s'} earlier). Seed ${g.seed}, game ${g.gi}.</div>`;
+  h+=`<div style="margin-top:4px">Hint: ${hchip(g.hint)} <span class="hint">${esc(g.hint_detail)}</span></div>`;
+  const warn=[];
+  if(g.replay&&g.replay.kind!=='ok') warn.push(`reference replay: <b>${esc(g.replay.kind)}</b> — ${esc(g.replay.detail)}`);
+  if(g.human_log_matches===false) warn.push(`your replayed game ended ${fw(g.human_log_win)}, not ${fw(g.human_win)} as recorded — the left column may not be exactly your game`);
+  if(!g.files.human) warn.push('no replay of your game could be written');
+  const r1=(g.ladder||[])[0]; if(r1&&r1.cv_win!==g.search_win) warn.push(`the hand-off from turn 1 wins ${fw(r1.cv_win)}, the bench ${fw(g.search_win)} (hand-off and batch paths differ)`);
+  if(g.rules&&g.rules.changed) warn.push(`<b>Rules changed since you recorded this game.</b> It replays under ${esc(g.rules.legacy_flags.join(' '))}; from turn 1 the search wins ${fw(g.rules.t1_recorded_rules)} under those rules and ${fw(g.rules.t1_current_rules)} under today's, so part of the gap is the rule change, not play`);
+  if(warn.length) h+=`<div class="banner bad">${warn.join('<br>')}</div>`;
+
+  // verdict + ladder
+  const v=g.verdict;
+  const rlog=(RIGHT==='search.json')?'the search from turn 1':((RIGHT||'').match(/handoff_T(\d+)/)?`your turns 1–${RIGHT.match(/handoff_T(\d+)/)[1]-1}, then the search`:'');
+  h+=`<div class="row2"><div class="box" id="vbar" style="min-width:340px;flex:1"><h3>Your verdict</h3>`+
+     `<button data-act="promote" class="promote ${v&&v.verdict==='promoted'?'on':''}" ${RIGHT?'':'disabled'} title="Make the right-hand line (${esc(rlog)}) the reference for this game">1. Promote search line</button> `+
+     LABELS.map((k,i)=>`<button data-v="${k}" class="${v&&v.verdict===k?'on':''}">${i+2}. ${VLABEL[k]}</button> `).join('')+
+     `<button data-v="" title="Remove the verdict">Clear</button>`+
+     `<div class="hint" style="margin-top:6px"><b>Promote</b> makes the line in the right column (${esc(rlog)}) the reference; your line is kept in references/review/replaced/. <b>Bug</b>: the search's line relies on an engine defect (say which in the note). <b>Replay manually</b>: your line is beatable but not this way; re-save it yourself in the play viewer.</div>`+
+     `<textarea id="note" placeholder="Note (optional): what the search did, why it is or is not a fair line, the bug…">${esc(v?v.note:'')}</textarea>`+
+     (v?`<div class="hint">${esc(VLABEL[v.verdict]||v.verdict)} ${esc(v.at)}${v.reference?` · now <code>${esc(v.reference)}</code>`:''}${v.human_line_kept_at?` · your line kept at <code>${esc(v.human_line_kept_at)}</code>`:''}${g.verdict_state==='stale'?' — <b style="color:var(--warn)">STALE: the search plays a different line now; re-check and re-mark</b>':''}</div>`:'')+
+     `<div id="vstatus"></div></div>`;
+  h+=`<div class="box"><h3>Hand-off ladder — the search from your board at the start of each turn</h3><table class="ladder"><tr><th>turn</th><th>search (sees library)</th><th>blind search</th><th></th><th>compare</th></tr>`;
+  for(const r of (g.ladder||[])){
+    const lb=lostBy[r.turn];
+    const note=lb?`your T${r.turn} lost ground: ${fw(lb.cv_from)} → ${fw(lb.cv_after)}`+(lb.hint?` · ${hchip(lb.hint)}`:''):'';
+    h+=`<tr class="${lb?'lost':''} ${r.cv_log?'pick':''} ${RIGHT===r.cv_log?'cur':''}" data-log="${esc(r.cv_log||'')}" title="${esc(r.board)}"><td>T${r.turn}</td><td>${r.cv_error?'error':fw(r.cv_win)}</td><td>${'nc_win' in r?(r.nc_error?'error':fw(r.nc_win)):'—'}</td><td>${note}</td><td>${r.cv_log?'◧ show':''}</td></tr>`;
+  }
+  h+=`<tr><td>end</td><td colspan="4" class="hint">your line: ${fw(g.human_win)}</td></tr></table>`+
+     `<div class="hint" style="margin-top:6px">A row is the search playing on from <i>your</i> board at that turn. Where the number rises, your turn above it lost ground. "Blind" is MTG_NC_SEARCH (no library knowledge): if it also gains there, the better line did not need foresight.</div></div></div>`;
+
+  // compare selector
+  const opts=[];
+  if(g.files.search) opts.push(['search.json','Search from turn 1 (the bench game)']);
+  for(const r of (g.ladder||[])) if(r.cv_log && r.turn>1) opts.push([r.cv_log,`Your turns 1–${r.turn-1}, then the search from T${r.turn}${lostSet.has(r.turn)?'  ← lost ground':''}`]);
+  const link=f=>`<a href="/viewer?log=${encodeURIComponent('/review/'+g.dir+'/'+f)}" target="_blank">open in step viewer ↗</a>`;
+  h+=`<div class="row2" style="align-items:center"><span>Right column:</span><select id="right">${opts.map(([f,l])=>`<option value="${esc(f)}" ${f===RIGHT?'selected':''}>${esc(l)}</option>`).join('')}</select>`+
+     `<button id="expand">${EXPAND?'Collapse identical turns':'Expand all turns'}</button>`+
+     `<span class="hint">${g.files.human?'you: '+link('human.json')+' · ':''}${RIGHT?'right: '+link(RIGHT):''}</span></div>`;
+  h+=`<div id="cmp"><div class="empty">Loading games…</div></div>`;
+  D.innerHTML=h;
+  D.querySelectorAll('#vbar button[data-v]').forEach(b=>b.onclick=()=>saveVerdict(b.dataset.v||null));
+  D.querySelector('#vbar button[data-act="promote"]').onclick=promote;
+  D.querySelectorAll('.ladder tr.pick').forEach(tr=>tr.onclick=()=>{ RIGHT=tr.dataset.log; renderDetail(); });
+  document.getElementById('right').onchange=e=>{ RIGHT=e.target.value; renderDetail(); };
+  document.getElementById('expand').onclick=()=>{ EXPAND=!EXPAND; renderDetail(); };
+  await renderCompare(g, lostSet);
+}
+async function renderCompare(g, lostSet){
+  const [L,R,REF]=await Promise.all([g.files.human?getLog(g,'human.json'):null, RIGHT?getLog(g,RIGHT):null,
+                                    g.files.reference?getLog(g,'reference.json'):null]);
+  const plays=humanPlays(REF);
+  if(CUR!==g) return;
+  const base=L||R; if(!base){ document.getElementById('cmp').innerHTML='<div class="empty">No game logs.</div>'; return; }
+  INV=invert(base.cardNumbering||{}); IMAGE_REFS=base.imageRefs||{};
+  const lt=L?turnsOf(L):new Map(), rt=R?turnsOf(R):new Map();
+  const maxT=Math.max(0,...lt.keys(),...rt.keys());
+  const res=lg=>lg&&lg.result?(lg.result.winner==='player'?`won T${lg.result.turn}`:'no win'):'';
+  const handT=(RIGHT||'').match(/handoff_T(\d+)/);
+  let h=`<table class="cmp"><tr><th style="width:62px"></th><th>You (${res(L)})</th><th>${RIGHT==='search.json'?'Search from turn 1':handT?`Search from your board at T${handT[1]}`:'Search'} (${res(R)})</th></tr>`;
+  for(let t=1;t<=maxT;t++){
+    const a=lt.get(t), b=rt.get(t);
+    const same=a&&b&&boardSig(a)===boardSig(b);
+    const collapsed=same&&!EXPAND;
+    h+=`<tr class="${same?'same':''} ${lostSet.has(t)?'lost':''} ${collapsed?'collapsed':''}"><td class="tn">T${t}${same?'<div class="hint" style="font-weight:400">same</div>':''}</td>`+
+       `<td class="side">${cellHtml(a,b,L?(plays.get(t)||[]):null)}</td><td class="side">${cellHtml(b,a,handT&&t<+handT[1]?(plays.get(t)||[]):null)}</td></tr>`;
+  }
+  h+='</table>';
+  const C=document.getElementById('cmp'); C.innerHTML=h;
+  C.querySelectorAll('tr.collapsed').forEach(tr=>tr.onclick=()=>tr.classList.remove('collapsed'));
+}
+function backupBanner(b, what){
+  return (b&&b.ok)
+    ? `<div class="banner ok">${what} · backed up · committed to references-autosave${b.pushed?' and pushed':''}.</div>`
+    : `<div class="banner bad">${what}, but the BACKUP failed — commit and push it by hand:<br>${esc(((b||{}).errors||[]).join('; '))}</div>`;
+}
+async function promote(){
+  const g=CUR, src=RIGHT; if(!src) return;
+  const R=await getLog(g,src); const w=R&&R.result&&R.result.winner==='player'?R.result.turn:null;
+  const kept=`Your line (${fw(g.human_win)}) is kept, byte for byte, at references/review/replaced/${g.ref_dir}/human_s${g.seed}_gi${g.gi}.json.`;
+  if(!confirm(`Promote this search line (${fw(w)}) to be the reference for ${g.key}?\n\n${kept}`)) return;
+  const st=document.getElementById('vstatus');
+  st.innerHTML='<div class="banner">promoting — replaying the line in the play engine and checking it replays as a reference…</div>';
+  const r=await fetch('/api/promote',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({key:g.key,source:src,note:document.getElementById('note').value})});
+  const out=await r.json();
+  if(!out.ok){ document.getElementById('vstatus').innerHTML=`<div class="banner bad">NOT promoted: ${esc(out.error)}<br>Replay it by hand in the play viewer if you want this line.</div>`; return; }
+  g.verdict=out.verdict; g.verdict_state=out.state;
+  renderList(); await renderDetail();
+  document.getElementById('vstatus').innerHTML=backupBanner(out.backup, `Promoted: ${esc(out.reference)} now wins ${fw(out.win_turn)}`)+
+    ((out.notes||[]).length?`<div class="hint">${(out.notes||[]).map(esc).join('<br>')}</div>`:'');
+}
+async function saveVerdict(v){
+  const g=CUR, st=document.getElementById('vstatus');
+  st.innerHTML='<div class="banner">saving…</div>';
+  const r=await fetch('/api/verdict',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({key:g.key,verdict:v,note:document.getElementById('note').value})});
+  const out=await r.json();
+  if(!r.ok){ st.innerHTML=`<div class="banner bad">NOT saved: ${esc(out.error)}</div>`; return; }
+  g.verdict=out.verdict; g.verdict_state=out.state;
+  renderList(); await renderDetail();
+  document.getElementById('vstatus').innerHTML=backupBanner(out.backup,'Saved to references/review/verdicts.json');
+}
+
+// ---- keys, popover, boot ----
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
+  const gs=visible(); const i=CUR?gs.findIndex(g=>g.key===CUR.key):-1;
+  if(e.key==='j'&&gs.length) select(gs[Math.min(gs.length-1,i+1)].key);
+  else if(e.key==='k'&&gs.length) select(gs[Math.max(0,i-1)].key);
+  else if(CUR&&e.key==='1') promote();
+  else if(CUR&&e.key>='2'&&e.key<='4') saveVerdict(LABELS[+e.key-2]);
+  else if(CUR&&e.key==='e'){ EXPAND=!EXPAND; renderDetail(); }
+});
+document.getElementById('filter').onchange=renderList;
+const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);
+const popImg=pop.querySelector('img'); let popName=null;
+function placePop(e){ const w=252,h=352; let x=e.clientX+18,y=e.clientY+18;
+  if(x+w>innerWidth)x=e.clientX-w-18; if(y+h>innerHeight)y=Math.max(8,innerHeight-h-8);
+  pop.style.left=x+'px'; pop.style.top=y+'px'; }
+document.addEventListener('mouseover',e=>{ const c=e.target.closest('[data-name]'); if(!c)return;
+  const n=c.getAttribute('data-name'); if(!n)return;
+  if(n!==popName){ popName=n; popImg.src=scryImg(n,'normal'); }
+  pop.style.display='block'; placePop(e); });
+document.addEventListener('mousemove',e=>{ if(pop.style.display==='block') placePop(e); });
+document.addEventListener('mouseout',e=>{ if(e.target.closest('[data-name]')){ pop.style.display='none'; popName=null; } });
+// While `ref_review.py build` is still running, games and hints keep arriving: refresh the list (not
+// the open game, so nothing you are reading moves under you) until the build says it is complete.
+async function refresh(){
+  const nx=await (await fetch('/api/review')).json();
+  const was=CUR&&CUR.key; INDEX=nx; if(was) CUR=INDEX.games.find(g=>g.key===was)||CUR;
+  renderList();
+  if(INDEX.meta&&INDEX.meta.complete===false) setTimeout(refresh,30000);
+}
+(async()=>{
+  INDEX=await (await fetch('/api/review')).json();
+  if(INDEX.meta&&INDEX.meta.complete===false) setTimeout(refresh,30000);
+  if(!INDEX.games.length){ document.getElementById('list').innerHTML='<div class="empty">No games. Run <code>python3 scripts/ref_review.py build</code>.</div>'; return; }
+  renderList();
+  const want=decodeURIComponent(location.hash.slice(1));
+  const first=INDEX.games.find(g=>g.key===want)||visible()[0]||INDEX.games[0];
+  if(first) select(first.key);
+})();
+</script>
+</body>
+</html>

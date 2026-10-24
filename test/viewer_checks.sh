@@ -132,6 +132,17 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_deck_beta_check.js" ]; 
   fi
 fi
 
+# 0c2) Reference REVIEW viewer (node + jsdom, no binary, ~1 s). tools/replay/review.html over the real
+#      review_server.js routes on a synthetic fixture: verdicts are stamped with the search line they
+#      judged and go stale when it changes, identical turns fold, /review/ cannot escape its directory.
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/review_viewer_check.js" ]; then
+  echo "--- reference review viewer ---"
+  if node "$HERE/review_viewer_check.js"; then :; else
+    echo "FAIL: the reference review viewer (tools/replay/review.html / review_server.js) is broken."
+    rc=1
+  fi
+fi
+
 # 0d) REFERENCE SAFETY (node + git; the route layer also uses the binary and SKIPS without it).
 #     ~10 s. Pins tools/play/refsafe.js: every saved reference is copied OUT of the repo, committed to
 #     the references-autosave branch with plumbing (working tree / index / HEAD untouched) and pushed;
