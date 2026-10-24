@@ -18,13 +18,13 @@
    "verdict": "promoted"
   },
   "Anti-Lifegain/claude_s4_gi3.json": {
-   "at": "2026-10-24T10:58:55+00:00",
+   "at": "2026-10-24T11:00:57+00:00",
    "hint": "likely-clairvoyance",
    "human_win": 6,
    "lost_turns": [
     2
    ],
-   "note": "",
+   "note": "The search specifically plays the Idyllic tutor and different fetches in order to avoid drawing the extra tainted remedy and get an extra mana source instead. This means that on T5 it has the 6 mana necessary for double Aria. As a non-clairvoyant, I didn't have that luxury.",
    "search_digest": "39a7128a13d84a78",
    "search_win": 5,
    "verdict": "clairvoyance"
