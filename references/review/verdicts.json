@@ -1,0 +1,162 @@
+{
+ "schema": 1,
+ "verdicts": {
+  "Anti-Lifegain/claude_s11_gi10.json": {
+   "at": "2026-10-24T11:09:14+00:00",
+   "hint": "mixed",
+   "human_win": 8,
+   "lost_turns": [
+    1,
+    3
+   ],
+   "note": "",
+   "search_digest": "9fc2f40ed2cd4742",
+   "search_win": 5,
+   "verdict": "clairvoyance"
+  },
+  "Anti-Lifegain/claude_s12_gi11.json": {
+   "at": "2026-10-24T11:12:18+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 7,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "search_digest": "d11c6ae947962565",
+   "search_win": 6,
+   "verdict": "clairvoyance"
+  },
+  "Anti-Lifegain/claude_s17_gi16.json": {
+   "at": "2026-10-24T11:20:43+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "search_digest": "04a5072b3834df82",
+   "search_win": 4,
+   "verdict": "clairvoyance"
+  },
+  "Anti-Lifegain/claude_s2_gi1.json": {
+   "at": "2026-10-24T10:53:58+00:00",
+   "hint": "likely-clairvoyance",
+   "human_line_kept_at": "references/review/replaced/Anti-Lifegain/human_s2_gi1.json",
+   "human_win": 5,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Anti-Lifegain/claude_s2_gi1.json",
+   "search_digest": "1c187ed8d0872790",
+   "search_win": 4,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  },
+  "Anti-Lifegain/claude_s4_gi3.json": {
+   "at": "2026-10-24T11:00:57+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 6,
+   "lost_turns": [
+    2
+   ],
+   "note": "The search specifically plays the Idyllic tutor and different fetches in order to avoid drawing the extra tainted remedy and get an extra mana source instead. This means that on T5 it has the 6 mana necessary for double Aria. As a non-clairvoyant, I didn't have that luxury.",
+   "search_digest": "39a7128a13d84a78",
+   "search_win": 5,
+   "verdict": "clairvoyance"
+  },
+  "Anti-Lifegain/claude_s5_gi4.json": {
+   "at": "2026-10-24T11:05:00+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Anti-Lifegain/human_s5_gi4.json",
+   "human_win": 4,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 3,
+   "reference": "references/Anti-Lifegain/claude_s5_gi4.json",
+   "search_digest": "a6f4cfe0b99afa4a",
+   "search_win": 3,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  },
+  "Auras/claude_s12_gi11.json": {
+   "at": "2026-10-24T11:34:16+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Auras/human_s12_gi11.json",
+   "human_win": 7,
+   "lost_turns": [
+    4
+   ],
+   "note": "",
+   "promoted_win": 6,
+   "reference": "references/Auras/claude_s12_gi11.json",
+   "search_digest": "97d9af67e80449dd",
+   "search_win": 6,
+   "source": "handoff_T4.json",
+   "verdict": "promoted"
+  },
+  "Auras/claude_s14_gi13.json": {
+   "at": "2026-10-24T11:46:28+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "search_digest": "dfcb72fc63108226",
+   "search_win": 4,
+   "verdict": "clairvoyance"
+  },
+  "Auras/claude_s3_gi2.json": {
+   "at": "2026-10-24T11:32:03+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Auras/human_s3_gi2.json",
+   "human_win": 4,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 3,
+   "reference": "references/Auras/claude_s3_gi2.json",
+   "search_digest": "4ef3b6ad1d0352b7",
+   "search_win": 3,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  },
+  "Bruna/claude_s11_gi10.json": {
+   "at": "2026-10-24T11:55:03+00:00",
+   "hint": "likely-clairvoyance",
+   "human_line_kept_at": "references/review/replaced/Bruna/human_s11_gi10.json",
+   "human_win": 5,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Bruna/claude_s11_gi10.json",
+   "search_digest": "6b9cf55877b97655",
+   "search_win": 4,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  },
+  "Vampires/claude_s4_gi3.json": {
+   "at": "2026-10-24T12:14:35+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Vampires/human_s4_gi3.json",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Vampires/claude_s4_gi3.json",
+   "search_digest": "8704443bf0086849",
+   "search_win": 4,
+   "source": "handoff_T2.json",
+   "verdict": "promoted"
+  }
+ }
+}
