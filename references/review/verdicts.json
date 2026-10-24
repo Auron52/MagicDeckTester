@@ -28,6 +28,22 @@
    "search_digest": "39a7128a13d84a78",
    "search_win": 5,
    "verdict": "clairvoyance"
+  },
+  "Anti-Lifegain/claude_s5_gi4.json": {
+   "at": "2026-10-24T11:05:00+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Anti-Lifegain/human_s5_gi4.json",
+   "human_win": 4,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 3,
+   "reference": "references/Anti-Lifegain/claude_s5_gi4.json",
+   "search_digest": "a6f4cfe0b99afa4a",
+   "search_win": 3,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
   }
  }
 }
