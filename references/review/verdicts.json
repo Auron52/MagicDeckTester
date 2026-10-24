@@ -125,6 +125,22 @@
    "search_win": 3,
    "source": "handoff_T3.json",
    "verdict": "promoted"
+  },
+  "Bruna/claude_s11_gi10.json": {
+   "at": "2026-10-24T11:55:03+00:00",
+   "hint": "likely-clairvoyance",
+   "human_line_kept_at": "references/review/replaced/Bruna/human_s11_gi10.json",
+   "human_win": 5,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Bruna/claude_s11_gi10.json",
+   "search_digest": "6b9cf55877b97655",
+   "search_win": 4,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
   }
  }
 }
