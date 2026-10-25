@@ -647,8 +647,10 @@ def score(it, cfg):
     it["sort"] = (0 if it.get("mark") else 1, -int(it.get("mark", {}).get("priority", 0)), -s)
 
 
-def assess_all(root=ROOT, rev="HEAD", only=None):
-    cfg = load_config(root)
+def assess_all(root=ROOT, rev="HEAD", only=None, cfg=None):
+    # The worker passes the cfg it loaded (the frozen tree has no config until the tool lands there):
+    # reloading it here from `root` dropped every USER mark (2026-10-25, Dragons run ahead of Angels/Giants).
+    cfg = cfg if cfg is not None else load_config(root)
     H = History(rev, root)
     smap = suite_map(root)
     out = []
@@ -1362,7 +1364,7 @@ def cmd_run(a):
             # has no config file and load_config() would return the bare defaults, silently dropping every
             # USER mark (2026-10-25: Angels/Giants marked p5 were passed over for three drift-ranked decks).
             cfg = load_config(wt if os.path.exists(os.path.join(wt, CONFIG_REL)) else ROOT)
-            items, _ = assess_all(root=wt)
+            items, _ = assess_all(root=wt, cfg=cfg)
             jobs = deck_jobs(items, cfg)
             q.fetch()
             claims = q.claims()

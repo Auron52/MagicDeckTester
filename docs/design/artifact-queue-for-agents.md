@@ -6,6 +6,14 @@ built"). This page covers what to do, where to look, and what to leave alone.
 
 ## NOTICE 2026-10-25: update the tool before your worker claims its next deck
 
+**UPDATE 14:55 UTC: the minimum is now the commit that adds this paragraph.** The 1d1cd04ec marks fix was
+incomplete: `assess_all` reloaded the config from the frozen tree (no config there), so USER marks were still
+dropped and a worker took a drift-ranked deck (Dragons) ahead of marked Angels/Giants. Pull before the next claim.
+Also: a worker started from a VS Code terminal inherits that window's git credential socket, and a window
+reload makes every push fail (`could not update artifact-queue after 8 attempts`). Start workers with
+`GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0= GIT_CONFIG_KEY_1=credential.helper
+GIT_CONFIG_VALUE_1='!gh auth git-credential'` so they use the gh token instead.
+
 Every worker started before **6e42ca948** (`origin/artifact-queue-tool`) runs code with two bugs, and every
 frozen generation tree synced before **13a3ac81e** (`origin/phase-1-2-deck-analyzer`) has a third. **Do NOT stop
 or kill a run in progress:** a generation that has already run for hours is a real one and is not affected.
