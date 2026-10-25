@@ -4,9 +4,12 @@
   "valueleaf": "em:dda402b9549781902008"
  },
  "deck": "dragonstorm",
+ "detail": "mulligan: REFUSED by a driver gate (exit 3) -- see dragonstorm.mulligan.log",
+ "finished": "2026-10-25T19:14:49Z",
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-25T19:14:37Z",
  "host": "550a08fdc1f3",
+ "result_branch": null,
  "run_id": "dragonstorm-artifact-queue-d7d6a5-20261025T191427",
  "score": 0.6592,
  "stage": "mulligan",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-25T19:14:27Z",
- "state": "running",
+ "state": "refused",
  "worker": "artifact-queue-d7d6a5"
 }
