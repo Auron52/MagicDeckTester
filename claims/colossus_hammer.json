@@ -1,0 +1,18 @@
+{
+ "blobs": {
+  "mulligan": "c1c20970e55b11a3345ebe51ecd64f16752156dc"
+ },
+ "deck": "colossus_hammer",
+ "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
+ "heartbeat": "2026-10-25T02:38:09Z",
+ "host": "550a08fdc1f3",
+ "run_id": "colossus_hammer-artifact-queue-d7d6a5-20261025T023809",
+ "score": 0.9836,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan"
+ ],
+ "started": "2026-10-25T02:38:09Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
