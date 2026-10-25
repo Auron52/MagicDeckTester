@@ -1,0 +1,43 @@
+{
+ "deck": "giants",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "giants-artifact-queue-d7d6a5-20261025T145443",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "643142ec0850104f954f9b993a8cb9b6a803fe34",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.017125,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.017125 t, recipe complete)"
+  },
+  {
+   "run_id": "giants-artifact-queue-d7d6a5-20261025T145443",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:b8979a38ce5ac04339f6",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_giants/DECISIONS.txt)",
+   "decisions": [
+    "=== 2026-10-25T16:32:28  PHASE E.7b: giants -- trust REJECTED at d5 -> value_trust_depth unset (unchanged); play moved d5/20 -> d4/20 after phase E decided trust",
+    "      trust candidate d5: ON-OFF +0.00000 turns (se 0.00000, one-sided 95% upper +0.00062) over 8 seeds x 1000 games; cost 759 vs 716 core-s (1.06x); 8/8 seeds byte-identical; se 0.00000 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: REJECTED -- the lever NEVER ENGAGED: play is byte-identical on every seed AND cost is 1.06x (>= 0.98), so trusting at d5 changed nothing at all. A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence of safety. Usual cause: a staged sidecar carrying value_play leaf:none, which swaps the model for a Constant() so it can never be consulted. Shipping UNSET (always eligible to escalate).",
+    "",
+    "=== 2026-10-25T16:32:33  PHASE E.6: no allowance for giants -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0",
+    "    the live sidecar's existing escalation_skip_r = [97.2, 73.7, 68.6, 0.0, 0.0] is KEPT -- it was measured against the leaf live when it was set; if this run installed a new leaf it is stale: USER, keep or remove it."
+   ]
+  }
+ ]
+}
