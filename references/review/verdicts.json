@@ -170,6 +170,22 @@
    "search_win": 5,
    "verdict": "clairvoyance"
   },
+  "Soldiers/claude_s16_gi15.json": {
+   "at": "2026-10-25T10:43:09+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Soldiers/human_s16_gi15.json",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Soldiers/claude_s16_gi15.json",
+   "search_digest": "e8564bf05c3aff3a",
+   "search_win": 4,
+   "source": "handoff_T2.json",
+   "verdict": "promoted"
+  },
   "Soldiers/claude_s2_gi1.json": {
    "at": "2026-10-25T10:40:50+00:00",
    "hint": "likely-misplay",
