@@ -686,6 +686,7 @@ def deck_jobs(items, cfg):
         jobs.append({"deck": deck, "dir": best["dir"], "stages": [k for k in KINDS if k in kinds],
                      "sort": best["sort"], "score": max(i["score"] for i in q),
                      "blobs": {i["kind"]: i["blob"] for i in its},
+                     "queued_kinds": sorted(set(i["kind"] for i in q)),
                      "ledger_runs": sorted(set(r for i in its for r in i.get("ledger_runs", [])))})
     jobs.sort(key=lambda j: j["sort"])
     return jobs
@@ -1244,7 +1245,11 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                                   "(new-vs-old %s t); incumbent restored" % delta)
                     verdict("mulligan", "kept-incumbent", job["blobs"].get("mulligan"),
                             {"delta": delta, "settings": settings, "detail": detail[-1]})
-                    break                          # the leaf would be fitted to an unchanged table: skip it
+                    # A leaf that is only here BECAUSE the table was regenerated (leaf_follows_mulligan) would be
+                    # fitted to an unchanged table: skip it. A leaf queued on its OWN drift is still due -- the
+                    # kept table is the one it is fitted to (2026-10-25: Anti-Lifegain's leaf was skipped here).
+                    if "valueleaf" not in job.get("queued_kinds", job["stages"]):
+                        break
                 else:
                     outcome = "failed"
                     detail.append("mulligan: FAILED rc=%d -- see %s.mulligan.log" % (rc, deck))
