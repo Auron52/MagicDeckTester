@@ -1056,9 +1056,15 @@ def ungzip_incumbent(wt, d):
     -- the PLAIN name -- but every deck commits only the .gz. Left alone, a regen would (1) save no
     incumbent, so it validates with the first-version bar (keep vs static) instead of old-vs-new, and
     (2) leave the new plain table SHADOWED by the old .gz, which the engine loads first. So in the
-    worker's own worktree the incumbent is unpacked to the plain names first. -> list of (gz, plain)."""
+    worker's own worktree the incumbent is unpacked to the plain names first. -> list of (gz, plain).
+
+    The PROFILE only. The plain raw name is the generator's FLOOR CHECKPOINT (cfg.out_raw): an existing
+    file there is resumed when its fingerprints match, so an unpacked incumbent raw from an unchanged
+    play digest is "resumed" as if it were this run's interrupted floor pass and the refine never runs
+    (Colossus Hammer 2026-10-25: a 5-minute "regeneration" at R~3 per hand, 0.100 t worse, rejected).
+    The raw stays .gz; mullgen.sh and the plan below read it from there."""
     done = []
-    for part in ("profile", "raw"):
+    for part in ("profile",):
         gz = os.path.join(wt, d["dir"], "%s.keepmodel.exhaustive.%s.json.gz" % (d["stem"], part))
         plain = gz[:-3]
         if os.path.exists(gz) and not os.path.exists(plain):
@@ -1175,7 +1181,8 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                 base = os.path.join(wt, deckinfo["dir"], "%s.keepmodel.exhaustive." % deckinfo["stem"])
                 if plan is None:
                     ek = read_json_any(base + "profile.json").get("exhaustive_keep", {})
-                    meta = read_json_any(base + "raw.json").get("meta", {}) if os.path.exists(base + "raw.json") else {}
+                    rawp = next((base + n for n in ("raw.json", "raw.json.gz") if os.path.exists(base + n)), None)
+                    meta = read_json_any(rawp).get("meta", {}) if rawp else {}
                     inc_R = max([r for r in (ek.get("effective_R"), meta.get("R")) if isinstance(r, int)] or [0]) or None
                     screened, _ = screened_setting(wt, deckinfo)
                     plan = mull_plan(cfg, deck, inc_R, meta.get("depth"), meta.get("budget_ms"), screened)
@@ -1495,8 +1502,9 @@ def cmd_selftest(a):
         git("commit", "-qm", "i", cwd=W)
         d = {"dir": "decks/X", "stem": "X"}
         ungzip_incumbent(W, d)
-        check("incumbent unpacked to the plain names the driver tests for",
-              sorted(os.listdir(W + "/decks/X")) == ["X.keepmodel.exhaustive.profile.json", "X.keepmodel.exhaustive.raw.json"])
+        check("incumbent PROFILE unpacked to the plain name the driver tests for; the raw stays .gz "
+              "(a plain raw is the generator's floor checkpoint and would be resumed)",
+              sorted(os.listdir(W + "/decks/X")) == ["X.keepmodel.exhaustive.profile.json", "X.keepmodel.exhaustive.raw.json.gz"])
         regzip(W, d)
         check("unchanged -> original .gz restored byte-for-byte", not git("status", "--porcelain", cwd=W).strip())
         ungzip_incumbent(W, d)
