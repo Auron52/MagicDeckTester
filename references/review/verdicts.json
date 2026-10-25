@@ -201,6 +201,19 @@
    "search_win": 4,
    "source": "handoff_T3.json",
    "verdict": "promoted"
+  },
+  "treasure_hunt/claude_s4_gi3.json": {
+   "at": "2026-10-25T01:15:49+00:00",
+   "hint": "mixed",
+   "human_win": null,
+   "lost_turns": [
+    4,
+    6
+   ],
+   "note": "The clairvoyant search took advantage of knowing the next card was Land's Edge and held Treasure Hunt.",
+   "search_digest": "ba4fa7877aab7417",
+   "search_win": 5,
+   "verdict": "clairvoyance"
   }
  }
 }
