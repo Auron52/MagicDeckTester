@@ -1,0 +1,24 @@
+{
+ "deck": "anti_lifegain",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "anti_lifegain-MagicDeckTester2-76d2cc-20261024T201005",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "a05761aa2dc5aa06b1e39821425f2a72d82ed9a4",
+   "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
+   "src_tree": "841e1e41c85bfade07e8eebfa1d9ccc8f7088eb6",
+   "date": "2026-10-25",
+   "worker": "MagicDeckTester2-76d2cc",
+   "delta": 0.005021,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.005021 t); incumbent restored"
+  }
+ ]
+}
