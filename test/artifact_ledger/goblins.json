@@ -1,0 +1,43 @@
+{
+ "deck": "goblins",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "goblins-artifact-queue-d7d6a5-20261025T025404",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "cc88b6250aaf8da27fa6b452cac50e310f841509",
+   "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
+   "src_tree": "0505eadb55ae1b3d2ec6f2754389db2743cfb79d",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.011094,
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": 6,
+    "budget": 10
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.011094 t, recipe fast)"
+  },
+  {
+   "run_id": "goblins-artifact-queue-d7d6a5-20261025T025404",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:71c8696d5192fbe47e51",
+   "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
+   "src_tree": "0505eadb55ae1b3d2ec6f2754389db2743cfb79d",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_goblins/DECISIONS.txt)",
+   "decisions": [
+    "=== 2026-10-25T14:36:32  PHASE E.7b: goblins -- trust REJECTED at d6 -> value_trust_depth unset (was 6; installed in this tree, NOT committed); play moved d6/40 -> d7/60 after phase E decided trust",
+    "      trust candidate d6: ON-OFF +0.00000 turns (se 0.00000, one-sided 95% upper +0.00062) over 8 seeds x 1000 games; cost 306 vs 302 core-s (1.01x); 8/8 seeds byte-identical; se 0.00000 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: REJECTED -- the lever NEVER ENGAGED: play is byte-identical on every seed AND cost is 1.01x (>= 0.98), so trusting at d6 changed nothing at all. A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence of safety. Usual cause: a staged sidecar carrying value_play leaf:none, which swaps the model for a Constant() so it can never be consulted. Shipping UNSET (always eligible to escalate).",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-25T14:36:38  PHASE E.6: no allowance for goblins -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
