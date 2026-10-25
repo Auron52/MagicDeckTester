@@ -4,22 +4,17 @@
   "valueleaf": "em:63f552c7e70c9e1c2c09"
  },
  "deck": "hinata2",
- "detail": "mulligan: FAILED rc=1 -- see hinata2.mulligan.log",
- "finished": "2026-10-24T21:48:06Z",
- "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
- "heartbeat": "2026-10-24T21:38:22Z",
- "host": "550a08fdc1f3",
- "released": "2026-10-24T21:48:35Z",
- "result_branch": null,
- "run_id": "hinata2-artifact-queue-d7d6a5-20261024T171638",
+ "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
+ "heartbeat": "2026-10-25T01:08:53Z",
+ "host": "8854e545ddab",
+ "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
  "score": 1.089,
  "stage": "mulligan",
  "stages": [
   "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-24T17:16:38Z",
- "state": "released",
- "why": "stopped in a 4h discovery tail; d09d1afa9 skips discovery on a regeneration",
- "worker": "artifact-queue-d7d6a5"
+ "started": "2026-10-25T01:08:53Z",
+ "state": "running",
+ "worker": "MagicDeckTester2-76d2cc"
 }
