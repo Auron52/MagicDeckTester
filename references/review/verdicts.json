@@ -158,6 +158,18 @@
    "source": "handoff_T4.json",
    "verdict": "promoted"
   },
+  "Bruna/claude_s14_gi13.json": {
+   "at": "2026-10-25T01:02:05+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 6,
+   "lost_turns": [
+    3
+   ],
+   "note": "The search clairvoyantly found that it would draw a sol ring. It is not possible for a non-clairvoyant to determine this line is the best.",
+   "search_digest": "308aaf52d8836f18",
+   "search_win": 5,
+   "verdict": "clairvoyance"
+  },
   "Vampires/claude_s4_gi3.json": {
    "at": "2026-10-24T12:14:35+00:00",
    "hint": "likely-misplay",
