@@ -3,7 +3,7 @@
   "mulligan": "c1c20970e55b11a3345ebe51ecd64f16752156dc"
  },
  "deck": "colossus_hammer",
- "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.100062 t); incumbent restored",
+ "detail": "released by the owner session: INVALID verdict -- the worker unpacked the incumbent raw onto the floor-checkpoint path and the gen 'resumed' it (R~3, no refine; fixed in 6e42ca948). Do not land artifact-refresh/colossus_hammer-20261025-0245. Was: mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.100062 t); incumbent restored",
  "finished": "2026-10-25T02:45:09Z",
  "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
  "heartbeat": "2026-10-25T02:38:20Z",
@@ -16,6 +16,6 @@
   "mulligan"
  ],
  "started": "2026-10-25T02:38:09Z",
- "state": "rejected",
+ "state": "released",
  "worker": "artifact-queue-d7d6a5"
 }
