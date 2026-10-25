@@ -984,8 +984,20 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
             EquivReport inc;
             try
             {
+                // Keep ONLY the bucket lists while parsing: an incumbent table is the whole keep table
+                // (FiveColour's is 1.8 GB), and a full DOM of it blew past the 20 GB RSS cap
+                // (2026-10-25). Every other key is discarded at its key event, so its subtree is
+                // tokenized but never stored.
                 std::ifstream bfs(bf);
-                nlohmann::json bj; bfs >> bj;
+                const nlohmann::json::parser_callback_t only_buckets =
+                    [](int depth, nlohmann::json::parse_event_t ev, nlohmann::json& parsed)
+                {
+                    if (ev != nlohmann::json::parse_event_t::key) { return true; }
+                    const std::string& k = parsed.get_ref<const std::string&>();
+                    if (depth == 1) { return k == "exhaustive_keep" || k == "buckets"; }
+                    return depth != 2 || k == "buckets";
+                };
+                nlohmann::json bj = nlohmann::json::parse(bfs, only_buckets);
                 const nlohmann::json& ek = bj.contains("exhaustive_keep") ? bj["exhaustive_keep"] : bj;
                 std::set<std::string> seen;
                 for (const auto& jb : ek.at("buckets"))
