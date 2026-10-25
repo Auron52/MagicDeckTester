@@ -3,9 +3,12 @@
   "mulligan": "d9c72c705c6634318ee67531e09bc6ffd8b3b7cb"
  },
  "deck": "snow",
+ "detail": "mulligan: ADOPTED (new-vs-old -0.037 t, recipe fast)",
+ "finished": "2026-10-25T14:02:13Z",
  "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
  "heartbeat": "2026-10-25T13:52:05Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/snow-20261025-1402",
  "run_id": "snow-artifact-queue-tool-647f24-20261024T160120",
  "score": 1.2308,
  "stage": "mulligan",
@@ -13,6 +16,6 @@
   "mulligan"
  ],
  "started": "2026-10-24T16:01:20Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
