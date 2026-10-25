@@ -143,16 +143,20 @@
    "verdict": "promoted"
   },
   "Bruna/claude_s12_gi11.json": {
-   "at": "2026-10-25T00:44:39+00:00",
+   "at": "2026-10-25T00:47:41+00:00",
    "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Bruna/human_s12_gi11.json",
    "human_win": null,
    "lost_turns": [
     4
    ],
-   "note": "",
+   "note": "The clairvoyant solution makes sense if you know you are getting no Blue mana. ",
+   "promoted_win": 8,
+   "reference": "references/Bruna/claude_s12_gi11.json",
    "search_digest": "ca88c21b9cac98b8",
    "search_win": 8,
-   "verdict": "clairvoyance"
+   "source": "handoff_T4.json",
+   "verdict": "promoted"
   },
   "Vampires/claude_s4_gi3.json": {
    "at": "2026-10-24T12:14:35+00:00",
