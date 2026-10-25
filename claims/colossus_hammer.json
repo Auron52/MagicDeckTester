@@ -3,9 +3,12 @@
   "mulligan": "c1c20970e55b11a3345ebe51ecd64f16752156dc"
  },
  "deck": "colossus_hammer",
+ "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.100062 t); incumbent restored",
+ "finished": "2026-10-25T02:45:09Z",
  "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
  "heartbeat": "2026-10-25T02:38:20Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/colossus_hammer-20261025-0245",
  "run_id": "colossus_hammer-artifact-queue-d7d6a5-20261025T023809",
  "score": 0.9836,
  "stage": "mulligan",
@@ -13,6 +16,6 @@
   "mulligan"
  ],
  "started": "2026-10-25T02:38:09Z",
- "state": "running",
+ "state": "rejected",
  "worker": "artifact-queue-d7d6a5"
 }
