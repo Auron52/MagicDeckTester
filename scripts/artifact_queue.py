@@ -1351,7 +1351,10 @@ def cmd_run(a):
             log(wid, "resuming in-flight %s at %s" % (job["deck"], frozen[:9]))
         else:
             wt, frozen = (ROOT, "HEAD") if a.dry_run else sync_worktree(wid, cfg)
-            cfg = load_config(wt)                       # marks/config as landed on the branch
+            # Marks/config as landed on the branch. Until the tool itself has landed there, the frozen tree
+            # has no config file and load_config() would return the bare defaults, silently dropping every
+            # USER mark (2026-10-25: Angels/Giants marked p5 were passed over for three drift-ranked decks).
+            cfg = load_config(wt if os.path.exists(os.path.join(wt, CONFIG_REL)) else ROOT)
             items, _ = assess_all(root=wt)
             jobs = deck_jobs(items, cfg)
             q.fetch()
