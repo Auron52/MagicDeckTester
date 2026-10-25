@@ -1330,7 +1330,7 @@ is unchanged and no no-search-shuffle bracket was run (the n-round rule).
 The owner keeps every card the shipped list already holds; "buy" is the new cards only, at the cheapest printing
 (Scryfall, fetched 2026-10-24: Scythecat Cub $27.48, Mossborn Hydra $13.72, Nature's Lore $2.15, Moraug $1.93, Harrow
 $0.34). Every step ADDS to the one above, so the owner can stop on any row and fill in later. Measured rows are hl2
-(held out, vs shipped); the two rows marked "est." were not played. Backup odds = P(at least 2 threats by T4 / T5 / T6
+(held out, vs shipped), rows 3 and 6 from hl3 (below). Backup odds = P(at least 2 threats by T4 / T5 / T6
 on the draw), and P(at least 3 by T6); "threats" = creatures other than Courser of Kruphix.
 
 | step | buy | total spent | list | threats | vs shipped | T7+ | backup T4 / T5 / T6, 3 by T6 |
@@ -1338,10 +1338,10 @@ on the draw), and P(at least 3 by T6); "threats" = creatures other than Courser 
 | 0 | -- | $0 | shipped | 16 | -- | 8.79% | 86.2 / 89.7 / 92.5, 74.7 |
 | 1 | 2 Harrow for 2 Cultivate | $0.68 | R0_P1 | 16 | -0.017 | 9.27% | 86.2 / 89.7 / 92.5, 74.7 |
 | 2 | 2 Moraug for 2 Genesis Wave, 2 Harrow for 2 Khalni | $5.22 | **R0_MP3** | 18 | **-0.161** | 6.96% | 91.0 / 93.7 / 95.7, 83.0 |
-| 3 | 1 Mossborn Hydra for 1 Rampaging Baloths | $18.94 | R0_MP3 + 1 Hydra | 18 | est. -0.4 | -- | 91.0 / 93.7 / 95.7, 83.0 |
+| 3 | 1 Mossborn Hydra for 1 Rampaging Baloths | $18.94 | **R1_MP3** | 18 | **-0.400** | 5.22% | 91.0 / 93.7 / 95.7, 83.0 |
 | 4 | 1 Hydra for the other Baloths | $32.66 | **R2_MP3** | 18 | **-0.597** | 4.01% | 91.0 / 93.7 / 95.7, 83.0 |
 | 5 | 2 Hydra for 2 Courser of Kruphix | $60.10 | **U0_MP3** | 20 | **-0.875** | 2.91% | 94.4 / 96.3 / 97.6, 89.1 |
-| 6 | 4 Nature's Lore for 4 Rampant Growth | $68.70 | U0_MP3 + NL | 20 | est. -0.89 | -- | 94.4 / 96.3 / 97.6, 89.1 |
+| 6 | 4 Nature's Lore for 4 Rampant Growth | $68.70 | **U0_MP4** | 20 | **-0.887** | 2.79% | 94.4 / 96.3 / 97.6, 89.1 |
 | 7 | 2 Scythecat Cub for the 2 Moraug | $123.66 | **R6_P4** | 20 | **-1.018** | 1.81% | 94.4 / 96.3 / 97.6, 89.1 |
 | 8 | 2 Cub for the last 2 Khalni | $178.62 | **S0_P4** | 22 | **-1.155** | 1.45% | 96.6 / 97.9 / 98.7, 93.4 |
 
@@ -1350,9 +1350,9 @@ on the draw), and P(at least 3 by T6); "threats" = creatures other than Courser 
   turns against the shipped list, and the slow tail (T7+) falls from 8.8% to 1.45%. Buying it directly, without
   the Moraugs, costs $174.76.
 * **Why this order**: turns per dollar. Moraug + Harrow on the shipped list is 0.031 turns/$, the first two Hydras
-  0.015-0.019, the last two 0.010, Nature's Lore 0.002-0.004, a Cub 0.0025. Rows 3 and 6 are estimates: the first
-  Hydra was worth more than the second in hl1 (-0.262 / -0.211), which puts row 3 near -0.4 between rows 2 and 4; and
-  Nature's Lore added -0.018 to -0.023 on every Hydra rung, which puts row 6 near -0.89.
+  0.015-0.019, the last two 0.010, Nature's Lore 0.002-0.004, a Cub 0.0025. Nature's Lore is the weakest buy per
+  dollar on row 6 (-0.0125 for $8.60, 0.0015 turns/$), but it is still the best thing $8.60 does on that list, and it
+  keeps its -0.020 on the Cub rungs.
 * **The Moraugs are a stopgap.** They are the best $4 on the shipped list, but at step 7 the Cubs take their slots
   (the Wave slots) and $3.86 of cards goes to the bench. An owner who already knows they will reach the Cubs can skip
   them; the Hydras are needed anyway.
@@ -1362,7 +1362,16 @@ on the draw), and P(at least 3 by T6); "threats" = creatures other than Courser 
   behind S0; not played with the Harrow packages). Keeping the Waves costs 0.07-0.15 turns on the cheap rungs, where
   Moraug would take their slots; from U0 up it costs only about 0.01-0.03.
 
-## Where the screen stands (2026-10-24, final)
+**hl3 -- the ladder's two unplayed rows, played** (USER 2026-10-25: *"How are we making judgements if we didn't play
+it?"*). R1_MP3 (shipped + 1 Hydra for 1 Baloths + M + P3) and U0_MP4 (U0 + M + P4), 20,000 games each on hl2's seeds
+and pin, 2 threads beside the artifact-queue worker's Snow generation (21:12-05:49 UTC). The base and the rungs were
+NOT replayed: the two arms' `[win]` lines are paired with hl2's by game index (same seed, same numbering, same binary;
+`logs/landfall_screen/hl3.screen.err`, read merged with hl2's). R1_MP3 **-0.400** vs shipped (se 0.005; -0.239 vs
+R0_MP3, +0.197 vs R2_MP3), T7+ 5.22%. U0_MP4 **-0.887** (se 0.006; -0.0125 vs U0_MP3, se 0.0012), T7+ 2.79%. The
+earlier additive estimates (-0.4, -0.89) were close, but Nature's Lore beside Moraug is worth less than on the other
+rungs (-0.0125 against -0.018 to -0.031), so the estimate of row 6 was right partly by luck.
+
+## Where the screen stands (2026-10-25, final)
 
 * **Recommendation: buy along the FINAL BUDGET LADDER above and stop wherever the budget does.** Cheapest real step:
   $5.22 (2 Moraug + 4 Harrow, -0.161). The big step: the four Hydras ($54.88, -0.77 alone). Top: S0_P4 (-1.155,
