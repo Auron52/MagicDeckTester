@@ -4,7 +4,7 @@
   "valueleaf": "em:15713f7430a43656572a"
  },
  "deck": "fivecolour",
- "detail": "mulligan: FAILED rc=1 -- see fivecolour.mulligan.log",
+ "detail": "released by the owner session: the failure was the MTG_KEEP_BUCKETS_FROM full-DOM parse (20 GB RSS on a 1.8 GB table), fixed in 13a3ac81e -- mulligan: FAILED rc=1 -- see fivecolour.mulligan.log",
  "finished": "2026-10-25T02:50:50Z",
  "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
  "heartbeat": "2026-10-25T02:46:15Z",
@@ -18,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-25T02:46:05Z",
- "state": "failed",
+ "state": "released",
  "worker": "artifact-queue-d7d6a5"
 }
