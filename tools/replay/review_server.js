@@ -138,6 +138,24 @@ function makeServer(opts) {
                    backup }];
   }
 
+  // The note alone, on whatever verdict the game already has. A PROMOTED game has no other route: the
+  // label buttons replace the verdict and Promote re-runs the promotion (USER 2026-10-25, an edited
+  // note on a promoted game was never saved).
+  async function saveNote(body) {
+    const idx = loadIndex();
+    const e = idx && idx.games.find(g => g.key === body.key);
+    if (!e) return [404, { error: `'${body.key}' is not in the review index` }];
+    const v = loadVerdicts();
+    const cur = (v.verdicts || {})[body.key];
+    if (!cur) return [409, { error: 'this game has no verdict yet -- pick one to save the note with it' }];
+    cur.note = String(body.note || '');
+    const tmp = o.verdicts + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(sortKeys(v), null, 1) + '\n');
+    fs.renameSync(tmp, o.verdicts);
+    const backup = await o.protect([VERDICTS_REL], `review note: ${body.key}`);
+    return [200, { ok: true, verdict: cur, state: verdictState(e, cur), backup }];
+  }
+
   // Promote: the new reference, the human's preserved line and the verdict file are all user work, so
   // every file the promotion wrote goes through protect() (backup + autosave commit + push).
   async function promote(body) {
@@ -173,6 +191,13 @@ function makeServer(opts) {
       if (req.method === 'POST' && url.pathname === '/api/verdict') {
         const body = JSON.parse(await readBody(req) || '{}');
         const job = writing.then(() => saveVerdict(body));
+        writing = job.catch(() => {});
+        const [code, out] = await job;
+        return send(res, code, out);
+      }
+      if (req.method === 'POST' && url.pathname === '/api/note') {
+        const body = JSON.parse(await readBody(req) || '{}');
+        const job = writing.then(() => saveNote(body));
         writing = job.catch(() => {});
         const [code, out] = await job;
         return send(res, code, out);

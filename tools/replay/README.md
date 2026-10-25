@@ -97,6 +97,10 @@ Settle each game one of four ways (keys `1`–`4`, `j`/`k` to move between games
 - **Replay manually**: your line is beatable but not this way. This is just a marker; re-save the
   game yourself in the play viewer.
 
+The note is saved with the verdict. To change a note later without touching the verdict, which is the
+only way for a promoted game, edit it and click **Save note** (Ctrl+Enter). A note you have not saved
+is kept in the browser across re-renders and reloads, and the box says so.
+
 Verdicts (and promoted references) are saved to the tracked `references/review/verdicts.json` /
 `references/` and protected like reference games: a backup outside the repo, a commit to
 `references-autosave`, and a push. So `review.sh`, like `play.sh`, refuses to start from a temp

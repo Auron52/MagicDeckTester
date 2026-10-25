@@ -188,6 +188,33 @@ server.listen(0, '127.0.0.1', async () => {
     doc.getElementById('expand').click();
     ok(doc.getElementById('note').value === 'unsaved draft', 'an expand / ladder / right-column re-render keeps an unsaved note');
     protectDelay = 0;
+    ok(JSON.parse(dom.window.localStorage.getItem('mdt-review-drafts') || '{}')[KEY] === 'unsaved draft',
+       'an unsaved note is kept in localStorage, so a reload does not lose it');
+
+    // ---- Save note: the note alone, the verdict untouched ----------------------------------------
+    // USER 2026-10-25: an edited note on a PROMOTED game had no way to be saved (the label buttons
+    // replace the verdict; Promote re-runs the promotion).
+    ok(!doc.getElementById('savenote').disabled, 'Save note is enabled while the note differs from the stored one');
+    const nprot = protects.length;
+    doc.getElementById('note').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+    await until(() => readV().note === 'unsaved draft', 'the note-only save (Ctrl+Enter)');
+    await until(() => /Note saved/.test(doc.getElementById('vstatus').textContent), 'the note-saved banner');
+    ok(readV().verdict === 'bug' && readV().search_digest === 'aaaa', 'Save note keeps the verdict and its stamp');
+    ok(protects.length === nprot + 1 && /review note/.test(protects[nprot].msg), 'the note save went through protect()');
+    ok(doc.getElementById('savenote').disabled && !/not saved/.test(doc.getElementById('notestate').textContent),
+       'after the save the box reads as saved');
+    ok(!(KEY in JSON.parse(dom.window.localStorage.getItem('mdt-review-drafts') || '{}')), 'a saved note drops its draft');
+    const pv = JSON.parse(fs.readFileSync(verdicts, 'utf8'));
+    pv.verdicts[KEY] = { verdict: 'promoted', note: 'old', search_digest: 'aaaa', reference: 'references/Deck/claude_s1_gi0.json',
+                         human_line_kept_at: 'references/review/replaced/Deck/human_s1_gi0.json', source: 'handoff_T2.json' };
+    fs.writeFileSync(verdicts, JSON.stringify(pv));
+    const pn = await (await fetch(base + '/api/note', { method: 'POST', body: JSON.stringify({ key: KEY, note: 'new reasoning' }) })).json();
+    ok(pn.ok && readV().verdict === 'promoted' && readV().note === 'new reasoning'
+       && readV().reference === 'references/Deck/claude_s1_gi0.json' && readV().source === 'handoff_T2.json',
+       'Save note on a PROMOTED game changes the note and nothing else');
+    await fetch(base + '/api/verdict', { method: 'POST', body: JSON.stringify({ key: KEY, verdict: null }) });
+    const nv = await fetch(base + '/api/note', { method: 'POST', body: JSON.stringify({ key: KEY, note: 'x' }) });
+    ok(nv.status === 409, 'Save note on a game with no verdict is refused (pick a verdict)');
     dom.window.close();
   } catch (e) {
     ok(false, 'exception: ' + (e && e.stack || e));
