@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "417a5df376df322d48ee5d00c56ebd12eeeba89f",
+  "valueleaf": "em:2038500e481e3f714a03"
+ },
+ "deck": "angels",
+ "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+ "heartbeat": "2026-10-25T16:33:37Z",
+ "host": "550a08fdc1f3",
+ "run_id": "angels-artifact-queue-d7d6a5-20261025T163337",
+ "score": 0.0418,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-25T16:33:37Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
