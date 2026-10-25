@@ -1,0 +1,43 @@
+{
+ "deck": "dragons",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "dragons-artifact-queue-d7d6a5-20261025T172727",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "615810a939dcddc65c65c05016a076d66a379871",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.016719,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.016719 t, recipe complete)"
+  },
+  {
+   "run_id": "dragons-artifact-queue-d7d6a5-20261025T172727",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:c579d50a10f9f55d0a90",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_dragons/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b30 adopt=1 delta=-0.00012 t=-1.00 cost=0.768x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=cheaper (0.77x) and quality not notably worse (-0.00012)",
+    "    VERDICT arm=d6b40 adopt=1 delta=-0.00025 t=-1.00 cost=0.814x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=cheaper (0.81x) and quality not notably worse (-0.00025)",
+    "    PICK arm=d6b20 why=the cheapest of 3 passing arm(s) (0.70x vs live, delta +0.00000)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-25T19:13:22  PHASE E.6: no allowance for dragons -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
