@@ -4,6 +4,8 @@
   "valueleaf": "em:c579d50a10f9f55d0a90"
  },
  "deck": "dragons",
+ "detail": "released by hand 3 min in: the worker ignored USER marks (assess_all reloaded config from the frozen tree); no journal written",
+ "finished": "2026-10-25T14:46:13Z",
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-25T14:42:32Z",
  "host": "550a08fdc1f3",
@@ -15,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-25T14:42:03Z",
- "state": "running",
+ "state": "released",
  "worker": "artifact-queue-d7d6a5"
 }
