@@ -104,8 +104,25 @@ server.listen(0, '127.0.0.1', async () => {
     ok(rows.length === 2, 'one row per turn (2)');
     ok(rows[0] && rows[0].classList.contains('same') && rows[0].classList.contains('collapsed'), 'identical T1 is folded');
     ok(rows[1] && rows[1].classList.contains('lost') && !rows[1].classList.contains('same'), 'T2 differs and is marked as the lost turn');
-    ok(rows[1] && /Lightning Bolt/.test(rows[1].textContent) && /land=Island/.test(rows[1].textContent),
+    ok(rows[1] && /Lightning Bolt/.test(rows[1].textContent) && /▣ Island/.test(rows[1].cells[1].textContent),
        'T2 shows both lines (yours read from the reference\'s decisions)');
+    // Both columns in ONE format: your plan is split into one item per action, under the same phase
+    // heading as the search's (USER 2026-10-25: "make the plans of both sides look the same").
+    const youActs = rows[1] ? [...rows[1].cells[1].querySelectorAll('.full .act')].map(e => e.textContent) : [];
+    const youPh = rows[1] ? [...rows[1].cells[1].querySelectorAll('.full .ph')].map(e => e.textContent) : [];
+    ok(youActs.includes('▣ Island') && !youActs.some(t => /land=|cast:/.test(t)) && youPh.includes('MAIN 1'),
+       'your plan reads as items under MAIN 1, like the search (' + youActs.join(' | ') + ')');
+    const split = (x, a) => dom.window.splitPlanItems(x, a).map(i => i.t);
+    ok(JSON.stringify(split('Galvanic Alchemist, Elvish Harbinger → Ezuri, Renegade Leader',
+                            [{ card: 'Galvanic Alchemist' }, { card: 'Elvish Harbinger' }]))
+       === JSON.stringify(['Galvanic Alchemist', 'Elvish Harbinger → Ezuri, Renegade Leader']),
+       'a comma inside a card name does not split an item');
+    ok(JSON.stringify(split('Khalni Heart Expedition: remove quest counters, sacrifice it: search for two basic lands',
+                            [{ card: 'Khalni Heart Expedition' }])).length > 0
+       && split('Ezuri, Renegade Leader, Resplendent Angel, equip Lightning Greaves → Resplendent Angel',
+                [{ card: 'Ezuri, Renegade Leader' }, { card: 'Resplendent Angel' }, { card: 'Lightning Greaves', activate: true }]).length === 3,
+       'card-name and equip boundaries split exactly one item per action');
+    ok(split('A, B', [{ card: 'A' }, { card: 'Z' }]).length === 1, 'a list that cannot be matched to its actions is shown whole');
     ok(rows[1] && !/pass/.test(rows[1].cells[1].textContent), 'a pass is not listed as a play');
     const imgs = rows[1] ? [...rows[1].cells[1].querySelectorAll('.endb img')].map(i => i.alt) : [];
     ok(imgs.filter(n => n === 'Mountain' || n === 'Island').length === 2 && imgs.includes('Lightning Bolt'),

@@ -149,25 +149,65 @@ function boardSig(steps){ const b=(steps[steps.length-1]||{}).boardAfter||{};
   return JSON.stringify([(b.battlefield||[]).map(x=>x.cardName||x.card).sort(),(b.hand||[]).slice().sort(),b.playerLife,b.opponentLife]); }
 // Your plays, from the REFERENCE: the game log written by replaying its choice stream records the
 // boards but not the plays made through those choices, so each turn's line is read back from the
-// recorded decisions -- the plan you committed at each main-phase frame (its own summary), and your
-// pick at every other decision.
+// recorded decisions -- the plan you committed at each main-phase frame, and your pick at every other
+// decision. Each plan is split into ONE ITEM PER ACTION (land, each cast, each activation) and filed
+// under the same MAIN 1 / MAIN 2 heading the search's log uses, so the two columns read alike.
+const PLAN_PHASE={pre_main:'MAIN_1', post_main:'MAIN_2'};
+// The summary's cast list joined with ", " -- but card names and ability text contain ", " too
+// ("Ezuri, Renegade Leader", "remove quest counters, sacrifice it"). So a ", " only starts a new item
+// where the text after it begins with an action not yet matched (the summary does not always list them
+// in action order: a vial cast comes first). -> [{t, a}], one per action; if that does not account for
+// every action, the list is shown whole rather than split wrongly.
+function splitPlanItems(text, actions){
+  const label=a=>!a.card?[]:[a.card,'equip '+a.card,'put '+a.card].concat(a.verb==='equipallfree'?['equip all']:[]);
+  const left=actions.slice();
+  const take=rest=>{ let best=-1, len=0;
+    left.forEach((a,k)=>{ for(const l of label(a)) if(rest.startsWith(l)&&l.length>len){ best=k; len=l.length; } });
+    return best<0?null:left.splice(best,1)[0]; };
+  if(actions.length<=1) return [{t:text, a:actions[0]||{}}];
+  const out=[]; let from=0, cur=take(text);
+  if(!cur) return [{t:text, a:{}}];
+  for(let i=text.indexOf(', '); i!==-1&&left.length; i=text.indexOf(', ',i+2)){
+    const nx=take(text.slice(i+2)); if(!nx) continue;
+    out.push({t:text.slice(from,i), a:cur}); from=i+2; cur=nx;
+  }
+  out.push({t:text.slice(from), a:cur});
+  return out.length===actions.length?out:[{t:text, a:{}}];
+}
+function planItems(p){
+  const sum=p.summary||'?', m=sum.match(/^land=(.*?); cast: (.*)$/);
+  if(!m) return [{html:`<span class="act">${esc(sum)}</span>`, txt:sum}];
+  const items=[];
+  const landTxt=m[1].replace(/ \(after the casts\)$/,'');
+  const land=landTxt!=='none'?{html:`<span class="act land" data-name="${esc(p.land||landTxt)}">▣ ${esc(landTxt)}</span>`, txt:landTxt}:null;
+  if(land&&!p.land_after_casts) items.push(land);
+  if(m[2]!=='(nothing)'){
+    for(const {t,a} of splitPlanItems(m[2], p.actions||[]))
+      items.push({html:`<span class="act" ${a.card?`data-name="${esc(a.card)}"`:''}>${a.activate?'':'✦ '}${esc(t)}</span>`, txt:t});
+  }
+  if(land&&p.land_after_casts) items.push(land);
+  return items;
+}
 function humanPlays(ref){
   const m=new Map(); if(!ref) return m;
-  const add=(t,ph,txt,cls)=>{ if(!m.has(t)) m.set(t,[]); m.get(t).push({ph,txt,cls}); };
+  const last={};                        // turn -> the main phase of your latest plan (a pick follows it)
+  const add=(t,ph,it,play)=>{ if(!m.has(t)) m.set(t,[]); m.get(t).push(Object.assign({ph,play},it)); };
   for(const rec of (ref.decisions||[])){
     const d=rec.decision||{}; let c=rec.chosen; if(Array.isArray(c)&&c.length===1) c=c[0];
     if(d.type==='mulligan'||d.type==='bottom') continue;
     if(d.type==='main_phase'){
       if(c===-1||c===null||c===undefined) continue;
       const p=(d.plans||[]).find(x=>x.index===c)||(d.plans||[])[c];
-      if(p) add(d.turn,d.phase,p.summary||'?','play');
+      const ph=PLAN_PHASE[d.phase]||'MAIN_1'; last[d.turn]=ph;
+      if(p) for(const it of planItems(p)) add(d.turn,ph,it,true);
       continue;
     }
     const opts=d.options||d.candidates||d.choices||d.cards||null;
     let lab=null;
     if(Array.isArray(opts)){ const pick=Array.isArray(c)?c.map(i=>opts[i]):[opts[c]];
       lab=pick.filter(x=>x!=null).map(o=>typeof o==='object'?(o.label||o.summary||o.name||o.cardName||JSON.stringify(o)):String(o)).join(', '); }
-    add(d.turn,d.phase||'',`${d.type.replace(/_/g,' ')}: ${lab!=null&&lab!==''?lab:JSON.stringify(c)}`,'pick');
+    const txt=`${d.type.replace(/_/g,' ')}: ${lab!=null&&lab!==''?lab:JSON.stringify(c)}`;
+    add(d.turn,last[d.turn]||'MAIN_1',{html:`<span class="act draw">${esc(txt)}</span>`, txt},false);
   }
   return m;
 }
@@ -211,17 +251,18 @@ function boardHtml(b, other){
 }
 function cellHtml(steps, otherSteps, plays){
   if(!steps) return '<span class="hint">— game over —</span>';
+  // `plays` (your recorded line) go under their phase's heading, ahead of whatever that step logged.
+  const byPh=new Map(); for(const p of (plays||[])){ if(!byPh.has(p.ph)) byPh.set(p.ph,[]); byPh.get(p.ph).push(p); }
   let full='', short=[];
-  if(plays&&plays.length){
-    full+=`<div class="ph">your plays</div><div class="acts">${plays.map(p=>`<span class="act ${p.cls==='pick'?'draw':''}" title="${esc(p.ph)}">${p.cls==='play'?'▶ ':''}${esc(p.txt)}</span>`).join('')}</div>`;
-    for(const p of plays) if(p.cls==='play') short.push(esc(p.txt));
-  }
+  const block=(ph,html)=>{ if(html) full+=`<div class="ph">${esc((ph||'').replace(/_/g,' '))}</div><div class="acts">${html}</div>`; };
   for(const s of steps){
+    const mine=byPh.get(s.phase)||[]; byPh.delete(s.phase);
     const acts=(s.actions||[]);
-    if(!acts.length) continue;
-    full+=`<div class="ph">${esc((s.phase||'').replace(/_/g,' '))}</div><div class="acts">${acts.map(actionHtml).join('')}</div>`;
+    block(s.phase, mine.map(p=>p.html).join('')+acts.map(actionHtml).join(''));
+    for(const p of mine) if(p.play) short.push(esc(p.txt));
     if(!plays) for(const a of acts) if(a.type==='PLAY_LAND'||a.type==='CAST_SPELL') short.push(esc(a.cardName||nm(a.card)));
   }
+  for(const [ph,mine] of byPh){ block(ph, mine.map(p=>p.html).join('')); for(const p of mine) if(p.play) short.push(esc(p.txt)); }
   const end=steps[steps.length-1].boardAfter, oend=otherSteps?otherSteps[otherSteps.length-1].boardAfter:null;
   full+=boardHtml(end, oend);
   return `<div class="short hint">${short.join(' · ')||'(nothing played)'} — click to expand</div><div class="full">${full||'<span class="hint">no actions</span>'}</div>`;
