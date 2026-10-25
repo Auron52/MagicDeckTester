@@ -214,6 +214,19 @@
    "search_digest": "ba4fa7877aab7417",
    "search_win": 5,
    "verdict": "clairvoyance"
+  },
+  "treasure_hunt/claude_s5_gi4.json": {
+   "at": "2026-10-25T01:17:46+00:00",
+   "hint": "mixed",
+   "human_win": 8,
+   "lost_turns": [
+    2,
+    4
+   ],
+   "note": "The search takes advantage of clairvoyant knowledge that the top card is a Land's Edge. It holds Treasure Hunt for just this reason.",
+   "search_digest": "7f63a12ac5a47bfd",
+   "search_win": 4,
+   "verdict": "clairvoyance"
   }
  }
 }
