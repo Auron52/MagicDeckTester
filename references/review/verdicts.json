@@ -170,6 +170,18 @@
    "search_win": 5,
    "verdict": "clairvoyance"
   },
+  "Soldiers/claude_s2_gi1.json": {
+   "at": "2026-10-25T10:40:50+00:00",
+   "hint": "likely-misplay",
+   "human_win": 5,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "search_digest": "939084401bbb7f8b",
+   "search_win": 4,
+   "verdict": "clairvoyance"
+  },
   "StompySurprise/claude_s1_gi0.json": {
    "at": "2026-10-25T10:39:33+00:00",
    "hint": "likely-misplay",
