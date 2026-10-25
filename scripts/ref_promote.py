@@ -15,7 +15,10 @@ did in that phase:
   * at each main-phase frame, among the plans that use only cards the search used in that phase, the
     one whose PROBED result (played on to the next main-phase frame) comes closest to the search's
     end-of-phase board (battlefield, hand, opponent life) is committed; pass when nothing gets closer.
-    A plan that reaches the search's own win is taken at once (see walk() for why names alone fail);
+    A plan that reaches the search's own win is taken at once (see walk() for why names alone fail).
+    A cast at an X the search did not use is not the search's action: a plan's X is fixed from the mana
+    in hand when it is enumerated, so a bigger X can need an earlier segment (lifegain for Accomplished
+    Alchemist, SelesnyaLifegain s15_gi14, 2026-10-25);
   * every other frame (a target, a tutor pick, a scry, a put-into-play) is answered the same way: each
     single-pick answer is probed and the one whose board at the next main-phase frame is closest to
     the search's is taken (multi-pick frames take the engine's default). Answers that tie there are
@@ -89,10 +92,11 @@ NOT_PLAYED = {"DRAW", "REVEAL", "ATTACK", "DISCARD"}
 
 def phase_names(log, from_turn):
     """{(turn, phase): {'lands': set of land-drop names, 'cards': set of other card names,
-    'count': Counter of 'land:<name>' / '<name>' per named action}} -- the cards the search used in
-    each main phase. Combat-step casts (tricks) belong to the pre-combat plan, as the viewer's plans
-    hold them."""
-    out = collections.defaultdict(lambda: {"lands": set(), "cards": set(), "count": collections.Counter()})
+    'count': Counter of 'land:<name>' / '<name>' per named action, 'xs': {name: set of X the search cast
+    it with}} -- the cards the search used in each main phase. Combat-step casts (tricks) belong to the
+    pre-combat plan, as the viewer's plans hold them."""
+    out = collections.defaultdict(lambda: {"lands": set(), "cards": set(), "count": collections.Counter(),
+                                           "xs": collections.defaultdict(set)})
     for s in log.get("turns") or []:
         ph = PHASE_OF.get(s.get("phase"))
         if ph is None or s.get("turn", 0) < from_turn:
@@ -104,6 +108,8 @@ def phase_names(log, from_turn):
             land = a.get("type") == "PLAY_LAND"
             out[(s["turn"], ph)]["lands" if land else "cards"].add(n)
             out[(s["turn"], ph)]["count"][("land:" if land else "") + n] += 1
+            if a.get("type") == "CAST_SPELL" and isinstance(a.get("chosenX"), int):
+                out[(s["turn"], ph)]["xs"][n].add(a["chosenX"])
     return out
 
 
@@ -187,16 +193,29 @@ def plan_ok(p, used):
     return bool(cards or p.get("land")) and cards <= used["cards"]
 
 
-def content(p):
-    c = collections.Counter(a.get("card") for a in p.get("actions") or [] if a.get("card"))
+def wrong_x(a, xs):
+    """A cast at an X the search did not use for that card: not the search's action. A plan's X is fixed
+    when the plan is enumerated, from the mana available THEN, so the search's bigger X can need an
+    earlier segment first (SelesnyaLifegain s15_gi14, 2026-10-25: Feed the Clan + Wellwisher gain the
+    life Accomplished Alchemist taps for, and only the next segment offers Genesis Wave X=14)."""
+    if a.get("activate") or not xs.get(a.get("card")):
+        return False
+    return (a.get("x") or 0) not in xs[a["card"]]          # a plan omits "x" at X=0
+
+
+def content(p, xs=None):
+    c = collections.Counter(a.get("card") for a in p.get("actions") or []
+                            if a.get("card") and not wrong_x(a, xs or {}))
     if p.get("land"):
         c["land:" + p["land"]] += 1
     return c
 
 
-def progress(p, rest):
-    """How many of the search's still-unplayed actions this phase the plan plays."""
-    return sum((content(p) & rest).values())
+def progress(p, rest, xs=None):
+    """(how many of the search's still-unplayed actions this phase the plan plays, minus its casts at an
+    X the search did not use) -- compared as a tuple."""
+    return (sum((content(p, xs) & rest).values()),
+            -sum(wrong_x(a, xs or {}) for a in p.get("actions") or []))
 
 
 # ---- side channels ------------------------------------------------------------------------------
@@ -466,9 +485,10 @@ def walk(c, prefix, extra, log, from_turn):
                 continue
             left = rest.setdefault(key, collections.Counter())
             if +left:
-                top = max(progress(p, left) for p in cands)
-                if top > 0:
-                    cands = [p for p in cands if progress(p, left) == top]
+                xs = used.get("xs") or {}
+                top = max(progress(p, left, xs) for p in cands)
+                if top[0] > 0:
+                    cands = [p for p in cands if progress(p, left, xs) == top]
             # The plan must beat PASSING (`here`) only once the search's named actions are all played.
             here = sig_diff(frame_sig(d), target)[0]
             if here == 0 and not +left:
@@ -494,7 +514,7 @@ def walk(c, prefix, extra, log, from_turn):
                 s.send(-1)
                 continue
             say("   take [%d]%s" % (best[1]["index"], " (reaches the win)" if best[0] < 0 else ""))
-            rest[key] = left - content(best[1])
+            rest[key] = left - content(best[1], used.get("xs") or {})
             if len(cands) > MAX_PROBES:
                 notes.append("T%s %s: probed %d of %d candidate plans" % (key[0], key[1], MAX_PROBES, len(cands)))
             s.send(best[1]["index"])
