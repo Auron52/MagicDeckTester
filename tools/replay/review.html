@@ -191,14 +191,21 @@ function planItems(p){
 function humanPlays(ref){
   const m=new Map(); if(!ref) return m;
   const last={};                        // turn -> the main phase of your latest plan (a pick follows it)
+  let prev=null;                        // {turn, ph} of the last plan you committed
   const add=(t,ph,it,play)=>{ if(!m.has(t)) m.set(t,[]); m.get(t).push(Object.assign({ph,play},it)); };
   for(const rec of (ref.decisions||[])){
     const d=rec.decision||{}; let c=rec.chosen; if(Array.isArray(c)&&c.length===1) c=c[0];
     if(d.type==='mulligan'||d.type==='bottom') continue;
     if(d.type==='main_phase'){
+      // Cards drawn since the previous frame. The replayed log does not carry what your PLAYS drew
+      // (a Treasure Hunt's lands, a cycle, a sac-to-draw), so they are shown after the play that drew
+      // them, like the search's own draws. A card drawn in a LATER turn than that play is the turn's
+      // draw step, which the log already shows.
+      for(const e of (d.drew||[])) if(prev&&e.turn===prev.turn)
+        add(e.turn,prev.ph,{html:`<span class="act draw" data-name="${esc(e.card)}">draw ${esc(e.card)}</span>`, txt:'draw '+e.card},false);
       if(c===-1||c===null||c===undefined) continue;
       const p=(d.plans||[]).find(x=>x.index===c)||(d.plans||[])[c];
-      const ph=PLAN_PHASE[d.phase]||'MAIN_1'; last[d.turn]=ph;
+      const ph=PLAN_PHASE[d.phase]||'MAIN_1'; last[d.turn]=ph; prev={turn:d.turn, ph};
       if(p) for(const it of planItems(p)) add(d.turn,ph,it,true);
       continue;
     }

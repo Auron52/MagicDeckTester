@@ -123,6 +123,17 @@ server.listen(0, '127.0.0.1', async () => {
                 [{ card: 'Ezuri, Renegade Leader' }, { card: 'Resplendent Angel' }, { card: 'Lightning Greaves', activate: true }]).length === 3,
        'card-name and equip boundaries split exactly one item per action');
     ok(split('A, B', [{ card: 'A' }, { card: 'Z' }]).length === 1, 'a list that cannot be matched to its actions is shown whole');
+    // A play's draws (Treasure Hunt, a cycle) are not in the replayed log; they come from the next
+    // frame's `drew`, shown after that play. A later turn's draw is the draw step, already in the log.
+    const plan = (turn, summary, drew) => ({ chosen: 0, decision: { type: 'main_phase', turn, phase: 'pre_main', drew,
+      plans: [{ index: 0, summary, actions: [{ card: 'Treasure Hunt' }], casts: ['Treasure Hunt'] }] } });
+    const hp = dom.window.humanPlays({ decisions: [
+      plan(2, 'land=Island; cast: Treasure Hunt', [{ turn: 2, card: 'Island' }]),
+      plan(2, 'land=none; cast: (nothing)', [{ turn: 2, card: 'Ferrous Lake' }, { turn: 2, card: 'Treasure Hunt' }]),
+      plan(3, 'land=none; cast: (nothing)', [{ turn: 3, card: 'Steam Vents' }])] });
+    ok(JSON.stringify((hp.get(2) || []).map(i => i.txt)) === JSON.stringify(['Island', 'Treasure Hunt', 'draw Ferrous Lake', 'draw Treasure Hunt'])
+       && !(hp.get(3) || []).length,
+       'a play\'s draws follow it; the draw-step card is not repeated (' + (hp.get(2) || []).map(i => i.txt).join(' | ') + ')');
     ok(rows[1] && !/pass/.test(rows[1].cells[1].textContent), 'a pass is not listed as a play');
     const imgs = rows[1] ? [...rows[1].cells[1].querySelectorAll('.endb img')].map(i => i.alt) : [];
     ok(imgs.filter(n => n === 'Mountain' || n === 'Island').length === 2 && imgs.includes('Lightning Bolt'),
