@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "7de4c96c116ece12da92a831c78def35328886f5",
+  "valueleaf": "em:c579d50a10f9f55d0a90"
+ },
+ "deck": "dragons",
+ "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+ "heartbeat": "2026-10-25T14:42:03Z",
+ "host": "550a08fdc1f3",
+ "run_id": "dragons-artifact-queue-d7d6a5-20261025T144203",
+ "score": 0.8224,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-25T14:42:03Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
