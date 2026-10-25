@@ -142,6 +142,18 @@
    "source": "handoff_T3.json",
    "verdict": "promoted"
   },
+  "Bruna/claude_s12_gi11.json": {
+   "at": "2026-10-25T00:44:39+00:00",
+   "hint": "likely-misplay",
+   "human_win": null,
+   "lost_turns": [
+    4
+   ],
+   "note": "",
+   "search_digest": "ca88c21b9cac98b8",
+   "search_win": 8,
+   "verdict": "clairvoyance"
+  },
   "Vampires/claude_s4_gi3.json": {
    "at": "2026-10-24T12:14:35+00:00",
    "hint": "likely-misplay",

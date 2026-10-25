@@ -1,10 +1,51 @@
 {
-  "seed": 4, "game_index": 3, "win_turn": 4, "won": true,
+  "seed": 4, "game_index": 3, "win_turn": 5, "won": true,
   "mulligan": { "count": 1, "bottom": [22] }, "combat_swap_timing": 1, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
-  "promoted_from_search": {"source": "handoff_T2.json", "from_turn": 2, "human_win": 5, "src": "3a42e204ff354a555f56f60698f1c1e4cd799cae", "at": "2026-10-24T12:14:35+00:00"},
   "decisions": [
-    { "chosen": 2, "decision": {
+    { "chosen": 0, "decision": {
   "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 5, "name": "Asylum Visitor" }, { "num": 36, "name": "Stromkirk Captain" }, { "num": 37, "name": "Stromkirk Captain" }, { "num": 57, "name": "Voldaren Estate" }, { "num": 40, "name": "Stromkirk Condemned" }, { "num": 32, "name": "Secluded Courtyard" }, { "num": 6, "name": "Asylum Visitor" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 23, "name": "Falkenrath Pit Fighter" }, { "num": 22, "name": "Falkenrath Pit Fighter" }, { "num": 18, "name": "Falkenrath Gorger" }, { "num": 50, "name": "Unclaimed Territory" }, { "num": 45, "name": "Swamp" }, { "num": 27, "name": "Legion Lieutenant" }, { "num": 4, "name": "Aether Vial" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 23, "name": "Falkenrath Pit Fighter", "win_optimal": true }, { "num": 22, "name": "Falkenrath Pit Fighter", "win_optimal": true }, { "num": 18, "name": "Falkenrath Gorger", "win_optimal": true }, { "num": 50, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 45, "name": "Swamp", "win_optimal": true }, { "num": 27, "name": "Legion Lieutenant", "win_optimal": true }, { "num": 4, "name": "Aether Vial", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 23, "name": "Falkenrath Pit Fighter" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
   "main_ordinal": 0,
   "type": "main_phase",
   "turn": 1,
@@ -12,7 +53,7 @@
   "on_the_play": true,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
   "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
     { "index": 1, "summary": "land=Unclaimed Territory; cast: Falkenrath Gorger", "land": "Unclaimed Territory", "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
@@ -20,27 +61,22 @@
     { "index": 3, "summary": "land=Swamp; cast: Aether Vial", "land": "Swamp", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
     { "index": 4, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
     { "index": 5, "summary": "land=Swamp; cast: (nothing)", "land": "Swamp", "casts": [], "actions": [] },
-    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
-    { "index": 7, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 8, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 9, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 10, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 11, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 12, "summary": "land=Unclaimed Territory; cast: Falkenrath Pit Fighter", "land": "Unclaimed Territory", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] }
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
+  "plans_hidden": 6,
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 1,
+  "decision_index": 4,
   "type": "main_phase",
   "turn": 1,
   "phase": "pre_main",
   "on_the_play": true,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
   "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
@@ -49,14 +85,14 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 2,
+  "decision_index": 5,
   "type": "main_phase",
   "turn": 1,
   "phase": "post_main",
   "on_the_play": true,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
   "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
@@ -65,7 +101,7 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 3,
+  "decision_index": 6,
   "type": "vial_charge",
   "turn": 2,
   "vial": "Aether Vial", "current_counters": 0,
@@ -73,12 +109,12 @@
   "heuristic_default": 1,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
   "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [0], "hand": [{ "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }] },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
   "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
 }
 },
-    { "chosen": 0, "decision": {
-  "decision_index": 4,
+    { "chosen": 3, "cast_order": ["*", "Falkenrath Gorger", "Legion Lieutenant"], "decision": {
+  "decision_index": 7,
   "main_ordinal": 1,
   "type": "main_phase",
   "turn": 2,
@@ -87,7 +123,7 @@
   "drew": [{ "turn": 2, "card": "Stromkirk Captain" }],
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
   "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 18, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }] },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "land=Swamp; cast: Falkenrath Pit Fighter (vial), Falkenrath Gorger", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
     { "index": 1, "summary": "land=Swamp; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
@@ -105,98 +141,24 @@
     { "index": 13, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
     { "index": 14, "summary": "land=none; cast: Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
     { "index": 15, "summary": "land=Swamp; cast: (nothing)", "land": "Swamp", "casts": [], "actions": [] },
-    { "index": 16, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
-    { "index": 17, "summary": "land=Swamp; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 18, "summary": "land=Swamp; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 19, "summary": "land=Swamp; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 20, "summary": "land=Swamp; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 21, "summary": "land=Swamp; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 22, "summary": "land=Swamp; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": "Swamp", "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 23, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 24, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 25, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 26, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 27, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 28, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 29, "summary": "land=Swamp; cast: Falkenrath Pit Fighter", "land": "Swamp", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 30, "summary": "land=Swamp; cast: Falkenrath Pit Fighter", "land": "Swamp", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 31, "summary": "land=Swamp; cast: Falkenrath Pit Fighter", "land": "Swamp", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 32, "summary": "land=Swamp; cast: Falkenrath Pit Fighter", "land": "Swamp", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 33, "summary": "land=Swamp; cast: Falkenrath Pit Fighter", "land": "Swamp", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 34, "summary": "land=Swamp; cast: Falkenrath Pit Fighter", "land": "Swamp", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 35, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 36, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 37, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 38, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 39, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 40, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] }
+    { "index": 16, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
+  "plans_hidden": 24,
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 5,
-  "type": "main_phase",
-  "turn": 2,
-  "phase": "pre_main",
-  "on_the_play": true,
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }] },
-  "plans": [
-    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": -1, "decision": {
-  "decision_index": 6,
-  "type": "main_phase",
-  "turn": 2,
-  "phase": "post_main",
-  "on_the_play": true,
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }] },
-  "plans": [
-    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": 1, "decision": {
-  "decision_index": 7,
-  "type": "vial_charge",
-  "turn": 3,
-  "vial": "Aether Vial", "current_counters": 1,
-  "perm_index": 2,
-  "heuristic_default": 1,
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
-  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
-}
-},
-    { "chosen": 0, "decision": {
   "decision_index": 8,
-  "main_ordinal": 2,
   "type": "main_phase",
-  "turn": 3,
+  "turn": 2,
   "phase": "pre_main",
   "on_the_play": true,
-  "drew": [{ "turn": 3, "card": "Vampire of the Dire Moon" }],
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 27, "name": "Legion Lieutenant", "cost": "{W}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: Legion Lieutenant (vial), Vampire of the Dire Moon", "land": null, "casts": ["Legion Lieutenant", "Vampire of the Dire Moon"], "cast_order_canonical": ["Legion Lieutenant", "Vampire of the Dire Moon"], "actions": [{ "card": "Legion Lieutenant" }, { "card": "Vampire of the Dire Moon" }] },
-    { "index": 1, "summary": "land=none; cast: Legion Lieutenant", "land": null, "casts": ["Legion Lieutenant"], "actions": [{ "card": "Legion Lieutenant" }] },
-    { "index": 2, "summary": "land=none; cast: Legion Lieutenant (vial)", "land": null, "casts": ["Legion Lieutenant"], "actions": [{ "card": "Legion Lieutenant" }] },
-    { "index": 3, "summary": "land=none; cast: Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
-    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
@@ -205,12 +167,64 @@
     { "chosen": -1, "decision": {
   "decision_index": 9,
   "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Falkenrath Pit Fighter", "Vampire of the Dire Moon"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Vampire of the Dire Moon" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 23, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Falkenrath Pit Fighter, Vampire of the Dire Moon", "land": null, "casts": ["Falkenrath Pit Fighter", "Vampire of the Dire Moon"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Vampire of the Dire Moon"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Vampire of the Dire Moon" }] },
+    { "index": 1, "summary": "land=none; cast: Vampire of the Dire Moon, Falkenrath Pit Fighter", "land": null, "casts": ["Vampire of the Dire Moon", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Vampire of the Dire Moon", "Falkenrath Pit Fighter"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 2, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 3, "summary": "land=none; cast: Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
   "on_the_play": true,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Legion Lieutenant", "idx": 8, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [2], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
@@ -219,15 +233,15 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 10,
+  "decision_index": 13,
   "type": "main_phase",
   "turn": 3,
   "phase": "post_main",
   "on_the_play": true,
-  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Falkenrath Pit Fighter (3), Falkenrath Gorger (3) — 6 to opponent (20→14)" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (3), Legion Lieutenant (2) — 5 to opponent (20→15)" }],
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Legion Lieutenant", "idx": 8, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [2], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
-  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "tapped": true, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "tapped": true, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
@@ -236,20 +250,20 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 11,
+  "decision_index": 14,
   "type": "vial_charge",
   "turn": 4,
   "vial": "Aether Vial", "current_counters": 2,
   "perm_index": 2,
   "heuristic_default": 1,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Legion Lieutenant", "idx": 8, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [2], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
-  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
   "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
 }
 },
-    { "chosen": 0, "decision": {
-  "decision_index": 12,
+    { "chosen": 0, "cast_order": ["*", "Stromkirk Captain", "Stromkirk Condemned"], "decision": {
+  "decision_index": 15,
   "main_ordinal": 3,
   "type": "main_phase",
   "turn": 4,
@@ -257,8 +271,8 @@
   "on_the_play": true,
   "drew": [{ "turn": 4, "card": "Stromkirk Condemned" }],
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Legion Lieutenant", "idx": 8, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [3], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
-  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [3], "hand": [{ "num": 39, "name": "Stromkirk Captain", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: Stromkirk Captain (vial), Stromkirk Condemned", "land": null, "casts": ["Stromkirk Captain", "Stromkirk Condemned"], "cast_order_canonical": ["Stromkirk Captain", "Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Captain" }, { "card": "Stromkirk Condemned" }] },
     { "index": 1, "summary": "land=none; cast: Stromkirk Captain (vial)", "land": null, "casts": ["Stromkirk Captain"], "actions": [{ "card": "Stromkirk Captain" }] },
@@ -270,14 +284,80 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 13,
+  "decision_index": 16,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
   "on_the_play": true,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 6, "num": 18, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Falkenrath Pit Fighter", "idx": 5, "num": 23, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Legion Lieutenant", "idx": 8, "num": 27, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stromkirk Captain", "idx": 10, "num": 39, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Stromkirk Condemned", "idx": 11, "num": 42, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [3], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
-  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Stromkirk Captain", "idx": 10, "num": 39, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 11, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [3], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (4), Legion Lieutenant (3), Falkenrath Pit Fighter (4), Vampire of the Dire Moon (3) — 14 to opponent (15→1)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "tapped": true, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "tapped": true, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "tapped": true, "is_land": false }, { "name": "Stromkirk Captain", "idx": 10, "num": 39, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 11, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "tapped": true, "is_land": false }], "vial_counters": [3], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "vial_charge",
+  "turn": 5,
+  "vial": "Aether Vial", "current_counters": 3,
+  "perm_index": 2,
+  "heuristic_default": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Stromkirk Captain", "idx": 10, "num": 39, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 11, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [3], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Bloodghast" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Stromkirk Captain", "idx": 10, "num": 39, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 11, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "is_land": true, "taps": "B" }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "is_land": true, "taps": "C" }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [3], "hand": [{ "num": 10, "name": "Bloodghast", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Stromkirk Condemned: Vampires +1/+1 (discard a card)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned", "src_num": 42, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Bloodghast", "land": null, "casts": ["Bloodghast"], "actions": [{ "card": "Bloodghast" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 4, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Bloodghast", "idx": 12, "num": 10, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 5, "num": 18, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 8, "num": 23, "is_land": false }, { "name": "Legion Lieutenant", "idx": 6, "num": 27, "is_land": false }, { "name": "Stromkirk Captain", "idx": 10, "num": 39, "is_land": false }, { "name": "Stromkirk Condemned", "idx": 11, "num": 42, "is_land": false }, { "name": "Swamp", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 50, "tapped": true, "is_land": true }, { "name": "Vampire of the Dire Moon", "idx": 9, "num": 54, "is_land": false }], "vial_counters": [3], "hand": [], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
@@ -287,6 +367,6 @@
 }
   ],
   "final_events": [
-    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Falkenrath Pit Fighter (4), Falkenrath Gorger (4), Legion Lieutenant (3), Vampire of the Dire Moon (3) — 14 to opponent (14→0)" }
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (4), Legion Lieutenant (3), Falkenrath Pit Fighter (4), Vampire of the Dire Moon (3), Stromkirk Captain (3), Stromkirk Condemned (4), Bloodghast (4) — 25 to opponent (1→-24)" }
   ]
 }
