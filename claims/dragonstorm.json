@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "8abbb1faa4ba2d08b0ded1c2939350e56fb38f82",
+  "valueleaf": "em:dda402b9549781902008"
+ },
+ "deck": "dragonstorm",
+ "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+ "heartbeat": "2026-10-25T19:14:27Z",
+ "host": "550a08fdc1f3",
+ "run_id": "dragonstorm-artifact-queue-d7d6a5-20261025T191427",
+ "score": 0.6592,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-25T19:14:27Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
