@@ -3,32 +3,30 @@
   {
    "cards": [
     "Crystal Grotto",
-    "The Grey Havens",
+    "Temple of Malice",
     "Temple of Deceit",
     "Temple of Abandon",
     "Temple of Mystery",
-    "Temple of Malice",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. PINS K=10: each keep_apart group takes ONE card from each of the ten buckets (a group vetoes every pair inside it), and the 11 groups together cover every cross-bucket pair, so no two buckets can merge or chain through a third card. Replaces discovery's K=9, which put the two untapped colourless lands in with Malice/Triumph. USER follow-up 2026-10-25 on that one split: 'that one is more arguable since often whether a land comes into play untapped actually isn't that relevant most of the time. K=9 is possible, but I don't think K=10 will break the bank either.' So K=9 (colourless lands back with Malice/Triumph) is an acceptable fallback if Galadriel's generation cost ever binds."
+   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. FINAL CHOICE K=9, the USER delegating it: 'The most relevant part of the untapped land is actually playing the turn you crackle for one more mana, so it is pretty low-relevance and somewhat comparable to having Red. (which can also be generated at the cost of 1 mana from a filter land) So yeah, I can see the argument to merge. I seem to be almost convincing myself of K=9... So you can use whichever you think appropriate.' The agent chose K=9: red is already ignored on the same grounds, and K=9 is exactly the shipped table's bucketing. PINS K=9: each keep_apart group takes ONE card from each of the nine buckets (a group vetoes every pair inside it), and the 14 groups together cover every cross-bucket pair, so no two buckets can merge or chain through a third card."
   },
   {
    "cards": [
     "Rumble Arena",
-    "Zhalfirin Void",
+    "Temple of Triumph",
     "Temple of Enlightenment",
     "Temple of Malady",
     "Temple of Mystery",
-    "Temple of Triumph",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 2 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 2 of 14 of the K=9 pin; see the first keep_apart group."
   },
   {
    "cards": [
@@ -37,13 +35,12 @@
     "Temple of Epiphany",
     "Temple of Plenty",
     "Temple of Mystery",
-    "Temple of Triumph",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 3 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 3 of 14 of the K=9 pin; see the first keep_apart group."
   },
   {
    "cards": [
@@ -52,118 +49,152 @@
     "Temple of Deceit",
     "Temple of Plenty",
     "Temple of Mystery",
-    "Temple of Malice",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 4 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 4 of 14 of the K=9 pin; see the first keep_apart group."
   },
   {
    "cards": [
     "Crystal Grotto",
-    "The Grey Havens",
+    "Zhalfirin Void",
     "Temple of Enlightenment",
-    "Temple of Malady",
+    "Temple of Abandon",
     "Temple of Mystery",
-    "Temple of Malice",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 5 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 5 of 14 of the K=9 pin; see the first keep_apart group."
   },
   {
    "cards": [
     "Rumble Arena",
-    "Zhalfirin Void",
+    "Temple of Malice",
     "Temple of Epiphany",
     "Temple of Abandon",
     "Temple of Mystery",
-    "Temple of Malice",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 6 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 6 of 14 of the K=9 pin; see the first keep_apart group."
   },
   {
    "cards": [
     "Crystal Grotto",
-    "Zhalfirin Void",
-    "Temple of Deceit",
-    "Temple of Abandon",
-    "Temple of Mystery",
     "Temple of Triumph",
-    "Saprazzan Skerry",
-    "Galadriel of Lothlórien",
-    "Sol Ring",
-    "Crackle with Power"
-   ],
-   "why": "Transversal 7 of 11 of the K=10 pin; see the first keep_apart group."
-  },
-  {
-   "cards": [
-    "Rumble Arena",
-    "The Grey Havens",
     "Temple of Deceit",
     "Temple of Malady",
     "Temple of Mystery",
-    "Temple of Malice",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 8 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 7 of 14 of the K=9 pin; see the first keep_apart group."
   },
   {
    "cards": [
     "Crystal Grotto",
-    "The Grey Havens",
-    "Temple of Enlightenment",
-    "Temple of Abandon",
-    "Temple of Mystery",
     "Temple of Malice",
-    "Saprazzan Skerry",
-    "Galadriel of Lothlórien",
-    "Sol Ring",
-    "Crackle with Power"
-   ],
-   "why": "Transversal 9 of 11 of the K=10 pin; see the first keep_apart group."
-  },
-  {
-   "cards": [
-    "Crystal Grotto",
-    "The Grey Havens",
     "Temple of Enlightenment",
     "Temple of Plenty",
     "Temple of Mystery",
-    "Temple of Malice",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 10 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 8 of 14 of the K=9 pin; see the first keep_apart group."
+  },
+  {
+   "cards": [
+    "Crystal Grotto",
+    "Zhalfirin Void",
+    "Temple of Epiphany",
+    "Temple of Malady",
+    "Temple of Mystery",
+    "Saprazzan Skerry",
+    "Galadriel of Lothlórien",
+    "Sol Ring",
+    "Crackle with Power"
+   ],
+   "why": "Transversal 9 of 14 of the K=9 pin; see the first keep_apart group."
+  },
+  {
+   "cards": [
+    "Rumble Arena",
+    "The Grey Havens",
+    "Temple of Deceit",
+    "Temple of Abandon",
+    "Temple of Mystery",
+    "Saprazzan Skerry",
+    "Galadriel of Lothlórien",
+    "Sol Ring",
+    "Crackle with Power"
+   ],
+   "why": "Transversal 10 of 14 of the K=9 pin; see the first keep_apart group."
+  },
+  {
+   "cards": [
+    "Crystal Grotto",
+    "Temple of Triumph",
+    "Temple of Epiphany",
+    "Temple of Abandon",
+    "Temple of Mystery",
+    "Saprazzan Skerry",
+    "Galadriel of Lothlórien",
+    "Sol Ring",
+    "Crackle with Power"
+   ],
+   "why": "Transversal 11 of 14 of the K=9 pin; see the first keep_apart group."
   },
   {
    "cards": [
     "Crystal Grotto",
     "The Grey Havens",
-    "Temple of Epiphany",
+    "Temple of Enlightenment",
     "Temple of Malady",
     "Temple of Mystery",
-    "Temple of Malice",
     "Saprazzan Skerry",
     "Galadriel of Lothlórien",
     "Sol Ring",
     "Crackle with Power"
    ],
-   "why": "Transversal 11 of 11 of the K=10 pin; see the first keep_apart group."
+   "why": "Transversal 12 of 14 of the K=9 pin; see the first keep_apart group."
+  },
+  {
+   "cards": [
+    "Crystal Grotto",
+    "Temple of Malice",
+    "Temple of Deceit",
+    "Temple of Malady",
+    "Temple of Mystery",
+    "Saprazzan Skerry",
+    "Galadriel of Lothlórien",
+    "Sol Ring",
+    "Crackle with Power"
+   ],
+   "why": "Transversal 13 of 14 of the K=9 pin; see the first keep_apart group."
+  },
+  {
+   "cards": [
+    "Crystal Grotto",
+    "Temple of Triumph",
+    "Temple of Deceit",
+    "Temple of Plenty",
+    "Temple of Mystery",
+    "Saprazzan Skerry",
+    "Galadriel of Lothlórien",
+    "Sol Ring",
+    "Crackle with Power"
+   ],
+   "why": "Transversal 14 of 14 of the K=9 pin; see the first keep_apart group."
   }
  ],
  "merge": [
@@ -172,14 +203,16 @@
     "Crystal Grotto",
     "Rumble Arena"
    ],
-   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. This is the 'Untapped filters' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both are untapped any-colour filter lands with an ETB scry 1."
+   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. FINAL CHOICE K=9, the USER delegating it: 'The most relevant part of the untapped land is actually playing the turn you crackle for one more mana, so it is pretty low-relevance and somewhat comparable to having Red. (which can also be generated at the cost of 1 mana from a filter land) So yeah, I can see the argument to merge. I seem to be almost convincing myself of K=9... So you can use whichever you think appropriate.' The agent chose K=9: red is already ignored on the same grounds, and K=9 is exactly the shipped table's bucketing. This is the 'Untapped filters' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both are untapped any-colour filter lands with an ETB scry 1."
   },
   {
    "cards": [
+    "Temple of Malice",
+    "Temple of Triumph",
     "The Grey Havens",
     "Zhalfirin Void"
    ],
-   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. This is the 'Untapped colourless' bucket."
+   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. FINAL CHOICE K=9, the USER delegating it: 'The most relevant part of the untapped land is actually playing the turn you crackle for one more mana, so it is pretty low-relevance and somewhat comparable to having Red. (which can also be generated at the cost of 1 mana from a filter land) So yeah, I can see the argument to merge. I seem to be almost convincing myself of K=9... So you can use whichever you think appropriate.' The agent chose K=9: red is already ignored on the same grounds, and K=9 is exactly the shipped table's bucketing. This is the 'Neither blue nor green (incl. untapped colourless)' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share red and supply one off-colour (B / W) the deck never casts."
   },
   {
    "cards": [
@@ -187,7 +220,7 @@
     "Temple of Enlightenment",
     "Temple of Epiphany"
    ],
-   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. This is the 'Blue sources' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share blue and supply one off-colour (W / B) the deck never casts."
+   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. FINAL CHOICE K=9, the USER delegating it: 'The most relevant part of the untapped land is actually playing the turn you crackle for one more mana, so it is pretty low-relevance and somewhat comparable to having Red. (which can also be generated at the cost of 1 mana from a filter land) So yeah, I can see the argument to merge. I seem to be almost convincing myself of K=9... So you can use whichever you think appropriate.' The agent chose K=9: red is already ignored on the same grounds, and K=9 is exactly the shipped table's bucketing. This is the 'Blue sources' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share blue and supply one off-colour (W / B) the deck never casts."
   },
   {
    "cards": [
@@ -195,14 +228,7 @@
     "Temple of Malady",
     "Temple of Plenty"
    ],
-   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. This is the 'Green sources' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share green and supply one off-colour (B / W) the deck never casts."
-  },
-  {
-   "cards": [
-    "Temple of Malice",
-    "Temple of Triumph"
-   ],
-   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. This is the 'Neither' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share red and supply one off-colour (B / W) the deck never casts."
+   "why": "USER RULING 2026-10-25 (from the deck owner): 'I talked with the deck owner and he thinks that 10 buckets is fine. Untapped Filters, untapped colourless, Blue sources, Green sources, both, neither, skerry, galadriel, sol ring and crackle.' On red: 'Red seemed sensible, but thinking more about it this hardly ever matters or changes your mulligan decisions. Since it is very easy to get red when going off.' So the Temples are classed by blue/green only. FINAL CHOICE K=9, the USER delegating it: 'The most relevant part of the untapped land is actually playing the turn you crackle for one more mana, so it is pretty low-relevance and somewhat comparable to having Red. (which can also be generated at the cost of 1 mana from a filter land) So yeah, I can see the argument to merge. I seem to be almost convincing myself of K=9... So you can use whichever you think appropriate.' The agent chose K=9: red is already ignored on the same grounds, and K=9 is exactly the shipped table's bucketing. This is the 'Green sources' bucket. It extends the 2026-10-17 ruling: USER RULING 2026-10-17: 'It should be easy to bucket with Crystal Grotto merged with Rumble Arena, Malady merged with Plenty, Malice merged with Triumph, Enlightenment merged with Deceit for at maximum of K=13.' (17 distinct names less these four merges = 13.) Both Temples share green and supply one off-colour (B / W) the deck never casts."
   }
  ]
 }
