@@ -430,16 +430,16 @@ def artifact_ident(kind, root, path):
 
 
 def mull_plan(cfg, deck, inc_R, inc_depth, inc_budget, screened):
-    """The mulligan regeneration's settings: NEVER BELOW THE INCUMBENT'S (USER 2026-10-23: "If they use much
-    lower settings they are all but guaranteed to fail"). The old-vs-new A/B is the gate, so a table
-    rolled at a lower R or a shallower/cheaper rollout than the one it must beat is a near-certain reject.
-      * R: `fast` (R30, adaptive bottoming) covers an incumbent at R<=30, `complete` (R40, full bottoming)
-        one at R<=40, and above 40 `complete` plus the sanctioned cap pin MTG_KEEP_ROLLOUTS=<R>.
-      * depth / budget: each the HIGHER of the incumbent's generation setting and the deck's screened
-        mull_gen_* -- never lower on either axis. Applied in the worker's worktree only, and restored after
-        the stage, so landing a result never changes a deck's shipped setting.
+    """The mulligan regeneration's recipe: the incumbent's, chosen from `fast` and `complete` only (USER
+    2026-10-25: "I'm okay with just considering complete and fast for this pipeline"; 2026-10-23: a much
+    lower setting is "all but guaranteed to fail" the old-vs-new A/B).
+      * R<=30 -> `fast` (R30, adaptive bottoming); R<=40, or not recorded -> `complete` (R40, full bottoming).
+      * R>40 (burn/slivers/knights-era R=60 tables) is beyond `complete`: the plan is marked `beyond`, and
+        such a table is LEFT AS IT IS (not queued) unless the USER marks it, when it runs `complete`.
+      * depth / budget: the deck's screened mull_gen_* as-is (mullgen.sh's own choice). An incumbent's
+        generation depth is reported (`explain`), never imposed.
     A per-deck recipe_overrides entry still wins (a USER decision)."""
-    plan = {"env": {}, "depth": None, "budget": None, "why": []}
+    plan = {"env": {}, "depth": None, "budget": None, "why": [], "beyond": False}
     R = max([r for r in (inc_R,) if isinstance(r, int)] or [0])
     if deck in cfg.get("recipe_overrides", {}):
         plan["recipe"] = cfg["recipe_overrides"][deck]
@@ -449,16 +449,10 @@ def mull_plan(cfg, deck, inc_R, inc_depth, inc_budget, screened):
     else:
         plan["recipe"] = "complete"
         if R > 40:
-            plan["env"]["MTG_KEEP_ROLLOUTS"] = str(R)
-            plan["why"].append("incumbent R=%d > 40: complete + MTG_KEEP_ROLLOUTS=%d" % (R, R))
+            plan["beyond"] = True
+            plan["why"].append("incumbent R=%d is beyond complete: left as is unless USER-marked" % R)
     if R:
         plan["why"].insert(0, "incumbent R=%d -> %s" % (R, plan["recipe"]))
-    sd, sb = screened
-    if isinstance(inc_depth, int) and isinstance(inc_budget, int) and isinstance(sd, int) and isinstance(sb, int):
-        d, b = max(inc_depth, sd), max(inc_budget, sb)
-        if (d, b) != (sd, sb):
-            plan["depth"], plan["budget"] = d, b
-            plan["why"].append("gen setting d%d b%d (incumbent d%d b%d, screened d%d b%d)" % (d, b, inc_depth, inc_budget, sd, sb))
     return plan
 
 
@@ -586,6 +580,7 @@ def assess_deck(H, d, cfg, smap):
             inc_R = max([r for r in (kt.get("R"), meta.get("R")) if isinstance(r, int)] or [0]) or None
             plan = mull_plan(cfg, d.key, inc_R, meta.get("depth"), meta.get("budget_ms"), (sd, sb))
             it["plan"] = plan
+            it["left_be"] = plan["beyond"]
             it["notes"].append("regen plan: recipe %s%s; %s" % (
                 plan["recipe"], "".join(" %s=%s" % kv for kv in plan["env"].items()),
                 "; ".join(plan["why"]) or "screened setting as-is"))
@@ -647,7 +642,7 @@ def score(it, cfg):
     s *= float(cfg["kind_weight"].get(it["kind"], 1.0))
     it["score"] = round(s, 4)
     it["queued"] = bool(it.get("mark")) or (s >= float(cfg["min_drift"]) and not it.get("uncommitted"))
-    if it.get("blocked"):
+    if it.get("blocked") or (it.get("left_be") and not it.get("mark")):
         it["queued"] = False
     it["sort"] = (0 if it.get("mark") else 1, -int(it.get("mark", {}).get("priority", 0)), -s)
 
@@ -1531,18 +1526,23 @@ def cmd_selftest(a):
         check("a deck's stages run mulligan before valueleaf",
               all(j["stages"] == [k for k in KINDS if k in j["stages"]] for j in jobs))
 
-        print("regeneration settings never below the incumbent:")
+        print("regeneration recipe = the incumbent's, fast or complete only:")
         P = lambda R, d, b, sd, sb: mull_plan(dict(cfg, recipe_overrides={}), "x", R, d, b, (sd, sb))
         p1 = P(30, 1, 3, 1, 3)
         check("R30 incumbent -> fast, screened setting as-is", p1["recipe"] == "fast" and p1["depth"] is None)
         check("R22 incumbent -> fast (R30 >= 22)", P(22, None, None, 1, 3)["recipe"] == "fast")
         check("R40 incumbent -> complete", P(40, 1, 1, 1, 1)["recipe"] == "complete")
         p60 = P(60, None, None, 1, 3)
-        check("R60 incumbent -> complete + MTG_KEEP_ROLLOUTS=60",
-              p60["recipe"] == "complete" and p60["env"] == {"MTG_KEEP_ROLLOUTS": "60"})
-        p2 = P(30, 3, 10, 6, 6)
-        check("incumbent d3 b10 vs screened d6 b6 -> d6 b10 (max per axis)", (p2["depth"], p2["budget"]) == (6, 10))
-        check("incumbent below the screen -> screened as-is", P(30, 1, 1, 2, 3)["depth"] is None)
+        check("R60 incumbent -> beyond complete: left be, no pin",
+              p60["recipe"] == "complete" and p60["beyond"] and p60["env"] == {})
+        p2 = P(40, 5, 20, 1, 3)
+        check("incumbent d5 b20 vs screened d1 b3 -> screened as-is (depth not imposed)",
+              (p2["depth"], p2["budget"], p2["env"]) == (None, None, {}))
+        it = {"churn": {"abs_dturn": 1.0}, "flags": [], "kind": "mulligan", "left_be": True}
+        score(it, cfg)
+        check("a left-be table is not queued on drift alone", not it["queued"])
+        it = dict(it, mark={"priority": 1}); score(it, cfg)
+        check("...but a USER mark queues it", it["queued"])
         check("recipe_overrides still wins", mull_plan(dict(cfg, recipe_overrides={"x": "fast"}), "x", 60, None, None,
                                                         (1, 3))["recipe"] == "fast")
 

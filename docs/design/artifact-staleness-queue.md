@@ -165,17 +165,20 @@ journals and their backups) stay in the worker's worktree, which is on the persi
 is a human/agent step**: rebase it onto the branch, run smoke + regression, accept the GT it moves.
 Nothing is ever killed: `stop` takes effect between jobs.
 
-**Regenerations are never at lower settings than the incumbent** (USER 2026-10-23: *"Let's try to have
-them reasonably replace the existing one. If they use much lower settings they are all but guaranteed to
-fail."*). The old-vs-new A/B is the gate, so `mull_plan` reads the incumbent's own generation record
-(profile `effective_R`, raw `meta.R/depth/budget_ms`): R<=30 -> `fast`, R<=40 -> `complete`, above 40
-`complete` + the sanctioned cap pin `MTG_KEEP_ROLLOUTS=<R>` (burn/slivers/knights-era tables are R=60);
-depth and budget are each the HIGHER of the incumbent's and the deck's screened `mull_gen_*` (Goblins:
-incumbent d3 b10, screened d6 b6 -> d6 b10). The raised setting is written into the worker's worktree for
-the stage and restored afterwards, so landing never changes a deck's shipped setting; the plan is pinned in
-`inflight.json` so a resume cannot change R under a banked journal. `explain <deck>` prints the plan.
-`recipe_overrides` (USER) still wins. The value leaf needs nothing: `valueleaf.sh` has one fixed route, so a
-regeneration is at the incumbent's settings by construction.
+**A regeneration runs the incumbent's recipe, `fast` or `complete` only** (USER 2026-10-23: *"Let's try to
+have them reasonably replace the existing one. If they use much lower settings they are all but guaranteed to
+fail."*; refined 2026-10-25: *"If the original ran complete we should at least run that. Though to be fair there
+are some that ran more than complete. In that case we can just leave it be"*, and *"I'm okay with just
+considering complete and fast for this pipeline."*). `mull_plan` reads the incumbent's R (profile `effective_R`,
+raw `meta.R`): R<=30 -> `fast`, R<=40 or unrecorded -> `complete`. A table above 40 (the burn/slivers/knights-era
+R=60 tables) is beyond `complete` and is LEFT AS IT IS: not queued on drift, only on a USER mark (then
+`complete`). Depth and budget are the deck's screened `mull_gen_*`, exactly what `mullgen.sh` picks; an
+incumbent's own generation depth is reported by `explain` but not imposed. (The 2026-10-23 build also raised
+depth/budget to the incumbent's and pinned `MTG_KEEP_ROLLOUTS` above 40; both were dropped 2026-10-25.
+Anti-Lifegain's 2026-07 table, for example, was rolled at the then-default d5 b20, recorded nowhere in the
+artifact, and its regeneration ran at the screened d1 b3 -- same recipe, so its kept-incumbent verdict stands.)
+`recipe_overrides` (USER) still wins. The plan is pinned in `inflight.json` so a resume cannot change R under a
+banked journal. The value leaf needs nothing: `valueleaf.sh` has one fixed route.
 
 **A failed replacement is a VERDICT and marks the drift as addressed** (USER, same day: *"if a new table
 or value-leaf doesn't improve quality we still don't want to do it again"*). Every stage outcome that is a
