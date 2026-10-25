@@ -150,7 +150,7 @@
    "lost_turns": [
     4
    ],
-   "note": "The clairvoyant solution makes sense if you know you are getting no Blue mana. ",
+   "note": "The clairvoyant solution makes sense if you know you are getting no Blue mana, but it is also a sensible hedge given that Bruna is in hand and castable as a better line if you do get Blue mana.",
    "promoted_win": 8,
    "reference": "references/Bruna/claude_s12_gi11.json",
    "search_digest": "ca88c21b9cac98b8",
