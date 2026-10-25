@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "5c492c39ea86e87c2de1bc88bfce33ee6b1c5ffc",
+  "valueleaf": "em:0e526f28aba1418057fe"
+ },
+ "deck": "melira_pod",
+ "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+ "heartbeat": "2026-10-25T19:15:45Z",
+ "host": "550a08fdc1f3",
+ "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
+ "score": 0.4147,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-25T19:15:45Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
