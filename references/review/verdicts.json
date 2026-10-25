@@ -227,6 +227,18 @@
    "search_digest": "7f63a12ac5a47bfd",
    "search_win": 4,
    "verdict": "clairvoyance"
+  },
+  "treasure_hunt/claude_s6_gi5.json": {
+   "at": "2026-10-25T01:46:15+00:00",
+   "hint": "likely-misplay",
+   "human_win": 6,
+   "lost_turns": [
+    3
+   ],
+   "note": "The clairvoyant search knew the second Treasure Hunt on T3 was not going to be effective, so it holds instead (keeping the second depletion land active) and plays it next turn after the draw to win earlier. This is not a line a non-clairvoyant can see.",
+   "search_digest": "d1ab6b4843bc9921",
+   "search_win": 4,
+   "verdict": "clairvoyance"
   }
  }
 }
