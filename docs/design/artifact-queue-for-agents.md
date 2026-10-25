@@ -4,6 +4,38 @@ For any agent asked to run, join, watch or land work from `scripts/artifact_queu
 For how the tool works and why, see `docs/design/artifact-staleness-queue.md` (section "2026-10-23: what was
 built"). This page covers what to do, where to look, and what to leave alone.
 
+## NOTICE 2026-10-25: update the tool before your worker claims its next deck
+
+Every worker started before **6e42ca948** (`origin/artifact-queue-tool`) runs code with two bugs, and every
+frozen generation tree synced before **13a3ac81e** (`origin/phase-1-2-deck-analyzer`) has a third. **Do NOT stop
+or kill a run in progress:** a generation that has already run for hours is a real one and is not affected.
+Fix the NEXT job:
+
+1. `python3 scripts/artifact_queue.py stop` now. It only takes effect between jobs; the current one finishes.
+2. When the worker has exited: `git pull --rebase` in the tool checkout (to 6e42ca948 or later), then
+   `python3 scripts/artifact_queue.py run` again, harness-tracked, with a new `kill -0` waiter. The worker re-syncs
+   its frozen tree to the engine branch, which picks up 13a3ac81e.
+
+The bugs:
+- **The USER's marks were ignored (1d1cd04ec).** `cmd_run` loaded `scripts/artifact_queue.json` from the frozen
+  worktree, which does not have it, so it fell back to defaults and the Angels/Giants marks never applied.
+- **A regeneration could fake-resume the OLD table (6e42ca948).** `ungzip_incumbent` unpacked the incumbent's
+  `raw.json.gz` to the plain `<stem>.keepmodel.exhaustive.raw.json`. That is the generator's floor-checkpoint
+  path. When play had not changed, every fingerprint matched and the generator "resumed" the old table: about 3
+  rollouts per size-7 cell, 0 refine waves, done in minutes, and then judged against the incumbent. Colossus
+  Hammer did this on 2026-10-25 (5 min, "REJECTED +0.100 t"). Its claim is released; **do not land
+  `artifact-refresh/colossus_hammer-20261025-0245`**. Any result from the old tool whose mulligan stage took
+  minutes, not hours, is suspect for the same reason. Check its gen log for `refine` waves before trusting it.
+- **Bucket reuse blew the 20 GB RSS cap on a large table (13a3ac81e, engine).** `MTG_KEEP_BUCKETS_FROM` parsed
+  the whole incumbent table into a DOM (FiveColour's is 1.8 GB). It now keeps only the bucket lists (4 MB RSS).
+  Tables of a few hundred MB, Hinata2 and Snow included, stayed under the cap anyway.
+
+The bucket rulings landed today (USER) are in each deck's `<stem>.buckets.json`:
+- Angels and Giants: keep_apart.
+- KittyEquipment, Dragonstorm and Galadriel: merges, with Galadriel pinned at K=9.
+- Hinata2's Remand merge is **confirmed correct** by the USER, so the in-flight Hinata2 regeneration that reuses it
+  is fine. Its ruling file is written after that run lands, because a policy change moves `bucket_fp`.
+
 ## Why it exists, and what that means for how you work
 
 The USER's framing (2026-10-24): inference budget is the scarce resource and CPU is the free one. The queue
