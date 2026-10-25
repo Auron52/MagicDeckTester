@@ -14114,6 +14114,11 @@
   "leaf_note": "ADOPTED 2026-09-11: NO-LEAF escalation (shape #2). This deck's value leaf was a NET NEGATIVE -- the strongest such result measured. Paired sign test, 4,000 games per cell, seeds 9,500,000+: d5b20 37 better / 2 worse z +5.60 (d_avg -0.0135) at 0.914x units / 0.848x wall; d3b10 2/0 z +1.41 at 0.987x/0.964x; d0b0 byte-identical (greedy). Better on quality AND cheaper on both axes at every configuration this deck is played at. See docs/design/per-deck-search-shape.md (fleet leaf-necessity screen, 2026-09-11)",
   "mull_gen_depth": 2,
   "mull_gen_budget_ms": 3,
-  "expected_buckets": 16
+  "expected_buckets": 16,
+  "ladder": "single",
+  "target_depth": 6,
+  "budget_ms": 20,
+  "enabled": true,
+  "note": "E.7 play-setting stage 2026-10-25: d6b20 adopted over the built-in default (no enabled block) (d5/20); the cheapest of 1 passing arm(s) (0.98x vs live, delta -0.00050)"
  }
 }
