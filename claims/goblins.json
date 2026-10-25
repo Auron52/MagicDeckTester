@@ -4,17 +4,20 @@
   "valueleaf": "em:71c8696d5192fbe47e51"
  },
  "deck": "goblins",
+ "detail": "mulligan: ADOPTED (new-vs-old -0.011094 t, recipe fast); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_goblins/DECISIONS.txt); result branch pushed by hand after the worker crashed on a claim write (git credentials lost at a VS Code reload)",
+ "finished": "2026-10-25T14:40:36Z",
  "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
- "heartbeat": "2026-10-25T10:59:40Z",
+ "heartbeat": "2026-10-25T14:33:32Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/goblins-20261025-1436",
  "run_id": "goblins-artifact-queue-d7d6a5-20261025T025404",
  "score": 0.8649,
- "stage": "mulligan",
+ "stage": "valueleaf",
  "stages": [
   "mulligan",
   "valueleaf"
  ],
  "started": "2026-10-25T02:54:04Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-d7d6a5"
 }
