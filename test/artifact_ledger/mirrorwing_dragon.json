@@ -1,0 +1,43 @@
+{
+ "deck": "mirrorwing_dragon",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "mirrorwing_dragon-artifact-queue-d7d6a5-20261024T220142",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "5898d5fe22406b73e658fd9b07050ff8a0b4b9e5",
+   "frozen": "b38566ccef70e7428dee417fa258219f1a0c47b3",
+   "src_tree": "0505eadb55ae1b3d2ec6f2754389db2743cfb79d",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.023889,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.023889 t, recipe complete)"
+  },
+  {
+   "run_id": "mirrorwing_dragon-artifact-queue-d7d6a5-20261024T220142",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:e650fa5b1a96f6292645",
+   "frozen": "b38566ccef70e7428dee417fa258219f1a0c47b3",
+   "src_tree": "0505eadb55ae1b3d2ec6f2754389db2743cfb79d",
+   "date": "2026-10-25",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_mirrorwing_dragon/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=staged_d6b40 adopt=0 delta=-0.00313 t=-3.42 cost=1.310x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.31x) with quality better (-0.00313) -- a TRADE, the user's call",
+    "    PICK arm=d6b20 why=the cheapest of 1 passing arm(s) (0.98x vs live, delta -0.00050)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-25T02:37:01  PHASE E.6: no allowance for mirrorwing_dragon -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0",
+    "    the live sidecar's existing escalation_skip_r = 70.5 is KEPT -- it was measured against the leaf live when it was set; if this run installed a new leaf it is stale: USER, keep or remove it."
+   ]
+  }
+ ]
+}
