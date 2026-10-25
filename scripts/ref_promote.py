@@ -18,7 +18,9 @@ did in that phase:
     A plan that reaches the search's own win is taken at once (see walk() for why names alone fail);
   * every other frame (a target, a tutor pick, a scry, a put-into-play) is answered the same way: each
     single-pick answer is probed and the one whose board at the next main-phase frame is closest to
-    the search's is taken (multi-pick frames take the engine's default);
+    the search's is taken (multi-pick frames take the engine's default). Answers that tie there are
+    probed on to the next turn's first main phase: a card tutored to the top of the library is hidden
+    until it is drawn (Worldly Tutor, StompySurprise s1_gi0, 2026-10-25);
   * the first point where the replay's board drifts from the search's is noted, and named in the
     refusal if the line then misses the search's win.
 
@@ -323,6 +325,30 @@ def probe_on(c, extra, picks, want_win):
         s.close()
 
 
+def probe_next_turn(c, extra, picks, turn):
+    """Play `picks`, then engine defaults at every other frame and PASS at every main phase, up to the
+    first main-phase frame of a turn after `turn`. -> that frame, or None. The tie-break for answers
+    whose boards look the same at the next main phase: a card tutored to the TOP of the library (Worldly
+    Tutor) is invisible until it is drawn, so only the next turn's hand tells the answers apart."""
+    s = Driver(c, extra)
+    try:
+        for _ in range(2000):
+            kind, d = s.read()
+            if kind != "decision":
+                return None
+            if len(s.picks) < len(picks):
+                s.send(picks[len(s.picks)])
+            elif d.get("type") == "main_phase":
+                if (d.get("turn") or 0) > turn:
+                    return d
+                s.send(-1)
+            else:
+                s.send(vpc.engine_default(d)[0])
+        return None
+    finally:
+        s.close()
+
+
 def probe(c, extra, picks):
     """The frame (or result) after `picks`, from a fresh stateless replay."""
     rc, out = vpc.replay(c["deck"], c["prof"], c["seed"], c["gi"], picks, c["force"], extra, c["mt"],
@@ -378,11 +404,11 @@ def walk(c, prefix, extra, log, from_turn):
                     continue
                 # A target, a tutor pick, a scry, a put-into-play: the answer whose board, once play
                 # reaches the next main-phase frame, is closest to the search's at that point.
-                best = (10 ** 9, picks_[0])
+                best, ties = (10 ** 9, picks_[0]), []
                 for o in picks_[:MAX_PROBES]:
                     k2, d2, win = probe_on(c, extra, list(s.picks) + [o], want_win)
                     if win:
-                        best = (-1, o)
+                        best, ties = (-1, o), []
                         break
                     if k2 != "decision" or d2 is None:
                         continue
@@ -394,9 +420,24 @@ def walk(c, prefix, extra, log, from_turn):
                     dist = sig_diff(frame_sig(d2), tgt)[0]
                     say("   %s option %s -> %d" % (d.get("type"), o, dist))
                     if dist < best[0]:
-                        best = (dist, o)
-                        if dist == 0:
-                            break
+                        best, ties = (dist, o), [o]
+                    elif dist == best[0]:
+                        ties.append(o)
+                # Answers that leave the same visible board (a card tutored to the top of the library)
+                # are told apart at the start of the next turn, after the draw.
+                if len(ties) > 1:
+                    t = d.get("turn") or 0
+                    deep = (10 ** 9, ties[0])
+                    for o in ties:
+                        d3 = probe_next_turn(c, extra, list(s.picks) + [o], t)
+                        tgt = d3 and log_sig((bd.get((d3.get("turn"), d3.get("phase"))) or (None, None))[0])
+                        if tgt is None:
+                            continue
+                        dist = sig_diff(frame_sig(d3), tgt)[0]
+                        say("   %s option %s, at T%s -> %d" % (d.get("type"), o, d3.get("turn"), dist))
+                        if dist < deep[0]:
+                            deep = (dist, o)
+                    best = (best[0], deep[1])
                 s.send(best[1])
                 continue
             key = (d.get("turn"), d.get("phase"))
