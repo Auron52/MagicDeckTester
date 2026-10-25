@@ -4,9 +4,12 @@
   "valueleaf": "em:b8979a38ce5ac04339f6"
  },
  "deck": "giants",
+ "detail": "mulligan: ADOPTED (new-vs-old -0.017125 t, recipe complete); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_giants/DECISIONS.txt)",
+ "finished": "2026-10-25T16:32:41Z",
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-25T16:15:31Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/giants-20261025-1632",
  "run_id": "giants-artifact-queue-d7d6a5-20261025T145443",
  "score": 0.0793,
  "stage": "valueleaf",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-25T14:54:43Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-d7d6a5"
 }
