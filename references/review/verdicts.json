@@ -185,6 +185,48 @@
    "search_win": 4,
    "source": "handoff_T2.json",
    "verdict": "promoted"
+  },
+  "Vampires/claude_s9_gi8.json": {
+   "at": "2026-10-25T01:12:12+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Vampires/human_s9_gi8.json",
+   "human_win": 5,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 4,
+   "reference": "references/Vampires/claude_s9_gi8.json",
+   "search_digest": "86e1b6822dfd7a75",
+   "search_win": 4,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  },
+  "treasure_hunt/claude_s4_gi3.json": {
+   "at": "2026-10-25T01:15:49+00:00",
+   "hint": "mixed",
+   "human_win": null,
+   "lost_turns": [
+    4,
+    6
+   ],
+   "note": "The clairvoyant search took advantage of knowing the next card was Land's Edge and held Treasure Hunt.",
+   "search_digest": "ba4fa7877aab7417",
+   "search_win": 5,
+   "verdict": "clairvoyance"
+  },
+  "treasure_hunt/claude_s5_gi4.json": {
+   "at": "2026-10-25T01:17:46+00:00",
+   "hint": "mixed",
+   "human_win": 8,
+   "lost_turns": [
+    2,
+    4
+   ],
+   "note": "The search takes advantage of clairvoyant knowledge that the top card is a Land's Edge. It holds Treasure Hunt for just this reason.",
+   "search_digest": "7f63a12ac5a47bfd",
+   "search_win": 4,
+   "verdict": "clairvoyance"
   }
  }
 }
