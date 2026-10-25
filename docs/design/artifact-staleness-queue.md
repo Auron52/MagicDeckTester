@@ -217,3 +217,31 @@ which validation it ran.
    half the cores; VM-wide under WSL2, so it usually catches a sibling container's generation, but a
    sibling's single-threaded phase can slip under it): on a shared box, start the worker only when the box
    is known to be free.
+
+## 2026-10-25: owed -- auto-land clear wins and clear losses (USER)
+
+The USER: *"It seems our tool is missing a way auto-adopt wins and auto-reject losses? Only ones that are
+in-between should be left up to the user."* Today every result stops at a branch
+(`artifact-refresh/<deck>-<date>`) and waits for an agent to rebase it, run smoke + regression and accept GT.
+Deferred on 2026-10-25 only because inference budget was nearly out (the USER: fine for the worker to just keep
+generating for the next 24 h); the results piling up meanwhile are StompySurprise, Mirrorwing, Goblins, Snow
+(play-moving) and Anti-Lifegain, Colossus Hammer `-1418` (verdict-only; Colossus `-0245` must never land).
+
+What to build, so that only the in-between needs the USER:
+- **Three classes from the driver's own A/B**, decided by the worker and written to the ledger:
+  - *clear win*: new better than old beyond the tie band (`mullgen.sh` versus pool; the leaf's phase-E
+    gate, which already requires cheaper-and-not-notably-worse) -> auto-land.
+  - *clear loss*: new worse beyond the band -> auto-land the verdict-only branch (incumbent kept, drift reset).
+  - *in the band*: apply the USER's 2026-10-24 tie rule first (slightly better within the margin -> keep the
+    new; slightly worse -> reject, or grow the test, as was done for StompySurprise at 12 rounds). Only what that
+    rule still cannot settle is left for the USER, listed in the report.
+  - A leaf whose candidate is a *trade* (cheaper on quality, dearer on cost or vice versa) is never a clear win:
+    the USER does not want cost added to the value leaf (2026-10-24).
+- **Landing is a box-wide step, not a per-job one.** Smoke + regression + GT accept cannot run beside a
+  generation (strictly serial), so the worker lands in a batch between jobs: rebase every pending clear branch
+  onto `phase-1-2-deck-analyzer`, ONE smoke + ONE regression over all of them, accept, push. A red tier
+  (crash, scenario failure, byte-identity break) stops the landing and leaves the branches for an agent; a GT
+  move is the expected outcome, not a failure. Verdict-only branches land with no tier at all.
+- **One landing machine.** Several workers pushing to the deck branch would race on GT; take a
+  `claims/_landing.json` lease (same CAS) so only one box lands at a time.
+- The USER's sign-off on each adoption is still collected (report the numbers), never waited for.
