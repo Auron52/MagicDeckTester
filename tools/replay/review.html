@@ -113,6 +113,10 @@
 </main>
 <script>
 let INDEX=null, CUR=null, LOGS={}, RIGHT=null, EXPAND=false;
+// The note you are typing, per game, until a save stores exactly that text. renderDetail rebuilds the
+// textarea on every save (which takes seconds: backup + autosave commit + push) and on every ladder /
+// right-column / expand click, so without this anything typed meanwhile was replaced by the stored note.
+const DRAFT={};
 // Label verdicts (buttons 2-4). "promoted" is set by the Promote ACTION (button 1), never by a label click.
 const VLABEL={promoted:'Promoted', clairvoyance:'Clairvoyance', bug:'Bug', replay_manually:'Replay manually'};
 const LABELS=['clairvoyance','bug','replay_manually'];
@@ -287,7 +291,8 @@ async function renderDetail(){
      LABELS.map((k,i)=>`<button data-v="${k}" class="${v&&v.verdict===k?'on':''}">${i+2}. ${VLABEL[k]}</button> `).join('')+
      `<button data-v="" title="Remove the verdict">Clear</button>`+
      `<div class="hint" style="margin-top:6px"><b>Promote</b> makes the line in the right column (${esc(rlog)}) the reference; your line is kept in references/review/replaced/. <b>Bug</b>: the search's line relies on an engine defect (say which in the note). <b>Replay manually</b>: your line is beatable but not this way; re-save it yourself in the play viewer.</div>`+
-     `<textarea id="note" placeholder="Note (optional): what the search did, why it is or is not a fair line, the bug…">${esc(v?v.note:'')}</textarea>`+
+     `<textarea id="note" placeholder="Note (optional): what the search did, why it is or is not a fair line, the bug…">${esc(g.key in DRAFT?DRAFT[g.key]:(v?v.note:''))}</textarea>`+
+     `<div class="hint" id="notestate"></div>`+
      (v?`<div class="hint">${esc(VLABEL[v.verdict]||v.verdict)} ${esc(v.at)}${v.reference?` · now <code>${esc(v.reference)}</code>`:''}${v.human_line_kept_at?` · your line kept at <code>${esc(v.human_line_kept_at)}</code>`:''}${g.verdict_state==='stale'?' — <b style="color:var(--warn)">STALE: the search plays a different line now; re-check and re-mark</b>':''}</div>`:'')+
      `<div id="vstatus"></div></div>`;
   h+=`<div class="box"><h3>Hand-off ladder — the search from your board at the start of each turn</h3><table class="ladder"><tr><th>turn</th><th>search (sees library)</th><th>blind search</th><th></th><th>compare</th></tr>`;
@@ -308,7 +313,13 @@ async function renderDetail(){
      `<button id="expand">${EXPAND?'Collapse identical turns':'Expand all turns'}</button>`+
      `<span class="hint">${g.files.human?'you: '+link('human.json')+' · ':''}${RIGHT?'right: '+link(RIGHT):''}</span></div>`;
   h+=`<div id="cmp"><div class="empty">Loading games…</div></div>`;
+  const prev=document.getElementById('note'), hadFocus=prev&&document.activeElement===prev;
+  const sel=hadFocus?[prev.selectionStart,prev.selectionEnd]:null;
   D.innerHTML=h;
+  const noteEl=document.getElementById('note');
+  noteEl.oninput=()=>{ DRAFT[g.key]=noteEl.value; noteState(g); };
+  if(hadFocus){ noteEl.focus(); noteEl.setSelectionRange(sel[0],sel[1]); }
+  noteState(g);
   D.querySelectorAll('#vbar button[data-v]').forEach(b=>b.onclick=()=>saveVerdict(b.dataset.v||null));
   D.querySelector('#vbar button[data-act="promote"]').onclick=promote;
   D.querySelectorAll('.ladder tr.pick').forEach(tr=>tr.onclick=()=>{ RIGHT=tr.dataset.log; renderDetail(); });
@@ -339,6 +350,18 @@ async function renderCompare(g, lostSet){
   const C=document.getElementById('cmp'); C.innerHTML=h;
   C.querySelectorAll('tr.collapsed').forEach(tr=>tr.onclick=()=>tr.classList.remove('collapsed'));
 }
+function noteState(g){
+  const el=document.getElementById('notestate'); if(!el||!CUR||CUR.key!==g.key) return;
+  const saved=g.verdict?g.verdict.note||'':'', draft=g.key in DRAFT?DRAFT[g.key]:saved;
+  el.innerHTML=draft===saved?'':`<b style="color:var(--warn)">note not saved yet</b> — ${g.verdict?'click your verdict again':'pick a verdict'} to save it`;
+}
+// The 30 s refresh during a build swaps in fresh game objects, so a save that lands after one must
+// update the live object too, or the panel re-renders from a game that never saw the save.
+function applyVerdict(g, out){
+  for(const o of new Set([g, INDEX.games.find(x=>x.key===g.key)])) if(o){ o.verdict=out.verdict; o.verdict_state=out.state; }
+}
+// A save stores the note it SENT; keep the draft only if you have typed on since.
+function settleDraft(g, sent){ if(DRAFT[g.key]===sent || !(g.key in DRAFT)) delete DRAFT[g.key]; }
 function backupBanner(b, what){
   return (b&&b.ok)
     ? `<div class="banner ok">${what} · backed up · committed to references-autosave${b.pushed?' and pushed':''}.</div>`
@@ -351,11 +374,12 @@ async function promote(){
   if(!confirm(`Promote this search line (${fw(w)}) to be the reference for ${g.key}?\n\n${kept}`)) return;
   const st=document.getElementById('vstatus');
   st.innerHTML='<div class="banner">promoting — replaying the line in the play engine and checking it replays as a reference…</div>';
+  const note=document.getElementById('note').value;
   const r=await fetch('/api/promote',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({key:g.key,source:src,note:document.getElementById('note').value})});
+    body:JSON.stringify({key:g.key,source:src,note})});
   const out=await r.json();
   if(!out.ok){ document.getElementById('vstatus').innerHTML=`<div class="banner bad">NOT promoted: ${esc(out.error)}<br>Replay it by hand in the play viewer if you want this line.</div>`; return; }
-  g.verdict=out.verdict; g.verdict_state=out.state;
+  applyVerdict(g, out); settleDraft(g, note);
   renderList(); await renderDetail();
   document.getElementById('vstatus').innerHTML=backupBanner(out.backup, `Promoted: ${esc(out.reference)} now wins ${fw(out.win_turn)}`)+
     ((out.notes||[]).length?`<div class="hint">${(out.notes||[]).map(esc).join('<br>')}</div>`:'');
@@ -363,11 +387,14 @@ async function promote(){
 async function saveVerdict(v){
   const g=CUR, st=document.getElementById('vstatus');
   st.innerHTML='<div class="banner">saving…</div>';
+  const note=document.getElementById('note').value;
   const r=await fetch('/api/verdict',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({key:g.key,verdict:v,note:document.getElementById('note').value})});
+    body:JSON.stringify({key:g.key,verdict:v,note})});
   const out=await r.json();
   if(!r.ok){ st.innerHTML=`<div class="banner bad">NOT saved: ${esc(out.error)}</div>`; return; }
-  g.verdict=out.verdict; g.verdict_state=out.state;
+  applyVerdict(g, out);
+  // Clear drops the stored note with the verdict; the text stays in the box (as a draft) either way.
+  if(v!==null) settleDraft(g, note); else if(note) DRAFT[g.key]=note;
   renderList(); await renderDetail();
   document.getElementById('vstatus').innerHTML=backupBanner(out.backup,'Saved to references/review/verdicts.json');
 }

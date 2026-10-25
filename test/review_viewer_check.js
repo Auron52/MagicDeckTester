@@ -72,8 +72,9 @@ writeIndex(entry);
 const protects = [];
 const promotes = [];
 let promoteReply = null;
+let protectDelay = 0;   // ms -- a real save backs up, commits and pushes, which takes seconds
 const server = makeServer({ reviewDir, verdicts,
-  protect: async (rels, msg) => { protects.push({ rels, msg }); return { ok: true, pushed: false }; },
+  protect: async (rels, msg) => { protects.push({ rels, msg }); await sleep(protectDelay); return { ok: true, pushed: false }; },
   promote: async (req) => { promotes.push(req); return promoteReply(req); } });
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -161,6 +162,32 @@ server.listen(0, '127.0.0.1', async () => {
     ok(badsrc.status === 400, 'an arbitrary promote source is refused');
     const cl = await (await fetch(base + '/api/verdict', { method: 'POST', body: JSON.stringify({ key: KEY, verdict: null }) })).json();
     ok(cl.ok && !(KEY in JSON.parse(fs.readFileSync(verdicts, 'utf8')).verdicts), 'Clear removes the verdict');
+
+    // ---- the note survives a save ---------------------------------------------------------------
+    // USER 2026-10-25: the comment box was cleared when a save landed. A save re-renders the panel
+    // from the STORED note, so text typed while the (slow) save was in flight was thrown away.
+    protectDelay = 400;
+    const readV = () => (JSON.parse(fs.readFileSync(verdicts, 'utf8')).verdicts || {})[KEY];
+    const type = (text) => { const n = doc.getElementById('note'); n.value = text;
+                             n.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+    type('first thought');
+    doc.querySelector('#vbar button[data-v="bug"]').click();
+    await until(() => readV() && readV().verdict === 'bug', 'the slow save to start');
+    type('first thought, and more typed while it saved');
+    await until(() => /Saved to/.test(doc.getElementById('vstatus').textContent), 'the slow save to land');
+    ok(doc.getElementById('note').value === 'first thought, and more typed while it saved',
+       'text typed while a save was in flight is still in the box after it lands');
+    ok(readV().note === 'first thought', 'the save stored the note it sent');
+    ok(/not saved yet/.test(doc.getElementById('notestate').textContent), 'the box says the newer text is not saved yet');
+    doc.querySelector('#vbar button[data-v="bug"]').click();
+    await until(() => readV().note === 'first thought, and more typed while it saved', 'the re-save');
+    await until(() => !/saving/.test(doc.getElementById('vstatus').textContent), 'the re-save to land');
+    ok(doc.getElementById('note').value === 'first thought, and more typed while it saved'
+       && !/not saved/.test(doc.getElementById('notestate').textContent), 'a re-save stores it and the box keeps it');
+    type('unsaved draft');
+    doc.getElementById('expand').click();
+    ok(doc.getElementById('note').value === 'unsaved draft', 'an expand / ladder / right-column re-render keeps an unsaved note');
+    protectDelay = 0;
     dom.window.close();
   } catch (e) {
     ok(false, 'exception: ' + (e && e.stack || e));
