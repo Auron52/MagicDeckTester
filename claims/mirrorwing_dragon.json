@@ -5,11 +5,11 @@
  },
  "deck": "mirrorwing_dragon",
  "frozen": "b38566ccef70e7428dee417fa258219f1a0c47b3",
- "heartbeat": "2026-10-25T02:04:17Z",
+ "heartbeat": "2026-10-25T02:14:13Z",
  "host": "550a08fdc1f3",
  "run_id": "mirrorwing_dragon-artifact-queue-d7d6a5-20261024T220142",
  "score": 1.1414,
- "stage": "mulligan",
+ "stage": "valueleaf",
  "stages": [
   "mulligan",
   "valueleaf"
