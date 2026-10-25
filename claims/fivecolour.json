@@ -4,9 +4,12 @@
   "valueleaf": "em:15713f7430a43656572a"
  },
  "deck": "fivecolour",
+ "detail": "mulligan: FAILED rc=1 -- see fivecolour.mulligan.log",
+ "finished": "2026-10-25T02:50:50Z",
  "frozen": "719cffd386a7d878b82b3453fb4b4d90b80ad741",
  "heartbeat": "2026-10-25T02:46:15Z",
  "host": "550a08fdc1f3",
+ "result_branch": null,
  "run_id": "fivecolour-artifact-queue-d7d6a5-20261025T024605",
  "score": 0.9057,
  "stage": "mulligan",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-25T02:46:05Z",
- "state": "running",
+ "state": "failed",
  "worker": "artifact-queue-d7d6a5"
 }
