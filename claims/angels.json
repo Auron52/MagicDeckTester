@@ -5,11 +5,11 @@
  },
  "deck": "angels",
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
- "heartbeat": "2026-10-25T17:13:55Z",
+ "heartbeat": "2026-10-25T17:21:22Z",
  "host": "550a08fdc1f3",
  "run_id": "angels-artifact-queue-d7d6a5-20261025T163337",
  "score": 0.0418,
- "stage": "mulligan",
+ "stage": "valueleaf",
  "stages": [
   "mulligan",
   "valueleaf"
