@@ -1,0 +1,53 @@
+{
+ "job": {
+  "deck": "fivecolour",
+  "dir": "decks/FiveColour",
+  "stages": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "sort": [
+   1,
+   0,
+   -0.9056870363829036
+  ],
+  "score": 0.9057,
+  "blobs": {
+   "valueleaf": "em:15713f7430a43656572a",
+   "mulligan": "8dc9c2a1c22f10cfb77a9cbfdd3c070a4cc66180"
+  },
+  "ledger_runs": []
+ },
+ "claim": {
+  "deck": "fivecolour",
+  "worker": "artifact-queue-tool-647f24",
+  "state": "running",
+  "stages": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "stage": "mulligan",
+  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+  "started": "2026-10-25T14:19:53Z",
+  "blobs": {
+   "valueleaf": "em:15713f7430a43656572a",
+   "mulligan": "8dc9c2a1c22f10cfb77a9cbfdd3c070a4cc66180"
+  },
+  "score": 0.9057,
+  "host": "58199181d02e",
+  "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
+  "heartbeat": "2026-10-25T14:20:08Z"
+ },
+ "done_stages": [],
+ "detail": [],
+ "plan": {
+  "env": {},
+  "depth": null,
+  "budget": null,
+  "why": [
+   "incumbent R=30 -> fast"
+  ],
+  "recipe": "fast"
+ },
+ "vl_queue_fresh": false
+}
