@@ -882,6 +882,10 @@ def claim_blocks(c, job, cfg, worker, now):
     if c.get("run_id") and c["run_id"] in job.get("ledger_runs", ()):
         return False                          # its verdict has LANDED: the ledger now governs this deck
     st = c.get("state")
+    if st == "paused":
+        # A USER-paused job (`pause`): set aside for EVERY other worker, with no lease expiry, and resumed only
+        # by the worker that holds its journal and inflight.json (USER 2026-10-26).
+        return c.get("worker") != worker
     if st in ("claimed", "running"):
         if c.get("worker") == worker:
             return False
@@ -1443,6 +1447,53 @@ def cmd_stop(a):
     return 0
 
 
+def cmd_pause(a):
+    """USER cancel of the CURRENT job, kept resumable (USER 2026-10-26: "The ideal is that next time we run the
+    pipeline here, it starts up Hinata. But otherwise it is set aside."). `stop` waits for the job to end, which
+    for a multi-day generation is no answer. This stops the worker NOW (SIGTERM to its process group: the worker,
+    the driver and the generator; the journal is durable and its rolling backups are minutes old), leaves
+    inflight.json in place so the next `start` on this checkout resumes the job in the same frozen worktree, and
+    marks the claim `paused`, which no other worker takes over, however old its heartbeat."""
+    wid = worker_id()
+    sd = state_dir(wid)
+    open(os.path.join(sd, "STOP"), "w").write(iso(utcnow()))
+    pidf = os.path.join(sd, "worker.pid")
+    pid = 0
+    try:
+        pid = int(open(pidf).read())
+        os.kill(pid, 0)
+    except (OSError, ValueError):
+        pid = 0
+    if pid:
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        for _ in range(120):
+            try:
+                os.kill(pid, 0)
+                time.sleep(1)
+            except OSError:
+                break
+        else:
+            print("worker pid %d did not exit within 120 s of SIGTERM -- check it by hand" % pid)
+            return 1
+        log(wid, "PAUSED by the USER: worker stopped mid-job (pid %d)" % pid)
+    ifp = os.path.join(sd, "inflight.json")
+    if not os.path.exists(ifp):
+        print("worker %s stopped; no job was in flight" % wid)
+        return 0
+    claim = json.load(open(ifp))["claim"]
+    claim.update({"state": "paused", "paused": iso(utcnow()),
+                  "detail": "paused by the USER: resumes when worker %s next starts; set aside for every other "
+                            "worker" % wid})
+    q = Queue()
+    q.fetch()
+    if not put_claim(q, claim["deck"], claim, wid):
+        print("could not write the paused claim for %s (another worker holds it?)" % claim["deck"])
+        return 1
+    print("paused %s (stage %s). `start` on this checkout resumes it; no other worker will take it."
+          % (claim["deck"], claim.get("stage")))
+    return 0
+
+
 def cmd_selftest(a):
     """Everything that can be checked without a generation: the claim CAS against a throwaway local bare
     repo (no push to origin), the lease/landing rules, the .gz incumbent round-trip, decklist parsing,
@@ -1492,6 +1543,9 @@ def cmd_selftest(a):
         check("a rejected claim holds inside the retry window",
               claim_blocks(dict(c, state="rejected"), job, cfg, "A", utcnow()))
         check("a released claim never blocks", not claim_blocks(dict(c, state="released"), job, cfg, "A", utcnow()))
+        check("a paused claim blocks every other worker, however stale",
+              claim_blocks(dict(c, state="paused", worker="A", heartbeat="2000-01-01T00:00:00Z"), job, cfg, "B", utcnow()))
+        check("...but not the worker that paused it", not claim_blocks(dict(c, state="paused", worker="A"), job, cfg, "A", utcnow()))
 
         print(".gz incumbent round-trip:")
         W = T + "/wt"
@@ -1602,10 +1656,11 @@ def main():
     s.add_argument("--dry-run", action="store_true", help="rank and pick, claim nothing, run nothing")
     sp.add_parser("start")
     sp.add_parser("stop")
+    sp.add_parser("pause")
     sp.add_parser("selftest")
     a = ap.parse_args()
     fn = {"status": cmd_status, "explain": cmd_explain, "mark": cmd_mark, "unmark": cmd_mark, "claims": cmd_claims,
-          "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "selftest": cmd_selftest}[a.cmd]
+          "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "pause": cmd_pause, "selftest": cmd_selftest}[a.cmd]
     return fn(a)
 
 
