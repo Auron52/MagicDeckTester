@@ -54,6 +54,18 @@
    "source": "handoff_T2.json",
    "verdict": "promoted"
   },
+  "Anti-Lifegain/claude_s25_gi24.json": {
+   "at": "2026-10-26T09:59:01+00:00",
+   "hint": "likely-misplay",
+   "human_win": 5,
+   "lost_turns": [
+    1
+   ],
+   "note": "Definite clairvoyance. The search avoids searching for Tainted Remedy by using a line that causes the one on the top of the library to be drawn.",
+   "search_digest": "8728b4215529fb9d",
+   "search_win": 4,
+   "verdict": "clairvoyance"
+  },
   "Anti-Lifegain/claude_s2_gi1.json": {
    "at": "2026-10-24T10:53:58+00:00",
    "hint": "likely-clairvoyance",
