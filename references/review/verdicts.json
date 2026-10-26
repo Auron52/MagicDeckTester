@@ -170,6 +170,22 @@
    "search_win": 5,
    "verdict": "clairvoyance"
   },
+  "Dragons/claude_s4_gi3.json": {
+   "at": "2026-10-26T07:53:09+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Dragons/human_s4_gi3.json",
+   "human_win": 6,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 5,
+   "reference": "references/Dragons/claude_s4_gi3.json",
+   "search_digest": "2791fc463c888671",
+   "search_win": 5,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  },
   "Soldiers/claude_s16_gi15.json": {
    "at": "2026-10-25T10:43:09+00:00",
    "hint": "likely-misplay",
