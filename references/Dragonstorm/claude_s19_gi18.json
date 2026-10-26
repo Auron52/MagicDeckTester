@@ -1,0 +1,241 @@
+{
+  "seed": 19, "game_index": 18, "win_turn": 3, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 22, "name": "Mercadian Bazaar" }, { "num": 18, "name": "Lotus Bloom" }, { "num": 1, "name": "Apex of Power" }, { "num": 43, "name": "Ruby Medallion" }, { "num": 46, "name": "Sandstone Needle" }, { "num": 57, "name": "Unclaimed Territory" }, { "num": 53, "name": "Seething Song" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 15, "cast_order": ["**", "land=Sandstone Needle", "suspend=Lotus Bloom"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Rite of Flame" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 18, "name": "Lotus Bloom", "cost": "", "mv": 0, "kind": "permanent", "suspend_only": true }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Rite of Flame", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 43, "name": "Ruby Medallion", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 46, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Rite of Flame, Seething Song", "land": "Unclaimed Territory", "drops": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "casts": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Rite of Flame, Seething Song, Lotus Bloom", "land": "Unclaimed Territory", "drops": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "casts": ["Ruby Medallion", "Rite of Flame", "Seething Song", "Lotus Bloom"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }, { "card": "Seething Song" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Seething Song", "land": "Unclaimed Territory", "drops": ["Ruby Medallion", "Seething Song"], "casts": ["Ruby Medallion", "Seething Song"], "cast_order_canonical": ["Ruby Medallion", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Rite of Flame", "land": "Unclaimed Territory", "drops": ["Ruby Medallion", "Rite of Flame"], "casts": ["Ruby Medallion", "Rite of Flame"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: Rite of Flame, Seething Song", "land": "Unclaimed Territory", "drops": ["Rite of Flame", "Seething Song"], "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Seething Song, Lotus Bloom", "land": "Unclaimed Territory", "drops": ["Ruby Medallion", "Seething Song"], "casts": ["Ruby Medallion", "Seething Song", "Lotus Bloom"], "cast_order_canonical": ["Ruby Medallion", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Seething Song" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 6, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Rite of Flame, Lotus Bloom", "land": "Unclaimed Territory", "drops": ["Ruby Medallion", "Rite of Flame"], "casts": ["Ruby Medallion", "Rite of Flame", "Lotus Bloom"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: Rite of Flame, Seething Song, Lotus Bloom", "land": "Unclaimed Territory", "drops": ["Rite of Flame", "Seething Song"], "casts": ["Rite of Flame", "Seething Song", "Lotus Bloom"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 8, "summary": "land=Unclaimed Territory; cast: Seething Song", "land": "Unclaimed Territory", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 9, "summary": "land=Unclaimed Territory; cast: Rite of Flame", "land": "Unclaimed Territory", "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 10, "summary": "land=Unclaimed Territory; cast: Seething Song, Lotus Bloom", "land": "Unclaimed Territory", "casts": ["Seething Song", "Lotus Bloom"], "actions": [{ "card": "Seething Song" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 11, "summary": "land=Unclaimed Territory; cast: Rite of Flame, Lotus Bloom", "land": "Unclaimed Territory", "casts": ["Rite of Flame", "Lotus Bloom"], "actions": [{ "card": "Rite of Flame" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 12, "summary": "land=Mercadian Bazaar; cast: (nothing)", "land": "Mercadian Bazaar", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Mercadian Bazaar; cast: Lotus Bloom", "land": "Mercadian Bazaar", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 14, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Sandstone Needle; cast: Lotus Bloom", "land": "Sandstone Needle", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 16, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Unclaimed Territory; cast: Lotus Bloom", "land": "Unclaimed Territory", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: Lotus Bloom", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 1, "kind": "suspend", "text": "⌛ Lotus Bloom -- suspended (arrives T4)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Rite of Flame", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 43, "name": "Ruby Medallion", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 53, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 3, "arrive_turn": 4 }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Rite of Flame", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 43, "name": "Ruby Medallion", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 53, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 3, "arrive_turn": 4 }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 19, "cast_order": ["**", "land=Unclaimed Territory", "cast=Ruby Medallion"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 0, "num": 46, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Rite of Flame", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 43, "name": "Ruby Medallion", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 53, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mercadian Bazaar; cast: Rite of Flame, Seething Song, Ruby Medallion", "land": "Mercadian Bazaar", "casts": ["Rite of Flame", "Seething Song", "Ruby Medallion"], "cast_order_canonical": ["Rite of Flame", "Seething Song", "Ruby Medallion"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }, { "card": "Ruby Medallion" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Rite of Flame, Seething Song", "land": "Unclaimed Territory", "casts": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Ruby Medallion, Rite of Flame, Seething Song", "land": "Mountain", "casts": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=none; cast: Rite of Flame, Seething Song, Ruby Medallion", "land": null, "casts": ["Rite of Flame", "Seething Song", "Ruby Medallion"], "cast_order_canonical": ["Rite of Flame", "Seething Song", "Ruby Medallion"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }, { "card": "Ruby Medallion" }] },
+    { "index": 4, "summary": "land=Mercadian Bazaar; cast: Ruby Medallion, Seething Song", "land": "Mercadian Bazaar", "drops": ["Seething Song"], "casts": ["Ruby Medallion", "Seething Song"], "cast_order_canonical": ["Ruby Medallion", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Seething Song" }] },
+    { "index": 5, "summary": "land=Mercadian Bazaar; cast: Rite of Flame, Ruby Medallion", "land": "Mercadian Bazaar", "casts": ["Rite of Flame", "Ruby Medallion"], "cast_order_canonical": ["Rite of Flame", "Ruby Medallion"], "actions": [{ "card": "Rite of Flame" }, { "card": "Ruby Medallion" }] },
+    { "index": 6, "summary": "land=Mercadian Bazaar; cast: Rite of Flame, Seething Song", "land": "Mercadian Bazaar", "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: Seething Song, Ruby Medallion", "land": "Unclaimed Territory", "casts": ["Seething Song", "Ruby Medallion"], "cast_order_canonical": ["Seething Song", "Ruby Medallion"], "actions": [{ "card": "Seething Song" }, { "card": "Ruby Medallion" }] },
+    { "index": 8, "summary": "land=Unclaimed Territory; cast: Ruby Medallion, Rite of Flame", "land": "Unclaimed Territory", "casts": ["Ruby Medallion", "Rite of Flame"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }] },
+    { "index": 9, "summary": "land=Unclaimed Territory; cast: Rite of Flame, Seething Song", "land": "Unclaimed Territory", "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 10, "summary": "land=Mountain; cast: Seething Song, Ruby Medallion", "land": "Mountain", "casts": ["Seething Song", "Ruby Medallion"], "cast_order_canonical": ["Seething Song", "Ruby Medallion"], "actions": [{ "card": "Seething Song" }, { "card": "Ruby Medallion" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Ruby Medallion, Rite of Flame", "land": "Mountain", "casts": ["Ruby Medallion", "Rite of Flame"], "cast_order_canonical": ["Ruby Medallion", "Rite of Flame"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Rite of Flame" }] },
+    { "index": 12, "summary": "land=Mountain; cast: Rite of Flame, Seething Song", "land": "Mountain", "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 13, "summary": "land=none; cast: Ruby Medallion, Seething Song", "land": null, "drops": ["Seething Song"], "casts": ["Ruby Medallion", "Seething Song"], "cast_order_canonical": ["Ruby Medallion", "Seething Song"], "actions": [{ "card": "Ruby Medallion" }, { "card": "Seething Song" }] },
+    { "index": 14, "summary": "land=none; cast: Rite of Flame, Ruby Medallion", "land": null, "casts": ["Rite of Flame", "Ruby Medallion"], "cast_order_canonical": ["Rite of Flame", "Ruby Medallion"], "actions": [{ "card": "Rite of Flame" }, { "card": "Ruby Medallion" }] },
+    { "index": 15, "summary": "land=none; cast: Rite of Flame, Seething Song", "land": null, "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 16, "summary": "land=Mercadian Bazaar; cast: Ruby Medallion", "land": "Mercadian Bazaar", "casts": ["Ruby Medallion"], "actions": [{ "card": "Ruby Medallion" }] },
+    { "index": 17, "summary": "land=Mercadian Bazaar; cast: Seething Song", "land": "Mercadian Bazaar", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 18, "summary": "land=Mercadian Bazaar; cast: Rite of Flame", "land": "Mercadian Bazaar", "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 19, "summary": "land=Unclaimed Territory; cast: Ruby Medallion", "land": "Unclaimed Territory", "casts": ["Ruby Medallion"], "actions": [{ "card": "Ruby Medallion" }] },
+    { "index": 20, "summary": "land=Unclaimed Territory; cast: Seething Song", "land": "Unclaimed Territory", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 21, "summary": "land=Unclaimed Territory; cast: Rite of Flame", "land": "Unclaimed Territory", "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 22, "summary": "land=Mountain; cast: Ruby Medallion", "land": "Mountain", "casts": ["Ruby Medallion"], "actions": [{ "card": "Ruby Medallion" }] },
+    { "index": 23, "summary": "land=Mountain; cast: Seething Song", "land": "Mountain", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 24, "summary": "land=Mountain; cast: Rite of Flame", "land": "Mountain", "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 25, "summary": "land=none; cast: Ruby Medallion", "land": null, "casts": ["Ruby Medallion"], "actions": [{ "card": "Ruby Medallion" }] },
+    { "index": 26, "summary": "land=none; cast: Seething Song", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 27, "summary": "land=none; cast: Rite of Flame", "land": null, "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 28, "summary": "land=Mercadian Bazaar; cast: (nothing)", "land": "Mercadian Bazaar", "casts": [], "actions": [] },
+    { "index": 29, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 30, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ruby Medallion", "idx": 2, "num": 43, "is_land": false }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Rite of Flame", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 53, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Rite of Flame, Seething Song", "land": null, "drops": ["Rite of Flame", "Seething Song"], "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 1, "summary": "land=none; cast: Seething Song", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=none; cast: Rite of Flame", "land": null, "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ruby Medallion", "idx": 2, "num": 43, "is_land": false }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Rite of Flame", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 53, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Rite of Flame, Seething Song", "land": null, "drops": ["Rite of Flame", "Seething Song"], "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 1, "summary": "land=none; cast: Seething Song", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=none; cast: Rite of Flame", "land": null, "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Rite of Flame", "cast=Seething Song", "cast=Dragonstorm"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Dragonstorm" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ruby Medallion", "idx": 2, "num": 43, "is_land": false }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 10, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Rite of Flame", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 53, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Rite of Flame, Seething Song, Dragonstorm", "land": "Mountain", "casts": ["Rite of Flame", "Seething Song", "Dragonstorm"], "cast_order_canonical": ["Rite of Flame", "Seething Song", "Dragonstorm"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }, { "card": "Dragonstorm" }] },
+    { "index": 1, "summary": "land=Mercadian Bazaar; cast: Rite of Flame, Seething Song", "land": "Mercadian Bazaar", "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Rite of Flame, Seething Song", "land": "Mountain", "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=none; cast: Rite of Flame, Seething Song", "land": null, "casts": ["Rite of Flame", "Seething Song"], "cast_order_canonical": ["Rite of Flame", "Seething Song"], "actions": [{ "card": "Rite of Flame" }, { "card": "Seething Song" }] },
+    { "index": 4, "summary": "land=Mercadian Bazaar; cast: Seething Song", "land": "Mercadian Bazaar", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 5, "summary": "land=Mercadian Bazaar; cast: Rite of Flame", "land": "Mercadian Bazaar", "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Seething Song", "land": "Mountain", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Rite of Flame", "land": "Mountain", "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 8, "summary": "land=none; cast: Seething Song", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 9, "summary": "land=none; cast: Rite of Flame", "land": null, "casts": ["Rite of Flame"], "actions": [{ "card": "Rite of Flame" }] },
+    { "index": 10, "summary": "land=Mercadian Bazaar; cast: (nothing)", "land": "Mercadian Bazaar", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": [1, 1, 0, 0, 0, 0, 1, 0], "decision": {
+  "decision_index": 8,
+  "type": "dragon",
+  "source": "Dragonstorm",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 5, "num": 26, "tapped": true, "is_land": true }, { "name": "Ruby Medallion", "idx": 2, "num": 43, "is_land": false }, { "name": "Sandstone Needle", "idx": 0, "num": 46, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Rite of Flame", "Seething Song"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "max_puts": 3,
+  "ai_set": [0, 1, 6],
+  "candidates": [{ "index": 0, "def": true, "name": "Lathliss, Dragon Queen" }, { "index": 1, "def": true, "name": "Scourge of Valkas" }, { "index": 2, "def": false, "name": "Scourge of Valkas" }, { "index": 3, "def": false, "name": "Scourge of Valkas" }, { "index": 4, "def": false, "name": "Utvara Hellkite" }, { "index": 5, "def": false, "name": "Utvara Hellkite" }, { "index": 6, "def": true, "name": "Karrthus, Tyrant of Jund" }, { "index": 7, "def": false, "name": "Dragonlord Kolaghan" }],
+  "note": "reply one int per candidate (1 = put this card onto the battlefield), up to max_puts total. The engine keeps the rule's play order. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "dragonstorm", "text": "🐉 Lathliss, Dragon Queen -- put onto the battlefield (Dragonstorm)" }, { "turn": 3, "kind": "dragonstorm", "text": "🐉 Scourge of Valkas -- put onto the battlefield (Dragonstorm)" }, { "turn": 3, "kind": "damage", "text": "🐉 Scourge of Valkas (3 Dragons): 3 to opponent (20→17)" }, { "turn": 3, "kind": "damage", "text": "🐉 Scourge of Valkas (3 Dragons): 3 to opponent (17→14)" }, { "turn": 3, "kind": "dragonstorm", "text": "🐉 Karrthus, Tyrant of Jund -- put onto the battlefield (Dragonstorm)" }, { "turn": 3, "kind": "damage", "text": "🐉 Scourge of Valkas (5 Dragons): 5 to opponent (14→9)" }, { "turn": 3, "kind": "damage", "text": "🐉 Scourge of Valkas (5 Dragons): 5 to opponent (9→4)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "5/5 Dragon Token", "idx": 7, "num": 1000, "is_land": false, "power": 5, "toughness": 5 }, { "name": "5/5 Dragon Token", "idx": 9, "num": 1001, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Karrthus, Tyrant of Jund", "idx": 8, "num": 16, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Lathliss, Dragon Queen", "idx": 5, "num": 17, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Mountain", "idx": 4, "num": 26, "tapped": true, "is_land": true }, { "name": "Ruby Medallion", "idx": 1, "num": 43, "is_land": false }, { "name": "Scourge of Valkas", "idx": 6, "num": 50, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Unclaimed Territory", "idx": 0, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Dragonstorm", "Rite of Flame", "Sandstone Needle", "Seething Song"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 2, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 3, "kind": "combat", "text": "⚔ attacked: Lathliss, Dragon Queen (6), Scourge of Valkas (4), 5/5 Dragon Token (5), Karrthus, Tyrant of Jund (7), 5/5 Dragon Token (5) — 27 to opponent (4→-23)" }
+  ]
+}
