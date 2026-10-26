@@ -9,6 +9,8 @@
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-25T19:08:30Z",
  "host": "550a08fdc1f3",
+ "landed": "2364cbc3a3460be413797a93d054524d42840a1f",
+ "landed_at": "2026-10-26T23:32:22Z",
  "result_branch": "artifact-refresh/dragons-20261025-1913",
  "run_id": "dragons-artifact-queue-d7d6a5-20261025T172727",
  "score": 0.8224,
