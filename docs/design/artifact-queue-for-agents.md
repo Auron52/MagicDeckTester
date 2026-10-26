@@ -109,6 +109,11 @@ checkout, started 2026-10-24 13:06 UTC, first job StompySurprise).
   resumes from `inflight.json` in the same frozen worktree, and the drivers resume from their own journals.
 - **Never kill a progressing run.** It is a USER-requested run; past ~10 minutes only the USER cancels it.
   `python3 scripts/artifact_queue.py stop` takes effect after the CURRENT job, never mid-generation.
+- **When the USER cancels a job: `python3 scripts/artifact_queue.py pause`.** It stops the worker now (its whole
+  process group), keeps `inflight.json`, and marks the claim `paused`. The next `start` on that checkout resumes
+  the job from its journal; no other worker takes a paused claim, however old its heartbeat. Copy the journal
+  aside first anyway (CLAUDE.md "A GENERATION JOURNAL IS ..."). First use: Hinata2, 2026-10-26, after 45 h; a
+  backup of its journal is on `origin/artifact-partial/hinata2-20261026`.
 
 ## What to leave alone
 
