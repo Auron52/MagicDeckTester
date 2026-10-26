@@ -50,8 +50,10 @@ the working branch.
 import argparse
 import datetime
 import gzip
+import glob
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -1132,6 +1134,27 @@ def put_claim(q, deck, claim, wid, job=None, cfg=None):
     return q._write(deck, claim, expect=lambda cur: not claim_blocks(cur, job, cfg, wid, utcnow()))
 
 
+def versus_cost(wt, stem, since):
+    """-> (mean per-seed new/old work-units ratio, its se, seeds) over THIS run's old-vs-new versus rounds, or None.
+    Work units, not wall: they are thread- and load-invariant, so a shared box cannot tilt the verdict."""
+    t0 = parse_iso(since).timestamp() if since else 0
+    per = {}
+    for d in glob.glob(os.path.join(wt, "logs", "keepmodel_exh_versus_%s_r*" % stem)):
+        f = os.path.join(d, "batch.log")
+        if not os.path.exists(f) or os.path.getmtime(f) < t0:
+            continue
+        for ln in open(f):
+            m = re.match(r"s(\d+)@(old|new): played=\d+ .*units=(\d+)", ln)
+            if m:
+                per.setdefault(m.group(1), {})[m.group(2)] = int(m.group(3))
+    r = [v["new"] / v["old"] for v in per.values() if v.get("old") and "new" in v]
+    if len(r) < 2:
+        return None
+    mean = sum(r) / len(r)
+    se = math.sqrt(sum((x - mean) ** 2 for x in r) / (len(r) - 1) / len(r))
+    return mean, se, len(r)
+
+
 def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     deck = job["deck"]
     claim = {"deck": deck, "worker": wid, "state": "running", "stages": job["stages"], "stage": job["stages"][0],
@@ -1235,10 +1258,22 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                     detail.append("mulligan: FAILED -- the driver ran FIRST-VERSION validation (no incumbent saved), "
                                   "so this is not an old-vs-new verdict; rc=%d, see %s.mulligan.log" % (rc, deck))
                     break
-                if rc == 0 and "VALIDATION PASSED" in text:
-                    detail.append("mulligan: ADOPTED (new-vs-old %s t, recipe %s)" % (delta, plan["recipe"]))
+                # BETTER OVERALL (USER 2026-10-26: "If the table is better overall (average quality and performance
+                # not worse) it is adoptable"). The driver gates quality; the worker adds the performance half from
+                # the same versus games. Significantly dearer at no-worse quality is a TRADE: the USER's call.
+                vc = versus_cost(wt, deckinfo["stem"], claim.get("started"))
+                cost_s = ("cost %.3fx (se %.3f, %d seeds)" % vc) if vc else "cost not measured"
+                dearer = bool(vc) and vc[0] - 1.0 > 2 * vc[1]
+                cheaper = bool(vc) and 1.0 - vc[0] > 2 * vc[1]
+                if rc == 0 and "VALIDATION PASSED" in text and dearer:
+                    detail.append("mulligan: TRADE -- quality not worse (new-vs-old %s t) but the new table costs MORE "
+                                  "(%s): the USER's call; left live on the result branch, NOT landed" % (delta, cost_s))
+                    verdict("mulligan", "trade", artifact_ident("mulligan", wt, prof_rel),
+                            {"delta": delta, "cost": vc, "settings": settings, "detail": detail[-1]})
+                elif rc == 0 and "VALIDATION PASSED" in text:
+                    detail.append("mulligan: ADOPTED (new-vs-old %s t, %s, recipe %s)" % (delta, cost_s, plan["recipe"]))
                     verdict("mulligan", "adopted", artifact_ident("mulligan", wt, prof_rel),
-                            {"delta": delta, "settings": settings, "detail": detail[-1]})
+                            {"delta": delta, "cost": vc, "settings": settings, "detail": detail[-1]})
                 elif rc == 0 and "UNGATED run" in text:
                     detail.append("mulligan: UNGATED -- the A/B was underpowered, the new table was left live "
                                   "with its verdict recorded (REVIEW before landing; recipe %s)" % plan["recipe"])
@@ -1251,9 +1286,10 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
                 elif "VALIDATION FAILED -- new profile is worse than the old" in text:
                     outcome = "rejected"
                     detail.append("mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better "
-                                  "(new-vs-old %s t); incumbent restored" % delta)
+                                  "(new-vs-old %s t, %s); incumbent restored%s" % (delta, cost_s,
+                                  " -- a TRADE (worse but CHEAPER): reported for the USER" if cheaper else ""))
                     verdict("mulligan", "kept-incumbent", job["blobs"].get("mulligan"),
-                            {"delta": delta, "settings": settings, "detail": detail[-1]})
+                            {"delta": delta, "cost": vc, "trade": cheaper, "settings": settings, "detail": detail[-1]})
                     # A leaf that is only here BECAUSE the table was regenerated (leaf_follows_mulligan) would be
                     # fitted to an unchanged table: skip it. A leaf queued on its OWN drift is still due -- the
                     # kept table is the one it is fitted to (2026-10-25: Anti-Lifegain's leaf was skipped here).
@@ -1341,7 +1377,13 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     os.remove(ifp)
     log(wid, "%s %s: %s%s" % (deck, outcome.upper(), "; ".join(detail), ("  -> " + branch) if branch else ""))
     # The adoption step: land the verdict now, between jobs (nothing else is generating on the box).
-    if branch and outcome in ("done", "rejected") and cfg.get("auto_land", True) and "PUSH FAILED" not in claim["detail"]:
+    # Held for the USER, never landed by the worker: a trade (dearer at no-worse quality) and an ungated table.
+    hold = [x for x in detail if x.startswith("mulligan: TRADE") or x.startswith("mulligan: UNGATED")]
+    if branch and hold:
+        claim["land_note"] = "HELD for the USER: " + "; ".join(hold)
+        q._write(deck, claim)
+        log(wid, "LAND %s: HELD for the USER -- %s" % (branch, "; ".join(hold)))
+    if branch and not hold and outcome in ("done", "rejected") and cfg.get("auto_land", True) and "PUSH FAILED" not in claim["detail"]:
         try:
             sha, note = land_result(wid, cfg, branch, deckinfo["dir"], ledger_only=(outcome == "rejected"))
         except Exception as e:
@@ -1490,6 +1532,10 @@ def cmd_land(a):
         if not c or c.get("state") not in ("done", "rejected"):
             print("%s: refused -- its claim is %s, not done/rejected (a released or failed run never lands)"
                   % (b, c.get("state") if c else "missing"))
+            rc = 1
+            continue
+        if str(c.get("land_note", "")).startswith("HELD") and not a.force:
+            print("%s: refused -- %s (the USER's call; pass --force once they have decided)" % (b, c["land_note"]))
             rc = 1
             continue
         d = next((x for x in shipping_decks(ROOT) if x.key == c["deck"]), None)
@@ -1825,6 +1871,7 @@ def main():
     sp.add_parser("pause")
     s = sp.add_parser("land", help="land result branches with the adoption step")
     s.add_argument("branches", nargs="+")
+    s.add_argument("--force", action="store_true", help="land a branch HELD for the USER (a trade) once they decided")
     sp.add_parser("selftest")
     a = ap.parse_args()
     fn = {"status": cmd_status, "explain": cmd_explain, "mark": cmd_mark, "unmark": cmd_mark, "claims": cmd_claims,

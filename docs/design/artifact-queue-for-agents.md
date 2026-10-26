@@ -137,7 +137,14 @@ improvement"*), right after each job, before claiming the next. The drivers' A/B
   adoption, not a failure. Overnight GT is left to the periodic overnight run.
 - Anything else -- a cherry-pick conflict, a tier that aborts (no `Result:` line), stale gt_logs, a push lost twice --
   is **left on its branch** with the reason in the claim's `land_note` and in `worker.log` (`LAND ... NOT landed`).
-- A value-leaf **trade** is never adopted by the driver, so it never lands: that is the in-between left to the USER.
+- **Better overall, or held** (USER 2026-10-26: *"If the table is better overall (average quality and performance not
+  worse) it is adoptable"*). For a keep table the driver gates quality and the worker adds performance: the per-seed
+  new/old WORK-UNITS ratio over the same versus games (`versus_cost`; units, not wall, so load cannot tilt it).
+  Significantly dearer (ratio - 1 > 2 se) at no-worse quality is a **TRADE**: the table stays on the result branch,
+  the claim's `land_note` says `HELD for the USER`, and `land` refuses it without `--force`. An UNGATED table is held
+  the same way. A rejected table that was significantly CHEAPER is noted as a trade in the verdict; the kept
+  incumbent's verdict still lands. A value leaf's rule is the driver's own (`vlq_ab_report.py`: cheaper and not
+  notably worse; a dearer-but-better leaf is a trade it never adopts), so it never lands one either.
 - `python3 scripts/artifact_queue.py land <branch>...` runs the same step by hand (the backlog from before it
   existed). It refuses a branch whose claim is not done/rejected (e.g. Colossus `-0245`, released). `auto_land:
   false` in the config turns the worker's step off.
