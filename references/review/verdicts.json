@@ -198,6 +198,18 @@
    "search_win": 5,
    "verdict": "clairvoyance"
   },
+  "Colossus_Hammer/claude_s7_gi6.json": {
+   "at": "2026-10-26T10:40:21+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 4,
+   "lost_turns": [
+    1
+   ],
+   "note": "Clairvoyance, since the line manages to get Kor Duelist earlier with some shuffle shenanigans.",
+   "search_digest": "8bbe6f36f25b1a4f",
+   "search_win": 3,
+   "verdict": "clairvoyance"
+  },
   "Dragons/claude_s4_gi3.json": {
    "at": "2026-10-26T07:53:09+00:00",
    "hint": "likely-misplay",
