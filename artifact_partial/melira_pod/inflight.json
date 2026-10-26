@@ -1,0 +1,58 @@
+{
+ "job": {
+  "deck": "melira_pod",
+  "dir": "decks/Melira Pod",
+  "stages": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "sort": [
+   1,
+   0,
+   -0.41473327688399664
+  ],
+  "score": 0.4147,
+  "blobs": {
+   "valueleaf": "em:0e526f28aba1418057fe",
+   "mulligan": "5c492c39ea86e87c2de1bc88bfce33ee6b1c5ffc"
+  },
+  "queued_kinds": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "ledger_runs": []
+ },
+ "claim": {
+  "deck": "melira_pod",
+  "worker": "artifact-queue-d7d6a5",
+  "state": "running",
+  "stages": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "stage": "mulligan",
+  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+  "started": "2026-10-25T19:15:45Z",
+  "blobs": {
+   "valueleaf": "em:0e526f28aba1418057fe",
+   "mulligan": "5c492c39ea86e87c2de1bc88bfce33ee6b1c5ffc"
+  },
+  "score": 0.4147,
+  "host": "550a08fdc1f3",
+  "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
+  "heartbeat": "2026-10-25T19:15:56Z"
+ },
+ "done_stages": [],
+ "detail": [],
+ "plan": {
+  "env": {},
+  "depth": null,
+  "budget": null,
+  "why": [
+   "incumbent R=30 -> fast"
+  ],
+  "beyond": false,
+  "recipe": "fast"
+ },
+ "vl_queue_fresh": false
+}
