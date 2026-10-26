@@ -38,6 +38,34 @@
    "search_win": 4,
    "verdict": "clairvoyance"
   },
+  "Anti-Lifegain/claude_s18_gi17.json": {
+   "at": "2026-10-26T09:42:16+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Anti-Lifegain/human_s18_gi17.json",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "This one is close to being clairvoyance, but the invigorate is actually not necessary to win. Hence we can actually predict a T4 win from T2 if we really think it out. 2 + 2 + 5 from combat + 10 from aria and a additional 1 from casting Enlightened Tutor with Aria out. ",
+   "promoted_win": 4,
+   "reference": "references/Anti-Lifegain/claude_s18_gi17.json",
+   "search_digest": "92c897efbe95b48a",
+   "search_win": 4,
+   "source": "handoff_T2.json",
+   "verdict": "promoted"
+  },
+  "Anti-Lifegain/claude_s25_gi24.json": {
+   "at": "2026-10-26T09:59:01+00:00",
+   "hint": "likely-misplay",
+   "human_win": 5,
+   "lost_turns": [
+    1
+   ],
+   "note": "Definite clairvoyance. The search avoids searching for Tainted Remedy by using a line that causes the one on the top of the library to be drawn.",
+   "search_digest": "8728b4215529fb9d",
+   "search_win": 4,
+   "verdict": "clairvoyance"
+  },
   "Anti-Lifegain/claude_s2_gi1.json": {
    "at": "2026-10-24T10:53:58+00:00",
    "hint": "likely-clairvoyance",
@@ -169,6 +197,62 @@
    "search_digest": "308aaf52d8836f18",
    "search_win": 5,
    "verdict": "clairvoyance"
+  },
+  "Colossus_Hammer/claude_s7_gi6.json": {
+   "at": "2026-10-26T10:40:21+00:00",
+   "hint": "likely-clairvoyance",
+   "human_win": 4,
+   "lost_turns": [
+    1
+   ],
+   "note": "Clairvoyance, since the line manages to get Kor Duelist earlier with some shuffle shenanigans.",
+   "search_digest": "8bbe6f36f25b1a4f",
+   "search_win": 3,
+   "verdict": "clairvoyance"
+  },
+  "Dragons/claude_s4_gi3.json": {
+   "at": "2026-10-26T07:53:09+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Dragons/human_s4_gi3.json",
+   "human_win": 6,
+   "lost_turns": [
+    3
+   ],
+   "note": "",
+   "promoted_win": 5,
+   "reference": "references/Dragons/claude_s4_gi3.json",
+   "search_digest": "2791fc463c888671",
+   "search_win": 5,
+   "source": "handoff_T3.json",
+   "verdict": "promoted"
+  },
+  "Dragonstorm/claude_s13_gi12.json": {
+   "at": "2026-10-26T08:51:11+00:00",
+   "hint": "likely-misplay",
+   "human_win": 6,
+   "lost_turns": [
+    1
+   ],
+   "note": "The original human line needs an update to somewhat match, but the search's line wastes an acceleration spell. It needs to be replayed.",
+   "search_digest": "7f6f99d9324241b4",
+   "search_win": 5,
+   "verdict": "replay_manually"
+  },
+  "Dragonstorm/claude_s17_gi16.json": {
+   "at": "2026-10-26T10:56:08+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Dragonstorm/human_s17_gi16.json",
+   "human_win": 3,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "promoted_win": 2,
+   "reference": "references/Dragonstorm/claude_s17_gi16.json",
+   "search_digest": "8adf80a6d72a40be",
+   "search_win": 2,
+   "source": "handoff_T2.json",
+   "verdict": "promoted"
   },
   "Soldiers/claude_s16_gi15.json": {
    "at": "2026-10-25T10:43:09+00:00",
