@@ -9,6 +9,8 @@
  "frozen": "c70c645741987e1c63722e6bcfe7ca56fc591f31",
  "heartbeat": "2026-10-24T19:57:22Z",
  "host": "8854e545ddab",
+ "landed": "f1fba2136",
+ "landed_at": "2026-10-26T22:39:27Z",
  "result_branch": "artifact-refresh/stompysurprise-20261024-2009",
  "run_id": "stompysurprise-MagicDeckTester2-76d2cc-20261024T130740",
  "score": 1.2722,
