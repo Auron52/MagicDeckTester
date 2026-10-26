@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 1f1466a65  date 2026-10-24
+# Regression ground truth -- commit 8e88c5da1  date 2026-10-26
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; smoke searched 54 faster / 30 slower, d0 217 / 144
 # accepted-with-regressions (regression, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; regression searched 79 faster / 46 slower, d0 205 / 157
@@ -129,9 +129,9 @@ edf2hg_smoke_d3_s1001=4.0667/9e9a97210b1a61ff
 edf_smoke_d0_s1001=5.3120/41d56d7cae7226bd
 edf_smoke_d3_s1001=4.0000/36eaa924621e49d6
 edf_smoke_d5_s1001=4.0667/b1bd5bbf9377ba90
-snow_smoke_d0_s1001=6.1710/25c505144d026210
-snow_smoke_d3_s1001=5.8400/0250540527c14a97
-snow_smoke_d5_s1001=5.8000/51401cf5b384e6fc
+snow_smoke_d0_s1001=6.1300/b6deb297a4241704
+snow_smoke_d3_s1001=5.7400/16478f30432c71b9
+snow_smoke_d5_s1001=5.7400/23fa0279c1103214
 landfall_smoke_d0_s1001=7.4410/e4098a114469d444
 landfall_smoke_d3_s1001=5.9667/afdd927e0142a4b6
 landfall_smoke_d5_s1001=5.8667/96b9f1a8019cd307
@@ -219,8 +219,8 @@ selesnyav2_regression_d3_s30061=4.3500/946a17248a25f5da
 selesnyav2_regression_d5_s30061=4.3500/946a17248a25f5da
 slivers_regression_d3_s30001=4.3500/40e109fbe57763c6
 slivers_regression_d5_s30001=4.3500/40e109fbe57763c6
-snow_regression_d3_s30001=5.0000/5798f9d1ed79d7ce
-snow_regression_d5_s30001=5.0000/5798f9d1ed79d7ce
+snow_regression_d3_s30001=5.0000/1067095304ef3df7
+snow_regression_d5_s30001=5.0000/1067095304ef3df7
 soldiers_regression_d3_s30001=4.4500/fc15453f5a3e98cd
 soldiers_regression_d5_s30001=4.4500/fc15453f5a3e98cd
 stompy_regression_d3_s30001=4.1500/545473b499fdb59a
@@ -394,11 +394,11 @@ edf_regression_d3_s2002=4.0250/50feef11bcaeee2c
 edf_regression_d3_s3003=4.2250/1e7922a1917533f2
 edf_regression_d5_s2002=3.9200/3ec57ea1e5fa6d2a
 edf_regression_d5_s3003=4.3600/20c44a0c1258e97d
-snow_regression_d0_s2002=6.2000/bbf505da0a0e2ae3
-snow_regression_d3_s2002=5.7000/a366ba71c35f920c
-snow_regression_d3_s3003=5.7000/34f95b27767ff9d4
-snow_regression_d5_s2002=5.6667/672a8d6ba4950919
-snow_regression_d5_s3003=5.7667/6cc882e78899ed4a
+snow_regression_d0_s2002=6.1610/5278d83502fc5f28
+snow_regression_d3_s2002=5.6833/9af829816e6640a0
+snow_regression_d3_s3003=5.6667/4c769af9172e810c
+snow_regression_d5_s2002=5.6667/3719365b1d5af34b
+snow_regression_d5_s3003=5.6667/fe88df618708917c
 landfall_regression_d0_s2002=7.5010/e64320e4142647e9
 landfall_regression_d3_s2002=5.8250/efc53bca089cde66
 landfall_regression_d3_s3003=5.7750/40c4dfd9c42be311
