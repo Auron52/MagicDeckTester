@@ -145,6 +145,8 @@ improvement"*), right after each job, before claiming the next. The drivers' A/B
 **No USER sign-off is owed for an adoption** (USER 2026-10-26: *"There is no need for me to sign-off. If the table is
 better overall (average quality and performance not worse) it is adoptable."*). Report each landed A/B with its
 numbers as DONE, not as a pending decision. Only a trade-off (better quality but slower, or the reverse) goes to the USER.
+The same holds for a value leaf, where the performance half matters more (USER: *"this is the same for value-leaf,
+though the performance item is more relevant there"*): check its per-game cost as carefully as its quality delta.
 
 ## Known gaps
 

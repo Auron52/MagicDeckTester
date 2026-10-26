@@ -245,4 +245,5 @@ What to build, so that only the in-between needs the USER:
 - **One landing machine.** Several workers pushing to the deck branch would race on GT; take a
   `claims/_landing.json` lease (same CAS) so only one box lands at a time.
 - No USER sign-off is owed for an adoption that is better overall -- average quality better and performance not
-  worse (USER 2026-10-26). Report the numbers as done; only a trade-off goes to the USER.
+  worse (USER 2026-10-26). Report the numbers as done; only a trade-off goes to the USER. Keep tables and value leaves
+  alike; for a leaf the performance half matters more.
