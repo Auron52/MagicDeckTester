@@ -9,6 +9,8 @@
  "frozen": "b38566ccef70e7428dee417fa258219f1a0c47b3",
  "heartbeat": "2026-10-25T02:24:30Z",
  "host": "550a08fdc1f3",
+ "landed": "7933887b72a6efb263a3864bbe9bbd5f43914022",
+ "landed_at": "2026-10-26T22:57:51Z",
  "result_branch": "artifact-refresh/mirrorwing_dragon-20261025-0237",
  "run_id": "mirrorwing_dragon-artifact-queue-d7d6a5-20261024T220142",
  "score": 1.1414,
