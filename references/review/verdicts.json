@@ -38,6 +38,22 @@
    "search_win": 4,
    "verdict": "clairvoyance"
   },
+  "Anti-Lifegain/claude_s18_gi17.json": {
+   "at": "2026-10-26T09:42:16+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Anti-Lifegain/human_s18_gi17.json",
+   "human_win": 5,
+   "lost_turns": [
+    2
+   ],
+   "note": "This one is close to being clairvoyance, but the invigorate is actually not necessary to win. Hence we can actually predict a T4 win from T2 if we really think it out. 2 + 2 + 5 from combat + 10 from aria and a additional 1 from casting Enlightened Tutor with Aria out. ",
+   "promoted_win": 4,
+   "reference": "references/Anti-Lifegain/claude_s18_gi17.json",
+   "search_digest": "92c897efbe95b48a",
+   "search_win": 4,
+   "source": "handoff_T2.json",
+   "verdict": "promoted"
+  },
   "Anti-Lifegain/claude_s2_gi1.json": {
    "at": "2026-10-24T10:53:58+00:00",
    "hint": "likely-clairvoyance",
