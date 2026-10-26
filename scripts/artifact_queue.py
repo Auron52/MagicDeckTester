@@ -1381,8 +1381,9 @@ def land_result(wid, cfg, branch, deck_dir, ledger_only=False):
 
     Anything that is not a clean, completed run stays on its branch for an agent, untouched: a cherry-pick
     conflict, a tier that aborts (scenario failure, crash, no `Result:` line), stale gt_logs, a lost push race.
-    A GT MOVE IS EXPECTED -- that is what adopting an artifact does -- and is not a failure. Only ONE thing here
-    is the USER's call and it is still collected, never waited for: the adoption itself, reported with numbers."""
+    A GT MOVE IS EXPECTED -- that is what adopting an artifact does -- and is not a failure. No USER sign-off is
+    owed for an adoption that is better overall (USER 2026-10-26): report the numbers as done. Only a trade-off
+    (better quality but slower, or the reverse) is the USER's, and the drivers never adopt one."""
     lw = land_worktree(wid)
     br = cfg["branch"]
     git("fetch", "-q", "origin", br, branch)
