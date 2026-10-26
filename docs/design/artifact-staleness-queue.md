@@ -218,7 +218,7 @@ which validation it ran.
    sibling's single-threaded phase can slip under it): on a shared box, start the worker only when the box
    is known to be free.
 
-## 2026-10-25: owed -- auto-land clear wins and clear losses (USER)
+## 2026-10-25: auto-land clear wins and clear losses (USER) -- BUILT 2026-10-26 as `land_result`, see the guide
 
 The USER: *"It seems our tool is missing a way auto-adopt wins and auto-reject losses? Only ones that are
 in-between should be left up to the user."* Today every result stops at a branch

@@ -87,6 +87,7 @@ DEFAULT_CONFIG = {
     "idle_poll_minutes": 5,
     "idle_max_load": None,
     "retry_rejected_days": 14,
+    "auto_land": True,
     "marks": [],
 }
 
@@ -1339,7 +1340,152 @@ def run_job(wid, cfg, q, job, wt, frozen, deckinfo, dry):
     q._write(deck, claim)
     os.remove(ifp)
     log(wid, "%s %s: %s%s" % (deck, outcome.upper(), "; ".join(detail), ("  -> " + branch) if branch else ""))
+    # The adoption step: land the verdict now, between jobs (nothing else is generating on the box).
+    if branch and outcome in ("done", "rejected") and cfg.get("auto_land", True) and "PUSH FAILED" not in claim["detail"]:
+        try:
+            sha, note = land_result(wid, cfg, branch, deckinfo["dir"], ledger_only=(outcome == "rejected"))
+        except Exception as e:
+            sha, note = None, "landing error: %s -- left for an agent" % e
+        log(wid, "LAND %s: %s%s" % (branch, ("landed %s -- " % sha[:9]) if sha else "NOT landed -- ", note))
+        if sha:
+            claim.update({"landed": sha, "landed_at": iso(utcnow())})
+        else:
+            claim["land_note"] = note
+        q._write(deck, claim)
     return outcome
+
+def land_worktree(wid):
+    return os.path.join(ROOT, ".claude", "worktrees", "artifact-land-" + wid)
+
+
+def suite_key(wt, deck_dir):
+    """-> the regression-suite key (test/regression_cases.sh DECK_FILE) of the deck in `deck_dir`, or None."""
+    txt = open(os.path.join(wt, "test", "regression_cases.sh")).read()
+    m = re.search(r"declare -A DECK_FILE=\((.*?)\n\)", txt, re.S)
+    for k, q, v in re.findall(r'\[([A-Za-z0-9_]+)\]=(?:"([^"]*)"|(\S+))', m.group(1) if m else ""):
+        if os.path.dirname(q or v) == deck_dir.rstrip("/"):
+            return k
+    return None
+
+
+def land_result(wid, cfg, branch, deck_dir, ledger_only=False):
+    """ADOPTION STEP (USER 2026-10-26: "change the pipeline to include adoption steps after each successful
+    improvement"). Lands one result branch on cfg["branch"] and returns (sha, note) or (None, why-not).
+
+    The drivers' own A/Bs already decided adopt vs keep (the old-vs-new versus pool for a keep table, the
+    leaf's cheaper-and-not-notably-worse gate), so a branch here is either a VERDICT ONLY (incumbent kept:
+    only the ledger changed, no play moves, lands as-is) or an ADOPTION, which lands as the regression-testing
+    flow lands any artifact: cherry-picked onto the branch TIP, rebuilt, the deck's own smoke and regression
+    cases run, their GT accepted, check_gt_logs clean, pushed. The deck's overnight GT is left to the periodic
+    overnight run (CLAUDE.md: the overnight tier is never per change).
+
+    Anything that is not a clean, completed run stays on its branch for an agent, untouched: a cherry-pick
+    conflict, a tier that aborts (scenario failure, crash, no `Result:` line), stale gt_logs, a lost push race.
+    A GT MOVE IS EXPECTED -- that is what adopting an artifact does -- and is not a failure. Only ONE thing here
+    is the USER's call and it is still collected, never waited for: the adoption itself, reported with numbers."""
+    lw = land_worktree(wid)
+    br = cfg["branch"]
+    git("fetch", "-q", "origin", br, branch)
+    if not os.path.exists(os.path.join(lw, ".git")):
+        os.makedirs(os.path.dirname(lw), exist_ok=True)
+        git("worktree", "add", "--detach", lw, "origin/" + br)
+    if git("status", "--porcelain", cwd=lw).strip():
+        return None, "landing worktree %s is not clean -- left for an agent" % lw
+    for attempt in (1, 2):
+        git("fetch", "-q", "origin", br, cwd=lw)
+        git("checkout", "-q", "--detach", "origin/" + br, cwd=lw)
+        r = subprocess.run(["git", "cherry-pick", "origin/" + branch], cwd=lw, capture_output=True, text=True)
+        if r.returncode != 0:
+            subprocess.run(["git", "cherry-pick", "--abort"], cwd=lw, capture_output=True)
+            return None, "cherry-pick onto %s conflicts (%s) -- left for an agent" % (br, r.stderr.strip()[:200])
+        changed = git("diff", "--name-only", "-z", "HEAD~1", "HEAD", cwd=lw).split("\0")
+        changed = [f for f in changed if f]
+        extra = [f for f in changed if not f.startswith("test/artifact_ledger/")]
+        if ledger_only and extra:
+            # A KEPT INCUMBENT lands its verdict and nothing else. Before 6e42ca948 the worker unpacked the
+            # incumbent's raw sidecar onto the generator's checkpoint path, and re-packed the regeneration's raw
+            # over it: Anti-Lifegain's "rejected" branch carries a NEW raw beside the OLD keep table. Drop it.
+            for f in extra:
+                if git("ls-tree", "HEAD~1", "--", f, cwd=lw).strip():
+                    git("checkout", "HEAD~1", "--", f, cwd=lw)
+                else:
+                    git("rm", "-q", "--", f, cwd=lw)
+            git("commit", "-q", "--amend", "-m", git("log", "-1", "--format=%B", cwd=lw).rstrip() +
+                "\n\nLanded as VERDICT ONLY: dropped %s (a kept incumbent changes no artifact).\n" % ", ".join(extra), cwd=lw)
+            changed = [f for f in changed if f not in extra]
+        verdict_only = all(f.startswith("test/artifact_ledger/") for f in changed)
+        if not verdict_only:
+            key = suite_key(lw, deck_dir)
+            if not key:
+                return None, "%s is not in test/regression_cases.sh -- left for an agent" % deck_dir
+            wait_idle(wid, cfg)
+            if run_logged(wid, ["./build.sh"], lw, "land.build.log") != 0:
+                return None, "build failed in the landing worktree -- left for an agent"
+            ran = []
+            for mode in ("--smoke", "--regression"):
+                args = ["bash", "test/regression.sh"] + ([mode] if mode == "--smoke" else []) + ["--deck=" + key]
+                lp = os.path.join(state_dir(wid), "land.%s.%s.log" % (key, mode.strip("-")))
+                with open(lp, "w") as f:
+                    rc = subprocess.run(args, cwd=lw, stdout=f, stderr=subprocess.STDOUT).returncode
+                out = open(lp).read()
+                if "matched no" in out:
+                    continue                    # the deck has no cases in this tier
+                if not re.search(r"^Result: \d+ passed, \d+ failed", out, re.M):
+                    return None, "%s %s did not complete (rc=%d; see %s) -- left for an agent" % (mode, key, rc, lp)
+                if "gt_logs are STALE" in out:
+                    return None, "%s: committed gt_logs are STALE -- the audit is unattributed; left for an agent" % mode
+                res = re.search(r"^Result: .*$", out, re.M).group(0)
+                acc = ["bash", "test/regression.sh"] + ([mode] if mode == "--smoke" else []) + ["--accept", "--deck=" + key]
+                if run_logged(wid, acc, lw, "land.accept.log") != 0:
+                    return None, "%s --accept failed -- left for an agent" % mode
+                ran.append("%s: %s (log %s)" % (mode.strip("-"), res, lp))
+            if subprocess.run(["python3", "test/check_gt_logs.py"], cwd=lw, capture_output=True).returncode != 0:
+                return None, "check_gt_logs.py fails after the accept -- left for an agent"
+            git("add", "-A", "--", "test/regression_gt.txt", "test/gt_logs", cwd=lw)
+            if git("diff", "--cached", "--name-only", cwd=lw).strip():
+                git("commit", "-q", "-m", "gt(%s): accept smoke + regression for the adopted artifact (%s)\n\n%s\n\n"
+                    "Accepted by the artifact queue's adoption step (land_result); the deck's overnight GT is left to\n"
+                    "the periodic overnight run.\n\nCo-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>\n"
+                    % (key, branch, "\n".join("  " + x for x in ran)), cwd=lw)
+        r = subprocess.run(["git", "push", "-q", "origin", "HEAD:" + br], cwd=lw, capture_output=True, text=True)
+        if r.returncode == 0:
+            sha = git("rev-parse", "HEAD", cwd=lw).strip()
+            return sha, ("verdict only, landed as-is" if verdict_only else "adopted: " + "; ".join(ran))
+        # Lost a race: the tip moved under us. Redo it once from the new tip (the tiers re-run, since the
+        # new commits may move play); a second loss is left for an agent.
+    return None, "push to %s lost the race twice -- left for an agent" % br
+
+
+def cmd_land(a):
+    """Land result branches by hand with the same adoption step (the backlog from before it existed)."""
+    wid = worker_id()
+    cfg = load_config()
+    q = Queue()
+    q.fetch()
+    claims = q.claims()
+    rc = 0
+    for b in a.branches:
+        b = b if b.startswith(RESULT_PREFIX) else RESULT_PREFIX + b
+        c = next((c for c in claims.values() if c.get("result_branch") == b), None)
+        if not c or c.get("state") not in ("done", "rejected"):
+            print("%s: refused -- its claim is %s, not done/rejected (a released or failed run never lands)"
+                  % (b, c.get("state") if c else "missing"))
+            rc = 1
+            continue
+        d = next((x for x in shipping_decks(ROOT) if x.key == c["deck"]), None)
+        if d is None:
+            print("%s: refused -- deck %s is not a shipping deck here" % (b, c["deck"]))
+            rc = 1
+            continue
+        sha, note = land_result(wid, cfg, b, d.dir, ledger_only=(c["state"] == "rejected"))
+        log(wid, "LAND %s: %s%s" % (b, ("landed %s -- " % sha[:9]) if sha else "NOT landed -- ", note))
+        print("%s: %s%s" % (b, ("landed %s -- " % sha[:9]) if sha else "NOT landed -- ", note))
+        if sha:
+            c.update({"landed": sha, "landed_at": iso(utcnow())})
+            q._write(c["deck"], c)
+        else:
+            rc = 1
+    return rc
 
 
 def cmd_run(a):
@@ -1657,10 +1803,12 @@ def main():
     sp.add_parser("start")
     sp.add_parser("stop")
     sp.add_parser("pause")
+    s = sp.add_parser("land", help="land result branches with the adoption step")
+    s.add_argument("branches", nargs="+")
     sp.add_parser("selftest")
     a = ap.parse_args()
     fn = {"status": cmd_status, "explain": cmd_explain, "mark": cmd_mark, "unmark": cmd_mark, "claims": cmd_claims,
-          "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "pause": cmd_pause, "selftest": cmd_selftest}[a.cmd]
+          "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "pause": cmd_pause, "land": cmd_land, "selftest": cmd_selftest}[a.cmd]
     return fn(a)
 
 

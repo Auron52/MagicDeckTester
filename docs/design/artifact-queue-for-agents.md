@@ -127,10 +127,22 @@ checkout, started 2026-10-24 13:06 UTC, first job StompySurprise).
 
 ## Landing a result
 
-A result branch is not live until it lands. Rebase it onto `phase-1-2-deck-analyzer`, run smoke and regression,
-and accept the GT it moves. A **verdict-only** branch (only `test/artifact_ledger/` changed) moves no play and
-lands as-is. The drivers' own gates decide adoption, but the USER's sign-off is still owed: report each A/B with a
-recommendation in your message, and keep working while you wait for it (CLAUDE.md "NEVER BLOCK ON A QUESTION").
+**The worker lands its own results** (`land_result`, USER 2026-10-26: *"include adoption steps after each successful
+improvement"*), right after each job, before claiming the next. The drivers' A/Bs have already decided:
+- **Kept incumbent** (`rejected`): only `test/artifact_ledger/<deck>.json` lands; any artifact file on the branch is
+  dropped (pre-6e42ca948 branches carry a regenerated raw sidecar beside the old table -- Anti-Lifegain's does).
+- **Adopted** (`done` with an artifact change): cherry-picked onto the branch TIP in
+  `.claude/worktrees/artifact-land-<worker-id>`, rebuilt, the deck's own smoke and regression cases run
+  (`regression.sh --deck=<suite key>`), their GT accepted, `check_gt_logs.py` clean, pushed. The GT move IS the
+  adoption, not a failure. Overnight GT is left to the periodic overnight run.
+- Anything else -- a cherry-pick conflict, a tier that aborts (no `Result:` line), stale gt_logs, a push lost twice --
+  is **left on its branch** with the reason in the claim's `land_note` and in `worker.log` (`LAND ... NOT landed`).
+- A value-leaf **trade** is never adopted by the driver, so it never lands: that is the in-between left to the USER.
+- `python3 scripts/artifact_queue.py land <branch>...` runs the same step by hand (the backlog from before it
+  existed). It refuses a branch whose claim is not done/rejected (e.g. Colossus `-0245`, released). `auto_land:
+  false` in the config turns the worker's step off.
+
+The USER's sign-off on each adoption is still owed: report each landed A/B with its numbers, never wait for it.
 
 ## Known gaps
 
