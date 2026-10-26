@@ -9,6 +9,8 @@
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-25T16:15:31Z",
  "host": "550a08fdc1f3",
+ "landed": "f1a437bfd7597a20a3af22276ce8d35ca968c72a",
+ "landed_at": "2026-10-26T23:15:14Z",
  "result_branch": "artifact-refresh/giants-20261025-1632",
  "run_id": "giants-artifact-queue-d7d6a5-20261025T145443",
  "score": 0.0793,
