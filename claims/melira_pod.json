@@ -4,9 +4,11 @@
   "valueleaf": "em:0e526f28aba1418057fe"
  },
  "deck": "melira_pod",
+ "detail": "paused by the USER: resumes when worker artifact-queue-d7d6a5 next starts; set aside for every other worker",
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
- "heartbeat": "2026-10-26T22:01:36Z",
+ "heartbeat": "2026-10-26T22:21:55Z",
  "host": "550a08fdc1f3",
+ "paused": "2026-10-26T22:21:53Z",
  "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
  "score": 0.4147,
  "stage": "mulligan",
@@ -15,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-25T19:15:45Z",
- "state": "running",
+ "state": "paused",
  "worker": "artifact-queue-d7d6a5"
 }
