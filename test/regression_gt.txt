@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 8e88c5da1  date 2026-10-26
+# Regression ground truth -- commit 497a217db  date 2026-10-26
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; smoke searched 54 faster / 30 slower, d0 217 / 144
 # accepted-with-regressions (regression, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; regression searched 79 faster / 46 slower, d0 205 / 157
@@ -51,9 +51,9 @@ mirrorwing_smoke_d5_s1001=4.2933/1ee0b9edf410b41b
 fivecolour_smoke_d0_s1001=5.4610/49ebcb52ca74dcff
 fivecolour_smoke_d3_s1001=4.8267/26fa543888b41690
 fivecolour_smoke_d5_s1001=4.8933/51568cf47a7cee0c
-stompy_smoke_d0_s1001=4.8370/a0166060c77c1b0f
-stompy_smoke_d3_s1001=4.0267/af05fbe1e8e12d8b
-stompy_smoke_d5_s1001=4.0133/3f06eca243261b9e
+stompy_smoke_d0_s1001=4.8280/ac3483da082047f0
+stompy_smoke_d3_s1001=4.0267/86d28684d0df7ce6
+stompy_smoke_d5_s1001=4.0267/a8bc77c76e840fc2
 minotaur_smoke_d0_s1001=5.3060/ca4f23ae60aa5272
 minotaur_smoke_d3_s1001=4.9080/bec947319031d513
 minotaur_smoke_d5_s1001=4.9067/40396b92ddaf3709
@@ -91,7 +91,7 @@ dragonstorm2hg_smoke_d3_s1001=4.7000/b80d7c9487d21967
 auras2hg_smoke_d3_s1001=4.5200/19d71deecc84575f
 creature_giving2hg_smoke_d3_s1001=5.0000/a4d1a5debaf27fea
 mirrorwing2hg_smoke_d3_s1001=4.6400/c6fa022b2b11ec14
-stompy2hg_smoke_d3_s1001=4.3200/c5489373dbb3638c
+stompy2hg_smoke_d3_s1001=4.3200/a44eb21587dda571
 kittyv32hg_smoke_d3_s1001=4.4000/b537b4372f8ac4e5
 dragons2hg_smoke_d3_s1001=6.2800/736c7b527ffc7ae5
 breaching2hg_smoke_d3_s1001=3.0800/6a08d6bea63ff0c6
@@ -301,11 +301,11 @@ fivecolour_regression_d3_s2002=4.8650/429f17131384d6d7
 fivecolour_regression_d3_s3003=4.8050/ae5e1e69ef8b4b30
 fivecolour_regression_d5_s2002=4.7700/e0846001db706389
 fivecolour_regression_d5_s3003=4.8300/49e46a56b0932537
-stompy_regression_d0_s2002=4.8650/2e09bd05d0abd877
-stompy_regression_d3_s2002=4.1667/987fbe7bc1fae882
-stompy_regression_d3_s3003=4.1033/39d4d7ba7363b63e
-stompy_regression_d5_s2002=4.1600/58f1cae016141f6f
-stompy_regression_d5_s3003=4.0840/b0e107f6a52998ca
+stompy_regression_d0_s2002=4.8710/d96dc74130540a68
+stompy_regression_d3_s2002=4.1533/3d4708ec061b8983
+stompy_regression_d3_s3003=4.1033/6ce475a3c5df9232
+stompy_regression_d5_s2002=4.1280/a670fa885439bb72
+stompy_regression_d5_s3003=4.0880/276178cb319f7f6c
 minotaur_regression_d0_s2002=5.3100/0d522c9d270f350f
 minotaur_regression_d3_s2002=4.9000/c82af0c3c38c4867
 minotaur_regression_d3_s3003=4.8667/0905da43c2ab5d54
