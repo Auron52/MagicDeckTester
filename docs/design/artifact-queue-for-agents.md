@@ -142,7 +142,9 @@ improvement"*), right after each job, before claiming the next. The drivers' A/B
   existed). It refuses a branch whose claim is not done/rejected (e.g. Colossus `-0245`, released). `auto_land:
   false` in the config turns the worker's step off.
 
-The USER's sign-off on each adoption is still owed: report each landed A/B with its numbers, never wait for it.
+**No USER sign-off is owed for an adoption** (USER 2026-10-26: *"There is no need for me to sign-off. If the table is
+better overall (average quality and performance not worse) it is adoptable."*). Report each landed A/B with its
+numbers as DONE, not as a pending decision. Only a trade-off (better quality but slower, or the reverse) goes to the USER.
 
 ## Known gaps
 

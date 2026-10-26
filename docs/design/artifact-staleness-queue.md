@@ -244,4 +244,5 @@ What to build, so that only the in-between needs the USER:
   move is the expected outcome, not a failure. Verdict-only branches land with no tier at all.
 - **One landing machine.** Several workers pushing to the deck branch would race on GT; take a
   `claims/_landing.json` lease (same CAS) so only one box lands at a time.
-- The USER's sign-off on each adoption is still collected (report the numbers), never waited for.
+- No USER sign-off is owed for an adoption that is better overall -- average quality better and performance not
+  worse (USER 2026-10-26). Report the numbers as done; only a trade-off goes to the USER.
