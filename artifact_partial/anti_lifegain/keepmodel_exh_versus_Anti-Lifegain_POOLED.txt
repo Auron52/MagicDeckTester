@@ -1,0 +1,12 @@
+
+=== POOLED A/B (new vs old) over 3 round(s), 96 seeds ===
+  round 1:  32 seeds  logs/keepmodel_exh_versus_Anti-Lifegain_r1
+  round 2:  32 seeds  logs/keepmodel_exh_versus_Anti-Lifegain_r2
+  round 3:  32 seeds  logs/keepmodel_exh_versus_Anti-Lifegain_r3
+
+           old           new     delta B-A     seeds B<A
+        4.2012        4.2062       +0.0050         35/96
+
+spread: min -0.0490  median +0.0055  max +0.0400   sd 0.0172  se 0.0018  mean/se +2.86
+
+pooled delta +0.005021t
