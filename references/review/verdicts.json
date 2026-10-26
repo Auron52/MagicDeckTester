@@ -238,6 +238,22 @@
    "search_win": 5,
    "verdict": "replay_manually"
   },
+  "Dragonstorm/claude_s17_gi16.json": {
+   "at": "2026-10-26T10:56:08+00:00",
+   "hint": "likely-misplay",
+   "human_line_kept_at": "references/review/replaced/Dragonstorm/human_s17_gi16.json",
+   "human_win": 3,
+   "lost_turns": [
+    2
+   ],
+   "note": "",
+   "promoted_win": 2,
+   "reference": "references/Dragonstorm/claude_s17_gi16.json",
+   "search_digest": "8adf80a6d72a40be",
+   "search_win": 2,
+   "source": "handoff_T2.json",
+   "verdict": "promoted"
+  },
   "Soldiers/claude_s16_gi15.json": {
    "at": "2026-10-25T10:43:09+00:00",
    "hint": "likely-misplay",
