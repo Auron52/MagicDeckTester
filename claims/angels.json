@@ -9,6 +9,8 @@
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-25T17:21:22Z",
  "host": "550a08fdc1f3",
+ "landed": "1daa3805d1234fab869b3ba3acf69969d0b6d375",
+ "landed_at": "2026-10-26T23:23:46Z",
  "result_branch": "artifact-refresh/angels-20261025-1726",
  "run_id": "angels-artifact-queue-d7d6a5-20261025T163337",
  "score": 0.0418,
