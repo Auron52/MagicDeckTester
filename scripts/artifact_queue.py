@@ -1391,9 +1391,13 @@ def land_result(wid, cfg, branch, deck_dir, ledger_only=False):
         git("worktree", "add", "--detach", lw, "origin/" + br)
     if git("status", "--porcelain", cwd=lw).strip():
         return None, "landing worktree %s is not clean -- left for an agent" % lw
-    for attempt in (1, 2):
+    GT_PATHS = ["test/regression_gt.txt", "test/gt_logs", "test/job_cost.tsv"]
+    tested = None                               # the tip the deck's tiers last ran on
+    for attempt in (1, 2, 3):
         git("fetch", "-q", "origin", br, cwd=lw)
+        git("checkout", "-q", "--", *GT_PATHS, cwd=lw)    # the harness's own writes from a lost attempt
         git("checkout", "-q", "--detach", "origin/" + br, cwd=lw)
+        tip = git("rev-parse", "HEAD", cwd=lw).strip()
         r = subprocess.run(["git", "cherry-pick", "origin/" + branch], cwd=lw, capture_output=True, text=True)
         if r.returncode != 0:
             subprocess.run(["git", "cherry-pick", "--abort"], cwd=lw, capture_output=True)
@@ -1421,16 +1425,26 @@ def land_result(wid, cfg, branch, deck_dir, ledger_only=False):
             # `--deck=` matches case keys EXACTLY: a deck's 2HG cases are keyed "<k>2hg" (mullgen.sh does the same).
             if re.search(r'^\s*"\s*%s2hg\s' % re.escape(key), open(os.path.join(lw, "test", "regression_cases.sh")).read(), re.M):
                 key = key + "," + key + "2hg"
-            wait_idle(wid, cfg)
-            if run_logged(wid, ["./build.sh"], lw, "land.build.log") != 0:
-                return None, "build failed in the landing worktree -- left for an agent"
+            # A lost push race re-uses the tiers' results when the new tip cannot move this deck's play (no src/,
+            # build, card-data or deck-folder change): --accept runs no binary, it merges those results into the
+            # tip's GT -- never a hand merge of regression_gt.txt (CLAUDE.md). Anything else re-runs the tiers.
+            rerun = not (tested and subprocess.run(
+                ["git", "diff", "--quiet", tested, tip, "--", "src", "CMakeLists.txt", "cmake", "build.sh", deck_dir],
+                cwd=lw).returncode == 0)
+            if rerun:
+                wait_idle(wid, cfg)
+                if run_logged(wid, ["./build.sh"], lw, "land.build.log") != 0:
+                    return None, "build failed in the landing worktree -- left for an agent"
             ran = []
             for mode in ("--smoke", "--regression"):
                 args = ["bash", "test/regression.sh"] + ([mode] if mode == "--smoke" else []) + ["--deck=" + key]
                 lp = os.path.join(state_dir(wid), "land.%s.%s.log" % (key, mode.strip("-")))
-                with open(lp, "w") as f:
-                    rc = subprocess.run(args, cwd=lw, stdout=f, stderr=subprocess.STDOUT).returncode
-                out = open(lp).read()
+                if rerun:
+                    with open(lp, "w") as f:
+                        rc = subprocess.run(args, cwd=lw, stdout=f, stderr=subprocess.STDOUT).returncode
+                else:
+                    rc = 0
+                out = open(lp).read() if os.path.exists(lp) else ""
                 if "matched no" in out:
                     continue                    # the deck has no cases in this tier
                 if not re.search(r"^Result: \d+ passed, \d+ failed", out, re.M):
@@ -1442,9 +1456,11 @@ def land_result(wid, cfg, branch, deck_dir, ledger_only=False):
                 if run_logged(wid, acc, lw, "land.accept.log") != 0:
                     return None, "%s --accept failed -- left for an agent" % mode
                 ran.append("%s: %s (log %s)" % (mode.strip("-"), res, lp))
+            if rerun:
+                tested = tip
             if subprocess.run(["python3", "test/check_gt_logs.py"], cwd=lw, capture_output=True).returncode != 0:
                 return None, "check_gt_logs.py fails after the accept -- left for an agent"
-            git("add", "-A", "--", "test/regression_gt.txt", "test/gt_logs", cwd=lw)
+            git("add", "-A", "--", *GT_PATHS, cwd=lw)
             if git("diff", "--cached", "--name-only", cwd=lw).strip():
                 git("commit", "-q", "-m", "gt(%s): accept smoke + regression for the adopted artifact (%s)\n\n%s\n\n"
                     "Accepted by the artifact queue's adoption step (land_result); the deck's overnight GT is left to\n"
@@ -1456,7 +1472,7 @@ def land_result(wid, cfg, branch, deck_dir, ledger_only=False):
             return sha, ("verdict only, landed as-is" if verdict_only else "adopted: " + "; ".join(ran))
         # Lost a race: the tip moved under us. Redo it once from the new tip (the tiers re-run, since the
         # new commits may move play); a second loss is left for an agent.
-    return None, "push to %s lost the race twice -- left for an agent" % br
+    return None, "push to %s lost the race three times -- left for an agent" % br
 
 
 def cmd_land(a):
