@@ -1,4 +1,4 @@
-# Regression ground truth -- commit d424e3aea  date 2026-10-26
+# Regression ground truth -- commit dae753619  date 2026-10-26
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; smoke searched 54 faster / 30 slower, d0 217 / 144
 # accepted-with-regressions (regression, 2026-10-24): LandfallElementals keep table ADOPTED (2ab6bba75; fast R30 d1 b1 K=21; mullgen validation keep -0.1935t, bottoming -0.0845t): only elementals keys move, every moved game a kept-hand / bottom divergence; regression searched 79 faster / 46 slower, d0 205 / 157
@@ -105,9 +105,9 @@ pd2hg_smoke_d3_s1001=5.6000/3ec18a53def26c00
 fluctuator_smoke_d0_s1001=4.9870/b9ca221376d42c0c
 fluctuator_smoke_d3_s1001=3.5400/c68eebf8293c6f75
 fluctuator_smoke_d5_s1001=3.5067/2c6bf705b991f9c7
-giants_smoke_d0_s1001=6.0270/b4f2c628ea0f1cb0
-giants_smoke_d3_s1001=5.7733/f309c865d734bfb8
-giants_smoke_d5_s1001=5.6933/f0392d48f1e9113c
+giants_smoke_d0_s1001=6.0240/d46a7ae3c00a356e
+giants_smoke_d3_s1001=5.7933/0c73ae595359a871
+giants_smoke_d5_s1001=5.7333/1d063c1fe34d6737
 pirates_smoke_d0_s1001=4.7380/adcc453d42c04b93
 pirates_smoke_d3_s1001=4.3533/9207502981a745b3
 pirates_smoke_d5_s1001=4.3467/0b707ae8e79ced74
@@ -193,8 +193,8 @@ fungusv3_regression_d3_s30001=4.6000/f19043113862d54c
 fungusv3_regression_d5_s30001=4.6000/f19043113862d54c
 galadriel_regression_d3_s30001=4.9000/b7ef4a3790960ae3
 galadriel_regression_d5_s30001=4.9000/b7ef4a3790960ae3
-giants_regression_d3_s30001=5.8000/c246427b3db2bf25
-giants_regression_d5_s30001=5.8000/404b0aa1bfa929f0
+giants_regression_d3_s30001=6.0000/72437b7b623325cd
+giants_regression_d5_s30001=6.0000/9d5c9504692c5889
 goblins_regression_d3_s30001=3.7500/999e53ab18231852
 goblins_regression_d5_s30001=3.7500/999e53ab18231852
 hinata_regression_d3_s30001=5.4000/7fc97e751fbaffcf
@@ -357,11 +357,11 @@ fluctuator_regression_d3_s2002=3.5733/dc12b50d7b009c76
 fluctuator_regression_d3_s3003=3.5267/53fc96ac8c04426d
 fluctuator_regression_d5_s2002=3.6400/e19653807fddf685
 fluctuator_regression_d5_s3003=3.5467/2d374923c7afc156
-giants_regression_d0_s2002=6.0010/34d6f843960eb74a
-giants_regression_d3_s2002=5.5933/37ed0993daaff1ea
-giants_regression_d3_s3003=5.6067/65ac614e10f62208
-giants_regression_d5_s2002=5.5333/a174b5a707f79211
-giants_regression_d5_s3003=5.7200/d9bf254dc660adf6
+giants_regression_d0_s2002=5.9740/2afa7c08ec2270cc
+giants_regression_d3_s2002=5.6400/a8617f9b43c31edd
+giants_regression_d3_s3003=5.5800/acf6eb4f28c6ed02
+giants_regression_d5_s2002=5.6133/b8feedeae9ed3439
+giants_regression_d5_s3003=5.6667/ae9c17fef6e279b9
 pirates_regression_d0_s2002=4.7350/9d3da7aac7cd85f7
 pirates_regression_d3_s2002=4.3533/8d1ecd075f751835
 pirates_regression_d3_s3003=4.4267/54d2a98a5abd8936
