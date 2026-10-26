@@ -186,6 +186,18 @@
    "source": "handoff_T3.json",
    "verdict": "promoted"
   },
+  "Dragonstorm/claude_s13_gi12.json": {
+   "at": "2026-10-26T08:51:11+00:00",
+   "hint": "likely-misplay",
+   "human_win": 6,
+   "lost_turns": [
+    1
+   ],
+   "note": "The original human line needs an update to somewhat match, but the search's line wastes an acceleration spell. It needs to be replayed.",
+   "search_digest": "7f6f99d9324241b4",
+   "search_win": 5,
+   "verdict": "replay_manually"
+  },
   "Soldiers/claude_s16_gi15.json": {
    "at": "2026-10-25T10:43:09+00:00",
    "hint": "likely-misplay",
