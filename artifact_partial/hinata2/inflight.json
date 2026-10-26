@@ -1,0 +1,58 @@
+{
+ "job": {
+  "deck": "hinata2",
+  "dir": "decks/Hinata2",
+  "stages": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "sort": [
+   1,
+   0,
+   -1.0889527548016262
+  ],
+  "score": 1.089,
+  "blobs": {
+   "mulligan": "04a7d610af64c16769963d2fc2e101d677d713b2",
+   "valueleaf": "em:63f552c7e70c9e1c2c09"
+  },
+  "queued_kinds": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "ledger_runs": []
+ },
+ "claim": {
+  "deck": "hinata2",
+  "worker": "MagicDeckTester2-76d2cc",
+  "state": "running",
+  "stages": [
+   "mulligan",
+   "valueleaf"
+  ],
+  "stage": "mulligan",
+  "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
+  "started": "2026-10-25T01:08:53Z",
+  "blobs": {
+   "mulligan": "04a7d610af64c16769963d2fc2e101d677d713b2",
+   "valueleaf": "em:63f552c7e70c9e1c2c09"
+  },
+  "score": 1.089,
+  "host": "8854e545ddab",
+  "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
+  "heartbeat": "2026-10-25T01:09:23Z"
+ },
+ "done_stages": [],
+ "detail": [],
+ "plan": {
+  "env": {},
+  "depth": null,
+  "budget": null,
+  "why": [
+   "incumbent R=22 -> fast"
+  ],
+  "beyond": false,
+  "recipe": "fast"
+ },
+ "vl_queue_fresh": false
+}
