@@ -1418,6 +1418,9 @@ def land_result(wid, cfg, branch, deck_dir, ledger_only=False):
             key = suite_key(lw, deck_dir)
             if not key:
                 return None, "%s is not in test/regression_cases.sh -- left for an agent" % deck_dir
+            # `--deck=` matches case keys EXACTLY: a deck's 2HG cases are keyed "<k>2hg" (mullgen.sh does the same).
+            if re.search(r'^\s*"\s*%s2hg\s' % re.escape(key), open(os.path.join(lw, "test", "regression_cases.sh")).read(), re.M):
+                key = key + "," + key + "2hg"
             wait_idle(wid, cfg)
             if run_logged(wid, ["./build.sh"], lw, "land.build.log") != 0:
                 return None, "build failed in the landing worktree -- left for an agent"
