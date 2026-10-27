@@ -227,7 +227,7 @@ TurnSeq() == turn_number for every other deck by construction.
   Stage 5 A/B: ceiling 1 vs ceiling -1 (no hand-cast Remand), paired, held-out seeds -> result to the USER,
   who decides. (An earlier draft of this entry said hand-cast self-Remand was pruned outright; that reading
   of "only off cyclone triggers" is SUPERSEDED by the MV ceiling above.)
-- Q7. Instant timing collapsed to main phase for Brainsurge / Long-Term Plans / Curator & Wraith cycling
+- Q7. APPROVED 2026-10-27: USER *"All spells are cast at sorcery speed here so that is probably fine."* Original: Instant timing collapsed to main phase for Brainsurge / Long-Term Plans / Curator & Wraith cycling
   (incl. the opponent's-turn cast after our cleanup keeping an extra card). PROVISIONAL.
 - Q9. An extra turn costs no search ply (depth counts rounds). Default: yes.
 - Q10. Eldrazi Conscription's annihilator note (2026-10-05 approval) rests on a false premise: the
@@ -246,9 +246,9 @@ TurnSeq() == turn_number for every other deck by construction.
   "then shuffle" (PerformFetch returns early). Rules-wrong but rare; fixing it moves any deck whose fetch
   whiffs. Default: disclosed, not changed (phase 1).
 - Q15. APPROVED 2026-10-27: USER *"Swampwalk is fine to treat as inert until 1v1 play."* Original: Street Wraith swampwalk (+ Landwalk tag) inert vs the never-blocking goldfish -- PROVISIONAL deferral.
-- Q16. Annihilator: the passive opponent sacrifices its OLDEST permanents first (a fixed rule for the
+- Q16. APPROVED 2026-10-27: USER *"Annihilator like that is fine."* Original: Annihilator: the passive opponent sacrifices its OLDEST permanents first (a fixed rule for the
   opponent's choice; every spawn is an equally good Ulamog target). Default: oldest first.
-- Q17. Two targeted-cast-trigger casts in one turn (Ulamog CH + Gyre) share ONE searched rank policy (the
+- Q17. APPROVED 2026-10-27: USER *"Fortunately the targets don't matter much for ulamog in goldfish so I'm sure that is fine."* Original: Two targeted-cast-trigger casts in one turn (Ulamog CH + Gyre) share ONE searched rank policy (the
   landfall_target_choice whole-turn shape), so their target choices are not searched independently.
   Default: accepted (both in one turn needs 21 mana or two Cyclone hits); flagged for phase 3.
 - Q18. The turn_number classification used an exhaustive grep of all 954 reads instead of a compile-break
@@ -256,5 +256,6 @@ TurnSeq() == turn_number for every other deck by construction.
   accepted; a rename pass can be run on request.
 
 ## Approved deferrals
+- Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
 - Holding a fetchland uncracked / cracking it later: deferred, USER 2026-10-27 (docs/design/uncracked-fetchland.md).
