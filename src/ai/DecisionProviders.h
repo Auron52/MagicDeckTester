@@ -3428,6 +3428,38 @@ public:
     // (valuearm::Arm::cyclone_remand_max_mv, manifest "cyclone_remand_max_mv") so the Stage 5 A/B arms
     // pool in one batch.
     bool AdmitRemandRider(const GameState& s, int controller, const CardDefinition& target) const override;
+
+    // ---- Phase 5 (2026-10-27): the USER's search heuristics (ledger "Optimization plan") ---------------
+    // Each is a RESTRICTION / ORDER behind its own default-ON lever (heurarm); human play and MTG_UNPRUNED
+    // keep every legal option (engine-side bypasses). See the .cpp for the USER's words.
+    // SCALDING TARN (MTG_CYCLONE_FETCH_RULE): Steam Vents while one is left; then by red NEED (the shared
+    // red count): short -> Blood Crypt, Mountain; else Watery Grave, Island. The top pick is the one-option
+    // fetch; Xander's Lounge is searched beside it.
+    std::vector<std::string> FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const override;
+    std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller, const CardParams& fetch_pp,
+                                                   const std::vector<std::string>& ranked) const override;
+    // MYRIAD LANDSCAPE (MTG_CYCLONE_MYRIAD_RULE): two Islands, the one-option pick; two Mountains searched
+    // beside them only while short on red.
+    void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                             bool basic_only, bool share_land_type, std::uint16_t subtype,
+                             std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    int  LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                             bool basic_only, bool share_land_type, std::uint16_t subtype,
+                             const std::vector<std::vector<std::string>>& picks) const override;
+    // LONG-TERM PLANS (MTG_CYCLONE_LTP_RULE): a missing Cyclone, or Emrakul when there is no other way to
+    // top one; neither -> the cast is held (CollectedActionAllowed). MTG_CYCLONE_LTP_ULAMOG (OFF): an
+    // Ulamog once no Emrakul is left in the library.
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    bool RestrictsCollectedActions() const override { return true; }
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    // CANTRIP PROPOSALS (the agent's, from the USER's examples; every one DEFAULT OFF pending the USER):
+    // MTG_CYCLONE_PUTBACK_RULE orders the put-back (dead cards, then the Eldrazi with Emrakul on top while a
+    // Cyclone is ours or in hand, then lands beyond one, then Remand); MTG_CYCLONE_PUTBACK_SINGLE prunes the
+    // put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.
+    std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
+    bool PutBackSingleCandidate(const GameState& s) const override;
+    bool ReorderKeepShuffleOnly(const GameState& s) const override;
 };
 
 class LandfallProvider : public DeckProvider

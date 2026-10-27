@@ -25596,11 +25596,11 @@ static void Note(Site site, const TurnSolver::Plan& p, const SearchBudget* b)
 //     the game's units, how many were spent evaluating some variant of this axis".
 namespace cantripattr
 {
-enum Axis { kPutBack = 0, kPonder = 1, kAxes = 2 };
+enum Axis { kPutBack = 0, kPonder = 1, kSeed = 2, kSeedPin = 3, kTutor = 4, kAxes = 5 };
 enum Card3 { kBrainstorm = 0, kPonderCard = 1, kPreordain = 2, kCards = 3 };
 inline bool On() { static const bool v = EnvOn("MTG_CANTRIP_ATTRIB"); return v; }
-inline thread_local int  t_depth[kAxes] = { 0, 0 };
-inline thread_local long long t_u0[kAxes] = { 0, 0 };
+inline thread_local int  t_depth[kAxes] = { 0, 0, 0, 0, 0 };
+inline thread_local long long t_u0[kAxes] = { 0, 0, 0, 0, 0 };
 inline thread_local std::chrono::steady_clock::time_point t_w0[kAxes];
 inline std::atomic<long long> g_units[kAxes], g_ns[kAxes], g_scopes[kAxes];
 inline std::atomic<long long> g_fan_plans[kAxes], g_fan_vars[kAxes];
@@ -25654,6 +25654,23 @@ struct Scope
     Scope(const Scope&) = delete;
     Scope& operator=(const Scope&) = delete;
 };
+// The cycle-seed and tutor axes (Unpredictable Cyclone phase 5 cost attribution), inclusive units like the two
+// above: a plan carrying a cycle seed, a seed with a non-default pin (j > 0, decline, take-and-Remand), and a tutor
+// target variant (tutor_choice >= 1). The scopes overlap (one plan can be several), so the rows do not sum.
+struct XScope
+{
+    Scope a, b, c;
+    static int SeedAx(const TurnSolver::Plan& p)
+    { return On() && CycleSeedOf(p.actions) != nullptr ? kSeed : -1; }
+    static int PinAx(const TurnSolver::Plan& p)
+    {
+        if (!On()) { return -1; }
+        const Action* sd = CycleSeedOf(p.actions);
+        return sd != nullptr && (sd->devour_count > 0 || sd->ponder_keep == 0 || sd->ponder_keep == 2) ? kSeedPin : -1;
+    }
+    explicit XScope(const TurnSolver::Plan& p)
+        : a(SeedAx(p)), b(PinAx(p)), c(On() && p.tutor_choice >= 1 ? kTutor : -1) {}
+};
 struct Report
 {
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
@@ -25661,7 +25678,7 @@ struct Report
     {
         if (!On()) { return; }
         const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-        static const char* axn[kAxes] = { "putback", "ponder" };
+        static const char* axn[kAxes] = { "putback", "ponder", "seed(any)", "seed(pin j>0|decline|remand)", "tutor(variant)" };
         for (int a = 0; a < kAxes; ++a)
         {
             const long long u = g_units[a].load();
@@ -64678,6 +64695,84 @@ static bool BindAuraLateHosts(const GameState& state, bool is_pre_combat, const 
     return true;
 }
 
+// ---- THE CYCLE-SEED PIN FOLD (Unpredictable Cyclone phase 5, 2026-10-27; SOUND, DEFAULT ON) ------------------
+// A searched cycle seed (CollectActions) carries two in-resolution pins: Curator of Mysteries' disposition j
+// (devour_count: N scry-1 triggers fold to "bottom the top min(j, N)", ResolveDiscardScryTriggers) and
+// Unpredictable Cyclone's free-cast choice (ponder_keep: take / decline / take-and-Remand). CollectActions
+// emits j = 0..(watchers on the battlefield + watchers in HAND) and the free-cast pins whenever a Cyclone is
+// on the battlefield OR in hand, because it cannot see the plan. Inside ONE plan both are often unreadable:
+//   * j above N, the watchers that can be on the battlefield when the seed is cycled -- those out now plus
+//     the watchers the plan itself casts (the seed runs after the plan's casts) -- bottoms exactly min(j, N)
+//     cards: the same state as the sibling with j = N;
+//   * with no Cyclone on the battlefield and none cast by the plan, the cycle draws normally and the
+//     free-cast pin is never read: every pin is the same state as the take sibling.
+// The sibling is enumerated beside the duplicate (same name, the same other selections, the same cost: the
+// seed variants differ in their pins only, and the clamped j / the take pin is emitted first), so dropping
+// the duplicate removes no line. EXACT only when no other action of the plan can add a watcher or a Cyclone
+// mid-plan -- a draw, a look, a tutor or a Remand cast opens a breakpoint whose continuation may cast what it
+// found before the seed runs -- so any such plan (and any non-cast action) is left alone.
+// MTG_CYCLE_SEED_FOLD=0 (per-job: heurarm CYCLE_SEED_FOLD) emits every pinned seed.
+static bool CycleSeedFoldOn()
+{
+    static const bool env = EnvOn("MTG_CYCLE_SEED_FOLD", true);
+    return heurarm::Flag(heurarm::CYCLE_SEED_FOLD, env);
+}
+struct CycleSeedFoldCtx
+{
+    bool on = false;
+    int  watchers_bf = 0;
+    bool replacer_out = false;
+};
+static CycleSeedFoldCtx BuildCycleSeedFoldCtx(const GameState& state, const std::vector<Action>& cands)
+{
+    CycleSeedFoldCtx c;
+    if (!(state.deck_has_cycle_draw_replacement || state.deck_has_discard_scry_watcher) || !CycleSeedFoldOn())
+    { return c; }
+    bool any_seed = false;
+    for (const Action& a : cands) { if (IsCycleSeed(a)) { any_seed = true; break; } }
+    if (!any_seed) { return c; }
+    c.on = true;
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.cycle_draw_exile_shared_type_freecast) { c.replacer_out = true; }
+        if (d->params.cycle_or_discard_trigger_scry > 0) { ++c.watchers_bf; }
+    }
+    return c;
+}
+// True when the selection's cycle seed carries a pin its sibling already covers (see above).
+static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel)
+{
+    const Action* seed = nullptr;
+    int  watch_cast = 0;
+    bool replacer_cast = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (IsCycleSeed(a)) { seed = &a; continue; }
+        if (a.kind != Action::Kind::CastFromHand || !a.remand_by.empty() || a.free_cast) { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { return false; }
+        const CardParams& pp = d->params;
+        if (pp.draw > 0 || pp.cast_reorder > 0 || pp.put_back_from_hand > 0 || pp.cast_scry > 0
+            || IsLibraryTutor(pp) || pp.counters_target_spell_to_hand || d->tmpl == CardTemplate::DrawSpell
+            || d->tmpl == CardTemplate::DrawX || d->tmpl == CardTemplate::DrawUntilNonland)
+        { return false; }
+        if (pp.cycle_or_discard_trigger_scry > 0) { ++watch_cast; }
+        if (pp.cycle_draw_exile_shared_type_freecast) { replacer_cast = true; }
+    }
+    if (seed == nullptr) { return false; }
+    const int n_real = c.watchers_bf + watch_cast;
+    if (seed->devour_count > n_real) { return true; }
+    const int fc = seed->ponder_keep;
+    if (fc != kCycFcDefault && fc != kCycFcTake && !c.replacer_out && !replacer_cast) { return true; }
+    return false;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     routetape::Suspend _rts;       // an enumeration's trial applies are not a route link's own resolutions
@@ -64710,6 +64805,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // later phase). The subset machinery below reads the per-Action valuation scalars.
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     considerstats::Record("enum", is_pre_combat, cands, state);
+    const CycleSeedFoldCtx seed_fold = BuildCycleSeedFoldCtx(state, cands);   // see CycleSeedPinRedundant
     // Inject sequenced restricted-aura candidates (e.g. Daybreak Coronet on a creature that an Ethereal
     // Armor cast this same turn will enable) -- on a creature in play, and on a creature in HAND the plan
     // also casts (MTG_AURA_RESTRICTED_NEW_CREATURE). Autonomous default since increment 2(a)
@@ -65474,6 +65570,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
         if (enumstats::Enabled()) { enumstats::g_e_enter.fetch_add(1, std::memory_order_relaxed); }
+        // THE CYCLE-SEED PIN FOLD (sound; see CycleSeedPinRedundant): the sibling with the readable pin
+        // is emitted beside this selection.
+        if (seed_fold.on && CycleSeedPinRedundant(seed_fold, cands, sel)) { return; }
         // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
         // cross-product BETWEEN them beyond `sat_max_actions` chosen actions. The forced free equips
         // (auto_sel) ride EVERY subset by construction, so they are not a choice and must not count.
@@ -72957,6 +73056,30 @@ static void AxisTrace(const char* stage, const GameState& state, const std::vect
                  " land_search=%zu look_top=%zu max_casts=%zu max_acts=%zu\n  hand=%s\n  bf=%s\n",
                  stage, state.turn_number, all.size(), tu, ls, as, sub, lsp, lt, max_casts, max_acts,
                  hand.c_str(), bf.c_str());
+    // MTG_AXIS_TRACE_DUMP=1 (diagnostic, with MTG_AXIS_TRACE): also list every plan of a traced list at the
+    // pre-looktop stage -- land / fetch / slot and the axis pins, then the actions (kind:name, a cycle seed's
+    // [j,fc] pins, a tutor target, a Remand rider). Print-only.
+    static const bool s_dump = EnvOn("MTG_AXIS_TRACE_DUMP");
+    if (s_dump && std::string(stage) == "pre-looktop")
+    {
+        for (const TurnSolver::Plan& p : all)
+        {
+            std::string o = "   P land=" + p.land_to_play + " fetch=" + p.fetch_target + " slot=" + std::to_string(p.land_slot)
+                          + " tut=" + std::to_string(p.tutor_choice) + " pon=" + std::to_string(p.ponder_choice)
+                          + " pb=" + std::to_string(p.putback_choice) + " dig=" + std::to_string(p.dig_choice)
+                          + " bp=" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at)
+                          + " ctt=" + std::to_string(p.cast_trigger_target_choice) + " ls=" + std::to_string(p.land_search_pins.size())
+                          + " :";
+            for (const Action& a : p.actions)
+            {
+                o += " " + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str();
+                if (a.kind == Action::Kind::DigDraw) { o += "[j" + std::to_string(a.devour_count) + ",fc" + std::to_string(a.ponder_keep) + "]"; }
+                if (!a.tutor_target.str().empty()) { o += ">" + a.tutor_target.str(); }
+                if (!a.remand_by.empty()) { o += "#RM"; }
+            }
+            std::fprintf(stderr, "%s\n", o.c_str());
+        }
+    }
     std::fflush(stderr);
 }
 
@@ -84643,6 +84766,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
             pbsite::Note(pbsite::kFsM2, q, budget);
             cantripattr::Scope _cas(cantripattr::AxisOf(q));   // MTG_CANTRIP_ATTRIB (diagnostic)
+            cantripattr::XScope _cax(q);   // MTG_CANTRIP_ATTRIB: the seed / tutor axes
             ChargePutBackVariant(budget, q);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             vampaxis::Scope _vax(vax_list_m2, q);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
             if (s_rollout_stats)
@@ -86761,6 +86885,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (!fb_fold_free) { ConsumeAt(budget, unitsite::kFsPre); }   // one interior node (plan applied)
         pbsite::Note(pbsite::kFsPre, p, budget);
         cantripattr::Scope _cas(cantripattr::AxisOf(p));   // MTG_CANTRIP_ATTRIB (diagnostic)
+        cantripattr::XScope _cax(p);   // MTG_CANTRIP_ATTRIB: the seed / tutor axes
         ChargePutBackVariant(budget, p);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
         vampaxis::Scope _vax(vax_list_pre, p, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
         if (s_rollout_stats)
@@ -93346,6 +93471,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             }
             pbsite::Note(is_pre_combat ? pbsite::kLaPre : pbsite::kLaPost, plan, budget);
             cantripattr::Scope _cas(cantripattr::AxisOf(plan));   // MTG_CANTRIP_ATTRIB (diagnostic)
+            cantripattr::XScope _cax(plan);   // MTG_CANTRIP_ATTRIB: the seed / tutor axes
             ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             VampCandCensus(plan, is_pre_combat);
             vampaxis::Scope _vax(vax_list, plan, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
