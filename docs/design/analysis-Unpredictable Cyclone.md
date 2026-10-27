@@ -225,9 +225,8 @@ TurnSeq() == turn_number for every other deck by construction.
   hand-cast self-Remand only when the target's MV <= `MTG_CYCLONE_REMAND_MAX_MV` (provider lever,
   per-job via HeuristicArm so arms pool in one batch). Shipped default 1 (the wider, searched side);
   Stage 5 A/B: ceiling 1 vs ceiling -1 (no hand-cast Remand), paired, held-out seeds -> result to the USER,
-  who decides. The
-  hand-cast self-Remand (riding a cast from hand) is PRUNED in CycloneProvider as a provider restriction on
-  the USER's word (agent reading of "only off cyclone triggers"; surfaced to the USER 2026-10-27).
+  who decides. (An earlier draft of this entry said hand-cast self-Remand was pruned outright; that reading
+  of "only off cyclone triggers" is SUPERSEDED by the MV ceiling above.)
 - Q7. Instant timing collapsed to main phase for Brainsurge / Long-Term Plans / Curator & Wraith cycling
   (incl. the opponent's-turn cast after our cleanup keeping an extra card). PROVISIONAL.
 - Q9. An extra turn costs no search ply (depth counts rounds). Default: yes.
