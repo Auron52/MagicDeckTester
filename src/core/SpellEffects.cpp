@@ -155,6 +155,12 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
     // A REGROWTH is a TARGETED spell, not "you may search": its target was chosen as it was cast
     // (CR 601.2c), so there is nothing to decline -- a -1 takes the default (or the first card).
     if (picked < 0 && pp.tutor_from_graveyard) { picked = def >= 0 ? def : 0; }
+    // Long-Term Plans' "search your library for A CARD" names no quality, so a non-empty library
+    // always yields one (CR 701.19b lets a search fail only for a card "with a stated quality"):
+    // a -1 takes the default, like the regrowth above. Scoped to the position tutor (the only such
+    // card new here); Gamble's -1 keeps its recorded fail-to-find semantics (references replay it).
+    if (picked < 0 && pp.tutor_library_position > 1 && pp.tutor_types.empty())
+    { picked = def >= 0 ? def : 0; }
     if (picked < 0) { return TutorAskResult::Declined; }   // -1 = decline the optional search
     // Out of range keeps the CALLER's current pick rather than declining -- the exact prior
     // semantics of this path. Unreachable from the shipped harness (the --choices reader validates
@@ -164,8 +170,9 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
     return TutorAskResult::Chosen;
 }
 
-// Execute a tutor (Idyllic / Enlightened): fetch `target_name` from the library and move it to
-// hand (to_hand) or the top of the library (to_top). When target_name is empty, fall back to
+// Execute a tutor (Idyllic / Enlightened / Long-Term Plans): fetch `target_name` from the library and
+// move it to hand (to_hand), the top of the library (to_top) or N-th from the top
+// (tutor_library_position, after the shuffle). When target_name is empty, fall back to
 // the heuristic's top candidate (TutorCandidates) -- so any path that doesn't carry a searched
 // choice still plays the heuristic. The library is treated as already shuffled (the remaining
 // order past the tutored card is a goldfish-irrelevant simplification that keeps the real game
@@ -424,6 +431,17 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         state.top_stacked_turn        = state.TurnSeq();
         state.top_stacked_card_number = fetched_num;   // identity, so a consumed stack self-invalidates
     }
+    else if (pp.tutor_library_position > 1)
+    {
+        // Long-Term Plans: "then shuffle and put that card third from the top" -- AFTER the search
+        // shuffle above. Ruling: "If there are fewer than 3 cards in your library, put the card on
+        // the bottom", which is exactly this clamp (index N-1, or the end of a shorter library).
+        // NOT a top stack: top_stacked_turn stays unset, so no next-draw consumer arms on it (the
+        // top is a shuffled card). Shared by both worlds, so lockstep by construction.
+        const std::size_t at = std::min<std::size_t>(
+            static_cast<std::size_t>(pp.tutor_library_position - 1), ap.library.size());
+        ap.library.insert(ap.library.begin() + static_cast<std::ptrdiff_t>(at), std::move(c));
+    }
 
     // Record WHAT was searched up so the replay viewer shows it (real play only -- the reveal
     // logger is null during search/rollout, so this is byte-identical to the suite). Modelled as
@@ -435,7 +453,12 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         EmitReveal(state.turn_number, source_name + (regrow ? " (returned from graveyard)"
                                                             : " (searched)"),
                    { fetched_num }, { fetched_name }, { fetched_num }, {},
-                   /*dispositions*/ { pp.tutor_to_top ? "to top" : "to hand" });
+                   /*dispositions*/ { pp.tutor_to_top ? std::string("to top")
+                                      : pp.tutor_library_position == 2 ? std::string("2nd from top")
+                                      : pp.tutor_library_position == 3 ? std::string("3rd from top")
+                                      : pp.tutor_library_position > 3
+                                          ? std::to_string(pp.tutor_library_position) + "th from top"
+                                          : std::string("to hand") });
     }
 
     // Gamble: "then discard a card at random." Deterministic so the rollout and the real executor
