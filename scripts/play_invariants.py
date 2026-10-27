@@ -193,6 +193,7 @@ def drive_game(deck, profile, seed, gi, max_turns, reveal, determinism_samples=3
     transcript = []          # (prefix_choices_tuple, raw_block) for determinism re-checks
     last_di, last_turn = -1, -1
     result = None
+    seen_menus = set()       # (turn, phase, plan summaries) of main_phase menus already answered
 
     for step in range(DECISION_CAP + 1):
         rc, out = invoke(deck, profile, seed, gi, max_turns, reveal, choices)
@@ -259,7 +260,25 @@ def drive_game(deck, profile, seed, gi, max_turns, reveal, determinism_samples=3
             advisories += cast_availability_advisory(obj)
 
         transcript.append((tuple(choices), raw))
-        choices += reply_for(obj)
+        reply = reply_for(obj)
+        # A PHANTOM PLAN: the menu offers a cast the apply then DROPS (the enumerator's order-free
+        # ritual affordability credit -- a Seething Song "paying for itself" off one Mountain;
+        # docs/design/analysis-Unpredictable Cyclone.md, Stages 3-5). The always-prompt viewer
+        # re-offers the identical menu, and a driver that keeps picking the no-op never advances
+        # (Unpredictable Cyclone, seed 8001 gi 0-3: 400 decisions on one turn-1 Seething Song).
+        # A real player passes: when the SAME main_phase menu comes back reporting dropped casts,
+        # reply -1 (the audit_viewer_decisions.py driver's repeated-menu rule) and record it as an
+        # advisory, so the phantom stays visible without masking a real runaway (any other repeat
+        # still burns the cap).
+        if t == "main_phase":
+            key = (obj.get("turn"), obj.get("phase"),
+                   tuple(p.get("summary", "") for p in obj.get("plans", [])))
+            if key in seen_menus and obj.get("dropped_casts") and reply != [-1]:
+                advisories.append(f"phantom plan re-offered at turn {obj.get('turn')}: dropped "
+                                  f"{obj.get('dropped_casts')} -- driver passed")
+                reply = [-1]
+            seen_menus.add(key)
+        choices += reply
     else:
         flags.append(f"did not reach a result within {DECISION_CAP} decisions (runaway?)")
 
