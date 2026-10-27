@@ -162,7 +162,10 @@ namespace manaoracle
 
     // Every MINIMAL way to pay `cost` on `state`: tap sets in which no tap can be dropped, crossed
     // with every distinct set-aside of the floating pool. Identical sources fold (only the lowest-
-    // numbered untapped copies are tapped). Each option is VERIFIED by performing it on a scratch copy
+    // numbered untapped copies are tapped), except a copy the plan being realised taps or sacrifices
+    // itself, which is its own source. A tap set that makes more than the bill is listed once per
+    // leftover, and a set holding a multi-unit source also with one more free tap (its surplus can
+    // float into a later payment). Each option is VERIFIED by performing it on a scratch copy
     // and paying float-only, so a listed option always pays. `unmodeled` collects what the
     // enumeration could not drive (e.g. a restricted-mana source the manual-tap routes refuse).
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,

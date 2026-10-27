@@ -569,6 +569,27 @@ std::string LineKey(const GameState& root, const GameState& fin)
     for (const std::string& n : LeftHand(root, fin)) { k += n + ","; }
     k += "|" + std::to_string(fin.spells_cast_this_turn);
     k += "|" + std::to_string(fin.players[fin.active_player_index].library.size());
+    // Where each NEW Aura went. A breakpoint's continuation is chosen by a solver inside the apply,
+    // from the board the payments left, so two payments can send the same Wild Growth to two lands
+    // (EDF seed 3129 T3: the engine's Living Wish payment floats a wild unit, the oracle's a concrete
+    // colour, and the continuation hosts the Aura on the fetched Wastes or on the Coast). Those are two
+    // continuations, not one line paid two ways. A plan's own Aura casts name their host, so every
+    // realisation of the plan agrees on it.
+    std::set<int> old;
+    for (const Permanent& p : root.battlefield) { old.insert(p.card.m_number); }
+    std::vector<std::string> hosts;
+    for (const Permanent& p : fin.battlefield)
+    {
+        if (p.aura_attached_to == 0 || old.count(p.card.m_number) != 0) { continue; }
+        for (const Permanent& h : fin.battlefield)
+        {
+            if (h.card.m_number != p.aura_attached_to) { continue; }
+            hosts.push_back(p.card.m_name.str() + ">" + h.card.m_name.str() + (h.entered_this_turn ? "*" : ""));
+            break;
+        }
+    }
+    std::sort(hosts.begin(), hosts.end());
+    for (const std::string& h : hosts) { k += "|" + h; }
     return k;
 }
 
@@ -697,6 +718,13 @@ int UsefulColorMask(const GameState& s, const ManaCost& cost)
     return m;
 }
 
+// The permanents the plan being realised taps or sacrifices itself (Realize's plan_srcs). Such a copy is
+// not its twins' equal -- tapping it for mana strands that action -- so BuildSources keys it apart. EDF
+// seed 3508 T4: Wild Growth, then Conservatory #13's {4},{T}: investigate. The fold tapped #13 (the lower
+// of two Conservatories) for the Wild Growth, the activation lost its source, and the oracle missed the
+// painless line the engine pays with #14 (an ORACLE-GAP, "life engine 20 oracle 19").
+thread_local const std::set<int>* t_plan_srcs = nullptr;
+
 std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, std::vector<std::string>* unmodeled,
                                    int useful)
 {
@@ -740,6 +768,8 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         key += "|" + p.counters.KeyFragment() + "|" + std::to_string(p.storage_counters) + ","
              + std::to_string(p.charge_counters) + "|" + std::to_string(n_auras)
              + (p.entered_this_turn ? "|new" : "|old");
+        if (t_plan_srcs != nullptr && t_plan_srcs->count(p.card.m_number) != 0)
+        { key += "|plan#" + std::to_string(p.card.m_number); }
         auto it = by_key.find(key);
         if (it != by_key.end()) { out[it->second].nums.push_back(p.card.m_number); continue; }
         SrcClass sc;
@@ -847,8 +877,9 @@ struct Pick { int cls; int face; };
 
 // The payment search for ONE set-aside: classes in battlefield order, each tapped 0..n times with a
 // non-decreasing face sequence (copies are interchangeable). At an OPTIMISTIC cover the candidate is
-// paid for REAL; if it pays it is recorded and not extended with free taps (a superset only taps more
-// of what could be tapped later) -- but it IS extended with FED conversions, because a converter
+// paid for REAL; if it pays it is recorded, once per leftover (Verify), and not extended with free taps
+// (a superset only taps more of what could be tapped later) -- except by one tap when it holds a
+// multi-unit source (ExtendSurplus) -- and it IS extended with FED conversions, because a converter
 // (Cascade Bluffs, an Izzet Signet) needs a feeder that may be gone by the time it is wanted: the
 // Island that feeds Bluffs now can pay Preordain AND float the {U} Curiosity needs. If the real
 // payment fails, the optimistic arithmetic was wrong (a yield it over-counted) and the search goes on
@@ -889,11 +920,52 @@ struct PayEnum
         return o;
     }
 
-    // Pay for real on a scratch copy; record a NEW result. Returns whether it paid.
+    // Pay for real on a scratch copy; record a NEW result; then the same taps once per OTHER leftover.
+    // WHICH UNITS FLOAT ON IS A CHOICE TOO (EDF seed 3353 T8): the float-only payer spends a generic pip
+    // in a fixed colour order, so a tap set that makes more than the bill always left the same unit --
+    // never the {U} a Trace of Abundance's bonus could have floated for the Training Grounds cast two
+    // payments later, which the engine's line did (its bonus floats as wild). A set-aside may hold
+    // units the taps just made (ScriptedPay subtracts it after the taps), so every leftover of the
+    // same size is its own option. Plain units only: a haste-tagged {C} or a wild unit in the pool
+    // keeps the payer's own leftover.
     bool Verify(const std::vector<Pick>& picks)
     {
         if (++probes > cap) { capped = true; return false; }
-        PayOption o = Build(picks);
+        const PayOption o = Build(picks);
+        ManaPool offered, left;
+        if (!PayAndRecord(o, &offered, &left)) { return false; }
+        // Only a multi-unit tap makes a leftover of its own: a set of one-unit taps pays exactly, and
+        // the floating pool it was offered is already split by the outer set-aside enumeration.
+        if (!HasMultiUnit(picks)) { return true; }
+        const int n = left.white + left.blue + left.black + left.red + left.green + left.colorless;
+        if (n == 0 || offered.wild != 0 || left.wild != 0) { return true; }
+        const int have[6] = { offered.white, offered.blue, offered.black, offered.red, offered.green, offered.colorless };
+        const int was[6]  = { left.white, left.blue, left.black, left.red, left.green, left.colorless };
+        int k[6] = { 0, 0, 0, 0, 0, 0 };
+        std::function<void(int, int)> rec = [&](int c, int rest)
+        {
+            if (capped) { return; }
+            if (c == 6)
+            {
+                if (rest != 0 || std::equal(k, k + 6, was)) { return; }
+                if (++probes > cap) { capped = true; return; }
+                PayOption o2 = o;
+                o2.stash.white += k[0]; o2.stash.blue += k[1]; o2.stash.black += k[2];
+                o2.stash.red   += k[3]; o2.stash.green += k[4]; o2.stash.colorless += k[5];
+                PayAndRecord(o2, nullptr, nullptr);
+                return;
+            }
+            for (int v = 0; v <= std::min(have[c], rest); ++v) { k[c] = v; rec(c + 1, rest - v); }
+            k[c] = 0;
+        };
+        rec(0, n);
+        return true;
+    }
+
+    // `offered` / `left` (optional): the general float the payment was offered (after the taps, less
+    // the set-aside; `wild` set when a haste-tagged {C} or a wild unit is in it) and what it left of it.
+    bool PayAndRecord(PayOption o, ManaPool* offered, ManaPool* left)
+    {
         GameState sc = state;
         auto why = [&](const char* w)
         {
@@ -914,10 +986,16 @@ struct PayEnum
         sf.red -= o.stash.red; sf.green -= o.stash.green; sf.colorless -= o.stash.colorless;
         sc.floating_haste_c -= o.stash_haste;
         sf.snow_units = std::min(sf.snow_units, sf.Total());
+        if (offered != nullptr)
+        {
+            *offered = sf;
+            if (sc.floating_haste_c > 0) { offered->wild = std::max(1, offered->wild); }
+        }
         t_float_only = true;
         const bool paid = TapForCostShared(sc, cost, for_creature, nullptr, true);
         t_float_only = false;
         if (!paid) { return why("the float-only payment failed"); }
+        if (left != nullptr) { *left = sf; }
         sf.white += o.stash.white; sf.blue += o.stash.blue; sf.black += o.stash.black;
         sf.red += o.stash.red; sf.green += o.stash.green; sf.colorless += o.stash.colorless;
         sc.floating_haste_c += o.stash_haste;
@@ -931,6 +1009,43 @@ struct PayEnum
         int n = 0;
         for (const Pick& pk : cur) { if (pk.cls == cls) { ++n; } }
         return n;
+    }
+
+    // A SUPERSET WORTH TAPPING (EDF seed 3101 T4): a source that makes two or more units in one tap
+    // (an Aura'd land, Aether Hub under Trace of Abundance) may pay part of this bill and float the
+    // rest -- but only if another tap covers what that rest would have paid. Conservatory {G} + the
+    // Hub's {C}+{U} pays Overgrowth's {2}{G} exactly, so the minimal search never taps Mariposa with
+    // them; the engine does, keeps the Hub's {U} for Training Grounds, and leaves Overgrowth's host
+    // untapped for its {G}{G}. So a paying set holding a multi-unit tap is also tried with ONE more
+    // free one-unit tap (its leftovers enumerated by Verify). One, not more, and one-unit: deeper
+    // supersets are not generated, a limit of this table (unbounded, they multiplied EDF seed 3353's
+    // turn-8 table -- an Aether Hub under two Overgrowths, five Aura'd lands -- by ~40x).
+    bool HasMultiUnit(const std::vector<Pick>& picks) const
+    {
+        for (const Pick& pk : picks)
+        {
+            const Face& f = srcs[static_cast<std::size_t>(pk.cls)].faces[static_cast<std::size_t>(pk.face)];
+            if (!f.fed && f.net >= 2) { return true; }
+        }
+        return false;
+    }
+    void ExtendSurplus()
+    {
+        if (!HasMultiUnit(cur)) { return; }
+        for (std::size_t c = 0; c < srcs.size() && !capped; ++c)
+        {
+            const SrcClass& sc = srcs[c];
+            if (UsedCopies(static_cast<int>(c)) >= static_cast<int>(sc.nums.size())) { continue; }
+            for (std::size_t fi = 0; fi < sc.faces.size() && !capped; ++fi)
+            {
+                // The added tap stands in for the unit that floats on, so a ONE-unit face: a second
+                // multi-unit tap is a deeper superset (see above).
+                if (sc.faces[fi].fed || sc.faces[fi].net != 1) { continue; }
+                cur.push_back({ static_cast<int>(c), static_cast<int>(fi) });
+                Verify(cur);
+                cur.pop_back();
+            }
+        }
     }
 
     // Add fed conversions to a paying set, one at a time, classes from `from` on.
@@ -953,7 +1068,7 @@ struct PayEnum
     void Dfs(std::size_t ci, const int col[6], int total)
     {
         if (capped) { return; }
-        if (MaybeCovers(col, total, cost) && Verify(cur)) { ExtendFed(0); return; }
+        if (MaybeCovers(col, total, cost) && Verify(cur)) { ExtendFed(0); ExtendSurplus(); return; }
         if (ci >= srcs.size()) { return; }
         if (total + suffix_max[ci] < cost.ManaValue()) { return; }
         Dfs(ci + 1, col, total);   // skip this class...
@@ -1219,6 +1334,12 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         if (a.sac_victim_id != 0) { plan_srcs.insert(a.sac_victim_id); }
         if (a.kind != Action::Kind::CastFromHand) { plan_names.insert(a.card_name.str()); }
     }
+    struct PlanSrcScope
+    {
+        const std::set<int>* saved;
+        explicit PlanSrcScope(const std::set<int>* s) : saved(t_plan_srcs) { t_plan_srcs = s; }
+        ~PlanSrcScope() { t_plan_srcs = saved; }
+    } _plan_src_scope(&plan_srcs);
     const int act = root.active_player_index;
     while (!layer.empty())
     {
@@ -1392,6 +1513,12 @@ std::string DiffText(const GameState& e, const GameState& o)
         if (p.temp_haste != q.temp_haste) { add(nm + " haste differs"); }
         if (p.temp_power_bonus != q.temp_power_bonus || p.temp_tough_bonus != q.temp_tough_bonus)
         { add(nm + " pump differs"); }
+        if (p.aura_attached_to != q.aura_attached_to || p.equipped_to != q.equipped_to)
+        {
+            add(nm + " on #" + std::to_string(p.aura_attached_to != 0 ? p.aura_attached_to : p.equipped_to)
+                + " by engine, #" + std::to_string(q.aura_attached_to != 0 ? q.aura_attached_to : q.equipped_to)
+                + " by oracle");
+        }
     }
     for (const Permanent& q : o.battlefield)
     { if (seen.count(q.card.m_number) == 0) { add(q.card.m_name.str() + "#" + std::to_string(q.card.m_number) + " only in oracle"); } }
@@ -1399,6 +1526,14 @@ std::string DiffText(const GameState& e, const GameState& o)
     { add("life engine " + std::to_string(e.players[a].life) + " oracle " + std::to_string(o.players[a].life)); }
     if (e.players[a].energy_counters != o.players[a].energy_counters) { add("energy differs"); }
     if (e.players[a].hand.size() != o.players[a].hand.size())  { add("hand size differs"); }
+    else
+    {
+        std::multiset<std::string> eh, oh;
+        for (const Card& c : e.players[a].hand) { eh.insert(c.m_name.str()); }
+        for (const Card& c : o.players[a].hand) { oh.insert(c.m_name.str()); }
+        if (eh != oh) { add("hand cards differ"); }
+    }
+    if (e.players[a].sideboard.size() != o.players[a].sideboard.size()) { add("sideboard size differs"); }
     if (e.players[a].graveyard.size() != o.players[a].graveyard.size()) { add("graveyard size differs"); }
     if (e.players[a].library.size() != o.players[a].library.size()) { add("library size differs"); }
     if (e.players[1 - a].life != o.players[1 - a].life) { add("opponent life differs"); }
@@ -1849,6 +1984,23 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         {
             Emit(C_UNMODELED, root, pre, plan, "the engine reached a board the oracle cannot ("
                                                + r.unmodeled.front() + ")");
+            return;
+        }
+        // ...but a same-line realisation only REACHED the engine's line; it is not the oracle's best payment.
+        // EDF seed 3946 T4 (Conservatory, Eldrazi Displacer; the engine's continuation casts Training
+        // Grounds): the painless payments the engine's own matches -- Brushland {C} + Trace of Abundance,
+        // Mariposa + Fertile Ground -- float a {U}, and the continuation solver on THAT board cast nothing
+        // more, while a one-tap-wider payment (a land more, 1 life more) happened to reach the engine's line.
+        // Judged against that one alone, the plan read as a gap. When a different-line realisation is at
+        // least the engine's life, the payment question is open on the continuation, not on the mana.
+        const int e_life = e.players[static_cast<std::size_t>(e.active_player_index)].life;
+        for (const Outcome& o : r.outcomes)
+        {
+            if (!o.Full() || o.line == e_line) { continue; }
+            if (o.st.players[static_cast<std::size_t>(o.st.active_player_index)].life < e_life) { continue; }
+            Emit(C_CONT_DIFFERS, root, pre, plan,
+                 "the realisations on the engine's line do not cover it, and one at least as healthy continued "
+                 "with different cards (the engine's continuation solver saw a different board)");
             return;
         }
         std::string why = r.outcomes.empty() ? std::string("the oracle reached no outcome at all")

@@ -228,7 +228,50 @@ thread-local that only the oracle sets on its own state copy:
    read from the definitions; pinned by "a colour only a later card in hand can spend is still offered").
    EDF census games: ORACLE-GAP 31 -> 15, PHANTOM 2291 -> 2200, CONTINUATION-DIFFERS 540 -> 463, ENUM-GAP
    107 -> 111; the 38-deck sample barely moves (DOMINATED-LAND +2) at +70% oracle time and CAPPED 248 -> 314.
-   The 15 left: Living Wish continuations one life apart and Conservatory's {4} investigate -- owed.
+   The 15 left: Living Wish continuations one life apart and Conservatory's {4} investigate -- items 11-15.
+
+11. *A copy the plan itself uses is not its twins' equal.* Identical untapped permanents fold into one source
+   class and the lowest-numbered copy taps first. When the plan's own activation needs one of them ({T} or a
+   sacrifice), tapping that copy for mana strands the activation. EDF seed 3508 T4: Wild Growth, then
+   Conservatory #13's {4},{T}: investigate; the fold tapped #13 for the Wild Growth and missed the painless line
+   the engine pays with #14. BuildSources now keys a plan source apart (`t_plan_srcs`, set by Realize).
+12. *Which leftover floats is a choice.* A tap set that makes more than the bill leaves units in the pool, and the
+   float-only payer spends a generic pip in a fixed colour order, so the oracle always kept the same unit --
+   never the {U} a Trace of Abundance bonus could float for a Training Grounds two payments later (EDF seed 3353
+   T8; the engine floats its bonus as wild). When a payment has a multi-unit face, Verify records the same taps
+   once per OTHER leftover of the same size (a set-aside may hold units the taps just made: ScriptedPay
+   subtracts it after the taps). Plain units only: a wild or haste-tagged {C} in the pool keeps the payer's own.
+13. *One tap more can be the line.* A minimal payment beside a multi-unit source (an Aura-bonus land) leaves that
+   source's surplus floating; tapping ONE more one-unit source beside it can float a unit a later payment needs
+   (EDF seed 3101). ExtendSurplus tries each one-unit face once more past every minimal multi-unit payment. Cost:
+   EDF seed 3353's oracle time 3.9 s -> 90 s (the leftover enumeration and the extra tap multiply), which is why
+   both run only beside a multi-unit face.
+14. *An Aura's host is part of the line.* A continuation that put a land Aura (Wild Growth) on a different land
+   reached a board the engine never had, and compared as a payment difference. LineKey now names every Aura new
+   to the battlefield with its host (`Aura>Host`, `*` = a host that entered this turn), so such a realisation is
+   CONTINUATION-DIFFERS. DiffText names an Aura/Equipment host difference, a hand of the same size with
+   different cards, and a sideboard-size difference (Living Wish).
+15. *A same-line realisation is not the oracle's best payment.* With items 12-13 the oracle reaches more boards,
+   and a wider payment (a land more, a life more) can happen to reach the engine's line while the painless ones
+   the engine matches float a unit that sends the continuation solver elsewhere (EDF seed 3946 T4: Conservatory,
+   Eldrazi Displacer, then the engine's continuation casts Training Grounds). Judged against that one outcome,
+   the plan read as an ORACLE-GAP. An uncovered plan with a different-line realisation at least as healthy as
+   the engine's is CONTINUATION-DIFFERS: the open question is the continuation, not the mana.
+
+   EDF census (the 144 games, same play): ORACLE-GAP 15 -> 4 (all seed 3946, item 15 -> 0), APPLY-DROP 689 ->
+   757 (68 lost lines the old oracle could not pay), APPLY-DROP-ORDER 108 -> 71, PHANTOM 2274 -> 1929,
+   CONTINUATION-DIFFERS 463 -> 338, DOMINATED-LAND 2077 -> 1921, DOMINATED-LIFE 5678 -> 5549. The price: CAPPED
+   4344 -> 6513 and oracle time 8.6 M -> 14.6 M ms (+69%). The 8 gap games: 0 ORACLE-GAP each; seed 3779 (the
+   Displacer blink loop) is CAPPED 544 times, so that game is unresolved rather than clean. With item 15,
+   seed 3946's four are CONTINUATION-DIFFERS.
+
+   38 decks x 6 games (`logs/mana_oracle/census3`, on d369f89d8; play identity with the oracle off:
+   byte-identical): ORACLE-GAP 195 -> 38 (Melira Pod 28 = Birthing Pod's Phyrexian mana, Anti-Lifegain 8 =
+   Grove, Auras 2 = Horizon Canopy -- the known unmodelled sources), CONTINUATION-DIFFERS 191 -> 433, CAPPED
+   314 -> 4,378, oracle time 590 -> 870 s. Most of the CAPPED rise is Melira Pod (39 -> 3,954) and Hinata
+   (3 -> 112), whose games changed between the runs (new play budgets: 13,147 menu plans against 5,147); on
+   the decks that played the same games it is EDF 122 -> 136, Fungus 0 -> 12, SelesnyaLifegain 14 -> 23,
+   AccomplishedAlchemist 21 -> 24.
 
 ## 7. First results (16 decks x 6 games, seed 424200, 798 real decisions, 10,469 menu plans)
 

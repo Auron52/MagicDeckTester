@@ -308,6 +308,55 @@ TEST_CASE("mana oracle: a colour only a later card in hand can spend is still of
     CHECK(floats_u);
 }
 
+// A hand whose costs are stripped, as a game holds it: Training Grounds makes {U} a useful colour.
+void BlueInHand(GameState& s)
+{
+    Card c = CardDatabase::Instance().Lookup("Training Grounds")->card;
+    c.m_number    = 100;
+    c.m_mana_cost = ManaCost{};
+    s.players[0].hand.push_back(c);
+}
+
+// EDF seed 3353 T8 (an ORACLE-GAP): a tap set that makes more than its bill floats ANY of its units on, not
+// the float-only payer's fixed pick. Forest + Wild Growth ({G}{G}) and Plains + Fertile Ground ({W} + any)
+// make four for {3}; the payer's generic order spends {W} and the bonus before {G}, so without a set-aside
+// of the new units the one left over is always a {G} -- never the {U} a later Training Grounds wants.
+TEST_CASE("mana oracle: a payment that makes more than its bill can float any one of its units")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Forest", "Wild Growth", "Plains", "Fertile Ground" });
+    s.battlefield[1].aura_attached_to = 1;
+    s.battlefield[3].aura_attached_to = 3;
+    s.deck_has_land_aura = true;
+    BlueInHand(s);
+    const auto opts = manaoracle::MinimalPayments(s, Cost(3), /*for_creature=*/false, nullptr);
+    bool keeps_u = false;
+    for (const manaoracle::PayOption& o : opts) { if (o.taps.size() == 2 && o.stash.blue == 1) { keeps_u = true; } }
+    CHECK(keeps_u);
+}
+
+// EDF seed 3101 T4 (an ORACLE-GAP): a multi-unit source may pay part of a bill and float the rest when one
+// more tap covers what that rest would have paid. Forest {G} + Plains/Fertile Ground {W}+any pays {2}{G}
+// exactly, so the minimal search never taps Mariposa beside them; with Mariposa's {C} as well the Fertile
+// Ground unit floats on (as {U}, the payer spending {C} and {W} on the generic).
+TEST_CASE("mana oracle: one more tap beside a multi-unit source lets its surplus float to a later payment")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Forest", "Plains", "Fertile Ground", "Mariposa Military Base" });
+    s.battlefield[2].aura_attached_to = 2;
+    s.deck_has_land_aura = true;
+    BlueInHand(s);
+    const auto opts = manaoracle::MinimalPayments(s, Cost(2, 0, 0, 0, 0, 1), /*for_creature=*/false, nullptr);
+    bool superset = false;
+    for (const manaoracle::PayOption& o : opts)
+    {
+        bool mariposa = false;
+        for (const TurnSolver::PreTap& t : o.taps) { if (t.name == "Mariposa Military Base") { mariposa = true; } }
+        if (mariposa && o.taps.size() == 3) { superset = true; }
+    }
+    CHECK(superset);
+}
+
 // Found by the oracle's rollback census (2026-10-27; EDF viewer game seed 3000 T4): a {U} whose only blue
 // is Fertile Ground's any-colour bonus on Mariposa Military Base fails the greedy, and the backtracker's
 // DFS -- which taps sources in battlefield order and accepts the FIRST covering tap set -- tapped
