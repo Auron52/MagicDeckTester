@@ -425,11 +425,19 @@ library cards it has seen and placed since the last shuffle (put-backs, LTP's ta
 look). Reading deeper library cards would make the order itself clairvoyant. If the engine does not
 track known top positions, the score reads nothing below the cards the current resolution reveals.
 
-**Ponder under the same estimate:**
-- k = 0: draw the needed piece now, with the Eldrazi as the next creature (positions 2-3 may hold
-  noncreatures).
-- k = 1: [draw now, draw next turn, Eldrazi].
-- Shuffle when the look holds no Eldrazi and nothing needed, and k >= 2.
+**Ponder under the same estimate.** USER 2026-10-27: *"Are we treating which cards to keep on top
+with ponder the same as Brainstorm? That is what I recommend there. We can search the shuffle as
+needed and realistically it probably is safest to do so most of the time."*
+- **The keep orders use the SAME scorer as Brainstorm's put-back** (`ScoreTopDisposition` over the
+  resulting top sequence). Ponder removes nothing from hand, so only the position terms apply (plus
+  the value of the card drawn now).
+  - k = 0: draw the needed piece now, with the Eldrazi as the next creature (positions 2-3 may hold
+    noncreatures).
+  - k = 1: [draw now, draw next turn, Eldrazi].
+- **The shuffle is ALWAYS searched.** It is never pruned (not by PONDER-GOOFF, not by a wave) and it
+  sits in wave 0 of every Ponder fan, beside the scored best keep order. The score decides only where
+  it sits within wave 0: ahead of the keep orders when the look holds no Eldrazi and nothing
+  needed and k >= 2, behind the best keep order otherwise.
 
 ### 3.3 One generic hook shape for Cyclone, Niv and Hinata
 
@@ -500,7 +508,7 @@ lands. It composes with B1.
 - **Cyclone.** k = 0: Eldrazi placements per §3.2 (min(c, e, 2) Eldrazi, Emrakul first, dead
   noncreatures above), then pairs of surplus only, then the rest. k = 1: [next-turn card, Eldrazi],
   then surplus pairs. k >= 2: surplus and dead pairs, then the shuffle-branch dumps (when admitted),
-  then the rest. Ponder: per §3.2.
+  then the rest. Ponder: wave 0 = the best scored keep order + the shuffle, always (USER), per §3.2.
 - **Niv.** Unchanged unless the USER drops `MTG_NIV_BRAINSTORM_SINGLE`. If a staged fan replaces the
   single pick, the head is Niv's existing rank 0.
 - **Hinata.** Ponder only. Rank 0 is `HinataRank`'s order. Wave 0 should be the heuristic order plus
