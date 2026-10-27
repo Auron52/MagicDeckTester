@@ -481,6 +481,9 @@ private:
     void BottomCards(GameState& state, int count, int max_turns);
 
 public:
+    // PerformDigFull's tri-state (Unpredictable Cyclone hazard R1: a REPLACED cycle draws nothing). Public
+    // so the test seam's callers can name it.
+    enum class DigOutcome : std::uint8_t { Failed, DrewLand, DrewNonland, Replaced };
     // Picks the index of the card the curve/castability heuristic would bottom,
     // considering only cards whose allowed[i] is non-zero. Returns -1 if none.
     // (Public for test_bottom_pref_order.cpp; const, reads the hand + profile only.)
@@ -558,7 +561,8 @@ private:
     // re-solves with that land's mana.
     bool UseSurplusLandAbilities(GameState& state,
                                  const std::function<void(GameState&)>& resolve_stack = {},
-                                 int dig_choice = -1);
+                                 int dig_choice = -1,
+                                 const Action* cycle_seed = nullptr);
 
     // Mechanically perform one dig: cycle the named land from hand (is_sacrifice=false) or
     // {cost},{T},Sacrifice it from the battlefield (is_sacrifice=true), pay the cost, and
@@ -567,6 +571,16 @@ private:
     // performed. The post-draw casts on a committed line are replayed separately by the
     // caller (the DigDraw's nested breakpoint_casts).
     bool PerformDig(GameState& state, const std::string& source, bool is_sacrifice);
+    // The full form (Unpredictable Cyclone phase 3). `scry_pin` = Curator of Mysteries' searched disposition
+    // for this cycle's triggers (-1 = unpinned: ScryKeepOnTop), `fc_pin` = Unpredictable Cyclone's free-cast
+    // choice (kCycFc*; -1 = the provider default) -- a committed line passes its DigDraw record's REALISED
+    // values. With a replacer on the battlefield the draw is REPLACED (the walk, the free cast through
+    // EffectHandler::PushFreeCast, the random-order bottom, the take-and-Remand), and `resolve_stack`, when
+    // given, resolves what it put on the stack. Returns the tri-state (hazard R1: a replaced cycle draws
+    // nothing, so a caller must not read "no draw" as "no dig").
+    DigOutcome PerformDigFull(GameState& state, const std::string& source, bool is_sacrifice,
+                              int scry_pin, int fc_pin,
+                              const std::function<void(GameState&)>& resolve_stack);
     // MTG_LANDDRAW_CENSUS's per-dig half (diagnostic only; see LandDrawCensusEndTurn).
     static void LandDrawCensusAfterDig(const GameState& state, bool drew_land, int drawn_num);
 

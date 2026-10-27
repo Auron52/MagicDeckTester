@@ -1,0 +1,51 @@
+{
+  "_comment": [
+    "Unpredictable Cyclone phase 3: the SEARCHED cycle (a cycle seed plan action) under Unpredictable Cyclone.",
+    "Round 3, main 1, land drop made, Cyclone + three Islands out, Street Wraith in hand; the library top is",
+    "Island, Emrakul. Cycling the Wraith (pay 2 life) REPLACES the draw: the walk exiles the Island, finds",
+    "Emrakul (a creature, like the Wraith), casts it free -- a real cast, so its trigger grants an extra turn",
+    "-- and Emrakul attacks for 15 in that extra turn: the 15-life opponent dies in ROUND 3 (extra turns do",
+    "not count). No other line wins by round 5 (the Wraith cannot be hard-cast off Islands)."
+  ],
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Unpredictable Cyclone",
+      "controller": 0
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Street Wraith"
+  ],
+  "library_top": [
+    "Island",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}
