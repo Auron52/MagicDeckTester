@@ -2306,7 +2306,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -4245,6 +4245,7 @@ function renderDecisionPanel(d, dec){
                 || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
                 || dec==='madness'   // Vampires A1: the discarded card is in EXILE (no visible zone) -- a card-image modal
                 || dec==='x_value'   // Stroke of Genius's X, picked at the cast (not a plan axis in human play)
+                || dec==='gy_return_one'   // Abiding Grace / Emeria: a graveyard card (image) or the alternative
                 // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
                 // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
                 // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
@@ -4271,6 +4272,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='free_cast' ? freeCastPanelHtml(d)
                   : dec==='demonstrate' ? demonstratePanelHtml(d)
                   : dec==='attack_mode' ? attackModePanelHtml(d)
+                  : dec==='gy_return_one' ? gyReturnOnePanelHtml(d)
                   : dec==='lifegain_counters' ? lifegainCountersPanelHtml(d)
                   : dec==='madness' ? madnessPanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
@@ -5188,6 +5190,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
   else if (dec==='attack_mode')
     panel.querySelectorAll('[data-atkmode]').forEach(b=>b.onclick=()=>commitAttackMode(d, +b.dataset.atkmode));
+  else if (dec==='gy_return_one')
+    panel.querySelectorAll('[data-gyr]').forEach(b=>b.onclick=()=>commitGyReturnOne(d, +b.dataset.gyr));
   else if (dec==='lifegain_counters')
     panel.querySelectorAll('[data-lgc]').forEach(b=>b.onclick=()=>commitLifegainCounters(d, +b.dataset.lgc));
   else if (dec==='madness')
@@ -5232,7 +5236,8 @@ function wireDecisionPanel(d, dec){
   else if (dec==='x_value') {
     // Presets fill the number box; Confirm commits whatever it holds (clamped to 0..max_x).
     const inp=panel.querySelector('#xvinput');
-    panel.querySelectorAll('[data-xv]').forEach(b=>b.onclick=()=>{ if (inp) { inp.value=b.dataset.xv; inp.dispatchEvent(new Event('input')); } });
+    // No number box (Martyr's reveal panel): a preset button IS the choice.
+    panel.querySelectorAll('[data-xv]').forEach(b=>b.onclick=()=>{ if (inp) { inp.value=b.dataset.xv; inp.dispatchEvent(new Event('input')); } else commitXValue(d, +b.dataset.xv); });
     const lab=panel.querySelector('#xvlabel');
     // An X above max_x is NOT silently clamped (USER 2026-10-21: typed 9 against "max 8"; the old clamp cast
     // X=8 without a word, so the 9 read as accepted and the max as wrong). Say so and refuse the confirm.
@@ -5409,6 +5414,32 @@ function commitLifegainCounters(d, v){
   const amt = (d.amount!=null) ? d.amount : 1;
   pushChoice(d, v, v===0 ? `${d.source||'Lifegain counters'}: declined (use not consumed)`
                          : `${d.source||'Lifegain counters'}: spent ${v} — +${v*amt}/+${v*amt} on each creature`);
+}
+// `gy_return_one` (Abiding Grace's end-step "choose one"; Emeria, the Sky Ruin's upkeep "you may
+// return"): ONE pick -- a graveyard card IMAGE to return to the battlefield, or the alternative button
+// (alt_text: "Gain 1 life" / "Return nothing"). Reply 0 = the alternative, i >= 1 = candidate i.
+function gyReturnOnePanelHtml(d){
+  const def=(d.heuristic_default==null)?0:d.heuristic_default;
+  let h=`<h3>${esc(d.source||'')} — return which creature card?</h3>`;
+  h+=`<div class="sub">Pick a creature card in your graveyard to return to the battlefield${d.alt_text?`, or <b>${esc(d.alt_text)}</b> instead`:''}.</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.candidates||[]).forEach(c=>{
+    const isAI=(c.index===def);
+    h+=`<span class="cardmini tdig${isAI?' def':''}" data-gyr="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div>`;
+  if (d.alt_text){
+    h+=`<div class="pbtns" style="justify-content:center">`+
+       `<button class="${def===0?'primary':'ghost'}" data-gyr="0">${esc(d.alt_text)}${def===0?'  ·  AI':''}</button></div>`;
+  }
+  return h;
+}
+function commitGyReturnOne(d, v){
+  const c=(d.candidates||[]).find(x=>x.index===v);
+  pushChoice(d, v, `${d.source||'Return'}: ${v===0?(d.alt_text||'none'):('return '+(c?c.name:'#'+v))}`);
 }
 function commitAttackMode(d, v){
   const opts = d.options || [];
@@ -5603,6 +5634,17 @@ function xValueConsequence(d, n){
 }
 function xValuePanelHtml(d){
   const max=d.max_x|0, def=(d.heuristic_default==null?max:d.heuristic_default|0);
+  if (d.x_kind==='reveal_gain'){
+    // Martyr of Sands: reveal X white cards, gain life_per_x * X.
+    const per=d.life_per_x|0;
+    let h=`<h3>${esc(d.source||'')} — reveal how many white cards?</h3>`;
+    h+=`<div class="sub">You gain <b>${per}</b> life per white card revealed (up to <b>${max}</b> in hand). Lands and colourless cards don't count.</div>`;
+    h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
+    h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+    for (let k=0;k<=max;k++)
+      h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">reveal ${k} → +${per*k} life${k===def?'  ·  AI':''}</button>`;
+    return h+`</div>`;
+  }
   const opp = d.draw_target==='opponent';
   let h=`<h3>${esc(d.source||'X spell')} — choose X</h3>`;
   h+=`<div class="sub">${opp?'The <b>opponent</b> draws X cards':'<b>You</b> draw X cards'}. You can pay up to <b>X=${max}</b> right now`+
@@ -5622,6 +5664,7 @@ function xValuePanelHtml(d){
   return h;
 }
 function commitXValue(d, n){
+  if (d.x_kind==='reveal_gain'){ pushChoice(d, n, `${d.source}: reveal ${n} → gain ${(d.life_per_x|0)*n}`); return; }
   pushChoice(d, n, `${d.source}: X=${n} → ${d.draw_target==='opponent'?'opponent':'you'} draw${d.draw_target==='opponent'?'s':''}`);
 }
 // Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint

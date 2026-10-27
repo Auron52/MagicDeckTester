@@ -4315,6 +4315,25 @@ static void WriteReviveDecisionJson(std::ostream& os, const GameState& s, const 
            "max_puts total. Default = the AI's pick (missing combo pieces first).");
 }
 
+// `gy_return_one`: ONE graveyard -> battlefield return with ONE alternative (Abiding Grace's end-step
+// "choose one": alt = "Gain 1 life"; Emeria, the Sky Ruin's upkeep "you may": alt = "Return nothing").
+// Reply 0 = the alternative, i >= 1 = return candidates[i-1] (one per graveyard copy, graveyard order).
+// Enumerated indices, so it rides the existing integer --choices stream.
+static void WriteGyReturnOneDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                         const std::string& alt_text, const std::vector<Card>& candidates,
+                                         int heuristic_default, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("gy_return_one").Source(source).Turn(s.turn_number).Board(s)
+     .HeuristicDefault(heuristic_default).Str("alt_text", alt_text);
+    d.Array("candidates", candidates.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << (i + 1) << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+    });
+    d.Note("reply 0 for the alternative (alt_text), or the index (1..n) of the graveyard card to return "
+           "to the battlefield.");
+}
+
 // Celes rummage decision: the player picks WHICH hand cards to discard ("discard any number of
 // cards, then draw that many cards plus one" -- zero is legal and still draws the bonus).
 // Candidates = the whole hand in hand order; ai_set = the excess-lands heuristic's picks.
@@ -4486,6 +4505,19 @@ static void WriteXValueDecisionJson(std::ostream& os, const GameState& s, const 
                                     int target, int max_x, int default_x, int lethal_x, int decision_index)
 {
     DecisionJson d(os, decision_index);
+    if (target == 2)
+    {
+        // Martyr of Sands: "Reveal X white cards from your hand ... gain three times X life". The
+        // chooser's lethal_x slot carries the life per revealed card.
+        d.Type("x_value").Source(source).Turn(s.turn_number).Board(s)
+         .Word("x_kind", "reveal_gain").Int("life_per_x", lethal_x)
+         .Int("min_x", 0).Int("max_x", max_x);
+        d.HeuristicDefault(default_x);
+        d.Note(std::string("reply how many white cards to reveal for ") + source + " (0.."
+               + std::to_string(max_x) + "; you gain " + std::to_string(lethal_x)
+               + " life per card), or -1 for the default (" + std::to_string(default_x) + ").");
+        return;
+    }
     d.Type("x_value").Source(source).Turn(s.turn_number).Board(s)
      .Word("draw_target", target != 0 ? "opponent" : "self")
      .Int("min_x", 0).Int("max_x", max_x);
@@ -5147,6 +5179,7 @@ g_play_land_entry_chooser = nullptr;
 g_play_dragon_chooser = nullptr;
 g_play_sac_tutor_chooser = nullptr;
 g_play_revive_chooser = nullptr;
+g_play_gy_return_one_chooser = nullptr;
 g_play_flicker_chooser = nullptr;
 g_play_treasurify_chooser = nullptr;
 g_play_rummage_chooser = nullptr;
@@ -5443,6 +5476,7 @@ struct ClaudePlayHarness
     DragonChooser         dragon_chooser;
     SacTutorChooser       sac_tutor_chooser;
     ReviveChooser         revive_chooser;
+    GyReturnOneChooser    gy_return_one_chooser;   // Abiding Grace / Emeria (gy_return_one)
     BounceChooser         flicker_chooser;
     BounceChooser         treasurify_chooser;
     RummageChooser        rummage_chooser;
@@ -7082,6 +7116,42 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         };
     g_play_revive_chooser = &revive_chooser;
 
+    // `gy_return_one` (Abiding Grace's end-step mode + target; Emeria's upkeep return). Wired at the
+    // SHARED resolution site (PerformEndStepAbidingGrace in SpellEffects.h, called from both
+    // GameEngine::EndStep and the rollout's SimulateEndAndStartNextTurn). Reply 0 = the alternative,
+    // i >= 1 = candidates[i-1]; out of range keeps the default.
+    gy_return_one_chooser =
+        [this](const GameState& s, int controller, const std::string& source, const std::string& alt_text,
+               const std::vector<Card>& candidates, int heuristic_default) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+        claude_retry_gyr:  // --interactive: new picks arrived on stdin
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen > static_cast<int>(candidates.size())) { chosen = heuristic_default; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteGyReturnOneDecisionJson(ss, s, source, alt_text, candidates, heuristic_default, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                reveal_log.clear();
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteGyReturnOneDecisionJson(std::cout, s, source, alt_text, candidates, heuristic_default, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_gyr; }
+            std::exit(70);
+        };
+    g_play_gy_return_one_chooser = &gy_return_one_chooser;
+
     // Felidar flicker (PUT path): the player picks which own permanent is exiled-and-returned,
     // or -1 to decline. Shares the --choices stream; reply = option index or -1. Default = the
     // provider's FlickerTarget pick.
@@ -8496,6 +8566,10 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             p.fade_counters     = e.value("fade_counters", 0);
             p.created_by_number = e.value("created_by_number", 0);
             p.quest_counters    = e.value("quest_counters", 0);
+            // +1/+1 counters (Walking Ballista's X / pinger fixtures) and Heliod's until-EOT lifelink grant,
+            // staged with the features that read them (LifegainHeliodCombo, 2026-10-27).
+            if (const int pc = e.value("plus_counters", 0); pc > 0) { p.counters.Add(Counter::Type::PlusOnePlusOne, pc); }
+            p.temp_lifelink     = e.value("temp_lifelink", false);
             p.hone_counters     = e.value("hone_counters", 0);
             // Depletion counters (Remote Farm / Peat Bog), which the land drop stamps on entry and a
             // staged permanent never gets -- without them a depletion land reads as already spent.
@@ -8585,6 +8659,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // The fixture wrote equipped_to directly (not through ApplyEquip), so derive a reconfigure
             // piece's creature-ness from it here (Lizard Blades -- CR 702.151b).
             RefreshReconfigureCreatures(state);
+            // ...and a devotion-gated God's creature-ness (Heliod, Sun-Crowned, CR 700.5): staged boards
+            // never pass a battlefield-membership chokepoint, so a "resume_at" fixture would otherwise
+            // keep the printed Enchantment Creature a 5/5 attacker at devotion 1 (turn-start fixtures
+            // were already refreshed by the untap resync). Param-gated inside: no other staged card moves.
+            RefreshDevotionCreatures(state);
         }
         for (const auto& hc : j.value("hand", json::array()))
         { state.players[0].hand.push_back(make_card(hc.get<std::string>())); }
@@ -8717,6 +8796,12 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // re-derivation of the promise, not a re-read of the flag that made it.
     if (j.contains("expect_combo_off"))
     {
+        // This path evaluates expect_history_contains only (see below); a lacks key would be skipped.
+        if (j.contains("expect_history_lacks"))
+        {
+            std::cerr << "scenario: \"expect_history_lacks\" is not evaluated on the expect_combo_off path\n";
+            return 2;
+        }
         const bool want = j.at("expect_combo_off").get<bool>();
         GameState s = state;
         s.turn_number = turn;
@@ -8916,6 +9001,17 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     //   "legacy_combat_swap_defer": true           // the REPLAY-ONLY 2026-10-06..22 swap deferral
     //                                              // (--legacy-combat-swap-defer; stamped references)
     const std::vector<std::string> human_lines = j.value("human_lines", std::vector<std::string>{});
+    // A HISTORY assertion is evaluated ONLY on the human-lines path below (and expect_history_contains
+    // on the combo_off path above): an autonomous fixture binds no event sink, so the keys used to be
+    // silently SKIPPED -- four LifegainHeliodCombo fixtures asserted nothing beyond their win turn
+    // (2026-10-27 review). A key the harness cannot evaluate is a harness error, never a pass.
+    if (human_lines.empty() && (j.contains("expect_history_contains") || j.contains("expect_history_lacks")))
+    {
+        std::cerr << "scenario: \"expect_history_contains\" / \"expect_history_lacks\" are evaluated only "
+                     "with \"human_lines\" (or expect_history_contains with \"expect_combo_off\") -- "
+                     "use a binding assertion (expect_active_life / expect_opponent_life / ...) instead\n";
+        return 2;
+    }
     if (j.value("legacy_combat_swap_defer", false)) { g_play_legacy_combat_swap_defer = true; }
     const std::vector<std::string> human_dig_picks = j.value("human_dig_picks", std::vector<std::string>{});
     std::size_t human_dig_next = 0;
@@ -9607,7 +9703,7 @@ int main(int argc, char* argv[])
             outhealth::Check(std::cout, "stdout (the per-job result lines)");
             if (gate_probe)
             {
-                const uint32_t live = QueriedGatesMask();
+                const std::uint64_t live = QueriedGatesMask();
                 std::string live_s, dead_s;
                 for (int i = 0; i < static_cast<int>(UnprunedGate::_Count); ++i)
                 {

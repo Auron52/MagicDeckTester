@@ -136,9 +136,13 @@ enum class UnprunedGate
                   // instead of DecisionProvider::LandSearchPickWidth's leading entries (Landfall's
                   // colour-sequence rule prunes a basic search to ONE pick, USER 2026-10-16). Human
                   // play never prunes: the human answers the tutor_etb prompts.
+    CounterPing,  // Walking Ballista's counter pings (2026-10-27): the per-target ping COUNT and the
+                  // face-ping offer opened to the generic full set instead of the deck provider's
+                  // CounterPingCounts narrowing (LifegainHeliodComboProvider, MTG_LHC_PING_PRUNE). The
+                  // 33rd gate: the masks were widened to 64 bits for it. Human play always sees every ping.
     _Count
 };
-static_assert(static_cast<int>(UnprunedGate::_Count) <= 32, "UnprunedGate masks are 32-bit");
+static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
 
 // True if `g` should be un-pruned for this run: the global MTG_UNPRUNED opens all gates,
 // else MTG_UNPRUNE=<list> opens the named subset. Same human-play suppression as the no-arg
@@ -161,7 +165,7 @@ bool UseValueModel();
 // matching cards / rituals / dig source), so opening it provably changes nothing -- skip sweeping it.
 // The mask accumulates across all threads/games since SetGateProbe(true). GateName maps enum->name.
 void        SetGateProbe(bool on);
-uint32_t    QueriedGatesMask();
+std::uint64_t QueriedGatesMask();
 const char* GateName(UnprunedGate g);
 // Is the probe armed RIGHT NOW? Read by anything that would otherwise skip a DecisionUnpruned
 // callsite as provably-dead work: the probe measures REACHABILITY, so a skipped query would show
@@ -3033,6 +3037,44 @@ public:
                                    const std::vector<int>&) const override;
 };
 
+// LifegainHeliodCombo (2026-10-27) -- mono-white "whenever you gain life" aggro sharing the CritterLifegain
+// shell (Soul Warden / Soul's Attendant / Auriok Champion into Ajani's Pridemate / Voice of the Blessed /
+// Serra Ascendant / Ajani, Strength of the Pride), plus the Heliod, Sun-Crowned + Walking Ballista combo,
+// Martyr of Sands, Abiding Grace and Emeria, the Sky Ruin. The USER asked for its own provider ("even if it
+// is a derived or something of that nature"). It DERIVES FROM CritterLifegainProvider because that is what
+// the list ROUTED TO before this class existed (Pridemate / Voice / Heliod set the critter signature) --
+// the analyze-deck 4a rule: derive from what the deck actually routes to, never from a thematically related
+// provider it did not ride. So every CritterLifegain judgement hook (the USER-settled total cast order, the
+// cleanup-discard buckets, the walker-aware legend keep, same-turn walker activation, Heliod's searched
+// two-way placement) is inherited byte-for-byte; the cast order and the discard buckets are the USER's to
+// settle for THIS deck (disclosed in docs/design/analysis-LifegainHeliodCombo.md, not decided here).
+// USER on the combo: "the deck often wins without the combo. It is not that reliant on it" -- "(but when
+// the combo is the right line we should take it nonetheless)". Hence NOTHING here ranks Heliod or Ballista
+// up or narrows toward the combo; the combo is found by the search as an execution-verified PingLoop action
+// (SpellEffects.h) that exists only while the loop is live.
+// Its own hooks: Abiding Grace's dominance folds (LifegainGraceFolds, MTG_GRACE_RETURN_DOMINATES).
+class LifegainHeliodComboProvider : public CritterLifegainProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat is NOT the only route to the opponent's "
+               "life: Walking Ballista pings (counter reach, post-combat finish) and the Heliod lifelink "
+               "loop deal unbounded non-combat damage, so any winless bound must price ping reach and treat "
+               "a live loop as a kill." }; }
+    const char* Name() const override { return "LifegainHeliodCombo"; }
+    // Abiding Grace: the deck-pool folds (B1 return dominates gain-1 while an unfiltered enter-lifegain
+    // watcher is out; B4 identical-behaviour cards are one option). Proven for THIS pool only -- see
+    // LifegainGraceFolds. MTG_GRACE_RETURN_DOMINATES=0 restores the ordering-only base list.
+    void GraceOptions(const GameState& s, int controller, std::vector<int>& opts) const override;
+    // Walking Ballista's face pings, narrowed with THIS pool's argument (MTG_LHC_PING_PRUNE, default ON):
+    // a non-lifelinked main-phase face ping is dropped. Creature targets keep the generic kill count.
+    std::vector<int> CounterPingCounts(const GameState& s, const Permanent& source, int target,
+                                       int max_counters) const override;
+    // Heliod's counter onto a one-counter Ballista whose loop it turns on (MTG_LHC_BUMP_TARGET, default
+    // ON); -1 (the generic pick) otherwise.
+    int LifegainCounterTarget(const GameState& s, int controller) const override;
+};
+
 // SelesnyaLifegain (GW "whenever you gain life" ramp-into-fatties: Wellwisher / Blighted Steppe /
 // Blossoming Sands / Feed the Clan / Verdant Sun's Avatar generating the life, Ageless Entity and
 // Nykthos Paragon converting it into +1/+1 counters, Accomplished Alchemist converting it into
@@ -4063,3 +4105,21 @@ bool AlchemistComboOffWon(const GameState& s, int controller);
 // The ONE dispatch of Action::Kind::ComboRoute (rollout, executor main plan, executor continuation):
 // whichever route the provider owns. Three routes share the kind; they are mutually exclusive per deck.
 int  ComboRouteApplyFor(GameState& s, int controller);
+
+// Abiding Grace's DOMINANCE FOLDS for a lifegain deck provider's GraceOptions override (USER-visible
+// lever MTG_GRACE_RETURN_DOMINATES, default ON; a no-op when off). Restricts `opts` (kGraceGainOption /
+// graveyard m_numbers, see DecisionProvider::GraceOptions) with two folds proven for a deck whose MV-1
+// creatures carry no harmful ETB/static and whose graveyard is read only by Grace / Emeria:
+//   B1  RETURN DOMINATES GAIN when at least one always-firing "another creature enters -> you gain
+//       life" watcher we control is on the battlefield (any_creature_enters_lifegain /
+//       own_creature_enters_lifegain: Soul Warden; Soul's Attendant and Auriok Champion, whose "may" is
+//       always taken). The return then produces >= 1 life-gain event of the same size as the gain
+//       mode's (CR 119.10) AFTER the body has entered (so every Heliod counter target set is a
+//       superset) plus the body; the gain option is dropped. Never drops the last option.
+//   B4  IDENTITY: two return options whose definitions are BEHAVIOURALLY IDENTICAL
+//       (CardDefinition::behaviour_identity, nonzero and equal -- Soul Warden == Soul's Attendant) are
+//       one option; the earlier in the list is kept.
+// (B5, "two triggers never target the same card", needs no fold: options are built at each trigger's
+// resolution from the cards still in the graveyard, so an earlier trigger's return is already gone.)
+bool GraceReturnDominatesOn();
+void LifegainGraceFolds(const GameState& s, int controller, std::vector<int>& opts);

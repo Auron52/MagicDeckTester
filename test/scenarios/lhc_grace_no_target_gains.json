@@ -1,0 +1,22 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 40,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "lands_played_this_turn": 1,
+  "_comment": "LifegainHeliodCombo (2026-10-27), Abiding Grace: NO LEGAL TARGET -> the gain mode is forced (CR 603.3c). The graveyard holds Walking Ballista (mana value 0 off the stack, CR 202.3e) and Ranger-Captain of Eos (MV 2): neither has mana value EXACTLY 1. Expect 20 -> 21. A Ballista wrongly returned enters as a 0/0 and dies with no gain (20); an MV<=1 filter instead of ==1 would do exactly that.",
+  "battlefield": [
+    {"name": "Plains"},
+    {"name": "Abiding Grace"}
+  ],
+  "graveyard": ["Walking Ballista", "Ranger-Captain of Eos"],
+  "hand": [],
+  "expect_no_win": true,
+  "expect_active_life": 21
+}

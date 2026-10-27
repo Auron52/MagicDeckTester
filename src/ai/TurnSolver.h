@@ -1563,6 +1563,16 @@ public:
         // future-turn rollout combat-swap pin applies to (MTG_ROLLOUT_AURA_SWAP). Never keyed,
         // compared or serialised -- a rollout-local marker.
         bool horizon_leaf = false;
+        // SEARCHED EMERIA UPKEEP RETURN ("At the beginning of your upkeep, if you control seven or more
+        // Plains, you may return target creature card from your graveyard to the battlefield"). PACKED
+        // per trigger ordinal (kUpkeepReanimatePinBits bits each, low first; -1 = unpinned = every
+        // trigger returns its list's front): each field is a RANK into GyReanimateCandidateNames built
+        // at the trigger's own resolution (out-of-range ranks clamp to the last option, duplicate-not-
+        // whiff) or kUpkeepReanimateDecline ("you may"). Decided in this turn's main phase, consumed at
+        // the NEXT upkeep, so it rides GameState::scripted_upkeep_gy_reanimate (the Search for Tomorrow
+        // upkeep_land_search_choice shape). An int16_t in the 3-byte hole after horizon_leaf (gdb
+        // ptype /o: no size change); folded into the census Xaxes key by hand.
+        std::int16_t upkeep_gy_reanimate_choice = -1;
 
         // Ponder-style REORDER disposition: which candidate of TopDispositionCandidates(Reorder) the
         // reorder takes. -1 == the provider heuristic, byte-identical to no branch. The FULL set
@@ -1653,6 +1663,18 @@ public:
         // branch-by-default, and so the rare case it IS wrong (chapter II's counters are PERMANENT,
         // so a body about to be eaten by Natural Order is the wrong home) is reachable.
         int saga_target_choice = -1;
+
+        // SEARCHED ABIDING GRACE END-STEP MODE + TARGET ("At the beginning of your end step, choose
+        // one -- you gain 1 life; or return target creature card with mana value 1 from your
+        // graveyard to the battlefield"). PACKED per trigger ordinal (kGracePinBits bits each, low
+        // first; -1 = unpinned = every trigger takes its option list's front): each field is a RANK
+        // into GraceOptions (SpellEffects.h) built at the trigger's own resolution, out-of-range
+        // ranks clamping to the last option (duplicate-not-whiff, the saga rule). The saga-target
+        // shape exactly: the decision fires AFTER the plan apply has returned (this turn's end step),
+        // so the pick rides GameState::scripted_grace_choice, consumed by the SHARED
+        // PerformEndStepAbidingGrace in both worlds (no AIEngine member). The search branches over
+        // mode AND target; only beyond the horizon does the unpinned front pick apply.
+        int grace_choice = -1;
 
         // SEARCHED SAGA CHAPTER I FREE CAST (World War Hulk I: "the next red or green creature
         // spell you cast this turn can be cast without paying its mana cost"). A RANK into
@@ -2012,6 +2034,31 @@ public:
     // built on: the enumeration emits a position after each such action, and both worlds' cast
     // loops count exactly these actions to find position k (lockstep by construction).
     static bool PutsLandfallWatcher(const Action& a);
+    // ---- THE REVEAL OUTLET'S POSITION (Martyr of Sands, 2026-10-27) --------------------------------
+    // "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life."
+    // X is the hand at ACTIVATION, so WHERE the activation sits among the plan's casts changes what it
+    // gains (every white card cast first is one card fewer) and who sees the gain (a "whenever you gain
+    // life" permanent cast first gets the event). The trailing pass alone made "sacrifice first, THEN
+    // cast" unfindable at any budget. Encoded on the activation's own `chosen_x` (always 0 on a
+    // SacCreatureOutlet before this, and folded into every plan signature / PlansEqual already):
+    //   0      -- the trailing pass (the base plan, unchanged);
+    //   k + 1  -- right after the k-th "whenever you gain life" cast this plan dispatches (k = 0: in the
+    //             pre-cast pass, before every cast).
+    // Emitted by AppendSubdecisionAxes; dispatched at that point by both worlds (ApplyPlanDirect's
+    // pre-cast pass + slot_hook, AIEngine::TakeTurn's twins) through each world's own trailing-pass
+    // body, so payment and resolution are the trailing pass's exactly.
+    static bool IsRevealOutletDef(const CardDefinition* d);
+    // The position k of a positioned reveal outlet, -1 for every other action (and an unpositioned one).
+    static int  RevealOutletSlot(const Action& a);
+    // Does any action of this plan carry a reveal position? False (no lookups) for every other deck.
+    static bool PlanHasPositionedRevealOutlet(const std::vector<Action>& acts);
+    // THE position counter: a cast / graveyard cast / Vial put of a "whenever you gain life" permanent
+    // (the FireLifegainWatchers prefilter, plus a walker that makes the Ajani's Pridemate token). The
+    // enumeration's position bound and both worlds' counters read only this.
+    static bool RevealSlotCounts(const Action& a);
+    // A positioned reveal outlet whose source is no longer ours on the battlefield: it already ran at
+    // its position (or cannot run), so the trailing pass must not pay for it again.
+    static bool PositionedRevealOutletSpent(const GameState& state, const Action& a);
     // Vampires A2: does this ACTIVATION put a GRAVEYARD-landfall card (Bloodghast) into our graveyard --
     // a pinned discard of one, or a sacrifice of one? Read ONLY by the land-after-ALL-casts (-1) clone
     // emission (EnumeratePlansWithLandUncached), so a plan that discards / sacrifices Bloodghast is

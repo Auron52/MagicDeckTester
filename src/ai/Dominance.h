@@ -515,6 +515,26 @@ static_assert(sizeof(Player) == 200,
 // The NivMizzetCombo / banked-hold fields and the Vampires fields above each fit the padding against 1136
 // on parallel branches; together they overflow it by one alignment step: 1152, measured on the rebased
 // tree, 2026-10-20. No new field -- every one is classified above.
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Martyr of Sands): `deck_reads_life_total` (a bool in the last
+// byte of padding after pending_extra_combats). Classification: DECK CONSTANT, stamped once in
+// StampDeckTraits; it only keeps a self-only lifegain sac outlet on the autonomous menu -- nothing to fold.
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Walking Ballista): `deck_has_counter_ping` (a bool in the
+// padding after deck_has_attack_attach, before m_provider -- measured 1152 unchanged). Classification: DECK
+// CONSTANT, stamped once in StampDeckTraits; gates CounterPingFinish / the CounterPingReach projection /
+// the Heliod bump scan -- nothing to fold.
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Abiding Grace): `deck_has_endstep_reanimate` (a bool) and
+// `scripted_grace_choice` (an int16_t), both in the padding after deck_has_counter_ping, before m_provider
+// (measured with gdb ptype /o: a 3-byte hole at 1093). Classification: the bool is a DECK CONSTANT stamped
+// once in StampDeckTraits that only skips provably-empty end-step walks -- nothing to fold; the pin is
+// FUTURE-DETERMINING (set by the turn's plan apply, consumed at THIS turn's end step), FOLDED in Build()
+// value-gated beside the saga pin (and in BuildDedupKey's pending pins).
+// +0 bytes (2026-10-27, LifegainHeliodCombo / Emeria, the Sky Ruin): `scripted_upkeep_gy_reanimate` (an
+// int16_t) and `deck_has_upkeep_reanimate` (a bool), both in the 4-byte hole after m_discard_protect
+// (measured with gdb ptype /o: 1124 / 1126, total 1152 unchanged). Classification: the pin is
+// FUTURE-DETERMINING (set by the turn's plan apply, consumed at the NEXT turn's upkeep -- live across the
+// turn boundary, the scripted_upkeep_land_search class), FOLDED in Build() value-gated (and in
+// BuildDedupKey's pending pins); the bool is a DECK CONSTANT stamped once in StampDeckTraits that only
+// skips provably-empty upkeep walks -- nothing to fold.
 static_assert(sizeof(GameState) == 1152,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -851,6 +871,16 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // keeps a pinned rank 0 distinguishable from "no pin".
     if (s.scripted_saga_target >= 0)
     { fold(static_cast<std::uint64_t>(s.scripted_saga_target) + 1u); }
+    // Abiding Grace's packed end-step pin: FUTURE-DETERMINING (set during the turn's apply, consumed at
+    // THIS turn's end step), value-gated with its own domain tag so every deck without the card keeps
+    // its exact key.
+    if (s.scripted_grace_choice >= 0)
+    { fold(0x6EACE0000ull + static_cast<std::uint64_t>(s.scripted_grace_choice)); }
+    // Emeria's packed next-upkeep pin: FUTURE-DETERMINING across the turn boundary (set during the turn's
+    // apply, consumed at the NEXT upkeep), value-gated with its own domain tag so every deck without the
+    // card keeps its exact key.
+    if (s.scripted_upkeep_gy_reanimate >= 0)
+    { fold(0xE3E41A0000ull + static_cast<std::uint64_t>(s.scripted_upkeep_gy_reanimate)); }
     // LAND SEARCH pins (core/LandSearch.h): Primeval Titan's attack-trigger pick (consumed at this
     // turn's declare-attackers) and Search for Tomorrow's off-suspend pick (consumed at the NEXT
     // upkeep -- live across exactly this boundary, the scripted_vial_charge class). Both

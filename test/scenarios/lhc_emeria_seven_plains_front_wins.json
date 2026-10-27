@@ -1,0 +1,54 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 7,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "library_top": [
+    "Plains",
+    "Plains",
+    "Walking Ballista"
+  ],
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "_comment": "Emeria's INTERVENING IF, positive half (pair: lhc_emeria_six_plains_no_trigger). Six Plains + Emeria + Heliod (devotion 1, not a creature) on the battlefield, a Plains in hand, ONLY Ranger-Captain of Eos in the graveyard, Walking Ballista the library's only creature; Emeria's search axis OFF so the trigger takes its list's front. T7 plays the 7th Plains, so T8's upkeep trigger exists and returns Ranger-Captain (the only target), which tutors Ballista; Ballista X=1 + Heliod's lifelink grant loops for the kill on T8. The paired six-Plains board is identical but one Plains short, and must NOT win.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Emeria, the Sky Ruin"
+    },
+    {
+      "name": "Heliod, Sun-Crowned"
+    }
+  ],
+  "hand": [
+    "Plains"
+  ],
+  "graveyard": [
+    "Ranger-Captain of Eos"
+  ],
+  "expect_win_turn": 8,
+  "env": {
+    "MTG_EMERIA_AXIS": "0"
+  }
+}

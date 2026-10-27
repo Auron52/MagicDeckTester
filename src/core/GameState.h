@@ -371,6 +371,16 @@ struct GameState
     //     the main-2 queue before the end step), so it is 0 at every turn boundary. Saturates at 255.
     bool                     deck_has_extra_combat        = false;
     std::uint8_t             pending_extra_combats        = 0;
+    // Deck stamp (StampDeckTraits): does anything in this deck read our LIFE TOTAL (not the gain
+    // events)? Serra Ascendant's life_threshold_pump_life, a life-above-start anthem, a
+    // life-above-start activation restriction, Ajani, Strength of the Pride's 0. Life persists across
+    // turns, so a gain now feeds such a card cast LATER -- which is why this is a deck stamp and not a
+    // board scan. Read only by SacOutletLifegainRead, to keep a self-only lifegain sac outlet (Martyr
+    // of Sands, Brindle Boar) on the autonomous menu. DEFAULT TRUE, the safe direction for a gate that
+    // only ever keeps an option open: a path that builds a GameState without stamping traits (the
+    // scenario harness) keeps the outlet. Placed in the last byte of the padding after
+    // pending_extra_combats (sizeof(GameState) unchanged, measured). A deck constant: never folded.
+    bool                     deck_reads_life_total = true;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
@@ -1178,6 +1188,25 @@ struct GameState
     // Raubahn at every enumeration node / every projection, so a clear bit PROVES both scans find
     // nothing. Same DEFAULT TRUE rule.
     bool                     deck_has_attack_attach            = true;
+    // ...and a COUNTER PINGER (CardParams::remove_counter_ping_damage, Walking Ballista), same padding:
+    // gates CounterPingFinish (the post-combat-damage lethal finish, both worlds), the projection's
+    // CounterPingReach term and the Heliod bump rule's board scan, so a clear bit PROVES all three find
+    // nothing. Same DEFAULT TRUE rule (an unstamped GameState -- the scenario harness -- keeps them).
+    // A deck constant: never folded.
+    bool                     deck_has_counter_ping             = true;
+    // ...and an END-STEP REANIMATOR (CardParams::endstep_modal_reanimate_mv, Abiding Grace), same
+    // padding: gates PerformEndStepAbidingGrace's walk at both end-step sites and the plan axis's
+    // consumer scan, so a clear bit PROVES both find nothing. Same DEFAULT TRUE rule. A deck constant:
+    // never folded.
+    bool                     deck_has_endstep_reanimate        = true;
+    // Searched ABIDING GRACE END-STEP PIN (Plan::grace_choice): PACKED per trigger ordinal
+    // (kGracePinBits bits each, low first), each a RANK into that trigger's GraceOptions; -1 = unpinned
+    // (every trigger takes its list's front). Written during a turn's apply (WritePostApplyStatePins,
+    // both worlds) and consumed + cleared by THIS turn's end step (PerformEndStepAbidingGrace), and
+    // also cleared at both turn starts so it cannot leak. FUTURE-DETERMINING: folded value-gated in
+    // dominance::Build() and BuildDedupKey's pending pins. An int16_t in the padding before m_provider
+    // (an int here would cost +8).
+    std::int16_t             scripted_grace_choice             = -1;
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.
@@ -1207,6 +1236,20 @@ struct GameState
     // it exactly like m_required_pieces. Default All = the established behaviour, so a raw
     // GameState and every deck that does not set the field are unchanged. See DiscardPolicy.h.
     DiscardProtectScope m_discard_protect = DiscardProtectScope::All;
+    // Searched EMERIA UPKEEP PIN (Plan::upkeep_gy_reanimate_choice): PACKED per trigger ordinal
+    // (kUpkeepReanimatePinBits bits each, low first), each a RANK into that trigger's resolution-time
+    // option list (GyReanimateCandidateNames) or kUpkeepReanimateDecline; -1 = unpinned (every trigger
+    // returns its list's front). Written during a turn's apply (WritePostApplyStatePins, both worlds)
+    // and consumed + cleared by the NEXT turn's upkeep (PerformUpkeepGyReanimate) -- so, like
+    // scripted_upkeep_land_search, it must SURVIVE the turn boundary and is never cleared with the
+    // per-turn pins. FUTURE-DETERMINING: folded value-gated in dominance::Build() and BuildDedupKey's
+    // pending pins. An int16_t in the 4-byte hole after m_discard_protect (gdb ptype /o, 2026-10-27).
+    std::int16_t             scripted_upkeep_gy_reanimate = -1;
+    // ...and an UPKEEP GRAVEYARD REANIMATOR in the deck (CardParams::upkeep_gy_reanimate, Emeria), same
+    // hole: gates PerformUpkeepGyReanimate's walk at both upkeep sites and the plan axis's consumer
+    // scan, so a clear bit PROVES both find nothing. DEFAULT TRUE (an unstamped GameState -- the
+    // scenario harness -- keeps the walks). A deck constant: never folded.
+    bool                     deck_has_upkeep_reanimate    = true;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),
     // stamped in AIEngine::HandleMulligan and propagated through every deep copy. Ranks NON-lethal
     // turn-plans in TurnSolver::Solve (the d0 decision + every rollout leaf) when MTG_EVAL_MODEL is

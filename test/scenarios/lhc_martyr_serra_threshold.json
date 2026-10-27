@@ -1,0 +1,37 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 21,
+  "opponent_life": 6,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "LifegainHeliodCombo (2026-10-27), Martyr of Sands. 2 Plains untapped, Martyr + Serra Ascendant (not sick). Hand = 2 Ajani + Heliod (3 WHITE cards, none castable once the {1} is paid) + 2 Plains (colourless; land drop used). Activating reveals X=3 -> 21+9 = 30 -> Serra Ascendant is 6/6 -> lethal this turn. Guards (a) the deck_reads_life_total gate (Serra reads the TOTAL, not gain events -- without it the outlet is never emitted and Serra hits for 1) and (b) the colour count (counting the Plains would gain 15, and the history line would read 'gain 15'). BINDING (2026-10-27 review, measured): active life 36 = 21 + 9 (Martyr, X = 3 white cards, three times X -> 30, Serra turns on) + 6 (the 6/6 Serra Ascendant's LIFELINK combat damage). Counting the two Plains as white would reveal X = 5 and end on a different total.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Martyr of Sands"
+    },
+    {
+      "name": "Serra Ascendant"
+    }
+  ],
+  "hand": [
+    "Ajani, Strength of the Pride",
+    "Ajani, Strength of the Pride",
+    "Heliod, Sun-Crowned",
+    "Plains",
+    "Plains"
+  ],
+  "expect_win_turn": 4,
+  "expect_active_life": 36
+}

@@ -936,6 +936,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.devour           = params.value("devour", 0);
     // "This creature enters with N +1/+1 counters on it" (Mossborn Hydra) -- see CardParams.
     p.enters_with_plus_counters = params.value("enters_with_plus_counters", 0);
+    // Walking Ballista -- see CardParams.
+    p.enters_with_x_plus_counters = params.value("enters_with_x_plus_counters", false);
+    if (params.contains("self_counter_cost"))
+        p.self_counter_cost = ManaCostFromString(params["self_counter_cost"].get<std::string>());
+    p.remove_counter_ping_damage = params.value("remove_counter_ping_damage", 0);
     // "Each creature you control gets +1/+0 for each time it has attacked this turn" (Moraug) -- see CardParams.
     p.attack_count_team_power = params.value("attack_count_team_power", false);
     if (params.contains("tap_token_cost"))
@@ -1346,6 +1351,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.ping_all_cost = ManaCostFromString(params["ping_all_cost"].get<std::string>());
     p.ping_all_amount                     = params.value("ping_all_amount", 0);
     p.endstep_sac_if_no_creatures         = params.value("endstep_sac_if_no_creatures", false);
+    p.endstep_modal_lifegain              = params.value("endstep_modal_lifegain", 0);
+    p.endstep_modal_reanimate_mv          = params.value("endstep_modal_reanimate_mv", -1);
+    p.upkeep_gy_reanimate                 = params.value("upkeep_gy_reanimate", false);
+    p.upkeep_gy_reanimate_land_subtype    = params.value("upkeep_gy_reanimate_land_subtype", std::string());
+    p.upkeep_gy_reanimate_land_threshold  = params.value("upkeep_gy_reanimate_land_threshold", 0);
+    p.upkeep_gy_reanimate_may             = params.value("upkeep_gy_reanimate_may", false);
     p.x_damage_each_creature_and_player   = params.value("x_damage_each_creature_and_player", false);
     p.tutor_max_mv_is_lands               = params.value("tutor_max_mv_is_lands", false);
     p.shuffles_self_into_library_on_resolve =
@@ -1717,6 +1728,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);
     p.sac_outlet_self_only          = params.value("sac_outlet_self_only", false);
     p.sac_outlet_lifegain           = params.value("sac_outlet_lifegain", 0);
+    p.sac_outlet_lifegain_per_revealed_color = params.value("sac_outlet_lifegain_per_revealed_color", std::string());
     p.sac_outlet_destroy_nonbasic_land = params.value("sac_outlet_destroy_nonbasic_land", false);
     if (params.contains("bestow_cost"))
         p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());

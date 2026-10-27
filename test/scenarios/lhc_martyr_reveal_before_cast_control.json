@@ -1,0 +1,37 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 21,
+  "opponent_life": 6,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "CONTROL for lhc_martyr_reveal_before_cast: the same board at 21 life, where the trailing order also kills (Martyr X=3 -> 30 with no cast needed). Proves the fixture's premise -- Serra at 30 is lethal on this board -- so a failure of the main fixture is the search's, not the setup's. BINDING: win T4 (the life total depends on which of the two winning orders the search keeps, so it is not asserted).",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Soul Warden"
+    },
+    {
+      "name": "Martyr of Sands"
+    },
+    {
+      "name": "Serra Ascendant"
+    }
+  ],
+  "hand": [
+    "Soul's Attendant",
+    "Heliod, Sun-Crowned",
+    "Ajani, Strength of the Pride"
+  ],
+  "expect_win_turn": 4
+}

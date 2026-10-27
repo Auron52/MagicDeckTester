@@ -1,0 +1,35 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "Walking Ballista (2026-10-27). THE COMBO with the pieces already out: Heliod (not a creature, devotion 1), a summoning-sick Ballista with 2 +1/+1 counters, 2 Plains for Heliod's {1}{W} grant. The PingLoop action (grant + lifelinked pings, Heliod's counter pinned back on the Ballista) kills from 20 this turn. Control: lhc_ballista_loop_no_mana_control. BINDING: opponent exactly 0 and us at 40 = exactly 20 lifelinked pings (one life-gain event each), the loop stopping at lethal.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Heliod, Sun-Crowned"
+    },
+    {
+      "name": "Walking Ballista",
+      "sick": true,
+      "plus_counters": 2
+    }
+  ],
+  "hand": [],
+  "expect_win_turn": 4,
+  "resume_at": "main1",
+  "expect_opponent_life": 0,
+  "expect_active_life": 40
+}
