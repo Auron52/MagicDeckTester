@@ -233,6 +233,11 @@ function main() {
   // missing `matched_plans` entry is never a v1 CheckLine limitation, it is the emitter dropping a
   // field the client depends on. See the block that fills it.
   const contractGaps = [];
+  // CAN THE SEARCH FIND THIS LINE (`search_lines`, manaoracle::AuditLine, 2026-10-27). INFORMATIONAL, never
+  // a failure: a played line whose plan the ENGINE'S OWN payment cannot cast in full (and no same-actions
+  // menu entry can) is a line the human reached with their own order or taps that the search never scores.
+  const searchTally = { findable: 0, lost: 0, unaudited: 0 };
+  const searchLost = [];
   let unaligned = 0;   // refs/frames the resolver could not place (reported, never silent)
   const aligned = resolveAlignment(refs.map(r => r.file));
   for (const { deck, file } of refs) {
@@ -396,6 +401,18 @@ function main() {
                           + (gaps.length > 5 ? ` (+${gaps.length - 5} more)` : ''));
         }
       }
+      if (verdict === 'accept') {
+        const sl = (v.search_lines || []).find(x => x && x.plan_index === v.plan_index);
+        if (!sl || !sl.audited) { searchTally.unaudited++; }
+        else if (sl.engine_full || sl.sibling >= 0) { searchTally.findable++; }
+        else {
+          searchTally.lost++;
+          searchLost.push(`${rel} | T${d.turn}/${d.phase} | ${line} | the engine's payment drops ${sl.dropped}`
+            + (sl.payable ? (sl.other_order ? ` -- only the order ${sl.other_order} pays`
+                                            : ` -- payable here, rollback ${sl.rollback}`)
+                          : sl.partial ? ` -- no verdict (${sl.partial})` : ' -- the oracle found no payment'));
+        }
+      }
       if (verdict === 'accept' || verdict === 'choose' || verdict === 'unsupported') { tally[verdict]++; }
       else {
         const sig = `${rel} | T${d.turn}/${d.phase} | ${line}`;
@@ -430,6 +447,9 @@ function main() {
     console.log('  CheckLine regression. If intended, inspect then rebaseline: node test/viewer_validate_check.js --update-baseline');
   }
   if (fixed.length) { console.log(`  (${fixed.length} baseline known-fail(s) now pass -- rebaseline to drop them.)`); }
+  console.log(`  Search can find the accepted line (mana): ${searchTally.findable} yes, ${searchTally.lost} NO, `
+              + `${searchTally.unaudited} not audited`);
+  searchLost.forEach(g => console.log('    SEARCH-CANNOT-PAY  ' + g));
   if (contractGaps.length) {
     console.log(`  CONTRACT: ${contractGaps.length} verdict(s) carry no matched_plans for a plan they can commit`);
     contractGaps.slice(0, 8).forEach(g => console.log('    ' + g));

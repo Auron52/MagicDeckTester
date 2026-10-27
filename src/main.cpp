@@ -14,6 +14,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <map>
+#include <optional>
 #include <set>            // --tap-pref (reference-replay payment-tap preference)
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
@@ -34,6 +35,7 @@
 #include "ai/DecisionProviders.h"   // SelectDecisionProvider for --scenario
 #include "ai/ManaPayment.h"      // CastOrderKey for the --cast-order-report sort; the pre-tap API
 #include "ai/EngineFlags.h"      // HumanPreTapEnabled (the decision JSON's `taps` affordance)
+#include "ai/ManaOracle.h"       // AuditLine: the validation's "can the search find this line"
 #include <nlohmann/json.hpp>        // --scenario board spec
 
 static void PrintUsage(const char* prog)
@@ -4893,19 +4895,25 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
 // Land's Edge discard of a land not in hand, a land that cannot be played) makes the line ILLEGAL here,
 // with every reason -- the commit would otherwise drop it. Human play only; a line
 // without `seq=` (every line written before 2026-10-22, and every one-step line) is untouched.
+// `unpaid_order` (optional): when the line is rejected because the queued order cannot PAY (a cast
+// unpayable at its position, or one the trial commit drops), the plan that commit would have applied --
+// the human's order -- so the validation can ask the mana oracle whether ANY taps pay it.
 static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSolver::LineSpec& spec,
-                                  const std::vector<TurnSolver::Plan>& plans, TurnSolver::LineCheck& chk)
+                                  const std::vector<TurnSolver::Plan>& plans, TurnSolver::LineCheck& chk,
+                                  std::optional<TurnSolver::Plan>* unpaid_order = nullptr)
 {
     using Vd = TurnSolver::LineCheck::Verdict;
     if (spec.sequence.empty() || !HumanPlayActive()) { return; }
     if (chk.verdict != Vd::Accept && chk.verdict != Vd::Choose) { return; }
     std::vector<std::string> ord{ "**" };
     ord.insert(ord.end(), spec.sequence.begin(), spec.sequence.end());
+    std::optional<TurnSolver::Plan> first_unpaid;
     auto problems = [&](int idx) -> std::vector<std::string>
     {
         std::vector<std::string> out;
         if (idx < 0 || idx >= static_cast<int>(plans.size())) { return out; }
         const HumanCommitPreview pv = PrepareHumanCommit(s, plans[static_cast<std::size_t>(idx)], ord, is_pre, true);
+        if ((pv.unpayable || !pv.dropped.empty()) && !first_unpaid) { first_unpaid = pv.plan; }
         out = pv.errors;
         if (!pv.unpayable)   // (an unpayable order's errors already name each cast it cannot pay)
         {
@@ -4921,6 +4929,7 @@ static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSol
         return r;
     };
     auto reject = [&](const std::vector<std::string>& why) {
+        if (unpaid_order != nullptr) { *unpaid_order = first_unpaid; }
         chk.verdict       = Vd::Illegal;
         chk.failed_action = why.empty() ? std::string() : why.front().substr(0, why.front().find(':'));
         chk.reason        = "your order cannot be played as queued: " + join(why);
@@ -5621,6 +5630,36 @@ struct ClaudePlayHarness
     void InstallLandAndSoulfireChoosers(AIEngine& ai);
 };
 
+// One manaoracle::LineAudit as the validation's JSON (the viewer's "can the search find this line").
+static void WriteLineAuditJson(std::ostream& os, const manaoracle::LineAudit& a)
+{
+    auto b = [](bool v) { return v ? "true" : "false"; };
+    os << "\"audited\": " << b(a.audited) << ", \"engine_full\": " << b(a.engine_full)
+       << ", \"sibling\": " << a.sibling << ", \"dropped\": ";
+    JsonStr(os, a.dropped);
+    os << ", \"payable\": " << b(a.payable) << ", \"other_order\": ";
+    JsonStr(os, a.other_order);
+    os << ", \"pays\": [";
+    for (std::size_t i = 0; i < a.pays.size(); ++i)
+    {
+        const manaoracle::LinePayment& p = a.pays[i];
+        os << (i ? ", " : "") << "{ \"what\": ";
+        JsonStr(os, p.what);
+        os << ", \"engine\": " << b(p.engine) << ", \"fail\": " << b(p.fail) << ", \"taps\": [";
+        for (std::size_t t = 0; t < p.taps.size(); ++t) { if (t) { os << ", "; } JsonStr(os, p.taps[t]); }
+        os << "], \"text\": ";
+        JsonStr(os, p.text);
+        os << ", \"keep_floating\": ";
+        JsonStr(os, p.keep_floating);
+        os << " }";
+    }
+    os << "], \"rollback\": ";
+    JsonStr(os, a.rollback);
+    os << ", \"keep\": " << a.keep << ", \"failed\": " << a.failed << ", \"later\": " << b(a.later)
+       << ", \"pay_rollback\": " << b(a.pay_rollback) << ", \"partial\": ";
+    JsonStr(os, a.partial);
+}
+
 // ONE writer for both validation routes (see the declaration). Byte-identical output to the
 // pre-2026-09-11 inline block it was lifted from -- the extraction is what lets the interactive
 // `@validate-line` directive answer with the same verdict the `--validate-line` spawn would.
@@ -5634,7 +5673,8 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
     // will index when the viewer commits the variant it picks. Without this the two
     // lists disagree and the human's chosen variant applies a different plan.
     TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, is_pre, spec, &plans);
-    ValidateHumanSequence(s, is_pre, spec, plans, chk);   // a `seq=` line: preview the commit in its order
+    std::optional<TurnSolver::Plan> unpaid_order;
+    ValidateHumanSequence(s, is_pre, spec, plans, chk, &unpaid_order);   // a `seq=` line: preview the commit in its order
     using Vd = TurnSolver::LineCheck::Verdict;
     const char* vstr =
         chk.verdict == Vd::Accept             ? "accept" :
@@ -5742,6 +5782,51 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
         }
     }
     os << "],\n";
+    // CAN THE SEARCH FIND THIS LINE (USER 2026-10-27: "a user using the viewer should be able to tell: 'Can
+    // the search actually find this line' while using it"). For every plan this verdict can commit: does
+    // the engine's own payment of it -- what the search scores -- cast everything, or does another menu
+    // entry with the same actions; and when neither, the mana oracle's answer (can the board pay it, with
+    // which taps, and how many of the engine's own mana decisions a rollback has to re-make). The human's
+    // commit pays in the human's order with the human's taps, so a line can play here and still be one the
+    // search never reaches. Mana only (manaoracle::AuditLine). Additive: a consumer ignoring it is unchanged.
+    os << "  \"search_lines\": [";
+    {
+        std::vector<int> want;
+        if (chk.plan_index >= 0) { want.push_back(chk.plan_index); }
+        for (const TurnSolver::LineVariant& lv : chk.variants)
+        { if (lv.plan_index >= 0) { want.push_back(lv.plan_index); } }
+        std::sort(want.begin(), want.end());
+        want.erase(std::unique(want.begin(), want.end()), want.end());
+        int deep_left = 3;   // the oracle proper is asked about the first few dropping lines of a frame
+        bool first_sl = true;
+        for (int idx : want)
+        {
+            if (static_cast<size_t>(idx) >= plans.size()) { continue; }
+            const manaoracle::LineAudit a =
+                manaoracle::AuditLine(s, is_pre, plans[static_cast<size_t>(idx)], &plans, 400, deep_left > 0);
+            if (!a.engine_full && a.sibling < 0) { --deep_left; }
+            os << (first_sl ? "" : ", ") << "{ \"plan_index\": " << idx << ", ";
+            first_sl = false;
+            WriteLineAuditJson(os, a);
+            os << " }";
+        }
+    }
+    os << "],\n";
+    // ...and for a line REJECTED because its queued order cannot pay: can ANY taps pay that order (the
+    // human's own taps left out, so the oracle chooses every one)? Null otherwise.
+    os << "  \"order_audit\": ";
+    if (unpaid_order)
+    {
+        GameState g = s;
+        TurnSolver::Plan t = *unpaid_order;
+        t.human_pre_taps.clear();
+        if (is_pre) { TurnSolver::DeferHumanAuraSwapToCombat(g, t, nullptr); }
+        os << "{ ";
+        WriteLineAuditJson(os, manaoracle::AuditLine(g, is_pre, t));
+        os << " }";
+    }
+    else { os << "null"; }
+    os << ",\n";
     os << "  \"decision\": ";
     WriteDecisionJson(os, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log,
                       this_main_ordinal, reveal_log);

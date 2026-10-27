@@ -30,6 +30,7 @@
 #include "TurnSolver.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,11 @@ namespace manaoracle
         ManaPool stash;          // general-float units set aside (typed WUBRGC; never wild)
         int      stash_haste = 0;// ...of which haste-tagged {C} (a subset of stash.colorless)
         bool     fail = false;   // no payment exists: fail this one (the engine drops the cast) and go on
+        // ENGINE STEP (the rollback census): this payment / tap-ahead is made by the ENGINE's own
+        // heuristic, exactly as an unhooked apply makes it -- so a script of k engine steps and then the
+        // oracle's options is "keep the engine's first k mana decisions, redo everything after".
+        bool     engine = false;
+        std::string what;        // display only: the bill this option paid ("{1}{U}", "tap-ahead")
     };
 
     // The payment script for ONE oracle apply. Consulted by TapForCostShared for the OUTERMOST payment
@@ -76,9 +82,52 @@ namespace manaoracle
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
         std::vector<int>       tapped_by_script;
+        // Past the script's end, keep making ENGINE steps instead of stopping at a frontier: the pure
+        // replay of the engine's own line, whose first failing step the census measures from.
+        bool                   all_engine = false;
+        int                    first_fail = -1;      // the first engine-step PAYMENT that failed (step index)
+        long long              engine_tapaheads = 0; // engine tap-aheads run inside engine steps (expected)
     };
 
     extern thread_local Hook* t_hook;
+
+    // Is the next mana decision on the oracle's copy `s` an ENGINE step? (False when `s` is not the
+    // oracle's copy -- every normal apply.) The engine-only machinery that stands down on the oracle's
+    // copy -- the joint prepay, the land-Aura host hold, the heuristic tap-ahead -- runs for an engine
+    // step, so the replay is the engine's line and not a variant of it.
+    bool NextIsEngineStep(const GameState& s);
+    // A tap-ahead site's step: true (and the step consumed) when it is an engine step, so the caller
+    // runs the engine's own tap-ahead; false -> the caller serves ScriptedTapAhead as before.
+    bool TakeEngineStep(const GameState& s, int count);
+    // Owns the taps the engine makes inside an engine step (they are the engine's, not unscripted).
+    // Inert unless `active`.
+    struct EngineStepScope
+    {
+        Hook*            h = nullptr;
+        GameState*       st = nullptr;
+        std::vector<int> untapped;
+        long long        ta0 = 0;
+        EngineStepScope(GameState& s, bool active);
+        ~EngineStepScope();
+        EngineStepScope(const EngineStepScope&) = delete;
+        EngineStepScope& operator=(const EngineStepScope&) = delete;
+    };
+    // ONE engine step made of SEVERAL payments: apply_one's land-Aura host hold pays once with the host
+    // reserved and, on failure, once more without -- one decision, so one step. Takes the step when
+    // `active`, stands the hook down until End(ok), and records a failed span as the step's failure.
+    struct EngineStepSpan
+    {
+        Hook*                h = nullptr;
+        std::size_t          step = 0;
+        std::optional<EngineStepScope> es;
+        EngineStepSpan(GameState& s, bool active);
+        // `made` = false: the span turned out to decide nothing (a declined joint prepay) -- the step is
+        // handed back, so the numbering counts only mana decisions.
+        void End(bool ok, bool made = true);
+        ~EngineStepSpan() { if (h != nullptr) { End(true); } }
+        EngineStepSpan(const EngineStepSpan&) = delete;
+        EngineStepSpan& operator=(const EngineStepSpan&) = delete;
+    };
     // OBSERVE MODE for the enumerator's mana gates (ENUM-GAP): while true, every per-subset mana
     // rejection in EnumeratePlans lets the subset through and the odometer's mana bounds are off, so
     // the menu it builds is "every plan the NON-mana rules allow". Set only by the oracle, around its
@@ -114,4 +163,44 @@ namespace manaoracle
 
     // AIEngine::TakeTurn's entry hook: audit this real decision (no-op unless On()).
     void AuditDecision(const GameState& state, bool is_pre_combat);
+
+    // THE VIEWER'S "CAN THE SEARCH FIND THIS LINE" CHECK (USER 2026-10-27: "a user using the viewer
+    // should be able to tell: 'Can the search actually find this line' while using it"). For one plan:
+    // does the engine's own apply of it -- the payments the search scores -- realise every action, or does
+    // another menu entry with the same actions; if neither, can the board pay for it at all and with
+    // which taps, and how far back the engine's own mana decisions have to be re-made to get there (the
+    // rollback census). MANA ONLY: whether the search's own enumeration offers the line is not asked.
+    // Runs whether or not MTG_MANA_ORACLE is on, quietly (RevealLogPause), on copies of `state`.
+    struct LinePayment
+    {
+        std::string              what;      // the bill ("{1}{U}"; "tap-ahead"); "" = the engine's own payment
+        bool                     engine = false;  // kept as the engine makes it (a census prefix step)
+        bool                     fail = false;    // no payment exists for this one
+        std::vector<std::string> taps;      // viewer pre-tap tokens: tap=<name>#<num>:<face>[+<aura>]
+        std::string              text;      // the same taps for a person ("Conservatory for G, ...")
+        std::string              keep_floating;   // floating units set aside for a later payment
+    };
+    struct LineAudit
+    {
+        bool        audited = false;      // false: not checked (`partial` says why)
+        bool        engine_full = false;  // the search's apply of THIS plan realises every action
+        int         sibling = -1;         // ...else a menu entry (index) with the same actions that does
+        std::string dropped;              // what the search's apply drops ("cast X, act Y")
+        // Only when neither of the above: the oracle's own answer.
+        bool        payable = false;      // some payment realises every action...
+        std::string other_order;          // ...in this plan's order (empty), or only in this one ("A > B > C")
+        std::vector<LinePayment> pays;    // ...paying payment by payment like this
+        // The census (this plan's order only; empty when only another order pays).
+        std::string rollback;             // census bucket ("depth0", "depth1", ..., "capped", ...)
+        int         keep = -1;            // keep the engine's first `keep` mana decisions, re-make the rest
+        int         failed = -1;          // decision #failed+1 is the engine payment that failed
+        bool        later = false;        // a lost cast is not one the plan declared (a continuation's)
+        bool        pay_rollback = false; // MTG_PAY_ROLLBACK (forced on) recovers it
+        std::string partial;              // non-empty: no verdict (capped / a choice the oracle does not drive)
+    };
+    // `menu` (optional): the frame's menu, for the same-actions sibling check; `plan` may be one of its
+    // entries. `node_cap` bounds each payment search (applies) so a validation stays interactive.
+    // `deep` = false: the engine and sibling checks only (`partial` says the oracle was not asked).
+    LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& plan,
+                        const std::vector<TurnSolver::Plan>* menu = nullptr, int node_cap = 400, bool deep = true);
 }

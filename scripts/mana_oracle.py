@@ -58,6 +58,7 @@ WHAT = {
 
 LINE = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=(?P<seed>\d+) job=(?P<job>\S+) gi=(?P<gi>-?\d+) "
                   r"T(?P<turn>\d+) m(?P<phase>\d) plan=\{(?P<plan>.*?)\} \| (?P<detail>.*)$")
+RB = re.compile(r"\|\| ROLLBACK (\S+):")
 DECISION = re.compile(r"^\[mana-oracle\] DECISION seed=\d+ job=(?P<job>\S+) gi=-?\d+ T\d+ m\d plans=(?P<n>\d+)")
 DIGEST = re.compile(r"^(?P<job>[^:\s]+): played=(?P<played>\d+) avg=(?P<avg>[0-9.]+) digest=(?P<digest>[0-9a-f]+)")
 
@@ -124,6 +125,9 @@ def main():
     ap.add_argument("decks", nargs="*", help="deck keys / folders (default: every shipping deck)")
     ap.add_argument("--games", type=int, default=6)
     ap.add_argument("--seed", type=int, default=424200)
+    ap.add_argument("--game-index", type=int, default=0,
+                    help="first game index: game i is (seed + i, game index + i). The play viewer's games are "
+                         "seed = gi + 1, so viewer seeds A..B are --seed A --game-index A-1 --games B-A+1")
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 8)
     ap.add_argument("--nodes", type=int, default=0, help="MTG_MANA_ORACLE_NODES (per-plan apply cap; 0 = engine default)")
     ap.add_argument("--name", default=None, help="run name (default: a timestamp)")
@@ -145,6 +149,8 @@ def main():
     jobs = []
     for d in chosen:
         j = {"name": d.key, "deck": os.path.relpath(d.deck_file, ROOT), "games": args.games, "seed": args.seed}
+        if args.game_index:
+            j["game_index"] = args.game_index
         if os.path.exists(d.profile):
             j["profile"] = os.path.relpath(d.profile, ROOT)
         jobs.append(j)
@@ -155,7 +161,8 @@ def main():
     env_on = {"MTG_MANA_ORACLE": "2"}
     if args.nodes > 0:
         env_on["MTG_MANA_ORACLE_NODES"] = str(args.nodes)
-    print("mana_oracle: %d decks x %d games, seed %d, %s" % (len(jobs), args.games, args.seed, mtg), file=sys.stderr)
+    print("mana_oracle: %d decks x %d games, seed %d, game index %d, %s"
+          % (len(jobs), args.games, args.seed, args.game_index, mtg), file=sys.stderr)
     rc_on = run_batch(mtg, manifest, env_on, os.path.join(scratch, "on.out"), os.path.join(scratch, "on.err"),
                       args.threads)
     identity = None
@@ -185,6 +192,9 @@ def main():
             if not m or m.group("cls") == "DECISION":
                 continue
             rec = m.groupdict()
+            # The engine prints the job-LOCAL game number; the viewer's game is the global one.
+            j0 = deck_of.get(rec["job"])
+            rec["gi"] = str(int(rec["gi"]) + (j0.get("game_index", 0) if j0 else 0))
             detail, _, board = rec["detail"].rpartition(" | ")
             rec["detail"], rec["board"] = (detail, board) if detail else (rec["detail"], "")
             flags.append(rec)
@@ -211,8 +221,9 @@ def main():
     gap_total = sum(by_cls["ORACLE-GAP"].values())
     rep = []
     rep.append("# Mana oracle run `%s`\n" % name)
-    rep.append("%d decks x %d games, seed %d, binary `%s`. Engine: `MTG_MANA_ORACLE=2`%s.\n"
-               % (len(jobs), args.games, args.seed, os.path.relpath(mtg, ROOT),
+    rep.append("%d decks x %d games, seed %d%s, binary `%s`. Engine: `MTG_MANA_ORACLE=2`%s.\n"
+               % (len(jobs), args.games, args.seed,
+                  (", game index %d" % args.game_index) if args.game_index else "", os.path.relpath(mtg, ROOT),
                   (", `MTG_MANA_ORACLE_NODES=%d`" % args.nodes) if args.nodes else ""))
     rep.append("**MISS = %d, ORACLE-GAP = %d.** Play identity with the oracle off: %s.\n"
                % (miss_total, gap_total,
@@ -230,6 +241,39 @@ def main():
         rep.append("| %s | %d | %d | %s |" % (k, decisions[k], plans_seen[k],
                                             " | ".join(str(by_cls[c][k]) for c in cols)))
     rep.append("")
+    # The rollback census (USER 2026-10-27): per lost line, how far back the engine's mana decisions have to
+    # be re-made for the line to pay (APPLY-DROP flags carry the verdict), plus the reorder / off-menu lines.
+    rb = collections.defaultdict(collections.Counter)
+    for f in flags:
+        if f["cls"] == "APPLY-DROP":
+            m = RB.search(f["detail"])
+            v = m.group(1) if m else "no-census"
+            rb[f["job"]][v] += 1
+            if "MTG_PAY_ROLLBACK (forced on) recovers it" in f["detail"]:
+                rb[f["job"]]["rescued"] += 1
+            if "was not declared in the plan" in f["detail"]:
+                rb[f["job"]]["need-later"] += 1
+        elif f["cls"] == "APPLY-DROP-ORDER":
+            rb[f["job"]]["reorder"] += 1
+        elif f["cls"] == "ENUM-GAP":
+            rb[f["job"]]["off-menu"] += 1
+    if rb:
+        rcols = ["depth0", "depth1", "depth2", "depth3+", "capped", "unfaithful", "no-failed-payment",
+                 "inconsistent", "no-census", "reorder", "off-menu", "rescued", "need-later"]
+        rcols = [c for c in rcols if any(rb[k][c] for k in rb)]
+        rep.append("## Rollback census\n")
+        rep.append("_Lost lines: APPLY-DROP split by DEPTH -- how many of the engine's mana decisions before the "
+                   "failing payment must be re-made (0 = the failing payment itself had a way; 1 = the payment before "
+                   "it, i.e. a one-step rollback); reorder = only another cast order pays (APPLY-DROP-ORDER); off-menu "
+                   "= a mana gate kept it off the menu (ENUM-GAP). rescued = MTG_PAY_ROLLBACK forced on recovers the "
+                   "APPLY-DROP; need-later = a lost action the plan did not declare._\n")
+        rep.append("| deck | " + " | ".join(rcols) + " |")
+        rep.append("|---|" + "---|" * len(rcols))
+        for j in jobs:
+            k = j["name"]
+            if k in rb:
+                rep.append("| %s | %s |" % (k, " | ".join(str(rb[k][c]) for c in rcols)))
+        rep.append("")
     for c in ORDER:
         if not sigs.get(c):
             continue

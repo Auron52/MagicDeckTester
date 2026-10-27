@@ -571,6 +571,8 @@
   .hist { list-style:none; margin:0; padding:0; font-size:12.5px; }
   .hist li { padding:5px 8px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
   .hist li .t { color:var(--muted); white-space:nowrap; } .hist li.rej .lab { color:var(--bad); } .hist li.win .lab { color:var(--good); }
+  .hist li .sbadge { color:var(--warn); font-size:11px; font-weight:600; white-space:nowrap; cursor:pointer; }
+  #verdict .paylist { margin:4px 0 0 18px; padding:0; font-size:12px; }
   /* life-affecting event lines (combat / burn damage / lifegain / lifeloss) coloured by kind */
   .hist li.ev-combat .lab { color:var(--warn); } .hist li.ev-damage .lab { color:var(--bad); }
   .hist li.ev-lifeloss .lab { color:var(--bad); } .hist li.ev-lifegain .lab { color:var(--good); }
@@ -3601,7 +3603,13 @@ function applyAccepted(planIndex, label, planView) {
     return items.length && items.every(it => it.includes(': '))
       ? label.replace('cast: ', 'activate: ') : label;
   })();
-  S.history.push({ turn:S.decision.turn, label: hist });
+  // CAN THE SEARCH FIND THIS LINE (searchNoteFor): a badge on the history entry, and the full note
+  // once the commit lands (step), when the search's own payment of the plan drops a cast.
+  const sNote = searchNoteFor(S.lastValidation, planIndex);
+  S.lastValidation = null;
+  S.history.push(sNote ? { turn:S.decision.turn, label: hist, cls:'nosearch', note:sNote }
+                       : { turn:S.decision.turn, label: hist });
+  S.pendingSearchNote = sNote;
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
@@ -3701,7 +3709,87 @@ function applyAccepted(planIndex, label, planView) {
   S.leMode=false; S.vialMode=null; S.blinkMode=null;
   renderHistory(); hideVerdict(); step();
 }
+// ---- CAN THE SEARCH FIND THIS LINE (USER 2026-10-27) ----------------------------------------------
+// *"a user using the viewer should be able to tell: 'Can the search actually find this line' while using
+// it"*, and *"show when it is possible to roll back the previous taps"*. The validation carries, for every
+// plan it can commit, the engine's own payment of that plan -- the payment the SEARCH scores -- and, when
+// that drops a cast, the mana oracle's answer (src/main.cpp WriteValidation `search_lines`,
+// manaoracle::AuditLine). A line you commit is paid in YOUR order with YOUR taps, so it can play here and
+// still be a line the search never reaches: this is what says so. MANA ONLY -- whether the search's own
+// enumeration offers the line is a different question, not asked here.
+function payListHtml(pays) {
+  if (!pays || !pays.length) return '';
+  return '<ol class="paylist">' + pays.map(p => '<li>' + (p.what ? `<b>${esc(p.what)}</b>: ` : '')
+    + (p.engine ? 'as the engine pays it' : p.fail ? '(no payment)' : (p.text ? 'tap ' + esc(p.text) : 'from floating mana'))
+    + (p.keep_floating ? ` — keep ${esc(p.keep_floating)} floating for later` : '') + '</li>').join('') + '</ol>';
+}
+function rollbackHtml(sl) {
+  const out = [];
+  if (sl.keep >= 0 && sl.failed >= 0) {
+    const d = sl.failed - sl.keep, n = sl.failed + 1;
+    out.push(d === 0
+      ? `Only the payment that failed (the engine's mana decision #${n}) has to change: the automatic tapping missed a way to pay it.`
+      : `Rolling back finds it: keep the engine's first ${sl.keep} mana decision${sl.keep === 1 ? '' : 's'} and re-make the rest — `
+        + `${d === 1 ? 'the decision' : `the ${d} decisions`} before the one that failed (#${n}) ${d === 1 ? 'has' : 'have'} to change too `
+        + `(for example keeping a different colour up).`);
+  } else if (sl.rollback) {
+    out.push(`Rollback census: ${sl.rollback}.`);
+  }
+  if (sl.later) out.push('The lost spell is one the line picked after a draw, not one it named up front, so no earlier payment could plan for it.');
+  out.push(sl.pay_rollback
+    ? 'The engine’s one-swap payment rollback (MTG_PAY_ROLLBACK, off by default) would recover it.'
+    : 'The engine’s one-swap payment rollback (MTG_PAY_ROLLBACK) would not recover it.');
+  return `<div class="hint" style="margin-top:6px">${out.map(esc).join('<br>')}</div>`;
+}
+// The note for one committed plan, or null when the search pays for it (or nothing was checked).
+function searchNoteFor(v, idx) {
+  // Only the validation of THIS frame (a dig / Combo Off click commits without one).
+  if (!v || !S.decision || v.decision_index !== S.decision.decision_index) return null;
+  const sl = (v.search_lines || []).find(x => x && x.plan_index === idx);
+  if (!sl || !sl.audited || sl.engine_full || sl.sibling >= 0) return null;
+  let body = `<div>The search pays for this line with the engine’s automatic tapping, and that drops `
+    + `<b>${esc(sl.dropped)}</b> — so the search can only ever score the smaller line, never the one you just played. `
+    + `It played here because you paid for it in your own order or with your own taps.</div>`;
+  if (sl.payable && !sl.other_order) {
+    body += `<div style="margin-top:6px">The board pays every spell in this order like this:</div>${payListHtml(sl.pays)}${rollbackHtml(sl)}`;
+  } else if (sl.payable) {
+    body += `<div style="margin-top:6px">Only the order <b>${esc(sl.other_order)}</b> pays every spell, and the menu has no entry in that order:</div>${payListHtml(sl.pays)}`;
+  } else if (sl.partial) {
+    body += `<div class="hint" style="margin-top:6px">Mana oracle: no verdict — ${esc(sl.partial)}.</div>`;
+  } else {
+    body += `<div class="hint" style="margin-top:6px">The mana oracle found no payment for it in this order or the others it tried, `
+      + `although your commit paid for it — an oracle gap worth reporting.</div>`;
+  }
+  return { tip: `the search's automatic tapping drops ${sl.dropped}`, html: body };
+}
+function showSearchNote(note) {
+  if (!note) return;
+  const ve=$('verdict'); ve.className='legal';
+  ve.innerHTML=`<span class="vtag">search can’t find this line</span><h4>Played — but the search can’t pay for this line</h4>`
+    + note.html + `<div class="actions"><button id="snok" class="ghost">Dismiss</button></div>`;
+  ve.style.display='block';
+  $('snok').onclick=hideVerdict;
+}
+// The reject panel's mana check: when the queued ORDER cannot pay, can any taps pay it?
+function orderAuditHtml(oa) {
+  if (!oa || !oa.audited) return '';
+  let h;
+  if (oa.engine_full) {
+    h = 'With the engine’s automatic tapping (none of your manual taps) this order pays for every spell — it is the queued taps that leave one unpaid.';
+    return `<div class="hint" style="margin-top:6px"><b>Mana check:</b> ${esc(h)}</div>`;
+  }
+  if (oa.payable && !oa.other_order)
+    return `<div style="margin-top:6px"><b>Mana check: the board can pay this order</b> if you tap like this `
+      + `(queue each payment’s taps just before the spell it pays for):</div>${payListHtml(oa.pays)}`;
+  if (oa.payable)
+    return `<div style="margin-top:6px"><b>Mana check:</b> not in this order — but <b>${esc(oa.other_order)}</b> pays every spell:</div>${payListHtml(oa.pays)}`;
+  if (oa.partial) return `<div class="hint" style="margin-top:6px"><b>Mana check:</b> no verdict — ${esc(oa.partial)}.</div>`;
+  return `<div class="hint" style="margin-top:6px"><b>Mana check:</b> no way of tapping this board pays for every spell, `
+    + `in this order or any other order tried.</div>`;
+}
 function handleVerdict(v, line) {
+  // applyAccepted reads this validation's `search_lines` for the plan it commits (searchNoteFor).
+  S.lastValidation = v;
   // The third argument is the verdict's OWN view of the plan it matched (matched_plans), which is
   // the only way applyAccepted can run its order guard when that plan is past the display cap.
   if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line,
@@ -3775,6 +3863,7 @@ function handleVerdict(v, line) {
   const ve=$('verdict'); ve.className=cls;
   ve.innerHTML=`<span class="vtag">${tag}</span>${macroNote}<h4>${head}</h4>`+
     `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
+    orderAuditHtml(v.order_audit)+
     `<div class="modelplans"><b>What the model would accept${plans.length?' (click to play)':''}:</b>${mp}</div>`+
     `<div class="actions">${playAnywayHtml(v)}<button id="artbtn" class="primary">Store as artifact</button>`+
     `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
@@ -6018,7 +6107,11 @@ function isDeadOpponentMain(dec){
 // Commit the current line, then auto-pass the rest of THIS turn (see advanceTo). The turn number is
 // captured now so the skip stops once the engine advances to the next turn.
 function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision && S.decision.turn; S.commitTurnPasses = 0; commitLine(); }
-function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
+function renderHistory() {
+  $('hist').innerHTML=S.history.map((h,i)=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span>`
+    + (h.note ? ` <span class="sbadge" data-h="${i}" title="${esc(h.note.tip)} — click for details">⚠ search can’t pay</span>` : '') + `</li>`).join('');
+  $('hist').querySelectorAll('.sbadge').forEach(b => b.onclick = () => { const h = S.history[+b.getAttribute('data-h')]; if (h) showSearchNote(h.note); });
+}
 function hideVerdict() { $('verdict').style.display='none'; }
 function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
 function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.display='block';
@@ -6070,10 +6163,13 @@ async function step() {
     // leaving only a line that had silently vanished (Bruna seed 13 T5, "Bruna, then Glittering Wish").
     // A frame that reports a drop is never advanced to: the rollback owns it.
     const dropped=(res.decision||{}).dropped_casts||[];
+    const note=S.pendingSearchNote; S.pendingSearchNote=null;
     if (dropped.length) return rollbackLine(dropped);
     advanceTo(res.decision);
+    if (note) showSearchNote(note);
   } else if (res.kind==='result') {
     const dropped=(res.result||{}).dropped_casts||[];
+    S.pendingSearchNote=null;
     if (dropped.length) return rollbackLine(dropped);
     showResult(res.result);
   } else showError(res.error||'unknown error', res.raw);
@@ -6083,10 +6179,11 @@ async function step() {
 function notifyDropped(names){
   const ve=$('verdict'); ve.className='unsupported';
   ve.innerHTML=`<span class="vtag">line rejected</span>`+
-    `<h4>${names.map(esc).join(', ')} — not enough mana</h4>`+
-    `<div>The board couldn’t actually produce the mana this line needs, so `+
-    `${names.length>1?'these spells were':'this spell was'} unpayable. The whole line was <b>rolled back</b> — `+
-    `nothing was cast, tapped, or drawn. Pick a line the board can really pay for.</div>`+
+    `<h4>${names.map(esc).join(', ')} — not paid</h4>`+
+    `<div>When the line was played, the engine’s automatic tapping couldn’t pay for `+
+    `${names.length>1?'these spells':'this spell'} in the order queued, so the whole line was <b>rolled back</b> — `+
+    `nothing was cast, tapped, or drawn. That is not always the board running out of mana: queuing your own `+
+    `taps (or another order) may pay for it.</div>`+
     `<div class="actions"><button id="dropok" class="ghost">Dismiss</button></div>`;
   ve.style.display='block';
   $('dropok').onclick=hideVerdict;

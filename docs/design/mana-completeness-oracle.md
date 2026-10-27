@@ -293,3 +293,72 @@ those decks is trustworthy until their gaps are closed.
 3. Engine fixes for the confirmed misses, each through the normal A/B -- the oracle locates them; it does
    not decide them.
 4. L4: sample rollout nodes, not only real decisions.
+
+## 9. The rollback census (2026-10-27)
+
+USER: *"we would like to know how many lines are fully inaccessible and which are accessible only with
+rollbacks to the previous line (i.e. keeping up blue instead of white so that we can cast a blue spell only
+after we discover that blue is needed)."* Every APPLY-DROP (a menu plan the engine's own payment drops, that
+some payment of the same order realises in full) gets a DEPTH:
+
+1. **Replay the engine's own line through the hook** with every mana decision an ENGINE STEP
+   (`PayOption::engine`, `Hook::all_engine`): the hook stands down and the engine's own payment, joint
+   prepay, land-Aura host hold or tap-ahead runs, counted as one step. The replay must end exactly where
+   the unhooked apply ends (board, resources with float, drops); otherwise the verdict is `unfaithful`.
+2. `f` = the first engine PAYMENT step that failed. For `k = f, f-1, ..., 0`: keep the engine's first `k`
+   decisions and let the oracle re-make the rest. The largest `k` that pays every action (and uses the cards
+   the line meant to use) gives **depth = f - k**: 0 = the failing payment itself had a way (a payer miss);
+   1 = the decision before it has to change too (keep blue up instead of white); and so on.
+3. Also recorded: whether the lost action was DECLARED in the plan (else it is a continuation's, chosen after
+   a draw -- `need-later`, which no earlier payment could plan for), and whether `MTG_PAY_ROLLBACK` forced on
+   recovers it.
+
+Buckets: `depth0/1/2/3+`, `capped`, `unfaithful`, `no-failed-payment`, `inconsistent`; plus `reorder`
+(APPLY-DROP-ORDER: only another order pays) and `off-menu` (ENUM-GAP: a mana gate kept it off the menu),
+counted alongside so the table answers "how many lost lines, of which kind". Exit line `=== MANA ORACLE
+rollback census: ... ===`; `scripts/mana_oracle.py` adds a "Rollback census" table per deck.
+
+**census1 (38 decks x 6 games, `logs/mana_oracle/census1/`):** 16 APPLY-DROP -- depth1 7
+(AccomplishedAlchemist 3, NivMizzetCombo 2, EDF 1, Hinata 1), depth2 7 (Fungus 6, Hinata 1), depth3+ 2
+(Fungus), depth0 0; none unfaithful, capped or inconsistent. `MTG_PAY_ROLLBACK` forced on rescues **0 of
+16** (it declines with mana floating and on multi-mana sources). 13 of the 16 lost a continuation's cast
+(need-later); 3 lost a declared one (Niv 2, Hinata 1). Off the menu: 82 ENUM-GAP (Alchemist 44, EDF 15,
+Slivers 11, Niv 6, Mirrorwing 3, Selesnya 2, Landfall 1).
+
+**What causes EDF's (viewer seed 3000 T4, the deck owner's manual-tap report):** Training Grounds {U} then
+Eldrazi Displacer {2}{W} on Conservatory, Mariposa Military Base + Fertile Ground, Shivan Gorge. Depth 1:
+the Grounds' payment has to change. (a) The greedy cannot pay {U} (its only blue is Fertile Ground's bonus),
+and the backtracker's DFS walks battlefield order and accepts the FIRST covering set, so it taps
+Conservatory (useless for {U}) and Mariposa, spending the only {W}. Pinned by the `should_fail` test
+"payment: {U} off a Fertile Ground host taps the host alone". (b) `BatchPrepayMainCasts` declines ("wild ->
+pip pinning ambiguous") whenever an any-colour land Aura is live, so EDF's multi-cast plans are paid one
+cast at a time and never jointly. Both fixes change play: USER decision.
+
+**Not covered:** a rollback reaching an EARLIER decision's payments (this turn's previous main-phase
+commit). The census keeps or re-makes decisions within one plan's application only.
+
+## 10. The viewer's line check -- "can the search find this line" (2026-10-27)
+
+USER: *"a user using the viewer should be able to tell: 'Can the search actually find this line' while
+using it"*, and *"show when it is possible to roll back the previous taps"*. The human's commit pays in
+the human's order with the human's taps; the search scores a plan as the ENGINE pays it. So a line can play
+in the viewer and still be one the search never reaches.
+
+* `manaoracle::AuditLine(state, pre, plan, menu)` (ManaOracle.h): the engine's own apply of the plan;
+  if it drops something, a menu entry with the same actions that does not; if none, the oracle in this
+  order (stop at the first full payment) with the census (keep / failed / depth / `MTG_PAY_ROLLBACK`), then
+  the other orders. Runs whether or not `MTG_MANA_ORACLE` is on, quietly (no logger, no chooser), with a
+  400-apply cap per payment search so a validation stays interactive. A line the engine pays costs one
+  apply.
+* `WriteValidation` (src/main.cpp) emits `search_lines` (one entry per plan the verdict can commit; the
+  oracle proper is asked about the first three dropping ones) and `order_audit` (a line rejected because
+  its queued ORDER cannot pay: can any taps pay that order, the human's own taps left out?).
+* The viewer: an accepted line the search cannot pay gets a "⚠ search can't pay" history badge and a note
+  (what the engine's tapping drops, the taps that pay it payment by payment, how far a rollback has to
+  reach); the reject panel for an unpayable order shows the taps that would pay it, or that the queued
+  taps are the problem, or that no tapping pays it; the post-commit "not paid" message no longer claims
+  the board lacks the mana.
+* MANA ONLY: whether the search's own enumeration offers the line (the viewer's menu is the unpruned human
+  menu) is not asked.
+* Next: a "queue these taps" action. The tokens are already in `pays[].taps` (`tap=<name>#<num>:<face>[+aura]`);
+  placing each before the step it pays for needs the payment -> action index recorded per payment.

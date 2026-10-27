@@ -6751,6 +6751,25 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
 {
     Hook& h = *t_hook;
     if (h.ended) { return false; }
+    // ENGINE STEP (the rollback census): the engine's own payment, made exactly as an unhooked apply
+    // makes it -- the hook stood down and the nest unwound, so it is the normal outermost payment. A
+    // failure drops the cast and the apply goes on, as it does in search; the first one is recorded.
+    if (h.next < h.script.size() ? h.script[h.next].engine : h.all_engine)
+    {
+        const std::size_t step = h.next++;
+        bool ok;
+        {
+            EngineStepScope es(state, true);
+            Hook* const saved = t_hook;
+            t_hook = nullptr;
+            --t_pay_nest;
+            ok = TapForCostShared(state, cost_in, for_creature, available, honor_legacy_cco);
+            ++t_pay_nest;
+            t_hook = saved;
+        }
+        if (!ok && h.first_fail < 0) { h.first_fail = static_cast<int>(step); }
+        return ok;
+    }
     if (h.next >= h.script.size())
     {
         h.ended          = true;

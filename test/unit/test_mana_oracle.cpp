@@ -7,9 +7,12 @@
 // haste-tagged {C} kept floating, and an optimistic cover whose real payment fails.
 #include <doctest/doctest.h>
 
+#include "ai/DecisionProviders.h"
 #include "ai/ManaOracle.h"
+#include "ai/TurnSolver.h"
 #include "ai/ManaPayment.h"
 #include "cards/CardDatabase.h"
+#include "core/GameLogger.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 
@@ -166,4 +169,115 @@ TEST_CASE("mana oracle: a scripted Ancient Tomb tap deals its 2 damage, as the e
     REQUIRE(ApplyHumanPreTap(pre, t).empty());
     CHECK(eng.players[0].life == 18);
     CHECK(pre.players[0].life == eng.players[0].life);
+}
+
+namespace
+{
+// The EDF viewer game seed 3000, turn 4 board: Conservatory, Mariposa Military Base enchanted by Fertile
+// Ground, Shivan Gorge, with Training Grounds ({U}) and Eldrazi Displacer ({2}{W}) in hand.
+GameState Edf3000T4()
+{
+    static const EldraziFlickerProvider prov;
+    GameState s = Board({ "Conservatory", "Mariposa Military Base", "Shivan Gorge", "Fertile Ground" });
+    s.battlefield[3].aura_attached_to = 2;
+    s.deck_has_land_aura = true;
+    s.m_provider = &prov;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    int n = 100;
+    for (const char* nm : { "Training Grounds", "Eldrazi Displacer", "Cloud of Faeries", "Fertile Ground" })
+    {
+        Card c = CardDatabase::Instance().Lookup(nm)->card;
+        c.m_number = n++;
+        s.players[0].hand.push_back(c);
+    }
+    for (int i = 0; i < 20; ++i)
+    { Card c = CardDatabase::Instance().Lookup("Brushland")->card; c.m_number = 300 + i; s.players[0].library.push_back(c); }
+    return s;
+}
+Action CastAction(const GameState& s, const char* nm)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+    Action a;
+    a.kind           = Action::Kind::CastFromHand;
+    a.card_name      = d->card.m_name;
+    a.def            = d;
+    a.cost           = d->card.m_mana_cost;
+    a.is_noncreature = !d->card.IsCreature();
+    a.card_mv        = d->card.m_mana_cost.ManaValue();
+    for (int i = 0; i < static_cast<int>(s.players[0].hand.size()); ++i)
+    { if (s.players[0].hand[static_cast<std::size_t>(i)].m_name.str() == nm) { a.hand_index = i; break; } }
+    return a;
+}
+} // namespace
+
+// THE VIEWER'S "CAN THE SEARCH FIND THIS LINE" (manaoracle::AuditLine). On this board the engine's own
+// payment of "Training Grounds, then Eldrazi Displacer" drops the Displacer -- the backtracker over-tap
+// pinned below spends Conservatory's {W} on the {U} -- while Mariposa's bonus {U} alone pays the Grounds
+// and leaves Conservatory for the Displacer. So the search can never score this line, the board can pay
+// it, and the rollback has to reach back one decision: the Grounds' payment (#1) before the Displacer's
+// (#2), which is the one that failed. When the over-tap is fixed the engine pays it (engine_full) and this
+// case has to move to another lost line.
+TEST_CASE("viewer line check: the search's payment drops a cast the board pays for, and says how to pay it")
+{
+    EnsureOracleCards();
+    const GameState s = Edf3000T4();
+    TurnSolver::Plan plan;
+    plan.actions      = { CastAction(s, "Training Grounds"), CastAction(s, "Eldrazi Displacer") };
+    plan.land_decided = true;
+    const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
+    REQUIRE(a.audited);
+    CHECK_FALSE(a.engine_full);
+    CHECK(a.sibling == -1);
+    CHECK(a.dropped == "cast Eldrazi Displacer");
+    REQUIRE(a.payable);
+    CHECK(a.other_order.empty());
+    REQUIRE(a.pays.size() == 2);
+    CHECK(a.pays[0].what == "{U}");
+    CHECK(a.pays[1].what == "{2}{W}");
+    // The Grounds' {U} comes from Mariposa alone (its {C} face plus Fertile Ground's {U}); Conservatory is
+    // left for the Displacer.
+    REQUIRE(a.pays[0].taps.size() == 1);
+    CHECK(a.pays[0].taps[0].rfind("tap=Mariposa Military Base#2:", 0) == 0);
+    CHECK(a.rollback == "depth1");
+    CHECK(a.keep == 0);
+    CHECK(a.failed == 1);
+    CHECK_FALSE(a.later);
+    // ...and nothing it did leaked: the board it was asked about is untouched.
+    for (const Permanent& p : s.battlefield) { CHECK_FALSE(p.tapped); }
+}
+
+TEST_CASE("viewer line check: a line the engine's own payment casts in full is search-findable, and nothing more is asked")
+{
+    EnsureOracleCards();
+    const GameState s = Edf3000T4();
+    TurnSolver::Plan plan;
+    plan.actions      = { CastAction(s, "Eldrazi Displacer") };
+    plan.land_decided = true;
+    const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
+    REQUIRE(a.audited);
+    CHECK(a.engine_full);
+    CHECK(a.dropped.empty());
+    CHECK(a.pays.empty());
+    CHECK(a.rollback.empty());
+}
+
+// KNOWN ENGINE BUG (2026-10-27, found by the oracle's rollback census; EDF viewer game seed 3000 T4): a
+// {U} whose only blue is Fertile Ground's any-colour bonus on Mariposa Military Base fails the greedy, and
+// the backtracker's DFS -- which taps sources in battlefield order and accepts the FIRST covering tap set
+// -- taps Conservatory (G/W, useless for {U}) before reaching Mariposa, so a one-mana spell taps two
+// lands and floats {G}{C}. With Mariposa first in battlefield order it taps Mariposa alone. In the game,
+// Training Grounds then leaves Eldrazi Displacer's {2}{W} without its {W} (APPLY-DROP, rollback depth 1).
+// should_fail until the payer stops accepting a non-minimal tap set; then drop the decorator.
+TEST_CASE("payment: {U} off a Fertile Ground host taps the host alone, not a useless land before it"
+          * doctest::should_fail(true))
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Conservatory", "Mariposa Military Base", "Shivan Gorge", "Fertile Ground" });
+    s.battlefield[3].aura_attached_to = 2;   // Fertile Ground on Mariposa Military Base
+    s.deck_has_land_aura = true;
+    REQUIRE(TapForCostDirect(s, Cost(0, 0, 1), /*for_creature=*/false));
+    CHECK_FALSE(s.battlefield[0].tapped);    // Conservatory: its {G}/{W} cannot pay {U}
+    CHECK(s.battlefield[1].tapped);
+    CHECK(s.floating_mana.Total() == 1);     // Mariposa's own {C}
 }

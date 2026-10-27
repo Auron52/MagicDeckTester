@@ -1,7 +1,9 @@
 // MANA COMPLETENESS ORACLE -- MTG_MANA_ORACLE. See ManaOracle.h for the mechanism and
 // docs/design/mana-completeness-oracle.md for the invariant, the classes and what is not modelled yet.
 #include "ManaOracle.h"
+#include "EngineFlags.h"
 #include "EscStats.h"
+#include "HeuristicArm.h"
 #include "ManaPayment.h"
 #include "../cards/CardDatabase.h"
 #include "../core/EnvFlags.h"
@@ -61,6 +63,59 @@ std::string OracleCreatureTap(GameState& state, const TurnSolver::PreTap& t)
     return "no untapped '" + t.name + "' with that id";
 }
 
+bool NextIsEngineStep(const GameState& s)
+{
+    const Hook* h = t_hook;
+    if (h == nullptr || h->target != &s || h->ended) { return false; }
+    return h->next < h->script.size() ? h->script[h->next].engine : h->all_engine;
+}
+
+bool TakeEngineStep(const GameState& s, int count)
+{
+    if (count <= 0 || !NextIsEngineStep(s)) { return false; }
+    ++t_hook->next;
+    return true;
+}
+
+EngineStepScope::EngineStepScope(GameState& s, bool active)
+{
+    if (!active || t_hook == nullptr || t_hook->target != &s) { return; }
+    h   = t_hook;
+    st  = &s;
+    ta0 = g_tap_ahead_calls;
+    for (const Permanent& p : s.battlefield) { if (!p.tapped) { untapped.push_back(p.card.m_number); } }
+}
+
+EngineStepScope::~EngineStepScope()
+{
+    if (h == nullptr) { return; }
+    h->engine_tapaheads += g_tap_ahead_calls - ta0;
+    for (const Permanent& p : st->battlefield)
+    {
+        if (p.tapped && std::find(untapped.begin(), untapped.end(), p.card.m_number) != untapped.end())
+        { h->tapped_by_script.push_back(p.card.m_number); }
+    }
+}
+
+EngineStepSpan::EngineStepSpan(GameState& s, bool active)
+{
+    if (!active || !NextIsEngineStep(s)) { return; }
+    h    = t_hook;
+    step = h->next++;
+    es.emplace(s, true);
+    t_hook = nullptr;
+}
+
+void EngineStepSpan::End(bool ok, bool made)
+{
+    if (h == nullptr) { return; }
+    t_hook = h;
+    es.reset();
+    if (!made) { h->next = step; }
+    else if (!ok && h->first_fail < 0) { h->first_fail = static_cast<int>(step); }
+    h = nullptr;
+}
+
 void ScriptedTapAhead(GameState& state, int count, bool lands_only)
 {
     Hook& h = *t_hook;
@@ -93,10 +148,11 @@ const char kLetters[] = "WUBRGC";
 
 // Per-plan apply ceiling (each node of the payment search is one full ApplyPlan from the decision
 // board). A plan that hits it is reported CAPPED, never silently treated as complete.
+thread_local int t_node_cap = 0;   // > 0: AuditLine's own ceiling (a viewer validation stays interactive)
 int NodeCap()
 {
     static const int v = std::max(1, EnvInt("MTG_MANA_ORACLE_NODES", 2000));
-    return v;
+    return t_node_cap > 0 ? t_node_cap : v;
 }
 // Level-3 trace filter: 0 = every turn, else only this turn number.
 int TraceTurn()
@@ -144,6 +200,23 @@ std::atomic<long long> g_cls[C_N];
 std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies{0}, g_frontiers{0},
                        g_pruned{0}, g_options{0}, g_engine_drop{0}, g_ms{0},
                        g_gate_rejects{0}, g_gate_rejects_checked{0}, g_gate_rejects_skipped{0};
+// ROLLBACK CENSUS (USER 2026-10-27: "how many lines are fully inaccessible and which are accessible only
+// with rollbacks to the previous line"). One bucket per LOST line -- a plan the oracle realises in full that
+// the search cannot reach. DEPTH k = how many of the engine's mana decisions before the one that failed
+// have to be re-made: 0 = the failing payment itself had a way (a payer miss), 1 = the payment before it
+// (keep blue up instead of white), ... The rest name lines no payment rollback in this order reaches.
+enum Rb
+{
+    RB_D0, RB_D1, RB_D2, RB_D3P, RB_INCONSISTENT, RB_CAPPED, RB_UNFAITHFUL, RB_NO_FAIL, RB_ORDER, RB_OFF_MENU, RB_N
+};
+const char* const kRbName[RB_N] = {
+    "depth0", "depth1", "depth2", "depth3+", "inconsistent", "capped", "unfaithful", "no-failed-payment",
+    "reorder", "off-menu"
+};
+std::atomic<long long> g_rb[RB_N];
+// ...whether the action it lost was declared IN THE PLAN before the payment that must be re-made (so a
+// smarter first payment could have known), and whether MTG_PAY_ROLLBACK (forced on) recovers the line.
+std::atomic<long long> g_rb_need_plan{0}, g_rb_need_later{0}, g_rb_rescue_tried{0}, g_rb_rescued{0};
 std::mutex             g_print_mu;
 std::mutex             g_reason_mu;
 std::map<std::string, long long> g_unmodeled_reasons;
@@ -173,6 +246,14 @@ struct Reporter
         std::fprintf(stderr, "=== MANA ORACLE classes:%s ===\n", by.empty() ? " (none)" : by.c_str());
         for (const auto& kv : g_unmodeled_reasons)
         { std::fprintf(stderr, "=== MANA ORACLE unmodeled: %lld x %s ===\n", kv.second, kv.first.c_str()); }
+        long long lost = 0;
+        std::string rb;
+        for (int k = 0; k < RB_N; ++k)
+        { lost += g_rb[k].load(); rb += std::string(" ") + kRbName[k] + "=" + std::to_string(g_rb[k].load()); }
+        std::fprintf(stderr, "=== MANA ORACLE rollback census: lost=%lld%s need_in_plan=%lld need_later=%lld "
+                             "pay_rollback_rescued=%lld/%lld ===\n",
+                     lost, rb.c_str(), g_rb_need_plan.load(), g_rb_need_later.load(), g_rb_rescued.load(),
+                     g_rb_rescue_tried.load());
     }
 };
 Reporter g_reporter;   // defined after everything it reads, so it is destroyed first
@@ -254,6 +335,7 @@ std::string PlanText(const TurnSolver::Plan& p)
 
 std::string TapsText(const PayOption& o)
 {
+    if (o.engine) { return "(the engine's own)"; }
     if (o.fail) { return "(no payment exists)"; }
     std::string s;
     for (std::size_t i = 0; i < o.taps.size(); ++i)
@@ -1057,6 +1139,7 @@ struct Outcome
     std::string                line;        // LineKey
     std::vector<PayOption>     script;
     std::string                unscripted;  // a mana source the ENGINE tapped outside any payment
+    int                        first_fail = -1;  // the first ENGINE step that failed (the census replay)
     // No drop reported: the engine-comparable sense (an optional payment with no option fails the same
     // way in the engine's own realisation, so such an outcome is still the engine's line).
     bool Full() const { return cast_drops.empty() && act_drops.empty(); }
@@ -1100,10 +1183,16 @@ struct FrontierRec
 // resources INCLUDING floating mana -> dropped; under goldfish monotonicity a board with every
 // resource another has reaches everything that one reaches), and the survivors' minimal payments
 // make layer k+1. `stop_at_full`: return at the first outcome that realises every action.
-Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pre, bool stop_at_full)
+// The ROLLBACK CENSUS's two modes: `prefix` -- every script starts with these steps (k ENGINE steps: keep
+// the engine's first k mana decisions, enumerate the rest); `all_engine` -- one apply whose every step is
+// the engine's, i.e. the engine's own line replayed through the hook.
+// `want` (with stop_at_full): stop only at a full outcome that used at least these hand cards.
+Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pre, bool stop_at_full,
+                    const std::vector<PayOption>& prefix = {}, bool all_engine = false,
+                    const std::multiset<std::string>* want = nullptr)
 {
     Realization r;
-    std::vector<std::vector<PayOption>> layer(1);
+    std::vector<std::vector<PayOption>> layer(1, prefix);
     int nodes = 0;
     // Battlefield permanents the plan itself uses (a {T}-cost activation, a sacrifice): an engine tap
     // of one of THOSE is the action, not an unscripted payment.
@@ -1130,6 +1219,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             h.target  = &copy;
             h.script  = script;
             h.f_state = &fr.st;
+            h.all_engine = all_engine;
             std::vector<std::string> cast_drops, act_drops;
             std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
             std::vector<std::string>* saved_act  = g_act_drop_sink;
@@ -1140,7 +1230,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             t_hook = &h;
             TurnSolver::ApplyPlan(copy, plan, pre);
             t_hook = nullptr;
-            const bool engine_tapahead = g_tap_ahead_calls != ta0;
+            // (A tap-ahead inside an ENGINE step is the engine's step, not a tap outside the script.)
+            const bool engine_tapahead = (g_tap_ahead_calls - ta0) != h.engine_tapaheads;
             const bool engine_untap    = g_untap_choice_calls != uc0;
             g_play_dropped_cast_sink = saved_cast;
             g_act_drop_sink          = saved_act;
@@ -1166,6 +1257,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             o.cast_drops = std::move(cast_drops);
             o.act_drops  = std::move(act_drops);
             o.script     = script;
+            o.first_fail = h.first_fail;
             o.left       = LeftHand(root, copy);
             o.line       = LineKey(root, copy);
             // Did the ENGINE tap a mana source on its own (a tap-ahead, an untap effect's choice)? The
@@ -1189,7 +1281,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 }
             }
             o.st = std::move(copy);
-            const bool full = o.Clean();
+            const bool full = o.Clean() && (want == nullptr || Includes(o.left, *want));
             r.outcomes.push_back(std::move(o));
             if (stop_at_full && full) { return r; }
         }
@@ -1247,6 +1339,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             for (PayOption& o : opts)
             {
                 std::vector<PayOption> s = f.script;
+                o.what = f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString();
                 s.push_back(std::move(o));
                 next.push_back(std::move(s));
             }
@@ -1454,6 +1547,99 @@ std::multiset<std::string> PlanHandCards(const TurnSolver::Plan& p)
     return m;
 }
 
+// ---- the ROLLBACK CENSUS for one lost line (an APPLY-DROP) ------------------------------------------
+// The engine's line is replayed through the hook with every mana decision the ENGINE's own (an ENGINE
+// step: ManaOracle.h) -- it must reproduce the engine's line exactly, or the census has no verdict -- and
+// the first engine payment that failed is step f. Then for k = f, f-1, ..., 0: keep the engine's first k
+// decisions and let the oracle re-make the rest. The largest k that pays for every action gives the
+// DEPTH f - k: how far back a rollback has to reach. RollbackCore measures; RollbackCensus counts it and
+// returns the verdict for the flag's detail; AuditLine hands it to the viewer.
+struct Census
+{
+    Rb                     bucket = RB_INCONSISTENT;
+    int                    keep = -1;      // the largest k that pays (a depth bucket)
+    int                    failed = -1;    // f
+    std::vector<PayOption> script;         // ...and how it pays (k engine steps, then the oracle's)
+    std::string            detail;         // why, for every bucket that is not a depth
+    bool                   later = false;  // a lost cast the plan did not declare
+    bool                   rescued = false;// MTG_PAY_ROLLBACK (forced on) recovers it
+};
+Census RollbackCore(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er,
+                    const std::multiset<std::string>& e_want)
+{
+    Census c;
+    // Was every lost action declared in the plan (so it was known before any of the plan's payments)?
+    // Anything else -- an activation or cast the plan does not name -- came later.
+    std::multiset<std::string> declared;
+    for (const Action& a : plan.actions) { declared.insert(a.kind == Action::Kind::CastFromHand ? a.card_name.str() : ActionKey(a)); }
+    for (const std::string& x : er.cast) { if (declared.count(x) == 0) { c.later = true; } }
+    // MTG_PAY_ROLLBACK, forced on for one engine apply: does the shipped one-swap rescue recover it?
+    // (Its ledger starts at this decision: a rescue reaching an earlier decision's payment is not seen.)
+    const std::int8_t saved_arm = heurarm::t_arm[heurarm::PAY_ROLLBACK];
+    heurarm::t_arm[heurarm::PAY_ROLLBACK] = 1;
+    const EngineReal rb = EngineApply(root, pre, plan);
+    heurarm::t_arm[heurarm::PAY_ROLLBACK] = saved_arm;
+    c.rescued = rb.Full() && Includes(LeftHand(root, rb.st), e_want);
+    const Realization all = Realize(root, plan, pre, /*stop_at_full=*/false, {}, /*all_engine=*/true);
+    auto sorted = [](std::vector<std::string> v) { std::sort(v.begin(), v.end()); return v; };
+    if (all.outcomes.size() != 1 || all.outcomes[0].st.battlefield.size() != er.st.battlefield.size()
+        || CoreKey(all.outcomes[0].st, /*canonical=*/false) != CoreKey(er.st, /*canonical=*/false)
+        || Resources(all.outcomes[0].st, true) != Resources(er.st, true)
+        || sorted(all.outcomes[0].cast_drops) != sorted(er.cast) || sorted(all.outcomes[0].act_drops) != sorted(er.act))
+    {
+        c.bucket = RB_UNFAITHFUL;
+        c.detail = all.outcomes.size() == 1
+            ? "the hooked replay of the engine's own payments ended elsewhere (" + DiffText(er.st, all.outcomes[0].st) + ")"
+            : "the hooked replay of the engine's own payments did not finish (" + std::to_string(all.outcomes.size())
+              + " outcomes" + (all.unmodeled.empty() ? "" : ", " + all.unmodeled.front()) + ")";
+        return c;
+    }
+    c.failed = all.outcomes[0].first_fail;
+    if (c.failed < 0)
+    {
+        c.bucket = RB_NO_FAIL;
+        c.detail = "no engine payment failed -- the action dropped for another reason";
+        return c;
+    }
+    bool capped = false;
+    for (int k = c.failed; k >= 0; --k)
+    {
+        std::vector<PayOption> prefix(static_cast<std::size_t>(k));
+        for (PayOption& o : prefix) { o.engine = true; }
+        const Realization rk = Realize(root, plan, pre, /*stop_at_full=*/true, prefix, false, &e_want);
+        capped = capped || rk.capped;
+        for (const Outcome& o : rk.outcomes)
+        {
+            if (!o.Clean() || !Includes(o.left, e_want) || !o.unscripted.empty()) { continue; }
+            const int d = c.failed - k;
+            c.bucket = d == 0 ? RB_D0 : d == 1 ? RB_D1 : d == 2 ? RB_D2 : RB_D3P;
+            c.keep   = k;
+            c.script = o.script;
+            return c;
+        }
+    }
+    c.bucket = capped ? RB_CAPPED : RB_INCONSISTENT;
+    c.detail = capped ? "the payment search hit its cap before a prefix was found"
+                      : "no prefix of the engine's decisions reaches it, not even none -- the census disagrees with the audit";
+    return c;
+}
+std::string RollbackCensus(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er,
+                           const std::multiset<std::string>& e_want)
+{
+    const Census c = RollbackCore(root, pre, plan, er, e_want);
+    (c.later ? g_rb_need_later : g_rb_need_plan).fetch_add(1, std::memory_order_relaxed);
+    g_rb_rescue_tried.fetch_add(1, std::memory_order_relaxed);
+    if (c.rescued) { g_rb_rescued.fetch_add(1, std::memory_order_relaxed); }
+    g_rb[c.bucket].fetch_add(1, std::memory_order_relaxed);
+    const std::string t = c.keep < 0 ? c.detail
+        : "keep the engine's first " + std::to_string(c.keep) + " mana decision" + (c.keep == 1 ? "" : "s")
+          + ", re-make the rest (decision #" + std::to_string(c.failed + 1) + " is the payment that failed) "
+          + "and every action pays: " + ScriptText(c.script);
+    return std::string(" || ROLLBACK ") + kRbName[c.bucket] + ": " + t
+         + (c.later ? "; a lost action was not declared in the plan" : "")
+         + (c.rescued ? "; MTG_PAY_ROLLBACK (forced on) recovers it" : "; MTG_PAY_ROLLBACK (forced on) does not recover it");
+}
+
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
                const std::vector<const EngineReal*>& full_sibs)
 {
@@ -1543,7 +1729,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 why += ", reaching a board the menu's other order of these actions does not ("
                      + DiffText(full_sibs.front()->st, show->st) + ")";
             }
-            Emit(C_APPLY_DROP, root, pre, plan, why);
+            Emit(C_APPLY_DROP, root, pre, plan, why + RollbackCensus(root, pre, plan, er_in, e_want));
             return;
         }
         if (!sib.empty())
@@ -1556,7 +1742,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         bool all_tried = true, other_partial = false;
         for (const TurnSolver::Plan& alt : OtherOrders(plan, /*with_acts=*/true, &all_tried))
         {
-            Realization ra = Realize(root, alt, pre, /*stop_at_full=*/true);
+            Realization ra = Realize(root, alt, pre, /*stop_at_full=*/true, {}, false, &e_want);
             if (ra.capped || !ra.unmodeled.empty()) { other_partial = true; }
             for (const Outcome& o : ra.outcomes)
             {
@@ -1569,6 +1755,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                     order += (order.empty() ? "" : " > ")
                            + (a.kind == Action::Kind::CastFromHand ? a.card_name.str() : ActionKey(a));
                 }
+                g_rb[RB_ORDER].fetch_add(1, std::memory_order_relaxed);
                 Emit(C_APPLY_DROP_ORDER, root, pre, plan,
                      dropped + "; the order " + order + " pays every action with " + ScriptText(o.script));
                 return;
@@ -1784,6 +1971,7 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
                 for (const Action& a : t.actions)
                 { if (a.kind == Action::Kind::CastFromHand) { order += (order.empty() ? "" : " > ") + a.card_name.str(); } }
             }
+            g_rb[RB_OFF_MENU].fetch_add(1, std::memory_order_relaxed);
             Emit(C_ENUM_GAP, state, is_pre_combat, p,
                  "a mana gate kept this plan off the menu, but " + (order.empty() ? std::string("it") : "casting " + order)
                  + " pays every action with " + ScriptText(hit->script)
@@ -1795,5 +1983,125 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     }
     g_ms.fetch_add(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count(),
                    std::memory_order_relaxed);
+}
+
+// ---- the viewer's line check (ManaOracle.h) ---------------------------------------------------------
+// The same questions AuditPlan asks of an APPLY-DROP, for one plan, answered as data: the engine's own
+// apply first (the common case, one apply, and the only cost a line the search pays for ever pays), then
+// a same-actions menu entry, then the oracle in this order with the rollback census, then the other orders.
+LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& plan,
+                    const std::vector<TurnSolver::Plan>* menu, int node_cap, bool deep)
+{
+    LineAudit a;
+    if (t_hook != nullptr) { a.partial = "inside an oracle apply"; return a; }
+    for (const Action& x : plan.actions)
+    {
+        if (x.kind == Action::Kind::ComboRoute)
+        { a.partial = "a combo-route macro (the oracle does not drive its payments)"; return a; }
+    }
+    // Quiet and chooser-free, like the commit preview's trial applies (PrepareHumanCommit): no logger, no
+    // viewer sink, no human chooser asked anything, not the real game.
+    ComboOffApplyPause co_quiet;
+    RevealLogPause     quiet;
+    struct CapScope
+    {
+        int saved;
+        explicit CapScope(int v) : saved(t_node_cap) { t_node_cap = std::max(1, v); }
+        ~CapScope() { t_node_cap = saved; }
+    } cap_scope(node_cap);
+    a.audited = true;
+    const EngineReal er = EngineApply(state, pre, plan);
+    a.dropped = DropText(er.cast, er.act);
+    if (er.Full()) { a.engine_full = true; return a; }
+    if (menu != nullptr)
+    {
+        const std::string key = SiblingKey(plan);
+        for (std::size_t i = 0; i < menu->size(); ++i)
+        {
+            const TurnSolver::Plan& m = (*menu)[i];
+            if (&m == &plan || SiblingKey(m) != key) { continue; }
+            if (EngineApply(state, pre, m).Full()) { a.sibling = static_cast<int>(i); return a; }
+        }
+    }
+    if (!deep) { a.partial = "not checked (the oracle is asked about the first few dropping lines only)"; return a; }
+    // What the engine's line meant to use from hand: what it did use, plus the casts it dropped.
+    std::multiset<std::string> want = LeftHand(state, er.st);
+    for (const std::string& c : er.cast) { want.insert(c); }
+    auto to_pays = [](const std::vector<PayOption>& script)
+    {
+        std::vector<LinePayment> v;
+        for (const PayOption& o : script)
+        {
+            LinePayment p;
+            p.what   = o.what;
+            p.engine = o.engine;
+            p.fail   = o.fail;
+            for (std::size_t i = 0; i < o.taps.size(); ++i)
+            {
+                const TurnSolver::PreTap& t = o.taps[i];
+                std::string face;
+                if (!t.combo.empty()) { for (int c : t.combo) { face.push_back(kLetters[c]); } }
+                else if (t.color >= 0 && t.color < 6) { face.push_back(kLetters[t.color]); }
+                std::string tok = "tap=" + t.name + "#" + std::to_string(t.num) + ":" + face;
+                std::string txt = t.name + " for " + face;
+                for (int ac : t.aura_colors) { tok += "+"; tok.push_back(kLetters[ac]); txt += "+"; txt.push_back(kLetters[ac]); }
+                if (i < o.creature_route.size() && o.creature_route[i]) { txt += " (creature-only mana)"; }
+                p.taps.push_back(std::move(tok));
+                p.text += (p.text.empty() ? "" : ", ") + txt;
+            }
+            if (o.stash.Total() > 0) { p.keep_floating = PoolText(o.stash, o.stash_haste); }
+            v.push_back(std::move(p));
+        }
+        return v;
+    };
+    // A payment the oracle can VOUCH for: every action paid, the cards the line meant to use used, and no
+    // mana choice the engine made on its own along the way.
+    auto hit_of = [&](const Realization& r) -> const Outcome*
+    {
+        if (a.partial.empty() && r.capped)
+        { a.partial = "the payment search hit its cap (" + std::to_string(NodeCap()) + " applies)"; }
+        if (a.partial.empty() && !r.unmodeled.empty()) { a.partial = r.unmodeled.front(); }
+        for (const Outcome& o : r.outcomes)
+        {
+            if (!o.unscripted.empty())
+            {
+                if (a.partial.empty()) { a.partial = "a mana choice the oracle does not drive: " + o.unscripted; }
+                continue;
+            }
+            if (o.Clean() && Includes(o.left, want)) { return &o; }
+        }
+        return nullptr;
+    };
+    const Realization r = Realize(state, plan, pre, /*stop_at_full=*/true, {}, false, &want);
+    if (const Outcome* hit = hit_of(r))
+    {
+        a.payable = true;
+        a.partial.clear();
+        a.pays    = to_pays(hit->script);
+        const Census c = RollbackCore(state, pre, plan, er, want);
+        a.rollback     = kRbName[c.bucket];
+        a.keep         = c.keep;
+        a.failed       = c.failed;
+        a.later        = c.later;
+        a.pay_rollback = c.rescued;
+        return a;
+    }
+    for (const TurnSolver::Plan& alt : OtherOrders(plan, /*with_acts=*/true))
+    {
+        const Realization ra = Realize(state, alt, pre, /*stop_at_full=*/true, {}, false, &want);
+        const Outcome* hit = hit_of(ra);
+        if (hit == nullptr) { continue; }
+        a.payable = true;
+        a.partial.clear();
+        a.pays    = to_pays(hit->script);
+        for (const Action& x : alt.actions)
+        {
+            if (x.kind == Action::Kind::PlayLand) { continue; }
+            a.other_order += (a.other_order.empty() ? "" : " > ")
+                           + (x.kind == Action::Kind::CastFromHand ? x.card_name.str() : ActionKey(x));
+        }
+        return a;
+    }
+    return a;
 }
 } // namespace manaoracle

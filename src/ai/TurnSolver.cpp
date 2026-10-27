@@ -51872,7 +51872,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (!s_enabled) { return false; }
     // MANA ORACLE (ManaOracle.h): on the oracle's own copy every payment comes from its script, one per
     // cast -- a joint solve here would tap through the backtracker, outside the script. Null elsewhere.
-    if (manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) { return false; }
+    // An ENGINE step (the rollback census) makes the joint prepay as an unhooked apply does: the hook
+    // stands down for the span, and a declined prepay decided nothing, so it hands its step back.
+    if (manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target)
+    {
+        if (!manaoracle::NextIsEngineStep(state)) { return false; }
+        manaoracle::EngineStepSpan span(state, true);
+        const bool ok = BatchPrepayMainCasts(state, acts, mint_prefix, hand_demand);
+        span.End(true, /*made=*/ok);
+        return ok;
+    }
     // Attribution (fivecolour-payment-query-fold.md step 0): count every invocation, and every one
     // that DECLINES -- a decline is what routes the turn's casts to the per-cast fallback, i.e. what
     // turns one folded question into one question per cast.
@@ -56489,18 +56498,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // MANA ORACLE (ManaOracle.h): on the oracle's own copy the tap-ahead is the oracle's choice --
             // every set of sources to tap ahead is a scripted step -- not this heuristic's. Null elsewhere.
             const bool oracle_owns = manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target;
+            // (An oracle ENGINE step -- the rollback census -- runs the heuristic as an unhooked apply does.)
             if (def.params.untap_x_mana_sources)
             {
-                if (oracle_owns) { manaoracle::ScriptedTapAhead(state, chosen_x, /*lands_only=*/false); }
-                else             { RitualTapAheadIntoFloat(state, chosen_x); }
+                if (oracle_owns && !manaoracle::TakeEngineStep(state, chosen_x))
+                { manaoracle::ScriptedTapAhead(state, chosen_x, /*lands_only=*/false); }
+                else
+                { manaoracle::EngineStepScope _es(state, oracle_owns); RitualTapAheadIntoFloat(state, chosen_x); }
             }
             if (def.params.etb_untap_lands > 0)
             {
-                if (oracle_owns)
+                if (oracle_owns && !manaoracle::TakeEngineStep(state, def.params.etb_untap_lands))
                 { manaoracle::ScriptedTapAhead(state, def.params.etb_untap_lands, /*lands_only=*/true); }
                 else
-                { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
-                                            ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost); }
+                {
+                    manaoracle::EngineStepScope _es(state, oracle_owns);
+                    EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
+                                              ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost);
+                }
             }
             // ...and a sacrifice-a-LAND cast's predicted victim (SacLandPayVictim; executor twin in
             // CastSpellFromHand) -- the land is leaving, so its mana is free.
@@ -56532,9 +56547,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // casts the Aura exactly as before (a failed TapForCostDirect restores atomically).
             int reserved_host = -1;
             // (Not on the MANA ORACLE's copy: the hold is a heuristic, and the oracle tries every payment,
-            // the host's included -- see ManaOracle.h.)
+            // the host's included -- see ManaOracle.h. An oracle ENGINE step makes it, as an unhooked
+            // apply does: the held attempt and its retry are ONE step, so the span owns both.)
+            manaoracle::EngineStepSpan _esp(state, oracle_owns);
             if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
-                && enchant_target > 0 && !oracle_owns)
+                && enchant_target > 0 && (!oracle_owns || _esp.h != nullptr))
             {
                 for (Permanent& lp : state.battlefield)
                 {
@@ -56566,6 +56583,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 SetPermTapped(state, state.active_player_index, reserved_host, false);
                 if (!paid_ok) { paid_ok = TapForCostDirect(state, pay_bill, is_creature); }
             }
+            _esp.End(paid_ok);
             if (!paid_ok && cast_haste_from_mana) { UndoHasteFloatTake(state); cast_haste_from_mana = false; }
             if (paid_ok)
             {
