@@ -493,3 +493,16 @@ lifegain-then-Alchemist lines are the largest class) and the CONTINUATION classe
   Fertile Ground host taps the host alone" is a plain test; the viewer line check's EDF seed 3000 T4 case now
   runs with the give-back off, and a new case shows the search's own payment casts that line.
 
+**What the payer fixes bought on the EDF census** (the 144 games, `build/scratch/manaoracle/edfcensus4`, on
+55151e2e4 -- the painless {C}, the Tomb, the give-back and the item 11-15 oracle -- against the same oracle on
+the old payer): APPLY-DROP 757 -> 697 (rollback depth 1: 569 -> 507), games with a lost line 141 -> 133 (seed
+3779 aside), DOMINATED-LIFE 5,549 -> 4,611. The rest of the lost lines are mostly the whole-turn prepay
+declining whenever its tap set makes any-colour mana (`BatchPrepayMainCasts`, "wild -> pip pinning
+ambiguous": every land-Aura bonus does), which hands the line to the per-cast payer.
+
+**Owed: EDF seed 3003 T5** (9 ORACLE-GAPs on the new payer, one board: Aether Hub #3 under Wild Growth,
+Aether Hub #4, Brushland, Adarkar Wastes; plans casting Trace of Abundance then Essence Depleter / a blink).
+Every full oracle realisation taps Adarkar Wastes as well; the engine pays with the three others. The first
+payment's options never include Brushland {W} + Aether Hub #4's energy {G} (likely the engine's), and with
+Trace on Hub #3 the Depleter's {2}{B} would then come off Hub #3 alone. Not yet explained.
+
