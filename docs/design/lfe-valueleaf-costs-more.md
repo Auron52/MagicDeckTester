@@ -103,6 +103,30 @@ check below replaces it.
 | live b20 (run twice) | 4.387 | -- | 16.07M | 286.3k / 299.1k (mean 292.7k) |
 | nlesc b11 | 4.388 | +0.001 | 1.009x | 0.984x |
 | staged b16 | 4.357 | -0.030 | 1.396x | 1.535x |
+| staged b20 (2026-10-27, live re-run alongside: 299.9k) | 4.353 | -0.034 | 1.528x | 1.754x (vs the 3-run live mean 295.1k) |
+
+Held out, b16 -> b20 buys only -0.004 more for +0.13x units and +0.23x wall. In units staged b20 still
+beats live's curve (live interpolated to 1.53x units is about -0.023). In wall it is about level with
+live's curve (live b40 is -0.031 at 1.62x), so b16 is the better staged point.
+
+### Where staged's extra cost at b20 goes (seed 600000, 1000 games)
+
+| | live | staged |
+|---|---|---|
+| total units | 16.26M | 24.34M |
+| units after the budget ran out | 1.19M (7%) | 7.27M (30%) |
+| units within the budget | 15.07M | 17.07M (1.13x) |
+
+About 75% of the gap is overrun. The relaxed start gate lets the value ladder start a deeper pass whose
+estimated cost is up to ~8.8x what remains; the rollout ladder does not start a pass that does not fit.
+Staged also runs a heuristic-rollout escalation over the leaf line (3.9M units, 16%; the rollout line was
+taken in 485 decisions), so it is mostly, not wholly, off heuristic rollouts. Per unit it is ~1.1x wall
+(model evaluation). The overrun is also where the gain comes from (alpha sweep at b20, one seed, about
++/-0.008): alpha 1 +0.004 @ 1.24x units, alpha 2 -0.015 @ 1.32x, alpha 4 -0.030 @ 1.42x, alpha 8
+(current) -0.043 @ 1.50x. Tightening the gate leaves the escalation overhead in place, which is why even
+staged b8 costs 1.12x. **Option kept for the USER: staged b20 with alpha 4** lands near staged b16 without
+lowering the nominal budget. It needs a per-deck alpha (today alpha is global; only a batch job can override
+it) and an 8-seed curve plus a held-out wall check first.
 
 ### Reading
 
