@@ -8468,14 +8468,17 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     else
     {
         if (!sd->params.cycling_cost.has_value()) { return false; }
-        // P1/P2 -- affordability probe and the real payment, both on the Fluctuator-reduced cost.
+        // P1/P2 -- affordability probe and the real payment, both on the Fluctuator-reduced cost,
+        // plus the LIFE half (Street Wraith; CyclingLifePayable / PayCyclingLife, SpellEffects.h).
         const ManaCost cyc_cost = EffectiveCyclingCostFor(state, *sd);
+        if (!CyclingLifePayable(state, state.active_player_index, *sd)) { return false; }
         ManaPool avail = AvailableManaPool(state);
         if (!avail.CanPay(cyc_cost)) { return false; }
         std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&source](const Card& c) { return c.m_name == source; });
         if (it == ap.hand.end()) { return false; }
         if (!TapForCost(state, cyc_cost, avail, false)) { return false; }
+        PayCyclingLife(state, state.active_player_index, *sd);
         if (m_logger) { m_logger->LogDiscard(it->m_number, it->m_name); }
         {   // THE SHARED DISCARD HOOK (Vampires A1): cycling's "discard this" is a COST, so a madness
             // trigger would resolve before the draw (the pool's cycling cards are lands: uniformity).

@@ -764,6 +764,17 @@ struct CardParams
     // AI uses only when the card is surplus (see AIEngine cycling heuristic).
     std::optional<ManaCost> cycling_cost;
 
+    // Life-cost cycling (Street Wraith: "Cycling--Pay 2 life."): the LIFE part of the cycling cost,
+    // paid in addition to `cycling_cost`'s mana part (Street Wraith carries `cycling_cost: ""`, an
+    // all-zero ManaCost, so the mana part is free). The loader REQUIRES cycling_cost alongside it.
+    // Probed and paid at EVERY cycle site through CyclingLifePayable / PayCyclingLife (SpellEffects.h),
+    // in lockstep with EffectiveCyclingCost's mana part. Payable only while life > N: CR 119.4 lets a
+    // player pay life equal to their total, but paying to 0 loses at the next state-based check (CR
+    // 704.5a), which happens before the cycling draw resolves, so a pay-to-0 cycle can never gain
+    // anything -- a sound dominance prune, applied identically in human play. Fluctuator-style
+    // reducers do not touch it (they reduce MANA, CR 601.2f). 0 = no life cost.
+    int cycling_life_cost = 0;
+
     // Sacrifice-to-draw activated ability (e.g. Fiery Islet: {1}, {T}, Sacrifice: draw
     // a card). Cost is this mana plus tapping and sacrificing the source.
     std::optional<ManaCost> sacrifice_draw_cost;
@@ -3977,7 +3988,8 @@ struct CardParams
     // Applied by EffectiveCyclingCost at ALL SIX sites a cycling cost is read (three payments, two
     // affordability filters, one human-play offer probe) -- the affordability sites MUST move in
     // lockstep with the payment sites, or a loop filters in a cycle it then cannot buy and silently
-    // breaks. UNLIKE Training Grounds the floor is ZERO, not one mana: Fluctuator's wording carries
+    // breaks. (Street Wraith's LIFE half, cycling_life_cost, rides the same sites: CyclingPayable /
+    // CyclingLifePayable / PayCyclingLife.) UNLIKE Training Grounds the floor is ZERO, not one mana: Fluctuator's wording carries
     // no "can't reduce below one mana" clause, so a {2} cycler goes to {0} -- which is the whole
     // point of this deck. Generic half only (CR 601.2f); a coloured cycling pip survives.
     int reduces_cycling_activation = 0;
@@ -3988,6 +4000,25 @@ struct CardParams
     // "another" is structurally always satisfied: the watcher is on the battlefield and cycling
     // happens from HAND, so a card can never cycle-trigger itself. 0 = not a cycle watcher.
     int cycle_trigger_damage_each_opponent = 0;
+
+    // ---- Unpredictable Cyclone deck (onboarding 2026-10-26) -- PARSED, NOT YET WIRED ----------------
+    // Added in phase 1 of the onboarding so CycloneProvider's routing signature (DetectDecisionProvider's
+    // `cyclone` flag) can key on them before the cards exist. NO EFFECT READS THEM YET: phase 2 wires
+    // the extra turn, phase 3 the Cyclone replacement and the Curator watcher. No card carries them
+    // until those phases add the entries, so every deck is byte-identical.
+    //
+    // Unpredictable Cyclone: "If a cycling ability of another nonland card would cause you to draw a
+    // card, instead exile cards from the top of your library until you exile a card that shares a card
+    // type with the cycled card. You may cast that card without paying its mana cost. Then put the
+    // exiled cards that weren't cast this way on the bottom of your library in a random order."
+    // A REPLACEMENT of the cycling draw (phase 3).
+    bool cycle_draw_exile_shared_type_freecast = false;
+    // Emrakul, the Aeons Torn: "When you cast this spell, take an extra turn after this one." The
+    // number of extra turns the CAST trigger grants (phase 2). 0 = none.
+    int cast_trigger_extra_turns = 0;
+    // Curator of Mysteries: "Whenever you cycle or discard another card, scry N." A battlefield watcher
+    // on every discard from hand, cycling included (phase 3). 0 = not a watcher.
+    int cycle_or_discard_trigger_scry = 0;
 
     // Hollow One: "This spell costs {2} less to cast for each card you've cycled or discarded this
     // turn." A cost reduction scaled by a PER-TURN COUNTER (Player::cards_cycled_or_discarded_this_

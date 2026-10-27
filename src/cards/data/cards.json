@@ -2054,7 +2054,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card. [Modelled as cast_reorder 3 then draw 1 (NOT scry -- Ponder cannot bottom cards). It is all-or-nothing: keep all three on top in best order (draw the best; the other two stay on top and you are stuck drawing them next), OR shuffle them all away and draw fresh. ReorderTopOrShuffle keeps when at least one of the top three is wanted, else shuffles (deterministic, lockstep). This removes the over-powered selective-bottom the old Scry 3 model granted.]",
+   "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card. [Modelled as cast_reorder 3 then draw 1 (NOT scry -- Ponder cannot bottom cards): keep all three on top in a chosen order and draw the first, OR shuffle the library and draw fresh (ReorderTopOrShuffle, shared by the executor and the rollout; the shuffle is the deterministic ShuffleAfterSearch, so the search knows the post-shuffle library -- the engine-wide known-library simplification). The DISPOSITION is SEARCHED: the Ponder order axis (TurnSolver PonderOrderAxis, under MTG_PONDER_AXIS, default ON) fans one plan variant per disposition -- every order of the looked-at cards plus the shuffle, 3! + 1 = 7 with three cards (TopDispositionCandidates; index 0 is the provider's default = the base plan, its duplicate dropped) -- pinned through g_scripted_reorder_choice and consumed at the reorder itself, so an earlier scry look in the same plan cannot eat it. ONE Ponder is varied per plan; a second Ponder in the same plan resolves by the provider's default disposition (generic: wanted cards first by ScryKeepOnTop, shuffle only when none is wanted). A deck provider may narrow the fan only by its own rule -- ReorderKeepShuffleOnly (keep-in-the-rule's-order vs shuffle) or ReorderSingleCandidate (the rule's pick alone); the generic provider does neither. HUMAN PLAY: no plan fan; the `reorder` decision (g_play_top_chooser) at resolution offers every order and the shuffle.]",
    "template": "draw_spell",
    "parameters": {
     "draw": 1,
@@ -3892,7 +3892,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled: PerformFetch ends with ShuffleAfterSearch (CR 701.19; deterministic and lockstep in both worlds, ON by default -- MTG_NO_SEARCH_SHUFFLE is the opt-out), so the fetched land thins the library and cards a Brainstorm-style put-back left on top are shuffled away; the search sees the post-shuffle order (the engine-wide known-library simplification). One residual simplification: a fail-to-find (no Island or Mountain card left, or the chosen target already gone) pays the life but returns before the shuffle.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -12560,7 +12560,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle. [Enters tapped (enters_tapped); taps for {C} (produces [C]). '{2}, {T}, Sacrifice this land' is the searched SacLandSearch activation (land_search_activation_cost {2}): the {T} is paid BEFORE the mana half, so it can never pay its own {2}, and the activation-line hold keeps an earlier cast in the same plan from tapping it for mana. Puts up to two basic land cards SHARING A LAND TYPE (two Forests or two Mountains here) onto the battlefield tapped: PerformLandSearch places both, then resolves their own enter triggers, then shuffles ONCE; each is a landfall event through EnterLand. WHICH land type = the in-plan land-search pin over the maximal picks; the human picks each land at resolution (`tutor_etb`; the second prompt offers only basics sharing a type with the first; -1 stops at one). 'Up to two' collapsed for the search to as many as the library allows (dominance; ruling 2018-03-16 lets you take one -- PROVISIONAL). Instant-speed timing collapsed to our main phase's trailing pass (PROVISIONAL, inert vs the passive opponent: see Evolving Wilds).]",
+   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle. [Enters tapped (enters_tapped); taps for {C} (produces [C]). '{2}, {T}, Sacrifice this land' is the searched SacLandSearch activation (land_search_activation_cost {2}): the {T} is paid BEFORE the mana half, so it can never pay its own {2}, and the activation-line hold keeps an earlier cast in the same plan from tapping it for mana. Puts up to two basic land cards SHARING A LAND TYPE (e.g. two Forests, or two Mountains) onto the battlefield tapped: PerformLandSearch places both, then resolves their own enter triggers, then shuffles ONCE; each is a landfall event through EnterLand. WHICH land type = the in-plan land-search pin over the maximal picks; the human picks each land at resolution (`tutor_etb`; the second prompt offers only basics sharing a type with the first; -1 stops at one). 'Up to two' collapsed for the search to as many as the library allows (dominance; ruling 2018-03-16 lets you take one -- PROVISIONAL). Instant-speed timing collapsed to our main phase's trailing pass (PROVISIONAL, inert vs the passive opponent: see Evolving Wilds).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -13726,6 +13726,88 @@
     "land_search_on_resolve": true,
     "land_search_count": 2,
     "land_search_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Watery Grave",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Island",
+    "Swamp"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {U} or {B}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "etb_pay_life_to_untap": 2
+   }
+  },
+  {
+   "name": "Xander's Lounge",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Island",
+    "Swamp",
+    "Mountain"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {U}, {B}, or {R}.)\nThis land enters tapped.\nCycling {3} ({3}, Discard this card: Draw a card.)",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B",
+     "R"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{3}"
+   }
+  },
+  {
+   "name": "Brainsurge",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Draw four cards, then put two cards from your hand on top of your library in any order. [draw_spell draw 4 + put_back_from_hand 2 -- Brainstorm's machinery, which is generic in the draw count: the shared ResolvePutBackFromHand (SpellEffects.h) runs INSIDE the resolution in both worlds (EffectHandler::ResolveDrawSpell, TurnSolver apply_one's DrawSpell branch), right after the four draws and before anything else -- the draw breakpoint, and every 'whenever you draw' trigger, which waits for the spell to finish resolving (CR 603.3). WHICH two and in WHAT order is SEARCHED (Plan::putback_choice): one plan variant per PutBackCandidates candidate -- every distinct ordered selection of hand cards, drawn or already held (ruling), identical copies folded -- PROVIDER-ORDERED by PutBackRanking and NOT width-capped; PutBackAxisWidth sizes the fan off draw 4. Inside a breakpoint continuation the pin rides ContPins. ONE put-back is pinned per plan: a second put-back spell in the same plan (a Brainstorm, another Brainsurge) takes the provider default there (the Ponder axis's shape) -- a known limitation that matters more in a deck chaining both. HUMAN PLAY: the `dig` chooser is asked twice ('Brainsurge (put back: top)', then '(put back: second)'); mandatory, -1 takes the default. INSTANT TIMING (PROVISIONAL fold, Brainstorm's argument): cast only in a main phase with an empty stack. Against a passive opponent an upkeep cast is weakly dominated by the main-phase one, an opponent's-turn cast equals a cast at the end of our own turn (a post-combat main), and 'in response' windows hold only our own spells. One residual difference, disclosed: an opponent's-turn cast happens AFTER our cleanup, so a hand pushed above seven (Brainsurge nets +1 card) keeps the extra card instead of discarding it.]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 4,
+    "put_back_from_hand": 2
+   }
+  },
+  {
+   "name": "Street Wraith",
+   "mana_cost": "{3}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Wraith"
+   ],
+   "keywords": [
+    "Landwalk",
+    "Swampwalk"
+   ],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)\nCycling—Pay 2 life. (Pay 2 life, Discard this card: Draw a card.) [Cycling modelled as cycling_cost \"\" (no mana) + cycling_life_cost 2: probed and paid at EVERY cycle site (executor PerformDig, the rollout dig loop, the human-play dig action, the SelectDigSource affordability filters and the viewer's offer probe) through CyclingLifePayable / PayCyclingLife, in lockstep with the mana half. Offered only while life > 2: paying to exactly 0 is legal (CR 119.4) but loses at the next state-based check, before the cycling draw resolves (CR 704.5a), so it is dominated -- a sound prune, the same in human play. Life is paid as life LOSS, not damage. 2HG pays from the team's shared life. Swampwalk (and its Landwalk umbrella tag) is INERT: landwalk only restricts blocks (CR 702.14) and the goldfish opponent never blocks -- PROVISIONAL.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cycling_cost": "",
+    "cycling_life_cost": 2
    }
   }
  ]

@@ -59599,11 +59599,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else
             {
                 if (!sd->params.cycling_cost.has_value()) { continue; }
-                // P3 -- human-play payment, on the Fluctuator-reduced cost.
+                // P3 -- human-play payment, on the Fluctuator-reduced cost, plus the LIFE half
+                // (Street Wraith; lockstep with the executor's P1/P2 and the rollout's P4).
+                if (!CyclingLifePayable(state, state.active_player_index, *sd)) { continue; }
                 if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { continue; }
                 std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
                     [&a](const Card& c) { return c.m_name == a.card_name; });
                 if (it == ap.hand.end()) { continue; }
+                PayCyclingLife(state, state.active_player_index, *sd);
                 {   // THE SHARED DISCARD HOOK (Vampires A1) -- see the executor's D1 site.
                     std::vector<MadnessPending> mq;
                     DiscardCardFromHand(state, state.active_player_index,
@@ -61308,11 +61311,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             else
             {
-                // P4 -- rollout payment, on the Fluctuator-reduced cost.
+                // P4 -- rollout payment, on the Fluctuator-reduced cost, plus the LIFE half
+                // (Street Wraith; lockstep with the executor's P1/P2).
+                if (!CyclingLifePayable(state, state.active_player_index, *sd)) { break; }
                 if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { break; }
                 std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
                     [&src](const Card& c) { return c.m_name == src; });
                 if (it == ap.hand.end()) { break; }
+                PayCyclingLife(state, state.active_player_index, *sd);
                 {   // THE SHARED DISCARD HOOK (Vampires A1) -- lockstep with the executor's D1 site.
                     std::vector<MadnessPending> mq;
                     DiscardCardFromHand(state, state.active_player_index,
@@ -69226,7 +69232,9 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
         std::string nm = c.m_name.str();
         if (!seen.insert("c:" + nm).second) { continue; }
         // P6 -- human-play offer probe. Same reduced cost the payer (P3) will use, so a
-        // Fluctuator-discounted cycle is actually OFFERED in the viewer's plan list.
+        // Fluctuator-discounted cycle is actually OFFERED in the viewer's plan list -- and the same
+        // life test (Street Wraith), so a cycle P3 would refuse is never offered.
+        if (!CyclingLifePayable(state, state.active_player_index, *d)) { continue; }
         add_variants(nm, false, EffectiveCyclingCostFor(state, *d));
     }
     for (const Permanent& p : state.battlefield)   // sac-to-draw lands in play (Fiery Islet)

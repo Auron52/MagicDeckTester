@@ -178,6 +178,13 @@ enum class Keyword
     // exists so Scryfall's keywords array can be pasted VERBATIM (KeywordFromString throws on an
     // unmapped keyword -- see Jump's note).
     Madness,
+    // Landwalk / Swampwalk (Street Wraith): INERT evasion tags, the Fear precedent. Scryfall lists BOTH
+    // ("Landwalk" is the umbrella keyword, "Swampwalk" the instance), so both exist to let the keywords
+    // array be pasted verbatim (KeywordFromString throws on an unmapped keyword -- see Jump's note).
+    // Provably inert vs the passive goldfish opponent: landwalk only restricts BLOCKS (CR 702.14), and
+    // nothing blocks anywhere in this engine. No engine code reads either enumerator.
+    Landwalk,
+    Swampwalk,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

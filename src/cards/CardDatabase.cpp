@@ -542,6 +542,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Landfall")      { return Keyword::Landfall; }   // inert ability-word tag; landfall_* params
     if (s == "Reconfigure")   { return Keyword::Reconfigure; } // tag; mechanic is param-modelled (reconfigure_cost)
     if (s == "Madness")       { return Keyword::Madness; }    // inert tag; param-modelled (madness_cost)
+    if (s == "Landwalk")      { return Keyword::Landwalk; }   // inert evasion tag; nothing blocks
+    if (s == "Swampwalk")     { return Keyword::Swampwalk; }  // inert evasion tag; nothing blocks
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -989,6 +991,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_self_damage_any_mode = params.value("tap_self_damage_any_mode", false);
     if (params.contains("cycling_cost"))
         p.cycling_cost = ManaCostFromString(params["cycling_cost"].get<std::string>());
+    // Street Wraith's "Cycling--Pay 2 life": the life part of the cycling cost. The mana part stays in
+    // cycling_cost (`""` for a life-only cycle), which every cycle site keys on -- a life cost with no
+    // cycling_cost would be read by nothing, so it is a data error, not a silent no-op.
+    p.cycling_life_cost = params.value("cycling_life_cost", 0);
+    if (p.cycling_life_cost > 0 && !p.cycling_cost.has_value())
+        throw std::runtime_error("cycling_life_cost requires cycling_cost (use \"\" for a life-only cycle)");
     if (params.contains("sacrifice_draw_cost"))
         p.sacrifice_draw_cost = ManaCostFromString(params["sacrifice_draw_cost"].get<std::string>());
     p.enters_tapped_with_depletion = params.value("enters_tapped_with_depletion", 0);
@@ -1743,6 +1751,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.reduces_cycling_activation    = params.value("reduces_cycling_activation", 0);
     p.cycle_trigger_damage_each_opponent =
         params.value("cycle_trigger_damage_each_opponent", 0);
+    // Unpredictable Cyclone onboarding (2026-10-26): parsed for CycloneProvider's routing signature;
+    // NO effect reads them yet (phase 2: the extra turn, phase 3: the replacement + the watcher).
+    p.cycle_draw_exile_shared_type_freecast = params.value("cycle_draw_exile_shared_type_freecast", false);
+    p.cast_trigger_extra_turns              = params.value("cast_trigger_extra_turns", 0);
+    p.cycle_or_discard_trigger_scry         = params.value("cycle_or_discard_trigger_scry", 0);
     p.cost_less_per_cycle_or_discard = params.value("cost_less_per_cycle_or_discard", 0);
     p.reanimate_creature_max_mv      = params.value("reanimate_creature_max_mv", 0);
     if (params.contains("other_creature_etb_counter_cost"))

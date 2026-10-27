@@ -683,6 +683,7 @@ enum Slot : int
     LFE_HARB_CHAIN_EARLY,     // MTG_LFE_HARB_CHAIN_EARLY  amendment (ADOPTED 2026-10-23, DEFAULT ON): another Flamekin Harbinger is offered on the same early board (one or no land out) when no other Harbinger is in hand (5 of the 26: T1 Harbinger -> Harbinger, cast T2 to tutor again)
     LFE_HARB_FURY_SOULSTOKE,  // MTG_LFE_HARB_FURY_SOULSTOKE  amendment (DEFAULT OFF; measured 0 / -1 held-out, not adopted): Fury is offered as Incandescent Soulstoke's payload -- a Soulstoke in hand or on our battlefield and no Fury in hand (4 of the 26: Soulstoke puts Fury in with haste for the T4 kill)
     LFE_HARB_SMOKE_FIRST,     // MTG_LFE_HARB_SMOKE_FIRST  ORDER amendment (ADOPTED 2026-10-23, DEFAULT ON; -12/-12 turns held-out): when the early-ramp condition admits Smokebraider it is ranked FIRST, not last -- smoke d3 gi122: the unrestricted search fetched it on T1 for the ramp and won T4; ranked last, the budgeted search took Brushfire (T5, persists at 16x)
+    CYCLONE_TUTOR_WIDTH,      // MTG_CYCLONE_TUTOR_WIDTH  Cyclone (Unpredictable Cyclone): TutorSearchWidth admits EVERY distinct legal name for Long-Term Plans (any card; ~22 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so most names (Emrakul among them) were unreachable per search at ANY budget. A COVERAGE fix (widens, never narrows; the axis is additive). DEFAULT ON; =0 -> the base 6
     COUNT
 };
 
@@ -1316,6 +1317,7 @@ inline const char* Name(int slot)
         "MTG_LFE_HARB_CHAIN_EARLY",
         "MTG_LFE_HARB_FURY_SOULSTOKE",
         "MTG_LFE_HARB_SMOKE_FIRST",
+        "MTG_CYCLONE_TUTOR_WIDTH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

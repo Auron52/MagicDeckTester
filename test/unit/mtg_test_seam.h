@@ -56,4 +56,9 @@ struct MtgTestSeam
 
     // How many breakpoint continuations TakeTurn's resolve_draw_breakpoint has run on this engine.
     static long long BpResolves(const AIEngine& e) { return e.m_bp_resolves; }
+
+    // The executor's realised dig (cycle from hand / sacrifice-to-draw): the lockstep twin of the
+    // rollout dig loop and the human-play DigDraw action. Returns PerformDig's drew-a-land flag.
+    static bool PerformDig(AIEngine& e, GameState& s, const std::string& source, bool is_sacrifice)
+    { return e.PerformDig(s, source, is_sacrifice); }
 };
