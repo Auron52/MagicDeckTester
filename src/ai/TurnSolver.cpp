@@ -24278,7 +24278,7 @@ static bool PutBackAxisEnabled()
 // be read off the library at enumeration time.
 static bool PutBackPredictionUnsafe(const CardDefinition& d)
 {
-    return d.params.cast_reorder > 0 || d.params.tutor_to_hand || d.params.tutor_to_top
+    return d.params.cast_reorder > 0 || IsLibraryTutor(d.params)   // Long-Term Plans shuffles too
         || !d.params.fetch_land_types.empty();
 }
 // THE FAN WIDTH for plan `p`'s put-back cast `bs`: an UPPER BOUND on the number of candidates the
@@ -30335,7 +30335,7 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // that hardening lands and the flip re-measures neutral-or-better.
     static const bool s_doubt_main2 = EnvOn("MTG_DOUBT_MAIN2");
     if (s_doubt_main2
-        && (p.tutor_to_hand || p.tutor_to_top || p.tutor_land_to_battlefield
+        && (IsLibraryTutor(p) || p.tutor_land_to_battlefield
             || p.tutor_to_battlefield))
     { return state.deck_feeds_combat ? MP::Both : MP::Main2; }
     switch (def.tmpl)
@@ -34737,7 +34737,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // hand_index, hence mutually exclusive in the plan enumerator) and let the search pick.
         // Narrowing to the few cards that matter keeps the search's branching factor small --
         // the general "heuristic narrows, search decides the rest" pattern.
-        if ((def.params.tutor_to_hand || def.params.tutor_to_top
+        if ((IsLibraryTutor(def.params)
             || def.params.tutor_land_to_battlefield || def.params.tutor_to_battlefield_single
             || def.params.look_top_put_creature_count > 0)
             // Ranger of Eos (etb_tutor_hand_count > 1): the PAIR is picked once at resolution
@@ -60195,9 +60195,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
             }
         }
-        else if (def.params.tutor_to_hand || def.params.tutor_to_top)
+        else if (IsLibraryTutor(def.params))
         {
-            // Tutor (Idyllic / Enlightened): fetch the SEARCHED target (tutor_target); empty
+            // Tutor (Idyllic / Enlightened / Long-Term Plans): fetch the SEARCHED target (tutor_target); empty
             // falls back to the heuristic's top pick. Identical to the real game (EffectHandler)
             // so the clairvoyant rollout sees the same fetched card.
             // human_repick: this IS a cast resolving, so a human at the viewer re-picks here off the
@@ -72176,6 +72176,9 @@ static bool ActionReadsLibraryTop(const Action& a)
     if (d == nullptr) { return false; }
     const CardParams& p = d->params;
     if (p.tutor_to_top && !p.tutor_types.empty()) { return true; }
+    // Long-Term Plans: a search SHUFFLE, then a write to the top three -- a crack before vs after it
+    // sees a different top. Any card is legal (tutor_types empty), so no type test.
+    if (p.tutor_library_position > 1) { return true; }
     if (p.etb_self_draw > 0 || p.etb_dig_count > 0 || p.etb_reveal_count > 0
         || p.look_top_put_creature_count > 0) { return true; }
     if (cast && (d->tmpl == CardTemplate::DrawSpell || d->tmpl == CardTemplate::DrawUntilNonland
@@ -75166,7 +75169,7 @@ static bool PlanMayHoldLandAtBounce(const GameState& state, const TurnSolver::Pl
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
         if (d == nullptr) { return true; }
         const CardParams& q = d->params;
-        if (q.cast_draw > 0 || q.etb_self_draw > 0 || q.tutor_to_hand || q.tutor_to_top
+        if (q.cast_draw > 0 || q.etb_self_draw > 0 || IsLibraryTutor(q)
             || q.land_search_to_hand > 0 || q.etb_return_gy_to_hand)
         { return true; }
         // ...and an EARLIER put Karoo of the same plan (a Genesis Wave; a non-basic land search that
@@ -76239,7 +76242,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                     || act.kind == Action::Kind::PutFromHandAbility;
                 if (act.kind != Action::Kind::CastFromHand && !put_tutor) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
-                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
+                if (d == nullptr || !(IsLibraryTutor(d->params)
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
                 if (put_tutor
@@ -76373,7 +76376,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
-                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
+                if (d == nullptr || !(IsLibraryTutor(d->params)
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
                 // The plan this candidate list is FOR -- see PlanContext.h. Providers that ignore it
@@ -79030,7 +79033,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if ((!d->card.IsLand() && !q.produces.empty()) || q.ritual_floating_mana > 0
                     || q.creates_treasures > 0 || q.etb_creates_treasures > 0 || q.mana_rock)
                 { producer = true; }
-                if (q.cast_draw > 0 || q.etb_self_draw > 0 || q.tutor_to_hand || q.tutor_to_top)
+                if (q.cast_draw > 0 || q.etb_self_draw > 0 || IsLibraryTutor(q))
                 { may_draw = true; }
             }
             std::size_t w = z.distinct;
