@@ -120,6 +120,18 @@ declare -A DECK_PROF=(
   [elementals]=decks/LandfallElementals/LandfallElementals.profile.json
 )
 
+# PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
+# sanity-check, but of much lower importance than what we ship."; play settings are "the numbers I'm more interested
+# in for both quality and performance"). In every tier, each deck keeps ONE small d3 b10 sanity row (about a third of
+# one former d3 row) and its play rows absorbed the freed core time, capped at the games they replaced and never
+# below their former count. A searched row with depth 5 is the PLAY row: regression.sh drops its depth so the
+# deck's value_play block picks it (d4/d5/d6/d7 per deck), and its budget is the deck's SHIPPED value_play
+# budget_ms (b20 without an enabled block; Hinata b30, Goblins b60, Melira b60, Kitty b14). The overnight tier's
+# former generous budgets (d3 b20/b80, play-depth b40/b80) became the shipped ones. 2HG rows that were d3-only
+# became play rows on the same seed. regression.sh WARNs when a play row's budget differs from the deck's shipped
+# budget (a re-tuned play setting must re-tune these rows). The per-deck sizing comments below predate this
+# reshape: their game counts and budgets are historical.
+
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
 # (counts sized from measured timings -- see test/TIMINGS.md)
 
@@ -141,15 +153,15 @@ SMOKE_CASES=(
   # below anticipated ("re-sizing upward is fair game once the list is adopted and the incumbent's
   # cases come out"). Net effect on every tier is a SAVING: two Fungus lists leave, one arrives.
   "fungusv3  0 1001 1000 0"
-  "fungusv3  3 1001  150 10"
-  "fungusv3  5 1001   75 20"
+  "fungusv3   3  1001    50 10"
+  "fungusv3   5  1001   175 20"
   # fungusv32hg: the searched d3 2HG canary every deck is supposed to have (regression-testing
   # skill, "2HG variant cases"), 50 games, SMOKE ONLY -- same shape as kittyv32hg_smoke_d3_s1001.
   # This archetype had NO 2HG coverage in ANY tier before today, which was a real hole rather than
   # a sizing choice: the list adoption reads std and 2HG as CO-EQUAL, and this deck's whole 2HG
   # edge runs through Beastmaster Ascension (4->2 costs +0.0214 std but +0.1321 2hg), so a change
   # that broke 2HG play here would have moved nothing the suite watches.
-  "fungusv32hg 3 1001 50 10"
+  "fungusv32hg 5  1001    50 20"
   # fungusb (adoption candidate): HALF the incumbent's searched counts, deliberately. The point of
   # these cases is a DIGEST that tracks this list's play through the multi-day mulligan generation --
   # a digest does that at any game count, while the per-game cost here is ~14x the incumbent's
@@ -158,17 +170,17 @@ SMOKE_CASES=(
   # the suite's most expensive deck is uncontroversial; re-sizing upward is fair game once the list
   # is adopted and the incumbent's cases come out.
   "slivers 0 1001 1000 0"
-  "slivers 3 1001  250 10"
-  "slivers 5 1001  150 20"
+  "slivers    3  1001    75 10"
+  "slivers    5  1001   325 20"
   "burn    0 1001 1000 0"
-  "burn    3 1001  300 10"
-  "burn    5 1001  250 20"
+  "burn       3  1001   100 10"
+  "burn       5  1001   450 20"
   "th      0 1001 1000 0"
-  "th      3 1001  150 10"
-  "th      5 1001   75 20"
+  "th         3  1001    50 10"
+  "th         5  1001   175 20"
   "knights 0 1001 1000 0"
-  "knights 3 1001  250 10"
-  "knights 5 1001  150 20"
+  "knights    3  1001    75 10"
+  "knights    5  1001   325 20"
   # whiteknights: knights' sizing exactly -- same tribe, same speed class (kills ~T4.3). Measured
   # 2.3 ms/game at d0, 7.0 at d5 b20 and 48.9 at d3 b10, so this whole block is ~16 core-s. NOTE the
   # d3-vs-d5 inversion: d3 b10 is ~7x COSTLIER per game than d5 b20 here, because a starved budget at
@@ -176,44 +188,44 @@ SMOKE_CASES=(
   # as d3 b20 = 5.87x d5 b20). So the d3 row, not the d5 row, is this deck's expensive one -- size that
   # one first if the smoke budget ever needs trimming.
   "whiteknights 0 1001 1000 0"
-  "whiteknights 3 1001  250 10"
-  "whiteknights 5 1001  150 20"
+  "whiteknights 3  1001    75 10"
+  "whiteknights 5  1001   325 20"
   "antilife 0 1001 1000 0"
-  "antilife 3 1001  250 10"
-  "antilife 5 1001  150 20"
+  "antilife   3  1001    75 10"
+  "antilife   5  1001   325 20"
   # hinata: d0 full + a small d3/d5 gate. The max-mana backtracker gate (commit 9229b25) cut its
   # combo search ~15x, so d3/d5 are now affordable in the fast gate (~0.59/1.25 s/game, tail-inclusive
   # -- no multi-minute blowups anymore). Counts match th's smoke sizing; the d5 job is the smoke long
   # pole at ~94 s single-thread (still well under the 15-min budget). Full deep coverage is OVERNIGHT.
   "hinata  0 1001 1000 0"
-  "hinata  3 1001  150 10"
-  "hinata  5 1001   75 20"
+  "hinata     3  1001    50 10"
+  "hinata     5  1001   100 30"
   # dragonstorm: cheap storm/combo deck (d0 ~0.24ms/game; d3 ~0.17 s/game, d5 ~0.28 s/game measured).
   # Small d3/d5 gate mirroring th/hinata; deeper coverage lives in regression/overnight.
   "dragonstorm 0 1001 1000 0"
-  "dragonstorm 3 1001  150 10"
-  "dragonstorm 5 1001   75 20"
+  "dragonstorm 3  1001    50 10"
+  "dragonstorm 5  1001   150 20"
   # auras: the cheapest deep-search deck in the suite (measured 2026-07-28, single-thread:
   # d3 b10 ~0.023 s/game, d5 b20 ~0.0086 s/game -- d5 is CHEAPER than d3 because its value_play
   # block routes d5 through the O(1) value leaf while the d0/d3 coverage cases bypass it via
   # ignore_play_profile). No heavy tail at any of the 7 suite seeds. That buys it burn-tier
   # counts rather than the smaller th/hinata/dragonstorm sizing: ~9 s added single-thread.
   "auras   0 1001 1000 0"
-  "auras   3 1001  300 10"
-  "auras   5 1001  250 20"
+  "auras      3  1001   100 10"
+  "auras      5  1001   450 20"
   # goblins: cheap fast aggro (wins ~turn 4-5, short games). d0 full + small d3/d5 gate,
   # sized like dragonstorm/th; deeper coverage lives in regression/overnight.
   "goblins 0 1001 1000 0"
-  "goblins 3 1001  150 10"
-  "goblins 5 1001   75 20"
+  "goblins    3  1001    50 10"
+  "goblins    5  1001   100 60"
   # creature_giving: gift-the-opponent drain (wins ~turn 4.8). Dragonstorm-class cost
   # (measured 2026-08-06 single-thread: d0 ~0.14 ms/game, d3 b10 ~0.23 s/game, d5 b20
   # ~0.48 s/game) -> th/dragonstorm smoke sizing (~70 s ST added). Covers engine paths no
   # other deck exercises: enter-watchers, stacking Wurm sweeps, DotH upkeep sac-tutor,
   # cumulative upkeep, tutor_land_to_battlefield.
   "creature_giving 0 1001 1000 0"
-  "creature_giving 3 1001  150 10"
-  "creature_giving 5 1001   75 20"
+  "creature_giving 3  1001    50 10"
+  "creature_giving 5  1001   150 20"
   # mirrorwing: Zada/Mirrorwing copy-magnet swarm (Tier-3 trick engine; wins ~T4.8). Switched
   # 2026-08-24 from the v1-twinflame-anger list to the SHIPPING list (tournament winner + Game
   # Trail mana base; the archived v1 lives on at decks/Mirrorwing Dragon/v1-twinflame-anger/).
@@ -224,8 +236,8 @@ SMOKE_CASES=(
   # multi-minute tail at suite budgets -- the provider prunes + strive fold are what keep it
   # tractable, see analysis-Mirrorwing Dragon.md. th/hinata smoke sizing.
   "mirrorwing 0 1001 1000 0"
-  "mirrorwing 3 1001  150 10"
-  "mirrorwing 5 1001   75 20"
+  "mirrorwing 3  1001    50 10"
+  "mirrorwing 5  1001   125 20"
   # fivecolour: 5-colour midrange, the ONLY deck whose value_play block asks for depth 6 besides
   # burn -- so its d5 case (depth key dropped, block owns the depth) is the suite's coverage of the
   # d6 + escalation_cap 5 path adopted 2026-08-14. Costliest deck per game in the suite, measured
@@ -234,8 +246,8 @@ SMOKE_CASES=(
   # list; since the 2026-08-24 decklist switch it is ~0.20/0.30, so fivecolour now stands alone).
   # Tail is mild: 2 games of 2800 over 30 s (worst 60.8 s), no multi-minute blowups. ~5 min ST added.
   "fivecolour 0 1001 1000 0"
-  "fivecolour 3 1001  150 10"
-  "fivecolour 5 1001   75 20"
+  "fivecolour 3  1001    50 10"
+  "fivecolour 5  1001   125 20"
   # stompy: StompySurprise elf ramp (wins ~T4.9; StompyProvider -- discard buckets + tutor
   # lethality gate). Dragonstorm-class cost (probed 2026-08-21 single-thread at gate budgets:
   # d0 ~0 ms/game, d3 b10 ~0.28 s/game, d5 b20 ~0.63 s/game; no heavy tail, worst game
@@ -243,8 +255,8 @@ SMOKE_CASES=(
   # deck exercises: scaled elf mana + growth credit, Lodge untap burst, MDFC spell//land,
   # sac-cost tutor (Natural Order), Terastodon K projection, Call of the Wild reveal chain.
   "stompy  0 1001 1000 0"
-  "stompy  3 1001  150 10"
-  "stompy  5 1001   75 20"
+  "stompy     3  1001    50 10"
+  "stompy     5  1001   175 20"
   # minotaur: Rakdos Minotaur tribal aggro (wins ~T5.0 at searched depth; MinotaurProvider since
   # 2026-08-30 -- Generic plus the user-amended cleanup-discard bucket policy). Ships a value leaf
   # with trust at d5.
@@ -252,8 +264,8 @@ SMOKE_CASES=(
   # -- between stompy and hinata. Counts mirror slivers/knights smoke sizing, giving two ~95 s
   # single-thread jobs that pool alongside the existing gate (smoke makespan was ~160 s).
   "minotaur 0 1001 1000 0"
-  "minotaur 3 1001  250 10"
-  "minotaur 5 1001  150 20"
+  "minotaur   3  1001    75 10"
+  "minotaur   5  1001   325 20"
   # kittyv3: KittyEquipment -- THE SHIPPED LIST since 2026-10-14 (Puresteel Paladin / Sram /
   # Colossus Hammer / Sigarda's Aid / Dwalin + 0-cost shields). Ships an adopted exhaustive keep
   # table (a9a17e64) and a value leaf. Wins ~T3.8 searched.
@@ -289,15 +301,15 @@ SMOKE_CASES=(
   # 3x RULE, measured 2026-10-11 under PGO: worst searched cell d5 b20 = 1,514 ms/game against the
   # 3,100 ms/game budget (3x fivecolour) => 0.49x, passing with more margin than v2 did (0.79x).
   "kittyv3 0 1001 1000 0"
-  "kittyv3 3 1001  100 10"
-  "kittyv3 5 1001   50 20"
+  "kittyv3    3  1001    25 10"
+  "kittyv3    5  1001   125 14"
   # dragons: mono-red Dragons ramp (Sol Ring/Dragonspeaker into 5-8 drops; wins ~T5.7-6.2, the
   # slowest clock in the suite after hinata). Same probe: d0 ~0.0004 s/game, d3 b10 ~0.98 s/game,
   # d5 b20 ~2.0 s/game -- 0.44x/0.52x minotaur. Defaults/static keep; ships a value leaf (no trust),
   # and DragonsProvider's cleanup-discard bucket policy.
   "dragons 0 1001 1000 0"
-  "dragons 3 1001  250 10"
-  "dragons 5 1001  150 20"
+  "dragons    3  1001    75 10"
+  "dragons    5  1001   325 20"
   # breaching: BreachingDragonstorm -- Temur cascade/free-cast combo (double sac-land burst into
   # Wanderer/Creative Technique chains; wins ~T3.5, 62% T3 at converged budgets). Pooled-probe
   # 2026-09-03 vs dragonstorm as in-batch anchor: d0 ~0.007 ms/game, d3 b10 ~0.38 s/game,
@@ -305,16 +317,16 @@ SMOKE_CASES=(
   # model / value leaf yet (Stage 4 pending): the d5 cell will move when a value leaf is adopted
   # (its case omits depth so value_play owns it -- expected churn, regenerate GT then).
   "breaching 0 1001 1000 0"
-  "breaching 3 1001  150 10"
-  "breaching 5 1001   75 20"
+  "breaching  3  1001    50 10"
+  "breaching  5  1001   175 20"
   # critter: CritterLifegain -- mono-white lifegain aggro (Soul Warden shell into Ajani's Pridemate /
   # Voice of the Blessed / Archangel of Thune / Heliod; wins ~T5). Probed single-thread 2026-09-08 at
   # the gate budgets: d3 b10 ~0.20 s/game, d5 b20 ~0.43 s/game -- breaching-class cost, so it takes
   # breaching's shape. CritterLifegainProvider (Generic + walker-aware legend keep); no keep model /
   # value leaf yet (the d5 cell will move when a value leaf is adopted -- regenerate GT then).
   "critter 0 1001 1000 0"
-  "critter 3 1001  150 10"
-  "critter 5 1001   75 20"
+  "critter    3  1001    50 10"
+  "critter    5  1001   175 20"
   # melira: RESTORED 2026-09-08 (user: "performance should be close to other decks"). Dropped
   # 2026-09-06 at smoke d3 31 s/game, d5 26 s/game (72% of the tier's core-time from one deck).
   # The wall was the 1-ply search LEAF re-running the greedy subset walk at every rollout turn
@@ -324,8 +336,8 @@ SMOKE_CASES=(
   # d3 0.65-0.78 s/game, d5 1.2 s/game -- third-costliest deck, under fivecolour (1.27 / 1.93)
   # and fluctuator (1.67 / 3.10). Full record: docs/design/analysis-Melira Pod.md SESSION 2026-09-08.
   "melira 0 1001 1000 0"
-  "melira 3 1001   50 10"
-  "melira 5 1001   25 20"
+  "melira     3  1001    25 10"
+  "melira     5  1001    25 60"
   # angels: ADDED 2026-09-18 (mono-white Angels tribal; analysis-Angels.md). Full kitty/critter
   # shape because it is one of the CHEAPEST decks in the matrix -- measured single-threaded at the
   # tier's own budgets: d0 ~0 s, d3 b10 0.066 s/game, d5 b20 0.060 s/game (cf. dragons 0.98 / 2.00).
@@ -340,8 +352,8 @@ SMOKE_CASES=(
   # noticed when an engine change moved this deck's play, and its claude-play sweep record could go
   # stale silently. That had to be checked by hand once already (2026-09-18, digests, Saga work).
   "angels 0 1001 1000 0"
-  "angels 3 1001  250 10"
-  "angels 5 1001  150 20"
+  "angels     3  1001    75 10"
+  "angels     5  1001   325 20"
   # 2HG gate (user request 2026-09-04): "<deck>2hg" = the SAME deck/profile at starting_life 30
   # + opponent_heads 2 (regression.sh strips the suffix for file lookup and adds the job fields).
   # Small on purpose -- just enough that a change which obviously ignores 2HG (second-face
@@ -368,53 +380,53 @@ SMOKE_CASES=(
   # case is bought entirely by the starting-life axis. Every OTHER deck gets a small SEARCHED canary -- d3 at 50 games (user,
   # 2026-09-04: d0 "isn't all that useful"; fewer games at search depth instead) -- so a
   # heads-plumbing break in the search/rollout path moves a committed digest too.
-  "hinata2hg     3 1001   75 10"
-  "antilife2hg   3 1001  100 10"
-  "minotaur2hg   3 1001  100 10"
-  "goblins2hg    3 1001   75 10"
-  "knights2hg    3 1001   75 10"
+  "hinata2hg  5  1001    25 30"
+  "antilife2hg 5  1001   100 20"
+  "minotaur2hg 5  1001   100 20"
+  "goblins2hg 5  1001    75 60"
+  "knights2hg 5  1001    75 20"
   # whiteknights2hg: treated as a RELEVANT deck, not a canary, and the evidence is direct. Its firing
   # harness shows Hero of Bladehold's attack_tokens_per_opponent gate is observable ONLY at 2 heads
   # (49/200 games differ there, 0/400 at one head) -- it is arithmetically inert at 1 head, so a normal
   # case structurally cannot see it. The deck also runs Adeline, whose token clause IS per-opponent, so
   # both sides of the "each opponent x heads" class sit in one deck. ~4 core-s.
-  "whiteknights2hg 3 1001  75 10"
-  "fivecolour2hg 3 1001   40 10"
-  "fluctuator2hg 3 1001   75 10"
+  "whiteknights2hg 5  1001    75 20"
+  "fivecolour2hg 5  1001    50 20"
+  "fluctuator2hg 5  1001    75 20"
   # angels2hg: antilife/minotaur sizing. Angels is one of the cheapest decks in the matrix
   # (d3 b10 ~0.066 s/game), so the whole relevant-tier treatment costs ~7 core-s here.
-  "angels2hg     3 1001  100 10"
-  "slivers2hg         3 1001 50 10"
-  "burn2hg            3 1001 50 10"
-  "th2hg              3 1001 50 10"
-  "dragonstorm2hg     3 1001 50 10"
-  "auras2hg           3 1001 50 10"
-  "creature_giving2hg 3 1001 50 10"
-  "mirrorwing2hg      3 1001 50 10"
-  "stompy2hg          3 1001 50 10"
-  "kittyv32hg         3 1001 50 10"
-  "dragons2hg         3 1001 50 10"
-  "breaching2hg       3 1001 50 10"
-  "critter2hg         3 1001 50 10"
-  "melira2hg          3 1001 25 10"
-  "pirates2hg         3 1001 50 10"
-  "soldiers2hg        3 1001 50 10"
+  "angels2hg  5  1001   100 20"
+  "slivers2hg 5  1001    50 20"
+  "burn2hg    5  1001    50 20"
+  "th2hg      5  1001    50 20"
+  "dragonstorm2hg 5  1001    50 20"
+  "auras2hg   5  1001    50 20"
+  "creature_giving2hg 5  1001    50 20"
+  "mirrorwing2hg 5  1001    50 20"
+  "stompy2hg  5  1001    50 20"
+  "kittyv32hg 5  1001    50 14"
+  "dragons2hg 5  1001    50 20"
+  "breaching2hg 5  1001    50 20"
+  "critter2hg 5  1001    50 20"
+  "melira2hg  5  1001    25 60"
+  "pirates2hg 5  1001    50 20"
+  "soldiers2hg 5  1001    50 20"
   # colossus2hg: a canary for Speaker of the Heavens' "at least 7 life more than your STARTING life
   # total" gate, which reads the 2HG starting life (30), and for a 30-life opponent the Hammer must reach.
-  "colossus2hg        3 1001 50 10"
+  "colossus2hg 5  1001    50 20"
   # elementals2hg: a small searched canary (no per-opponent card in the list).
-  "elementals2hg      3 1001 25 10"
+  "elementals2hg 5  1001    25 20"
   # pd2hg: a RELEVANT deck, not a canary -- Dina ("each opponent loses 1"), Rolling Earthquake /
   # Pyrohemia ("each player") and Vito ("target opponent") all read heads / life. See the pd rows.
-  "pd2hg              3 1001 15 10"
+  "pd2hg      5  1001    25 20"
   # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
   # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
   # d3 b10 1.34 s/game, d5 b20 2.81 s/game, with NO game over 30 s at any of them -- the heavy tail
   # this deck shows at b200 is budget-driven, not structural, so the gate sizing is safe. th/hinata
   # counts => ~7 core-min added to the pooled batch.
   "fluctuator 0 1001 1000 0"
-  "fluctuator 3 1001  150 10"
-  "fluctuator 5 1001   75 20"
+  "fluctuator 3  1001    50 10"
+  "fluctuator 5  1001   175 20"
   # giants: mono-red Giant tribal (Stinkdrinker cost reduction into Inferno Titan / Surtland
   # Flinger fling / Tectonic Giant modal). Measured single-thread at the GATE budgets 2026-09-22,
   # post-rebase: d0 1000 games in 2 ms (free), d3 b10 0.521 s/game, d5 b20 1.098 s/game, and NO
@@ -423,14 +435,14 @@ SMOKE_CASES=(
   # plus a tutor decline arm; measured at these budgets the two axes are +9% wall at d3 / +26% at
   # d5 and buy -0.060 / -0.067 turns, so the sizing above already includes them.
   "giants 0 1001 1000 0"
-  "giants 3 1001  150 10"
-  "giants 5 1001   75 20"
+  "giants     3  1001    50 10"
+  "giants     5  1001   150 20"
   # pirates: U/R Aether Vial Pirates tribal (Buccaneer reveal-or-pay, Mimic/Automaton chosen type,
   # Corsair/Larcenist Treasures, Forerunner tutor-to-top drains). Added 2026-09-26 with Giants' sizing;
   # cost measured in the tier -- see the note beside the regression rows.
   "pirates 0 1001 1000 0"
-  "pirates 3 1001  150 10"
-  "pirates 5 1001   75 20"
+  "pirates    3  1001    50 10"
+  "pirates    5  1001   175 20"
   # selesnyav2: the NEW list (decks/SelesnyaLifegain/, promoted from v2-bogbeast-heroes 2026-10-22: 18 Elves,
   # 4 Bogbeast, 2 Heroes' Reunion, 2 Genesis Wave; Alchemist / Wellwisher / Verdant Sun's Avatar / Sanctuary
   # out). ENTERED at the original list's gate shape (pirates' counts) and the overnight ENTRY set; no keep table and no
@@ -440,9 +452,9 @@ SMOKE_CASES=(
   # smoke-only canary. Nothing in the 60 reads opponent heads, but Feed the Clan / Heroes' Reunion are
   # "target player" gains, and a second head lengthens the race the deck is ranked on.
   "selesnyav2 0 1001 1000 0"
-  "selesnyav2 3 1001  150 10"
-  "selesnyav2 5 1001   75 20"
-  "selesnyav22hg 3 1001 50 10"
+  "selesnyav2 3  1001    50 10"
+  "selesnyav2 5  1001   175 20"
+  "selesnyav22hg 5  1001    50 20"
   # soldiers: W/x Human Soldier tribal on Aether Vial (Champion / Thalia's Lieutenant counters, Field
   # Marshal / Kudro / Coppercoat / Darien / Rick lords, Harbin's 5-attacker pump, Beachhead's team
   # pump, Thalia's symmetric noncreature tax). ADDED 2026-10-04 (analysis-soldiers.md) at PIRATES'
@@ -452,8 +464,8 @@ SMOKE_CASES=(
   # life; Brutal Cathar exiles an opponent creature (immaterial to damage) and Esper Sentinel's
   # opponent-cast trigger is inert.
   "soldiers 0 1001 1000 0"
-  "soldiers 3 1001  150 10"
-  "soldiers 5 1001   75 20"
+  "soldiers   3  1001    50 10"
+  "soldiers   5  1001   175 20"
   # pd (Prevent Damage): Tamanoa / Rhox Faithmender turn Manabarbs, Spellshock, painland and sweeper
   # self-damage into lifegain; Vito / Dina turn the lifegain into the drain. Tutors (Beseech, Living
   # Wish into a 15-card sideboard, Green Sun's Zenith) make it the widest searched menu in the repo.
@@ -467,8 +479,8 @@ SMOKE_CASES=(
   # and pre keep table: clairvoyant bottoming is ~45% of its search units, so GT WILL move when the
   # artifacts land.
   "pd 0 1001 1000 0"
-  "pd 3 1001   25 10"
-  "pd 5 1001   15 20"
+  "pd         3  1001    25 10"
+  "pd         5  1001    25 20"
   # bruna: RESTORED TO ALL THREE TIERS 2026-10-09 (USER: "see if Bruna earns a spot back in the suite").
   # It was removed 2026-10-06 (USER: "Yes, we should take Bruna out.") for failing the 3x suite-cost rule
   # (~3.9 s/game after the Glittering Wish sideboard widened from 4 to 11 names). The Wish / Open the
@@ -479,19 +491,19 @@ SMOKE_CASES=(
   # WILL move when it lands. Cost in the tiers (2026-10-09, before the value leaf; Bruna
   # rows alone): overnight makespan 27m46s on 24 cores with 285 games over 30 s; ~70% of its search is
   # the clairvoyant mulligan-bottoming playouts the keep table replaces (analysis-Bruna.md, slow games).
-  "bruna2hg 3 1001   50 10"
+  "bruna2hg   5  1001    50 20"
   "bruna 0 1001 1000 0"
-  "bruna 3 1001  150 10"
-  "bruna 5 1001   75 20"
+  "bruna      3  1001    50 10"
+  "bruna      5  1001   150 20"
   # edf (EldraziDisplacerFlicker): ADDED 2026-10-17. suite_gate --cost on ONE pooled regression-tier run
   # (Release, quiet box) measured its worst searched case, d5 b20 s3003, at 6,174 ms/game against pd's
   # 2,695 (the costliest deck with both artifacts) -> 2.29x, budget 8,086. Sized like pd (closest per-game
   # cost): at Bruna's counts it was 26% of the regression tier. No value leaf / keep table yet, so GT WILL
   # move when they land; overnight carries the ENTRY set.
-  "edf2hg 3 1001   15 10"
+  "edf2hg     5  1001    25 20"
   "edf 0 1001 1000 0"
-  "edf 3 1001   25 10"
-  "edf 5 1001   15 20"
+  "edf        3  1001    25 10"
+  "edf        5  1001    25 20"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -513,8 +525,8 @@ SMOKE_CASES=(
   # interaction silently deleted 54% of its value-leaf labels for four days (cd00879e) with nothing
   # to go red, precisely because Snow had no suite coverage. This closes that hole.
   "snow 0 1001 1000 0"
-  "snow 3 1001  100 10"
-  "snow 5 1001   50 20"
+  "snow       3  1001    25 10"
+  "snow       5  1001   125 20"
   # landfall: ADDED 2026-10-16 on the USER's decision (docs/design/analysis-Landfall.md, L1), all three
   # tiers at once (the all-or-none rule). Before its artifacts it was 4.30x PD in one pooled run; with the
   # USER's fetch-rule prune it is ~3.1x at the first-proposed 50/25 rows and 2.64x at these (92-99% of the
@@ -525,8 +537,8 @@ SMOKE_CASES=(
   # GT WILL move when they land. No 2HG row: the deck has no "each opponent" effect or
   # starting-life-relative card for a second head to scale.
   "landfall 0 1001 1000 0"
-  "landfall 3 1001   30 10"
-  "landfall 5 1001   15 20"
+  "landfall   3  1001    25 10"
+  "landfall   5  1001    25 20"
   # galadriel: ADDED 2026-10-17 (docs/design/analysis-Galadriel.md) at Landfall's pre-keep-table admission
   # shape; RESIZED 2026-10-18 after the keep table + value leaf landed (USER: "we should resize all of the
   # regression test rows for the deck") -- smoke/regression to the Selesnya/Bruna shape, overnight to the
@@ -534,18 +546,18 @@ SMOKE_CASES=(
   # worst searched case measured ~170 ms/game (was 2,969 before the keep table). 2HG rows:
   # Crackle with Power hits "up to X targets", so a second head is a second Crackle target.
   "galadriel 0 1001 1000 0"
-  "galadriel 3 1001  150 10"
-  "galadriel 5 1001   75 20"
-  "galadriel2hg 3 1001 75 10"
+  "galadriel  3  1001    50 10"
+  "galadriel  5  1001   175 20"
+  "galadriel2hg 5  1001    75 20"
   # niv: ADDED 2026-10-18 (docs/design/analysis-NivMizzetCombo.md), all three tiers at once, at Landfall's /
   # Galadriel's pre-keep-table admission shape (d3 30/40, d5 15/20; overnight d3 4x250, d5 4x150) -- grow
   # at the keep-table adoption. No value leaf and no keep table yet, so GT WILL move when they land. 2HG
   # rows: Niv-Mizzet's "any target" ping is single-target (x1 whatever the heads), so a 30-life team
   # needs a longer draw/ping loop -- and Tandem Lookout's draws are MANDATORY.
   "niv 0 1001 1000 0"
-  "niv 3 1001   30 10"
-  "niv 5 1001   15 20"
-  "niv2hg 3 1001 30 10"
+  "niv        3  1001    25 10"
+  "niv        5  1001    25 20"
+  "niv2hg     5  1001    25 20"
   # colossus: ADDED 2026-10-17 by the analysis (docs/design/analysis-Colossus Hammer.md), all three tiers
   # at once (the all-or-none rule), at the pirates / soldiers gate shape and the overnight ENTRY set.
   # Colossus Hammer (+10/+10) on a double striker through five equip cheats; most games end T3-T5. No
@@ -553,8 +565,8 @@ SMOKE_CASES=(
   # Path exclusion are ON (2026-10-18, MTG_COLOSSUS_ORDER / MTG_COLOSSUS_NO_PATH); the AI-drafted discard
   # buckets ship OFF (MTG_COLOSSUS_BUCKET_DISCARD) pending the USER.
   "colossus 0 1001 1000 0"
-  "colossus 3 1001  150 10"
-  "colossus 5 1001   75 20"
+  "colossus   3  1001    50 10"
+  "colossus   5  1001   175 20"
   # vampires: ADDED 2026-10-18 by the analysis (docs/design/analysis-Vampire.md), all three tiers at
   # once (the all-or-none rule), at the colossus / pirates gate shape and the overnight ENTRY set. B/R/W
   # Vampire tribal on Aether Vial: madness (Falkenrath Gorger), discard / sacrifice outlets, Bloodghast
@@ -563,9 +575,9 @@ SMOKE_CASES=(
   # life), "an opponent lost life this turn" (Pit Fighter, Socialite) and Captivating Vampire's targets
   # all read the 2HG life total / heads.
   "vampires 0 1001 1000 0"
-  "vampires 3 1001  150 10"
-  "vampires 5 1001   75 20"
-  "vampires2hg 3 1001 50 10"
+  "vampires   3  1001    50 10"
+  "vampires   5  1001   175 20"
+  "vampires2hg 5  1001    50 20"
   # alchemist: ADDED 2026-10-20 by the analysis (docs/design/analysis-AccomplishedAlchemist.md), all three tiers
   # at once (the all-or-none rule), at the colossus gate shape and the overnight ENTRY set. Accomplished
   # Alchemist + an untapper is unbounded mana; the kill is Stroke of Genius at the opponent (deck-out) or a
@@ -573,9 +585,9 @@ SMOKE_CASES=(
   # expands to the FULL set just before the keep table is adopted. 2HG canary: Scholar drains each opponent and
   # Stroke targets ONE head's library.
   "alchemist 0 1001 1000 0"
-  "alchemist 3 1001  150 10"
-  "alchemist 5 1001   75 20"
-  "alchemist2hg 3 1001 50 10"
+  "alchemist  3  1001    50 10"
+  "alchemist  5  1001   150 20"
+  "alchemist2hg 5  1001    50 20"
   # elementals (LandfallElementals): ADDED 2026-10-19 by the analysis (docs/design/analysis-LandfallElementals.md),
   # all three tiers at once (the all-or-none rule), at the colossus gate shape and the overnight ENTRY set:
   # its worst searched case measured ~1.6 s/game (0.55x galadriel) before a keep table -- most of it
@@ -583,8 +595,8 @@ SMOKE_CASES=(
   # at the keep-table adoption. Key `elementals`, not `landfall_elementals`, so no `landfall_` prefix match can capture it.
   # No value leaf and no keep table yet, so GT WILL move when they land.
   "elementals 0 1001 1000 0"
-  "elementals 3 1001  150 10"
-  "elementals 5 1001   75 20"
+  "elementals 3  1001    50 10"
+  "elementals 5  1001   125 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -655,6 +667,10 @@ REGRESSION_CASES=(
   "knights          5 30001  20 0"
   "landfall         3 30311  10 0"
   "landfall         5 30311  10 0"
+  # elementals: added 2026-10-27 (it entered the suite 10-19, before the backstop). Screened 16 five-game blocks at
+  # d3/d5: all clean but s30141 (one game hit the 2,000,000-unit cap at d3). Slowest kept game ~2 s.
+  "elementals       3 30001   5 0"
+  "elementals       5 30001   5 0"
   # niv: NO backstop block yet (2026-10-22, owed). The screen (5-game blocks at 30401-30471, d3 and d5) abandoned
   # 1-3 games in EVERY block, and the games that finished spent ~30-70 s each on work the unit meter does not count,
   # so abandon_units cannot bound them. The deck entered the budgeted tiers without it so its mulligan generation
@@ -702,209 +718,177 @@ REGRESSION_CASES=(
   # tier run, never a per-deck loop). See docs/design/fungus-token-search-cost.md and
   # docs/design/fungus-slow-rollout-diagnosis-2026-09-30.md.
   "fungusv3  0 2002 1000 0"
-  "fungusv3  3 2002  200 10"
-  "fungusv3  3 3003  200 10"
-  "fungusv3  5 2002  100 20"
-  "fungusv3  5 3003  100 20"
+  "fungusv3   3  2002    75 10"
+  "fungusv3   5  2002   250 20"
+  "fungusv3   5  3003   250 20"
   "slivers 0 2002 1000 0"
-  "slivers 3 2002  400 10"
-  "slivers 3 3003  400 10"
-  "slivers 5 2002  300 20"
-  "slivers 5 3003  300 20"
+  "slivers    3  2002   125 10"
+  "slivers    5  2002   650 20"
+  "slivers    5  3003   650 20"
   "burn    0 2002 1000 0"
-  "burn    3 2002  500 10"
-  "burn    3 3003  500 10"
-  "burn    5 2002  500 20"
-  "burn    5 3003  500 20"
+  "burn       3  2002   175 10"
+  "burn       5  2002   900 20"
+  "burn       5  3003   900 20"
   "th      0 2002 1000 0"
-  "th      3 2002  500 10"
-  "th      3 3003  500 10"
-  "th      5 2002  300 20"
-  "th      5 3003  300 20"
+  "th         3  2002   175 10"
+  "th         5  2002   600 20"
+  "th         5  3003   600 20"
   "knights 0 2002 1000 0"
-  "knights 3 2002  300 10"
-  "knights 3 3003  300 10"
-  "knights 5 2002  250 20"
-  "knights 5 3003  250 20"
+  "knights    3  2002   100 10"
+  "knights    5  2002   500 20"
+  "knights    5  3003   500 20"
   # whiteknights: knights' sizing, disjoint seeds from smoke (1001). ~40 core-s total.
   "whiteknights 0 2002 1000 0"
-  "whiteknights 3 2002  300 10"
-  "whiteknights 3 3003  300 10"
-  "whiteknights 5 2002  250 20"
-  "whiteknights 5 3003  250 20"
+  "whiteknights 3  2002   100 10"
+  "whiteknights 5  2002   500 20"
+  "whiteknights 5  3003   500 20"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 2002 1000 0"
-  "antilife 3 2002  300 10"
-  "antilife 3 3003  300 10"
-  "antilife 5 2002  250 20"
-  "antilife 5 3003  250 20"
+  "antilife   3  2002   100 10"
+  "antilife   5  2002   500 20"
+  "antilife   5  3003   500 20"
   # hinata: d0 full + d3/d5 at both seeds (affordable since the max-mana gate; see SMOKE block).
   # Sized a touch under the other decks (~0.59/1.25 s/game); heaviest job d5 100g ~125 s single-thread.
   "hinata  0 2002 1000 0"
-  "hinata  3 2002  200 10"
-  "hinata  3 3003  200 10"
-  "hinata  5 2002  100 20"
-  "hinata  5 3003  100 20"
+  "hinata     3  2002    75 10"
+  "hinata     5  2002   150 30"
+  "hinata     5  3003   150 30"
   # dragonstorm: two seeds at d3/d5 (~0.17/0.28 s/game -> ~4 min added; well under the 45-min budget).
   "dragonstorm 0 2002 1000 0"
-  "dragonstorm 3 2002  300 10"
-  "dragonstorm 3 3003  300 10"
-  "dragonstorm 5 2002  250 20"
-  "dragonstorm 5 3003  250 20"
+  "dragonstorm 3  2002   100 10"
+  "dragonstorm 5  2002   425 20"
+  "dragonstorm 5  3003   425 20"
   # auras: burn-tier counts at gate budgets -- ~32 s added single-thread (see SMOKE block).
   "auras   0 2002 1000 0"
-  "auras   3 2002  500 10"
-  "auras   3 3003  500 10"
-  "auras   5 2002  500 20"
-  "auras   5 3003  500 20"
+  "auras      3  2002   175 10"
+  "auras      5  2002   900 20"
+  "auras      5  3003   900 20"
   # goblins: two seeds at d3/d5 + d0 (cheap fast aggro; ~4 min added, well under budget).
   "goblins 0 2002 1000 0"
-  "goblins 3 2002  300 10"
-  "goblins 3 3003  300 10"
-  "goblins 5 2002  250 20"
-  "goblins 5 3003  250 20"
+  "goblins    3  2002   100 10"
+  "goblins    5  2002   250 60"
+  "goblins    5  3003   250 60"
   # creature_giving: dragonstorm-mirror sizing (~6.5 min ST added; see SMOKE block for costs).
   "creature_giving 0 2002 1000 0"
-  "creature_giving 3 2002  300 10"
-  "creature_giving 3 3003  300 10"
-  "creature_giving 5 2002  250 20"
-  "creature_giving 5 3003  250 20"
+  "creature_giving 3  2002   100 10"
+  "creature_giving 5  2002   425 20"
+  "creature_giving 5  3003   425 20"
   # mirrorwing: sizing inherited from the v1 list (~20 min ST budgeted); on the 2026-08-24
   # shipping list it actually costs ~2 min ST. See SMOKE block for the re-measured costs.
   "mirrorwing 0 2002 1000 0"
-  "mirrorwing 3 2002  200 10"
-  "mirrorwing 3 3003  200 10"
-  "mirrorwing 5 2002  100 20"
-  "mirrorwing 5 3003  100 20"
+  "mirrorwing 3  2002    75 10"
+  "mirrorwing 5  2002   225 20"
+  "mirrorwing 5  3003   225 20"
   # fivecolour: hinata/mirrorwing-mirror sizing (~14 min ST added; see SMOKE block for costs).
   "fivecolour 0 2002 1000 0"
-  "fivecolour 3 2002  200 10"
-  "fivecolour 3 3003  200 10"
-  "fivecolour 5 2002  100 20"
-  "fivecolour 5 3003  100 20"
+  "fivecolour 3  2002    75 10"
+  "fivecolour 5  2002   200 20"
+  "fivecolour 5  3003   200 20"
   # stompy: dragonstorm-style two-seed sweep (~8 min ST added at probed per-game costs).
   "stompy  0 2002 1000 0"
-  "stompy  3 2002  300 10"
-  "stompy  3 3003  300 10"
-  "stompy  5 2002  250 20"
-  "stompy  5 3003  250 20"
+  "stompy     3  2002   100 10"
+  "stompy     5  2002   500 20"
+  "stompy     5  3003   500 20"
   # minotaur: stompy-style two-seed sweep (~9 min ST added at the probed per-game costs; the
   # longest job, d5 x250, is ~158 s -- well inside the existing regression makespan).
   "minotaur 0 2002 1000 0"
-  "minotaur 3 2002  300 10"
-  "minotaur 3 3003  300 10"
-  "minotaur 5 2002  250 20"
-  "minotaur 5 3003  250 20"
+  "minotaur   3  2002   100 10"
+  "minotaur   5  2002   500 20"
+  "minotaur   5  3003   500 20"
   # kittyv3: see the SMOKE block. The GATED cells (worst searched case d5 b20 = 1,514 ms/game,
   # 0.49x the 3,100 budget). v1 and v2 had blocks here until 2026-10-14; both were dropped when v3
   # was promoted to the shipped list.
   "kittyv3 0 2002 1000 0"
-  "kittyv3 3 2002  100 10"
-  "kittyv3 3 3003  100 10"
-  "kittyv3 5 2002   50 20"
-  "kittyv3 5 3003   50 20"
+  "kittyv3    3  2002    25 10"
+  "kittyv3    5  2002   150 14"
+  "kittyv3    5  3003   150 14"
   # dragons: same shape (~26 min ST added at the probed costs; pools inside the existing makespan).
   "dragons 0 2002 1000 0"
-  "dragons 3 2002  300 10"
-  "dragons 3 3003  300 10"
-  "dragons 5 2002  250 20"
-  "dragons 5 3003  250 20"
+  "dragons    3  2002   100 10"
+  "dragons    5  2002   500 20"
+  "dragons    5  3003   500 20"
   # breaching: kitty-shaped two-seed sweep at reduced counts (~0.38/0.56 s/game at the gate
   # budgets => ~7 min ST added, pools inside the existing makespan).
   "breaching 0 2002 1000 0"
-  "breaching 3 2002  300 10"
-  "breaching 3 3003  300 10"
-  "breaching 5 2002  250 20"
-  "breaching 5 3003  250 20"
+  "breaching  3  2002   100 10"
+  "breaching  5  2002   500 20"
+  "breaching  5  3003   500 20"
   # critter: breaching-shaped two-seed sweep (~0.20/0.43 s/game at the gate budgets).
   "critter 0 2002 1000 0"
-  "critter 3 2002  300 10"
-  "critter 3 3003  300 10"
-  "critter 5 2002  250 20"
-  "critter 5 3003  250 20"
+  "critter    3  2002   100 10"
+  "critter    5  2002   500 20"
+  "critter    5  3003   500 20"
   # melira: restored 2026-09-08 (see the SMOKE block).
   "melira 0 2002 1000 0"
-  "melira 3 2002   75 10"
-  "melira 3 3003   75 10"
-  "melira 5 2002   40 20"
-  "melira 5 3003   40 20"
+  "melira     3  2002    25 10"
+  "melira     5  2002    40 60"
+  "melira     5  3003    40 60"
   # angels: ADDED 2026-09-18 (see the SMOKE block). ~77 core-s for this tier.
   "angels 0 2002 1000 0"
-  "angels 3 2002  300 10"
-  "angels 3 3003  300 10"
-  "angels 5 2002  250 20"
-  "angels 5 3003  250 20"
+  "angels     3  2002   100 10"
+  "angels     5  2002   500 20"
+  "angels     5  3003   500 20"
   # 2HG gate, second seed (see the SMOKE block for the design): the seven 2HG-relevant decks at
   # d3, plus ONE d5 case (hinata2hg -- the value_play/deep-search path under two heads, covering
   # the Crackle declared-count search where the second face changes lethality). No canaries here
   # (smoke owns them); the deep default-settings 2HG coverage is the OVERNIGHT block below.
-  "hinata2hg     3 2002  100 10"
-  "hinata2hg     5 2002   50 20"
-  "antilife2hg   3 2002  150 10"
-  "minotaur2hg   3 2002  150 10"
-  "goblins2hg    3 2002  100 10"
-  "knights2hg    3 2002  100 10"
-  "whiteknights2hg 3 2002 100 10"
-  "fivecolour2hg 3 2002   50 10"
-  "fluctuator2hg 3 2002  100 10"
+  "hinata2hg  5  2002    75 30"
+  "antilife2hg 5  2002   150 20"
+  "minotaur2hg 5  2002   150 20"
+  "goblins2hg 5  2002    75 60"
+  "knights2hg 5  2002   100 20"
+  "whiteknights2hg 5  2002   100 20"
+  "fivecolour2hg 5  2002    50 20"
+  "fluctuator2hg 5  2002   100 20"
   # angels2hg: antilife/minotaur sizing again (~10 core-s at 0.066 s/game).
-  "angels2hg     3 2002  150 10"
+  "angels2hg  5  2002   150 20"
   # pd2hg: see the pd SMOKE block (a 2HG-relevant deck).
-  "pd2hg         3 2002   25 10"
+  "pd2hg      5  2002    25 20"
   # fluctuator: gate budgets at both seeds (~14 core-min). See the SMOKE block for measured costs.
   "fluctuator 0 2002 1000 0"
-  "fluctuator 3 2002  150 10"
-  "fluctuator 3 3003  150 10"
-  "fluctuator 5 2002   75 20"
-  "fluctuator 5 3003   75 20"
+  "fluctuator 3  2002    50 10"
+  "fluctuator 5  2002   200 20"
+  "fluctuator 5  3003   200 20"
   # giants: see the SMOKE block. Unlike Snow, this deck is NOT seed-sensitive -- the regression
   # seeds are actually CHEAPER than the smoke seed, so the smoke counts carry across unchanged.
   # MEASURED IN THE TIER'S OWN SEEDS 2026-09-22: d3 b10 63.3/61.0 core-s at s2002/s3003
   # (0.422/0.407 s/game), d5 b20 79.3/51.4 (1.057/0.685). ~255 core-s total; budget is 45 min.
   # No game over 30 s, so it does not become the pole.
   "giants 0 2002 1000 0"
-  "giants 3 2002  150 10"
-  "giants 3 3003  150 10"
-  "giants 5 2002   75 20"
-  "giants 5 3003   75 20"
+  "giants     3  2002    50 10"
+  "giants     5  2002   200 20"
+  "giants     5  3003   200 20"
   # pirates: see the SMOKE block.
   "pirates 0 2002 1000 0"
-  "pirates 3 2002  150 10"
-  "pirates 3 3003  150 10"
-  "pirates 5 2002   75 20"
-  "pirates 5 3003   75 20"
+  "pirates    3  2002    50 10"
+  "pirates    5  2002   200 20"
+  "pirates    5  3003   200 20"
   # selesnyav2: see the SMOKE block.
   "selesnyav2 0 2002 1000 0"
-  "selesnyav2 3 2002  150 10"
-  "selesnyav2 3 3003  150 10"
-  "selesnyav2 5 2002   75 20"
-  "selesnyav2 5 3003   75 20"
-  "selesnyav22hg 3 2002 100 10"
-  "selesnyav22hg 5 2002  50 20"
+  "selesnyav2 3  2002    50 10"
+  "selesnyav2 5  2002   200 20"
+  "selesnyav2 5  3003   200 20"
+  "selesnyav22hg 5  2002   150 20"
   # soldiers: see the SMOKE block (pirates' counts).
   "soldiers 0 2002 1000 0"
-  "soldiers 3 2002  150 10"
-  "soldiers 3 3003  150 10"
-  "soldiers 5 2002   75 20"
-  "soldiers 5 3003   75 20"
+  "soldiers   3  2002    50 10"
+  "soldiers   5  2002   200 20"
+  "soldiers   5  3003   200 20"
   # pd: see the SMOKE block. These are the GATED cells (worst searched case d5 b20 s3003).
   "pd 0 2002 1000 0"
-  "pd 3 2002   40 10"
-  "pd 3 3003   40 10"
-  "pd 5 2002   25 20"
-  "pd 5 3003   25 20"
+  "pd         3  2002    25 10"
+  "pd         5  2002    50 20"
+  "pd         5  3003    50 20"
   # bruna: RESTORED 2026-10-09, see the SMOKE block.
   "bruna 0 2002 1000 0"
-  "bruna 3 2002  150 10"
-  "bruna 3 3003  150 10"
-  "bruna 5 2002   75 20"
-  "bruna 5 3003   75 20"
+  "bruna      3  2002    50 10"
+  "bruna      5  2002   150 20"
+  "bruna      5  3003   150 20"
   # edf: see the SMOKE block.
   "edf 0 2002 1000 0"
-  "edf 3 2002   40 10"
-  "edf 3 3003   40 10"
-  "edf 5 2002   25 20"
-  "edf 5 3003   25 20"
+  "edf        3  2002    25 10"
+  "edf        5  2002    50 20"
+  "edf        5  3003    50 20"
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
@@ -912,57 +896,47 @@ REGRESSION_CASES=(
   # The worst single game in the measured windows is 59.6 s, under the tier's own makespan, so Snow
   # does not become the pole.
   "snow 0 2002 1000 0"
-  "snow 3 2002   60 10"
-  "snow 3 3003   60 10"
-  "snow 5 2002   30 20"
-  "snow 5 3003   30 20"
+  "snow       3  2002    25 10"
+  "snow       5  2002    75 20"
+  "snow       5  3003    75 20"
   # landfall: see the SMOKE block.
   "landfall 0 2002 1000 0"
-  "landfall 3 2002   40 10"
-  "landfall 3 3003   40 10"
-  "landfall 5 2002   20 20"
-  "landfall 5 3003   20 20"
+  "landfall   3  2002    25 10"
+  "landfall   5  2002    50 20"
+  "landfall   5  3003    50 20"
   # galadriel: see the SMOKE block.
   "galadriel 0 2002 1000 0"
-  "galadriel 3 2002  150 10"
-  "galadriel 3 3003  150 10"
-  "galadriel 5 2002   75 20"
-  "galadriel 5 3003   75 20"
-  "galadriel2hg 3 2002 100 10"
-  "galadriel2hg 5 2002  50 20"
+  "galadriel  3  2002    50 10"
+  "galadriel  5  2002   200 20"
+  "galadriel  5  3003   200 20"
+  "galadriel2hg 5  2002   150 20"
   # niv: see the SMOKE block.
   "niv 0 2002 1000 0"
-  "niv 3 2002   40 10"
-  "niv 3 3003   40 10"
-  "niv 5 2002   20 20"
-  "niv 5 3003   20 20"
-  "niv2hg 3 2002 40 10"
+  "niv        3  2002    25 10"
+  "niv        5  2002    50 20"
+  "niv        5  3003    50 20"
+  "niv2hg     5  2002    50 20"
   # colossus: see the SMOKE block.
   "colossus 0 2002 1000 0"
-  "colossus 3 2002  150 10"
-  "colossus 3 3003  150 10"
-  "colossus 5 2002   75 20"
-  "colossus 5 3003   75 20"
+  "colossus   3  2002    50 10"
+  "colossus   5  2002   200 20"
+  "colossus   5  3003   200 20"
   # vampires: see the SMOKE block.
   "vampires 0 2002 1000 0"
-  "vampires 3 2002  150 10"
-  "vampires 3 3003  150 10"
-  "vampires 5 2002   75 20"
-  "vampires 5 3003   75 20"
-  "vampires2hg 3 2002 100 10"
-  "vampires2hg 5 2002  50 20"
+  "vampires   3  2002    50 10"
+  "vampires   5  2002   200 20"
+  "vampires   5  3003   200 20"
+  "vampires2hg 5  2002   100 20"
   # alchemist: see the SMOKE block.
   "alchemist 0 2002 1000 0"
-  "alchemist 3 2002  150 10"
-  "alchemist 3 3003  150 10"
-  "alchemist 5 2002   75 20"
-  "alchemist 5 3003   75 20"
+  "alchemist  3  2002    50 10"
+  "alchemist  5  2002   175 20"
+  "alchemist  5  3003   175 20"
   # elementals: see the SMOKE block.
   "elementals 0 2002 1000 0"
-  "elementals 3 2002  150 10"
-  "elementals 3 3003  150 10"
-  "elementals 5 2002   75 20"
-  "elementals 5 3003   75 20"
+  "elementals 3  2002    50 10"
+  "elementals 5  2002   150 20"
+  "elementals 5  3003   150 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -1048,6 +1022,10 @@ OVERNIGHT_CASES=(
   "knights          5 30101  20 0"
   "landfall         3 30341  10 0"
   "landfall         5 30341  10 0"
+  # elementals: added 2026-10-27 (it entered the suite 10-19, before the backstop). Screened 16 five-game blocks at
+  # d3/d5: all clean but s30141 (one game hit the 2,000,000-unit cap at d3). Slowest kept game ~2 s.
+  "elementals       3 30101   5 0"
+  "elementals       5 30101   5 0"
   # niv: NO backstop block yet (2026-10-22, owed). The screen (5-game blocks at 30401-30471, d3 and d5) abandoned
   # 1-3 games in EVERY block, and the games that finished spent ~30-70 s each on work the unit meter does not count,
   # so abandon_units cannot bound them. The deck entered the budgeted tiers without it so its mulligan generation
@@ -1096,62 +1074,47 @@ OVERNIGHT_CASES=(
   "fungusv3  0  6006 2000 0"
   "fungusv3  0  8008 2000 0"
   "fungusv3  0 10010 2000 0"
-  "fungusv3  3  4004 1000 20"
-  "fungusv3  3  5005 1000 20"
-  "fungusv3  3  6006 1000 20"
-  "fungusv3  3  7007 1000 20"
-  "fungusv3  5  4004  500 40"
-  "fungusv3  5  5005  500 40"
-  "fungusv3  5  6006  500 40"
-  "fungusv3  5  7007  500 40"
+  "fungusv3   3  4004   325 10"
+  "fungusv3   5  4004  1425 20"
+  "fungusv3   5  5005  1425 20"
+  "fungusv3   5  6006  1425 20"
+  "fungusv3   5  7007  1425 20"
   "slivers 0 4004 2000 0"
   "slivers 0  6006 2000 0"
   "slivers 0  8008 2000 0"
   "slivers 0 10010 2000 0"
-  "slivers 3 4004 1000 10"
-  "slivers 3 5005 1000 10"
-  "slivers 3 6006 1000 10"
-  "slivers 3 7007 1000 10"
-  "slivers 5 4004 1000 20"
-  "slivers 5 5005 1000 20"
-  "slivers 5 6006 1000 20"
-  "slivers 5 7007 1000 20"
+  "slivers    3  4004   325 10"
+  "slivers    5  4004  1925 20"
+  "slivers    5  5005  1925 20"
+  "slivers    5  6006  1925 20"
+  "slivers    5  7007  1925 20"
   "burn    0 4004 2000 0"
   "burn    0  6006 2000 0"
   "burn    0  8008 2000 0"
   "burn    0 10010 2000 0"
-  "burn    3 4004 1000 80"
-  "burn    3 5005 1000 80"
-  "burn    3 6006 1000 80"
-  "burn    3 7007 1000 80"
-  "burn    5 4004 1000 80"
-  "burn    5 5005 1000 80"
-  "burn    5 6006 1000 80"
-  "burn    5 7007 1000 80"
+  "burn       3  4004   325 10"
+  "burn       5  4004  1925 20"
+  "burn       5  5005  1925 20"
+  "burn       5  6006  1925 20"
+  "burn       5  7007  1925 20"
   "th      0 4004 2000 0"
   "th      0  6006 2000 0"
   "th      0  8008 2000 0"
   "th      0 10010 2000 0"
-  "th      3 4004 1000 80"
-  "th      3 5005 1000 80"
-  "th      3 6006 1000 80"
-  "th      3 7007 1000 80"
-  "th      5 4004 1000 80"
-  "th      5 5005 1000 80"
-  "th      5 6006 1000 80"
-  "th      5 7007 1000 80"
+  "th         3  4004   325 10"
+  "th         5  4004  1925 20"
+  "th         5  5005  1925 20"
+  "th         5  6006  1925 20"
+  "th         5  7007  1925 20"
   "knights 0 4004 2000 0"
   "knights 0  6006 2000 0"
   "knights 0  8008 2000 0"
   "knights 0 10010 2000 0"
-  "knights 3 4004 1000 20"
-  "knights 3 5005 1000 20"
-  "knights 3 6006 1000 20"
-  "knights 3 7007 1000 20"
-  "knights 5 4004 1000 40"
-  "knights 5 5005 1000 40"
-  "knights 5 6006 1000 40"
-  "knights 5 7007 1000 40"
+  "knights    3  4004   325 10"
+  "knights    5  4004  1925 20"
+  "knights    5  5005  1925 20"
+  "knights    5  6006  1925 20"
+  "knights    5  7007  1925 20"
   # whiteknights: knights' 4-seed sweep. d0 ~19 core-s, d5 b40 ~36 core-s; the d3 b20 rows dominate at
   # ~220 core-s for the reason noted in the smoke block (shallow depth + starved budget is the costly
   # corner on this deck, not deep search). ~4.6 core-min for the tier, which is noise against the 8 h
@@ -1160,27 +1123,21 @@ OVERNIGHT_CASES=(
   "whiteknights 0  6006 2000 0"
   "whiteknights 0  8008 2000 0"
   "whiteknights 0 10010 2000 0"
-  "whiteknights 3 4004 1000 20"
-  "whiteknights 3 5005 1000 20"
-  "whiteknights 3 6006 1000 20"
-  "whiteknights 3 7007 1000 20"
-  "whiteknights 5 4004 1000 40"
-  "whiteknights 5 5005 1000 40"
-  "whiteknights 5 6006 1000 40"
-  "whiteknights 5 7007 1000 40"
+  "whiteknights 3  4004   325 10"
+  "whiteknights 5  4004  1925 20"
+  "whiteknights 5  5005  1925 20"
+  "whiteknights 5  6006  1925 20"
+  "whiteknights 5  7007  1925 20"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 4004 2000 0"
   "antilife 0  6006 2000 0"
   "antilife 0  8008 2000 0"
   "antilife 0 10010 2000 0"
-  "antilife 3 4004 1000 10"
-  "antilife 3 5005 1000 10"
-  "antilife 3 6006 1000 10"
-  "antilife 3 7007 1000 10"
-  "antilife 5 4004 1000 20"
-  "antilife 5 5005 1000 20"
-  "antilife 5 6006 1000 20"
-  "antilife 5 7007 1000 20"
+  "antilife   3  4004   325 10"
+  "antilife   5  4004  1925 20"
+  "antilife   5  5005  1925 20"
+  "antilife   5  6006  1925 20"
+  "antilife   5  7007  1925 20"
   # hinata: the deep-search home. The max-mana backtracker gate (commit 9229b25) cut its combo search
   # ~15x (d3 5.9->0.47 s/game at session start; ~0.59/1.25 s/game d3/d5 tail-inclusive at THIS scale),
   # so the old tiny 40/25 sample is no longer necessary. Raised to 400 d3 / 300 d5 per seed = ~2449 s
@@ -1192,27 +1149,21 @@ OVERNIGHT_CASES=(
   "hinata  0  6006 2000 0"
   "hinata  0  8008 2000 0"
   "hinata  0 10010 2000 0"
-  "hinata  3 4004  400 10"
-  "hinata  3 5005  400 10"
-  "hinata  3 6006  400 10"
-  "hinata  3 7007  400 10"
-  "hinata  5 4004  300 20"
-  "hinata  5 5005  300 20"
-  "hinata  5 6006  300 20"
-  "hinata  5 7007  300 20"
+  "hinata     3  4004   125 10"
+  "hinata     5  4004   425 30"
+  "hinata     5  5005   425 30"
+  "hinata     5  6006   425 30"
+  "hinata     5  7007   425 30"
   # dragonstorm: 4-seed sweep at modest gate budgets (10/20) -- it's cheap, ~11 min total across seeds.
   "dragonstorm 0 4004 2000 0"
   "dragonstorm 0  6006 2000 0"
   "dragonstorm 0  8008 2000 0"
   "dragonstorm 0 10010 2000 0"
-  "dragonstorm 3 4004  500 10"
-  "dragonstorm 3 5005  500 10"
-  "dragonstorm 3 6006  500 10"
-  "dragonstorm 3 7007  500 10"
-  "dragonstorm 5 4004  300 20"
-  "dragonstorm 5 5005  300 20"
-  "dragonstorm 5 6006  300 20"
-  "dragonstorm 5 7007  300 20"
+  "dragonstorm 3  4004   175 10"
+  "dragonstorm 5  4004   750 20"
+  "dragonstorm 5  5005   750 20"
+  "dragonstorm 5  6006   750 20"
+  "dragonstorm 5  7007   750 20"
   # auras: full burn-tier 1000g x 4 seeds -- it is cheap enough (see SMOKE block) that the deep
   # decks still own the makespan. Budgets are split on MEASUREMENT, not by mode convention:
   #   d5 stays at the gate budget 20 because it is CONVERGED there -- re-running all four overnight
@@ -1226,27 +1177,21 @@ OVERNIGHT_CASES=(
   "auras   0  6006 2000 0"
   "auras   0  8008 2000 0"
   "auras   0 10010 2000 0"
-  "auras   3 4004 1000 80"
-  "auras   3 5005 1000 80"
-  "auras   3 6006 1000 80"
-  "auras   3 7007 1000 80"
-  "auras   5 4004 1000 20"
-  "auras   5 5005 1000 20"
-  "auras   5 6006 1000 20"
-  "auras   5 7007 1000 20"
+  "auras      3  4004   325 10"
+  "auras      5  4004  1925 20"
+  "auras      5  5005  1925 20"
+  "auras      5  6006  1925 20"
+  "auras      5  7007  1925 20"
   # goblins: wide 4-seed sweep (cheap fast aggro; d3/d5 sized like knights/dragonstorm).
   "goblins 0 4004 2000 0"
   "goblins 0  6006 2000 0"
   "goblins 0  8008 2000 0"
   "goblins 0 10010 2000 0"
-  "goblins 3 4004 1000 20"
-  "goblins 3 5005 1000 20"
-  "goblins 3 6006 1000 20"
-  "goblins 3 7007 1000 20"
-  "goblins 5 4004 1000 40"
-  "goblins 5 5005 1000 40"
-  "goblins 5 6006 1000 40"
-  "goblins 5 7007 1000 40"
+  "goblins    3  4004   325 10"
+  "goblins    5  4004  1650 60"
+  "goblins    5  5005  1650 60"
+  "goblins    5  6006  1650 60"
+  "goblins    5  7007  1650 60"
   # creature_giving: goblins-style generosity (d3 b20 / d5 b40, ~2x the gate budgets) at
   # dragonstorm-style d5 counts -- d5 b40 is the deck's expensive axis (~1 s/game ST est.),
   # so 500g x 4 seeds keeps it ~35 min ST. d3 1000g <= 1001 seed spacing; d0 2000g on the
@@ -1255,14 +1200,11 @@ OVERNIGHT_CASES=(
   "creature_giving 0  6006 2000 0"
   "creature_giving 0  8008 2000 0"
   "creature_giving 0 10010 2000 0"
-  "creature_giving 3 4004 1000 20"
-  "creature_giving 3 5005 1000 20"
-  "creature_giving 3 6006 1000 20"
-  "creature_giving 3 7007 1000 20"
-  "creature_giving 5 4004  500 40"
-  "creature_giving 5 5005  500 40"
-  "creature_giving 5 6006  500 40"
-  "creature_giving 5 7007  500 40"
+  "creature_giving 3  4004   325 10"
+  "creature_giving 5  4004  1425 20"
+  "creature_giving 5  5005  1425 20"
+  "creature_giving 5  6006  1425 20"
+  "creature_giving 5  7007  1425 20"
   # mirrorwing: sizing inherited from the v1 list (~60 min ST budgeted, when this was the heaviest
   # suite deck per game after slivers); on the 2026-08-24 shipping list it costs ~10 min ST.
   # Deeper budgets deliberately NOT raised until a b-sweep motivates them.
@@ -1270,14 +1212,11 @@ OVERNIGHT_CASES=(
   "mirrorwing 0 6006 2000 0"
   "mirrorwing 0 8008 2000 0"
   "mirrorwing 0 10010 2000 0"
-  "mirrorwing 3 4004  400 10"
-  "mirrorwing 3 5005  400 10"
-  "mirrorwing 3 6006  400 10"
-  "mirrorwing 3 7007  400 10"
-  "mirrorwing 5 4004  300 20"
-  "mirrorwing 5 5005  300 20"
-  "mirrorwing 5 6006  300 20"
-  "mirrorwing 5 7007  300 20"
+  "mirrorwing 3  4004   125 10"
+  "mirrorwing 5  4004   675 20"
+  "mirrorwing 5  5005   675 20"
+  "mirrorwing 5  6006   675 20"
+  "mirrorwing 5  7007   675 20"
   # fivecolour: hinata/mirrorwing-mirror overnight sizing (~70 min ST added; now the costliest deck
   # per game in the suite). Budgets deliberately left at the gate values -- the d5 case runs at the
   # value block's depth 6, so a generous budget here would change the shipped config, not stress it.
@@ -1285,14 +1224,11 @@ OVERNIGHT_CASES=(
   "fivecolour 0 6006 2000 0"
   "fivecolour 0 8008 2000 0"
   "fivecolour 0 10010 2000 0"
-  "fivecolour 3 4004  400 10"
-  "fivecolour 3 5005  400 10"
-  "fivecolour 3 6006  400 10"
-  "fivecolour 3 7007  400 10"
-  "fivecolour 5 4004  300 20"
-  "fivecolour 5 5005  300 20"
-  "fivecolour 5 6006  300 20"
-  "fivecolour 5 7007  300 20"
+  "fivecolour 3  4004   125 10"
+  "fivecolour 5  4004   550 20"
+  "fivecolour 5  5005   550 20"
+  "fivecolour 5  6006   550 20"
+  "fivecolour 5  7007   550 20"
   # stompy: creature_giving-style generosity (d3 b20 / d5 b40, ~2x the gate budgets) --
   # ~70 min ST added (d3 ~0.45 s/game, d5 b40 ~1.2 s/game est. from the gate-budget probe).
   # d0 on the 2002-spaced bases per the SEED SPACING rule above.
@@ -1300,28 +1236,22 @@ OVERNIGHT_CASES=(
   "stompy  0  6006 2000 0"
   "stompy  0  8008 2000 0"
   "stompy  0 10010 2000 0"
-  "stompy  3 4004 1000 20"
-  "stompy  3 5005 1000 20"
-  "stompy  3 6006 1000 20"
-  "stompy  3 7007 1000 20"
-  "stompy  5 4004  500 40"
-  "stompy  5 5005  500 40"
-  "stompy  5 6006  500 40"
-  "stompy  5 7007  500 40"
+  "stompy     3  4004   325 10"
+  "stompy     5  4004  1425 20"
+  "stompy     5  5005  1425 20"
+  "stompy     5  6006  1425 20"
+  "stompy     5  7007  1425 20"
   # minotaur: stompy-shaped four-seed deep sweep at 2x the gate budgets (d3 b20 / d5 b40).
   # At the probed costs that is ~4x1000x0.39 s + 4x500x0.63 s ~= 47 min single-thread, pooled.
   "minotaur 0  4004 2000 0"
   "minotaur 0  6006 2000 0"
   "minotaur 0  8008 2000 0"
   "minotaur 0 10010 2000 0"
-  "minotaur 3 4004 1000 20"
-  "minotaur 3 5005 1000 20"
-  "minotaur 3 6006 1000 20"
-  "minotaur 3 7007 1000 20"
-  "minotaur 5 4004  500 40"
-  "minotaur 5 5005  500 40"
-  "minotaur 5 6006  500 40"
-  "minotaur 5 7007  500 40"
+  "minotaur   3  4004   325 10"
+  "minotaur   5  4004  1425 20"
+  "minotaur   5  5005  1425 20"
+  "minotaur   5  6006  1425 20"
+  "minotaur   5  7007  1425 20"
   # kittyv3: see the SMOKE block. EXPANDED at the keep-table adoption, 2026-10-14 -- the ENTRY-style
   # quarter shape it used to carry (shared with the since-dropped kittyv2) existed because a deck
   # WITHOUT a keep table is at its
@@ -1351,14 +1281,11 @@ OVERNIGHT_CASES=(
   "kittyv3 0  6006 2000 0"
   "kittyv3 0  8008 2000 0"
   "kittyv3 0 10010 2000 0"
-  "kittyv3 3 4004  500 20"
-  "kittyv3 3 5005  500 20"
-  "kittyv3 3 6006  500 20"
-  "kittyv3 3 7007  500 20"
-  "kittyv3 5 4004  250 40"
-  "kittyv3 5 5005  250 40"
-  "kittyv3 5 6006  250 40"
-  "kittyv3 5 7007  250 40"
+  "kittyv3    3  4004   175 10"
+  "kittyv3    5  4004   700 14"
+  "kittyv3    5  5005   700 14"
+  "kittyv3    5  6006   700 14"
+  "kittyv3    5  7007   700 14"
   # dragons: same shape. Probed at b20/b40: d3 ~1.39 s/game, d5 ~3.60 s/game (0.54x/0.45x
   # minotaur) => ~3.6 core-hours added. Combined with kitty this is ~+5.4 core-hours on a tier
   # that ran ~9.6 core-hours, i.e. ~40 min wall on a free box against an 8 h budget.
@@ -1366,14 +1293,11 @@ OVERNIGHT_CASES=(
   "dragons 0  6006 2000 0"
   "dragons 0  8008 2000 0"
   "dragons 0 10010 2000 0"
-  "dragons 3 4004 1000 20"
-  "dragons 3 5005 1000 20"
-  "dragons 3 6006 1000 20"
-  "dragons 3 7007 1000 20"
-  "dragons 5 4004  500 40"
-  "dragons 5 5005  500 40"
-  "dragons 5 6006  500 40"
-  "dragons 5 7007  500 40"
+  "dragons    3  4004   325 10"
+  "dragons    5  4004  1425 20"
+  "dragons    5  5005  1425 20"
+  "dragons    5  6006  1425 20"
+  "dragons    5  7007  1425 20"
   # breaching: kitty-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
   # budgets 2026-09-03: d3 b20 ~0.43 s/game, d5 b40 ~0.60 s/game (the deck's search plateaus at
   # d3, so 2x budget costs almost nothing over the gates) => ~2.1 core-hours added. Counts obey
@@ -1382,55 +1306,43 @@ OVERNIGHT_CASES=(
   "breaching 0  6006 2000 0"
   "breaching 0  8008 2000 0"
   "breaching 0 10010 2000 0"
-  "breaching 3 4004 1000 20"
-  "breaching 3 5005 1000 20"
-  "breaching 3 6006 1000 20"
-  "breaching 3 7007 1000 20"
-  "breaching 5 4004  500 40"
-  "breaching 5 5005  500 40"
-  "breaching 5 6006  500 40"
-  "breaching 5 7007  500 40"
+  "breaching  3  4004   325 10"
+  "breaching  5  4004  1425 20"
+  "breaching  5  5005  1425 20"
+  "breaching  5  6006  1425 20"
+  "breaching  5  7007  1425 20"
   # critter: breaching-shaped 4-seed sweep at 2x gate budgets (~1.5 core-hours at the probe rates).
   "critter 0  4004 2000 0"
   "critter 0  6006 2000 0"
   "critter 0  8008 2000 0"
   "critter 0 10010 2000 0"
-  "critter 3 4004 1000 20"
-  "critter 3 5005 1000 20"
-  "critter 3 6006 1000 20"
-  "critter 3 7007 1000 20"
-  "critter 5 4004  500 40"
-  "critter 5 5005  500 40"
-  "critter 5 6006  500 40"
-  "critter 5 7007  500 40"
+  "critter    3  4004   325 10"
+  "critter    5  4004  1425 20"
+  "critter    5  5005  1425 20"
+  "critter    5  6006  1425 20"
+  "critter    5  7007  1425 20"
   # melira: restored 2026-09-08 (see the SMOKE block). The four-seed d3/d5 sweep that was
   # ~7.5 CPU-hours from one deck now projects to ~25 core-minutes.
   "melira 0 4004 2000 0"
   "melira 0 6006 2000 0"
   "melira 0 8008 2000 0"
   "melira 0 10010 2000 0"
-  "melira 3 4004  200 10"
-  "melira 3 5005  200 10"
-  "melira 3 6006  200 10"
-  "melira 3 7007  200 10"
-  "melira 5 4004  150 20"
-  "melira 5 5005  150 20"
-  "melira 5 6006  150 20"
-  "melira 5 7007  150 20"
+  "melira     3  4004    75 10"
+  "melira     5  4004   150 60"
+  "melira     5  5005   150 60"
+  "melira     5  6006   150 60"
+  "melira     5  7007   150 60"
   # angels: ADDED 2026-09-18 (see the SMOKE block). Full kitty/critter overnight shape -- it
   # projects to ~11 core-minutes against an 8 h tier budget, so there is nothing to trim for.
   "angels 0  4004 2000 0"
   "angels 0  6006 2000 0"
   "angels 0  8008 2000 0"
   "angels 0 10010 2000 0"
-  "angels 3 4004 1000 20"
-  "angels 3 5005 1000 20"
-  "angels 3 6006 1000 20"
-  "angels 3 7007 1000 20"
-  "angels 5 4004  500 40"
-  "angels 5 5005  500 40"
-  "angels 5 6006  500 40"
-  "angels 5 7007  500 40"
+  "angels     3  4004   325 10"
+  "angels     5  4004  1425 20"
+  "angels     5  5005  1425 20"
+  "angels     5  6006  1425 20"
+  "angels     5  7007  1425 20"
   # pirates (added 2026-09-27, USER: "Pirates should be added at all regression test tiers ... As
   # long as it is fast enough"): the angels/minotaur shape -- d0 2000 on the 2002-spaced bases, d3 1000
   # at b20, d5 500 at b40. Measured ~0.7 s/game d3b10 and ~1.3 s/game d5b20 in the gate tiers; this
@@ -1439,14 +1351,11 @@ OVERNIGHT_CASES=(
   "pirates 0  6006 2000 0"
   "pirates 0  8008 2000 0"
   "pirates 0 10010 2000 0"
-  "pirates 3 4004 1000 20"
-  "pirates 3 5005 1000 20"
-  "pirates 3 6006 1000 20"
-  "pirates 3 7007 1000 20"
-  "pirates 5 4004  500 40"
-  "pirates 5 5005  500 40"
-  "pirates 5 6006  500 40"
-  "pirates 5 7007  500 40"
+  "pirates    3  4004   325 10"
+  "pirates    5  4004  1425 20"
+  "pirates    5  5005  1425 20"
+  "pirates    5  6006  1425 20"
+  "pirates    5  7007  1425 20"
   # selesnyav2: see the SMOKE block. The overnight FULL set (regression-testing skill, "Sizing a deck's
   # overnight rows"), expanded 2026-10-22 just before the keep table + value sidecar were adopted and
   # re-baselined with both ABSENT first: the original list's (= angels/pirates') standard shape (d0 4x2000, d3 4x1000 b20,
@@ -1456,32 +1365,26 @@ OVERNIGHT_CASES=(
   "selesnyav2 0  6006 2000 0"
   "selesnyav2 0  8008 2000 0"
   "selesnyav2 0 10010 2000 0"
-  "selesnyav2 3 4004 1000 20"
-  "selesnyav2 3 5005 1000 20"
-  "selesnyav2 3 6006 1000 20"
-  "selesnyav2 3 7007 1000 20"
-  "selesnyav2 5 4004  500 40"
-  "selesnyav2 5 5005  500 40"
-  "selesnyav2 5 6006  500 40"
-  "selesnyav2 5 7007  500 40"
-  "selesnyav22hg 5 4004 170 40"
-  "selesnyav22hg 5 5005 170 40"
-  "selesnyav22hg 5 6006 170 40"
-  "selesnyav22hg 5 7007 170 40"
+  "selesnyav2 3  4004   325 10"
+  "selesnyav2 5  4004  1425 20"
+  "selesnyav2 5  5005  1425 20"
+  "selesnyav2 5  6006  1425 20"
+  "selesnyav2 5  7007  1425 20"
+  "selesnyav22hg 5  4004   175 20"
+  "selesnyav22hg 5  5005   175 20"
+  "selesnyav22hg 5  6006   175 20"
+  "selesnyav22hg 5  7007   175 20"
   # soldiers: see the SMOKE block. Full angels/pirates overnight shape (~1.9 core-h at the measured
   # 0.94 s/game d3 b20 and 1.49 s/game d5 b40).
   "soldiers 0  4004 2000 0"
   "soldiers 0  6006 2000 0"
   "soldiers 0  8008 2000 0"
   "soldiers 0 10010 2000 0"
-  "soldiers 3 4004 1000 20"
-  "soldiers 3 5005 1000 20"
-  "soldiers 3 6006 1000 20"
-  "soldiers 3 7007 1000 20"
-  "soldiers 5 4004  500 40"
-  "soldiers 5 5005  500 40"
-  "soldiers 5 6006  500 40"
-  "soldiers 5 7007  500 40"
+  "soldiers   3  4004   325 10"
+  "soldiers   5  4004  1425 20"
+  "soldiers   5  5005  1425 20"
+  "soldiers   5  6006  1425 20"
+  "soldiers   5  7007  1425 20"
   # pd: see the SMOKE block. RESIZED at the keep-table adoption (2026-10-12; regression-testing skill, "Sizing
   # a deck's overnight rows"; USER: resize to fix NOTABLY undersized rows, but keep a performance benefit from
   # the artifacts): d3 4x200 b20, d5 4x125 b40 (was the ledger's 4x100 / 4x75 -- 700 searched games, 1/4 of
@@ -1492,14 +1395,11 @@ OVERNIGHT_CASES=(
   "pd 0  6006 2000 0"
   "pd 0  8008 2000 0"
   "pd 0 10010 2000 0"
-  "pd 3 4004  200 20"
-  "pd 3 5005  200 20"
-  "pd 3 6006  200 20"
-  "pd 3 7007  200 20"
-  "pd 5 4004  125 40"
-  "pd 5 5005  125 40"
-  "pd 5 6006  125 40"
-  "pd 5 7007  125 40"
+  "pd         3  4004    75 10"
+  "pd         5  4004   300 20"
+  "pd         5  5005   300 20"
+  "pd         5  6006   300 20"
+  "pd         5  7007   300 20"
   # bruna: RESTORED 2026-10-09, see the SMOKE block. ENTRY SET (regression-testing skill, "Sizing a deck's
   # overnight rows"): Hinata's shape until Bruna's keep table is adopted. The rows restored on 10-09 were
   # the pre-removal standard shape (d3 4x1000 b20, d5 4x500 b40) -- 6,000 searched games against
@@ -1513,28 +1413,22 @@ OVERNIGHT_CASES=(
   "bruna 0 6006 2000 0"
   "bruna 0 8008 2000 0"
   "bruna 0 10010 2000 0"
-  "bruna 3 4004  400 10"
-  "bruna 3 5005  400 10"
-  "bruna 3 6006  400 10"
-  "bruna 3 7007  400 10"
-  "bruna 5 4004  300 20"
-  "bruna 5 5005  300 20"
-  "bruna 5 6006  300 20"
-  "bruna 5 7007  300 20"
+  "bruna      3  4004   125 10"
+  "bruna      5  4004   500 20"
+  "bruna      5  5005   500 20"
+  "bruna      5  6006   500 20"
+  "bruna      5  7007   500 20"
   # edf: see the SMOKE block. Kept on the ENTRY SET (Hinata's shape) at its keep-table adoption (2026-10-21):
   # at 6.2 s/game (d5 b20) it is the 2nd-costliest deck in the suite, and a heavy deck stays near Hinata's shape.
   "edf 0 4004 2000 0"
   "edf 0 6006 2000 0"
   "edf 0 8008 2000 0"
   "edf 0 10010 2000 0"
-  "edf 3 4004  400 10"
-  "edf 3 5005  400 10"
-  "edf 3 6006  400 10"
-  "edf 3 7007  400 10"
-  "edf 5 4004  300 20"
-  "edf 5 5005  300 20"
-  "edf 5 6006  300 20"
-  "edf 5 7007  300 20"
+  "edf        3  4004   125 10"
+  "edf        5  4004   675 20"
+  "edf        5  5005   675 20"
+  "edf        5  6006   675 20"
+  "edf        5  7007   675 20"
   # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
   # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
   # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.
@@ -1542,70 +1436,67 @@ OVERNIGHT_CASES=(
   "giants 0  6006 2000 0"
   "giants 0  8008 2000 0"
   "giants 0 10010 2000 0"
-  "giants 3 4004 1000 20"
-  "giants 3 5005 1000 20"
-  "giants 3 6006 1000 20"
-  "giants 3 7007 1000 20"
-  "giants 5 4004  500 40"
-  "giants 5 5005  500 40"
-  "giants 5 6006  500 40"
-  "giants 5 7007  500 40"
+  "giants     3  4004   325 10"
+  "giants     5  4004  1425 20"
+  "giants     5  5005  1425 20"
+  "giants     5  6006  1425 20"
+  "giants     5  7007  1425 20"
   # 2HG gate, deep tier (user request 2026-09-04): the six 2HG-relevant decks at DEFAULT
   # SETTINGS -- depth-5 rows drop the depth key so each deck's value_play block owns the play
   # depth (fivecolour runs d6), at the SAME per-deck overnight d5 budget as the deck's own rows.
   # Counts at ~1/3 of each deck's own d5 sample: the 2HG gate is a digest tripwire plus a real
   # deep-search 2HG behaviour sample, not a statistics tier (~55 min ST added, pools inside the
   # existing makespan). Seed spacing rule holds (all counts < the 1001 base spacing).
-  "hinata2hg     5 4004 100 20"
-  "hinata2hg     5 5005 100 20"
-  "hinata2hg     5 6006 100 20"
-  "hinata2hg     5 7007 100 20"
-  "antilife2hg   5 4004 300 20"
-  "antilife2hg   5 5005 300 20"
-  "antilife2hg   5 6006 300 20"
-  "antilife2hg   5 7007 300 20"
-  "minotaur2hg   5 4004 150 40"
-  "minotaur2hg   5 5005 150 40"
-  "minotaur2hg   5 6006 150 40"
-  "minotaur2hg   5 7007 150 40"
-  "goblins2hg    5 4004 300 40"
-  "goblins2hg    5 5005 300 40"
-  "goblins2hg    5 6006 300 40"
-  "goblins2hg    5 7007 300 40"
-  "knights2hg    5 4004 300 40"
-  "knights2hg    5 5005 300 40"
-  "knights2hg    5 6006 300 40"
-  "knights2hg    5 7007 300 40"
-  "whiteknights2hg 5 4004 300 40"
-  "whiteknights2hg 5 5005 300 40"
-  "whiteknights2hg 5 6006 300 40"
-  "whiteknights2hg 5 7007 300 40"
-  "fivecolour2hg 5 4004 100 20"
-  "fivecolour2hg 5 5005 100 20"
-  "fivecolour2hg 5 6006 100 20"
-  "fivecolour2hg 5 7007 100 20"
-  "fluctuator2hg 5 4004  80 40"
-  "fluctuator2hg 5 5005  80 40"
-  "fluctuator2hg 5 6006  80 40"
-  "fluctuator2hg 5 7007  80 40"
+  "hinata2hg  5  4004   100 30"
+  "hinata2hg  5  5005   100 30"
+  "hinata2hg  5  6006   100 30"
+  "hinata2hg  5  7007   100 30"
+  "antilife2hg 5  4004   300 20"
+  "antilife2hg 5  5005   300 20"
+  "antilife2hg 5  6006   300 20"
+  "antilife2hg 5  7007   300 20"
+  "minotaur2hg 5  4004   150 20"
+  "minotaur2hg 5  5005   150 20"
+  "minotaur2hg 5  6006   150 20"
+  "minotaur2hg 5  7007   150 20"
+  "goblins2hg 5  4004   300 60"
+  "goblins2hg 5  5005   300 60"
+  "goblins2hg 5  6006   300 60"
+  "goblins2hg 5  7007   300 60"
+  "knights2hg 5  4004   300 20"
+  "knights2hg 5  5005   300 20"
+  "knights2hg 5  6006   300 20"
+  "knights2hg 5  7007   300 20"
+  "whiteknights2hg 5  4004   300 20"
+  "whiteknights2hg 5  5005   300 20"
+  "whiteknights2hg 5  6006   300 20"
+  "whiteknights2hg 5  7007   300 20"
+  "fivecolour2hg 5  4004   100 20"
+  "fivecolour2hg 5  5005   100 20"
+  "fivecolour2hg 5  6006   100 20"
+  "fivecolour2hg 5  7007   100 20"
+  "fluctuator2hg 5  4004    80 20"
+  "fluctuator2hg 5  5005    80 20"
+  "fluctuator2hg 5  6006    80 20"
+  "fluctuator2hg 5  7007    80 20"
   # angels2hg: minotaur2hg's exact shape -- 150 games against the deck's own 500-game d5 rows,
   # at the same b40. This is the tier that actually exercises Righteous Valkyrie's anthem under
   # a 37-life threshold over a full game, rather than just tripping a digest. ~1 core-min.
-  "angels2hg     5 4004 150 40"
-  "angels2hg     5 5005 150 40"
-  "angels2hg     5 6006 150 40"
-  "angels2hg     5 7007 150 40"
+  "angels2hg  5  4004   150 20"
+  "angels2hg  5  5005   150 20"
+  "angels2hg  5  6006   150 20"
+  "angels2hg  5  7007   150 20"
   # pirates2hg: angels2hg's shape (150 against the deck's own 500-game d5 rows, b40).
-  "pirates2hg    5 4004 150 40"
-  "pirates2hg    5 5005 150 40"
-  "pirates2hg    5 6006 150 40"
-  "pirates2hg    5 7007 150 40"
+  "pirates2hg 5  4004   150 20"
+  "pirates2hg 5  5005   150 20"
+  "pirates2hg 5  6006   150 20"
+  "pirates2hg 5  7007   150 20"
   # pd2hg: 50 against the deck's own 125-game d5 rows, b40 (it reads heads/life -- see the pd SMOKE block).
   # Unchanged at the 2026-10-12 resize: ~1/3-2/3 of the d5 rows, as for the other 2HG decks.
-  "pd2hg         5 4004  50 40"
-  "pd2hg         5 5005  50 40"
-  "pd2hg         5 6006  50 40"
-  "pd2hg         5 7007  50 40"
+  "pd2hg      5  4004    50 20"
+  "pd2hg      5  5005    50 20"
+  "pd2hg      5  6006    50 20"
+  "pd2hg      5  7007    50 20"
   # fluctuator: breaching-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
   # budgets 2026-09-05: d3 b20 ~2.78 s/game, d5 b40 ~4.29 s/game, NO game over 30 s at either
   # => ~2.7 core-hours added, breaching's bracket. Counts obey the seed-spacing rule
@@ -1614,14 +1505,11 @@ OVERNIGHT_CASES=(
   "fluctuator 0  6006 2000 0"
   "fluctuator 0  8008 2000 0"
   "fluctuator 0 10010 2000 0"
-  "fluctuator 3 4004  500 20"
-  "fluctuator 3 5005  500 20"
-  "fluctuator 3 6006  500 20"
-  "fluctuator 3 7007  500 20"
-  "fluctuator 5 4004  250 40"
-  "fluctuator 5 5005  250 40"
-  "fluctuator 5 6006  250 40"
-  "fluctuator 5 7007  250 40"
+  "fluctuator 3  4004   175 10"
+  "fluctuator 5  4004   700 20"
+  "fluctuator 5  5005   700 20"
+  "fluctuator 5  6006   700 20"
+  "fluctuator 5  7007   700 20"
   # snow: see the SMOKE block. This is the tier with room -- the whole Snow block is ~5,400 core-s
   # (1.5 core-h, doubling the bare-probe figure for --lookahead-bottoming as the smoke block
   # explains), i.e. ~170 s of makespan on 32 cores against an 8 h budget, so the deck gets its real
@@ -1634,14 +1522,11 @@ OVERNIGHT_CASES=(
   # budget-driven (the d3/d5 b200 cells in the ledger reach 5-15 MINUTES per game), and this deck is
   # where a doubled budget stops being free.
   "snow 0 4004 1000 0"
-  "snow 3 4004  150 10"
-  "snow 3 5005  150 10"
-  "snow 3 6006  150 10"
-  "snow 3 7007  150 10"
-  "snow 5 4004  100 20"
-  "snow 5 5005  100 20"
-  "snow 5 6006  100 20"
-  "snow 5 7007  100 20"
+  "snow       3  4004    50 10"
+  "snow       5  4004   175 20"
+  "snow       5  5005   175 20"
+  "snow       5  6006   175 20"
+  "snow       5  7007   175 20"
   # landfall: see the SMOKE block. A SMALLER-than-entry set (USER 2026-10-16: d3 4x250, d5 4x150 where
   # Hinata's entry shape is 400/300); it expands to the FULL set just before a keep table is adopted
   # (regression-testing.md "Sizing a deck's overnight rows").
@@ -1649,31 +1534,25 @@ OVERNIGHT_CASES=(
   "landfall 0 6006 2000 0"
   "landfall 0 8008 2000 0"
   "landfall 0 10010 2000 0"
-  "landfall 3 4004  250 10"
-  "landfall 3 5005  250 10"
-  "landfall 3 6006  250 10"
-  "landfall 3 7007  250 10"
-  "landfall 5 4004  150 20"
-  "landfall 5 5005  150 20"
-  "landfall 5 6006  150 20"
-  "landfall 5 7007  150 20"
+  "landfall   3  4004    75 10"
+  "landfall   5  4004   250 20"
+  "landfall   5  5005   250 20"
+  "landfall   5  6006   250 20"
+  "landfall   5  7007   250 20"
   # galadriel: see the SMOKE block. Landfall's smaller-than-entry set until the keep table (expand then).
   "galadriel 0 4004 2000 0"
   "galadriel 0 6006 2000 0"
   "galadriel 0 8008 2000 0"
   "galadriel 0 10010 2000 0"
-  "galadriel 3 4004 1000 20"
-  "galadriel 3 5005 1000 20"
-  "galadriel 3 6006 1000 20"
-  "galadriel 3 7007 1000 20"
-  "galadriel 5 4004  500 40"
-  "galadriel 5 5005  500 40"
-  "galadriel 5 6006  500 40"
-  "galadriel 5 7007  500 40"
-  "galadriel2hg 5 4004 170 40"
-  "galadriel2hg 5 5005 170 40"
-  "galadriel2hg 5 6006 170 40"
-  "galadriel2hg 5 7007 170 40"
+  "galadriel  3  4004   325 10"
+  "galadriel  5  4004  1425 20"
+  "galadriel  5  5005  1425 20"
+  "galadriel  5  6006  1425 20"
+  "galadriel  5  7007  1425 20"
+  "galadriel2hg 5  4004   175 20"
+  "galadriel2hg 5  5005   175 20"
+  "galadriel2hg 5  6006   175 20"
+  "galadriel2hg 5  7007   175 20"
   # niv: see the SMOKE block. FULL set at the keep-table adoption (2026-10-24), resized from Landfall's
   # smaller-than-entry set (4x250 b10 / 4x150 b20 / 2hg 4x50) to HINATA'S shape, not the standard one: Niv
   # is a heavy deck (regression-testing.md "Sizing a deck's overnight rows"). Measured table-ABSENT on this
@@ -1683,18 +1562,15 @@ OVERNIGHT_CASES=(
   "niv 0 6006 2000 0"
   "niv 0 8008 2000 0"
   "niv 0 10010 2000 0"
-  "niv 3 4004  400 10"
-  "niv 3 5005  400 10"
-  "niv 3 6006  400 10"
-  "niv 3 7007  400 10"
-  "niv 5 4004  300 20"
-  "niv 5 5005  300 20"
-  "niv 5 6006  300 20"
-  "niv 5 7007  300 20"
-  "niv2hg 5 4004 100 20"
-  "niv2hg 5 5005 100 20"
-  "niv2hg 5 6006 100 20"
-  "niv2hg 5 7007 100 20"
+  "niv        3  4004   125 10"
+  "niv        5  4004   525 20"
+  "niv        5  5005   525 20"
+  "niv        5  6006   525 20"
+  "niv        5  7007   525 20"
+  "niv2hg     5  4004   100 20"
+  "niv2hg     5  5005   100 20"
+  "niv2hg     5  6006   100 20"
+  "niv2hg     5  7007   100 20"
   # colossus: see the SMOKE block. FULL set (standard shape) since the 2026-10-19 keep-table adoption,
   # resized from the ENTRY set (4x400 b10 / 4x300 b20) and accepted table-ABSENT first (regression-testing.md
   # "Sizing a deck's overnight rows"). ~7 ms/game in the regression tier vs galadriel's 79 on this shape.
@@ -1702,14 +1578,11 @@ OVERNIGHT_CASES=(
   "colossus 0 6006 2000 0"
   "colossus 0 8008 2000 0"
   "colossus 0 10010 2000 0"
-  "colossus 3 4004 1000 20"
-  "colossus 3 5005 1000 20"
-  "colossus 3 6006 1000 20"
-  "colossus 3 7007 1000 20"
-  "colossus 5 4004  500 40"
-  "colossus 5 5005  500 40"
-  "colossus 5 6006  500 40"
-  "colossus 5 7007  500 40"
+  "colossus   3  4004   325 10"
+  "colossus   5  4004  1425 20"
+  "colossus   5  5005  1425 20"
+  "colossus   5  6006  1425 20"
+  "colossus   5  7007  1425 20"
   # vampires: see the SMOKE block. The FULL set (2026-10-21, just before the keep table's adoption; resized
   # rows accepted with the table ABSENT first): the standard shape, 2HG at 150 x b40 (pirates / minotaur).
   # With the table a game costs ~0.1x Hinata's (regression d5 b20: 121 ms/game, 2HG 348), so the set is
@@ -1718,18 +1591,15 @@ OVERNIGHT_CASES=(
   "vampires 0 6006 2000 0"
   "vampires 0 8008 2000 0"
   "vampires 0 10010 2000 0"
-  "vampires 3 4004 1000 20"
-  "vampires 3 5005 1000 20"
-  "vampires 3 6006 1000 20"
-  "vampires 3 7007 1000 20"
-  "vampires 5 4004  500 40"
-  "vampires 5 5005  500 40"
-  "vampires 5 6006  500 40"
-  "vampires 5 7007  500 40"
-  "vampires2hg 5 4004 150 40"
-  "vampires2hg 5 5005 150 40"
-  "vampires2hg 5 6006 150 40"
-  "vampires2hg 5 7007 150 40"
+  "vampires   3  4004   325 10"
+  "vampires   5  4004  1425 20"
+  "vampires   5  5005  1425 20"
+  "vampires   5  6006  1425 20"
+  "vampires   5  7007  1425 20"
+  "vampires2hg 5  4004   150 20"
+  "vampires2hg 5  5005   150 20"
+  "vampires2hg 5  6006   150 20"
+  "vampires2hg 5  7007   150 20"
   # alchemist: see the SMOKE block. SIZED by measured cost (USER 2026-10-22: "reasonably sized for the current deck
   # speed"): with the keep table + leafless sidecar it runs ~0.6x Hinata per game (pooled smoke, d3 b10 954 vs 1556 ms,
   # d5 b20 1512 vs 2549), so it keeps Hinata's heavy-deck shape (4x400 b10 / 4x300 b20), like Bruna and EDF; ~6-7% of the tier.
@@ -1737,25 +1607,19 @@ OVERNIGHT_CASES=(
   "alchemist 0 6006 2000 0"
   "alchemist 0 8008 2000 0"
   "alchemist 0 10010 2000 0"
-  "alchemist 3 4004  400 10"
-  "alchemist 3 5005  400 10"
-  "alchemist 3 6006  400 10"
-  "alchemist 3 7007  400 10"
-  "alchemist 5 4004  300 20"
-  "alchemist 5 5005  300 20"
-  "alchemist 5 6006  300 20"
-  "alchemist 5 7007  300 20"
+  "alchemist  3  4004   125 10"
+  "alchemist  5  4004   600 20"
+  "alchemist  5  5005   600 20"
+  "alchemist  5  6006   600 20"
+  "alchemist  5  7007   600 20"
   # elementals: see the SMOKE block. Overnight ENTRY set until the keep table (expand then).
   "elementals 0 4004 2000 0"
   "elementals 0 6006 2000 0"
   "elementals 0 8008 2000 0"
   "elementals 0 10010 2000 0"
-  "elementals 3 4004  400 10"
-  "elementals 3 5005  400 10"
-  "elementals 3 6006  400 10"
-  "elementals 3 7007  400 10"
-  "elementals 5 4004  300 20"
-  "elementals 5 5005  300 20"
-  "elementals 5 6006  300 20"
-  "elementals 5 7007  300 20"
+  "elementals 3  4004   125 10"
+  "elementals 5  4004   525 20"
+  "elementals 5  5005   525 20"
+  "elementals 5  6006   525 20"
+  "elementals 5  7007   525 20"
 )

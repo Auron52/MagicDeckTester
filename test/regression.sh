@@ -329,6 +329,11 @@ fi
 # core on each config's slowest game). Results are validated byte-identical to the
 # per-case runs, so the ground truth is unchanged. See docs/design/batch-runner.md.
 MANIFEST="$LOGDIR/manifest.json"
+# Play rows test what SHIPS (USER 2026-10-27): warn when one's budget drifted from the deck's value_play budget.
+if command -v python3 >/dev/null 2>&1; then
+  _profs=(); for _k in "${!DECK_PROF[@]}"; do _profs+=("$_k=${DECK_PROF[$_k]}"); done
+  printf '%s\n' "${CASES[@]}" | python3 "$HERE/lib/play_rows_check.py" "${_profs[@]}"
+fi
 # MEASURED JOB COSTS (test/job_cost.tsv, written by --accept via test/lib/job_cost.py): each known job's
 # work units per game becomes its LPT weight, so the expensive chunks (NivMizzetCombo / Bruna d5 in
 # smoke) are dispatched FIRST and the cheap ones backfill -- USER 2026-10-23, after smoke's makespan sat

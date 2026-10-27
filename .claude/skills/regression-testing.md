@@ -91,6 +91,23 @@ bash test/regression.sh              # pre-commit
 bash test/regression.sh --overnight  # deep sweep (run later, not inline)
 ```
 
+### The rows test what SHIPS (USER 2026-10-27)
+
+*"I would cut d3 b10 games to run more at play settings. d3 b10 is a nice sanity-check, but of much lower
+importance than what we ship."* Play settings are *"the numbers I'm more interested in for both quality and
+performance."* So in every tier a deck's searched games are mostly **play rows**, plus one small d3 b10
+sanity row.
+* **A play row is a depth-5 row.** `regression.sh` drops its depth, so the deck's enabled `value_play`
+  block picks it (d4/d5/d6/d7 per deck). Its budget must be the deck's **shipped** `budget_ms` (b20 with no
+  enabled block). The row's budget still overrides the block's, so `regression.sh` WARNs about any play
+  row whose budget has drifted (`test/lib/play_rows_check.py`). Before this rule, Hinata (b30), Goblins
+  (b60), Melira (b60) and Kitty (b14) were tested at b20 in every tier. The overnight tier ran b40/b80
+  rows that nothing ships at.
+* **Re-tuning a deck's play setting re-tunes its rows** in all three tiers, in the same commit. GT moves
+  anyway when play does.
+* **Size a deck by its play-row cost**, not by d3. The d3 b10 sanity row is about a third of one former
+  d3 row.
+
 ### Unbudgeted backstop rows (USER 2026-10-22)
 
 Every other row is budgeted, so a path that runs only at `--budget-ms 0` (`g_unbudgeted_play`,
