@@ -2162,6 +2162,36 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// A FAIL-TO-FIND library search ("search your library for ..., then shuffle" that finds nothing: no legal
+// card left, or the chosen card gone). The search still happened and the printed shuffle is unconditional
+// (CR 701.19b), so the library is shuffled exactly as on a find. Before 2026-10-27 every fetch-shaped path
+// returned BEFORE its shuffle on a whiff, so a whiffing Scalding Tarn left the known top in place (ledger
+// Q14, USER: "Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle"). Called by
+// PerformFetch, PerformLandTutorToBattlefield, PerformTutorToBattlefield and PerformTutor -- every one shared
+// by the executor and the rollout, so lockstep by construction. NOT for a declined "you MAY search" (no
+// search, no shuffle) or a wish / regrowth (no library searched).
+//   MTG_LEGACY_WHIFF_NO_SHUFFLE=1 restores the old early return (an isolation lever, the MTG_LEGACY_SHUFFLE
+//   precedent: =1 makes a whiff skip the shuffle, so a game that moves between the two arms moved BECAUSE
+//   of a whiff). MTG_WHIFF_TRACE=1 prints each REAL-resolution whiff (never the search's) to stderr.
+inline void WhiffShuffle(GameState& state, int controller_index, const char* what)
+{
+    static const bool s_legacy = EnvOn("MTG_LEGACY_WHIFF_NO_SHUFFLE");
+    if (s_legacy) { return; }
+    ShuffleAfterSearch(state, controller_index);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      std::string(what) + ": searched the library, found nothing -- library shuffled");
+    }
+    static const bool s_trace = EnvOn("MTG_WHIFF_TRACE");
+    if (s_trace && g_real_resolution)
+    {
+        std::fprintf(stderr, "[whiff-shuffle] %s seed=%llu T%d search_count=%llu\n", what,
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                     static_cast<unsigned long long>(state.search_count));
+    }
+}
+
 // ---- GRAVEYARD-SHUFFLE TRIGGER (Emrakul, the Aeons Torn; Ulamog, the Infinite Gyre) -----------------
 // "When <this> is put into a graveyard from anywhere, its owner shuffles their graveyard into their
 // library." CardParams::put_into_graveyard_shuffles_graveyard. A TRIGGER (CR 603.6a), so the card is in
@@ -3189,7 +3219,12 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // A FAIL-TO-FIND cast (the enumerator's kTutorDeclineTarget variant of an X-capped put: "may
     // fail to find", CR 701.19b) puts nothing -- no provider fill, no resolution re-ask. Returns
     // where an empty search already returns (put_names empty below), so the two agree.
-    if (preferred.size() == 1 && preferred.front() == kTutorDeclineTarget) { return; }
+    // ...but a fail-to-find still SEARCHED, so a "then shuffle" card shuffles (2026-10-27, Q14/Q28).
+    if (preferred.size() == 1 && preferred.front() == kTutorDeclineTarget)
+    {
+        if (pp.tutor_shuffle_after) { WhiffShuffle(state, controller, "tutor to battlefield"); }
+        return;
+    }
     struct ResolveScope
     {
         bool prev;
@@ -3447,7 +3482,15 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
             { put_names.push_back(nm); --it->second; }
         }
     }
-    if (put_names.empty()) { return; }
+    // Nothing to put: a fail-to-find. A searching card still shuffles ("then shuffle" is unconditional,
+    // CR 701.19b) -- Dragonstorm with no Dragon left, a Natural Order with no green creature. Bilbo's
+    // caller (ApplyPermAbility) keeps its own once-per-activation guard on search_count, which this
+    // satisfies. The explicit kTutorDeclineTarget fail-to-find above shuffles the same way.
+    if (put_names.empty())
+    {
+        if (pp.tutor_shuffle_after) { WhiffShuffle(state, controller, "tutor to battlefield"); }
+        return;
+    }
 
     // Put each named Dragon: find+remove the first library copy, enter it (preserving its per-copy
     // number), fire FireEtbWatchers. Re-find per put -- erase shifts library indices, and FireEtbWatchers
@@ -40952,9 +40995,12 @@ inline void FireScryWatchers(GameState& state)
 // fetched land's own enters-tapped/shock choice), and pay 1 life. The caller is responsible
 // for removing the fetchland from hand, using its land drop, and sending it to the graveyard
 // -- PerformFetch only resolves the search-and-put-into-play, then SHUFFLES the library
-// ("... then shuffle": ShuffleAfterSearch at the end, deterministic and lockstep; a fail-to-find
-// returns early, before the shuffle -- a disclosed simplification). Shared by the real engine
-// (AIEngine) and the rollout (TurnSolver/ApplyPlanDirect) so both fetch alike.
+// ("... then shuffle": ShuffleAfterSearch, deterministic and lockstep). A FAIL-TO-FIND (no legal
+// target left, or the chosen target gone) still shuffles: the search happened, and the printed
+// shuffle is unconditional (CR 701.19b; USER 2026-10-27: "Scalding Tarn sacrificing and finding
+// nothing should indeed allow for a shuffle"). Before that date a whiff returned before the shuffle.
+// Shared by the real engine (AIEngine) and the rollout (TurnSolver/ApplyPlanDirect) so both fetch
+// alike.
 inline void PerformFetch(GameState& state, int controller_index,
                          const CardParams& fetch_pp, const std::string& target_name = "")
 {
@@ -40972,7 +41018,8 @@ inline void PerformFetch(GameState& state, int controller_index,
     if (want.empty())
     {
         std::vector<std::string> cands = ResolveProvider(state).FetchCandidates(state, controller_index, fetch_pp);
-        if (cands.empty()) { return; }   // whiff: no legal target (life already paid)
+        // Whiff: no legal target (life already paid). The library was still searched -> shuffle.
+        if (cands.empty()) { WhiffShuffle(state, controller_index, "fetch"); return; }
         want = cands.front();
     }
     int idx = -1;
@@ -40980,7 +41027,8 @@ inline void PerformFetch(GameState& state, int controller_index,
     {
         if (ap.library[i].m_name == want) { idx = i; break; }
     }
-    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    // Chosen target no longer present (search/real drift guard): finds nothing, still shuffles.
+    if (idx < 0) { WhiffShuffle(state, controller_index, "fetch"); return; }
     Card lc = ap.library[idx];
     ap.library.erase(ap.library.begin() + idx);
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
@@ -41316,7 +41364,8 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     {
         std::vector<std::string> cands =
             RankedTutorCandidates(ResolveProvider(state), state, controller_index, pp);
-        if (cands.empty()) { return; }   // whiff: no land left in the library
+        // Whiff: no land left in the library. "...then shuffle" still happens (CR 701.19b).
+        if (cands.empty()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
         want = cands.front();
     }
     int idx = -1;
@@ -41324,12 +41373,14 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     {
         if (ap.library[i].m_name == want) { idx = i; break; }
     }
-    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    // Chosen target no longer present (search/real drift guard): finds nothing, still shuffles.
+    if (idx < 0) { WhiffShuffle(state, controller_index, "land tutor"); return; }
     Card lc = ap.library[idx];
     if (!lc.IsLand())
     {
         const CardDefinition* pd = CardDatabase::Instance().LookupCached(lc);
-        if (!pd || !pd->card.IsLand()) { return; }   // guard: only a land card may be put
+        // Guard: only a land card may be put -- a fail-to-find, which still shuffles.
+        if (!pd || !pd->card.IsLand()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
     }
     ap.library.erase(ap.library.begin() + idx);
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);

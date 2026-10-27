@@ -267,3 +267,48 @@ TEST_CASE("Cyclone phase 4: human play -- re-asked at resolution; a -1 takes the
     CHECK(s.players[0].library.size() == 4);   // a card was found and put back into the library
     CHECK(s.search_count == 1);
 }
+
+TEST_CASE("Phase 4b: a fail-to-find library search still shuffles (fetch, land tutor, tutor)")
+{
+    EnsureCards4();
+    // Scalding Tarn with no Island or Mountain card left: life paid, nothing fetched, the library SHUFFLED.
+    {
+        GameState s = Base4(0, { "Brainstorm", "Ponder", "Remand", "Street Wraith", kEmrakul, "Curator of Mysteries" });
+        const std::vector<int> before = LibNums4(s);
+        PerformFetch(s, 0, Def4("Scalding Tarn").params, std::string());
+        CHECK(s.players[0].life == 19);
+        CHECK(s.search_count == 1);
+        CHECK(s.players[0].library.size() == before.size());
+        std::vector<int> after = LibNums4(s), sb = before;
+        std::sort(after.begin(), after.end()); std::sort(sb.begin(), sb.end());
+        CHECK(after == sb);   // same cards, shuffled
+    }
+    // ...and the drift guard (a named target that is gone) shuffles too.
+    {
+        GameState s = Base4(0, { "Island", "Brainstorm" });
+        PerformFetch(s, 0, Def4("Scalding Tarn").params, "Steam Vents");
+        CHECK(s.search_count == 1);
+        CHECK(s.players[0].library.size() == 2);
+    }
+    // Crop Rotation's land tutor with no land left.
+    {
+        GameState s = Base4(0, { "Brainstorm", "Ponder" });
+        PerformLandTutorToBattlefield(s, 0, Def4("Crop Rotation").params, std::string());
+        CHECK(s.search_count == 1);
+    }
+    // A required card tutor (Worldly Tutor: a creature) with no creature left shuffles...
+    {
+        GameState s = Base4(0, { "Island", "Brainstorm", "Ponder" });
+        PerformTutor(s, 0, Def4("Worldly Tutor").params, std::string(), "Worldly Tutor");
+        CHECK(s.search_count == 1);
+        CHECK(s.players[0].library.size() == 3);
+    }
+    // ...but a "you MAY search" with nothing to find declines (no search, no shuffle).
+    {
+        GameState s = Base4(0, { "Island", "Brainstorm", "Ponder" });
+        const CardDefinition& gh = Def4("Giant Harbinger");
+        REQUIRE(gh.params.tutor_optional);
+        PerformTutor(s, 0, gh.params, std::string(), "Giant Harbinger");
+        CHECK(s.search_count == 0);
+    }
+}
