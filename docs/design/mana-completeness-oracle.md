@@ -282,9 +282,8 @@ Damage) `TapSourceIntoFloat` treats a {C} tap of a land that has a {C} mode as a
 ability and never reads `tap_self_damage_any_mode`, so the payment (`TapForCostShared`) and the pre-tap
 tap Ancient Tomb for free. A real Fungus game (`--seed 424200`, game 2 of 6) taps the Tomb for Shroofus Sproutsire and
 stays at 20 life; the search's plan application does charge it. That split is the whole of Fungus's
-DOMINATED-LIFE (56, every one "+2 life by paying with Ancient Tomb:C"). Fix: use `dmgev::PainForTap` in
-the unarmed branch too. It changes Fungus play (life only), so it goes through the normal GT flow --
-pinned meanwhile by a `should_fail` test in `test/unit/test_mana_oracle.cpp`.
+DOMINATED-LIFE (56, every one "+2 life by paying with Ancient Tomb:C"). FIXED 2026-10-27 (section 12): the
+unarmed branch uses `dmgev::PainForTap` too, and the pin in `test/unit/test_mana_oracle.cpp` is a plain test.
 
 **38 decks (2026-10-27, `logs/mana_oracle/dev8`).** The 22 decks never run before add ORACLE-GAP 195 --
 the oracle is not yet complete there: Melira Pod 185 (Birthing Pod's Phyrexian {G/P}, mana vs life),
@@ -294,7 +293,7 @@ those decks is trustworthy until their gaps are closed.
 
 ## 8. Next steps
 
-0. **Fix the Ancient Tomb pain split** (section 7.1) and close the new decks' ORACLE-GAPs (Phyrexian
+0. ~~Fix the Ancient Tomb pain split~~ (done, section 12). Close the new decks' ORACLE-GAPs (Phyrexian
    mana, Horizon Canopy, Grove), then rerun all 38.
 1. **Stage 3, LOST-FOLLOW-UP** -- needs the USER's call on question 1 (section 5) before it is worth
    building, because it decides whether incomparable trade-offs (DOMINATED-LAND's real cases) are bugs.
@@ -423,3 +422,22 @@ search nearly always has an equally fast alternative. The mana misses matter whe
 point -- the viewer, which is what section 10 serves ("Queue these taps") -- not in the search's win turns.
 The remaining levers to look at for search are the ENUM-GAP gates (AccomplishedAlchemist's 44 off-menu
 lifegain-then-Alchemist lines are the largest class) and the CONTINUATION classes.
+
+## 12. Payer fixes from the census (2026-10-27)
+
+* **Painless {C} under a land Aura (`MTG_PAINLESS_AURA_PIP`, default ON).** The USER's EDF viewer sweep (seeds
+  3000-4000) flagged DOMINATED-LIFE in 724 of 1,001 games: a painland under its own land Aura paid a COLOURED
+  pip with its painful face while the Aura's bonus already covered that pip and the painless {C} face would
+  have paid the generic (Brushland + Wild Growth for Living Wish {1}{G}: {G} + 1 damage, where {C} + the
+  Aura's {G} pays it for nothing). `PainlessAuraPipColor` (ManaPayment.cpp, the greedy's coloured tap) takes
+  the {C} face when the Aura's fixed-colour units cover every pip of that colour still owed and a generic pip
+  is left to spend the {C} on. Only EldraziDisplacerFlicker runs a painland under a land Aura. Held-out A/B
+  (seed 920001; d0 2,000, d3 600, d5 150, 2HG d3 200 games per arm): 0 games slower, 0 faster, 0 play
+  digests changed; units d3 4,137,488 -> 4,116,395, d5 1,211,858 -> 1,210,148, 2HG 1,413,848 -> 1,411,993.
+  Strictly better, adopted.
+* **Ancient Tomb's pain on an unarmed board** (section 7.1): `TapSourceIntoFloat`'s unarmed branch now reads
+  `dmgev::PainForTap`, the armed branch's predicate, so the payment and the pre-tap charge the Tomb's 2 like
+  the search's plan application always did. Rules fix (life only; Fungus is the only unarmed deck with the
+  Tomb). The viewer's painland tap-ahead (SpellEffects.h, `pain_c`) no longer treats the Tomb's {C}{C} as a
+  painless {C} either.
+

@@ -29901,8 +29901,10 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                                               pending_cost, p))
             { reserve_overlap = false; }
         }
+        // A tap_self_damage_any_mode land (Ancient Tomb) has no painless {C}: its {C}{C} hurts, so it
+        // stays out of the tap-ahead like every painful source.
         bool pain_c = false;
-        if (q.tap_self_damage > 0 && PainlandCModeEnabled() && s_pain_tapahead
+        if (q.tap_self_damage > 0 && !q.tap_self_damage_any_mode && PainlandCModeEnabled() && s_pain_tapahead
             && ((g_in_blink_loop && (HumanPlayActive() || s_pain_loop_auto))
                 || (HumanPlayActive() && s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
         {

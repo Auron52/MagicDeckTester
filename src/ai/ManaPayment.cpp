@@ -499,8 +499,13 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
         bool has_c_mode = false;
         for (Color pc : EffectiveProducesFor(state, active, def, &p))
         { if (pc == Color::Colorless) { has_c_mode = true; break; } }
-        if (!(col == Color::Colorless && has_c_mode))
-        { state.players[active].life -= def.params.tap_self_damage; }
+        // The same predicate as the armed branch. A tap_self_damage_any_mode land (Ancient Tomb's
+        // "{T}: Add {C}{C}. This land deals 2 damage to you.") hurts in its {C} mode too: that {C}
+        // is its only ability, not a painland's separate painless one. Before 2026-10-27 this branch
+        // tested `col == Colorless && has_c_mode` alone, so the payment and the pre-tap took the
+        // Tomb for free while the search's plan application charged it (the mana oracle's Fungus
+        // DOMINATED-LIFE "+2 life", docs/design/mana-completeness-oracle.md section 7.1).
+        state.players[active].life -= dmgev::PainForTap(def, col, has_c_mode);
     }
     // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
     // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
@@ -1356,6 +1361,37 @@ static bool RestrictedMayHoldForAttack(const GameState& state, int active, const
     bool known = false;
     const int owed_later = RestrictedIneligOwedLater(state, cost_in, known);
     return general >= cost_left.ManaValue() + owed_later;
+}
+
+// A COLOURED PIP OFF A PAINLAND WHOSE LAND AURA PAYS IT (MTG_PAINLESS_AURA_PIP, PainlessAuraPipOn; default
+// ON, =0 the historical coloured tap). EDF, viewer seeds 3000-4000: in 724 of 1,001 games the payer took a
+// painland's damaging colour for a pip the land's own Aura already pays -- Living Wish {1}{G} off
+// Brushland + Wild Growth tapped Brushland for {G} (1 damage) and spent the Wild Growth {G} on the
+// generic, where the painless {C} and the same {G} pay the same two pips. The mana oracle reports it as
+// DOMINATED-LIFE (the same board a life short), and it is the auto-tap a viewer player corrects by hand.
+// Taken only where the swap reaches nothing but the life total: the Aura's FIXED-colour units of
+// `needed` cover every `needed` pip this payment still owes (nd_left counts this one; a wild unit is
+// left out, since it could have paid a later pip of another colour), and the payment still owes at
+// least as many generic pips as the tap leaves over, so the {C} is spent where the coloured unit would
+// have been. PayWithPain (a deck whose own damage is useful) keeps the coloured tap.
+static Color PainlessAuraPipColor(const GameState& state, int active, const Permanent& p,
+                                  const CardDefinition& def, Color needed, const int nd_left[7])
+{
+    const int ni = static_cast<int>(needed);
+    if (!PainlessAuraPipOn() || ni < 0 || ni > 4 || def.params.tap_self_damage <= 0 || def.params.tap_self_damage_any_mode
+        || !PainlandCModeEnabled() || !state.deck_has_land_aura)
+    { return needed; }
+    bool has_c = false;
+    for (Color c : def.params.produces) { if (c == Color::Colorless) { has_c = true; break; } }
+    if (!has_c || LandAuraBonus(state, p) <= 0 || dmgev::PayWithPain(state, active)) { return needed; }
+    ManaPool bonus;
+    LandAuraAddToPoolOfLand(bonus, state, p);
+    const int by_colour[5] = { bonus.white, bonus.blue, bonus.black, bonus.red, bonus.green };
+    const int k = by_colour[ni];
+    if (k < nd_left[ni]) { return needed; }
+    const int spare = 1 + bonus.Total() - nd_left[ni];
+    if (nd_left[6] < spare) { return needed; }
+    return Color::Colorless;
 }
 
 static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
@@ -2675,7 +2711,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 const std::vector<Color>& prod = pay_produces(*bdef, &bp);
                 const Color gen_pick = BurstPendingActColour(state, *bdef, prod, floating,
                                                              LineDemandAnyPipColor(state, prod, floating, prod[0]));
-                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick) : needed);
+                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick)
+                                          : PainlessAuraPipColor(state, active, bp, *bdef, needed, nd_left));
                 return true;
             }
             if (best_kind == 3)

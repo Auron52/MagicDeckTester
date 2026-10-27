@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 883c24a3a  date 2026-10-27
+# Regression ground truth -- commit 7007052a4  date 2026-10-27
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Periodic overnight 2026-10-27 on 486a3783a (PGO, 15m19s): lands MTG_GAME_LINE_CACHE default ON, the PLAY-SETTING SHAPE (USER: d3 cut to one d3 b10 sanity row, play rows at SHIPPED budgets -- the old b40/b80 rows now b20, hinata b30, goblins/melira b60, kittyv3 b14), the 10-26 artifact landings (giants/goblins/angels/dragons/mirrorwing keep tables) and everything since 10-24. Overlapping games: searched 992 faster / 774 slower + 40 new wins / 36 to-unwon, d0 3111 / 2821; classify 139 churn / 671 PERSISTS, 646 of them in the five refreshed-keep-table decks (different keep -> draws diverge; giants s4004 gi31 = 0-land Sol Ring 6 kept then 8 straight spells). Net slower only where the budget dropped to ship (creature_giving +0.011/g, th +0.009, kittyv3 +0.009, angels +0.003) and goblins d0 +0.007 (its keep table). elementals backstop rows NEW.
 # accepted-with-regressions (smoke, 2026-10-27): USER 2026-10-27: LandfallElementals staged value leaf at b20 + NivMizzetCombo emulnl at b20 ADOPTED (sidecar presence); only elementals/niv keys move, searched 10 faster / 4 slower, all 4 churn (recover at 4x/16x)
@@ -9,7 +9,7 @@
 # --- smoke ---
 fungusv3_smoke_d0_s1001=5.2640/1d55edbc8625d2ab
 fungusv3_smoke_d3_s1001=4.4800/328a4dfa91a1142d
-fungusv3_smoke_d5_s1001=4.5257/42ea2368bac67b3d
+fungusv3_smoke_d5_s1001=4.5257/c84261adf8bd6da2
 fungusv32hg_smoke_d5_s1001=4.8200/0ef90c8557fd3f7a
 slivers_smoke_d0_s1001=4.6530/ab6117b39bbb586a
 slivers_smoke_d3_s1001=4.2000/5593dfdd9112e9ad

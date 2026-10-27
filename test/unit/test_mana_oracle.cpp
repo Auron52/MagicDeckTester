@@ -149,14 +149,12 @@ TEST_CASE("mana oracle: every listed option really pays (verified), and none is 
     CHECK(forest_island == 1);
 }
 
-// KNOWN ENGINE BUG (2026-10-27, found by the oracle; docs/design/mana-completeness-oracle.md): on an
-// UNARMED board TapSourceIntoFloat treats every {C} tap of a land with a {C} mode as a painland's
-// painless ability and never reads tap_self_damage_any_mode, so the payment and the pre-tap tap Ancient
-// Tomb for free (a real Fungus game: tapped, life stays 20) while the search's plan application charges
-// it -- the source of every Fungus DOMINATED-LIFE "+2 life". should_fail until the fix lands; then
-// drop the decorator.
-TEST_CASE("mana oracle: a scripted Ancient Tomb tap deals its 2 damage, as the engine's own payment does"
-          * doctest::should_fail(true))
+// Found by the oracle (2026-10-27; docs/design/mana-completeness-oracle.md section 7.1): on an UNARMED
+// board TapSourceIntoFloat used to treat every {C} tap of a land with a {C} mode as a painland's painless
+// ability and never read tap_self_damage_any_mode, so the payment and the pre-tap took Ancient Tomb for
+// free (a real Fungus game: tapped, life stays 20) while the search's plan application charged it -- the
+// source of every Fungus DOMINATED-LIFE "+2 life". Both now go through dmgev::PainForTap.
+TEST_CASE("mana oracle: a scripted Ancient Tomb tap deals its 2 damage, as the engine's own payment does")
 {
     EnsureOracleCards();
     // Ancient Tomb hurts in EVERY mode (tap_self_damage_any_mode): its {C}{C} is not a painland's

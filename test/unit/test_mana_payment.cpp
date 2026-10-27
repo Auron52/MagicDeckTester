@@ -1035,3 +1035,54 @@ TEST_CASE("payment: Wirewood Lodge cannot burst off a reserved, untapped Priest"
         CHECK_FALSE(pays(tapped, Cost(0, 0, 0, 0, 0, /*g=*/6), hold_priest, prepay));
     }
 }
+
+// MTG_PAINLESS_AURA_PIP: a COLOURED pip off a painland whose land Aura already pays it takes the
+// painless {C} face (EDF viewer seeds 3000-4000: Living Wish {1}{G} off Brushland + Wild Growth tapped
+// Brushland's damaging {G} in 724 of 1,001 games). Only where the swap reaches nothing but life.
+namespace
+{
+GameState PainAuraBoard(const std::vector<std::string>& more)
+{
+    EnsureCards();
+    GameState s = MakeBoard({ "Brushland" });
+    s.battlefield[0].card.m_number = 6;
+    int num = 100;
+    for (const std::string& n : more) { s.battlefield.push_back(MakeLand(n)); s.battlefield.back().card.m_number = num++; }
+    Permanent wg = MakeLand("Wild Growth");
+    wg.card.m_number    = 53;
+    wg.aura_attached_to = 6;
+    s.battlefield.push_back(wg);
+    s.deck_has_land_aura = true;
+    s.players[0].life    = 20;
+    s.players[1].life    = 20;
+    return s;
+}
+int PainAuraLife(GameState s, const ManaCost& c, int arm)
+{
+    heurarm::t_arm[heurarm::PAINLESS_AURA_PIP] = static_cast<std::int8_t>(arm);
+    const bool ok = TapForCostShared(s, c, /*for_creature=*/false, nullptr, true);
+    heurarm::t_arm[heurarm::PAINLESS_AURA_PIP] = -1;
+    REQUIRE(ok);
+    return s.players[0].life;
+}
+}
+
+TEST_CASE("payment: {1}{G} off Brushland + Wild Growth taps the painless {C}, the Aura pays the {G}")
+{
+    const GameState s = PainAuraBoard({});
+    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), -1) == 20);
+    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), 0) == 19);    // =0: the historical coloured tap
+    GameState t = s;
+    REQUIRE(TapForCostShared(t, Cost(1, 0, 0, 0, 0, /*g=*/1), false, nullptr, true));
+    CHECK(t.battlefield[0].tapped);
+    CHECK(t.floating_mana.Total() == 0);
+}
+
+TEST_CASE("payment: the painless {C} is not taken where it would strand a pip or float a different unit")
+{
+    // {1}{G}{G} with a Plains: Brushland's {G} and Wild Growth's {G} pay both {G}; a {C} would leave one
+    // {G} pip to a board with no other green. Still pays, with the damage.
+    CHECK(PainAuraLife(PainAuraBoard({ "Plains" }), Cost(1, 0, 0, 0, 0, /*g=*/2), -1) == 19);
+    // {G} alone: no generic pip spends the {C}, so it would float {C} where the coloured tap floats {G}.
+    CHECK(PainAuraLife(PainAuraBoard({}), Cost(0, 0, 0, 0, 0, /*g=*/1), -1) == 19);
+}

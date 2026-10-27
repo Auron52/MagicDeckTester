@@ -401,6 +401,15 @@ inline bool PayEnergyLastOn()
     return PayPainLastOn() && heurarm::Flag(heurarm::PAY_ENERGY_LAST, env_on);
 }
 
+// MTG_PAINLESS_AURA_PIP (2026-10-27; DEFAULT ON, =0 -> the historical coloured tap): a coloured pip off a
+// painland whose land Aura already pays it takes the painless {C} face -- see PainlessAuraPipColor
+// (ManaPayment.cpp) for the rule and the EDF numbers. One reader for the shared payer.
+inline bool PainlessAuraPipOn()
+{
+    static const bool env_on = EnvOn("MTG_PAINLESS_AURA_PIP", true);
+    return heurarm::Flag(heurarm::PAINLESS_AURA_PIP, env_on);
+}
+
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
 // Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's
