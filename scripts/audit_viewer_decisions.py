@@ -164,6 +164,10 @@ MANIFEST = {
     "draw_target_player":    ("main_phase",           truthy),
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
+    # Long-Term Plans ("search your library for a card, then shuffle and put that card third from the
+    # top"): the same searched tutor target (Plan::tutor_choice / tutor_target plan variants); in human
+    # play an instant tutor re-asks at resolution (HumanPlayDefersTutorTarget -> the `tutor` chooser).
+    "tutor_library_position": ("main_phase",          positive),
     # "You MAY search" (Giant Harbinger). This is a real decision, not inert: TurnSolver.cpp
     # emits an extra DECLINE plan variant (`v.tutor_choice = kTutorDeclineChoice`) alongside the
     # per-target variants, so it rides the same main_phase plan list as the tutor pick it
@@ -1920,6 +1924,7 @@ def modeled_tokens(card):
     if p.get("grants_madness_creature_subtype"):
         t.add("discard")
     if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
+            or p.get("tutor_library_position", 0) > 1 \
             or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
             or p.get("look_top_put_creature_count", 0) > 0:
         t.add("search")

@@ -14201,6 +14201,34 @@
     "annihilator": 4,
     "put_into_graveyard_shuffles_graveyard": true
    }
+  },
+  {
+   "name": "Long-Term Plans",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a card, then shuffle and put that card third from the top. [tutor_library_position 3 -- NOT tutor_to_top: about 30 provider sites read that param as 'the found card is the next draw', and it alone sets the anti-lifegain routing signature. Every generic tutor site asks IsLibraryTutor() (CardDatabase.h). Resolution is the shared PerformTutor (executor EffectHandler + rollout apply_one, lockstep by construction): remove the chosen card, shuffle the library (the deterministic CRN ShuffleAfterSearch -- the engine-wide known-library simplification, so the search sees the two cards that land above it), then insert it at index min(2, library size) -- with fewer than 3 cards left it goes to the bottom (ruling). Not a top stack (top_stacked_turn stays unset: the top is a shuffled card). Any card is legal (empty tutor_types). The TARGET is SEARCHED: Plan::tutor_choice / tutor_target plan variants over the provider's TutorCandidates (the generic every-legal-name list), TutorSearchWidth wide (CycloneProvider: 32, so every distinct name is reachable). The line it serves: put Emrakul third from the top, then Brainstorm / Brainsurge draw into it, Ponder sees it, Curator's cycle scry or a cycle digs to it, or an Unpredictable Cyclone walk reaches it (unless a creature lands above it). HUMAN PLAY: picks at resolution from every legal name (the `tutor` chooser, HumanPlayDefersTutorTarget); the search is mandatory ('a card' has no stated quality), so a -1 takes the default. INSTANT TIMING (USER-approved fold, 2026-10-27: 'All spells are cast at sorcery speed here'): cast in a main phase with an empty stack.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_library_position": 3
+   }
+  },
+  {
+   "name": "Toxic Deluge",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As an additional cost to cast this spell, pay X life.\nAll creatures get -X/-X until end of turn. [Goldfish-inert (USER ruling 2026-10-27: 'I wouldn't cast Toxic Deluge, personally. That is fine to prune, just like the do-nothing-in-goldfish cards'). The passive opponent's spawned tokens are never a threat, so the only real use is against our OWN creatures -- killing an Emrakul or an Ulamog, the Infinite Gyre to shuffle the graveyard back into the library -- and the USER rules that out: 'You can argue that getting the shuffle and card back in the library is useful, but it's not worth losing your threat on board.' So it is never cast (the Memory Lapse precedent: TurnSolver skips a goldfish_inert cast) and the pay-X-life cost and the -X/-X sweep are NOT modelled. A dead card in hand that can still be bottomed, discarded, put back by Brainstorm / Brainsurge, or walked past by a Cyclone (it is a sorcery, not a creature).]",
+   "template": "custom",
+   "parameters": {
+    "goldfish_inert": true
+   }
   }
  ]
 }

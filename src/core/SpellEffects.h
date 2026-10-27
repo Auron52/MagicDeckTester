@@ -2548,7 +2548,7 @@ inline bool HumanPlayDefersTutorTarget(const CardDefinition& def)
 {
     static const bool s_on = EnvOn("MTG_PLAY_TUTOR_FAN_COLLAPSE", true);   // DEFAULT ON; =0 disables
     if (!s_on || !HumanPlayActive()) { return false; }
-    if (!(def.params.tutor_to_hand || def.params.tutor_to_top)) { return false; }
+    if (!IsLibraryTutor(def.params)) { return false; }   // incl. Long-Term Plans (an instant)
     if (def.params.etb_tutor_hand_count > 1) { return false; }   // Ranger of Eos: no cast-time axis
     // A PERMANENT fetches from its ETB, not from a spell resolution -> no `human_repick` frame.
     if (def.card.HasType(CardType::Creature)     || def.card.HasType(CardType::Land)
