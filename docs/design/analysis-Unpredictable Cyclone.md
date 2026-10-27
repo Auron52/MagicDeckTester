@@ -605,6 +605,121 @@ all three runs. The provisional cases are left UNCOMMITTED in test/regression_ca
 The deck reaches the gate only with the USER's put-back decision (Q33) AND the mulligan stage's keep table (or cheaper
 bottoming) -- Q32.
 
+## Stages 3-5 (coverage re-check, baseline profile, cost gate, verification) -- 2026-10-27
+Run on the SHIPPED configuration (phase-5 levers at their committed defaults: the cycle-seed fold and the USER's Tarn /
+Myriad / LTP rules ON, every cantrip proposal OFF). Where marked, a second arm `single` = MTG_CYCLONE_PUTBACK_RULE=1 +
+MTG_CYCLONE_PUTBACK_SINGLE=1 (the Q33 adoption as recommended; SINGLE alone is inert without the rule) was run beside it,
+per-job, adopting nothing. Scratch: build/scratch/cyclone/s5 (build volume).
+
+**Stage 3.** `analyze_deck.py --coverage-only`: 22/22 cards `full`, 0 missing; the sideboard (Architects of Will, 2 LTP) is
+unreachable (no wish). Every bracket note is a description of modelled behaviour or a Tier-4 deferral already on the
+ledger (Q7 instant timing, Q11 Ulamog CH attack exile, Q12 Emrakul protection, Q15 swampwalk, Q21 cleanup-discard scry,
+Toxic Deluge goldfish_inert, Remand's self-target gaps): no Tier 1-3 gap. One STALE note fixed: Remand's listed "Remand on a
+free cast" as unmodelled, but the Cyclone free-cast Remand is built (phase 3); the note now says so (other free casts stay
+a gap). Cosmetic: the coverage parser truncates Myriad Landscape's note at the nested `[C]` (the card is `full`). Cost audit
+498/498 match Scryfall; field audit (offline) rc 0 (oracle-text divergence advisories only: the bracket notes).
+
+**Stage 4 (d402f8bcb).** `analyze_deck.py --no-rebuild` wrote the BASELINE profile: card scores (1000 games d5 b20), NO
+hand-score gate (-1e18), the default keep block (min 1 / max 5 lands, curve_check two_drop, stop_at 4, bottom_order
+count_first, no required pieces), no value_play (play settings = the built-in **d5 b20**, `source=default`), no keep table.
+mulligan_flags: none. Cost diagnostic: HIGH_DISCOUNT_COMBO (keep the accurate aggregate; no reframe). **The mulligan rate
+does not move (Q32 c):** the profile's keep block IS the built-in default, and with no hand-score gate the card scores are
+not read by the keep; on the phase-5 probe seeds the profile's first-hand keep decisions are IDENTICAL to the default's,
+game for game (37/96 = 38.5% at seed 72000, 23/48 = 47.9% at 71000; 33/96 = 34.4% at 81000). The analyzer's last stage, the
+discard analysis (report only: a 400-game single-thread d3 labeller, ~5 h on this deck, then a rule A/B), was still running
+at hand-off; it writes nothing to the profile (its report lands in the analyzer's JSON and logs/discard_analysis/); the
+discard buckets are USER-owned.
+
+**Stage 4a.** `provider_audit.py --check` rc 0: `Unpredictable Cyclone -> Cyclone`, certificate NotAssessed.
+
+**Cost gate re-run with the profile attached (provisional cases applied from logs/cyclone/provisional-suite-cases.diff,
+then restored to HEAD; MTG_PGO=0 both runs).**
+| run | cyclone worst searched case | hinata worst (same run) | ratio | verdict |
+|---|---|---|---|---|
+| shipped set (OFFICIAL) | 65,216 ms/game (cyclone2hg d3 s2002; d5 s3003 62,011) | 6,220 (d5 s3003) | **10.49x** | **FAIL** |
+| what-if: + put-back RULE + SINGLE (env only, nothing adopted) | 25,992 (d5 s2002) | 6,611 | **3.93x** | FAIL |
+| (phase 5, for reference: shipped / + the three cantrip proposals) | 49,009 / 11,493 | 2,823 / 2,960 | 17.36x / 3.88x | FAIL / FAIL |
+BOX-LOAD CAVEAT: Hinata's units are byte-identical to the phase-5 gate run, but its ms were 2.2-2.3x higher in both runs
+here (host loadavg ~41-45 from ANOTHER container while this worktree ran ~24 threads), while the cyclone rows inflated
+only 1.3-2.1x (the same units within 1%), so the shipped ratio moved 17.36x -> 10.49x for reasons that are not the deck.
+The verdict does not depend on it: the shipped set fails by 3.5-5.8x the limit, and even the put-back single pick (Q33)
+alone stays over 3x (3.93x; phase 5's three-proposal what-if 3.88x). The bottoming trials (Q32) are the rest. Restored
+test/regression_cases.sh and test/suite_cost.json to HEAD; the cases stay uncommitted.
+
+**Stage 5a: nonconv / fd-diverge at play settings (d5 b20), plus d3 b10.** Pooled batches (per-job arms; nonconv and the
+fd oracle in separate processes, as verify_deck does).
+| batch | binary | cells (games) | [nonconv] | [fd-diverge] |
+|---|---|---|---|---|
+| A (seeds 90000-92000) | 9341d9823 | d0 x1000; d3 b10 ship/single x150; d5 b20 ship/single x150 | 0 | -- |
+| B (seed 93000) | 9341d9823 | d5 b20 ship/single x150 | -- | **1** (ship, s93143 gi143) |
+| C (seed 94000) | 56f21c37a | d0 x150; d3 b10 ship/single x150; d5 b20 ship/single x150 | 0 | -- |
+| D (seed 93000 again) | 56f21c37a | d5 b20 ship/single x150 | -- | 0 |
+**The one hit was a LOCKSTEP DEFECT, fixed (56f21c37a).** s93143 gi143, proven T7, realised unwon: turn 7, Seething Song
+paid by Steam Vents + Mountain + Island left Cascade Bluffs and RRRRR floating; the committed line cycled Curator of
+Mysteries ({U}) -- payable only through the filter fed by a floating {R} -- drew the Street Wraith, cast Cyclone, cycled the
+Wraith into Emrakul. The rollout's cycle seed pays through TapForCostDirect; the executor's PerformDigFull refused first on
+`AvailableManaPool().CanPay`, which books a filter only as its own taps. The probe is deleted (the payer leaves the state
+unchanged on failure; P3/P4 never had it). Pinned by test_cyclone_stage5.cpp; the game now realises T7; batch D (same seeds)
+has 0 hits and only gi143 moved (units byte-identical). Unit 2079/2079, scenarios 321/321, smoke 149/149 PASS with
+play-changed 0 on every deck.
+
+**Stage 5b: multi-depth sanity (batch C, paired on seed 94000, n=150 each).**
+| arm | d0 | d3 b10 | d5 b20 (play) | unwon d3/d5 | d5 vs d3 per game (slower / faster) |
+|---|---|---|---|---|---|
+| shipped | 8.700 (123 unwon) | 5.313 | **5.220** | 0 / 0 | 5 / 12 |
+| single | -- | 5.113 | 5.140 | 0 / 0 | 10 / 6 |
+Shipped is monotone in aggregate. Win turns are plausible for the deck (T5-T6 modal; T3-T4 with an early Cyclone; 2-3 % at
+T8). The single arm's d5 is 0.027 worse than its d3 (10 slower / 6 faster). All 15 depth inversions (5 shipped, 10 single)
+were re-run at d3 and d5 under four REAL futures (batch F2: `shuffle_salt` = `shuffle_salt_search` = 1-4, the clairvoyant
+form of the real-salt ensemble; the opening is unchanged): shipped 1 slower / 0 faster / 19 tied, single 2 slower / 2 faster / 36 tied. In every
+other future the two depths play to the same turn; the inversion belongs to the one realised future, i.e. which shuffle
+the line happened to ride, not to a deeper search choosing worse. (A first ensemble varied `shuffle_salt_search` alone --
+the search's knowledge, not the future: shipped 1/1/18, single 4/4/32, the same reading.) Budget escalation did not
+recover ship gi24 (T6 at b20/b100/b400/b2000 vs d3's T5); it ties d3 in all four real futures. The d0 rollout policy is very
+weak (77-82 % unwon at d0, every searched game won): 5i (the rollout-quality digest) is the indicated tool if leaf quality
+is worked on.
+
+**Stage 5c: budget starvation.** The slowest shipped games (T8 / unwon) of batch A re-run at 1x, 5x and 20x budget (d5 b20/b100/b400; d3 b10/b100/b400):
+d5 (seed 92000): gi3 8->7->7, gi80 8->8->7, gi103 8->7->7, gi30 8 at all three; d3 (91000): gi0 8->7 (b100), gi1 8 at all.
+E2 (seed 94000, d5): ship gi132 8->7->7, single gi14 8->6->6, single gi24 7->6->6, single gi134 8 at all. So b20 / b10 starve
+a minority of the slow games by about one turn (the phase-5 reading: the put-back fan does not fit the first pass). The
+UNWON games are not budget: d5 gi125 (unwon at b20/b100/b400: a mulligan to 5 that never sees a Cyclone, four Remands in
+hand), d5 gi50 (mulligan to 5 keeping one Mountain, no blue source until T4), d3 gi53 (two Mountains, a hand of blue
+cantrips; units identical at every budget), d3 gi148 (two Myriad Landscapes and no other land: neither can ever pay its own
+{2}). All four are keep-policy / mana-screw games (the keep is USER-owned, Q32 d).
+
+**Stage 5c2: horizon-honest tie-break** (`leaf_tiebreak_check.py --blocks 4 --games 60`, play settings, 480 games / 240
+paired, on 16 cores): net -3 turns (9 worse / 11 better), binding 8.3 % (20 changed), halves +6 / -9 (they DISAGREE).
+Script verdict KEEP THE DEFAULT (ON). The sample is small (the script's default is 12 x 1000 per arm, 50x this, ~12 h of the
+box at this deck's cost); the halves disagreeing means the sign is not established. Default kept; no provider override.
+
+**Stage 5h: the LIVE viewer sweep** (`audit_viewer_decisions.py`, 40 games from seed 9001, max 12 turns): expected
+{dig, free_cast, land_entry, reorder, scry, target, tutor_etb}, observed all of them (+ discard); no HARD MISS, no
+SELF-GUARD or DRIVER failure; oracle cross-check clean. **5h PASS.**
+
+**Stage 5j: verify_deck.py** (after 1b18e71e8):
+| gate | result |
+|---|---|
+| coverage | PASS (22/22 full) |
+| card_costs | PASS |
+| card_fields | PASS (644 cards; 17 allowlisted divergences) |
+| clause_ledger | SKIP (covered by coverage + bracket notes + oracle diff) |
+| regression_tiers | **FAIL** (expected: not in any tier -- the cost gate, Q32/Q33) |
+| viewer | PASS |
+| viewer_wiring | PASS (7 types: dig, free_cast, land_entry, reorder, scry, target, tutor_etb) |
+| mismatch | PASS (seeds 7001/8001 x 60, d3 b20 nonconv + d5 b20 fd oracle) |
+| play_invariants | PASS (8 games / 340 decisions) -- FAILED on the first run, fixed (below) |
+| claude_sweep | SKIP (expected: 5d comes after Q33) |
+| suite | **FAIL** (expected: same cause as regression_tiers) |
+The first run's play_invariants FAIL (seed 8001 gi 0-3, "did not reach a result within 400 decisions") was the DRIVER: the
+viewer always re-prompts, the menu offered a PHANTOM plan (turn 1, one Mountain: "cast: Seething Song", which the apply then
+drops -- TurnSolver's order-free ritual affordability credit, measured load-bearing for Dragonstorm's go-off search), and the driver
+re-picked it until the cap. Fixed in the tool (1b18e71e8): on the same menu coming back with `dropped_casts`, the driver
+passes and records an advisory (24 advisories on seed 8001; the phantom stays visible). The menu entry itself is Q37. Two
+tool notes: play_invariants seeds every game-index of a seed with the SAME `--seed` (claude-play keys the shuffle on the
+seed), so its "4 games per seed" are one game four times (Q38); and the reference-reproducibility check run after the
+executor fix: 668 refs, 0 play-drift / 0 board-diverged / 0 enum-gap.
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -767,6 +882,28 @@ bottoming) -- Q32.
   ON, amendments OFF).
 - Q36. Q26 (a) (fold the decline / take-and-Remand / j variants of a seed-only plan whose Cyclone walk is EXACTLY
   predictable) is not built: the whole seed-pin axis is 2.7% of the work. Owed as a sound collapse. Default: deferred.
+- Q37. PHANTOM RITUAL PLANS IN THE HUMAN-PLAY MENU (Stage 5j). With one Mountain out, the viewer offers "cast: Seething
+  Song" (and on turn 3 "Song, Song, Unpredictable Cyclone"); the apply drops the cast (`dropped_casts`) and the frame
+  re-prompts the same menu. Cause: TurnSolver's order-free ritual affordability credit (a ritual's gross float counts toward
+  its own cost), which is load-bearing as a PROPOSAL in the autonomous search (the re-sim verifies), but in human play the
+  proposal is shown unverified. Generic, not Cyclone-specific (not re-checked on another ritual deck). Options: (a) verify
+  each human-menu plan by an apply on a copy and hide or mark the plans whose casts drop (human-play only, GT-neutral; menu
+  indices shift, so saved references replay as `repaired`); (b) leave it: the dropped-casts banner already tells the
+  player. Default: (b), no engine change; play_invariants' driver now passes on such a menu (1b18e71e8).
+- Q38. `scripts/play_invariants.py` drives every game-index of a seed with the same `--seed`, and claude-play keys the
+  shuffle on the seed, so verify_deck's "4 games per seed" are one game four times (2 distinct games, not 8). The fix is
+  `--seed seed+gi` (the audit_viewer_decisions.py convention); it changes which games EVERY deck's gate drives and may surface
+  new findings elsewhere. Default: not changed here (a shared tool; flagged).
+- Q39. Stage 5c2 (horizon-honest tie-break): 240 paired games, net -3 turns, but the halves disagree (+6 / -9). The
+  script's decisive sample (12 x 1000 per arm) is ~12 h of the box at today's cost. Default: keep the tie-break ON (the
+  script's verdict); re-run at size once Q32 / Q33 make the deck cheaper.
+- Q40. Budget starvation at the shipped play settings (d5 b20) and the d3 b10 gate cell: 7 of the 14 slow games re-run gain
+  one turn at 5x-20x budget; none of the unwon games is budget (mulligan / mana screw). Play depth and budget are the USER's.
+  Default: no change; the Q33 single pick (~4x cheaper per game) is the lever that relieves it without a budget change.
+- Q41. The cost gate's timing depends on HOST load: the same units measured 17.36x (phase 5) and 10.49x (2026-10-27, host
+  loadavg ~41-45 from another container; Hinata's ms per unit 2.2x the phase-5 run, cyclone's 1.3-2.1x). Default: report
+  both; the FAIL holds either way; re-time on a quiet host before trusting a verdict near the 3x limit (the Q33 what-if,
+  3.93x, is such a case).
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
