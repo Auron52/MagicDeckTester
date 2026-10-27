@@ -1031,6 +1031,15 @@ executor fix: 668 refs, 0 play-drift / 0 board-diverged / 0 enum-gap.
   loadavg ~41-45 from another container; Hinata's ms per unit 2.2x the phase-5 run, cyclone's 1.3-2.1x). Default: report
   both; the FAIL holds either way; re-time on a quiet host before trusting a verdict near the 3x limit (the Q33 what-if,
   3.93x, is such a case).
+- Q42. THE ANALYZER'S DISCARD ANALYSIS finished (Stage 4, report only): RULE_FOUND. Over 125 search-labelled cleanup
+  discards (400 games d3; 97% have several optimal picks), a derived order beats the current ranking: optimal 92.0% vs
+  80.8%, mean regret 0.096 vs 0.216. The proposed shed order (most expendable first): Steam Vents, Toxic Deluge, Cascade
+  Bluffs, Remand, Ulamog the Ceaseless Hunger, Myriad Landscape, Xander's Lounge, Ulamog the Infinite Gyre (then the
+  deck's default). Most costly to discard: Street Wraith, Unpredictable Cyclone, Seething Song, Scalding Tarn, Ponder.
+  Paired outcome A/B: d0 -0.0285 turns (n 4000, t -2.37), d3 -0.0225 (n 800, t -0.81, not significant). Discard
+  buckets are the USER's: the order is NOT adopted. Note that Steam Vents first reads oddly beside the USER's Tarn rule
+  (Vents is the fetch's top pick); it was offered only 9 times. Default: not adopted; it would become
+  CycloneProvider::CleanupDiscardCandidates on approval. Report: build/scratch/cyclone/stage4.json (discard_analysis).
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
