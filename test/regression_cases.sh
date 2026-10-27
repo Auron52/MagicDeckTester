@@ -55,6 +55,7 @@ declare -A DECK_FILE=(
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [critter]=decks/CritterLifegain/CritterLifegain.cod
+  [lhc]=decks/LifegainHeliodCombo/LifegainHeliodCombo.cod
   [melira]="decks/Melira Pod/Melira Pod.cod"
   [angels]=decks/Angels/Angels.cod
   [fluctuator]=decks/Fluctuator/Fluctuator.cod
@@ -100,6 +101,7 @@ declare -A DECK_PROF=(
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [critter]=decks/CritterLifegain/CritterLifegain.profile.json
+  [lhc]=decks/LifegainHeliodCombo/LifegainHeliodCombo.profile.json
   [melira]="decks/Melira Pod/Melira Pod.profile.json"
   [angels]=decks/Angels/Angels.profile.json
   [fluctuator]=decks/Fluctuator/Fluctuator.profile.json
@@ -330,6 +332,13 @@ SMOKE_CASES=(
   "critter 0 1001 1000 0"
   "critter    3  1001    50 10"
   "critter    5  1001   175 20"
+  # lhc: LifegainHeliodCombo -- ADDED 2026-10-27 (analysis-LifegainHeliodCombo.md). The CritterLifegain
+  # shell plus the Heliod + Walking Ballista loop, Martyr of Sands, Abiding Grace, Emeria. Own provider
+  # (LifegainHeliodComboProvider, derived from CritterLifegainProvider). No keep table / value leaf yet:
+  # critter's shape (similar per-game cost), overnight on the ENTRY set. Play rows = d5 b20 (no value_play).
+  "lhc 0 1001 1000 0"
+  "lhc        3  1001    50 10"
+  "lhc        5  1001   175 20"
   # melira: RESTORED 2026-09-08 (user: "performance should be close to other decks"). Dropped
   # 2026-09-06 at smoke d3 31 s/game, d5 26 s/game (72% of the tier's core-time from one deck).
   # The wall was the 1-ply search LEAF re-running the greedy subset walk at every rollout turn
@@ -411,6 +420,7 @@ SMOKE_CASES=(
   "dragons2hg 5  1001    50 20"
   "breaching2hg 5  1001    50 20"
   "critter2hg 5  1001    50 20"
+  "lhc2hg     5  1001    50 20"
   "melira2hg  5  1001    25 60"
   "pirates2hg 5  1001    50 20"
   "soldiers2hg 5  1001    50 20"
@@ -644,6 +654,8 @@ REGRESSION_CASES=(
   "creature_giving  5 30001  20 0"
   "critter          3 30001  20 0"
   "critter          5 30001  20 0"
+  "lhc              3 30001  20 0"
+  "lhc              5 30001  20 0"
   "dragons          3 30001  20 0"
   "dragons          5 30001  20 0"
   "dragonstorm      3 30201   3 0"
@@ -821,6 +833,11 @@ REGRESSION_CASES=(
   "critter    3  2002   100 10"
   "critter    5  2002   500 20"
   "critter    5  3003   500 20"
+  # lhc: LifegainHeliodCombo (see the SMOKE block) -- critter's two-seed shape.
+  "lhc 0 2002 1000 0"
+  "lhc        3  2002   100 10"
+  "lhc        5  2002   500 20"
+  "lhc        5  3003   500 20"
   # melira: restored 2026-09-08 (see the SMOKE block).
   "melira 0 2002 1000 0"
   "melira     3  2002    25 10"
@@ -999,6 +1016,8 @@ OVERNIGHT_CASES=(
   "creature_giving  5 30101  20 0"
   "critter          3 30101  20 0"
   "critter          5 30101  20 0"
+  "lhc              3 30101  20 0"
+  "lhc              5 30101  20 0"
   "dragons          3 30101  20 0"
   "dragons          5 30101  20 0"
   "dragonstorm      3 30211   3 0"
@@ -1324,6 +1343,17 @@ OVERNIGHT_CASES=(
   "critter    5  5005  1425 20"
   "critter    5  6006  1425 20"
   "critter    5  7007  1425 20"
+  # lhc: LifegainHeliodCombo (see the SMOKE block) -- the overnight ENTRY set (no keep table yet; the
+  # FULL set comes just before its keep-table adoption): d0 4x2000, one d3 b10 sanity row, d5 4x300 b20.
+  "lhc 0  4004 2000 0"
+  "lhc 0  6006 2000 0"
+  "lhc 0  8008 2000 0"
+  "lhc 0 10010 2000 0"
+  "lhc        3  4004   125 10"
+  "lhc        5  4004   300 20"
+  "lhc        5  5005   300 20"
+  "lhc        5  6006   300 20"
+  "lhc        5  7007   300 20"
   # melira: restored 2026-09-08 (see the SMOKE block). The four-seed d3/d5 sweep that was
   # ~7.5 CPU-hours from one deck now projects to ~25 core-minutes.
   "melira 0 4004 2000 0"

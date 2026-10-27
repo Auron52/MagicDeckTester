@@ -163,11 +163,11 @@
    "worst_case": "goblins2hg_regression_d3_s2002"
   },
   "hinata": {
-   "cost_per_game_ms": 1788.49,
+   "cost_per_game_ms": 2173.76,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 957522,
+   "total_core_ms": 907141,
    "worst_case": "hinata_regression_d5_s3003"
   },
   "kittyv3": {
@@ -193,6 +193,14 @@
    "tier": "regression",
    "total_core_ms": 26348,
    "worst_case": "landfall_regression_d5_s3003"
+  },
+  "lhc": {
+   "cost_per_game_ms": 341.522,
+   "jobs": 6,
+   "key": "lhc",
+   "tier": "regression",
+   "total_core_ms": 373421,
+   "worst_case": "lhc_regression_d5_s2002"
   },
   "melira": {
    "cost_per_game_ms": 354.975,
