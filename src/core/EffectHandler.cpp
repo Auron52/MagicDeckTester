@@ -480,7 +480,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                       entry.land_put_credit.Total() > 0 ? &entry.land_put_credit
                                                                         : nullptr);
                 }
-                if (def.params.tutor_to_hand || def.params.tutor_to_top)
+                if (IsLibraryTutor(def.params))
                 {
                     // Fetch the searched target carried on the stack entry (empty -> the
                     // heuristic's top pick), matching the rollout's ApplyPlanDirect.
