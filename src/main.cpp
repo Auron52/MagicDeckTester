@@ -1402,7 +1402,7 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         }
         for (const SuspendedCard& sc : me.suspended_cards)
         {
-            int counters = sc.arrive_turn - s.turn_number;
+            int counters = sc.arrive_turn - s.TurnSeq();
             if (counters < 0) { counters = 0; }
             open_or_sep();
             os << "{ \"name\": "; JsonStr(os, sc.card.m_name);
@@ -1639,6 +1639,22 @@ public:
         return *this;
     }
 
+    // The game's turn: the ROUND (extra turns do not count, USER 2026-10-26), plus -- only once an extra
+    // turn has been taken, so every other game's JSON is byte-identical -- `extra_turn` (k when THIS turn
+    // is the k-th extra turn taken, else 0) and `turn_seq` (turns taken; what the per-turn replay specs --
+    // --force-attackers, --firebreathe, --jitte, --tap-pref, --storage-hold -- key on, since two turns
+    // can share a round).
+    DecisionJson& Turn(const GameState& s)
+    {
+        m_os << "  \"turn\": " << s.turn_number << ",\n";
+        if (s.extra_turns_taken != 0)
+        {
+            m_os << "  \"extra_turn\": " << (s.in_extra_turn ? static_cast<int>(s.extra_turns_taken) : 0) << ",\n";
+            m_os << "  \"turn_seq\": " << s.TurnSeq() << ",\n";
+        }
+        return *this;
+    }
+
     DecisionJson& Board(const GameState& s, int reveal_count = 0)
     {
         WriteBoardContext(m_os, s, reveal_count);
@@ -1722,7 +1738,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     // (no fragile client-side counting). -1 => not supplied (validation/replay contexts that don't reorder).
     // Emitted BEFORE `type`, which is why DecisionJson defers the type rather than taking it up front.
     if (main_ordinal >= 0) { d.Int("main_ordinal", main_ordinal); }
-    d.Type("main_phase").Turn(s.turn_number)
+    d.Type("main_phase").Turn(s)
      .Word("phase", is_pre_combat ? "pre_main" : "post_main")
      .Bool("on_the_play", s.on_the_play);
     // Cards drawn since the previous main-phase decision (turn draw + any cantrip draws this
@@ -1776,6 +1792,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ei) { os << ", "; }
             os << "{ \"turn\": " << events[ei].turn << ", \"kind\": ";
             JsonStr(os, events[ei].kind);
+            if (events[ei].extra > 0) { os << ", \"turn_seq\": " << (events[ei].turn + events[ei].extra); }
             os << ", \"text\": ";
             JsonStr(os, events[ei].text);
             os << " }";
@@ -3167,7 +3184,7 @@ static void WriteVialDecisionJson(std::ostream& os, const GameState& s,
                                   const Permanent& vial, int decision_index, bool heuristic)
 {
     DecisionJson d(os, decision_index);
-    d.Type("vial_charge").Turn(s.turn_number);
+    d.Type("vial_charge").Turn(s);
     // vial + current_counters deliberately share one output line (historic layout) -- emitted raw.
     os << "  \"vial\": "; JsonStr(os, vial.card.m_name);
     os << ", \"current_counters\": " << vial.charge_counters << ",\n";
@@ -3191,7 +3208,7 @@ static void WriteEchoDecisionJson(std::ostream& os, const GameState& s,
                                   int decision_index, bool heuristic)
 {
     DecisionJson d(os, decision_index);
-    d.Type("echo").Turn(s.turn_number);
+    d.Type("echo").Turn(s);
     // creature + echo_cost deliberately share one output line (historic layout) -- emitted raw.
     os << "  \"creature\": "; JsonStr(os, creature.card.m_name);
     os << ", \"echo_cost\": "; JsonStr(os, echo_cost); os << ",\n";
@@ -3316,7 +3333,7 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
     const int   m         = static_cast<int>(looked.size());
 
     DecisionJson dj(os, decision_index);
-    dj.Type(kindstr).Source(source).Turn(s.turn_number).Word("away_zone", away_zone).Board(s);
+    dj.Type(kindstr).Source(source).Turn(s).Word("away_zone", away_zone).Board(s);
     dj.Array("looked", static_cast<std::size_t>(m), [&](std::size_t i)
     {
         const CardDefinition* cd = CardDatabase::Instance().LookupCached(looked[i]);
@@ -3564,7 +3581,7 @@ static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const 
                                     bool allow_none = false)
 {
     DecisionJson d(os, decision_index);
-    d.Type("divide").Source(source).Turn(s.turn_number).Int("total_damage", total).Board(s);
+    d.Type("divide").Source(source).Turn(s).Int("total_damage", total).Board(s);
     // "ANY NUMBER of target creatures" (Fury's ETB): choosing NO target is legal and deals no damage, so
     // an all-zero reply is accepted too. Absent for the "any number of targets" burn spells, which
     // name the opponent's face and are cast to be aimed.
@@ -3602,7 +3619,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::string& lifegain_desc = "")
 {
     DecisionJson d(os, decision_index);
-    d.Type("target").Source(source).Turn(s.turn_number);
+    d.Type("target").Source(source).Turn(s);
     // A non-empty lifegain_desc (e.g. "gains 7 life") flags this as a "TARGET PLAYER gains N life"
     // spell (Heroes' Reunion / Rest for the Weary): the legal set is the two PLAYERS, nothing is
     // damaged, and the viewer must word it as life gained, not "N damage".
@@ -3694,7 +3711,7 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     // A `sacrifice` variant reuses the identical board-land picker as the Karoo bounce, but the land
     // goes to the graveyard (Shard Volley's additional cost) and the viewer says "sacrifice".
     d.Type(legend_keep ? "legend_keep" : (sacrifice ? "sacrifice" : "bounce"))
-     .Source(source).Turn(s.turn_number)
+     .Source(source).Turn(s)
      .Board(s).HeuristicDefault(heuristic_default);
     // MACHINE-READABLE decline flag. This used to live only in the prose `note` below, which the
     // play viewer does not parse -- so Surtland Flinger's "you MAY sacrifice another creature"
@@ -3775,7 +3792,7 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
                                      int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("flicker").Source(source).Turn(s.turn_number)
+    d.Type("flicker").Source(source).Turn(s)
      .Board(s).HeuristicDefault(heuristic_default);
     d.Array("options", legal.size(), [&](std::size_t i)
     {
@@ -3799,7 +3816,7 @@ static void WriteTreasurifyDecisionJson(std::ostream& os, const GameState& s, co
 {
     const bool yours = side_player == s.active_player_index;
     DecisionJson d(os, decision_index);
-    d.Type("treasurify").Source(source).Turn(s.turn_number)
+    d.Type("treasurify").Source(source).Turn(s)
      .Board(s).HeuristicDefault(heuristic_default);
     d.Str("side", yours ? "yours" : "opponent");
     d.Array("options", legal.size(), [&](std::size_t i)
@@ -3827,7 +3844,7 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     std::vector<bool> is_legal(examined.size(), false);
     for (int li : legal) { if (li >= 0 && li < static_cast<int>(examined.size())) { is_legal[li] = true; } }
     DecisionJson d(os, decision_index);
-    d.Type("dig").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
+    d.Type("dig").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
     d.Array("examined", examined.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
@@ -3963,7 +3980,7 @@ static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, cons
 {
     static const char* kNames[6] = { "White", "Blue", "Black", "Red", "Green", "Colorless" };
     DecisionJson d(os, decision_index);
-    d.Type("choose_color").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("choose_color").Source(source).Turn(s).Board(s)
      .HeuristicDefault(heuristic_default);
     d.Array("colors", menu.size(), [&](std::size_t i)
     {
@@ -3985,7 +4002,7 @@ static void WriteEtbKeywordsDecisionJson(std::ostream& os, const GameState& s, c
                                          int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("choose_abilities").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("choose_abilities").Source(source).Turn(s).Board(s)
      .HeuristicDefault(heuristic_default);
     d.Array("options", option_masks.size(), [&](std::size_t i)
     {
@@ -4015,7 +4032,7 @@ static void WriteLightPawsDecisionJson(std::ostream& os, const GameState& s, con
     std::vector<bool> is_legal(pool.size(), false);
     for (int li : legal) { if (li >= 0 && li < static_cast<int>(pool.size())) { is_legal[li] = true; } }
     DecisionJson d(os, decision_index);
-    d.Type("lightpaws").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
+    d.Type("lightpaws").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
     d.Array("pool", pool.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
@@ -4033,7 +4050,7 @@ static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const 
                                     int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("lackey_put").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
+    d.Type("lackey_put").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
@@ -4102,7 +4119,7 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     //    and replaying a won game into a loss (`play-drift`).
     //
     // The AI's suggestion also ships as `ai_pick` for the viewer's badge either way.
-    d.Type("free_cast").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("free_cast").Source(source).Turn(s).Board(s)
      .HeuristicDefault(source == "Maelstrom Archangel" ? -1 : heuristic_default);
     if (source == "Chain Lightning (pay {R}{R})") { d.Word("operation", "pay_rr"); }
     else if (source == "Chain Lightning (copy spell)") { d.Word("operation", "copy"); }
@@ -4168,7 +4185,7 @@ static void WriteMadnessDecisionJson(std::ostream& os, const GameState& s, const
                                      const std::vector<PlayReveal>& reveals = {})
 {
     DecisionJson d(os, decision_index);
-    d.Type("madness").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
+    d.Type("madness").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
     d.Int("ai_pick", heuristic_default);
     d.Str("card", card.m_name.str());
     d.Int("card_number", card.m_number);
@@ -4192,7 +4209,7 @@ static void WriteDemonstrateDecisionJson(std::ostream& os, const GameState& s,
                                          const std::vector<PlayReveal>& reveals = {})
 {
     DecisionJson d(os, decision_index);
-    d.Type("demonstrate").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("demonstrate").Source(source).Turn(s).Board(s)
      .HeuristicDefault(heuristic_default ? 1 : 0);
     EmitRevealsField(os, reveals);   // pending walk reveals stay current mid-chain (see helper)
     d.Note("reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy.");
@@ -4209,7 +4226,7 @@ static void WriteAttackModeDecisionJson(std::ostream& os, const GameState& s,
                                         const std::vector<PlayReveal>& reveals = {})
 {
     DecisionJson d(os, decision_index);
-    d.Type("attack_mode").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("attack_mode").Source(source).Turn(s).Board(s)
      .HeuristicDefault(heuristic_default);
     // DecisionJson contract (see the class comment): the PRECEDING field already wrote its own
     // ",\n", and this one must write its own trailing ",\n" so Note() can close the object. An
@@ -4258,7 +4275,7 @@ static void WriteLifegainCountersDecisionJson(std::ostream& os, const GameState&
                                              const std::vector<PlayReveal>& reveals = {})
 {
     DecisionJson d(os, decision_index);
-    d.Type("lifegain_counters").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("lifegain_counters").Source(source).Turn(s).Board(s)
      .HeuristicDefault(heuristic_count);
     // DecisionJson contract (see the class comment, and WriteAttackModeDecisionJson's scar): the
     // PRECEDING field already wrote its own ",\n", so this one opens with a bare "  \"...\"" and
@@ -4309,7 +4326,7 @@ static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const s
                                    int decision_index, const std::vector<int>& suggested)
 {
     DecisionJson d(os, decision_index);
-    d.Type("tutor_etb").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
+    d.Type("tutor_etb").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i]);
@@ -4335,7 +4352,7 @@ static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const 
     for (int di : heuristic_subset)
     { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
     DecisionJson d(os, decision_index);
-    d.Type("dragon").Source(source).Turn(s.turn_number).Board(s).Int("max_puts", max_puts);
+    d.Type("dragon").Source(source).Turn(s).Board(s).Int("max_puts", max_puts);
     d.Array("ai_set", heuristic_subset.size(), [&](std::size_t i) { os << heuristic_subset[i]; });
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
@@ -4363,7 +4380,7 @@ static void WriteSacTutorDecisionJson(std::ostream& os, const GameState& s, cons
     for (int di : heuristic_subset)
     { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
     DecisionJson d(os, decision_index);
-    d.Type("sac_tutor").Source(source).Turn(s.turn_number).Board(s).Int("max_puts", max_puts);
+    d.Type("sac_tutor").Source(source).Turn(s).Board(s).Int("max_puts", max_puts);
     d.Array("ai_set", heuristic_subset.size(), [&](std::size_t i) { os << heuristic_subset[i]; });
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
@@ -4387,7 +4404,7 @@ static void WriteReviveDecisionJson(std::ostream& os, const GameState& s, const 
     for (int di : heuristic_subset)
     { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
     DecisionJson d(os, decision_index);
-    d.Type("revive").Source(source).Turn(s.turn_number).Board(s).Int("max_puts", max_puts);
+    d.Type("revive").Source(source).Turn(s).Board(s).Int("max_puts", max_puts);
     d.Array("ai_set", heuristic_subset.size(), [&](std::size_t i) { os << heuristic_subset[i]; });
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
@@ -4431,7 +4448,7 @@ static void WriteRummageDecisionJson(std::ostream& os, const GameState& s, const
     for (int di : heuristic_subset)
     { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
     DecisionJson d(os, decision_index);
-    d.Type("rummage").Source(source).Turn(s.turn_number).Board(s).Int("max_puts", max_puts);
+    d.Type("rummage").Source(source).Turn(s).Board(s).Int("max_puts", max_puts);
     d.Array("ai_set", heuristic_subset.size(), [&](std::size_t i) { os << heuristic_subset[i]; });
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
@@ -4456,7 +4473,7 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
     // framing's over_by (hand - 7) goes negative on a small hand ("Select -5 cards", Minotaur
     // seed 1). The context carries the ability's source so the viewer can title it honestly.
     const bool cost_discard = !NonCleanupDiscardContext().empty();
-    d.Type("discard").Turn(s.turn_number)
+    d.Type("discard").Turn(s)
      .Int("over_by", cost_discard ? 1 : static_cast<int>(ap.hand.size()) - 7);
     if (cost_discard)
     {
@@ -4524,7 +4541,7 @@ static void WriteEIDecisionJson(std::ostream& os, const GameState& s,
     const int look = static_cast<int>(looked.size());
     std::vector<std::pair<int,int>> asg = EIAssignments(look);
     DecisionJson d(os, decision_index);
-    d.Type("expressive_iteration").SourceLiteral("Expressive Iteration").Turn(s.turn_number).Board(s);
+    d.Type("expressive_iteration").SourceLiteral("Expressive Iteration").Turn(s).Board(s);
     d.Array("looked", static_cast<std::size_t>(look), [&](std::size_t i)
     { os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, looked[i].m_name.str()); os << " }"; });
     d.HeuristicDefault(heur_option);
@@ -4549,7 +4566,7 @@ static void WriteRetraceDiscardDecisionJson(std::ostream& os, const GameState& s
 {
     const Player& ap = s.players[s.active_player_index];
     DecisionJson d(os, decision_index);
-    d.Type("retrace_discard").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("retrace_discard").Source(source).Turn(s).Board(s)
      .HeuristicDefault(heuristic_default);
     d.Array("options", hand_land_indices.size(), [&](std::size_t i)
     {
@@ -4575,7 +4592,7 @@ static void WriteReplicateDecisionJson(std::ostream& os, const GameState& s, con
                                        int max_count, int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("replicate").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("replicate").Source(source).Turn(s).Board(s)
      .Int("max_count", max_count).HeuristicDefault(max_count);
     d.Note("reply how many times to replicate this Sliver spell (0.." + std::to_string(max_count)
            + "); each pays the replicate cost again to make a token copy. Default = replicate the maximum.");
@@ -4595,7 +4612,7 @@ static void WriteXValueDecisionJson(std::ostream& os, const GameState& s, const 
     {
         // Martyr of Sands: "Reveal X white cards from your hand ... gain three times X life". The
         // chooser's lethal_x slot carries the life per revealed card.
-        d.Type("x_value").Source(source).Turn(s.turn_number).Board(s)
+        d.Type("x_value").Source(source).Turn(s).Board(s)
          .Word("x_kind", "reveal_gain").Int("life_per_x", lethal_x)
          .Int("min_x", 0).Int("max_x", max_x);
         d.HeuristicDefault(default_x);
@@ -4604,7 +4621,7 @@ static void WriteXValueDecisionJson(std::ostream& os, const GameState& s, const 
                + " life per card), or -1 for the default (" + std::to_string(default_x) + ").");
         return;
     }
-    d.Type("x_value").Source(source).Turn(s.turn_number).Board(s)
+    d.Type("x_value").Source(source).Turn(s).Board(s)
      .Word("draw_target", target != 0 ? "opponent" : "self")
      .Int("min_x", 0).Int("max_x", max_x);
     if (target != 0 && lethal_x > 0) { d.Int("lethal_x", lethal_x); }
@@ -4628,7 +4645,7 @@ static void WriteAttachHostDecisionJson(std::ostream& os, const GameState& s,
                                         int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("attach_host").Source(source).Turn(s.turn_number)
+    d.Type("attach_host").Source(source).Turn(s)
      .Board(s).HeuristicDefault(heuristic_default);
     d.Array("options", legal.size(), [&](std::size_t i)
     {
@@ -4697,7 +4714,7 @@ static void WriteJitteDecisionJson(std::ostream& os, const GameState& s,
                                    int max_count, int decision_index, bool mid_step)
 {
     DecisionJson d(os, decision_index);
-    d.Type("jitte").Turn(s.turn_number).Board(s)
+    d.Type("jitte").Turn(s).Board(s)
      .Int("max_count", max_count).Bool("mid_step", mid_step).HeuristicDefault(-1);
     d.Array("attackers", attacker_indices.size(), [&](std::size_t j)
     {
@@ -4731,7 +4748,7 @@ static void WriteFirebreatheDecisionJson(std::ostream& os, const GameState& s,
                                          int max_count, int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("firebreathe").Turn(s.turn_number).Board(s)
+    d.Type("firebreathe").Turn(s).Board(s)
      .Int("max_count", max_count).HeuristicDefault(max_count);
     d.Array("attackers", attacker_indices.size(), [&](std::size_t j)
     {
@@ -4787,7 +4804,7 @@ static void WriteStorageHoldDecisionJson(std::ostream& os, const GameState& s,
                                          const Permanent& land, int counters, int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("storage_hold").Turn(s.turn_number).Str("land", land.card.m_name.str());
+    d.Type("storage_hold").Turn(s).Str("land", land.card.m_name.str());
     // Side-channel key: the land's BATTLEFIELD INDEX (its position in state.battlefield). Unique per
     // permanent and deterministic across the stateless replay (same seed/choices/holds => same board =>
     // same index at this consult), so it distinguishes two storage lands charged the same turn -- unlike
@@ -4819,7 +4836,7 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
                                        bool heuristic_untapped, int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("land_entry").Source(source).Turn(s.turn_number).Board(s).Int("pay_life", pay_life);
+    d.Type("land_entry").Source(source).Turn(s).Board(s).Int("pay_life", pay_life);
     d.Array("reveal_types", reveal_types.size(), [&](std::size_t i) { JsonStr(os, reveal_types[i]); });
     d.HeuristicDefault(heuristic_untapped ? 1 : 0);
     // Name WHAT is revealed, from reveal_types: a Snarl reveals "an Island or a Mountain card",
@@ -5377,6 +5394,7 @@ if (!log_dir.empty())
         {
             out << "    { \"turn\": " << final_events[ei].turn << ", \"kind\": ";
             JsonStr(out, final_events[ei].kind);
+            if (final_events[ei].extra > 0) { out << ", \"turn_seq\": " << (final_events[ei].turn + final_events[ei].extra); }
             out << ", \"text\": ";
             JsonStr(out, final_events[ei].text);
             out << " }" << (ei + 1 < final_events.size() ? ",\n" : "\n");
@@ -5416,6 +5434,7 @@ if (!event_log.empty())
         if (ei) { std::cout << ", "; }
         std::cout << "{ \"turn\": " << event_log[ei].turn << ", \"kind\": ";
         JsonStr(std::cout, event_log[ei].kind);
+        if (event_log[ei].extra > 0) { std::cout << ", \"turn_seq\": " << (event_log[ei].turn + event_log[ei].extra); }
         std::cout << ", \"text\": ";
         JsonStr(std::cout, event_log[ei].text);
         std::cout << " }";
@@ -7588,7 +7607,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
-            auto it = firebreathe_by_turn.find(s.turn_number);
+            auto it = firebreathe_by_turn.find(s.TurnSeq());
             if (it != firebreathe_by_turn.end())
             {
                 int chosen = it->second;
@@ -7803,9 +7822,9 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
             const int num = p.card.m_number;
             // ORDINAL-scoped entry first (the current committed line's own witnessed taps --
             // see ParseTapPrefSpec), then the phase-wide wildcard (legacy 3-field form).
-            auto it = tap_pref_by_phase.find({ s.turn_number, post, g_play_cur_main_ordinal });
+            auto it = tap_pref_by_phase.find({ s.TurnSeq(), post, g_play_cur_main_ordinal });
             if (it != tap_pref_by_phase.end() && it->second.count(num) > 0) { return true; }
-            it = tap_pref_by_phase.find({ s.turn_number, post, -1 });
+            it = tap_pref_by_phase.find({ s.TurnSeq(), post, -1 });
             return it != tap_pref_by_phase.end() && it->second.count(num) > 0;
         };
     if (!tap_pref_by_phase.empty()) { g_play_tap_pref_chooser = &tap_pref_chooser; }
@@ -7821,7 +7840,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
         {
             int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
             const int land_idx = static_cast<int>(&land - s.battlefield.data());   // #6 side-channel key
-            auto it = storage_hold_by_land.find({ s.turn_number, land_idx });
+            auto it = storage_hold_by_land.find({ s.TurnSeq(), land_idx });
             if (it != storage_hold_by_land.end())
             {
                 if (!log_dir.empty())
@@ -8451,6 +8470,7 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // of that name ends attached to a permanent of that name
 //                                    // ("attached": false asserts it is NOT)
 //     "expect_exile_contains": ["X"],  // optional: X in the exile zone (and not on the battlefield)
+//     "expect_exile_counts": {"X": 2}, // optional: EXACTLY 2 copies of X in exile (copies may remain in play)
 //                                    // at the end -- removal a passive opponent never notices
 //     "expect_active_life": 20,      // optional: pin OUR life (incidental lifegain / pain taps) --
 //                                    // the only assertion that sees a rider-only illegal cast
@@ -8646,6 +8666,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     }
     state.on_the_play           = j.value("on_the_play", true);
     state.game_seed             = j.value("seed", 1);
+    // EXTRA TURNS (Emrakul): a fixture can start owing extra turns, or inside one. TurnSeq() derives
+    // from turn_number + extra_turns_taken, so nothing else needs setting. Absent -> 0 / false.
+    state.pending_extra_turns   = static_cast<std::uint8_t>(j.value("pending_extra_turns", 0));
+    state.extra_turns_taken     = static_cast<std::uint8_t>(j.value("extra_turns_taken", 0));
+    state.in_extra_turn         = j.value("in_extra_turn", false);
 
     // The opponent's real library + opening hand, exactly as SetupGame deals them, so a fixture on
     // a milling deck models the same opponent a real game does. Must come AFTER game_seed is set --
@@ -9430,6 +9455,24 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 return 1;
             }
             std::cout << "scenario: PASS (" << want << " exiled)\n";
+        }
+    }
+    // "expect_exile_counts": {"Island": 2} -- EXACTLY that many copies in exile at the end, whatever is
+    // still on the battlefield (expect_exile_contains above also demands none remain there, which a
+    // board of identical lands can never satisfy). Phase 2: Ulamog's forced own-permanent exile.
+    if (j.contains("expect_exile_counts"))
+    {
+        for (const auto& [want, nv] : j.at("expect_exile_counts").items())
+        {
+            const int need = nv.get<int>();
+            int got = 0;
+            for (const Card& c : state.exile) { if (c.m_name.str() == want) { ++got; } }
+            if (got != need)
+            {
+                std::cout << "scenario: FAIL expected " << need << "x " << want << " in exile, got " << got << "\n";
+                return 1;
+            }
+            std::cout << "scenario: PASS (" << got << "x " << want << " exiled)\n";
         }
     }
 

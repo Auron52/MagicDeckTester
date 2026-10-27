@@ -14091,6 +14091,80 @@
     "cycling_cost": "",
     "cycling_life_cost": 2
    }
+  },
+  {
+   "name": "Emrakul, the Aeons Torn",
+   "mana_cost": "{15}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 15,
+   "toughness": 15,
+   "oracle_text": "This spell can't be countered.\nWhen you cast this spell, take an extra turn after this one.\nFlying, protection from spells that are one or more colors, annihilator 6\nWhen Emrakul is put into a graveyard from anywhere, its owner shuffles their graveyard into their library. [Can't be countered: cant_be_countered (inert against the passive opponent; its reader is the self-targeted Remand, which may target Emrakul and draws, Emrakul resolving anyway). Cast trigger: cast_trigger_extra_turns 1 -- pushed above the spell at EVERY cast (EffectHandler::PushCastTriggers for hand casts and PushFreeCast's free casts -- cascade, Unpredictable Cyclone -- and the rollout's inline twin in apply_one), so it resolves first, and two casts give two extra turns. An extra turn is a full turn of ours (untap clears summoning sickness, so an Emrakul cast this turn attacks in it; upkeep; draw; a new land drop; mains; combat; end; cleanup); the passive opponent takes no turn before it (no notional upkeep or draw, no scheduled spawn). EXTRA TURNS DO NOT COUNT TOWARD THE TURN COUNT (USER ruling 2026-10-26): GameState::turn_number is the ROUND, so the reported win turn and every search comparison are in rounds; an extra turn costs no search ply (depth counts rounds), so it is always searched inside the window. Flying inert (no blockers). Annihilator 6: the annihilator param -- at declare attackers the defending player sacrifices six permanents, oldest first (the opponent's choice, a fixed rule); LIVE, because the goldfish opponent's scheduled spawns (8 of 10 games) are the Ulamogs' preferred targets. Protection from spells that are one or more colors: NOT modelled, PROVISIONAL inert -- nothing in a goldfish game targets, damages, enchants or blocks Emrakul with a colored spell in the Cyclone list (Remand targets the SPELL on the stack, where a permanent's protection does not function; the Ulamog triggers are colorless abilities); cross-deck caveat: a future deck's colored own-target spell (a pump, Soulfire's own targets, an Aura) would wrongly be allowed to target it. Graveyard trigger: put_into_graveyard_shuffles_graveyard -- a TRIGGER (not Progenitus's replacement): Emrakul reaches the graveyard first, then its owner shuffles the WHOLE graveyard, Emrakul included, into the library (search-salted shuffle), after the whole event that moved it (the cleanup discard, a legend-rule batch); fired from the shared discard hook and every creature death (legend rule, Ulamog the Infinite Gyre's destroy, sacrifice). Exile is not a graveyard (Ulamog the Ceaseless Hunger's exile does not trigger it). Legend rule modelled (keep the oldest: the copies differ only in summoning sickness, and the doomed one fires the same graveyard shuffle).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cant_be_countered": true,
+    "cast_trigger_extra_turns": 1,
+    "annihilator": 6,
+    "put_into_graveyard_shuffles_graveyard": true
+   }
+  },
+  {
+   "name": "Ulamog, the Ceaseless Hunger",
+   "mana_cost": "{10}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "keywords": [
+    "Indestructible"
+   ],
+   "power": 10,
+   "toughness": 10,
+   "oracle_text": "When you cast this spell, exile two target permanents.\nIndestructible\nWhenever Ulamog attacks, defending player exiles the top twenty cards of their library. [Cast trigger: cast_trigger_exile_target_permanents 2 -- MANDATORY, fires at every cast (hand casts, free casts); the two targets are DISTINCT (CR 115.3) and chosen as the trigger is put on the stack (CR 603.3d) from EVERY permanent on the battlefield, either side (the spell itself is on the stack, not a target): the goldfish opponent's scheduled spawns when present, otherwise our own permanents (lands, Unpredictable Cyclone, creatures) -- forced. With fewer than two legal permanents the trigger is removed (CR 603.3d). SEARCHED: Plan::cast_trigger_target_choice ranks the options (multisets of identity-folded permanents, two identical Islands being one option) in DecisionProvider::CastTriggerTargetOrder's order -- ORDER only, opponent permanents first; the human picks on the board (the target decision, one pick at a time; a forced pick is not prompted). Re-checked on resolution (CR 608.2b): a target that left is skipped, the other is still exiled. Exile ignores indestructible and is not a graveyard (no Emrakul shuffle); a token exiled ceases to exist. Indestructible modelled (destroy does nothing; -X/-X and 0 toughness still kill). Attack trigger NOT modelled, PROVISIONAL inert: the opponent is dealt a library only for decks that touch it (DeckTouchesOpponentZones), and even with a 53-card library Ulamog's 10 power kills a 20-life opponent on its 2nd attack while the exile needs a 3rd attack plus their draw; at 2HG's 30 life the 3rd attack is lethal by damage in the same combat. Legend rule modelled (one copy in the list).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cast_trigger_exile_target_permanents": 2
+   }
+  },
+  {
+   "name": "Ulamog, the Infinite Gyre",
+   "mana_cost": "{11}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "keywords": [
+    "Indestructible"
+   ],
+   "power": 10,
+   "toughness": 10,
+   "oracle_text": "When you cast this spell, destroy target permanent.\nIndestructible\nAnnihilator 4 (Whenever this creature attacks, defending player sacrifices four permanents of their choice.)\nWhen Ulamog is put into a graveyard from anywhere, its owner shuffles their graveyard into their library. [Cast trigger: cast_trigger_destroy_target_permanents 1 -- MANDATORY, every cast (hand and free casts); one target chosen as the trigger is put on the stack (CR 603.3d) from every permanent, either side (an opponent spawn when present, else ours -- forced); removed with no legal target. SEARCHED via Plan::cast_trigger_target_choice (provider ORDER only: the opponent's permanents first, then our own indestructible ones -- a legal no-op); the human picks on the board (target), a forced pick is not prompted. Destroy respects indestructible (targeting an indestructible permanent is legal and does nothing); a destroyed creature dies through OnCreatureDies (an Emrakul target fires its graveyard shuffle). Indestructible modelled (-X/-X and 0 toughness still kill). Annihilator 4: the annihilator param (LIVE: it removes opponent spawns the Ulamog cast triggers would otherwise target; the opponent sacrifices oldest first, a fixed rule -- their choice, not ours). Graveyard trigger: put_into_graveyard_shuffles_graveyard (see Emrakul): reached by the cleanup discard (it cannot be destroyed). Legend rule modelled (one copy in the list).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cast_trigger_destroy_target_permanents": 1,
+    "annihilator": 4,
+    "put_into_graveyard_shuffles_graveyard": true
+   }
   }
  ]
 }
