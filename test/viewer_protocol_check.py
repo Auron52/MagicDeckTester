@@ -367,17 +367,30 @@ def recorded_tap_prefs(decisions):
     phase-wide, the historical behaviour."""
     prefs = {}
     prev = None
+    # Sources seen TAPPED on the sub-decision frames between the pair (a target, a sacrifice): a
+    # source that tapped and then LEFT before the closing frame (the Mountain that paid Shard Volley
+    # and was then sacrificed to it, burn s21_gi20) is a payment tap the closing frame cannot show.
+    between = set()
     for d in decisions:
         dec = d.get("decision", {})
         if dec.get("type") != "main_phase":
+            between |= {p["num"] for p in (dec.get("me") or {}).get("battlefield", [])
+                        if isinstance(p.get("num"), int) and p.get("tapped")}
             continue
         if prev is not None and prev.get("turn") == dec.get("turn") \
                 and prev.get("phase") == dec.get("phase"):
+            # By CARD NUMBER, not battlefield position: `idx` is a slot in a vector that is rebuilt
+            # when a permanent LEAVES between the two frames (a sac-land paid as Shard Volley's
+            # additional cost, Blighted Steppe sacrificed), and every later slot then shifts down
+            # by one, so an idx delta named permanents that never tapped and dropped ones that
+            # did. burn s21_gi20 pinned Swiftspear + Eidolon; SelesnyaLifegain s15_gi14 pinned
+            # Accomplished Alchemist, which then tapped before the lifegain and shrank Genesis
+            # Wave's X from 14 to 2 (ref_promote refusals, 2026-10-26).
             def field(fr, want_tapped):
-                return {p["idx"] for p in fr.get("me", {}).get("battlefield", [])
-                        if isinstance(p.get("idx"), int)
+                return {p["num"] for p in fr.get("me", {}).get("battlefield", [])
+                        if isinstance(p.get("num"), int)
                         and (bool(p.get("tapped")) or not want_tapped)}
-            delta = (field(dec, True) - field(prev, True)) & field(prev, False)
+            delta = ((field(dec, True) | between) - field(prev, True)) & field(prev, False)
             # (see the CAST-AND-TAPPED note below: those can carry a pair whose delta is empty)
             _hand = {h.get("num") for h in (prev.get("me", {}).get("hand") or [])
                      if isinstance(h.get("num"), int)}
@@ -393,9 +406,7 @@ def recorded_tap_prefs(decisions):
                 # killing the reference several frames later as an opaque "board differs". Same
                 # stale-index class that cost five Mirrorwing references. Copies of a card are
                 # interchangeable to a payment, so the name IS the whole recoverable intent.
-                by_idx = {p["idx"]: p.get("num") for p in prev.get("me", {}).get("battlefield", [])
-                          if isinstance(p.get("idx"), int)}
-                nums = {by_idx[i] for i in delta if isinstance(by_idx.get(i), int)}
+                nums = set(delta)
                 # CAST-AND-TAPPED. A source the line itself CAST from hand and then TAPPED is a payment tap too, and
                 # leaving it out is not neutral: a pin outranks every unpinned source, so the pinned
                 # lands pay the generic pips the human paid with the new rock and a later coloured pip
@@ -413,6 +424,7 @@ def recorded_tap_prefs(decisions):
                     key = (dec.get("turn"), dec.get("phase"), ordinal)
                     prefs[key] = sorted(set(prefs.get(key, [])) | nums)
         prev = dec
+        between = set()
     return prefs
 
 
@@ -1072,6 +1084,12 @@ def option_key(o):
         return ("placement", tuple(o.get("top") or []), tuple(o.get("away") or []),
                 bool(o.get("shuffle")))
     if "name" in o:
+        # A permanent pick (sacrifice / bounce) carries its TAPPED state, and that is intent, not
+        # position: sacrificing the Mountain that already paid is not sacrificing a fresh one
+        # (burn s21_gi20: Shard Volley + Skullcrack on three Mountains needs the TAPPED one
+        # sacrificed; name alone resolved to an untapped copy and stranded Skullcrack's mana).
+        if isinstance(o.get("tapped"), bool):
+            return ("name", o.get("name"), o["tapped"])
         return ("name", o.get("name"))
     if isinstance(o.get("label"), str) and o["label"]:
         parts = [p.strip() for p in o["label"].split(" + ")]
@@ -1092,6 +1110,9 @@ def find_option(recorded, options, recorded_index=None):
         return recorded_index if (recorded_index is not None
                                   and 0 <= recorded_index < len(options)) else None
     hits = [i for i, o in enumerate(options) if option_key(o) == want]
+    if not hits and want[0] == "name" and len(want) == 3:
+        # The recorded tapped state is not reproducible (the payment moved): same card, any state.
+        hits = [i for i, o in enumerate(options) if (option_key(o) or ())[:2] == want[:2]]
     if not hits:
         return None
     if recorded_index is not None and recorded_index in hits:
