@@ -1,7 +1,7 @@
-# NivMizzetCombo: replacing the rollout ladder with a leafless shape (PARKED 2026-10-24)
+# NivMizzetCombo: replacing the rollout ladder with a leafless shape (resumed 2026-10-27)
 
-**Status: PARKED by the USER on 2026-10-24 ("we'll park this for now until the reset"). Nothing is built
-and nothing changed in play. This is the measurement record and the proposal to resume from.**
+**Status: resumed 2026-10-27 after the 2026-10-24 park.** Budget curves at equal cost are below, in "Budget
+curves (2026-10-27)". Nothing changed in play. The shape to ship is a USER decision.
 
 ## The question
 
@@ -67,9 +67,12 @@ the cost column is reliable; the win-turn column is indicative.
 
 ## Why none of them captures the waste on Niv
 
-1. **The leafless probe is not cheap on Niv's early turns.** With no leaf estimate there is no
-   branch-and-bound bound, so a leafless pass has ~2x the leaves of the rollout pass at the same depth
-   (emulated-ladder same-depth trees, d1: rollout/leafless leaves 0.53, B&B prunes 36.5 vs 0). From turn 1 the
+1. **The leafless probe is not cheap on Niv's early turns.** A leafless pass at the same depth counted ~2x
+   the leaves of the rollout pass (emulated-ladder same-depth trees, d1: rollout/leafless leaves 0.53, B&B
+   prunes 36.5 vs 0). *Correction 2026-10-27:* this record first blamed the missing branch-and-bound bound for
+   that. The bound cannot explain it: the win-turn cut (`state.turn_number > cutoff`, cutoff = incumbent - 1)
+   can only cut horizon-leaf evaluations, and those are free in a leafless pass. The leaf-count ratio is not
+   root-caused. What is measured is the probes' total cost (below and in the 2026-10-27 section). From turn 1 the
    leafless d3 pass costs ~14-17k of the 18k-unit budget and ends on turn 3, where Niv almost never wins.
    NLESC: 408 of its 424 escalations were on turns 1-3 with no proven win (`owt=9`); the discarded probes in
    them were 5.96M units, 55% of the arm's total, and the fallback ladder (fresh 0.5 budget) committed depth 1
@@ -101,6 +104,65 @@ the cost column is reliable; the win-turn column is indicative.
 * **(B) Cut the final pass itself.** That is 86% of Niv's ladder units, and it sits in the rollout leaf.
   The Brainstorm put-back dedup targets `la_bp_wave` (26% of turn 1-3 units), a sound collapse.
 * Unchanged meanwhile: Niv ships no sidecar (rollout ladder); Q17 (the value-leaf trades) stays open.
+
+## Budget curves (2026-10-27)
+
+The 300-game table above compared every shape at b20, where the shapes spend their budget and the rollout ladder
+does not. That is a comparison at unequal cost. Here each shape is run over a range of budgets and set against
+the ladder's OWN curve (the ladder at b30 / b40). Setup: d5, 4 seeds (600000..603000) x 1000 paired games, keep
+table attached, Release binary, the same for every arm. Arms are variant folders under
+`build/scratch/niv_curve/variants/` (scratch). staged and emul are the 2026-10-24 handoff's sidecars
+(`logs/vlq_nivmizzetcombo/`, `logs/eval/NivMizzetCombo.value.STAGED.json`). Columns are the delta in average win
+turn vs live b20, then units and pooled core-ms vs live b20.
+
+| arm | b10 | b12 | b14 | b16 | b20 |
+|---|---|---|---|---|---|
+| live (rollout ladder) | | | | | 0 @ 1.00x; b30 -0.0210 @ 1.34x; b40 -0.0305 @ 1.67x |
+| nlesc | +0.0072 @ 1.07x | +0.0027 @ 1.18x | -0.0018 @ 1.28x | -0.0070 @ 1.38x | -0.0138 @ 1.55x |
+| nlfit | +0.0085 @ 1.18x | +0.0025 @ 1.27x | -0.0015 @ 1.34x | -0.0063 @ 1.42x | -0.0133 @ 1.56x |
+| **emulnl** (E0 `emul_r`) | +0.0215 @ 0.76x | +0.0160 @ 0.81x | +0.0092 @ 0.88x | +0.0027 @ 0.95x | -0.0068 @ 1.09x |
+| emul (model warm-ups) | +0.0147 @ 0.88x | +0.0085 @ 0.96x | +0.0017 @ 1.04x | -0.0040 @ 1.12x | -0.0123 @ 1.26x |
+| staged (model leaf) | +0.0220 @ 1.45x | +0.0182 @ 1.58x | +0.0132 @ 1.68x | +0.0092 @ 1.79x | -0.0015 @ 1.99x |
+
+Live's curve runs at about -0.062 turns per 1x of units. Measured against it:
+
+* **The handoff's staged leaf is far off the curve.** At b20 it gives level quality for 1.99x units. On Niv the
+  model is not an asset.
+* **nlesc and nlfit are behind the curve at every budget.** At 1.28-1.34x they are level, where live b30 gets -0.021.
+* **emul is behind it.** b20 gives -0.012 @ 1.26x; live interpolates to -0.016 there.
+* **emulnl is ON the curve:** b16 +0.003 @ 0.95x, b20 -0.007 @ 1.09x. This is the 2026-10-24 target shape:
+  leafless warm-ups, then one rollout pass at the committing depth.
+
+**Held-out confirmation** (seeds 604000..607000 x 1000, one pooled batch, arms innermost):
+
+| arm | delta | t | units | core-ms |
+|---|---|---|---|---|
+| emulnl b18 | +0.0012 | +1.2 | 1.026x | 0.996x |
+| emulnl b20 | -0.0052 | -4.0 | 1.095x | 1.033x |
+
+**Why nlfit costs what it does** (seed 600000, b20, `MTG_HYBRID_STATS=1`; 38.99M units vs live's 25.92M):
+
+| part | units | share of nlfit |
+|---|---|---|
+| per-game R calibration (689 calibrations) | 4.52M | 11.6% |
+| reserved rollout pass (1490 decisions where the probe proved no win) | 10.63M | 27% |
+| leafless probes (2495 decisions, 1005 proved a win) | ~23.8M | 61% |
+
+The leafless probes alone cost 92% of live's whole spend, so the calibration is not the lever. A frozen
+per-deck R (proposal A's first half) would bring nlfit b20 to about 1.33x for -0.013, still behind live b30's
+-0.021 at 1.34x. It is not built.
+
+### Open decision (USER)
+
+* **emulnl at b20 (agent recommendation).** It stays at the current budget, so it does not touch the
+  2026-10-22 never-lower rule, and it takes Niv off the rollout LADDER. Held out it is -0.005 turns for
+  +9.5% units / +3% wall: the same trade the ladder makes when given more budget, not a better one. Under
+  the adoption rule ("average quality and performance not worse") it is a trade, so it is the USER's call.
+* **emulnl at b18:** level on both axes, but below the current budget.
+* Unchanged meanwhile: no sidecar, rollout ladder.
+
+Its committing pass still scores horizon leaves with the rollout. Removing that needs a leaf that pays its
+way, and on Niv none does yet.
 
 ## Reproducing
 
