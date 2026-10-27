@@ -84928,27 +84928,31 @@ static void FswDeclinedTrace(const GameState& state, int depth, const TurnSolver
 // counts disagreements (win turn, or a no-win that the fresh search turned into a win); the fresh answer is
 // the one used, so verify mode plays as if the cache were off. A disagreement is MATERIAL when either answer is
 // within the querying node's cutoff (beyond it the caller reads both as no-win); the 2026-10-27 run after the
-// cutoff rule: 0 material of 31,781 verified hits (4 shapes, b20 and unlimited d3). MTG_GAME_LINE_CACHE_CAP bounds the entries
-// per game (default 200000; a full cache stops storing, it never evicts).
+// cutoff rule: 0 material of 31,781 verified hits (4 shapes, b20 and unlimited d3). MTG_GAME_LINE_CACHE_MB bounds its bytes
+// per worker (default 24; a full cache stops storing, it never evicts).
 namespace gamelc
 {
     inline bool On()     { static const bool v = EnvOn("MTG_GAME_LINE_CACHE"); return v; }
     inline bool Verify() { static const bool v = EnvOn("MTG_GAME_LINE_CACHE_VERIFY"); return v; }
-    inline std::size_t Cap()
+    // Bytes per worker thread (ApproxFslBytes of each stored line plus the node), MTG_GAME_LINE_CACHE_MB, default 24:
+    // 32 workers stay under ~0.8 GB. A full cache stops storing; it never evicts.
+    inline std::size_t CapBytes()
     {
         static const std::size_t v = []() -> std::size_t
-        { const char* e = std::getenv("MTG_GAME_LINE_CACHE_CAP");
-          return (e != nullptr && *e != '\0') ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10)) : 200000u; }();
+        { const char* e = std::getenv("MTG_GAME_LINE_CACHE_MB");
+          const unsigned long long mb = (e != nullptr && *e != '\0') ? std::strtoull(e, nullptr, 10) : 24ull;
+          return static_cast<std::size_t>(mb) << 20; }();
         return v;
     }
     inline thread_local std::unordered_map<TranspositionTable::Key, FSLineEntry, TranspositionTable::KeyHash> t_map;
+    inline thread_local std::size_t t_bytes = 0;
     inline std::atomic<long long> g_win_hits{0}, g_nowin_hits{0}, g_stores{0}, g_full{0};
     inline std::atomic<long long> g_ver_n{0}, g_ver_bad{0}, g_ver_unreached{0};
     inline std::atomic<long long> g_ver_kind[5]{}, g_ver_printed{0}, g_ver_material{0};
     struct StoreCtx { int turn, depth, cutoff, nest; long long used; };   // verify-only diagnostics
     inline thread_local std::unordered_map<TranspositionTable::Key, StoreCtx, TranspositionTable::KeyHash> t_ctx;
     inline thread_local TranspositionTable::Key t_hit_key{};
-    inline void Clear() { t_map.clear(); t_ctx.clear(); }
+    inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; }
     // The node's answer context (see the block comment). `vm` mirrors the leaf code in FSLineWin exactly.
     inline TranspositionTable::Key Tag(TranspositionTable::Key k, const GameState& state)
     {
@@ -87813,9 +87817,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             auto it = gamelc::t_map.find(gk);
             if (it == gamelc::t_map.end())
             {
-                if (gamelc::t_map.size() >= gamelc::Cap()) { gamelc::g_full.fetch_add(1, std::memory_order_relaxed); }
+                const std::size_t nb = (win ? ApproxFslBytes(best) : sizeof(FSLineEntry)) + 64;   // +64: the map node
+                if (gamelc::t_bytes + nb > gamelc::CapBytes()) { gamelc::g_full.fetch_add(1, std::memory_order_relaxed); }
                 else
                 {
+                    gamelc::t_bytes += nb;
                     gamelc::g_stores.fetch_add(1, std::memory_order_relaxed);
                     if (gamelc::Verify())
                     { gamelc::t_ctx[gk] = { state.turn_number, depth, cutoff, g_fsline_nest, static_cast<long long>(gamework::Used()) }; }
