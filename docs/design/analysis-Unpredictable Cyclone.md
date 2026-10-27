@@ -382,6 +382,74 @@ Arguably the triome should be fetched if we don't need the mana."*
 - **Cantrip prunes (Brainstorm / Brainsurge put-back, Ponder order/shuffle).** Candidate SOUND folds first (identical
   cards, a put-back set equal under the deck's needs), then proposed lossy prunes for the USER (e.g. put-backs keep
   Emrakul on top when a Cyclone walk can reach it; dead cards such as Toxic Deluge go back first). Each is measured.
+- **Put-back / top-of-library (USER 2026-10-27):** *"The idea is very similar to Niv. You put stuff on top that you don't
+  need immediately or that you like to cyclone cycle into. So Emrakul and ulamog are both a great choice to put on top,
+  second or third from the top."* Brainstorm / Brainsurge put-backs and Ponder's order favour (a) cards not needed this
+  turn or next and (b) Cyclone walk targets (Emrakul, either Ulamog), with the Eldrazi as the first creature from the top so
+  a creature-cycle walk hits it. Feeds the generic cantrip design (docs/design/cantrip-search-optimization.md) as a
+  provider ORDER first; any single pick stays a separate lossy lever (Q33).
+- **The deck's plan (USER 2026-10-27):** *"You need to make sure Cyclone can be played as early as possible. It is also a
+  key card to always keep 1-of between hand and board. Beyond that you need enough mana to play it and 1-3 cycling cards
+  (preferring Street Wraith for the free cycle). Even better if you can rig the top card or cards of the library to drop
+  an early Emrakul with Brainstorm, Brainsurge or Ponder. (I forgot the list doesn't play Preordain, but that makes sense
+  given how much worse it is at doing this.)"* Reading for put-backs / Ponder: keep exactly one Cyclone (hand + board;
+  a second is surplus, only one replacement applies), the mana for {3}{R}{R} (lands / Seething Song), and 1-3 cyclers
+  (Wraith over Curator); put back the surplus (extra Cyclones, cyclers beyond 3, lands beyond the Cyclone need, dead
+  cards) and the Eldrazi, with Emrakul (or an Ulamog) as the first creature from the top. Also input for the mulligan
+  stage (keep requirements) and the USER-owned discard buckets -- parked until then, not adopted.
+- **Put-back order follows the GO-OFF TURN (USER 2026-10-27):** *"It's a bit tricky though because the put back order
+  actually depends on when you can go off. I recommend calculating that heuristically."* A provider estimate k = our
+  draw steps before we can have Cyclone out AND cycle (Cyclone in hand/board, the {3}{R}{R} mana incl. land drops and
+  Seething Song, a cycler and its cost). Going off this turn: Eldrazi on top. After k draws: the top k cards are what
+  we still need, the Eldrazi at k+1, and still the first creature from the top at go-off. A provider ORDER (the searched
+  fan stays findable); measured paired. USER confirmation: *"if it is this turn you are cycling with cyclone you would
+  want the Emrakul (or ulamog is no Emrakul) on top. Otherwise you may want it second or third from the top."* -- Emrakul
+  first; an Ulamog only when no Emrakul is available to put back. Why not on top otherwise (USER): *"so that you don't
+  draw it and can drop it instead"* -- an Eldrazi drawn is stuck in hand (Emrakul is {15}); it must sit below the draws.
+  Junk ABOVE the Eldrazi even when going off this turn (USER): *"there is actually reason to put it under a useless
+  non-creature card you have in hand even if you are cycling with cyclone this turn. For example a Toxic deluge or extra
+  Cyclone can be freely replaced by putting it above the Emrakul and then Cyclone cycling."* A creature-cycle walk skips
+  noncreature cards and bottoms them, so dead noncreature cards from hand go ABOVE the Eldrazi: they are thrown away for
+  free and the walk still hits the Eldrazi. Order at go-off: [dead noncreatures] then the Eldrazi (the first creature).
+  Several cycles this turn (USER): *"But if you can cycle twice this turn and have multiple of Emrakul or Ulamog you put
+  both back and cycle both."* With c payable creature cycles this turn and e Eldrazi in hand, put back min(c, e,
+  put-back slots) Eldrazi as the top creatures in the order they will be hit (Emrakul first), dead noncreatures above
+  or between them; each walk bottoms what it passes, so the next walk reaches the next Eldrazi.
+  USER: *"Since that is an automatic win."* -- two Eldrazi dropped in one turn is treated as the top-priority line.
+  Hit order ANSWERED (USER): *"Yes, Emrakul goes first. Technically it doesn't matter as much when you have 2 Emrakul
+  but even in that case the extra copies still give extra turns that equate to 15 damage each."* -- Emrakul before
+  Ulamog; every Emrakul copy is worth putting back (each extra turn is another 15-power attack).
+  2HG (USER): *"I guess in 2HG 2 Emrakul kills while Emrakul + Ulamog may not."* (30 team life: two Emrakuls attack for
+  30 in the extra turn; Emrakul + Ulamog CH is 25.) So when Eldrazi outnumber the cycles, prefer Emrakul copies over
+  Ulamogs. USER: *"But you can make that rule general if you want."* -- so it is ONE rule for every format: Emrakul copies
+  before Ulamogs, always (no format check needed).
+  PURPOSE (USER): *"the point of all of these rules is to come up with heuristics with which we can effectively prune a
+  number of search options."* -- the rules above are meant as provider RESTRICTIONS (prunes), each measured, not only as
+  an order.
+  THE SHUFFLE LINE (USER): *"there is a separate line we need to consider. In some cases you do want to use Brainstorm or
+  Brainsurge to throw away bad cards with a shuffle, such as from a fetchland. This is an important line we need to
+  consider and might be the one case where we don't always throw back all of our Eldrazi."* So the default prune is
+  "the Eldrazi always go back (per the go-off order)", and the EXCEPTION branch, admitted only when a shuffle is
+  available after the cantrip this turn (an uncracked / playable Scalding Tarn, an activatable Myriad Landscape, a
+  castable Long-Term Plans), is "put back the worst cards, then shuffle". In that branch the put-back ORDER is
+  irrelevant (the shuffle follows): a sound fold to the put-back SET. Clairvoyance caveat applies (the search sees the
+  post-shuffle library).
+  When (USER): *"So that would be the 'have 1-2 cards that do nothing or practically nothing and are missing pieces we do
+  need' line. We need to support playing the fetch lands after the brainstorm to do this. Other times you just throw away
+  1 card by shuffling next turn."* So the branch is admitted when the hand holds 1-2 (near-)dead cards AND a needed piece
+  is missing. Two shapes: (i) THIS TURN -- cantrip first, THEN the land drop is the fetch (or Myriad / LTP) and the shuffle
+  takes both put-backs away; this needs the search to be able to play the land drop AFTER the cantrip (verify it can);
+  (ii) NEXT TURN -- put a keepable card on top (it is drawn in the draw step) and the dead card second, then next turn's
+  fetch shuffles the dead card away.
+  Never when ready (USER): *"Naturally, you don't do this when you are in position to go off."* -- the shuffle branch is
+  admitted only when the go-off estimate says we cannot go off this turn OR next turn (USER: *"If it says we can go off
+  next I wouldn't consider it either, since we can still set up the Eldrazi on top for the next turn."*).
+- **Ponder (USER 2026-10-27):** *"Are we treating which cards to keep on top with ponder the same as Brainstorm? That is
+  what I recommend there. We can search the shuffle as needed and realistically it probably is safest to do so most of
+  the time."* So Ponder's keep orders are scored by the SAME go-off scorer as the Brainstorm put-back (position terms
+  only; Ponder removes nothing from hand). Ponder's shuffle is ALWAYS searched: it is never pruned, and it sits in the
+  head of the order (the future wave 0) beside the best keep order. Design: `docs/design/cantrip-search-optimization.md`
+  §3.2 (e227e9db7).
 - Every heuristic lives in CycloneProvider (restrict/order only), each prune behind its own lever, measured paired on
   held-out seeds; results to the USER.
 
@@ -604,6 +672,60 @@ The what-ifs adopt nothing (env only; test/suite_cost.json restored to HEAD). Hi
 all three runs. The provisional cases are left UNCOMMITTED in test/regression_cases.sh (the brief: commit only on PASS).
 The deck reaches the gate only with the USER's put-back decision (Q33) AND the mulligan stage's keep table (or cheaper
 bottoming) -- Q32.
+
+### Root-cause of the unrecoverable slower games (2026-10-27)
+USER: *"root-cause every unrecoverable slower game and determine whether they are truly clairvoyance or if we are
+actually making bad decisions."* The eight games whose rule-minus-off mean stayed > 0 over shuffle_salt_search 1-4
+(fetch gi 25, 43, 61, 130, 154, 184; LTP gi 12; Myriad gi 184), replayed with the FROZEN f3d4974fa binary (`mtg.ab2`),
+single-threaded, full logs. Scratch: `build/scratch/cyclone/rootcause/` (`runs/<arm><salt>_<gi>`, `bin/fmt.py`,
+`bin/div.py`).
+- **Reproduction.** All 15 salt-0 replays (7 R, 8 U) reproduce the ab2 batch's win turn exactly.
+- **Why the search-salt ensemble could not tell luck from rules.** `shuffle_salt_search` changes only what the SEARCH
+  sees after a shuffle; the REAL shuffles keep `shuffle_salt` = 0, so all four "salts" dealt the same post-fetch
+  future. And the shuffle is the CRN `ShuffleByKey`: the order is a function of (seed, shuffle ordinal, each card's
+  m_number), so two fetch targets give the SAME future minus a different card. A different target therefore
+  changes the draws even when both searches play identically. Four search salts measure the search's knowledge, not
+  the luck of the realised shuffle. The right ensemble varies the REAL salt: `MTG_SHUFFLE_SALT=k` (opening fixed), with
+  `MTG_SHUFFLE_SALT_SEARCH=1000+k` (non-clairvoyant, k = 1-8) and `=k` (clairvoyant, k = 1-4). That is 12 real
+  futures per game per arm.
+- **Six of the eight diverge BEFORE the lever has made any decision in the real game.** Either no Tarn is in hand,
+  or the first difference is the mulligan bottom. The lever reaches that decision only through the search's
+  rollouts, or through the lookahead bottomer's trial games (one full CLAIRVOYANT game per candidate bottom, played
+  under the lever). Those are butterflies.
+
+| gi | lever | first divergence (state) | R (rule on) | U (rule off) | class | evidence |
+|---|---|---|---|---|---|---|
+| 25 | fetch | T1, the rule's own pick (hand Mountain, Ponder, Brainsurge, Curator, Tarn, Myriad; Tarn played) | Steam Vents, T2 Vents | Watery Grave, T2 Island (generic: first land in library order) | (a) | Mana is equal or better for R (Vents, Vents, Mountain). Draws are identical through T3; after that, R's library still holds the Grave and Island that U fetched. R's T4 Brainstorm draws Grave, Island, Myriad; U's draws Wraith, Island, Cyclone and wins T4. 12 real salts: -0.08 (3 slower / 3 faster). The slower salts diverge later at search choices (k5 T2 Wraith cycle; k7 T2 crack vs Myriad; k6 the search took the admitted Lounge on T1 holding Ponder) |
+| 43 | fetch | T4, no Tarn in hand (Remand x2, Deluge x2, Vents, Island, Curator, Emrakul) | cycle Curator, Ponder, Remand the Ponder (draws Tarn) | land, pass | (c) | Play is identical in all 8 non-clairvoyant salts; 12 salts: 0.00 (1/2) |
+| 61 | fetch | T1, no Tarn (Emrakul, Brainsurge, Curator, Lounge, Ponder x2, Island; Vents played) | no Ponder | Ponder | (c) | 12 salts: -0.17 (1/3) |
+| 130 | fetch | T1, no Tarn (Curator, Ulamog CH, Song, Remand, Myriad, Grave, Cyclone) | NO land drop | Watery Grave | (c) | The R T1 is dominated (Myriad enters tapped for free). At d8 b0, R plays Grave T1 and wins T4 = U: RECOVERS. 12 salts: -0.33 (2/7) |
+| 154 | fetch | T2 sequencing (Tarn, Ponder, Mountain, Island x2, Brainstorm, Brainsurge) | crack Tarn (Vents), then Ponder the shuffled library | play Island, Ponder the known top (Cyclone, Bluffs, Mountain), keep Tarn | (c) | Both lines were open to both arms; the rule only names the target. U's salt-0 gain rides the known base-order top. At d8 b0, R plays the SAME Tarn-first line and wins T3 (U at d3: T4): RECOVERS. 12 salts: +0.25 (3/3), within noise (se 0.35) |
+| 184 | fetch | T1, no Tarn (Bluffs, Island, Remand, Mountain, Deluge, Wraith) | keep Wraith | cycle Wraith -> Island | (c) | At d8 b0, R wins T7 = U: RECOVERS. 12 salts: -0.08 (2/3) |
+| 12 | LTP | mulligan bottom 2 of (Tarn, Curator, Deluge, Ponder, Wraith, Remand, LTP) | Street Wraith + LTP | Toxic Deluge + LTP | (c) bottomer | The pick follows the realised future: R makes 5 different picks over 9 futures. Both arms usually KEEP the goldfish-inert Toxic Deluge and bottom Street Wraith (Deluge kept in 7/13 R runs, 9/13 U runs). 12 salts: -0.50 (1/4) |
+| 184 | Myriad | mulligan bottom 1 (Island, Bluffs, Remand, Myriad, Mountain, Deluge, Wraith) | Myriad Landscape | Remand | (c) bottomer | Bottom and play are identical in all 8 non-clairvoyant salts. At d8 b0, R wins T7 = U: RECOVERS. 12 salts: -0.17 (0/1) |
+
+**Verdict: no (b), so no rule amendment.** No game shows the Tarn, Myriad or LTP rule removing a choice that a
+non-clairvoyant player would make. Pooled over the 12 real futures, the six fetch games average **-0.069 (se 0.107;
+12 slower / 21 faster)**: the rule is not slower on the very games picked for being slower. LTP gi 12 averages -0.50,
+Myriad gi 184 -0.17. The one game decided by the rule's own pick (gi 25) is draw luck under the CRN shuffle.
+Observations for the USER, not evidence against the rule:
+- The rule takes Steam Vents even once red is met (gi 25 T2: Vents in play and Mountain in hand). That costs 2 life
+  against a basic Island, and life never bound in these games.
+- The search sometimes takes the admitted Xander's Lounge on T1 while holding a castable Ponder (gi 25 k6).
+- d8 b0 for gi 25, 43, 61 and 12 was still running when this was written: `runs/d8R_<gi>`.
+
+**Defects found (reported, not fixed):**
+1. **A dominated T1 skip of the land drop** at d3 b10. Repro: `mtg.ab2 "decks/Unpredictable Cyclone/Unpredictable
+   Cyclone.cod" --games 1 --seed 81130 --game-index 130 --depth 3 --budget-ms 10 --threads 1 --ignore-play-profile`
+   (T1 plays no land while holding Watery Grave and Myriad Landscape). It recovers at `--depth 8 --budget-ms 0`. It
+   looks like a budget-tie artifact; it is not the rule.
+2. **The lookahead bottomer keeps the inert Toxic Deluge over Street Wraith / Curator** in most futures (gi 12;
+   also gi 184 never bottoms Deluge). Each candidate is judged by ONE clairvoyant trial game, so the pick follows
+   the library rather than the hand. It is parked with the mulligan stage (Q32). A candidate provider order for that
+   stage: goldfish_inert cards first. That would be a lossy prune and needs measurement first.
+3. **The game log omits Brainstorm put-backs.** A card drawn and then put back gets no DRAW entry, and there is no
+   put-back action (e.g. `runs/Ufk1_154` T1: a 3-card Brainstorm logs 2 DRAWs, and the Cyclone it put back appears
+   as the T2 draw). This is cosmetic for play, but it misleads anyone reading a log as the full record.
 
 ## Stages 3-5 (coverage re-check, baseline profile, cost gate, verification) -- 2026-10-27
 Run on the SHIPPED configuration (phase-5 levers at their committed defaults: the cycle-seed fold and the USER's Tarn /
@@ -854,6 +976,11 @@ executor fix: 668 refs, 0 play-drift / 0 board-diverged / 0 enum-gap.
 - Q31. LTP's Street Wraith target is "the cheapest creature cycler left" (Street Wraith; Curator of Mysteries once no
   Wraith is left), "no cycler in hand" = no CREATURE with cycling in hand (Cyclone's and the Lounge's cycling do not count),
   and the Seething Song lever also requires no Song in hand ("missing"). Default: as built.
+- Q32 RULING (USER 2026-10-27): *"Let's leave the mulligan stuff until the profile generation. I want to focus on other
+  performance wins."* The bottoming-rollout cost is parked until the mulligan-profile stage; the next performance work
+  is everything else, starting with the cantrips (USER: *"We should also look at optimizing brainstorm, ponder and
+  preordain (and brainsurge)"*). The suite gate still counts the bottoming cost, so suite entry will need the keep table
+  (or a USER waiver) -- re-raise at that point.
 - Q32. **THE 3x GATE FAILS: 17.36x Hinata** (cyclone 49,009 ms/game at d5 b20 s3003 vs hinata 2,823, same run), and it
   cannot pass with the shipped (USER-sanctioned) set, because ~80% of the deck's work is MULLIGAN BOTTOMING: with no keep
   table the default keep policy (curve check TwoDrop -- it counts neither Street Wraith's free cycle nor Curator's {U}
