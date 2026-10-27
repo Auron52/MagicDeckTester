@@ -1,7 +1,8 @@
 # Reusing the searched tree across a game's decisions (DEFERRED, 2026-10-27)
 
-**Status: deferred by the USER until the LandfallElementals / NivMizzetCombo shape work is done.** Nothing is built.
-The first step is a measurement, not the cache.
+**Status (2026-10-27): the overlap is MEASURED (below); the cache is not built.** The USER deferred this until the
+LandfallElementals / NivMizzetCombo shape work was done (it is; `lfe-valueleaf-costs-more.md`,
+`niv-rollout-ladder-vs-leafless-shapes.md`). Next: the exact-key VALUE cache, which the measurement favours.
 
 ## The idea (USER, 2026-10-27)
 
@@ -60,3 +61,62 @@ decision computed, and per decision count (a) nodes whose key the previous decis
 computed at the same remaining depth, (b) nodes whose STATE it computed at any depth (the expansion-cache
 overlap), and (c) the units charged under each. One pooled batch on LandfallElementals and NivMizzetCombo at play
 settings. If (b) is near the arithmetic above, build the expansion cache; if only (a), the cheaper value cache.
+
+## Measured overlap (2026-10-27)
+
+**Instrument:** `MTG_TREE_REUSE_PROBE=1` (TurnSolver.cpp, `namespace treereuse`). It is read-only: probe on vs off
+gives byte-identical digests and units on all four arms below. It prints one `[tree-reuse] job=<job> turn=<t>`
+line per batch job and decision turn. Each FSLineWin node reached inside a decision (the outermost
+FullSearchLineHybrid) is looked up in per-game sets of the earlier decisions' keys:
+
+* **exact** -- the same (state, remaining depth) key. Its units are the inclusive per-game-meter delta under the
+  TOPMOST exact hit. This is what a game-persistent VALUE cache could answer.
+* **re-expanded** -- an interior node whose state an earlier decision already EXPANDED (searched at depth >= 1, at
+  any depth). Its units are the node's OWN units (its delta minus its children's): the plan enumeration and
+  applies an EXPANSION cache could skip.
+* **leaves** -- a leaf node's own units (the rollout or leaf evaluation).
+
+The shares are an UPPER bound. Keys are recorded at node entry, so truncated subtrees are included; a real
+cache could reuse only completed ones.
+
+Setup: one pooled batch, seed 600000, 500 games per arm, d5. Shares are of all units in the arm's decisions.
+
+| arm | units | exact (value cache) | re-expanded own (expansion cache) | leaves' own |
+|---|---|---|---|---|
+| LandfallElementals live b20 (rollout ladder) | 8.72M | 12.1% | 1.2% | 90% |
+| NivMizzetCombo live b20 (rollout ladder) | 11.95M | 7.8% | 0.6% | 90% |
+| NivMizzetCombo emulnl b20 | 13.07M | 15.4% | 1.0% | 89% |
+| LandfallElementals staged b16 (model leaf) | 11.82M | 25.6% | 18.7% | 17% |
+
+By decision turn, staged LandfallElementals (turn 1 has no earlier decision, by construction):
+
+| turn | decisions | units | exact | re-expanded own |
+|---|---|---|---|---|
+| 1 | 500 | 7.24M | 0 | 0 |
+| 2 | 235 | 2.85M | 61% | 40% |
+| 3 | 91 | 1.29M | 76% | 63% |
+| 4 | 39 | 0.43M | 69% | 60% |
+
+**Reading.**
+
+* On the rollout shapes the work is the leaf rollouts (~90%). Re-expanding the interior is ~1%, so an expansion
+  cache buys nothing there. The exact overlap (8-15%) is the warm-up arithmetic predicted above: the previous
+  decision's pass k searched this decision's root at depth k-1.
+* On the model-leaf shape the interior is the work (83%), and most of it in a turn-2+ decision was already
+  computed. The exact overlap is 66% of turn-2+ units, 26% overall. That is the doc's 20-30% estimate, and it
+  is concentrated where staged pays its premium. At b16 here staged spends 11.82M vs live b20's 8.72M; a 26%
+  cut would bring it to ~8.75M.
+* The two kinds overlap (an exact hit's subtree contains re-expanded nodes), so their shares do not add.
+
+**Decision by the rule above: build the exact-key VALUE cache first.** It is the cheaper cache and the larger
+share on every shape. The expansion cache only adds what the value cache misses on the leaf shape (subtrees
+whose depth changed).
+
+Constraints it must keep (from the costs section):
+
+* Reuse only entries from completed subtrees, under the same leaf kind and the same FSLineCache key semantics.
+  That means wins on the order-exact key, no-wins on the canonical key with `nowin_bound`, and the same
+  rule as the intra-decision `FSLineCache` that a warm-up pass's entry never answers the committing pass on a
+  different leaf.
+* Per-game lifetime.
+* Re-measure with the probe restricted to completed subtrees before the A/B.

@@ -78794,6 +78794,129 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     return plans;
 }
 
+// CROSS-DECISION TREE-REUSE PROBE (MTG_TREE_REUSE_PROBE; docs/design/cross-decision-tree-reuse.md).
+// READ-ONLY: it changes no play and no units. It measures how much of each decision's full-line search an
+// earlier decision of the SAME game already computed, before anything is built to reuse it. Every
+// FSLineWin node reached inside a decision (FullSearchLineHybrid, outermost call) is looked up in the
+// per-game sets of the earlier decisions:
+//   exact  = the same (state, remaining depth) key: a game-persistent VALUE cache could answer it;
+//   expanded = an INTERIOR node whose state an earlier decision already expanded (searched at depth >= 1, at
+//            any depth): an EXPANSION (child-state) cache could skip its plan enumeration and applies.
+// Units are the per-GAME meter (gamework::Used). For exact hits, the delta under the TOPMOST hit (inclusive,
+// counted once). For expansion, each node's OWN units (its delta minus its children's), split interior / leaf. Keys are recorded at node ENTRY, truncated subtrees included, so the
+// shares are an UPPER bound on what a cache restricted to completed subtrees could reuse. Per GAME only
+// (cleared in ClearPerGameCaches), never per worker.
+namespace treereuse
+{
+    inline bool On() { static const bool v = EnvOn("MTG_TREE_REUSE_PROBE"); return v; }
+    using KeySet = std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash>;
+    struct Thread
+    {
+        // prev_*: every earlier decision of this game; cur_*: this decision (merged into prev_* at its end).
+        // exact = (state, remaining depth); expanded = a state searched with depth >= 1 (its plans enumerated
+        // and applied), whatever the depth.
+        KeySet prev_exact, prev_expanded, cur_exact, cur_expanded;
+        int    nest = 0;                 // FullSearchLineHybrid nesting (the decision is the outermost call)
+        int    covered_exact = 0;        // exact-hit FSLineWin ancestors on the stack
+        std::vector<long long> child_units;   // per open node: the inclusive units of its finished children
+        int    turn = 0;
+        long long u0 = 0;
+        long long nodes = 0, n_exact = 0, u_exact = 0;            // value cache: topmost exact hit, inclusive
+        long long n_int = 0, u_int = 0, n_exp = 0, u_exp = 0;      // interior: own (exclusive) units; ... of which re-expanded
+        long long n_leaf = 0, u_leaf = 0;                          // leaves: own units (the rollout / leaf eval)
+    };
+    inline thread_local Thread t;
+    constexpr int kTurns = 8;            // decision turn buckets 1..7, 8 = 8+
+    struct Acc { long long decisions = 0, units = 0, nodes = 0, n_exact = 0, u_exact = 0,
+                 n_int = 0, u_int = 0, n_exp = 0, u_exp = 0, n_leaf = 0, u_leaf = 0; };
+    // Keyed by batch job (heurarm::t_job_name), so one pooled batch reports every arm; [0] = all decisions.
+    inline std::mutex g_mu;
+    inline std::map<std::string, std::array<Acc, kTurns + 1>> g_by_job;
+    inline void ClearGame() { t.prev_exact.clear(); t.prev_expanded.clear(); t.cur_exact.clear(); t.cur_expanded.clear(); }
+    struct Decision   // RAII around FullSearchLineHybrid
+    {
+        bool outer = false;
+        explicit Decision(int turn)
+        {
+            if (!On()) { return; }
+            outer = (t.nest++ == 0);
+            if (!outer) { return; }
+            t.turn = turn; t.u0 = gamework::Used();
+            t.nodes = t.n_exact = t.u_exact = t.n_int = t.u_int = t.n_exp = t.u_exp = t.n_leaf = t.u_leaf = 0;
+            t.cur_exact.clear(); t.cur_expanded.clear(); t.child_units.clear();
+        }
+        ~Decision()
+        {
+            if (!On()) { return; }
+            --t.nest;
+            if (!outer) { return; }
+            const long long u = gamework::Used() - t.u0;
+            const int b = t.turn < 1 ? 1 : (t.turn > kTurns ? kTurns : t.turn);
+            {
+                const std::lock_guard<std::mutex> lk(g_mu);
+                std::array<Acc, kTurns + 1>& row = g_by_job[heurarm::t_job_name ? heurarm::t_job_name : "-"];
+                for (Acc* a : { &row[0], &row[b] })
+                {
+                    a->decisions += 1; a->units += u; a->nodes += t.nodes; a->n_exact += t.n_exact; a->u_exact += t.u_exact;
+                    a->n_int += t.n_int; a->u_int += t.u_int; a->n_exp += t.n_exp; a->u_exp += t.u_exp;
+                    a->n_leaf += t.n_leaf; a->u_leaf += t.u_leaf;
+                }
+            }
+            t.prev_exact.insert(t.cur_exact.begin(), t.cur_exact.end());
+            t.prev_expanded.insert(t.cur_expanded.begin(), t.cur_expanded.end());
+        }
+    };
+    struct Node       // RAII at FSLineWin's node entry (past the cut / overrun returns)
+    {
+        bool hit_e = false, top_exact = false, expanded_before = false, leaf = false;
+        long long u0 = 0;
+        Node(const TranspositionTable::Key& base, const TranspositionTable::Key& exact, int depth)
+        {
+            ++t.nodes;
+            leaf = depth <= 0;
+            hit_e = t.prev_exact.count(exact) != 0;
+            expanded_before = !leaf && t.prev_expanded.count(base) != 0;
+            t.cur_exact.insert(exact);
+            if (!leaf) { t.cur_expanded.insert(base); }
+            if (hit_e) { ++t.n_exact; if (t.covered_exact++ == 0) { top_exact = true; } }
+            u0 = gamework::Used();
+            t.child_units.push_back(0);
+        }
+        ~Node()
+        {
+            const long long incl = gamework::Used() - u0;
+            const long long own  = incl - t.child_units.back();
+            t.child_units.pop_back();
+            if (!t.child_units.empty()) { t.child_units.back() += incl; }
+            if (leaf) { ++t.n_leaf; t.u_leaf += own; }
+            else      { ++t.n_int; t.u_int += own; if (expanded_before) { ++t.n_exp; t.u_exp += own; } }
+            if (hit_e) { --t.covered_exact; if (top_exact) { t.u_exact += incl; } }
+        }
+    };
+    struct Reporter
+    {
+        ~Reporter()
+        {
+            if (!On()) { return; }
+            auto sh = [](long long x, long long y) { return y ? static_cast<double>(x) / y : 0.0; };
+            for (const auto& [job, row] : g_by_job)
+            for (int b = 0; b <= kTurns; ++b)
+            {
+                const Acc& a = row[b];
+                if (a.decisions == 0) { continue; }
+                std::cerr << "[tree-reuse] job=" << job << " turn="
+                          << (b == 0 ? std::string("all") : (b == kTurns ? std::to_string(b) + "+" : std::to_string(b)))
+                          << " decisions=" << a.decisions << " units=" << a.units << " fsw_nodes=" << a.nodes
+                          << " | exact_nodes=" << a.n_exact << " exact_units=" << a.u_exact << " (" << sh(a.u_exact, a.units) << ")"
+                          << " | interior_nodes=" << a.n_int << " own_units=" << a.u_int << " (" << sh(a.u_int, a.units) << ")"
+                          << " re_expanded_nodes=" << a.n_exp << " own_units=" << a.u_exp << " (" << sh(a.u_exp, a.units) << ")"
+                          << " | leaves=" << a.n_leaf << " own_units=" << a.u_leaf << " (" << sh(a.u_leaf, a.units) << ")\n";
+            }
+        }
+    };
+    inline Reporter g_reporter;
+}
+
 // Per-GAME reset of the thread_local plan memos (see TurnSolver.h for why this exists). Defined
 // here because it must follow both memo namespaces. Cheap: an unordered_map::clear on maps whose
 // live content is one decision's worth of entries.
@@ -78857,6 +78980,7 @@ void TurnSolver::ClearPerGameCaches()
     // The payable-mana cache (SpellEffects.cpp): pure in design, but every key hole it has had was a
     // cross-game channel because it outlived the game -- see ManaCacheClearPerGame.
     ManaCacheClearPerGame();
+    treereuse::ClearGame();   // MTG_TREE_REUSE_PROBE (diagnostic; empty when off)
 }
 
 
@@ -84734,6 +84858,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // already includes it when there is one, an unbudgeted frame never asked. Always false unless a
     // unit ceiling or a wall cap is armed.
     if ((budget && budget->Overrun()) || gamework::Abandoned()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
+    // MTG_TREE_REUSE_PROBE (read-only): was this node computed by an earlier decision of the game?
+    std::optional<treereuse::Node> _treereuse;
+    if (treereuse::On() && treereuse::t.nest > 0)
+    {
+        const TranspositionTable::Key kb = BuildSimKeyBase(state, max_turns, second_main);
+        _treereuse.emplace(kb, SimKeyAtDepth(kb, depth), depth);
+    }
     if (depth <= 0)
     {
         ++g_fs_leaf_evals;   // count leaf evaluations (value-leaf or rollout) for the K-predictor's leaf-count model
@@ -89096,6 +89227,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int escalation_cap,
                                                         double escalation_r)
 {
+    const treereuse::Decision _treereuse_decision(state.turn_number);   // MTG_TREE_REUSE_PROBE (read-only)
     // This whole function is planning on state COPIES, but it is called straight from
     // AIEngine::TakeTurn (real-play context) and its single-pass escalation invokes FSLineWin
     // DIRECTLY -- so until 2026-08-25 this was the one planning entry point with NO enclosing
