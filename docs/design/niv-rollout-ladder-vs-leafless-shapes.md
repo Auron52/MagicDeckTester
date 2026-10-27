@@ -158,7 +158,20 @@ When the USER chose LandfallElementals' staged b20, they said *"we can use the m
 quality option"*. The agent read that as covering Niv too and adopted **emulnl at b20**
 (`build/scratch/niv_curve/variants/emulnl/NivMizzetCombo.value.json`: a `value_play` block with
 `ladder: emulated`, `leaf: none`, `emul_r`, and no enabled depth or budget, so it plays the built-in d5/20).
-The USER was told that reading and can reverse it by removing the sidecar. The options as they stood:
+The USER was told that reading, then CONFIRMED it the same day after this comparison (*"Let's keep it."*).
+It came from one pooled batch on 65353d004, using the regression seeds 2002/3003, with each deck at its play
+setting:
+
+| arm | games | avg win turn | core-ms/game | units/game | vs Hinata |
+|---|---|---|---|---|---|
+| Hinata (d5 b30) | 300 | 5.597 | 2,059 | 68,616 | 1.00x |
+| Niv, no sidecar (rollout ladder) | 300 | 4.5000 | 614 | 22,955 | 0.30x |
+| Niv, emulnl b20 | 300 | 4.4933 | 615 | 24,976 | 0.30x |
+| Niv 2HG, no sidecar | 150 | 4.4733 | 638 | 20,555 | 0.31x |
+| Niv 2HG, emulnl b20 | 150 | 4.4533 | 601 | 22,068 | 0.29x |
+
+The quality evidence is the held-out run above (-0.0052, t -4.0, 4,000 paired games); these small samples only
+agree in sign. The options as they stood:
 
 
 * **emulnl at b20 (agent recommendation).** It stays at the current budget, so it does not touch the
