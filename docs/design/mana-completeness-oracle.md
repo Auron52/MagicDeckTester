@@ -409,7 +409,7 @@ built in a scratch worktree (`.claude/worktrees/smarttap`, not on the branch):
   regression: no searched-depth win turn moves (16 searched configs change play at equal score); d0 15
   slower / 4 faster. Held-out (seed 900001; 3,000 d0 + 120 d3 games per deck per arm, the 9 decks that
   moved): d3 identical everywhere; d0 EDF -0.0007, niv -0.0006, PD -0.0010, Snow -0.0010, TH +0.0017, rest
-  identical. Sound, neutral, NOT strictly better -> USER decision (not adopted).
+  identical. Sound, neutral, NOT strictly better -> USER decision. ADOPTED 2026-10-27 (section 12).
 * **`MTG_ORACLE_PAY`** -- the UPPER BOUND: every top-level full plan apply whose own payment drops a cast takes
   the oracle's full payment of the same plan in the same order (executor and search share the apply). Seed
   910001, 200 d3 b10 + 1,000 d0 games per deck per arm: **EDF 3.980 -> 3.980**, Fungus 4.590 -> 4.590,
@@ -440,4 +440,13 @@ lifegain-then-Alchemist lines are the largest class) and the CONTINUATION classe
   the search's plan application always did. Rules fix (life only; Fungus is the only unarmed deck with the
   Tomb). The viewer's painland tap-ahead (SpellEffects.h, `pain_c`) no longer treats the Tomb's {C}{C} as a
   painless {C} either.
+* **The per-cast give-back (`MTG_PAY_SHRINK`, default ON; section 11).** The USER, told it fixes the backtracker
+  over-tap (a one-mana spell tapping two lands, the second spell of the line left unpayable): "that sounds like an
+  actual issue". Held-out at every deck's SHIPPED play setting (seed 930001; 38 suite decks, 600 games per deck
+  per arm, AccomplishedAlchemist 427): 22,627 paired games, 47 play digests change in five decks (EDF 19, Snow
+  10, NivMizzetCombo 11, PD 6, TH 1) and only NivMizzetCombo's win turns move: 3 slower / 2 faster (+1 turn over
+  600 games). All five reach the same turn in BOTH arms at 4x and 16x the budget (b80, b320): budget churn.
+  Work: 303,711,599 -> 303,582,423 units (-0.04%; NivMizzetCombo -0.8%, Snow +0.1%). The pin "payment: {U} off a
+  Fertile Ground host taps the host alone" is a plain test; the viewer line check's EDF seed 3000 T4 case now
+  runs with the give-back off, and a new case shows the search's own payment casts that line.
 

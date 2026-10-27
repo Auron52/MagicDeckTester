@@ -8,6 +8,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaOracle.h"
 #include "ai/TurnSolver.h"
 #include "ai/ManaPayment.h"
@@ -214,8 +215,8 @@ Action CastAction(const GameState& s, const char* nm)
 // pinned below spends Conservatory's {W} on the {U} -- while Mariposa's bonus {U} alone pays the Grounds
 // and leaves Conservatory for the Displacer. So the search can never score this line, the board can pay
 // it, and the rollback has to reach back one decision: the Grounds' payment (#1) before the Displacer's
-// (#2), which is the one that failed. When the over-tap is fixed the engine pays it (engine_full) and this
-// case has to move to another lost line.
+// (#2), which is the one that failed. The per-cast give-back (MTG_PAY_SHRINK, default on) fixed that
+// over-tap, so the case runs with the give-back OFF, the historical payer; the next test is the fixed one.
 TEST_CASE("viewer line check: the search's payment drops a cast the board pays for, and says how to pay it")
 {
     EnsureOracleCards();
@@ -223,7 +224,10 @@ TEST_CASE("viewer line check: the search's payment drops a cast the board pays f
     TurnSolver::Plan plan;
     plan.actions      = { CastAction(s, "Training Grounds"), CastAction(s, "Eldrazi Displacer") };
     plan.land_decided = true;
+    const std::int8_t saved = heurarm::t_arm[heurarm::PAY_SHRINK];
+    heurarm::t_arm[heurarm::PAY_SHRINK] = 0;
     const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
+    heurarm::t_arm[heurarm::PAY_SHRINK] = saved;
     REQUIRE(a.audited);
     CHECK_FALSE(a.engine_full);
     CHECK(a.sibling == -1);
@@ -243,6 +247,19 @@ TEST_CASE("viewer line check: the search's payment drops a cast the board pays f
     CHECK_FALSE(a.later);
     // ...and nothing it did leaked: the board it was asked about is untouched.
     for (const Permanent& p : s.battlefield) { CHECK_FALSE(p.tapped); }
+}
+
+TEST_CASE("viewer line check: with the give-back the search's own payment casts the EDF seed 3000 T4 line")
+{
+    EnsureOracleCards();
+    const GameState s = Edf3000T4();
+    TurnSolver::Plan plan;
+    plan.actions      = { CastAction(s, "Training Grounds"), CastAction(s, "Eldrazi Displacer") };
+    plan.land_decided = true;
+    const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
+    REQUIRE(a.audited);
+    CHECK(a.engine_full);
+    CHECK(a.dropped.empty());
 }
 
 TEST_CASE("viewer line check: a line the engine's own payment casts in full is search-findable, and nothing more is asked")
@@ -291,15 +308,13 @@ TEST_CASE("mana oracle: a colour only a later card in hand can spend is still of
     CHECK(floats_u);
 }
 
-// KNOWN ENGINE BUG (2026-10-27, found by the oracle's rollback census; EDF viewer game seed 3000 T4): a
-// {U} whose only blue is Fertile Ground's any-colour bonus on Mariposa Military Base fails the greedy, and
-// the backtracker's DFS -- which taps sources in battlefield order and accepts the FIRST covering tap set
-// -- taps Conservatory (G/W, useless for {U}) before reaching Mariposa, so a one-mana spell taps two
-// lands and floats {G}{C}. With Mariposa first in battlefield order it taps Mariposa alone. In the game,
-// Training Grounds then leaves Eldrazi Displacer's {2}{W} without its {W} (APPLY-DROP, rollback depth 1).
-// should_fail until the payer stops accepting a non-minimal tap set; then drop the decorator.
-TEST_CASE("payment: {U} off a Fertile Ground host taps the host alone, not a useless land before it"
-          * doctest::should_fail(true))
+// Found by the oracle's rollback census (2026-10-27; EDF viewer game seed 3000 T4): a {U} whose only blue
+// is Fertile Ground's any-colour bonus on Mariposa Military Base fails the greedy, and the backtracker's
+// DFS -- which taps sources in battlefield order and accepts the FIRST covering tap set -- tapped
+// Conservatory (G/W, useless for {U}) before reaching Mariposa, so a one-mana spell tapped two lands and
+// floated {G}{C}. In the game, Training Grounds then left Eldrazi Displacer's {2}{W} without its {W}
+// (APPLY-DROP, rollback depth 1). The per-cast give-back (MTG_PAY_SHRINK) now returns Conservatory.
+TEST_CASE("payment: {U} off a Fertile Ground host taps the host alone, not a useless land before it")
 {
     EnsureOracleCards();
     GameState s = Board({ "Conservatory", "Mariposa Military Base", "Shivan Gorge", "Fertile Ground" });
@@ -309,4 +324,21 @@ TEST_CASE("payment: {U} off a Fertile Ground host taps the host alone, not a use
     CHECK_FALSE(s.battlefield[0].tapped);    // Conservatory: its {G}/{W} cannot pay {U}
     CHECK(s.battlefield[1].tapped);
     CHECK(s.floating_mana.Total() == 1);     // Mariposa's own {C}
+}
+
+// MTG_PAY_SHRINK=0: the backtracker's first covering tap set, Conservatory as well as the host.
+TEST_CASE("payment: MTG_PAY_SHRINK=0 keeps the backtracker's first covering tap set for a {U}")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Conservatory", "Mariposa Military Base", "Shivan Gorge", "Fertile Ground" });
+    s.battlefield[3].aura_attached_to = 2;
+    s.deck_has_land_aura = true;
+    const std::int8_t saved = heurarm::t_arm[heurarm::PAY_SHRINK];
+    heurarm::t_arm[heurarm::PAY_SHRINK] = 0;
+    const bool ok = TapForCostDirect(s, Cost(0, 0, 1), /*for_creature=*/false);
+    heurarm::t_arm[heurarm::PAY_SHRINK] = saved;
+    REQUIRE(ok);
+    CHECK(s.battlefield[0].tapped);
+    CHECK(s.battlefield[1].tapped);
+    CHECK(s.floating_mana.Total() == 2);
 }

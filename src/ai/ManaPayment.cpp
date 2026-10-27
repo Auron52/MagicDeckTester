@@ -3276,10 +3276,108 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     auto snow_backtrack_ok = [&]() -> bool { return !snow_strict; };
     ManaPool bt_leftover;
     if (tapstats::Enabled()) { tapstats::g_site_percast.fetch_add(1, std::memory_order_relaxed); }
+    const PayRollbackLedger ledger_pre = state.pay_ledger;   // (the give-back below re-solves from here)
     if (snow_backtrack_ok()
         && TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
                                /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
-    { commit_leftover(bt_leftover); CommitPaySacSacrifices(state, active); return true; }
+    {
+        // GIVE BACK WHAT THE PAYMENT DID NOT NEED (MTG_PAY_SHRINK). The backtracker takes the FIRST tap
+        // set its DFS finds, walking sources in candidate order and trying "tap" before "skip", so it can
+        // tap a source that adds nothing to this bill: EDF viewer seed 3000 T4 paid Training Grounds' {U}
+        // with Conservatory ({G}/{W} -- useless for {U}) AND the Fertile Ground host whose bonus made the
+        // {U}, and Eldrazi Displacer's {2}{W} then had no {W} (the mana oracle's rollback census: depth 1;
+        // 512 of EDF's 689 lost lines on seeds 3000-4000 are depth 1). The whole-turn prepay has had this
+        // pass since 2026-08-26 (MTG_PREPAY_SHRINK); this is the per-cast payer's. Same rule: only when the
+        // payment tapped more sources than the bill has mana points, candidates most-flexible first, each
+        // re-solved with that source held back and kept back if the bill still pays from the REST of the
+        // first payment's taps -- never bought with life or energy (unarmed boards; pain-last's guard).
+        if (PayShrinkOn())
+        {
+            const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
+            std::vector<int> cand;
+            int newly = 0;
+            // A GIVE-BACK, never a swap: every source the payment did NOT tap stays held through the
+            // re-solves, so a re-solve can only pay with a SUBSET of the first payment's taps. (Holding back
+            // one source alone let the re-solve reach for another -- a mana creature that then could not
+            // attack -- and the depth-0 runner measured 9 slower / 4 faster on smoke.)
+            std::uint64_t untouched = 0;
+            int drip_useful = -1;   // -1 unknown, else 0/1 (lazily: no drip land -> never asked)
+            for (int i = 0; i < nb && i < 64; ++i)
+            {
+                const Permanent& bp = state.battlefield[static_cast<std::size_t>(i)];
+                if (!bf_pre[static_cast<std::size_t>(i)].tapped && !bp.tapped) { untouched |= 1ull << i; }
+                if (!bp.tapped || bf_pre[static_cast<std::size_t>(i)].tapped || bp.controller_index != active) { continue; }
+                ++newly;
+                // A drip land (Grove of the Burnwillows) tapped while lifegain hurts the opponent already
+                // dealt its point: giving it back refunds that -- the prepay shrink's exception, verbatim.
+                const CardDefinition* d = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
+                if (d != nullptr && d->params.tap_opponent_lifegain > 0)
+                {
+                    if (drip_useful < 0) { drip_useful = ResolveProvider(state).OpponentLifegainUseful(state, active) ? 1 : 0; }
+                    if (drip_useful == 1) { continue; }
+                }
+                cand.push_back(i);
+            }
+            if (nb <= 64 && newly > cost.ManaValue() && !cand.empty())
+            {
+                auto flex = [&](int i) -> int
+                {
+                    const Permanent& bp = state.battlefield[static_cast<std::size_t>(i)];
+                    const CardDefinition* d = bp.def_absent ? nullptr : CardDatabase::Instance().LookupCached(bp.card);
+                    return d != nullptr ? static_cast<int>(d->params.produces.size()) : 0;
+                };
+                std::stable_sort(cand.begin(), cand.end(), [&](int a, int b) { return flex(a) > flex(b); });
+                const bool pain_guard = PayPainLastOn() && !state.dmg_events_armed;
+                std::vector<Permanent> best_bf = state.battlefield;
+                std::vector<Card>      best_gy = state.players[active].graveyard;
+                int               best_life   = state.players[active].life;
+                int               best_opp    = state.players[1 - active].life;
+                bool              best_oll    = state.opponent_lost_life_this_turn;
+                int               best_e      = state.players[active].energy_counters;
+                PayRollbackLedger best_ledger = state.pay_ledger;
+                ManaPool          best_lo     = bt_leftover;
+                std::uint64_t hold = 0;
+                for (int i : cand)
+                {
+                    RestorePayFields(state.battlefield, bf_pre);
+                    state.players[active].life         = life_pre;
+                    state.players[active].graveyard    = gy_pre;
+                    state.players[1 - active].life     = opp_pre;
+                    state.opponent_lost_life_this_turn = oll_pre;
+                    if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }
+                    state.pay_ledger   = ledger_pre;
+                    g_pay_remaining_mv = pay_full_mv;
+                    ManaPool lo2;
+                    const std::uint64_t trial = hold | (1ull << i);
+                    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &lo2,
+                                            /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask | untouched | trial)
+                        && !(pain_guard && state.players[active].life < best_life)
+                        && !(pain_guard && PayEnergyLastOn() && state.players[active].energy_counters < best_e))
+                    {
+                        hold        = trial;
+                        best_bf     = state.battlefield;
+                        best_gy     = state.players[active].graveyard;
+                        best_life   = state.players[active].life;
+                        best_opp    = state.players[1 - active].life;
+                        best_oll    = state.opponent_lost_life_this_turn;
+                        best_e      = state.players[active].energy_counters;
+                        best_ledger = state.pay_ledger;
+                        best_lo     = lo2;
+                    }
+                }
+                // The last re-solve may have failed or been refused: put the best payment back wholesale.
+                state.battlefield                  = std::move(best_bf);
+                state.players[active].graveyard    = std::move(best_gy);
+                state.players[active].life         = best_life;
+                state.players[1 - active].life     = best_opp;
+                state.opponent_lost_life_this_turn = best_oll;
+                state.players[active].energy_counters = best_e;
+                state.pay_ledger                   = best_ledger;
+                bt_leftover                        = best_lo;
+            }
+        }
+        commit_leftover(bt_leftover); CommitPaySacSacrifices(state, active); return true;
+    }
     // Floating-fed filter retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
     // FED by turn-scoped floating (a ritual's output, a depletion over-tap). SpendFloatingTowardCost
     // above spent that floating on the cost DIRECTLY, stranding the filter (no feeder left) -- so the
