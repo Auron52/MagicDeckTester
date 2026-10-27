@@ -2052,12 +2052,18 @@ function pruneCommitted(){
 // it is a different play. Stops at the first segment that is not loopable (a land drop / Land's
 // Edge discard), because a loop is a CONTIGUOUS tail -- skipping over a land drop in the middle
 // would repeat a block the human never played as one.
+// EXTRA TURNS (Emrakul): `turn` is the ROUND (extra turns do not count toward the turn count, USER
+// 2026-10-26), so two turns can share it. The engine adds `turn_seq` (turns taken) and `extra_turn` (k
+// in the k-th extra turn) once an extra turn has been taken -- absent in every other game, so these fall
+// back to `turn`. Anything that means "the same turn" keys on turnKey; the per-turn side-channels
+// (--firebreathe / --jitte / --storage-hold) do too, matching the engine's TurnSeq-keyed maps.
+function turnKey(d){ return d ? (d.turn_seq != null ? d.turn_seq : d.turn) : undefined; }
 function loopTail(){
   if (!S.decision || S.decision.type!=='main_phase') return [];
   const out=[]; const all=pruneCommitted();
   for (let i=all.length-1; i>=0 && out.length<LOOP_KS[LOOP_KS.length-1]; --i){
     const c=all[i];
-    if (c.turn !== S.decision.turn) break;
+    if ((c.tkey != null ? c.tkey : c.turn) !== turnKey(S.decision)) break;
     if (!LB.segmentLoopable(c.entries)) break;
     out.unshift(c);
   }
@@ -2506,7 +2512,7 @@ function renderBoard() {
   // and other after-combat plays happen).
   const phaseLabel = d.phase==='pre_main' ? 'Main 1 · pre-combat'
                    : d.phase==='post_main' ? 'Main 2 · post-combat' : (d.phase||'').replace('_',' ');
-  h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span>`+
+  h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}${d.extra_turn ? ` (extra ${d.extra_turn})` : ''}</span>`+
     `<span class="phase">${esc(phaseLabel)}</span>`+
     `<span class="who">${d.on_the_play ? 'on the play' : 'on the draw'}</span></div>`;
   // Flow hint: explain that combat is automatic and Spectacle spells land in Main 2. Shown in Main 1
@@ -3696,7 +3702,7 @@ function applyAccepted(planIndex, label, planView) {
   // an undo drops it for free (pruneCommitted) -- rollbackStep pops steps, and a record whose step
   // is gone describes a line that no longer happened.
   if (seg0.length) {
-    (S.committed=S.committed||[]).push({ at:S.steps.length, turn:dec0 && dec0.turn,
+    (S.committed=S.committed||[]).push({ at:S.steps.length, turn:dec0 && dec0.turn, tkey:turnKey(dec0),
                                          entries:seg0.map(p => Object.assign({}, p)) });
     if (S.committed.length > 60) { S.committed.splice(0, S.committed.length - 60); }
   }
@@ -4072,7 +4078,7 @@ function sameNameMultiset(a,b){
 function sacBurstAuto(d){
   const q=S.sacBurst;
   if (!q) return false;
-  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || d.turn!==q.turn
+  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || turnKey(d)!==q.turn
       || !q.want.length) { S.sacBurst=null; return false; }
   const got=(d.options||[]).map(o=>o.name);
   if (!sameNameMultiset(got, q.expect)) { S.sacBurst=null; return false; }   // board moved -- ask
@@ -5731,7 +5737,7 @@ function jittePanelHtml(d){
   return h+`</div>`;
 }
 function commitJitte(d, k){
-  const t=d.turn, max=d.max_count||0;
+  const t=turnKey(d), max=d.max_count||0;
   (S.jitte=S.jitte||{})[t]=k;
   S.history.push({ turn:t, label:jitteLabel(k, max) });
   S.prev=S.decision;
@@ -5743,9 +5749,9 @@ function commitJitte(d, k){
 // turn key (fb) so undo (rollbackStep) can pop it and drop the side-channel entry, keeping the #2
 // checkpoint/step bookkeeping 1:1 (one shown decision -> one checkpoint -> one step).
 function commitFirebreathe(d, k){
-  const t=d.turn, max=d.max_count||0;
+  const t=turnKey(d), max=d.max_count||0;
   (S.firebreathe=S.firebreathe||{})[t]=k;
-  S.history.push({ turn:t, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.history.push({ turn:d.turn, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
   S.prev=S.decision;
   (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), fb:t });   // consumes NO --choices slot
   renderHistory(); hideDecPanel(); step();
@@ -5808,7 +5814,7 @@ function storageHoldPanelHtml(d){
 // Record the hold answer in the (turn, land-number)-keyed side-channel and re-step. Like commitFirebreathe
 // it appends NO --choices int; it pushes a ZERO-int step carrying the side-channel key (sh) so undo drops it.
 function commitStorageHold(d, k){
-  const key=`${d.turn}:${d.land_idx}`;
+  const key=`${turnKey(d)}:${d.land_idx}`;
   (S.storageHold=S.storageHold||{})[key]=k;
   S.history.push({ turn:d.turn, label:`${d.land||'storage'} ${k?'hold (charge)':'allow tap'}` });
   S.prev=S.decision;
@@ -5884,7 +5890,7 @@ function commitBoardSel(d, dec){
       const expect=(d.options||[]).map(o=>o.name);
       expect.splice(expect.indexOf(picked[0].name), 1);
       const rest=picked.slice(1).map(o=>o.name);
-      S.sacBurst = rest.length ? { source:d.source, turn:d.turn, want:rest, expect } : null;
+      S.sacBurst = rest.length ? { source:d.source, turn:turnKey(d), want:rest, expect } : null;
       return pushChoice(d, picked[0].index,
         `${d.source}: sacrifice ${picked.map(o=>o.name).join(' + ')}`
         + (sacBurstForced(d)?' (forced — every creature)':''));
@@ -6218,10 +6224,10 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // ARMED: once it is answered, the next main-phase frame of this turn is passed as before. (It used
   // to cancel the skip, so every Karoo land dropped the user back into Main 1 -- USER 2026-10-08.)
   if (!undoing && S.commitTurn != null) {
-    if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
+    if (dec && dec.type==='main_phase' && turnKey(dec)===S.commitTurn && (S.commitTurnPasses||0) < 40) {
       S.commitTurnPasses = (S.commitTurnPasses||0) + 1; dec._autoStep=true; S.plan=[]; commitLine(); return;
     }
-    if (dec && dec.type!=='main_phase' && dec.turn===S.commitTurn) return;   // answer it, keep skipping
+    if (dec && dec.type!=='main_phase' && turnKey(dec)===S.commitTurn) return;   // answer it, keep skipping
     S.commitTurn = null;   // turn advanced / cap hit -> resume normal interaction
   }
 }
@@ -6232,7 +6238,7 @@ function isDeadOpponentMain(dec){
 }
 // Commit the current line, then auto-pass the rest of THIS turn (see advanceTo). The turn number is
 // captured now so the skip stops once the engine advances to the next turn.
-function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision && S.decision.turn; S.commitTurnPasses = 0; commitLine(); }
+function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision ? turnKey(S.decision) : undefined; S.commitTurnPasses = 0; commitLine(); }
 function renderHistory() {
   $('hist').innerHTML=S.history.map((h,i)=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span>`
     + (h.note ? ` <span class="sbadge" data-h="${i}" title="${esc(h.note.tip)} — click for details">⚠ search can’t pay</span>` : '') + `</li>`).join('');

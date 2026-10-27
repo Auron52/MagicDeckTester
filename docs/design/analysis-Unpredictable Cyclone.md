@@ -110,6 +110,94 @@ Tests: `test/unit/test_cyclone_phase1.cpp` (card data; life boundary; executor P
 `{"Unpredictable Cyclone", "AntiLifegain"}` in `test/unit/test_pirates_provider.cpp` (~:121) and add the three
 params to `scripts/audit_viewer_decisions.py`'s manifest (the self-guard fails on an unmapped param on a deck card).
 
+### Phase 2 (extra turns + the three Eldrazi) -- implemented 2026-10-27
+**Extra turns, engine-wide (Tier 3).** `turn_number` stays the ROUND (USER 2026-10-26). New GameState fields
+`pending_extra_turns` / `extra_turns_taken` / `in_extra_turn` + the deck stamp `deck_has_extra_turn`.
+`TurnSeq()` = `turn_number + extra_turns_taken` is a DERIVED accessor, not the draft's stored `turn_seq`
+(deviation): every unit test, scenario and replay that sets `turn_number` by hand stays consistent, and
+TurnSeq() == turn_number for every other deck by construction.
+- Transition: ONE shared `GameState::AdvanceTurnCounter()` in `GameEngine::RunTurnFrom(NewTurn)` and
+  `SimulateEndAndStartNextTurn`. With an extra turn next, the opponent's notional upkeep (Asylum Visitor)
+  and draw are skipped (both worlds). Scheduled spawns do not arrive in an extra turn (both worlds).
+  DayNightTurnBoundary is unchanged (one call; no daybound card in the list). DrawStep's on-the-play skip
+  keys on `TurnSeq() == 1`. `PlayOutFrom` loops while `turn_number < max_turns || pending_extra_turns`.
+  Backstop `TurnSeqCapped(max_turns)` (turns taken > 4 x max_turns -> no-win) in PlayOutFrom,
+  SimulateToEndImpl and FSLineWin, value-gated on extra_turns_taken.
+- Same-turn sites moved to TurnSeq() (about 70 lines): m1_hand_turn, m1start_hand_turn, m2_stage_turn,
+  combat_hand_turn, top_stacked_turn (including "previous turn"), every staged-expiry write and read,
+  suspend arrive_turn (+ the viewer's counter display), the pay ledger (PayLedger.h, PayRollback,
+  NoteUntapEffect x9), the landfall pin, g_bp_site_turn (+ the CantripOrderScope site turns),
+  g_condemn_root_turn (+ its guards), DecisionRootTurn (+ its two readers), t_ko_turn, the shuffle salts,
+  the rollout / diagnostic reshuffle seeds, the T1 forced-land debug, three provider memo keys
+  (FluctKeepPayable, the EDF BoardKey pair), and the viewer per-turn maps (firebreathe / jitte / tap-pref /
+  storage-hold, Combat.cpp's attackers chooser). Method: an exhaustive grep of all 954 `turn_number`
+  reads (no macro or token pasting touches the identifier), each classified ROUND or SAME-TURN. The
+  compile-break rename was NOT run (it lists the same 954 sites; skipped to save a rebuild, Q18).
+  Everything left on turn_number is a game clock (win turns, cutoffs, horizons, provider "turn >= 3"
+  heuristics, logs, inf_life_turn, TT bounds), which IS the round under the USER ruling.
+- **Depth counts ROUNDS (Q9 default).** `DepthAcrossTurn(after, depth)` gives the ply back after a
+  transition INTO an extra turn, at all seven FSLineTail transition sites (and their eot_seen keys). It is
+  applied AFTER the transition, not at the FSLineTail call sites as the draft said (deviation), because a
+  main-2 Emrakul grants the turn after the caller has already decremented. SimulateToEndImpl gives the
+  entry round +1 when a rollout is entered at an extra turn's start (SolveWithLookahead, label playouts).
+  So every `win_turn <= turn + depth - 1` window check stays exact in rounds, and an extra turn inside
+  the window is always searched.
+- Keys: BuildSimKeyBase, dominance::Build and RouteSig fold pending / taken / in_extra, value-gated.
+- Turn-edge prunes are OFF for `deck_has_extra_turn` (Q13 default): FslEdgeNoReach, the rollout kill-only
+  turn, the winless certificate, the label edge-tail elide and go-off dominance.
+- Logs and viewer: the decision JSON gets `extra_turn` (k) + `turn_seq`, and play events get `turn_seq`
+  (g_play_extra_turns_taken), only once an extra turn has been taken (byte-identical otherwise).
+  GameLogger phases carry `extraTurn` and a digest fold only when nonzero. An "Extra turn begins" event.
+  index.html: "Turn N (extra k)" in the turn bar; `turnKey()` (turn_seq ?? turn) for commit-turn, the loop
+  tail, the sacrifice burst and the firebreathe / jitte / storage-hold side-channels.
+  test/viewer_protocol_check.py: `_tkey()` at every same-turn key and comparison (frame identity, free
+  casts, replicate, the tap-pref / firebreathe / storage specs, force-attackers from events). server.js
+  passes the maps through unchanged. No existing reference can hold an extra turn, so all replay
+  identically. Known display-only gap: the staged_until / arrive_turn badges are in turns-taken units (no
+  card in the list stages or suspends).
+
+| card | tier | what landed |
+|---|---|---|
+| Emrakul, the Aeons Torn | 3 | `cant_be_countered`, `cast_trigger_extra_turns 1` (TriggerKind::ExtraTurn via PushCastTriggers for hand casts and every PushFreeCast; the rollout resolves it inline in apply_one after FireOnCastTriggers), Flying, `annihilator 6`, `put_into_graveyard_shuffles_graveyard`. Protection from colored spells PROVISIONAL inert (Q12; scryfall_divergences entry). Legend rule: the existing keep-oldest fold. Viewer: none (display only). |
+| Ulamog, the Ceaseless Hunger | 3 | `cast_trigger_exile_target_permanents 2` (TriggerKind::CastExileTargets, targets chosen at PUSH per CR 603.3d; distinct, both sides, our own permanents legal and forced when needed; fewer than 2 legal -> removed; re-checked on resolution; exile ignores indestructible; a token ceases to exist). Indestructible. Attack trigger "exile the top twenty" PROVISIONAL inert (Q11). Viewer: bucket A `target`, two sequential picks. |
+| Ulamog, the Infinite Gyre | 3 | 10/10 (Scryfall, verified). `cast_trigger_destroy_target_permanents 1` (an indestructible target is a legal no-op; a destroyed creature dies through OnCreatureDies), `annihilator 4`, graveyard shuffle, indestructible. Viewer: bucket A `target`. |
+
+- **Annihilator** (`ApplyAnnihilator`, SpellEffects.h, both worlds right after battle cry): the defending
+  player sacrifices N permanents, oldest first (their choice, so a fixed rule, Q16); atk_idx is remapped
+  across the erases; FireOppCreatureDies per creature. Deck-gated (`deck_has_annihilator`).
+- **Graveyard shuffle** (`FireGraveyardEntryTriggers` / `PerformGraveyardShuffle` / `GyShuffleBatch`): hooked
+  in DiscardCardFromHand and OnCreatureDies; batched over the cleanup discard (both worlds), a legend-rule
+  SBA batch and the cast-trigger destroy, so the shuffle takes every card that moved in the same event;
+  shuffled with ShuffleAfterSearch (search-salted). NOT hooked (disclosed in the code): stack ->
+  graveyard (a countered creature; Emrakul cannot be countered and a Remanded Gyre goes to hand) and
+  library -> graveyard mills. Deck-gated (`deck_has_gy_shuffle`).
+- **Searched target axis** `Plan::cast_trigger_target_choice` (int16, because a two-target option list on a
+  wide board exceeds 127; it fits Plan's padding, so sizeof is unchanged). The Phylath landfall shape: a
+  whole-turn rank policy (`ScriptedCastTriggerTarget`, keyed on TurnSeq) over the OPTIONS, which are
+  multisets of N identity-folded classes (`CastTriggerTargetFoldKey` = LandfallTargetFoldKey + controller)
+  in `DecisionProvider::CastTriggerTargetOrder`'s order. Base rule (ORDER only): opponent first; for a
+  destroy, our indestructible permanents next; then tapped lands, untapped lands, creatures by power,
+  others, power >= 10 last. Emitted by AppendSubdecisionAxes for plans that hard-cast a targeted
+  cast-trigger card. Width = the exact option count with every permanent the plan adds counted as a new
+  singleton class (an upper bound). NO cap: the landfall axis caps at 4, and a cap here would make options
+  unfindable at any budget. Installed by ApplyPlanDirect and by AIEngine::TakeTurn (+ re-solve). Folded
+  into PlanSignature, the axis-variant skip, plan equality, the bucket hashes and the PlanDom census.
+  Deck-gated (`deck_has_cast_target_trigger`). **Phase 3 must extend the emission to plans whose Cyclone
+  walk can free-cast an Ulamog.**
+- GameState grew 1152 -> 1160 bytes (the Dominance.h static_assert is updated, with the classification).
+- Audits: MODELED_ELSEWHERE_KEYWORDS += "annihilator"; audit_viewer_decisions.py manifest rows (target x2,
+  INERT_PARAMS x3); a DECISIONS.md row; scenario harness key `expect_exile_counts`.
+- Routing: Emrakul now carries `cast_trigger_extra_turns`, but CycloneProvider's AND term also needs
+  Curator's `cycle_or_discard_trigger_scry` (phase 3), so the deck still routes to AntiLifegain. Expected.
+- Tests: test/unit/test_cyclone_phase2.cpp; scenarios cyclone_emrakul_extra_turn_counts_rounds,
+  cyclone_two_emrakul_two_extra_turns_same_round, cyclone_ulamog_exiles_own_permanents_when_forced.
+- Results: unit 2056/2056 (15 new cases), scenarios 317/317 (3 new: win T4 in rounds after a T3 Emrakul
+  with an extra-turn attack; two Emrakuls -> two extra turns -> win T3; a forced Ulamog exile of two own
+  Islands), smoke 149 passed with play-changed=0 (searched and d0), viewer_protocol_check --strict 0
+  play-drift / 0 enum-gap / 0 board-diverged (668 refs), cost audit rc 0 (494/494), field audit rc 0
+  (snapshot refreshed with the three Eldrazi; the --update pass hit 429s on three cards already in the
+  snapshot), viewer-decisions static audit clean.
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -155,10 +243,19 @@ params to `scripts/audit_viewer_decisions.py`'s manifest (the self-guard fails o
   perf cost for this deck only; a sound refinement later. Default: off for extra-turn decks.
 - Q8. CycloneProvider TutorSearchWidth 32 (coverage fix: AL's width 2 makes Emrakul unreachable for
   Long-Term Plans). Default: yes.
-- Q9. Scalding Tarn fail-to-find: a crack with no Island/Mountain card left pays the life but skips the
+- Q14. ANSWERED 2026-10-27: USER *"Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle."* -> FIX QUEUED LAST, after phases 2-4 (USER: "can happen after everything else ... It isn't a key change"; generic engine fix in PerformFetch; may move other decks whose fetch can whiff -- measure in smoke/regression as a play change). Holding / late-cracking a fetch stays DEFERRED (USER: "isn't often super relevant"), recorded in docs/design/uncracked-fetchland.md. Original question:
   "then shuffle" (PerformFetch returns early). Rules-wrong but rare; fixing it moves any deck whose fetch
   whiffs. Default: disclosed, not changed (phase 1).
-- Q10. Street Wraith swampwalk (+ Landwalk tag) inert vs the never-blocking goldfish -- PROVISIONAL deferral.
+- Q15. APPROVED 2026-10-27: USER *"Swampwalk is fine to treat as inert until 1v1 play."* Original: Street Wraith swampwalk (+ Landwalk tag) inert vs the never-blocking goldfish -- PROVISIONAL deferral.
+- Q16. Annihilator: the passive opponent sacrifices its OLDEST permanents first (a fixed rule for the
+  opponent's choice; every spawn is an equally good Ulamog target). Default: oldest first.
+- Q17. Two targeted-cast-trigger casts in one turn (Ulamog CH + Gyre) share ONE searched rank policy (the
+  landfall_target_choice whole-turn shape), so their target choices are not searched independently.
+  Default: accepted (both in one turn needs 21 mana or two Cyclone hits); flagged for phase 3.
+- Q18. The turn_number classification used an exhaustive grep of all 954 reads instead of a compile-break
+  rename (the identifier has no macro/token-pasting use, so the two list the same sites). Default: grep
+  accepted; a rename pass can be run on request.
 
 ## Approved deferrals
-(none yet)
+- Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
+- Holding a fetchland uncracked / cracking it later: deferred, USER 2026-10-27 (docs/design/uncracked-fetchland.md).
