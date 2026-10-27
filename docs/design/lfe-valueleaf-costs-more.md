@@ -128,6 +128,25 @@ staged b8 costs 1.12x. **Option kept for the USER: staged b20 with alpha 4** lan
 lowering the nominal budget. It needs a per-deck alpha (today alpha is global; only a batch job can override
 it) and an 8-seed curve plus a held-out wall check first.
 
+### Profile of the shipped staged leaf (2026-10-27, Profile build, seed 608000, 300 games, d5 b20)
+
+| arm | avg | units | core-ms | us/unit |
+|---|---|---|---|---|
+| live (rollout ladder) | 4.4367 | 4.68M | 79.4k | 17.0 |
+| staged (shipped) | 4.3667 | 5.83M (1.24x) | 123.0k (1.55x) | 21.1 (1.25x) |
+
+* **The per-unit premium is NOT model evaluation** (that was the earlier guess). `MidGameEvaluator::Score` plus
+  `ExtractMidGameFeatures` is 0.14% of staged's samples, and every leaf/eval/model symbol together is 0.39%
+  (live 0.33%). Most of the gap is enumeration on deeper, bigger positions: `CollectActivationKeys` 2.00% vs
+  0.75%, `EnumeratePlans` 1.98% vs 1.13%, `AppendSubdecisionAxes` 1.12% vs 0.70%, `BuildSimKeyBase` 3.82% vs
+  3.48%. Staged searches deeper, and those nodes cost more each. That is per-node cost, not waste.
+* **Predictable waste in the rollout escalation (DEFERRED):** `MTG_HYBRID_STATS` shows 144 escalations, 89
+  TAKEN (640k units, 11%) and 55 DISCARDED (239k units, 4.1% of staged's units, 50 of them at committed c4).
+  143 of the 144 never reach user depth. 70 of the 144 start with under 10% of the decision budget left.
+  Candidate: do not launch an escalation that cannot reach `take_heuristic_at_hdepth[c]` in the budget left.
+  That is a budget re-pricing, inert at unlimited. It is lossless only if no TAKEN escalation starts that low;
+  split the leftover-decile histogram by taken/discarded first, and A/B it if any does.
+
 ### Reading
 
 * **The model leaf (staged) dominates the rollout ladder's curve.** Staged b16 gives -0.034 for 1.43x
