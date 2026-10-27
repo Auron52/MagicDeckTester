@@ -66,7 +66,35 @@ re-triggers an ETB, and Redcap's ETB carries a target choice. With 2–4 Feeders
 other. The searched turn's branching would grow combinatorially in the number of sac-able bodies, which fits
 both the hand list (Feeder ×2–4) and the RSS growth.
 
-**What to check first** (owed, not started):
+**DIAGNOSED 2026-10-27 (replay of the 62.9 s rollout, `Kitchen Finks x2; Caves of Koilos x2; Carrion Feeder x3`,
+size 7 draw r=0, via `MTG_KEEP_REPLAY` on the frozen binary -- play digest b2c25a26e00f1eba reproduced).** The
+hypothesis above was half right. The fodder sacrifices were already gated (`MeliraPodProvider::FodderSacUseful`,
+the USER's 2026-09-05 rule), so the generic sac was not the problem. The cost is the COMBO-ACTIVE case: on the
+board `Carrion Feeder x3, Kitchen Finks x2, Celes, Rune Knight` (Celes = a live loop-closer) the persist-loop
+block in `CollectActions` emitted K=1 / growth-K variants for EVERY (outlet, persist body) pair, 12 loop actions,
+crossed by the breakpoint enumeration into 13,824 plans per node. Two pre-combat decisions (t4, t5 of the
+rollout) each ran into the 1M-unit decision work ceiling (`MTG_DECISION_WORK_X=1000` x b3), ~25 s each; an
+ordinary rollout costs ~0.25 s (40-rollout sample: 25 ms - 1 s).
+
+**Fix: `MTG_POD_LOOP_FOLD` (TurnSolver.cpp, default ON).** One loop variant per DISTINCT (outlet, body) state:
+twin outlets / twin bodies (same card, tap state, counters, everything `PermIsPlainForFold` reads) give states
+that differ only by permuting identical permanents, so the twin pair adds no reachable outcome. Oldest copy kept.
+Single replay on the new binary: **69.1 s -> 5.2 s (13x), units 2.17M -> 229k, same win turn (6).**
+
+**Replay A/B, same binary, `MTG_POD_LOOP_FOLD=0` vs `1`** (`MTG_KEEP_REPLAY_LIST`: every 8th slow-log line at or under
+150 s, plus 1,000 ordinary sampled rollouts; generation suspended so both arms had the box):
+
+| population | n | wall off -> on | avg win turn off -> on | on better / worse |
+|---|---|---|---|---|
+| slow tail | 98 | 14,212 s -> 2,146 s (**6.6x**) | 6.29 -> **5.98** | **30 / 0** |
+| ordinary | 1,000 | 377 s -> 327 s (1.15x) | 5.764 -> 5.764 | 1 / 1 |
+
+The freed budget buys play on the tail (30 rollouts win a turn earlier, none later), and the ordinary rollout is
+untouched. Generation was restarted on the fixed commit with `MTG_KEEP_RETAIN_FOREIGN=b2c25a26e00f1eba` (USER
+2026-10-27: "it would be nicer if we could retain what we have done") -- the rollouts banked under the old engine
+stay in the journal.
+
+**Originally listed checks** (1 is answered above; 2-3 remain):
 1. Single-rollout repro of the 7,642 s hand (Basilica, Forest, Feeder ×4: the smallest hand, nearly pure
    Feeder), run under the per-decision census. Does the time go to sacrifice-activation enumeration, and
    are interchangeable outlets/bodies being pooled the way the sac-outlet pooling collapse already does

@@ -16352,6 +16352,47 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     return true;
 }
 
+// --- PERSIST-LOOP TWIN FOLD (MTG_POD_LOOP_FOLD, DEFAULT ON; =0 restores every pair) --------------
+// USER 2026-10-27, on the Melira Pod generation tail: "The only times we should consider sacrificing
+// I believe are when it would make it lethal and when we have the combo." The tail was the second
+// case done N*M times over: with a loop-closer live (Celes, Rune Knight on the measured board) the
+// persist-loop block emitted its K=1 / growth-K / Redcap-K variants for EVERY (free outlet, persist
+// body) pair -- 3 Carrion Feeders x 2 Kitchen Finks -> 12 loop actions plus the generic sacs, crossed
+// by the breakpoint enumeration into 13,824 plans per node. Two decisions of the replayed rollout
+// (seed 11400714822130206840 hand, Feeder x3 + Finks x2 + Celes) each ran the 1M-unit decision
+// ceiling (~25 s). The ordinary rollout costs ~0.25 s.
+//
+// The fold is an IDENTITY, not a narrowing. Two outlets that are field-identical (same card, same
+// tap state, same counters, everything PermIsPlainForFold reads at its default) produce states that
+// differ only by permuting identical permanents whichever one loops; the same holds for two
+// identical persist bodies. A loop variant is a demand-sized burst on ONE (outlet, body) pair, so
+// the twin pair adds no reachable outcome. The FIRST pair seen is kept, and battlefield order is
+// entry order, so the kept outlet is the OLDEST copy -- never summoning-sick when a twin is not (the
+// PermIsPlainForFold ordering argument), which is what the growth loop's attack needs.
+//
+// Counters are compared EXACTLY rather than refused: after one loop under Celes every creature
+// carries +1/+1 counters, and the plainness test (which refuses any counter) would stop folding at
+// precisely the nodes that need it. Human play is never folded (the menu keeps every legal entry).
+static bool PodLoopFoldOn()
+{
+    static const bool on = EnvOn("MTG_POD_LOOP_FOLD", true);
+    return on;
+}
+static bool PersistLoopTwin(const GameState& state, const Permanent& a, const Permanent& b)
+{
+    if (&a == &b) { return true; }
+    if (a.card.m_name_hash != b.card.m_name_hash || a.card.m_name.str() != b.card.m_name.str()) { return false; }
+    if (a.tapped != b.tapped) { return false; }
+    int ca[6] = { 0, 0, 0, 0, 0, 0 }, cb[6] = { 0, 0, 0, 0, 0, 0 };
+    for (const Counter& c : a.counters) { ca[static_cast<int>(c.type)] += c.count; }
+    for (const Counter& c : b.counters) { cb[static_cast<int>(c.type)] += c.count; }
+    for (int i = 0; i < 6; ++i) { if (ca[i] != cb[i]) { return false; } }
+    Permanent pa = a, pb = b;
+    pa.counters.clear();
+    pb.counters.clear();
+    return PermIsPlainForFold(state, pa) && PermIsPlainForFold(state, pb);
+}
+
 // ADOPTED 2026-09-09, DEFAULT ON (MTG_FOLD_ACT_SOURCES=0 restores the unfolded enumeration).
 // Suite is BYTE-IDENTICAL with it on -- smoke 80/80 and regression 108/108 configs unchanged,
 // play-changed=0 -- so adoption moves no ground truth at all. Snow, 300 games at play settings,
@@ -40593,6 +40634,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         };
         // Vampires A2: discard-cost outlets already emitted (by definition) -- see the pooling note below.
         std::vector<const CardDefinition*> discard_outlet_done;
+        // Persist-loop (outlet, body) pairs already emitted -- see PodLoopFoldOn.
+        std::vector<std::pair<const Permanent*, const Permanent*>> loop_pairs_done;
         for (const Permanent& src : state.battlefield)
         {
             if (src.controller_index != state.active_player_index) { continue; }
@@ -41359,6 +41402,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (closer_active && mcr != 0
                             && !GyEnterCleanerActive(state, me, v.card.m_number))
                         { continue; }
+                        // Twin (outlet, body) pair already emitted -> nothing new (PodLoopFoldOn).
+                        if (PodLoopFoldOn() && !HumanPlayActive())
+                        {
+                            bool twin = false;
+                            for (const auto& d : loop_pairs_done)
+                            {
+                                if (PersistLoopTwin(state, *d.first, src)
+                                    && PersistLoopTwin(state, *d.second, v))
+                                { twin = true; break; }
+                            }
+                            if (twin) { continue; }
+                            loop_pairs_done.emplace_back(&src, &v);
+                        }
                         // Explicit K=1 sac of the persist body itself. Distinct from the canonical
                         // single-sac action above, whose victim heuristic ranks EXPENDABILITY and
                         // may pick a dork -- but the persist body is the right victim exactly when
