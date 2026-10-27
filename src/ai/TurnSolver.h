@@ -2475,6 +2475,11 @@ public:
     // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
     // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
     static int ProjectedAttackDamage(const GameState& state);
+    // Does the board AS IT STANDS kill this turn -- no further main-phase action, just the attack --
+    // VERIFIED by applying the idle plan on a copy and simulating the combat, exactly as the
+    // board-lethal short-circuit does (LethalCutKillIsReal). Read-only. Post-combat: only an
+    // opponent already at <= 0.
+    static bool BoardLethalAsIs(const GameState& state, bool is_pre_combat);
     // MTG_BP_RESUME_LINE_HOLD test hook: apply `plan` with a breakpoint-node capture; if it pends, resume its
     // EMPTY child from the snapshot. Returns false when the apply did not pend. `at_capture` is the line's
     // unpaid-cost hold where the full apply stopped; `at_resume` the hold the resumed apply ran under.

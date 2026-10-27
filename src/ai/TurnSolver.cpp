@@ -47354,6 +47354,17 @@ static bool LethalCutKillIsReal(const GameState& state, const TurnSolver::Plan& 
     return real;
 }
 
+bool TurnSolver::BoardLethalAsIs(const GameState& state, bool is_pre_combat)
+{
+    if (OpponentHasLost(state)) { return true; }
+    if (!is_pre_combat) { return false; }
+    const int pending = PendingAttackDamage(state);
+    if (pending < state.Opponent().life) { return false; }   // the cheap necessary test first
+    TurnSolver::Plan idle;
+    idle.land_decided = true;      // no land, no action: the board as it stands
+    return LethalCutKillIsReal(state, idle, is_pre_combat, /*land_played=*/true, pending, "board-as-is");
+}
+
 // ---- GREEDY UNTAP-COUNT DOMINANCE (MTG_GREEDY_UNTAP_K_DOM; DEFAULT ON, =0 restores the full family) -----
 // Branching optimisation, AccomplishedAlchemist 2026-10-20 ("Optimization: branching" in the ledger).
 // An activated untapper (Action::Kind::ActivateUntap: Crab Umbra, Staff of Domination, Galvanic Alchemist's

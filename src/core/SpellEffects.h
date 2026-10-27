@@ -31383,9 +31383,20 @@ extern thread_local int g_scripted_freshmode;
 // (PaySacSpendableNow, MintedTreasureSpendable, the two enumeration mint-credit twins) must gate
 // on THIS, not on PaySacFreshHoldEnabled() directly, so the freshmode pin releases all of them
 // together (a site left on the raw flag would price a world the payer then refuses).
+//
+// NEVER IN HUMAN PLAY. The hold is a SEARCH doctrine (the search misprices spend-vs-bank, 73 slower
+// / 31 faster when released), not a game rule: a Treasure is spendable the moment it exists (CR
+// 111.10a). The search's own escape is the FRESH-SPEND axis (a freshmode=1 plan variant), which is
+// host-gated to FSLineWin and `!HumanPlayActive()` -- so with the hold biting in human play a human
+// could NEVER spend a magnetless Gold Rush's Treasure this turn: no menu plan, and even the manual
+// tap fallback (`tap=Treasure Token#..:G`) graded `unsupported` / `legal_not_enumerated`, while the
+// decision JSON offered the Treasure as a clickable tap source. Mirrorwing v2 s4_gi3 T3: the search
+// plays Gold Rush -> crack the mint -> Luxurious Libation X=0 (its T6 win); the viewer could not.
+// HumanPlayActive() is false in rollouts (HumanPlaySuppress), in a --choices-then-auto continuation
+// (HandBackToSearch) and in every autonomous run, so search/GT are byte-identical.
 inline bool FreshHoldActive()
 {
-    return PaySacFreshHoldEnabled() && g_scripted_freshmode != 1;
+    return PaySacFreshHoldEnabled() && g_scripted_freshmode != 1 && !HumanPlayActive();
 }
 
 // CURRENT PAYMENT's coloured need (W,U,B,R,G), published by TapForCostSharedOnce for the

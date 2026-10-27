@@ -39321,7 +39321,6 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
         if (b.budget != nullptr && (b.budget->Exhausted() || b.budget->Overrun())) { b.cut = true; }
         else { b.partial = true; }
     }
-    if (plans.empty()) { return 0; }
     for (const TurnSolver::Plan& p : plans)
     {
         if (p.wins_this_turn)
@@ -39330,6 +39329,19 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
             return 1;
         }
     }
+    // THE BOARD MAY ALREADY BE THE KILL, and the enumeration is not obliged to say so. The previous
+    // link's own equips (metalcraft {0}) can finish the chain; a plan's `wins_this_turn` prices the
+    // board BEFORE that plan's equips, and the do-nothing plan that carries "attack now" exists only
+    // through the board-lethal short-circuit, which DecisionUnpruned(UnprunedGate::ComboLine) turns
+    // off -- i.e. in every claude-play / viewer session (MTG_UNPRUNED). There the enumeration of a
+    // finished chain is EMPTY (nothing left to cast) and this walk returned 0 ON A LETHAL BOARD, then
+    // stored it winless in `seen`: KittyEquipment v2 claude_s6_gi5 t3, viewer "SEARCH no win (viewer;
+    // 21 links applied)" while the autonomous trial says "LETHAL after 3 link(s)" on the same board, so
+    // the viewer never offered COMBO OFF. Verified, not projected (BoardLethalAsIs simulates the combat).
+    // Autonomous: wherever the short-circuit plan exists it won in the loop above, so this is reached
+    // only where it does not (a provider without UseLethalShortCircuit, or MTG_NO_LETHAL_CUT).
+    if (TurnSolver::BoardLethalAsIs(s, /*is_pre_combat=*/true)) { return 1; }
+    if (plans.empty()) { return 0; }
     // One representative per purchase. Within a purchase: the BASE plan over any breakpoint
     // VARIANT, then the least non-cast spend, then the most free casts, then value.
     //
@@ -39715,7 +39727,6 @@ static int Run(GameState& s, int me, Adv adv, RunMode mode)
         const auto te0 = std::chrono::steady_clock::now();
         std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
         const double enum_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
-        if (plans.empty()) { break; }
         // LETHAL FIRST. `wins_this_turn` on a board this playout has already realised is a
         // statement about the attack that board can make now -- not about casts still to come --
         // which is exactly the projection the user asked to be made accurate by playing it out.
@@ -39732,6 +39743,17 @@ static int Run(GameState& s, int me, Adv adv, RunMode mode)
             }
             return 1;
         }
+        // ...or the board as it stands: the same empty-enumeration hole as RunSearchRec's (see there).
+        if (TurnSolver::BoardLethalAsIs(s, /*is_pre_combat=*/true))
+        {
+            if (Trace())
+            {
+                std::fprintf(stderr, "[equip-route] t%d LETHAL (board as is) after %d link(s), %d iter(s)\n",
+                             s.turn_number, links, iters + 1);
+            }
+            return 1;
+        }
+        if (plans.empty()) { break; }
         // Otherwise ADVANCE THE CHAIN: the plan that casts the most, because on this engine a cast
         // is what produces the next link (two draws and an artifact toward metalcraft). Ties go to
         // the engine's own `value` so the choice is never arbitrary.

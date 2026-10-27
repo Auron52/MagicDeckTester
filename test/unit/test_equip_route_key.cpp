@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
 #include "core/GameState.h"
@@ -123,4 +124,33 @@ TEST_CASE("the route key separates the same board before and after combat")
     a.phase = Phase::PreCombatMain;
     b.phase = Phase::PostCombatMain;
     CHECK(EquipRouteStateKey(a, 0) != EquipRouteStateKey(b, 0));
+}
+
+// The equip route's walk returned "no win" on a FINISHED chain whose board already kills: with nothing
+// left to cast the enumeration is empty, and the only plan that carries "attack now" comes from the
+// board-lethal short-circuit, which MTG_UNPRUNED (every claude-play / viewer session) turns off.
+// KittyEquipment v2 claude_s6_gi5 t3, 2026-10-27: the viewer never offered COMBO OFF. The walk now asks
+// BoardLethalAsIs, a VERIFIED kill (the idle plan applied on a copy and the combat simulated).
+TEST_CASE("BoardLethalAsIs: a finished equip chain kills as it stands; a short one does not")
+{
+    EnsureCardsLoaded();
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.players[0].life     = gamesetup::StartingLife();
+    Put(s, "Puresteel Paladin", 40);
+    Put(s, "Shadowspear", 49);
+    Find(s, 49).equipped_to = 40;
+    Put(s, "Colossus Hammer", 20);
+    Find(s, 20).equipped_to = 40;
+    Put(s, "Colossus Hammer", 21);
+    Find(s, 21).equipped_to = 40;
+    s.players[1].life = 20;
+    CHECK(TurnSolver::BoardLethalAsIs(s, /*is_pre_combat=*/true));     // 2 + 10 + 10 + 1 = 23
+    CHECK_FALSE(TurnSolver::BoardLethalAsIs(s, /*is_pre_combat=*/false));
+    s.players[1].life = 24;
+    CHECK_FALSE(TurnSolver::BoardLethalAsIs(s, /*is_pre_combat=*/true));
+    Find(s, 40).entered_this_turn = true;                              // summoning sick: no attack
+    s.players[1].life = 20;
+    CHECK_FALSE(TurnSolver::BoardLethalAsIs(s, /*is_pre_combat=*/true));
 }
