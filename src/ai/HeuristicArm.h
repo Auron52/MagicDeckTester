@@ -759,6 +759,15 @@ enum Slot : int
     HOLD_PARTIAL_DEPL,        // MTG_HOLD_PARTIAL_DEPL  the prepay's partial creature rungs come AHEAD of the [depletion] last resort, each as a pair (remaining creatures + depletion held, then released); they sat after it, which a depletion land on the board made unreachable (each holds a superset of [depletion]). =0 -> the old order
     GRANT_CAST_CREDIT,        // MTG_GRANT_CAST_CREDIT  a same-plan Brightcap Badger cast carries Action::rock_mana = one {G} per body already on board its grant would unlock, so the plan's later casts may be funded by them (mana-oracle ENUM-GAP fungusv3 s1100024 gi23 T3). =0 -> no credit
     CYCLONE_TUTOR_WIDTH,      // MTG_CYCLONE_TUTOR_WIDTH  Cyclone (Unpredictable Cyclone): TutorSearchWidth admits EVERY distinct legal name for Long-Term Plans (any card; ~22 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so most names (Emrakul among them) were unreachable per search at ANY budget. A COVERAGE fix (widens, never narrows; the axis is additive). DEFAULT ON; =0 -> the base 6
+    CYCLE_SEED_FOLD,          // MTG_CYCLE_SEED_FOLD  the searched cycle's SOUND pin fold (EnumeratePlans): a cycle seed whose Curator disposition j exceeds the watchers that can be on the battlefield when it is cycled (on the battlefield now + the watchers the plan itself casts), or whose free-cast pin (decline / take-and-Remand) can never be read because no Cyclone can be out (none on the battlefield, none cast by the plan), resolves EXACTLY as its sibling with the clamped j / the take pin, which is enumerated beside it -- so the duplicate is not emitted. Applied only to plans whose other actions cannot draw (no draw / look / tutor / Remand cast), where the count is exact. Default ON; =0 -> every pinned seed is emitted
+    CYCLONE_FETCH_RULE,       // MTG_CYCLONE_FETCH_RULE  Cyclone: the USER's Scalding Tarn rule (2026-10-27) -- Steam Vents while one is in the library; then by RED NEED (CycloneShortOnRed: fewer than two red sources counting the battlefield, at most one untapped-entering red land in hand, Seething Song as the second red only): short -> Blood Crypt, Mountain; else Watery Grave, Island. The top pick is the one-option fetch, with Xander's Lounge admitted beside it (searched). Default ON; =0 -> library-order candidates, top pick only (the generic default)
+    CYCLONE_MYRIAD_RULE,      // MTG_CYCLONE_MYRIAD_RULE  Cyclone: the USER's Myriad Landscape rule (2026-10-27) -- two Islands is the one-option pick; two Mountains is ADMITTED (searched against the Islands) only while short on red (the shared red count). A list with no two-Island pick keeps the full fan. Default ON; =0 -> the base order and full fan
+    CYCLONE_LTP_RULE,         // MTG_CYCLONE_LTP_RULE  Cyclone: the USER's Long-Term Plans rule (2026-10-27) -- targets are Unpredictable Cyclone (only with none in hand or on the battlefield), Emrakul (only with no other way to top one: not an Emrakul AND a put-back cantrip both in hand) and Street Wraith (the cheapest creature cycler; only with NO creature cycler in hand and nothing else missing: a Cyclone held or out, no Eldrazi target admitted); none -> the cast is HELD (pruned this enumeration). Searched over what is admitted. Default ON; =0 -> every legal name (width 32)
+    CYCLONE_LTP_ULAMOG,       // MTG_CYCLONE_LTP_ULAMOG  amendment to the LTP rule (the AGENT's proposal, DEFAULT OFF pending the USER): with no Emrakul left in the library an Ulamog is admitted instead (Ceaseless Hunger before Infinite Gyre, by mana value). Inert unless MTG_CYCLONE_LTP_RULE is on
+    CYCLONE_LTP_SONG,         // MTG_CYCLONE_LTP_SONG  amendment to the LTP rule (the USER's "maybe even consider Seething Song if we have a way to pull it off the top", 2026-10-27; DEFAULT OFF, measured and reported): Seething Song is admitted as a target while we hold a card that draws it off the top (Brainstorm / Brainsurge / Ponder: a draw spell that puts back or reorders) and none is in hand. Inert unless MTG_CYCLONE_LTP_RULE is on
+    CYCLONE_PUTBACK_RULE,     // MTG_CYCLONE_PUTBACK_RULE  Cyclone PROPOSAL (the agent's, from the USER's examples; DEFAULT OFF pending the USER): Brainstorm / Brainsurge put-back ORDER (PutBackRanking, most expendable first) -- dead cards (goldfish_inert: Toxic Deluge) first, then the Eldrazi (Ulamogs before Emrakul, so an Emrakul put back with one of them lands ON TOP, where a Cyclone walk reaches it) while a Cyclone is out or in hand, then lands beyond one, then Remand, then the deck's shed order. An ORDER only: every candidate stays searched
+    CYCLONE_PUTBACK_SINGLE,   // MTG_CYCLONE_PUTBACK_SINGLE  Cyclone PROPOSAL (DEFAULT OFF pending the USER): prune the searched put-back fan to the rule's pick alone (PutBackSingleCandidate; the NivMizzet BRAINSTORM_SINGLE shape). LOSSY. Inert unless MTG_CYCLONE_PUTBACK_RULE is on. Human play is never pruned
+    CYCLONE_PONDER_KEEPSHUFFLE,// MTG_CYCLONE_PONDER_KEEPSHUFFLE  Cyclone PROPOSAL (DEFAULT OFF pending the USER): Ponder's searched fan narrowed to keep-in-the-provider's-order vs shuffle (ReorderKeepShuffleOnly; the NivMizzet shape) instead of every order. LOSSY. Human play is never narrowed
     COUNT
 };
 
@@ -1462,6 +1471,15 @@ inline const char* Name(int slot)
         "MTG_HOLD_PARTIAL_DEPL",
         "MTG_GRANT_CAST_CREDIT",
         "MTG_CYCLONE_TUTOR_WIDTH",
+        "MTG_CYCLE_SEED_FOLD",
+        "MTG_CYCLONE_FETCH_RULE",
+        "MTG_CYCLONE_MYRIAD_RULE",
+        "MTG_CYCLONE_LTP_RULE",
+        "MTG_CYCLONE_LTP_ULAMOG",
+        "MTG_CYCLONE_LTP_SONG",
+        "MTG_CYCLONE_PUTBACK_RULE",
+        "MTG_CYCLONE_PUTBACK_SINGLE",
+        "MTG_CYCLONE_PONDER_KEEPSHUFFLE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
