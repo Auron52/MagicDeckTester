@@ -37964,6 +37964,52 @@ inline ManaCost EffectiveCyclingCostFor(const GameState& state, const CardDefini
     return EffectiveCyclingCost(state, state.active_player_index, def.params.cycling_cost.value());
 }
 
+// ---- Life-cost cycling (Street Wraith: "Cycling--Pay 2 life.") ----------------------------------
+// The LIFE half of a cycling cost (CardParams::cycling_life_cost), the companion of the mana half
+// above. Same lockstep contract as EffectiveCyclingCost: every site that probes or pays a cycling cost
+// -- the three payments (executor PerformDig, the rollout dig loop, the human-play DigDraw), the
+// affordability filters (SelectDigSource, FluctuatorProvider::SelectDigSource and its free-cycle
+// predicates) and the human-play offer probe -- calls BOTH, so a filter never admits a cycle the payer
+// then refuses (which would `break` a dig loop silently) and no payer ever cycles for free.
+//
+// Payable only while life > N (CR 119.4 allows paying exactly your life total, but at 0 the player
+// loses at the next state-based check, CR 704.5a, which comes before the cycling draw resolves: the
+// cycle cannot gain anything). A SOUND dominance prune, applied identically in human play (disclosed on
+// the card). 2HG: players[controller].life is the team's shared pool, which is the right total to pay
+// from (CR 810.9). Returns true for every card without a life cost, so every other deck is unchanged.
+inline bool CyclingLifePayable(const GameState& state, int controller, const CardDefinition& def)
+{
+    const int n = def.params.cycling_life_cost;
+    return n <= 0 || state.players[static_cast<std::size_t>(controller)].life > n;
+}
+
+// Mana half affordable from `pool` (on the Fluctuator-reduced cost) AND life half payable. The one
+// probe every affordability filter uses. `def` must carry a cycling_cost.
+inline bool CyclingPayable(const GameState& state, int controller, const CardDefinition& def,
+                           const ManaPool& pool)
+{
+    return CyclingLifePayable(state, controller, def)
+        && pool.CanPay(EffectiveCyclingCost(state, controller, def.params.cycling_cost.value()));
+}
+
+// Pay the life half. Called by each payer AFTER its mana half succeeded and BEFORE the discard (both
+// are costs, CR 602.2b / 601.2h; no observer sits between them). Paying life is life LOSS (CR 119.4 /
+// 119.3), not damage, so no prevention or damage trigger is involved. A no-op without a life cost.
+inline void PayCyclingLife(GameState& state, int controller, const CardDefinition& def)
+{
+    const int n = def.params.cycling_life_cost;
+    if (n <= 0) { return; }
+    Player& pl = state.players[static_cast<std::size_t>(controller)];
+    const int before = pl.life;
+    pl.life -= n;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "life",
+                      def.card.m_name.str() + " (cycling cost): pay " + std::to_string(n) + " life ("
+                      + std::to_string(before) + "\xE2\x86\x92" + std::to_string(pl.life) + ")");
+    }
+}
+
 // A SATURATED cost-reducer: casting `def` would not reduce any cycling cost the controller can
 // currently use, because a copy already in play has floored them all. Casting it then spends a card
 // AND its mana for literally no change in the game state.
@@ -38132,8 +38178,9 @@ inline std::string SelectDigSource(const GameState& state, const ManaPool& pool,
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
         // P5 -- affordability filter. MUST use the same reduced cost the payer will use
         // (EffectiveCyclingCost), or a Fluctuator-discounted cycle is filtered out here and the
-        // dig loop breaks on a cost it could actually have paid.
-        if (!pool.CanPay(EffectiveCyclingCostFor(state, *d))) { continue; }
+        // dig loop breaks on a cost it could actually have paid; and the same life test, or a
+        // Street Wraith at life <= 2 is picked and the payer's refusal breaks the loop.
+        if (!CyclingPayable(state, state.active_player_index, *d, pool)) { continue; }
         return c.m_name;
     }
     // Sacrifice-to-draw: an untapped land in play (e.g. Fiery Islet) whose cost is affordable.
@@ -40447,9 +40494,10 @@ inline void FireScryWatchers(GameState& state)
 // top FetchCandidates pick) from the library, make it enter the battlefield (resolving the
 // fetched land's own enters-tapped/shock choice), and pay 1 life. The caller is responsible
 // for removing the fetchland from hand, using its land drop, and sending it to the graveyard
-// -- PerformFetch only resolves the search-and-put-into-play. The library order past the
-// fetched card is a goldfish-irrelevant simplification (no shuffle modelled). Shared by the
-// real engine (AIEngine) and the rollout (TurnSolver/ApplyPlanDirect) so both fetch alike.
+// -- PerformFetch only resolves the search-and-put-into-play, then SHUFFLES the library
+// ("... then shuffle": ShuffleAfterSearch at the end, deterministic and lockstep; a fail-to-find
+// returns early, before the shuffle -- a disclosed simplification). Shared by the real engine
+// (AIEngine) and the rollout (TurnSolver/ApplyPlanDirect) so both fetch alike.
 inline void PerformFetch(GameState& state, int controller_index,
                          const CardParams& fetch_pp, const std::string& target_name = "")
 {

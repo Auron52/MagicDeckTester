@@ -21017,6 +21017,7 @@ namespace
     const GaladrielProvider      g_galadriel;
     const NivMizzetComboProvider g_niv_mizzet_combo;
     const LandfallElementalsProvider g_landfall_elementals;
+    const CycloneProvider        g_cyclone;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -23051,6 +23052,17 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // landfall aggro list may run) and Mossborn Hydra's landfall_double_self_counters (2026-10-22: a
     // Landfall screening candidate, so it would pull a Landfall list that adopts it onto this provider).
     bool lfe = false;
+    // UNPREDICTABLE CYCLONE (cycling into Eldrazi; onboarding 2026-10-26). Signature = Unpredictable
+    // Cyclone's cycling-draw replacement (cycle_draw_exile_shared_type_freecast) OR the CONJUNCTION of
+    // Emrakul's cast-trigger extra turn (cast_trigger_extra_turns) and Curator of Mysteries' cycle-or-
+    // discard scry watcher (cycle_or_discard_trigger_scry) -- so a list that cuts Cyclone still routes,
+    // while an Eldrazi-ramp list (Emrakul alone) or a cycling list (Curator alone) does not. All three
+    // are new, gated params carried by no other card in cards.json, so no other deck's routing moves.
+    // EXCLUDED, with reasons: Street Wraith's cycling_life_cost and plain cycling_cost (Living End / any
+    // cycling list), cant_be_countered (Niv-Mizzet, Parun), the Ulamogs' cast triggers (Eldrazi ramp),
+    // the cantrips' / Remand's / Seething Song's params (Hinata, Niv, Dragonstorm), fetch / shock lands.
+    // Must beat `anti` (Scalding Tarn's fetch_land_types), which the deck rode by accident.
+    bool cyclone = false, cy_extra_turn = false, cy_cycle_scry = false;
     for (const Card& c : deck.mainboard)
     {
         // Midrange Burn's three independent signature cards, conjuncted with the
@@ -23084,6 +23096,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.soulbond_grants_untap_self_cost.has_value()) { alchemist = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.enters_look_top_land_or_hand || p.mana_only_subtype_abilities) { lfe = true; }
+        if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
+        if (p.cast_trigger_extra_turns > 0)          { cy_extra_turn = true; }
+        if (p.cycle_or_discard_trigger_scry > 0)     { cy_cycle_scry = true; }
         if (p.draw_trigger_damage > 0 || p.cast_trigger_instant_sorcery_draw > 0
             || p.aura_damage_trigger_draw || p.soulbond_damage_trigger_draw)
         { niv = true; }
@@ -23557,6 +23572,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (Tandem Lookout's soulbond once tripped it -- see the flag).
     // LandfallElementals: its signature is carried by no other card, so the position is free; it must
     // beat `anti` (Flamekin Harbinger's tutor_to_top), `vial` (Aether Vial), `landfall` and `fungus`.
+    // Cyclone: FIRST -- its signature is carried by no other card, so the position is free, and it must
+    // beat `anti` (Scalding Tarn) and whatever a later card's param might trip (see the flag).
+    cyclone = cyclone || (cy_extra_turn && cy_cycle_scry);
+    if (cyclone)     { return g_cyclone; }
     if (lfe)         { return g_landfall_elementals; }
     if (niv)         { return g_niv_mizzet_combo; }
     // Vampires: its signature is carried by no other card, so the position is free (see the flag).
@@ -27661,7 +27680,10 @@ static bool FluctuatorFreeCycleAvailable(const GameState& s)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
-        if (EffectiveCyclingCostFor(s, *d).ManaValue() == 0) { return true; }
+        // "Free" = no MANA to husband, and only if the cycle is payable at all: a life-cost cycler
+        // (Street Wraith) is mana-free but refused by every payer at life <= its cost.
+        if (EffectiveCyclingCostFor(s, *d).ManaValue() == 0
+            && CyclingLifePayable(s, s.active_player_index, *d)) { return true; }
     }
     return false;
 }
@@ -27868,7 +27890,8 @@ static bool FluctuatorImmediateRebuyExecutable(const GameState& s)
         if (!d) { continue; }
         if (d->params.cycle_trigger_damage_each_opponent > 0
             && d->params.cycling_cost.has_value()
-            && EffectiveCyclingCostFor(s, *d).ManaValue() == 0) { free_stinger_cycle = true; }
+            && EffectiveCyclingCostFor(s, *d).ManaValue() == 0
+            && CyclingLifePayable(s, s.active_player_index, *d)) { free_stinger_cycle = true; }
         if (d->params.reanimate_creature_max_mv > 0 && !unearth) { unearth = d; }
     }
     if (!free_stinger_cycle || !unearth) { return false; }
@@ -28294,7 +28317,7 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
-        if (!pool.CanPay(EffectiveCyclingCostFor(s, *d))) { continue; }   // lockstep with the payer
+        if (!CyclingPayable(s, s.active_player_index, *d, pool)) { continue; }   // lockstep with the payer (mana + life)
 
         const CardParams& p = d->params;
         int rank;
@@ -30832,6 +30855,16 @@ int LandfallElementalsProvider::TutorSearchWidth() const
 {
     static const bool on = EnvOn("MTG_LFE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
     return heurarm::Flag(heurarm::LFE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
+}
+
+// ---- CycloneProvider::TutorSearchWidth --------------------------------------
+// Long-Term Plans' tutor axis must reach every distinct NAME (any card is legal); the base width 6 over
+// the library-order candidate list left most unreachable per search, chosen by the shuffle. A coverage
+// fix (see the header note). MTG_CYCLONE_TUTOR_WIDTH=0 -> the base 6.
+int CycloneProvider::TutorSearchWidth() const
+{
+    static const bool on = EnvOn("MTG_CYCLONE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
+    return heurarm::Flag(heurarm::CYCLONE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
 }
 
 // ---- LandfallElementalsProvider: the USER's fetch rule (2026-10-23) ----------------------------

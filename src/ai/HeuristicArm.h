@@ -758,6 +758,7 @@ enum Slot : int
     RESERVE_GRANTED_BODIES,   // MTG_RESERVE_GRANTED_BODIES  the whole-turn prepay's creature hold class (BatchPrepayMainCasts' DorkReserve) includes an attack-capable body that taps for mana only through a GRANT (Badger's Saprolings and Fungus cards), exactly like a mana dork. =0 -> granted bodies are never held
     HOLD_PARTIAL_DEPL,        // MTG_HOLD_PARTIAL_DEPL  the prepay's partial creature rungs come AHEAD of the [depletion] last resort, each as a pair (remaining creatures + depletion held, then released); they sat after it, which a depletion land on the board made unreachable (each holds a superset of [depletion]). =0 -> the old order
     GRANT_CAST_CREDIT,        // MTG_GRANT_CAST_CREDIT  a same-plan Brightcap Badger cast carries Action::rock_mana = one {G} per body already on board its grant would unlock, so the plan's later casts may be funded by them (mana-oracle ENUM-GAP fungusv3 s1100024 gi23 T3). =0 -> no credit
+    CYCLONE_TUTOR_WIDTH,      // MTG_CYCLONE_TUTOR_WIDTH  Cyclone (Unpredictable Cyclone): TutorSearchWidth admits EVERY distinct legal name for Long-Term Plans (any card; ~22 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so most names (Emrakul among them) were unreachable per search at ANY budget. A COVERAGE fix (widens, never narrows; the axis is additive). DEFAULT ON; =0 -> the base 6
     COUNT
 };
 
@@ -1460,6 +1461,7 @@ inline const char* Name(int slot)
         "MTG_RESERVE_GRANTED_BODIES",
         "MTG_HOLD_PARTIAL_DEPL",
         "MTG_GRANT_CAST_CREDIT",
+        "MTG_CYCLONE_TUTOR_WIDTH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
