@@ -4001,11 +4001,10 @@ struct CardParams
     // happens from HAND, so a card can never cycle-trigger itself. 0 = not a cycle watcher.
     int cycle_trigger_damage_each_opponent = 0;
 
-    // ---- Unpredictable Cyclone deck (onboarding 2026-10-26) -- PARSED, NOT YET WIRED ----------------
+    // ---- Unpredictable Cyclone deck (onboarding 2026-10-26) --------------------------------------------
     // Added in phase 1 of the onboarding so CycloneProvider's routing signature (DetectDecisionProvider's
-    // `cyclone` flag) can key on them before the cards exist. NO EFFECT READS THEM YET: phase 2 wires
-    // the extra turn, phase 3 the Cyclone replacement and the Curator watcher. No card carries them
-    // until those phases add the entries, so every deck is byte-identical.
+    // `cyclone` flag) can key on them before the cards exist. Phase 2 wired the extra turn (below); the
+    // Cyclone replacement and the Curator watcher are still PARSED, NOT YET WIRED (phase 3).
     //
     // Unpredictable Cyclone: "If a cycling ability of another nonland card would cause you to draw a
     // card, instead exile cards from the top of your library until you exile a card that shares a card
@@ -4014,8 +4013,37 @@ struct CardParams
     // A REPLACEMENT of the cycling draw (phase 3).
     bool cycle_draw_exile_shared_type_freecast = false;
     // Emrakul, the Aeons Torn: "When you cast this spell, take an extra turn after this one." The
-    // number of extra turns the CAST trigger grants (phase 2). 0 = none.
+    // number of extra turns the CAST trigger grants. WIRED (phase 2): pushed above the spell at EVERY cast
+    // (EffectHandler::PushCastTriggers -- hand casts and PushFreeCast's free casts -- and the rollout
+    // apply_one cast block, lockstep); resolving it does ++GameState::pending_extra_turns, which the
+    // next turn transition consumes (GameState::AdvanceTurnCounter). Extra turns do NOT advance
+    // turn_number (USER 2026-10-26: they do not count toward the turn count). 0 = none.
     int cast_trigger_extra_turns = 0;
+    // Ulamog, the Ceaseless Hunger: "When you cast this spell, exile N target permanents." A MANDATORY
+    // cast trigger with N DISTINCT targets (CR 115.3) chosen as it is put on the stack (CR 603.3d) from
+    // every permanent on the battlefield, either side (the spell itself is on the stack, not a target).
+    // Fewer than N legal targets -> the trigger is removed from the stack (603.3d). Re-checked on
+    // resolution (608.2b): a target that left is skipped. Exile ignores indestructible and is not a
+    // graveyard. The target CHOICE is searched (Plan::cast_trigger_target_choice). 0 = none.
+    int cast_trigger_exile_target_permanents = 0;
+    // Ulamog, the Infinite Gyre: "When you cast this spell, destroy N target permanent(s)." Same trigger
+    // shape and target axis as above, DESTROY semantics: an indestructible target is a legal no-op; a
+    // destroyed creature dies through OnCreatureDies. 0 = none.
+    int cast_trigger_destroy_target_permanents = 0;
+    // ANNIHILATOR N (CR 702.86): "Whenever this creature attacks, defending player sacrifices N
+    // permanents." Applied at declare attackers in both worlds (ApplyAnnihilator, beside battle cry). The
+    // sacrifice choice is the OPPONENT's, not ours, so a fixed deterministic rule is legitimate under the
+    // no-greedy rule (DecisionProvider never sees it; nothing for the viewer): the passive opponent's
+    // permanents are its scheduled vanilla spawns, each an equally good future target. 0 = none.
+    // (Modelled as a param, not a Keyword: the audit lists "annihilator" in MODELED_ELSEWHERE_KEYWORDS.)
+    int annihilator = 0;
+    // "When <this> is put into a graveyard from anywhere, its owner shuffles their graveyard into their
+    // library." (Emrakul, the Aeons Torn; Ulamog, the Infinite Gyre). A TRIGGER (CR 603.6a, a zone-change
+    // trigger), NOT Progenitus's replacement (graveyard_replace_shuffle_library): the card reaches the
+    // graveyard, then its owner shuffles the WHOLE graveyard, the card included, into the library
+    // (FireGraveyardEntryTriggers, called after the move at the graveyard-entry sites; the shuffle is
+    // ShuffleAfterSearch so the search cannot foresee it). Gated per game on GameState::deck_has_gy_shuffle.
+    bool put_into_graveyard_shuffles_graveyard = false;
     // Curator of Mysteries: "Whenever you cycle or discard another card, scry N." A battlefield watcher
     // on every discard from hand, cycling included (phase 3). 0 = not a watcher.
     int cycle_or_discard_trigger_scry = 0;

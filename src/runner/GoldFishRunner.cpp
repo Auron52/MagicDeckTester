@@ -1187,6 +1187,43 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // EXTRA TURNS (Emrakul, the Aeons Torn): MAINBOARD ONLY, the Moraug reasoning above -- this stamp
+    // switches OFF the turn-edge prunes, a behaviour, so over-arming would split a screen's arms.
+    state.deck_has_extra_turn = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.cast_trigger_extra_turns > 0) { return true; }
+        }
+        return false;
+    }();
+    // The Ulamogs' targeted cast triggers: MAINBOARD ONLY (the stamp opens a searched axis -- a behaviour).
+    state.deck_has_cast_target_trigger = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && (d->params.cast_trigger_exile_target_permanents > 0
+                      || d->params.cast_trigger_destroy_target_permanents > 0)) { return true; }
+        }
+        return false;
+    }();
+    // The graveyard-shuffle trigger and annihilator: BOTH ZONES -- each stamp only skips a scan that
+    // would find nothing (the deck_has_attack_threshold reasoning), so over-arming is merely slower.
+    {
+        bool gy = false, ann = false;
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { continue; }
+                gy  = gy  || d->params.put_into_graveyard_shuffles_graveyard;
+                ann = ann || d->params.annihilator > 0;
+            }
+        }
+        state.deck_has_gy_shuffle  = gy;
+        state.deck_has_annihilator = ann;
+    }
     // Jorn's per-turn main 2 (UntapSecondMainLive) is only ever live in a deck that runs the card.
     state.deck_has_attack_untap = [&deck]{
         for (const Card& c : deck.mainboard)

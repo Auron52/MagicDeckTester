@@ -449,7 +449,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     { payledger::Record(state, active, p, def, col, payledger::t_cur_pip_any); }
     // Rollback ledger (MTG_PAY_ROLLBACK, both worlds): the committed tap, on the state.
     if (PayRollbackOn())
-    { state.pay_ledger.Push(state.turn_number, active, p.card.m_number, static_cast<int>(col), payledger::t_cur_pip_any); }
+    { state.pay_ledger.Push(state.TurnSeq(), active, p.card.m_number, static_cast<int>(col), payledger::t_cur_pip_any); }
     // CRACK FLAG: a pay-sac source (Treasure / Eldrazi Spawn) is SACRIFICED, not left tapped, and
     // the erase is deferred to CommitPaySacSacrifices -- which uses this flag to skip its whole
     // battlefield walk on the overwhelmingly common board that cracked nothing. Set here because
@@ -3677,8 +3677,8 @@ void NoteMain2StagerCast(GameState& state, const CardDefinition& def)
     if (!ResolveProvider(state).RestrictsMain2Casts()) { return; }
     // The FIRST main-2 stager owns the snapshot: a second Light Up later in the same main is itself
     // "played off" the first, and what it exiles is new either way.
-    if (state.m2_stage_turn == state.turn_number) { return; }
-    state.m2_stage_turn = state.turn_number;
+    if (state.m2_stage_turn == state.TurnSeq()) { return; }
+    state.m2_stage_turn = state.TurnSeq();
     state.m2_prestaged_mask[0] = 0;
     state.m2_prestaged_mask[1] = 0;
     auto mark = [&](const Card& c)

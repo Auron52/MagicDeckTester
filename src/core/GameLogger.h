@@ -30,6 +30,10 @@ public:
                    const std::map<std::string, std::vector<int>>& card_numbering);
 
     void StartPhase(int turn, const std::string& phase);
+    // EXTRA TURNS (Emrakul): `extra` = k when this phase is in the k-th extra turn taken (0 = a regular
+    // turn). Folded into the play digest and written as "extraTurn" ONLY when nonzero, so every game
+    // without an extra turn keeps its exact digest and log.
+    void StartPhase(int turn, const std::string& phase, int extra);
 
     // Called once per hand drawn during the mulligan process.
     // attempt=0 is the initial 7-card hand; each mulligan increments by 1.
@@ -227,6 +231,7 @@ private:
     struct PhaseEntry
     {
         int                 turn = 0;
+        int                 extra_turn = 0;   // k = the k-th extra turn taken (0 = regular); see StartPhase
         std::string         phase;
         std::vector<Action> actions;
         int                 player_life = 0;
@@ -965,12 +970,18 @@ std::string RevealDisposition(int card_num,
 // `text` is the human-readable line. Nulled by RevealLogPause during every search/rollout scope, so
 // only real play appends -> autonomous play is byte-identical (an external vector never touches
 // GameState). Inert unless set.
-struct PlayEvent { int turn; std::string kind; std::string text; };
+// `extra` (EXTRA TURNS, Emrakul): the extra turns taken so far in the real game when the event fired
+// (g_play_extra_turns_taken, stamped by GameEngine::RunTurnFrom at each turn start), so a serializer can
+// write turn_seq = turn + extra -- two turns can share a round (`turn`), and the per-turn replay specs
+// (--force-attackers off the combat events) key on turns TAKEN. 0 for every game without an extra turn,
+// whose JSON then carries no turn_seq (byte-identical).
+struct PlayEvent { int turn; std::string kind; std::string text; int extra = 0; };
 extern thread_local std::vector<PlayEvent>* g_play_event_sink;
+extern thread_local int g_play_extra_turns_taken;
 // Append a play event if the sink is live (real play only). Safe no-op otherwise.
 inline void EmitPlayEvent(int turn, const char* kind, std::string text)
 {
-    if (g_play_event_sink) { g_play_event_sink->push_back({ turn, kind, std::move(text) }); }
+    if (g_play_event_sink) { g_play_event_sink->push_back({ turn, kind, std::move(text), g_play_extra_turns_taken }); }
 }
 
 // Server-truth "dropped cast" sink for the play viewer (SERVER-TRUTH RESOLUTION). When a committed

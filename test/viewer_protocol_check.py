@@ -341,7 +341,7 @@ def recorded_attackers(decisions):
             # Attackers are "Name (power)" joined by ", "; split on '), ' because names themselves
             # can carry commas ("Oko, Thief of Crowns (3)"), then strip the power suffix.
             names = [re.sub(r" \(\d+\)?$", "", piece) for piece in body.split("), ")]
-            by_turn[ev.get("turn")] = names
+            by_turn[_tkey(ev)] = names
     return by_turn
 
 
@@ -371,7 +371,7 @@ def recorded_tap_prefs(decisions):
         dec = d.get("decision", {})
         if dec.get("type") != "main_phase":
             continue
-        if prev is not None and prev.get("turn") == dec.get("turn") \
+        if prev is not None and _tkey(prev) == _tkey(dec) \
                 and prev.get("phase") == dec.get("phase"):
             def field(fr, want_tapped):
                 return {p["idx"] for p in fr.get("me", {}).get("battlefield", [])
@@ -410,7 +410,7 @@ def recorded_tap_prefs(decisions):
                     ordinal = prev.get("main_ordinal")
                     if not isinstance(ordinal, int):
                         ordinal = -1
-                    key = (dec.get("turn"), dec.get("phase"), ordinal)
+                    key = (_tkey(dec), dec.get("phase"), ordinal)
                     prefs[key] = sorted(set(prefs.get(key, [])) | nums)
         prev = dec
     return prefs
@@ -483,9 +483,9 @@ def side_channel_args(decisions, pin_lines=False, ordmap=None):
         dec = d.get("decision", {})
         t = dec.get("type")
         if t == "firebreathe":
-            fb.append(f'{dec.get("turn")}:{int(d["chosen"])}')
+            fb.append(f'{_tkey(dec)}:{int(d["chosen"])}')
         elif t == "storage_hold":
-            sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
+            sh.append(f'{_tkey(dec)}:{dec.get("land_idx")}:{int(d["chosen"])}')
         if t == "main_phase" and d.get("cast_order"):
             _o = dec.get("main_ordinal")
             _o = om(_o) if isinstance(_o, int) and _o >= 0 else _o
@@ -674,6 +674,16 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, v
     return p.returncode, p.stdout + p.stderr
 
 
+
+def _tkey(d):
+    """THE TURN KEY: turns TAKEN. A decision / event carries `turn` (the ROUND -- extra turns do not
+    count toward the turn count, USER 2026-10-26) and, once an extra turn has been taken (Emrakul),
+    `turn_seq`. Anything meaning "the same turn" -- and the per-turn replay specs, which the engine keys
+    on turns taken -- uses this. Absent turn_seq (every reference without an extra turn): `turn`, so
+    those replay byte-identically."""
+    v = d.get("turn_seq") if isinstance(d, dict) else None
+    return v if v is not None else (d.get("turn") if isinstance(d, dict) else None)
+
 REQUIRED_DECISION_KEYS = {"decision_index", "type", "turn"}
 
 
@@ -692,7 +702,7 @@ def frame_ident(d):
     pick and tried to play it a phase early -- reported as a bogus ENUM-GAP ("recorded plan 'cast:
     Light Up the Stage' no longer enumerated", nplans 5->2, hand identical) or as play-drift on the
     decks with a real second main. They are different decisions; identity must say so."""
-    return (d.get("type"), d.get("turn"), d.get("phase"), d.get("source"))
+    return (d.get("type"), _tkey(d), d.get("phase"), d.get("source"))
 
 
 def plan_key(p):
@@ -1153,13 +1163,13 @@ def replicate_intent(dec, kept, ri):
     all, and for those the old engine's own default -- greedy max -- is the recorded intent. The
     caller distinguishes the two cases; this returns only what the reference actually says.
     """
-    turn = dec.get("turn")
+    turn = _tkey(dec)
     out = {}
     for rec in kept[ri:]:
         rd = rec.get("decision") or {}
         if rd.get("type") != "replicate":
             continue
-        if rd.get("turn") != turn:
+        if _tkey(rd) != turn:
             break                      # a later turn: this turn's dialogs are all behind us
         chosen = rec.get("chosen")
         if isinstance(chosen, int) and rd.get("source"):
@@ -1181,14 +1191,14 @@ def free_cast_intent(dec, kept, ri):
 
     Returns (pick, source) or None when the reference has nothing to say (caller falls back).
     """
-    turn = dec.get("turn")
+    turn = _tkey(dec)
     cands = dec.get("candidates") or []
     if not cands:
         return None
     by_name = {c.get("name"): c.get("index") for c in cands}
     for rec in kept[ri:]:
         rd = rec.get("decision") or {}
-        if rd.get("type") != "main_phase" or rd.get("turn") != turn:
+        if rd.get("type") != "main_phase" or _tkey(rd) != turn:
             continue
         if rd.get("phase") != "post_main":
             continue
@@ -1218,12 +1228,12 @@ def target_intent(dec, kept, ri):
 
     Returns (pick, source) or None when the reference says nothing (caller falls back).
     """
-    src, turn = dec.get("source"), dec.get("turn")
+    src, turn = dec.get("source"), _tkey(dec)
     if not src:
         return None
     for rec in reversed(kept[:ri]):                 # the plan this cast came from, most recent first
         rd = rec.get("decision") or {}
-        if rd.get("type") != "main_phase" or rd.get("turn") != turn:
+        if rd.get("type") != "main_phase" or _tkey(rd) != turn:
             continue
         chosen = rec.get("chosen")
         if not isinstance(chosen, int) or chosen < 0:
@@ -1414,7 +1424,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
         except (TypeError, ValueError):
             return False
         rank = {"pre_main": 0, "post_main": 1}
-        dt, ct = d.get("turn"), dec.get("turn")
+        dt, ct = _tkey(d), _tkey(dec)
         if not isinstance(dt, int) or not isinstance(ct, int):
             return False
         if dt < ct:
@@ -1534,7 +1544,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 # walk really did pin, so a frame whose count was NOT reproduced still stays loud.
                 rd_ = rec["decision"]
                 if rd_.get("type") == "replicate":
-                    return (rd_.get("turn"), rd_.get("source"), rec.get("chosen")) in honoured
+                    return (_tkey(rd_), rd_.get("source"), rec.get("chosen")) in honoured
                 return False
             j = next((k for k in range(ri + 1, len(kept))
                       if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
@@ -1580,7 +1590,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                         nm = next((c.get("name") for c in (dec.get("candidates") or [])
                                    if c.get("index") == pick), None)
                         if nm:
-                            freecast_done.setdefault(dec.get("turn"), []).append(nm)
+                            freecast_done.setdefault(_tkey(dec), []).append(nm)
                 else:
                     pick, src = engine_default(dec)
             elif dec.get("type") == "target":
@@ -1707,7 +1717,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                     # time, so the plan is legitimately gone here and passing loses nothing.
                     # Only when the plan is NOTHING BUT those casts (no land, no extras) --
                     # anything still unplayed falls through and stays loud.
-                    done = freecast_done.get(dec.get("turn"), [])
+                    done = freecast_done.get(_tkey(dec), [])
                     plan_casts = sorted(recorded.get("casts") or [])
                     if (plan_casts and recorded.get("land") in (None, "", "none")
                             and plan_casts == sorted(done)):
@@ -1790,7 +1800,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                     shifted.append(f"{frame_ident(dec)} {p}->{q}")
                 for a in ((cur_plans[q] if 0 <= q < len(cur_plans) else {}).get("actions") or []):
                     if "replicate_count" in a:
-                        honoured.add((dec.get("turn"), a.get("card"), a["replicate_count"]))
+                        honoured.add((_tkey(dec), a.get("card"), a["replicate_count"]))
                 resolved.append(q)
         else:
             # Auxiliary decision (scry / reorder / discard / target / ...). These carry an

@@ -156,10 +156,17 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
         if (CheckWinCondition(state))       { return state.turn_number; }
         if (state.ActivePlayer().HasLost()) { return -1; }
     }
-    while (state.turn_number < max_turns)
+    // An extra turn owed at the end of round max_turns is still played (it is part of that round:
+    // USER 2026-10-26, extra turns do not count toward the turn count). `pending_extra_turns` is 0 for
+    // every deck without an extra-turn card, so the guard is the old one there.
+    while (state.turn_number < max_turns || state.pending_extra_turns > 0)
     {
         if (state.player_lost_on_draw) { return -1; }
-        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return tnote(-1); }   // SetStopAfterTurn
+        // Extra-turn chain backstop (GameState::TurnSeqCapped; inert unless an extra turn was taken).
+        if (state.TurnSeqCapped(max_turns)) { return tnote(-1); }
+        // SetStopAfterTurn, in ROUNDS: an extra turn still owed after round `stop` is not played --
+        // a win there would only TIE a round-`stop` win, never beat it (the caller's use: a bound).
+        if (m_stop_after_turn > 0 && state.turn_number >= m_stop_after_turn) { return tnote(-1); }
         // Stop playing a game that has already been voided. The search bails out of its recursion as
         // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
         // running turns on rolled-back lines -- cheap per turn, yet unbounded in count, and every one
@@ -216,7 +223,16 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     if (from == ResumeAt::NewTurn)
     {
         AIEngine::LandDrawCensusBeginTurn();   // MTG_LANDDRAW_CENSUS (diagnostic only; no-op unless set)
-        ++state.turn_number;
+        // ++turn_number, or (a pending extra turn) ++extra_turns_taken with the round unchanged.
+        // Lockstep twin: SimulateEndAndStartNextTurn. Identical to ++turn_number for every other deck.
+        state.AdvanceTurnCounter();
+        g_play_extra_turns_taken = state.extra_turns_taken;   // play-event turn_seq stamp (GameLogger.h)
+        if (state.in_extra_turn)
+        {
+            EmitPlayEvent(state.turn_number, "extra_turn",
+                          "\xE2\x8F\xB3 Extra turn begins (turn " + std::to_string(state.turn_number)
+                          + ", extra " + std::to_string(static_cast<int>(state.extra_turns_taken)) + ")");
+        }
         UntapStep(state);
         UpkeepStep(state);   // includes UpkeepTail
     }
@@ -264,14 +280,20 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     AIEngine::LandDrawCensusEndTurn(state);
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
-    // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
-    // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
-    if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
-    // The passive opponent's notional draw for THEIR turn, which falls between ours (see
-    // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
-    // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
-    // TurnSolver::SimulateEndAndStartNextTurn.
-    opponentdeck::EndOfTurnDraw(state);
+    // EXTRA TURN NEXT (pending_extra_turns > 0): the opponent takes NO turn before it, so neither
+    // their upkeep nor their notional draw happens (CR 500.7: the extra turn is taken directly after
+    // this one). Lockstep twin: SimulateEndAndStartNextTurn. 0 for every deck without the card.
+    if (state.pending_extra_turns == 0)
+    {
+        // Asylum Visitor at THE OPPONENT'S upkeep (Vampires A1), which precedes their notional draw below.
+        // A no-op unless the opponent was dealt a hand and holds none. Lockstep twin: the rollout's.
+        if (!PerformOpponentUpkeepHellbentDraw(state)) { state.player_lost_on_draw = true; }
+        // The passive opponent's notional draw for THEIR turn, which falls between ours (see
+        // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
+        // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
+        // TurnSolver::SimulateEndAndStartNextTurn.
+        opponentdeck::EndOfTurnDraw(state);
+    }
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
     // (Brutal Cathar). Lockstep with SimulateEndAndStartNextTurn; no-op unless a daybound card set it.
     DayNightTurnBoundary(state);
@@ -387,8 +409,10 @@ void GameEngine::UntapStep(GameState& state)
     state.free_casts_available = 0;
 
     // Materialise any passive opponent creatures scheduled for this turn.
+    // Spawns are keyed on the ROUND and arrive at the regular turn's untap only: an extra turn is not
+    // a new round (the schedule would otherwise fire twice). Lockstep twin: the rollout's spawn site.
     int opp_index = 1 - state.active_player_index;
-    if (state.opponent_spawns)
+    if (state.opponent_spawns && !state.in_extra_turn)
     for (const OpponentSpawn& spawn : *state.opponent_spawns)
     {
         if (spawn.turn != state.turn_number) { continue; }
@@ -557,8 +581,9 @@ void GameEngine::DrawStep(GameState& state)
 {
     state.step = Step::Draw;
 
-    // Player on the play skips their first draw step (CR 103.8a).
-    if (state.on_the_play && state.turn_number == 1)
+    // Player on the play skips their first draw step (CR 103.8a) -- the first TURN taken, so an
+    // extra turn taken in round 1 draws (TurnSeq == turn_number for every other deck).
+    if (state.on_the_play && state.TurnSeq() == 1)
     {
         ResolveStack(state);
         return;
@@ -580,7 +605,7 @@ void GameEngine::DrawStep(GameState& state)
         std::vector<GameLogger::PermSnapshot> bf, obf;
         std::vector<int> hand, gy, staged;
         CollectBoardState(state, bf, hand, obf, gy, staged);
-        m_logger->StartPhase(state.turn_number, "DRAW");
+        m_logger->StartPhase(state.turn_number, "DRAW", state.in_extra_turn ? state.extra_turns_taken : 0);
         m_logger->LogDraw(drawn.m_number, drawn.m_name);
         hand.push_back(drawn.m_number);
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged, PhaseLibraryTop(state));
@@ -610,7 +635,7 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 
     if (m_logger)
     {
-        m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2");
+        m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2", state.in_extra_turn ? state.extra_turns_taken : 0);
     }
 
     // Initial cast pass. The AI resolves each cast before the next (we don't model
@@ -754,7 +779,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     std::vector<Permanent*> declared = m_ai.DeclareAttackers(state);
     ResolveStack(state);
 
-    if (m_logger) { m_logger->StartPhase(state.turn_number, "COMBAT"); }
+    if (m_logger) { m_logger->StartPhase(state.turn_number, "COMBAT", state.in_extra_turn ? state.extra_turns_taken : 0); }
 
     state.step = Step::CombatDamage;
     Player& opp = state.Opponent();
@@ -830,6 +855,9 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Adeline's Human are pumped too (CR 603.3b -- the player orders simultaneous attack triggers,
     // and tokens-first is strictly dominant here). Mirrors TurnSolver::SimulateCombat. Gated inert.
     ApplyBattleCry(state, state.active_player_index, atk_idx);
+    // Annihilator (Emrakul, Ulamog the Infinite Gyre): the defending player sacrifices N permanents.
+    // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Deck-gated inert.
+    ApplyAnnihilator(state, state.active_player_index, atk_idx);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
@@ -1003,31 +1031,36 @@ void GameEngine::CleanupStep(GameState& state)
     // Discard down to maximum hand size (7 unless unlimited by a permanent).
     if (!unlimited_hand && ap.hand.size() > 7 && m_logger)
     {
-        m_logger->StartPhase(state.turn_number, "CLEANUP");
+        m_logger->StartPhase(state.turn_number, "CLEANUP", state.in_extra_turn ? state.extra_turns_taken : 0);
     }
     // MADNESS (Vampires A1): a madness card shed here is exiled and queued by the shared hook, and its
     // trigger resolves after the CR 514.2 reset below (lockstep twin: SimulateEndAndStartNextTurn).
     std::vector<MadnessPending> madness_q;
-    while (!unlimited_hand && ap.hand.size() > 7)
     {
-        Card* discard = m_ai.ChooseDiscard(state);
-        // Human play: let the player pick WHICH card to discard (one per over-limit card). The
-        // heuristic pick is the prepopulated default. Consulted only here in the real cleanup step
-        // (search rollouts never reach GameEngine::CleanupStep), so autonomous play is unchanged.
-        if (g_play_discard_chooser && !ap.hand.empty())
+        // The discard to hand size is ONE simultaneous event: a graveyard-shuffle trigger it fires (Emrakul)
+        // resolves after the whole discard (GyShuffleBatch; lockstep with SimulateEndAndStartNextTurn).
+        GyShuffleBatch _gyb(state);
+        while (!unlimited_hand && ap.hand.size() > 7)
         {
-            int heur = static_cast<int>(discard - &ap.hand[0]);
-            if (heur < 0 || heur >= static_cast<int>(ap.hand.size())) { heur = 0; }
-            std::vector<int> idxs(ap.hand.size());
-            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { idxs[i] = i; }
-            int chosen = (*g_play_discard_chooser)(state, state.active_player_index, idxs, heur);
-            if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { discard = &ap.hand[chosen]; }
+            Card* discard = m_ai.ChooseDiscard(state);
+            // Human play: let the player pick WHICH card to discard (one per over-limit card). The
+            // heuristic pick is the prepopulated default. Consulted only here in the real cleanup step
+            // (search rollouts never reach GameEngine::CleanupStep), so autonomous play is unchanged.
+            if (g_play_discard_chooser && !ap.hand.empty())
+            {
+                int heur = static_cast<int>(discard - &ap.hand[0]);
+                if (heur < 0 || heur >= static_cast<int>(ap.hand.size())) { heur = 0; }
+                std::vector<int> idxs(ap.hand.size());
+                for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { idxs[i] = i; }
+                int chosen = (*g_play_discard_chooser)(state, state.active_player_index, idxs, heur);
+                if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { discard = &ap.hand[chosen]; }
+            }
+            if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
+            // THE SHARED DISCARD HOOK: madness exile + queue, else Progenitus (shuffled into its owner's
+            // library instead of the graveyard -- a replacement), else the graveyard.
+            DiscardCardFromHand(state, state.active_player_index, static_cast<int>(discard - ap.hand.data()),
+                                &madness_q, "cleanup");
         }
-        if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
-        // THE SHARED DISCARD HOOK: madness exile + queue, else Progenitus (shuffled into its owner's
-        // library instead of the graveyard -- a replacement), else the graveyard.
-        DiscardCardFromHand(state, state.active_player_index, static_cast<int>(discard - ap.hand.data()),
-                            &madness_q, "cleanup");
     }
     if (m_logger && m_logger->InPhase())
     {

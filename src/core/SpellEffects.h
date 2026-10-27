@@ -1865,6 +1865,74 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// ---- GRAVEYARD-SHUFFLE TRIGGER (Emrakul, the Aeons Torn; Ulamog, the Infinite Gyre) -----------------
+// "When <this> is put into a graveyard from anywhere, its owner shuffles their graveyard into their
+// library." CardParams::put_into_graveyard_shuffles_graveyard. A TRIGGER (CR 603.6a), so the card is in
+// the graveyard first and the WHOLE graveyard, the card included, goes into the library; and it resolves
+// AFTER the event that moved it -- a simultaneous event (the cleanup discard to seven, a legend-rule SBA
+// batch) is wrapped in a GyShuffleBatch, so the shuffle takes every card that moved with it, and two
+// triggers from one event shuffle twice (the second an empty-graveyard shuffle, still performed).
+// THE ENTRY HOOK is FireGraveyardEntryTriggers, called right after the push at the graveyard-entry sites:
+// DiscardCardFromHand (every real discard, both worlds) and OnCreatureDies (every death: legend rule,
+// destroy, sacrifice, SBA). NOT hooked (disclosed): the stack -> graveyard move (EffectHandler::
+// MoveToGraveyard / apply_one's instant-sorcery line -- a creature spell reaches it only when countered,
+// and the two carriers are uncounterable (Emrakul) or Remanded to HAND (Gyre)), and library -> graveyard
+// mills / surveils (no carrier deck mills itself). A future carrier that can take those routes must add
+// the call there. Shuffled through ShuffleAfterSearch (the search-salted CRN shuffle), so the search
+// cannot foresee the post-shuffle order. Token cards are not moved into the library (a token in a
+// graveyard ceases to exist, CR 111.7). Gated on GameState::deck_has_gy_shuffle: one bool test per
+// graveyard entry for every other deck.
+inline void PerformGraveyardShuffle(GameState& state, int owner)
+{
+    Player& pl = state.players[owner];
+    int moved = 0;
+    for (Card& c : pl.graveyard)
+    {
+        if (c.m_number >= GameState::kFirstTokenNumber) { continue; }   // a token ceases to exist
+        pl.library.push_back(std::move(c));
+        ++moved;
+    }
+    pl.graveyard.clear();
+    ShuffleAfterSearch(state, owner);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x94\x80 graveyard shuffled into the library (" + std::to_string(moved)
+                      + " card" + (moved == 1 ? "" : "s") + ")");
+    }
+}
+inline void FireGraveyardEntryTriggers(GameState& state, int owner, const Card& c)
+{
+    if (!state.deck_has_gy_shuffle) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr || !d->params.put_into_graveyard_shuffles_graveyard) { return; }
+    if (owner < 0 || owner > 1) { return; }
+    if (state.gy_shuffle_batch > 0)
+    {
+        if (state.pending_gy_shuffles[owner] < 255) { ++state.pending_gy_shuffles[owner]; }
+        return;
+    }
+    PerformGraveyardShuffle(state, owner);
+}
+struct GyShuffleBatch
+{
+    GameState& s;
+    const bool on;
+    explicit GyShuffleBatch(GameState& st) : s(st), on(st.deck_has_gy_shuffle)
+    { if (on) { ++s.gy_shuffle_batch; } }
+    ~GyShuffleBatch()
+    {
+        if (!on) { return; }
+        if (--s.gy_shuffle_batch != 0) { return; }
+        for (int o = 0; o < 2; ++o)
+        {
+            while (s.pending_gy_shuffles[o] > 0) { --s.pending_gy_shuffles[o]; PerformGraveyardShuffle(s, o); }
+        }
+    }
+    GyShuffleBatch(const GyShuffleBatch&) = delete;
+    GyShuffleBatch& operator=(const GyShuffleBatch&) = delete;
+};
+
 // ---- LAND SEARCH: the pin + the forward declarations (bodies in src/core/LandSearch.h) ----------
 // Declared this early because the fire sites are spread through this header -- the instant/sorcery
 // resolution (EffectHandler / apply_one), the own-ETB cascade (Primeval Titan), the off-suspend cast
@@ -7714,7 +7782,7 @@ struct ScriptedLandfallTarget
 // memo key while live (TurnSolver's ACTIVE SCRIPTED PINS block), since a live pin steers resolution.
 inline int LandfallTargetPinFor(const GameState& state)
 {
-    return g_landfall_target_pin_turn == state.turn_number ? g_landfall_target_pin : -1;
+    return g_landfall_target_pin_turn == state.TurnSeq() ? g_landfall_target_pin : -1;
 }
 
 // SIMULTANEOUS LAND ENTRY -- the TOKEN FLOOR of the event (Scute Swarm, 2026-10-23). A put of several
@@ -10956,6 +11024,9 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             }
         }
     }
+    // "Put into a graveyard from anywhere -> its owner shuffles their GRAVEYARD into their library"
+    // (Emrakul / Ulamog the Infinite Gyre): the death site pushed the card first. Deck-gated (one bool).
+    FireGraveyardEntryTriggers(state, dead_controller, dead_card);
 
     // Persist (Kitchen Finks / Murderous Redcap): "When this creature dies, if it had no -1/-1
     // counters on it, return it to the battlefield under its owner's control with a -1/-1 counter
@@ -11054,7 +11125,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             if (ok)
             {
                 c.m_is_staged     = true;
-                c.m_staged_expiry = state.turn_number + (wp.dies_impulse_expiry_next_turn ? 1 : 0);
+                c.m_staged_expiry = state.TurnSeq() + (wp.dies_impulse_expiry_next_turn ? 1 : 0);
                 EnterHand(state, dead_controller, std::move(c), HandEntryReason::Stage);
             }
         }
@@ -12911,7 +12982,7 @@ inline int GyReturnRandomPick(const GameState& state, const std::vector<Card>& g
         return x.m_name.str() < y.m_name.str();
     });
     uint64_t mix = static_cast<uint64_t>(state.game_seed) * 0x9E3779B97F4A7C15ull
-                 + (static_cast<uint64_t>(state.turn_number) + 1) * 0xD1B54A32D192ED03ull
+                 + (static_cast<uint64_t>(state.TurnSeq()) + 1) * 0xD1B54A32D192ED03ull
                  + static_cast<uint64_t>(elig.size()) * 0xCA5A826395121157ull
                  + 0x46E9C4AFull;   // domain tag: a stream distinct from Gamble's
     mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
@@ -13894,6 +13965,283 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     (void)source_id;
 }
 
+// ---- TARGETED CAST TRIGGERS (Ulamog, the Ceaseless Hunger: exile two; Ulamog, the Infinite Gyre: ----
+// destroy one). CardParams::cast_trigger_exile_target_permanents / cast_trigger_destroy_target_permanents.
+// "When you cast this spell, exile two target permanents" / "destroy target permanent": MANDATORY, and the
+// targets are chosen as the trigger is PUT ON THE STACK (CR 603.3d -> 601.2c), from every permanent on the
+// battlefield, either side (CR 115.1: "target permanent" has no controller qualifier, so OUR permanents
+// are legal -- and FORCED when the opponent has too few); the same object cannot be chosen twice for one
+// "target" word (CR 115.3), so N targets are N DISTINCT permanents; fewer than N legal targets -> the
+// trigger is removed from the stack (603.3d). The spell itself is on the stack, not a permanent, so it is
+// never a target. Shroud (equip_grants_shroud) is honoured; Emrakul's protection is from colored SPELLS and
+// these are colorless abilities, so it is a legal target.
+//
+//   * ONE SHARED CHOOSER (ChooseCastTriggerTargets), called by the executor's push site
+//     (EffectHandler::PushCastTriggers) and the rollout's inline cast block (apply_one) -- lockstep: in
+//     both worlds nothing happens between the push and the resolution in a goldfish, so the two pick the
+//     same targets on the same board.
+//   * BRANCHING: the legal set is identity-folded into classes (CastTriggerTargetFoldKey -- the Phylath
+//     LandfallTargetFoldKey "identical in all state" fold, plus the controller); the provider ORDERS the
+//     class representatives (DecisionProvider::CastTriggerTargetOrder -- order only, never a prune: an
+//     opponent token first by default, but exiling our own land can be right); the OPTIONS are the
+//     multisets of N classes respecting each class's size, in lexicographic provider order (two identical
+//     Islands are ONE option); and the SEARCH chooses the option rank (Plan::cast_trigger_target_choice
+//     -> ScriptedCastTriggerTarget, a whole-turn policy keyed on GameState::TurnSeq, clamped). Rank 0 is
+//     the default for every path with no plan (the d0 runner, rollout turns beyond the horizon). NOT the
+//     auto-resolved EtbDestroyTargetPick shape: that is a provider's top candidate, unbranched.
+//   * HUMAN PLAY re-asks over the FULL legal set (never the folded list) through the shared board-click
+//     `target` decision (g_play_loyalty_chooser), one pick at a time for N targets (the Terastodon
+//     "target n of K" shape), each pick preselected to the engine's option; a forced pick (legal == picks
+//     left) is not prompted. Nulled by RevealLogPause, so autonomous play is untouched.
+//   * RESOLUTION (ResolveCastTriggerTargets) re-checks each target (CR 608.2b): one that left is skipped,
+//     the rest still happen. Exile ignores indestructible and is not a graveyard (no Emrakul shuffle;
+//     LTB triggers fire); destroy skips an indestructible target (legal, no effect) and a destroyed
+//     creature dies through OnCreatureDies (+ FireOppCreatureDies for the opponent's).
+inline thread_local int g_cast_trigger_target_pin      = -1;
+inline thread_local int g_cast_trigger_target_pin_turn = -1;
+struct ScriptedCastTriggerTarget
+{
+    int saved, saved_turn;
+    bool active;
+    ScriptedCastTriggerTarget(int k, int turn_seq)
+        : saved(g_cast_trigger_target_pin), saved_turn(g_cast_trigger_target_pin_turn), active(k >= 0)
+    {
+        if (active) { g_cast_trigger_target_pin = k; g_cast_trigger_target_pin_turn = turn_seq; }
+    }
+    ~ScriptedCastTriggerTarget()
+    { if (active) { g_cast_trigger_target_pin = saved; g_cast_trigger_target_pin_turn = saved_turn; } }
+    ScriptedCastTriggerTarget(const ScriptedCastTriggerTarget&) = delete;
+    ScriptedCastTriggerTarget& operator=(const ScriptedCastTriggerTarget&) = delete;
+};
+// The policy live for THIS turn, or -1 (the provider's front). Keyed on TurnSeq: a pin from the regular
+// turn of a round is stale inside that round's extra turn.
+inline int CastTriggerTargetPinFor(const GameState& state)
+{ return g_cast_trigger_target_pin_turn == state.TurnSeq() ? g_cast_trigger_target_pin : -1; }
+
+// How many N-target options the classes (sizes `counts`) give: multisets of size n with each class used at
+// most counts[i] times. Exact; used by the axis to size its width.
+inline long long CastTriggerOptionCount(const std::vector<int>& counts, int n, std::size_t from = 0)
+{
+    if (n == 0) { return 1; }
+    long long total = 0;
+    for (std::size_t i = from; i < counts.size(); ++i)
+    {
+        for (int take = 1; take <= std::min(n, counts[i]); ++take)
+        { total += CastTriggerOptionCount(counts, n - take, i + 1); }
+    }
+    return total;
+}
+// The identity fold for a cast-trigger target (sound): LandfallTargetFoldKey's "identical in all state"
+// key, plus the CONTROLLER (that key mixes the owner only). false -> a singleton class.
+inline bool CastTriggerTargetFoldKey(const GameState& state, const Permanent& p, std::uint64_t& key,
+                                     const std::vector<int>* linked)
+{
+    if (!LandfallTargetFoldKey(state, p, key, linked)) { return false; }
+    key ^= 0xC7A6E7ull * (static_cast<std::uint64_t>(p.controller_index) + 1);
+    key *= 0x9E3779B97F4A7C15ull;
+    return true;
+}
+// The legal set, folded and ORDERED: `classes[c]` = the battlefield indices of class c (ascending), the
+// classes in the provider's order.
+inline void CastTriggerTargetClasses(const GameState& state, int controller, bool destroy,
+                                     std::vector<std::vector<int>>& classes)
+{
+    classes.clear();
+    std::vector<int> linked;
+    LandfallTargetLinks(state, linked);
+    std::vector<std::uint64_t> keys;   // parallel to classes; 0 = singleton
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+        std::uint64_t k = 0;
+        const bool foldable = CastTriggerTargetFoldKey(state, q, k, &linked);
+        bool placed = false;
+        if (foldable)
+        {
+            for (std::size_t c = 0; c < classes.size(); ++c)
+            { if (keys[c] == k && k != 0) { classes[c].push_back(i); placed = true; break; } }
+        }
+        if (!placed) { classes.push_back({ i }); keys.push_back(foldable ? k : 0); }
+    }
+    if (classes.size() < 2) { return; }
+    std::vector<int> reps;
+    reps.reserve(classes.size());
+    for (const auto& c : classes) { reps.push_back(c.front()); }
+    ResolveProvider(state).CastTriggerTargetOrder(state, controller, destroy, reps);
+    std::vector<std::vector<int>> ordered;
+    ordered.reserve(classes.size());
+    for (int r : reps)
+    {
+        for (const auto& c : classes) { if (c.front() == r) { ordered.push_back(c); break; } }
+    }
+    if (ordered.size() == classes.size()) { classes.swap(ordered); }   // a provider must not add/drop
+}
+// The option of rank `rank` (clamped), as battlefield indices; empty when fewer than n legal targets.
+inline std::vector<int> CastTriggerTargetOption(const std::vector<std::vector<int>>& classes, int n, int rank)
+{
+    std::vector<int> counts;
+    for (const auto& c : classes) { counts.push_back(static_cast<int>(c.size())); }
+    const long long total = CastTriggerOptionCount(counts, n);
+    if (n <= 0 || total <= 0) { return {}; }
+    long long r = std::max(0, rank);
+    if (r >= total) { r = total - 1; }
+    // Walk the lexicographic order: at class i, taking `take` members (largest share first is NOT the
+    // order -- the order is "smallest next class index first", i.e. take as many of the FRONT class as the
+    // multiset allows before moving on, which makes option 0 the front-loaded pick).
+    std::vector<int> out;
+    int left = n;
+    std::size_t from = 0;
+    while (left > 0)
+    {
+        bool advanced = false;
+        for (std::size_t i = from; i < classes.size() && !advanced; ++i)
+        {
+            for (int take = std::min(left, counts[i]); take >= 1; --take)
+            {
+                const long long block = CastTriggerOptionCount(counts, left - take, i + 1);
+                if (r < block)
+                {
+                    for (int t = 0; t < take; ++t) { out.push_back(classes[i][static_cast<std::size_t>(t)]); }
+                    left -= take;
+                    from = i + 1;
+                    advanced = true;
+                    break;
+                }
+                r -= block;
+            }
+        }
+        if (!advanced) { return {}; }   // unreachable for r < total
+    }
+    return out;
+}
+// THE SHARED CHOOSER. Returns the chosen permanents' m_numbers (n of them), or empty = the trigger is
+// removed (fewer than n legal targets). `src_name` / `destroy` word the human prompt.
+inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
+                                                 const std::string& src_name)
+{
+    std::vector<std::vector<int>> classes;
+    CastTriggerTargetClasses(state, controller, destroy, classes);
+    std::size_t legal_n = 0;
+    for (const auto& c : classes) { legal_n += c.size(); }
+    if (n <= 0 || legal_n < static_cast<std::size_t>(n))
+    {
+        if (n > 0 && g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src_name + ": fewer than " + std::to_string(n)
+                          + " legal targets -- the trigger is removed");
+        }
+        return {};
+    }
+    std::vector<int> pick = CastTriggerTargetOption(classes, n, CastTriggerTargetPinFor(state));
+    if (static_cast<int>(pick.size()) != n) { return {}; }
+    // HUMAN PLAY: one board-click per target over the FULL legal set (every permanent not yet picked).
+    if (g_play_loyalty_chooser)
+    {
+        std::vector<int> all;
+        for (const auto& c : classes) { all.insert(all.end(), c.begin(), c.end()); }
+        std::sort(all.begin(), all.end());
+        std::vector<int> chosen;
+        for (int j = 0; j < n; ++j)
+        {
+            std::vector<int> legal;
+            for (int i : all) { if (std::find(chosen.begin(), chosen.end(), i) == chosen.end()) { legal.push_back(i); } }
+            const int left = n - j;
+            int dflt_idx = 0;
+            {
+                // The engine's option, minus what the human already took: its first remaining member.
+                int want = -1;
+                for (int i : pick) { if (std::find(chosen.begin(), chosen.end(), i) == chosen.end()) { want = i; break; } }
+                for (int k = 0; k < static_cast<int>(legal.size()); ++k) { if (legal[k] == want) { dflt_idx = k; break; } }
+            }
+            int c = dflt_idx;
+            if (static_cast<int>(legal.size()) > left)   // a forced pick is not a choice (CR 601.2c)
+            {
+                const std::string what = std::string(destroy ? "destroyed" : "exiled")
+                    + " (target permanent " + std::to_string(j + 1) + " of " + std::to_string(n) + " -- mandatory)";
+                const int got = (*g_play_loyalty_chooser)(state, controller, src_name, what, legal, dflt_idx);
+                if (got >= 0 && got < static_cast<int>(legal.size())) { c = got; }
+            }
+            chosen.push_back(legal[static_cast<std::size_t>(c)]);
+        }
+        pick = chosen;
+    }
+    std::vector<int> nums;
+    for (int i : pick) { nums.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    return nums;
+}
+inline int SweepOrphanedAuras(GameState& state);   // defined below
+inline void ResolveCastTriggerTargets(GameState& state, int controller, const std::string& src_name,
+                                      const std::vector<int>& numbers, bool destroy)
+{
+    GyShuffleBatch _gyb(state);   // simultaneous destroys: an Emrakul's graveyard shuffle waits for both
+    for (int num : numbers)
+    {
+        int bi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { bi = i; break; } }
+        if (bi < 0) { continue; }   // CR 608.2b: the target left -- skipped, the rest still happen
+        Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        const Card dead = q.card;
+        const int  dead_ctrl = q.controller_index;
+        const int  dead_owner = q.owner_index;
+        const bool was_creature = q.card.IsCreature();
+        // A scheduled opponent spawn is a token too (its Permanent does not carry is_token).
+        const bool was_token = q.is_token || q.card.m_number >= GameState::kFirstOppSpawnNumber;
+        const int  m1 = MinusCountersOn(q);
+        if (destroy && q.card.HasKeyword(Keyword::Indestructible))
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              src_name + ": " + dead.m_name.str() + " is indestructible -- nothing happens");
+            }
+            continue;
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          std::string(destroy ? "\xF0\x9F\x92\x80 " : "\xF0\x9F\x8C\x8C ") + src_name
+                          + (destroy ? ": destroys " : ": exiles ")
+                          + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
+                          + dead.m_name.str());
+        }
+        if (destroy) { state.players[dead_owner].graveyard.push_back(dead); }
+        else if (!was_token) { state.exile.push_back(dead); }   // a token ceases to exist (CR 111.7)
+        state.battlefield.erase(state.battlefield.begin() + bi);
+        for (Permanent& o : state.battlefield)
+        {
+            if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+            if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+        }
+        if (destroy && was_creature)
+        {
+            OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+            if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
+        }
+        else
+        {
+            if (destroy) { FireGraveyardEntryTriggers(state, dead_owner, dead); }
+            FireLeavesBattlefieldTriggers(state, dead_ctrl, dead);
+            RefreshDevotionCreatures(state);
+            RefreshReconfigureCreatures(state);
+        }
+    }
+    SweepOrphanedAuras(state);   // an Aura on an exiled / destroyed host (CR 704.5m)
+}
+// "When you cast this spell, take an extra turn after this one" (Emrakul): resolving the trigger.
+inline void ResolveCastTriggerExtraTurn(GameState& state, const std::string& src_name)
+{
+    if (state.pending_extra_turns < 255) { ++state.pending_extra_turns; }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xE2\x8F\xB3 " + src_name + ": take an extra turn after this one ("
+                      + std::to_string(static_cast<int>(state.pending_extra_turns)) + " pending)");
+    }
+}
+
 // Foundation Breaker: "When this creature enters, you MAY destroy target artifact or enchantment."
 // The OPTIONAL twin of the mandatory resolver above: same legal set over BOTH sides (an artifact or
 // an enchantment -- Metallic Mimic is an artifact creature, the source itself is neither), but the
@@ -14678,7 +15026,7 @@ inline bool ApplyRevealTopDeploy(GameState& state, int controller)
 // for -- so it stays out rather than grow the change. Stamping it there is the follow-up.
 inline const CardDefinition* UpkeepRevealTopCandidate(const GameState& state, int controller)
 {
-    if (state.top_stacked_turn != state.turn_number - 1) { return nullptr; }
+    if (state.top_stacked_turn != state.TurnSeq() - 1) { return nullptr; }
     if (state.top_stacked_card_number < 0) { return nullptr; }
     if (controller < 0 || controller >= static_cast<int>(state.players.size())) { return nullptr; }
     const Player& ap = state.players[controller];
@@ -14872,7 +15220,7 @@ inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     int src = -1, best = -1, best_yield = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -15060,6 +15408,7 @@ inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int han
     }
     if (MaybeReplaceGraveyardWithLibraryShuffle(state, controller, c)) { return DiscardDest::LibraryShuffle; }
     pl.graveyard.push_back(c);
+    FireGraveyardEntryTriggers(state, controller, c);   // Emrakul's graveyard shuffle (deck-gated)
     return DiscardDest::Graveyard;
 }
 
@@ -17912,6 +18261,61 @@ inline void ApplyBattleCry(GameState& state, int controller,
     }
 }
 
+// ---- ANNIHILATOR N (CR 702.86; Emrakul 6, Ulamog the Infinite Gyre 4) ---------------------------
+// "Whenever this creature attacks, defending player sacrifices N permanents." Applied at declare
+// attackers in BOTH worlds (GameEngine::CombatPhase / TurnSolver::SimulateCombat, right after battle
+// cry -- lockstep, ONE shared helper). The sacrifice is the DEFENDING player's choice, not ours, so a
+// fixed deterministic rule is legitimate under the no-greedy rule (it is not a decision of the player
+// the search plays): the passive opponent sacrifices in battlefield order, oldest first. Its permanents
+// are the scheduled vanilla spawns (PopulateOpponentSpawns, 8 of 10 games), each an equally good future
+// target for our Ulamog triggers, so the rule cannot bias our play. Each sacrificed creature dies
+// through SacrificePermanentAt (graveyard, death watchers) + FireOppCreatureDies. `attacker_indices` is
+// REMAPPED in place across the erases (a spawn sits at a lower battlefield index than a creature we
+// cast later). Gated on GameState::deck_has_annihilator: one bool test per combat elsewhere.
+inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>& attacker_indices)
+{
+    if (!state.deck_has_annihilator || attacker_indices.empty()) { return; }
+    int total = 0;
+    std::string names;
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& a = state.battlefield[static_cast<std::size_t>(idx)];
+        if (a.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d == nullptr || d->params.annihilator <= 0) { continue; }
+        total += d->params.annihilator;
+        if (!names.empty()) { names += ", "; }
+        names += a.card.m_name.str();
+    }
+    if (total <= 0) { return; }
+    const int defender = 1 - controller;
+    int sacrificed = 0;
+    std::string gone;
+    for (int k = 0; k < total; ++k)
+    {
+        int victim = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].controller_index == defender) { victim = i; break; }
+        }
+        if (victim < 0) { break; }   // fewer permanents than N: they sacrifice all they have
+        const bool was_creature = state.battlefield[static_cast<std::size_t>(victim)].card.IsCreature();
+        if (!gone.empty()) { gone += ", "; }
+        gone += state.battlefield[static_cast<std::size_t>(victim)].card.m_name.str();
+        SacrificePermanentAt(state, defender, victim);
+        for (int& ai : attacker_indices) { if (ai > victim) { --ai; } }
+        if (was_creature) { FireOppCreatureDies(state, defender); }
+        ++sacrificed;
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x8C\x80 annihilator " + std::to_string(total) + " (" + names + "): the opponent sacrifices "
+                      + (sacrificed == 0 ? std::string("nothing (no permanents)") : gone));
+    }
+}
+
 // ---- Two-Headed Hellkite: "Whenever this creature attacks, draw two cards." ---------------------
 // Self-only attack-trigger draw (CardParams::attack_draw_cards), applied once per attacking copy at
 // declare-attackers alongside ApplyAttackSelfPumps, in BOTH worlds (GameEngine::CombatPhase executor
@@ -18331,7 +18735,7 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
             if (k != best) { state.exile.push_back(examined[k]); continue; }
             Card c = examined[k];
             c.m_is_staged     = true;
-            c.m_staged_expiry = state.turn_number
+            c.m_staged_expiry = state.TurnSeq()
                               + (d->params.attack_trigger_impulse_expiry_next_turn ? 1 : 0);
             // m_impulse_no_land deliberately NOT set: the card says "you may PLAY that card".
             ap.hand.push_back(std::move(c));
@@ -19164,7 +19568,7 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
         { return; }
         SuspendedCard sc;
         sc.card        = *it;
-        sc.arrive_turn = state.turn_number + d->params.suspend_time_counters;
+        sc.arrive_turn = state.TurnSeq() + d->params.suspend_time_counters;
         pl.suspended_cards.push_back(std::move(sc));
         if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
         {
@@ -19431,7 +19835,7 @@ inline void ProcessSuspendArrivals(GameState& state, int controller)
     pl.suspended_cards.clear();
     for (SuspendedCard& sc : snap)
     {
-        if (sc.arrive_turn <= state.turn_number) { CastOffSuspend(state, controller, sc.card); }
+        if (sc.arrive_turn <= state.TurnSeq()) { CastOffSuspend(state, controller, sc.card); }
         else                                     { remaining.push_back(std::move(sc)); }
     }
     // Re-attach anything an arrival's cascade may have added, plus the not-yet-arrived remainder.
@@ -19644,7 +20048,7 @@ inline void UntapSnowPermanents(GameState& state, int controller)
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     const bool ice_grants = AnyIceCounters(state) && IceGrantsSnow(state);
     for (Permanent& p : state.battlefield)
     {
@@ -19662,7 +20066,7 @@ inline void UntapSnowPermanents(GameState& state, int controller)
 // cannot attack); an animated land is a creature. An untap EFFECT for the payment-rollback ledger.
 inline void UntapOwnCreaturesForCombat(GameState& state, int controller)
 {
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || !p.tapped) { continue; }
@@ -19747,7 +20151,7 @@ inline bool UntapSecondMainLive(const GameState& state)
 inline bool DigSecondMainLive(const GameState& state)
 {
     if (!state.deck_has_attack_dig_hand) { return false; }   // deck constant: no cost for other decks
-    if (state.combat_hand_turn != static_cast<std::int16_t>(state.turn_number)
+    if (state.combat_hand_turn != static_cast<std::int16_t>(state.TurnSeq())
         || state.combat_hand[0] == 0) { return false; }
     // heurarm-slotted rather than a bare `static const bool`, and that is required rather than
     // stylistic: the A/B that prices this must run BOTH arms inside ONE pooled `mtg --batch`, which
@@ -20972,6 +21376,8 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     SweepOrphanedAuras(state);
     RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
     RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
+    // One SBA batch: every graveyard-shuffle trigger it fires resolves after ALL the deaths (inert elsewhere).
+    GyShuffleBatch _gyb(state);
     for (const DoomedDeath& dd : doomed_creatures)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
 }
@@ -22882,7 +23288,7 @@ inline void StageTopLibraryCard(GameState& state)
     Card c = ap.library.front();
     ap.library.erase(ap.library.begin());
     c.m_is_staged     = true;
-    c.m_staged_expiry = state.turn_number + 1;
+    c.m_staged_expiry = state.TurnSeq() + 1;
     EnterHand(state, state.active_player_index, std::move(c), HandEntryReason::Stage);
 }
 
@@ -23224,7 +23630,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
         mvs.push_back(d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue());
         if (capture) { flip_nums.push_back(c.m_number); flip_names.push_back(c.m_name); }
         c.m_is_staged     = true;
-        c.m_staged_expiry = state.turn_number + 1;
+        c.m_staged_expiry = state.TurnSeq() + 1;
         EnterHand(state, controller, std::move(c), HandEntryReason::Stage);
     }
 
@@ -23287,7 +23693,7 @@ inline void UntapManaSources(GameState& state, int count)
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     const int active = state.active_player_index;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()) && count > 0; ++i)
     {
@@ -23551,7 +23957,7 @@ inline void RitualUntapSources(GameState& state, int count)
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     if (count <= 0) { return; }
     const int active = state.active_player_index;
     std::vector<std::pair<int, int>> tapped;   // (per-tap output, battlefield index)
@@ -27130,7 +27536,7 @@ inline int SpendSelfUntapRepeats(GameState& state, int controller, int source_id
             state.battlefield[static_cast<std::size_t>(si)].tapped = was_tapped;
             break;
         }
-        if (was_tapped) { state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index); }
+        if (was_tapped) { state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index); }
         ApplyPermAbility(state, controller, source_id, mode);
         ++fired;
     }
@@ -28471,7 +28877,7 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
 {
     // Mana-payment rollback (src/ai/PayRollback.h): an untap EFFECT fired this turn, so a
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
-    state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
     if (count <= 0) { return; }
     // Computed ONCE per untap, not per land: the sink is a property of the board, and the scan is
     // O(battlefield). HumanPlayActive() first, so an autonomous game pays a single bool. See the
@@ -32000,7 +32406,7 @@ inline int ApplyActivatedUntap(GameState& state, int ctrl, int shape, int source
         ti = find_num(target_id, false);
         if (ti < 0) { break; }
         Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
-        state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+        state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
         t.tapped = false;
         if (shape == kUntapPumpTarget)
         {
@@ -32883,7 +33289,7 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
             if (sd && sd->params.self_untap_cost && pay_from_surplus(su))
             {
                 state.battlefield[static_cast<std::size_t>(si)].tapped = false;
-                state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
+                state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
             }
         }
     }
@@ -35967,7 +36373,7 @@ inline std::uint64_t PutBackClassKey(const GameState& state, const Card& c)
     // The order-condemnation snapshot singles a hand card out BY NUMBER (TurnSolver's
     // HandCastEquivTag makes the same split): a copy in it and a copy drawn since are not
     // interchangeable while it is live. Stale/empty snapshot -> constant term -> every copy folds.
-    if (state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number)
+    if (state.m1_hand_n > 0 && state.m1_hand_turn == state.TurnSeq())
     {
         bool in_m1 = false;
         for (int i = 0; i < state.m1_hand_n; ++i) { if (state.m1_hand[i] == c.m_number) { in_m1 = true; break; } }

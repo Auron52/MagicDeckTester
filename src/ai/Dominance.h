@@ -515,7 +515,15 @@ static_assert(sizeof(Player) == 200,
 // The NivMizzetCombo / banked-hold fields and the Vampires fields above each fit the padding against 1136
 // on parallel branches; together they overflow it by one alignment step: 1152, measured on the rebased
 // tree, 2026-10-20. No new field -- every one is classified above.
-static_assert(sizeof(GameState) == 1152,
+// +8 bytes (2026-10-27, Unpredictable Cyclone phase 2; measured 1152 -> 1160): ten one-byte fields beside
+// pending_extra_combats. Classification: `pending_extra_turns`, `extra_turns_taken`, `in_extra_turn` are
+// FUTURE-DETERMINING (an owed extra turn; the turns-taken count every same-turn stamp reads through
+// TurnSeq) -- FOLDED in Build(), value-gated (both counts 0 for every deck without an extra-turn card).
+// `deck_has_extra_turn`, `deck_has_gy_shuffle`, `deck_has_annihilator`, `deck_has_cast_target_trigger` are
+// DECK CONSTANTS stamped once in StampDeckTraits -- nothing to fold. `gy_shuffle_batch` /
+// `pending_gy_shuffles[2]` are 0 outside one simultaneous event (GyShuffleBatch), never live at a
+// snapshot -- nothing to fold.
+static_assert(sizeof(GameState) == 1160,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -766,6 +774,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     auto fold = [&e](std::uint64_t v) { e = Mix(e, v); };
 
     fold(static_cast<std::uint64_t>(s.turn_number));
+    // EXTRA TURNS: pending / taken / in_extra_turn are exact-match (more pending is never worse, but the
+    // simple sound choice is equality). Value-gated: every deck without an extra-turn card keeps its key.
+    if (s.pending_extra_turns != 0 || s.extra_turns_taken != 0)
+    {
+        fold(0xE77E000ull + static_cast<std::uint64_t>(s.pending_extra_turns) * 0x10000ull
+             + static_cast<std::uint64_t>(s.extra_turns_taken) * 2ull + (s.in_extra_turn ? 1u : 0u));
+    }
     fold(static_cast<std::uint64_t>(s.active_player_index));
     fold(static_cast<std::uint64_t>(s.priority_player_index));
     fold(static_cast<std::uint64_t>(s.phase));
@@ -791,7 +806,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // every other deck and every non-dig turn keeps its exact prior key. XOR so trigger order, which
     // is not a property of the position, cannot split two equivalent states.
     if (s.deck_has_attack_dig_hand && s.combat_hand[0] != 0
-        && s.combat_hand_turn == static_cast<std::int16_t>(s.turn_number))
+        && s.combat_hand_turn == static_cast<std::int16_t>(s.TurnSeq()))
     {
         std::uint64_t mix = 0xD16A100ull;
         for (std::uint8_t slot : s.combat_hand)

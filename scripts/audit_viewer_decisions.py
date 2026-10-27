@@ -541,6 +541,14 @@ MANIFEST = {
     # ResolveLandfallTargetCounters, over EVERY legal Plant; the engine's searched pick
     # (Plan::landfall_target_choice) is preselected. A single legal Plant is forced (not prompted).
     "landfall_target_counters": ("target",            positive),
+    # ---- Unpredictable Cyclone phase 2 (2026-10-27): the Ulamogs' targeted CAST triggers ----
+    # "exile two target permanents" / "destroy target permanent": WHICH permanents (either side) is asked
+    # through the shared `target` board-click (g_play_loyalty_chooser) at ChooseCastTriggerTargets -- the
+    # shared push/inline chooser both apply paths call -- one pick per target over EVERY legal permanent;
+    # the engine's searched option (Plan::cast_trigger_target_choice) is preselected; a forced pick is not
+    # prompted.
+    "cast_trigger_exile_target_permanents":   ("target", positive),
+    "cast_trigger_destroy_target_permanents": ("target", positive),
     # ---- the land-search cluster (2026-10-15; core/LandSearch.h) ----
     # WHICH land(s) every land search finds is asked at RESOLUTION through the shared `tutor_etb`
     # chooser, one sequential prompt per land (PerformLandSearch -- the shared resolution helper, so it
@@ -744,6 +752,10 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # ---- Unpredictable Cyclone phase 2 (2026-10-27) -- PROVISIONAL, pending the user's OK ----
+    "cast_trigger_extra_turns": "Emrakul's 'take an extra turn after this one' -- MANDATORY cast trigger, no choice (display only: the turn bar's 'Turn N (extra k)', an event line, extra_turn/turn_seq in the decision JSON)",
+    "annihilator": "Annihilator N -- the DEFENDING player's sacrifice (the passive opponent sacrifices oldest first, a fixed rule); not our choice, nothing to surface (event line only)",
+    "put_into_graveyard_shuffles_graveyard": "Emrakul / Ulamog the Infinite Gyre: the owner shuffles their graveyard into their library -- MANDATORY trigger, no choice (event line)",
     # ---- LandfallElementals (2026-10-18) -- PROVISIONAL, pending the user's OK ----
     "landfall_self_pump_power": "Akoum Hellhound / Brushfire Elemental: 'this creature gets +2/+2 until end of turn' on each landfall -- MANDATORY, untargeted SELF pump, no choice (the land drop's timing is the decision and rides main_phase via Plan::land_slot)",
     "landfall_self_pump_toughness": "toughness half of the landfall self pump (rides landfall_self_pump_power) -- no choice",
@@ -1866,6 +1878,10 @@ def modeled_tokens(card):
     # Fulminator Mage's sacrifice payload (the `target` board-click).
     if p.get("etb_destroy_artifact_enchantment_optional") or p.get("sac_outlet_destroy_nonbasic_land"):
         t.add("target")
+    # Unpredictable Cyclone phase 2: the Ulamogs' targeted CAST triggers (the `target` board-click,
+    # one pick per target, at ChooseCastTriggerTargets).
+    if p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0:
+        t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
         t.add("search")
     # The land-search cluster: every "search your library for ... land" is the tutor_etb prompts.
@@ -2066,7 +2082,7 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                 in_hand_here = True
             choice = pick_toward(d, target_lc)
             if t in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
-                jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             if t == "main_phase":
                 key = (d.get("turn"),
@@ -2149,7 +2165,7 @@ def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turn
                                              "turn": d.get("turn"), "marker": marker})
             choice = pick_toward(d, target_lc)
             if d.get("type") in ("jitte", "firebreathe"):
-                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             if d.get("type") == "main_phase":
                 key = (d.get("turn"),
@@ -2216,7 +2232,7 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
                             max_open_mana[nm] = open_mana
             choice = pick(d)
             if d.get("type") in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
-                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn')}:{choice}")
+                jitte.append(("fb|" if d.get("type") == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
             # Free repeatable actions (equip {0}: Lightning Greaves, metalcraft) legally recur
             # forever -- the engine faithfully re-offers "move the equipment back" after every

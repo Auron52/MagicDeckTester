@@ -1689,6 +1689,19 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Unicorn"
   },
+  "Emrakul, the Aeons Torn": {
+    "cmc": 15.0,
+    "keywords": [
+      "Annihilator",
+      "Flying",
+      "Protection"
+    ],
+    "mana_cost": "{15}",
+    "oracle_text": "This spell can't be countered.\nWhen you cast this spell, take an extra turn after this one.\nFlying, protection from spells that are one or more colors, annihilator 6\nWhen Emrakul is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+    "power": "15",
+    "toughness": "15",
+    "type_line": "Legendary Creature — Eldrazi"
+  },
   "Enlightened Tutor": {
     "cmc": 1.0,
     "keywords": [],
@@ -5877,6 +5890,29 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Dragon"
+  },
+  "Ulamog, the Ceaseless Hunger": {
+    "cmc": 10.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{10}",
+    "oracle_text": "When you cast this spell, exile two target permanents.\nIndestructible\nWhenever Ulamog attacks, defending player exiles the top twenty cards of their library.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Legendary Creature — Eldrazi"
+  },
+  "Ulamog, the Infinite Gyre": {
+    "cmc": 11.0,
+    "keywords": [
+      "Annihilator",
+      "Indestructible"
+    ],
+    "mana_cost": "{11}",
+    "oracle_text": "When you cast this spell, destroy target permanent.\nIndestructible\nAnnihilator 4 (Whenever this creature attacks, defending player sacrifices four permanents of their choice.)\nWhen Ulamog is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Legendary Creature — Eldrazi"
   },
   "Umezawa's Jitte": {
     "cmc": 2.0,

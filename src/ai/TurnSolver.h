@@ -1486,6 +1486,17 @@ public:
         // AppendSubdecisionAxes on a pre-combat list whose state has an untapped banked source and a
         // firebreathing / team-pump source on the battlefield or in hand.
         int8_t fb_hold_choice = -1;
+        // SEARCHED CAST-TRIGGER TARGETS (2026-10-27; Ulamog, the Ceaseless Hunger's "exile two target
+        // permanents", Ulamog, the Infinite Gyre's "destroy target permanent"). -1 (default) == the
+        // provider's front option at every targeted cast trigger; k >= 1 == the option ranked k
+        // (CastTriggerTargetOption: multisets of N identity-folded classes in
+        // DecisionProvider::CastTriggerTargetOrder's order), computed AT EACH TRIGGER's state and clamped.
+        // A WHOLE-TURN POLICY (the landfall_target_choice shape): installed by both worlds for the turn
+        // (ScriptedCastTriggerTarget, keyed on GameState::TurnSeq) and folded into every plan key while
+        // live. Emitted by AppendSubdecisionAxes for plans that cast a targeted cast-trigger card from
+        // hand, every option (no width cap -- a cap would make the later options unfindable at any budget).
+        // int16_t: a two-target option list on a wide board exceeds 127.
+        int16_t cast_trigger_target_choice = -1;
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);

@@ -1752,10 +1752,15 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cycle_trigger_damage_each_opponent =
         params.value("cycle_trigger_damage_each_opponent", 0);
     // Unpredictable Cyclone onboarding (2026-10-26): parsed for CycloneProvider's routing signature;
-    // NO effect reads them yet (phase 2: the extra turn, phase 3: the replacement + the watcher).
+    // phase 2 wired cast_trigger_extra_turns; phase 3 wires the replacement + the watcher.
     p.cycle_draw_exile_shared_type_freecast = params.value("cycle_draw_exile_shared_type_freecast", false);
     p.cast_trigger_extra_turns              = params.value("cast_trigger_extra_turns", 0);
     p.cycle_or_discard_trigger_scry         = params.value("cycle_or_discard_trigger_scry", 0);
+    // Phase 2 (2026-10-27): the Eldrazi.
+    p.cast_trigger_exile_target_permanents  = params.value("cast_trigger_exile_target_permanents", 0);
+    p.cast_trigger_destroy_target_permanents = params.value("cast_trigger_destroy_target_permanents", 0);
+    p.annihilator                           = params.value("annihilator", 0);
+    p.put_into_graveyard_shuffles_graveyard = params.value("put_into_graveyard_shuffles_graveyard", false);
     p.cost_less_per_cycle_or_discard = params.value("cost_less_per_cycle_or_discard", 0);
     p.reanimate_creature_max_mv      = params.value("reanimate_creature_max_mv", 0);
     if (params.contains("other_creature_etb_counter_cost"))
