@@ -82579,6 +82579,29 @@ inline void FSLineStoreOfHint(FSLineCache* lc, const TranspositionTable::Key& ca
     }
 }
 
+// MTG_FSL_PASTCUT_PROBE (diagnostic, read-only unless _VERIFY): does the per-decision memo ever answer a node
+// with a win that an earlier node stored PAST its own cutoff, for a query with a WIDER cutoff? Such a win is a
+// line the storing node met, not its best (docs/design/cross-decision-tree-reuse.md, "Open question for the
+// per-decision memo"). Counts: past-cutoff win stores; later win hits on them from a wider cutoff ("wider").
+// MTG_FSL_PASTCUT_VERIFY=1 also re-searches each wider hit instead of returning it and counts the ones where
+// the fresh search finds an EARLIER win (play then differs from the shipped engine; diagnostic only).
+namespace pastcut
+{
+    inline bool On()     { static const bool v = EnvOn("MTG_FSL_PASTCUT_PROBE"); return v; }
+    inline bool Verify() { static const bool v = On() && EnvOn("MTG_FSL_PASTCUT_VERIFY"); return v; }
+    inline thread_local int t_node_cutoff = std::numeric_limits<int>::max();   // the innermost FSLineWin's cutoff
+    struct CutFrame { int saved; explicit CutFrame(int c) : saved(t_node_cutoff) { t_node_cutoff = c; }
+                      ~CutFrame() { t_node_cutoff = saved; } };
+    struct Rec { const void* lc; int cutoff; };
+    inline thread_local std::unordered_map<TranspositionTable::Key, Rec, TranspositionTable::KeyHash> t_rec;
+    inline std::atomic<long long> g_stores{0}, g_wider{0}, g_checked{0}, g_better{0};
+    struct Reporter { ~Reporter() { if (!On()) { return; }
+        std::cerr << "[fsl-pastcut] pastcut_win_stores=" << g_stores.load() << " wider_hits=" << g_wider.load();
+        if (Verify()) { std::cerr << " verified=" << g_checked.load() << " BETTER_WIN_HIDDEN=" << g_better.load(); }
+        std::cerr << "\n"; } };
+    inline Reporter g_reporter;
+}
+
 inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
                            const TurnSolver::SearchLine& line, const GameState& state,
                            const TranspositionTable::Key* of_canonical = nullptr,
@@ -82597,12 +82620,20 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
         if (!FslPoolAcquire(kb)) { return; }                  // shared pool drained: recompute
         lc->charged_kb += kb;
         lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), sig });
+        if (pastcut::On() && line.win_turn > pastcut::t_node_cutoff)
+        { pastcut::g_stores.fetch_add(1, std::memory_order_relaxed); pastcut::t_rec[key] = { lc, pastcut::t_node_cutoff }; }
     }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max()
              || (it->second.line.truncated && !line.truncated))   // fill-in: complete line supersedes a truncated one
     {
         const long long oldkb = static_cast<long long>(ApproxFslBytes(it->second.line));
         it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig };
+        if (pastcut::On())
+        {
+            if (line.win_turn > pastcut::t_node_cutoff)
+            { pastcut::g_stores.fetch_add(1, std::memory_order_relaxed); pastcut::t_rec[key] = { lc, pastcut::t_node_cutoff }; }
+            else { pastcut::t_rec.erase(key); }
+        }
         const long long delta = static_cast<long long>(ApproxFslBytes(it->second.line)) - oldkb;
         FslPoolAdjust(delta);
         lc->charged_kb += delta;
@@ -84940,7 +84971,7 @@ namespace gamelc
     };
     inline Reporter g_reporter;
 }
-static void GameLineCacheClear() { gamelc::Clear(); }
+static void GameLineCacheClear() { gamelc::Clear(); pastcut::t_rec.clear(); }
 
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
@@ -84948,6 +84979,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
+    const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
     const ProvEpochGuard _prov(g_fsline_nest == 0, budget);   // a pass root opens its own provisional epoch
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // The search-window frame GreedyPermit checks (greedywindow, TurnSolver.h): THIS node's remaining
@@ -85103,6 +85135,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     int of_hint_win = 0;             // a twin's win turn (probe only -- NEVER consulted by search)
     TranspositionTable::Key key, key_win, key_base;
     bool gamelc_hit = false; int gamelc_hit_win = 0;   // MTG_GAME_LINE_CACHE_VERIFY: the cached answer to check
+    int pastcut_cached = 0;                            // MTG_FSL_PASTCUT_VERIFY: the memo win being re-searched
     struct GamelcUnreached { const bool& hit; bool done = false; ~GamelcUnreached()
         { if (hit && !done) { gamelc::g_ver_unreached.fetch_add(1, std::memory_order_relaxed); } } } gamelc_unreached{ gamelc_hit };
     if (lc != nullptr)
@@ -85140,7 +85173,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // WIN on the order-exact key: stored by a state with THIS zone order, so the
             // index-encoded line is replayable by construction and needs no order_sig check.
             FSLineCache::const_iterator itw = lc->find(key_win);
-            if (itw != lc->end() && itw->second.nowin_bound == std::numeric_limits<int>::max())
+            bool pastcut_skip = false;   // MTG_FSL_PASTCUT_VERIFY: re-search this hit instead of returning it
+            if (pastcut::On() && itw != lc->end() && itw->second.nowin_bound == std::numeric_limits<int>::max())
+            {
+                auto r = pastcut::t_rec.find(key_win);
+                if (r != pastcut::t_rec.end() && r->second.lc == lc && cutoff > r->second.cutoff)
+                {
+                    pastcut::g_wider.fetch_add(1, std::memory_order_relaxed);
+                    if (pastcut::Verify()) { pastcut_skip = true; pastcut_cached = itw->second.line.win_turn; }
+                }
+            }
+            if (!pastcut_skip && itw != lc->end() && itw->second.nowin_bound == std::numeric_limits<int>::max())
             {
                 PROF_INC(fsline_win_hit);
                 ++g_fs_memo_win_hits;
@@ -87694,6 +87737,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // up to every residual node this run searched.
     if (residual_node && winlesscert::StatsOn() && best.win_turn > state.turn_number)
     { winlesscert::g_res_nowin.fetch_add(1, std::memory_order_relaxed); }
+    if (pastcut_cached != 0)
+    {
+        pastcut::g_checked.fetch_add(1, std::memory_order_relaxed);
+        if (best.win_turn < pastcut_cached && best.win_turn <= cutoff)
+        {
+            if (pastcut::g_better.fetch_add(1, std::memory_order_relaxed) < 12)
+            { std::cerr << "[fsl-pastcut] BETTER job=" << (heurarm::t_job_name ? heurarm::t_job_name : "-") << " turn=" << state.turn_number
+                        << " depth=" << depth << " cutoff=" << cutoff << " memo=" << pastcut_cached << " fresh=" << best.win_turn << "\n"; }
+        }
+    }
     // MTG_GAME_LINE_CACHE: keep a COMPLETED non-root answer for the rest of the game (see gamelc).
     if (gamelc::On() && lc != nullptr && !bp_root)
     {

@@ -160,11 +160,13 @@ build stored such wins; NivMizzetCombo seed 600016 (live, unlimited d3, turn 3, 
 found under cutoff 4, and a later node with no incumbent (cutoff 9) reused it and missed a turn-5 win. The cache
 now stores a win only when `win_turn <= cutoff`, and otherwise an empty no-win under bound `cutoff`.
 
-**Open question for the per-decision memo.** `FSLineStoreWin` (the intra-decision `FSLineCache`) has the same
-shape: it stores any win whatever its cutoff, and a win hit ignores the querying cutoff. Whether a looser-cutoff
-query ever reaches such an entry within ONE decision is not measured. A read-only counter (store cutoff beside
-each past-cutoff win; count later win hits with a wider cutoff) would answer it. If it fires, it is a
-completeness defect at large budget, independent of this cache.
+**The per-decision memo does not have this hole in practice (measured).** `FSLineStoreWin` (the intra-decision
+`FSLineCache`) has the same shape: it stores any win whatever its cutoff, and a win hit ignores the querying
+cutoff. `MTG_FSL_PASTCUT_PROBE` (diagnostic, byte-identical; `_VERIFY` re-searches each suspect hit) counts the
+past-cutoff win stores and the later hits on them from a WIDER cutoff. Same four arms: 9,775 such stores at b20
+and 3,874 at unlimited d3, and **0 wider hits** in both. Within one decision a repeated key only comes back
+with the same or a tighter cutoff, so the hole opens only once entries outlive their decision, which is why
+the game line cache needs the cutoff rule and the per-decision memo does not.
 
 **Verification** (500 games/arm at b20 d5 seed 600000; 200 games/arm unlimited d3; arms LFE live, LFE staged b16,
 Niv live, Niv emulnl):
@@ -186,6 +188,6 @@ Niv live, Niv emulnl):
 5.4% on LFE staged, because freed units buy deeper passes. One seed, 500 games: LFE staged 4.370 -> 4.362, LFE
 live 4.416 -> 4.418, both Niv arms unchanged.
 
-**Next:** the per-decision memo counter above, then a held-out A/B on the decks that move at play settings (every
+**Next:** a held-out A/B on the decks that move at play settings (every
 deck searches through this path, so that is the suite), then GT acceptance if adopted. Memory: entries are full
 lines; the run above never filled the cap (`full_refusals=0`), but RSS is unmeasured at suite scale.
