@@ -434,6 +434,15 @@ struct GameState
     // gates AppendSubdecisionAxes' cast-trigger-target axis scan (a per-plan action walk) so every other
     // deck pays one bool test per enumeration. DEFAULT FALSE.
     bool                     deck_has_cast_target_trigger = false;
+    // UNPREDICTABLE CYCLONE (CardParams::cycle_draw_exile_shared_type_freecast; phase 3, 2026-10-27).
+    // DECK CONSTANT (StampDeckTraits, MAINBOARD -- it replaces a draw, a behaviour): CycleDrawReplacer's
+    // battlefield scan at the three cycle sites runs only while set, so every other deck pays one bool
+    // test per cycle. DEFAULT FALSE (only StampDeckTraits sets it; a unit test sets it by hand).
+    bool                     deck_has_cycle_draw_replacement = false;
+    // CURATOR OF MYSTERIES (CardParams::cycle_or_discard_trigger_scry). DECK CONSTANT (StampDeckTraits,
+    // main + sideboard -- it only gates a scan that would find nothing): DiscardScryTriggers' battlefield
+    // scan at every discard and cycle runs only while set. DEFAULT FALSE.
+    bool                     deck_has_discard_scry_watcher = false;
     // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):
     // a trigger fired inside one simultaneous event (the cleanup discard, a legend-rule SBA batch) waits
     // until the event completes, so its shuffle takes EVERY card that moved with it (CR 603.2 / 603.3:

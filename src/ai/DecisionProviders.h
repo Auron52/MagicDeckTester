@@ -3498,6 +3498,46 @@ public:
     // never narrows, and the axis is additive (one rollout per extra target). MTG_CYCLONE_TUTOR_WIDTH=0
     // restores the base 6; MTG_TUTOR_WIDTH still overrides engine-side. PROVISIONAL (USER Q8).
     int TutorSearchWidth() const override;
+
+    // ---- Phase 3 (2026-10-27): the searched cycle, Cyclone's free cast, Remand ------------------------
+    // THE SEARCHED CYCLE. Every distinct cycler in hand whose life half is payable is a seed the search
+    // branches over (no restriction; ORDER only: nonland cyclers before lands, creatures first, cheaper
+    // first) -- "which card do I cycle" is this deck's main decision, so nothing is pruned here. The
+    // engine then runs no in-window legacy cycle for this deck (CyclesAreSearched); ShouldConsiderDig /
+    // SelectDigSource below are only its PLAYOUT policy (the horizon leaf, the d0 runner).
+    bool CyclesAreSearched() const override;
+    std::vector<std::string> SearchedCycleSources(const GameState& s) const override;
+    // No dig twins / dig-while-affordable variants: the seeds ARE the searched dig.
+    DigOffer DigOfferAt(const GameState& s) const override { (void)s; return DigOffer{}; }
+    // The playout gate: the generic empty-of-gas rule, OR a replacer is out and a nonland cycler is held
+    // (cycling is the combo, not a dig of last resort). The playout pick: with a replacer out, the first
+    // payable creature cycler (Street Wraith before Curator: no mana), else the generic first-affordable.
+    // The chain continues after a re-solve (the loop's DigContinueAfterResolve).
+    bool ShouldConsiderDig(const GameState& s) const override;
+    std::string SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const override;
+    bool DigContinueAfterResolve() const override { return true; }
+    // THE TAKE-DOMINANCE FOLD (stated): taking the walk's hit is no worse than bottoming it when the hit is
+    // a vanilla-template creature (Street Wraith, Curator of Mysteries, Emrakul, the Ulamogs -- their
+    // printed abilities are all upside for us or attack-time) or another replacer (a second Cyclone: one
+    // replacement applies, CR 616.1), AND it collides with no legendary permanent we control (an Emrakul
+    // hit beside an Emrakul dies to the legend rule and shuffles the graveyard back), AND every TARGET its
+    // mandatory cast trigger needs can be the opponent's (the Ulamogs: with fewer opposing permanents the
+    // trigger must take ours). Everything else is branched.
+    bool FreeCastTakeDominated(const GameState& s, int controller, const CardDefinition& hit) const override;
+    // The playout's take: the fold above, else take (the generic default) unless the hit's targeted cast
+    // trigger would be forced onto our own permanents.
+    bool TakeFreeCast(const GameState& s, int controller, const CardDefinition& found) const override;
+    // USER 2026-10-27 (ledger Q6): "I would probably heuristically prune remanding either Ulamog". Keyed on
+    // the card's PROPERTIES, not its name: a counterable spell with a TARGETED cast trigger (Remand would
+    // bounce the threat whose trigger already resolved). Emrakul (can't be countered: Remand is a cantrip)
+    // and the cyclers (back to hand, cycle again) stay admitted.
+    bool AdmitRemandOnFreeCast(const GameState& s, int controller, const CardDefinition& hit) const override;
+    // HAND-CAST self-Remand (ledger Q6, USER 2026-10-27: "maybe allowing remands on other cheaper spells
+    // (say on something MV 1)"): admitted only when the target's mana value is at most
+    // MTG_CYCLONE_REMAND_MAX_MV (int, DEFAULT 1; -1 = never). Per-job via the numeric arm
+    // (valuearm::Arm::cyclone_remand_max_mv, manifest "cyclone_remand_max_mv") so the Stage 5 A/B arms
+    // pool in one batch.
+    bool AdmitRemandRider(const GameState& s, int controller, const CardDefinition& target) const override;
 };
 
 class LandfallProvider : public DeckProvider

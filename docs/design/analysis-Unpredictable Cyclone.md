@@ -106,7 +106,7 @@ replacement param OR (Emrakul extra-turn AND Curator scry), routed first.
 
 Tests: `test/unit/test_cyclone_phase1.cpp` (card data; life boundary; executor PerformDig and rollout dig loop pay/refuse in lockstep; routing on synthetic registered carriers incl. the AND term; tutor width + =0 hatch). `MtgTestSeam::PerformDig` added.
 
-**TODO (phase 3):** when the Cyclone/Emrakul/Curator entries land, the deck routes to `Cyclone`: update the pin
+**TODO (phase 3) -- DONE in phase 3:** when the Cyclone/Emrakul/Curator entries land, the deck routes to `Cyclone`: update the pin
 `{"Unpredictable Cyclone", "AntiLifegain"}` in `test/unit/test_pirates_provider.cpp` (~:121) and add the three
 params to `scripts/audit_viewer_decisions.py`'s manifest (the self-guard fails on an unmapped param on a deck card).
 
@@ -198,6 +198,124 @@ TurnSeq() == turn_number for every other deck by construction.
   (snapshot refreshed with the three Eldrazi; the --update pass hit 429s on three cards already in the
   snapshot), viewer-decisions static audit clean.
 
+### Phase 3 (the searched cycle, Unpredictable Cyclone, Curator, Remand) -- implemented 2026-10-27
+**The searched cycle (item 1, generic mechanism, Tier 3).** WHICH card is cycled is now a plan ACTION: a
+"cycle seed" (`Action::Kind::DigDraw`, `dig_sacrifice` false, by NAME -- `hand_index` -1, `def` set;
+`IsCycleSeed` / `CycleSeedOf`, TurnSolver.h), one per DISTINCT cycler the provider admits
+(`DecisionProvider::SearchedCycleSources`, restrict / order only; copies fold: every world cycles by name).
+CollectActions emits them in the decision space only (`g_search_candidate_enum || g_condemn_root_turn < 0`,
+the Remand precedent) and never in human play. All seeds share ONE odometer family (`PlanGroupKey`
+-6000000: one cycle per plan section), and `kDupCopies` (BuildCopyCap / CopiesOfNameUsed) stops a seed and a
+cast spending one copy twice. Each seed carries its two in-resolution choices as pins: `devour_count` =
+Curator's disposition j, `ponder_keep` = Cyclone's free cast (kCycFc*: -1 default, 0 decline, 1 take,
+2 take-and-Remand). Keyed in both plan signatures ("CYCLE#name#fc#j"; fast + slow, lockstep) -- ActionFoldSig
+and Action::operator== already fold both fields.
+- **Realised as a chain** (`cycle_chain_step`, ApplyPlanDirect): the plan's own seed runs at the dig loop's
+  position (after the plan's casts and trailing activations); the seed is paid (life + mana, the copy must
+  still be in hand), discarded (CycleDiscardScope), Curator's triggers resolve with the pin, OnCardCycled,
+  then the draw OR the Cyclone replacement; then EVERY step opens the site-4 re-solve, whose continuation
+  may carry the NEXT seed or end the chain (EMPTY). So every step of a cycle chain is a searched decision,
+  with the standing breakpoint machinery (wave 0, deferred waves, BpBaseCanon's base-plan canon).
+  A seed in ANY continuation runs right after that continuation's cast section (`apply_continuation_plan`'s
+  hook), so "Brainstorm, then cycle the Street Wraith it drew" is reachable (scenario
+  cyclone_brainstorm_draws_wraith_cycles_same_turn) -- except an unbranched-CANON continuation at the other
+  breakpoint sites (the executor MIRRORS those, casts only: lockstep); at site 4 a canon continuation's seed
+  does run (a site-4 continuation reaches the executor only as recorded breakpoint_casts, never mirrored),
+  so a base plan's chain is not cut at its first cycle. Each step is recorded as a DigDraw in the current
+  sink (pushed BEFORE a walk -- R2 -- with its REALISED pins; at top level in its own main-level segment
+  `rec_bp_ord = main_bp_ord + 1`). `BpDigFanoutForPlan` marks a seeded plan (exact: its chain always
+  reaches site 4).
+- **Executor replay ordering fix (generic, in `replay_recorded`).** A recorded DigDraw now dispatches the
+  board activations of the records BEFORE it first (the rollout cycles after them). Found by the
+  MTG_FD_ORACLE probe: a Brainstorm continuation's Myriad Landscape search (a shuffle) and the plan's
+  cycle sat in one catch-all list; the executor deferred the activation past the cycle, so its walk found a
+  Street Wraith where the rollout's (post-shuffle) walk found the kill (s7322 gi22: proven T7, realised T9;
+  fixed: T7). Smoke stayed byte-identical (no other deck records a dig after a continuation activation).
+- **Executor**: the committed line replays the DigDraw records through `AIEngine::PerformDigFull` (the
+  record's pins + `resolve_stack`). The uncommitted path (`UseSurplusLandAbilities(..., cycle_seed)`)
+  realises the plan's seed in EITHER main; a cycle-searching provider then stops (the rest of its chain was
+  a decision this path has no answer for) and requests the second pass.
+- **Opt-in, not forced (deviation from the brief; Q20).** `CyclesAreSearched()` / `SearchedCycleSources`
+  default to false / empty: every other deck keeps the legacy dig loop byte-identically. CycloneProvider
+  opts in (every distinct payable cycler, ORDER: creatures, other nonlands, lands; cheaper first). For an
+  opted-in provider the legacy loop runs only for the horizon leaf's plan (its PLAYOUT policy:
+  CycloneProvider's ShouldConsiderDig = generic empty-of-gas OR a replacer out with a nonland cycler held;
+  SelectDigSource = the cheapest payable creature cycler; DigContinueAfterResolve true) and DigOfferAt
+  offers no twins. The generic "only when nothing is castable" gate was NOT removed for the other decks:
+  it is the USER's own 2026-09-29 rule (docs/design/generic-dig-gate.md), a provider restriction.
+- **R1 fixed**: `PerformDigFull` returns {Failed, DrewLand, DrewNonland, Replaced}; the reactive chain
+  breaks only on Failed (a replaced, draw-less cycle no longer ends it).
+
+| card | tier | what landed |
+|---|---|---|
+| Unpredictable Cyclone | 3 | `cycle_draw_exile_shared_type_freecast` (+ cycling {2}). Replacement of the cycling draw at the three sites (executor `PerformDigFull`, the human DigDraw pass, the rollout's seeded chain + legacy loop) through ONE set of SpellEffects.h helpers: `CycleDrawReplacer` (nonland cycled card; one instance applies, CR 616.1; deck stamp `deck_has_cycle_draw_replacement`), `WalkExileUntilSharedType` (definition card types; Battle/Kindred included, Land excluded), `CycleHitCastable` (no land, a legal target, a cast left), `ResolveCycleFreeCastChoice`, `BottomInRandomOrder` (a CRN keyed sort with ShuffleAfterSearch's seed/salt/g_shuffle_eval; >= 2 cards bump search_count), `EmitCycloneWalk` (history: "cast (free)" / "bottom (random order)"). The cast is world-specific: executor `EffectHandler::PushFreeCast` (cast triggers fire: Emrakul's extra turn, the Ulamogs' targets) then bottom then the Remand; rollout/human `cyclone_replaced_draw` (bottom, EnterHand(Reveal) at the hand FRONT so apply_one casts this copy, `cascade_free` + `suppress_cast_record` (R2: the cast is not recorded as a CastFromHand; its nested records nest under the DigDraw) + apply_one). Whiff = a random put-back, no draw. Viewer: bucket A `free_cast` (source "Unpredictable Cyclone", walked shown), the plan label "cycle X (Unpredictable Cyclone: exile until a creature, may cast it free)". |
+| Curator of Mysteries | 3 | 4/4 Flying {2}{U}{U} (Scryfall; the phase brief's "2/2 {2}{U}" was wrong), cycling {U}, `cycle_or_discard_trigger_scry 1`. HOOK RESOLVED: `DiscardCardFromHand` fires the watcher for every NON-cycle discard (cleanup); the three cycle sites wrap their discard in `CycleDiscardScope` (the hook stands down) and fire it themselves via `ResolveDiscardScryTriggers` with the seed's pin, after the madness drain and BEFORE OnCardCycled / the draw / the walk -- so a cycle fires EXACTLY once (unit-pinned). N scry-1 triggers fold to "bottom the top j" (pinned; exact only when every watcher scries 1, checked). Unpinned (human, playout, cleanup) = ScryTop per trigger with any land-ETB scry pin set aside. Deck stamp `deck_has_discard_scry_watcher`. Viewer: bucket A `scry`. |
+
+**Free cast (Q3-Q5 defaults taken).** Take / decline / take-and-Remand is SEARCHED per cycle (the seed's
+pin, the realised value on the record). The take-dominance fold is the PROVIDER's
+(`DecisionProvider::FreeCastTakeDominated`, base false = everything branched): CycloneProvider folds a
+vanilla-template creature or another replacer UNLESS it collides with a legendary permanent we control or
+its targeted cast trigger would have to take our own permanents (fewer opposing permanents than targets).
+A decline variant is emitted only when the library holds a non-dominated card of a shared type; a decline
+pin on a dominated hit takes. The walk re-solves (Q4: every seeded step re-solves). The bottom order is
+random for Cyclone only (Q5: cascade untouched). The playout default (`TakeFreeCast`) takes unless an
+Ulamog's trigger would be forced onto our own permanents.
+
+**Remand rulings (item 4, USER Q6).** Remand on a Cyclone FREE CAST: the take-and-Remand pin (offered with
+a Remand in hand that the provider admits for some reachable hit; realised only when the Remand is payable,
+else plain take). Rollout: `CastRiders::free_remand` lets apply_one's remand rider ride a free walk cast,
+paying ONLY the Remand (TapForCostDirect); executor: PushFreeCast -> bottom -> TapForCost the Remand ->
+erase the hit from the stack if counterable -> the shared `CastAndResolveRemand`. A cycler hit goes back to
+hand (cycle it again); Emrakul (cant_be_countered) resolves and the Remand is a cantrip. PRUNED on a free-cast
+Ulamog by `DecisionProvider::AdmitRemandOnFreeCast` (generic hook, default admit all; CycloneProvider:
+refuse a counterable spell with a TARGETED cast trigger -- properties, not names). HAND-CAST self-Remand:
+`DecisionProvider::AdmitRemandRider` (default admit all) read in CollectActions' remand post-pass;
+CycloneProvider admits only target MV <= `MTG_CYCLONE_REMAND_MAX_MV` (int, default 1, -1 = never). It is an
+INT, so the per-job arm is `valuearm::Arm::cyclone_remand_max_mv` (manifest key "cyclone_remand_max_mv"),
+not the boolean HeuristicArm the brief named (Q23). The Stage 5 A/B (1 vs -1) is the orchestrator's.
+
+**Cast-trigger targets on a free cast.** AppendSubdecisionAxes' `cast_trigger_target_choice` axis is now
+also emitted for a plan whose cycle seed can walk to a targeted cast-trigger card
+(`CycleSeedCastTriggerTargets`: EXACT -- the predicted hit below the pinned scry's bottomed cards -- when
+a replacer is out and the plan does nothing else; otherwise every library card of a shared type, an upper
+bound). Still uncapped.
+
+**Wiring.** Routing pin `{"Unpredictable Cyclone", "Cyclone"}` (test_pirates_provider.cpp) -- the deck
+routes to CycloneProvider now. audit_viewer_decisions.py MANIFEST rows (`cycle_draw_exile_shared_type_freecast`
+-> free_cast, `cycle_or_discard_trigger_scry` -> scry) and the oracle cross-check token. DECISIONS.md rows
+(which-card-to-cycle `main_phase`, the Cyclone `free_cast` + its Remand prompt, the Curator `scry`).
+main.cpp `SummarizePlan` label. Human play: which cycler = the standalone dig plans; take/decline + the
+Remand prompt = `free_cast` (the Remand prompt is a SECOND free_cast decision whose candidate is the Remand
+in hand, zone "hand" -- a reuse, Q22); scry j = one `scry` prompt per trigger. MTG_DIG_CENSUS gains `seed=`.
+The Stage 5h live surface check (audit_viewer_decisions.py without --no-sweep) was NOT run in phase 3.
+
+**Tests.** test/unit/test_cyclone_phase3.cpp (10 cases: card data; routing; the walk -- shared types, an
+artifact creature stopping at an artifact, an artifact-land hit not cast, the whiff = random put-back with no
+draw, a cycled land not replaced, Cyclone's own cycling with none out, a Cyclone cycled with one out walking to
+the next enchantment; LOCKSTEP executor PerformDigFull vs the rollout's seeded chain, library ORDER included;
+decline (non-dominated Ulamog) / dominated decline-takes / take-and-Remand in both worlds; the Remand
+restrictions incl. the per-job ceiling; Curator once per cycle (chooser count), pinned j, a cycled Curator not
+triggering itself, a cleanup discard triggering; the scry-before-walk core line in both worlds; seed
+emission counts + no two seeds per plan + no seed beside a cast of the same copy; R1 -- the reactive chain
+continues past a replaced cycle). Scenarios: cyclone_wraith_walks_to_emrakul_extra_turn (round-3 kill),
+cyclone_curator_scry_bottoms_wraith_walk_reaches_emrakul (needs j = 1), cyclone_brainstorm_draws_wraith_cycles_same_turn
+(needs a CONTINUATION seed). Phase-1 test updated (its legacy-loop case is now the horizon leaf's plan).
+
+**Results.** Unit 2066/2066; scenarios 320/320; smoke 149 passed, play-changed 0 on every deck (searched and
+d0: the mechanism is opt-in and only the Cyclone deck, not yet in the suite, opts in);
+viewer_protocol_check --strict 0 play-drift / 0 enum-gap / 0 board-diverged (668 refs); cost audit rc 0
+(496/496); field audit offline rc 0 (snapshot refreshed with Cyclone + Curator; the --update pass hit 429s on
+five cards already in the snapshot). Lockstep probe MTG_FD_ORACLE (d3 b10): 1 diverge in 24 games before the
+replay-order fix (s7322), 0 in 64 + 96 games after.
+
+**COST (measured 2026-10-27, d3 b10, no profile -- the deck has none yet).** The searched cycle costs
+**1.71x CPU** against the legacy greedy cycle on the same binary (32 paired games, seed 7800: 466 s vs 272 s
+user, 14.6 vs 8.5 s/game; avg 5.625 vs 5.656 turns -- the quality delta is inside the noise at this size).
+The deck is expensive with or without it: single-thread 16 games (seed 7600) 12.7 s/game against Hinata2's
+0.93 s/game at the same settings (~13.6x; the 3x suite-entry rule would block it today), and ~3 GB resident even
+on one worker (4.8-5.8 GB on eight; Hinata2: 113 MB). Not root-caused in phase 3 (Q26). Census (96 games):
+in-window automatic digs 0, playout (leaf) cycles 1.30M, searched cycle steps 48.8M.
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -254,7 +372,59 @@ TurnSeq() == turn_number for every other deck by construction.
 - Q18. The turn_number classification used an exhaustive grep of all 954 reads instead of a compile-break
   rename (the identifier has no macro/token-pasting use, so the two list the same sites). Default: grep
   accepted; a rename pass can be run on request.
+- Q19. HOW THE SEARCH TREATS AN EXTRA TURN (USER 2026-10-27: *"We'll have to decide how best to treat extra turns in terms
+  of searches, but the top thing is that they are not counted negatively in our search optimization."* and *"My guess is
+  that they could be treated like new phases (or equivalent)."*). The top requirement is MET and verified (orchestrator,
+  2026-10-27): every search/executor win return reports `state.turn_number`, the ROUND (GameEngine.cpp:156,
+  TurnSolver.cpp ~80783-81019 and ~94369-94383), and no scoring site reads TurnSeq(), so an extra turn never costs win turn
+  in the objective. Depth counts rounds (phase 2: the ply is given back after an extra-turn transition). OPEN: the search
+  STRUCTURE. Today an extra turn is a real turn transition (a new turn's solve, turn-edge prunes off for the deck: Q13).
+  USER's suggestion: treat the extra turn like further phases of the same turn (or equivalent), i.e. one search frame
+  continuing through it, so the turn-complete / per-turn budget accounting does not split the turn the extra turn
+  belongs to. USER 2026-10-27: *"But we might find this is a bad idea from a correctness standpoint. I think we should
+  evaluate both ideas."* So EVALUATE BOTH, side by side, AFTER phase 4 (with the Stage 5 measurements):
+  (A) extra turn = real turn transition (as built in phase 2); (B) extra turn = more phases of the same search frame.
+  First CORRECTNESS: (B) must still do everything a turn boundary does (untap, upkeep triggers, draw, land drop reset,
+  summoning sickness cleared, until-end-of-turn effects expire, 'this turn' counters/stamps reset, a second combat with
+  annihilator, cleanup discard) in executor AND rollout, and must not let the search see information it would not have
+  (the extra turn's draw is unknown when the current turn is planned -- a frame that plans across it must not be
+  clairvoyant on that draw). USER 2026-10-27: *"When the search is clarivoyant that isn't an issue, but you are right
+  that we need to be a bit careful not to break non-clairvoyant search."* So the draw-information check applies to the
+  NON-clairvoyant search modes only; a clairvoyant search may see the extra turn's draw. Then COST and QUALITY: paired A/B on held-out seeds, budgeted plus the unbudgeted backstop.
+  Result to the USER, who decides.
 
+- Q20. THE SEARCHED CYCLE FOR THE OTHER CYCLING DECKS (phase 3). The mechanism is generic
+  (DecisionProvider::SearchedCycleSources / CyclesAreSearched), but only CycloneProvider opts in; the phase brief
+  expected the other cycling decks to move. They do not (default taken: not opted in), because (a) the generic
+  "cycle only when nothing is castable" gate is the USER's own 2026-09-29 rule, a provider RESTRICTION the no-greedy
+  rule allows, so removing it is not an agent's call; (b) an opted-in deck re-solves after EVERY cycle, which would
+  reshape treasure_hunt's dig-through-lands chain and Fluctuator's 16-cycler combo chain (one searched breakpoint per
+  apply, canon defaults for the rest) -- a large play and cost change to measure, not to assume. What remains for those
+  decks is the legacy loop's SelectDigSource pick when two or more DISTINCT sources are payable at one step (FiveColour's
+  two Triomes, treasure_hunt's three cycling lands + Fiery Islet, Fluctuator's many cyclers; EDF and WhiteKnights hold one
+  cycler name each, so nothing to choose) -- a residual in-window pick, disclosed. Recommendation: opt them in one deck at
+  a time as a measured play change (smoke + held-out A/B), FiveColour first.
+- Q21. Curator's scry on a NON-cycle discard (the cleanup discard) uses the provider's ScryKeepOnTop in-window (the
+  cycle's scry is searched; this one is not: it happens at cleanup, outside the plan). Rare (more than seven cards at
+  cleanup with a Curator out). And when an Emrakul is discarded in the same cleanup, the scry resolves before the
+  graveyard shuffle (a legal trigger order, not the better one). Default: accepted, disclosed.
+- Q22. Remand on a Cyclone free cast in HUMAN play is a second `free_cast` prompt (candidate = the Remand in hand,
+  zone "hand"), not a new decision type. Default: the reuse.
+- Q23. MTG_CYCLONE_REMAND_MAX_MV is an INT, so its per-job override lives in the numeric arm
+  (valuearm::Arm::cyclone_remand_max_mv, manifest key "cyclone_remand_max_mv"), not in the boolean HeuristicArm the
+  brief named. Default: the numeric arm (the bp_chain_slot precedent).
+- Q24. Curator's searched j counts the Curators in HAND as well as on the battlefield (a Curator the plan casts before
+  the cycle triggers too), so a j above the realised trigger count is a duplicate line, never a missing one. Default:
+  completeness over width.
+- Q25. The UNCOMMITTED executor path (the develop-when-stuck fallback with no recorded script) realises the plan's first
+  cycle seed only, and at depth > 0 does not re-solve the rest of that main. The committed line (the normal path)
+  replays the whole recorded chain. Default: disclosed.
+- Q26. THE DECK'S SEARCH COST (phase 3 measurement, see the Phase 3 COST paragraph): ~12.7 s/game single-thread at d3
+  b10 (Hinata2 0.93 s/game; the 3x suite-entry rule would block it) and ~3 GB resident per process; the searched
+  cycle is 1.71x of that against the legacy greedy cycle. Not root-caused. Candidate SOUND collapses, none built:
+  (a) a seed-only plan with a replacer out has an exactly predictable walk, so its decline / take-and-Remand / j
+  variants whose outcome equals another's are duplicates and can be folded; (b) the per-step site-4 re-solve's
+  continuation list carries every seed variant again. Default: report; the suite-entry cost work is Stage 4's.
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
