@@ -1597,6 +1597,10 @@ MAINPHASE_PARAMS = {
     # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
     "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
+    # Street Wraith (2026-10-26): "Cycling--Pay 2 life" -- the LIFE half of the cycling cost. It prices the
+    # same cycling_cost main_phase play (offered only while life > N; the viewer's offer probe and every
+    # payer read CyclingLifePayable), so it adds no decision of its own.
+    "cycling_life_cost":   "life half of a cycling cost (Street Wraith); prices the cycling_cost main_phase play, no choice",
     # Remand (2026-10-17): "Counter target spell ... put it into its owner's hand ... Draw a card." Its
     # only legal target is one of OUR OWN spells on the stack, so WHICH spell it answers is a main_phase
     # PLAN VARIANT -- Action::remand_by on the target's cast ("X + Remand on it"), one per legal target,

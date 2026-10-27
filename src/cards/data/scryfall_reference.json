@@ -801,6 +801,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Brainsurge": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Draw four cards, then put two cards from your hand on top of your library in any order.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Branchloft Pathway": {
     "cmc": 0.0,
     "keywords": [],
@@ -5443,6 +5452,19 @@
     "toughness": "2",
     "type_line": "Creature — Kor Artificer"
   },
+  "Street Wraith": {
+    "cmc": 5.0,
+    "keywords": [
+      "Cycling",
+      "Landwalk",
+      "Swampwalk"
+    ],
+    "mana_cost": "{3}{B}{B}",
+    "oracle_text": "Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)\nCycling—Pay 2 life. (Pay 2 life, Discard this card: Draw a card.)",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Wraith"
+  },
   "Striking Sliver": {
     "cmc": 1.0,
     "keywords": [],
@@ -6256,6 +6278,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Watery Grave": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U} or {B}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Swamp"
+  },
   "Weather the Storm": {
     "cmc": 2.0,
     "keywords": [
@@ -6353,6 +6384,17 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Knight"
+  },
+  "Xander's Lounge": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U}, {B}, or {R}.)\nThis land enters tapped.\nCycling {3} ({3}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Swamp Mountain"
   },
   "Yavimaya Coast": {
     "cmc": 0.0,
