@@ -765,6 +765,7 @@ enum Slot : int
     RAMP_FILTER_C_FEED,       // MTG_RAMP_FILTER_C_FEED  EnumeratePlans' flat mana test relabels up to one {C} per fed ramp filter (Izzet Signet / Ferrous Lake on the board, or cast by the same plan) as wild that can still pay a {C} pip: the filter eats the {C} and returns two colours, which the pool's "+1 wild" credit assumed came from a coloured feed (mana-oracle ENUM-GAP nivmizzetcombo: Generator Servant's {C} through Izzet Signet). =0 -> the feed is assumed coloured
     PO_LAND_AURA_HOLD,        // MTG_PO_LAND_AURA_HOLD  the payable-order walks (ManaPayment.cpp: the exact walk and the plain/hand walks) hold a land Aura's host out of the pool until a cast needs it, then tap it with the bonus of every Aura of the order resolved on it by then -- the given order {Wild Growth -> Forest, a hasted Undercellar Myconid} pays, where the aggregate walk read it unpayable and moved the Myconid first (Fungus s3003 gi148). =0 -> the walks ignore the bonus
     DOMAIN_OPEN_EXACT,        // MTG_DOMAIN_OPEN_EXACT  ColorFeasibility (the MTG_COLOR_EXACT gate) keeps a domain source's bundle at the board's domain and opens a widened colour per subset: for a pip only when another cast asks for it (a permanent cannot widen for its own cost), for generic whenever a cast permanent has it; a coloured-token maker falls back to the all-five bundle. Kills the lone-Jared / {Deathrite, Jared} FiveColour PHANTOM (mana-oracle 13.7). =0 -> the all-five bundle
+    CYCLONE_TUTOR_WIDTH,      // MTG_CYCLONE_TUTOR_WIDTH  Cyclone (Unpredictable Cyclone): TutorSearchWidth admits EVERY distinct legal name for Long-Term Plans (any card; ~22 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so most names (Emrakul among them) were unreachable per search at ANY budget. A COVERAGE fix (widens, never narrows; the axis is additive). DEFAULT ON; =0 -> the base 6
     COUNT
 };
 
@@ -1474,6 +1475,7 @@ inline const char* Name(int slot)
         "MTG_RAMP_FILTER_C_FEED",
         "MTG_PO_LAND_AURA_HOLD",
         "MTG_DOMAIN_OPEN_EXACT",
+        "MTG_CYCLONE_TUTOR_WIDTH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

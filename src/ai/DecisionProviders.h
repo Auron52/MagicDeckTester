@@ -3472,6 +3472,34 @@ public:
     std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
 };
 
+// UNPREDICTABLE CYCLONE (cycling into Eldrazi; onboarding 2026-10-26). The deck rode
+// AntiLifegainProvider BY ACCIDENT: Scalding Tarn's fetch_land_types sets `anti` alone (pinned from a
+// probe in test_pirates_provider.cpp, never decided). EMPTY derivation of DeckProvider (== Generic),
+// NOT of AntiLifegain: the deck was never measured on AL (not in the suite, no GT), so nothing is
+// preserved by inheriting its width-2 tutor, single-pick fetch or cleanup buckets. Signature: see
+// DetectDecisionProvider's `cyclone` flag (Cyclone-only params OR-ed across three cards; the deck
+// routes here once the phase 2/3 card entries carry them).
+class CycloneProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Damage is combat only (Emrakul 15 flying + "
+               "annihilator 6, the Ulamogs 10, Curator of Mysteries 4 flying, Street Wraith 3), but the "
+               "bodies arrive mid-turn as FREE casts off Unpredictable Cyclone's walk (the library is "
+               "known to the search), and Emrakul's cast grants an EXTRA TURN. A winless-this-turn bound "
+               "must count every cycler in hand times the creature each walk can reach, and must say "
+               "whether 'this turn' is the turn or the ROUND (the USER's rounds win-turn metric: an extra "
+               "turn untaps and attacks before the opponent's next turn)." }; }
+    const char* Name() const override { return "Cyclone"; }
+    // TutorSearchWidth -- a COVERAGE fix, not a heuristic (the LandfallElementals / Pirates precedent):
+    // Long-Term Plans can find ANY card (~22 distinct names in the list) and the generic candidate list
+    // is in LIBRARY (= shuffle) order, so the base width 6 left most names -- Emrakul among them, as the
+    // shuffle chose -- unreachable per search at ANY budget. 32 admits every distinct name; it widens,
+    // never narrows, and the axis is additive (one rollout per extra target). MTG_CYCLONE_TUTOR_WIDTH=0
+    // restores the base 6; MTG_TUTOR_WIDTH still overrides engine-side. PROVISIONAL (USER Q8).
+    int TutorSearchWidth() const override;
+};
+
 class LandfallProvider : public DeckProvider
 {
 public:
