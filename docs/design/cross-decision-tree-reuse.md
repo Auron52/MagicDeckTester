@@ -1,8 +1,9 @@
-# Reusing the searched tree across a game's decisions (DEFERRED, 2026-10-27)
+# Reusing the searched tree across a game's decisions (2026-10-27)
 
-**Status (2026-10-27): the overlap is MEASURED (below); the cache is not built.** The USER deferred this until the
-LandfallElementals / NivMizzetCombo shape work was done (it is; `lfe-valueleaf-costs-more.md`,
-`niv-rollout-ladder-vs-leafless-shapes.md`). Next: the exact-key VALUE cache, which the measurement favours (~10% of units).
+**Status (2026-10-27): the VALUE cache is BUILT, verified sound, DEFAULT OFF** (`MTG_GAME_LINE_CACHE`, results in
+"The game line cache" at the end). It is answer-identical at unlimited budget and removes 0.3-9.9% of units there. At
+a budget it changes play (freed units buy depth), so adoption needs a held-out A/B and GT acceptance. Built after the
+LandfallElementals / NivMizzetCombo shape work, as the USER asked.
 
 ## The idea (USER, 2026-10-27)
 
@@ -143,3 +144,48 @@ Constraints it must keep (from the costs section):
   different leaf.
 * Per-game lifetime.
 * (Done: the probe's completed-subtree, same-leaf numbers above are the expected ceiling.)
+
+## The game line cache (built 2026-10-27, `MTG_GAME_LINE_CACHE`, default off)
+
+`src/ai/TurnSolver.cpp`, `namespace gamelc` (block comment above it). A per-thread map, cleared per game, holding
+the answer of every non-root `FSLineWin` node whose search completed (no truncation, no budget bind, decision
+ceiling not hit, line not truncated). Keyed by the node's `FSLineCache` key folded with the effective leaf, the
+escalation beam, the coarse second-main mode and the labeller mode. Read with the per-decision cache's rules: a
+win answers any query, a no-win only a query no wider than its bound. `MTG_GAME_LINE_CACHE_VERIFY=1` recomputes
+every hit, plays the fresh answer and counts disagreements; `MTG_GAME_LINE_CACHE_CAP` (default 200000 per game).
+
+**The bug verify found, and the rule it added.** A node searched under cutoff `c` proves only its best win at or
+before `c`. A win it returns past `c` (a horizon rollout that ran on) is a line it met, not its best. The first
+build stored such wins; NivMizzetCombo seed 600016 (live, unlimited d3, turn 3, depth 1) stored a turn-7 win
+found under cutoff 4, and a later node with no incumbent (cutoff 9) reused it and missed a turn-5 win. The cache
+now stores a win only when `win_turn <= cutoff`, and otherwise an empty no-win under bound `cutoff`.
+
+**Open question for the per-decision memo.** `FSLineStoreWin` (the intra-decision `FSLineCache`) has the same
+shape: it stores any win whatever its cutoff, and a win hit ignores the querying cutoff. Whether a looser-cutoff
+query ever reaches such an entry within ONE decision is not measured. A read-only counter (store cutoff beside
+each past-cutoff win; count later win hits with a wider cutoff) would answer it. If it fires, it is a
+completeness defect at large budget, independent of this cache.
+
+**Verification** (500 games/arm at b20 d5 seed 600000; 200 games/arm unlimited d3; arms LFE live, LFE staged b16,
+Niv live, Niv emulnl):
+
+* Cache off and verify mode: digests and units byte-identical to the pre-cache binary.
+* Verify: 31,781 hits checked, **0 material disagreements** (an answer within the querying node's cutoff that
+  differs). The remaining ~1,200 differ only past the cutoff, where the caller reads both as no-win.
+
+**Work removed at unlimited budget** (play identical, every digest equal to cache off):
+
+| arm | units off | units on | change | core-ms |
+|---|---|---|---|---|
+| Niv live | 146.35M | 131.85M | -9.9% | -7% |
+| LFE live | 19.24M | 18.27M | -5.0% | -4% |
+| LFE staged | 21.68M | 20.70M | -4.5% | -4% |
+| Niv emulnl | 109.76M | 109.45M | -0.3% | ~0 |
+
+**At b20 it changes play**, as a sound cut under a budget does: units fall only 0.2% on the rollout shapes and
+5.4% on LFE staged, because freed units buy deeper passes. One seed, 500 games: LFE staged 4.370 -> 4.362, LFE
+live 4.416 -> 4.418, both Niv arms unchanged.
+
+**Next:** the per-decision memo counter above, then a held-out A/B on the decks that move at play settings (every
+deck searches through this path, so that is the suite), then GT acceptance if adopted. Memory: entries are full
+lines; the run above never filled the cap (`full_refusals=0`), but RSS is unmeasured at suite scale.
