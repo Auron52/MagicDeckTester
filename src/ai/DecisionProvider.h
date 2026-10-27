@@ -824,6 +824,21 @@ public:
     virtual void LandfallDoubleTargetOrder(const GameState& s, int controller,
                                            std::vector<int>& class_reps) const;
 
+    // CastTriggerTargetOrder -- a MANDATORY targeted CAST trigger over "target permanent", either side
+    // (Ulamog, the Ceaseless Hunger's exile two; Ulamog, the Infinite Gyre's destroy one; `destroy` says
+    // which). `class_reps` arrives as battlefield indices, ONE per identity class (CastTriggerTargetFoldKey),
+    // and the provider ORDERS it in place; the engine's options are the multisets of N classes in that
+    // order (rank 0 = the default; Plan::cast_trigger_target_choice is the searched rank). ORDER ONLY --
+    // opponent-first is NOT a provable dominance (exiling our own land is sometimes the line; destroying
+    // our own Emrakul fires its graveyard shuffle), so a provider must not restrict this list.
+    //
+    // Base rule (out-of-line): the opponent's permanents (smallest power first); for a destroy, our
+    // indestructible permanents next (a legal no-op); then our tapped lands, our untapped lands, our
+    // creatures (lowest power first), our other permanents; our cast-trigger fatties (power >= 10) last.
+    // Stable, so ties keep battlefield order (oldest first).
+    virtual void CastTriggerTargetOrder(const GameState& s, int controller, bool destroy,
+                                        std::vector<int>& class_reps) const;
+
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
     // double-strike mid-step earnings (see JitteDamageMath; per-turn damage-optimal). The one

@@ -78,6 +78,7 @@ thread_local int g_play_cur_main_ordinal = -1;
 thread_local StorageHoldChooser* g_play_storage_hold_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
+thread_local int g_play_extra_turns_taken = 0;
 thread_local std::vector<std::string>* g_play_dropped_cast_sink = nullptr;
 thread_local bool g_human_play_suppressed = false;
 thread_local bool g_unpruned_suppressed   = false;   // see GameLogger.h (hand-back pruning switch)
@@ -322,6 +323,15 @@ void GameLogger::StartGame(const std::string& run_id, int game_number,
     m_in_phase     = false;
     m_win_turn     = -1;
     m_digest       = FNV_OFFSET;   // reset the running play digest for this game
+}
+
+void GameLogger::StartPhase(int turn, const std::string& phase, int extra)
+{
+    StartPhase(turn, phase);
+    if (extra <= 0) { return; }
+    FoldStr("X"); FoldInt(extra);
+    if (m_digest_only) { return; }
+    m_current.extra_turn = extra;
 }
 
 void GameLogger::StartPhase(int turn, const std::string& phase)
@@ -667,6 +677,7 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
     {
         json entry;
         entry["turn"]  = pe.turn;
+        if (pe.extra_turn > 0) { entry["extraTurn"] = pe.extra_turn; }   // only in an extra turn (byte-identical else)
         entry["phase"] = pe.phase;
 
         json actions_arr = json::array();

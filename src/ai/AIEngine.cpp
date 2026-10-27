@@ -667,6 +667,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
+        || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
@@ -705,6 +706,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.combat_transform_choice >= 0
         && s.scripted_combat_transform != p.combat_transform_choice)                               { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
+    if (p.cast_trigger_target_choice >= 0 && CastTriggerTargetPinFor(s) != p.cast_trigger_target_choice) { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
     if (p.grace_choice >= 0            && s.scripted_grace_choice != p.grace_choice)               { ok = false; }
     if (p.upkeep_gy_reanimate_choice >= 0
@@ -2651,7 +2653,7 @@ void MergeStagedIntoHand(GameState& state)
     ap.staged_cards.clear();
     for (StagedCard& sc : snap)
     {
-        if (sc.expiry_turn < state.turn_number) { continue; }  // end-of-next-turn expiry (CR 406)
+        if (sc.expiry_turn < state.TurnSeq()) { continue; }  // end-of-next-turn expiry (CR 406)
         sc.card.m_is_staged     = true;
         sc.card.m_staged_expiry = sc.expiry_turn;  // travels with the card so the rollout can expire it
         EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
@@ -2690,7 +2692,7 @@ static int UnexpiredStagedCount(const GameState& state)
 {
     int n = 0;
     for (const StagedCard& sc : state.ActivePlayer().staged_cards)
-    { if (sc.expiry_turn >= state.turn_number) { ++n; } }
+    { if (sc.expiry_turn >= state.TurnSeq()) { ++n; } }
     return n;
 }
 
@@ -3814,6 +3816,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // its land drop and held for the rest of the phase -- lockstep with ApplyPlanDirect's
     // ScriptedLandfallTarget. Empty (nothing installed) for a plan carrying no policy.
     std::optional<ScriptedLandfallTarget> landfall_target_exec;
+    // ...and its CAST-TRIGGER target policy (Plan::cast_trigger_target_choice; Ulamog), the same shape,
+    // installed before its first cast -- lockstep with ApplyPlanDirect's ScriptedCastTriggerTarget.
+    std::optional<ScriptedCastTriggerTarget> cast_trigger_target_exec;
 
     if (play_this_phase)
     {
@@ -4431,7 +4436,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
             // The plan's landfall-target policy, before its land drop (see landfall_target_exec).
             if (plan.landfall_target_choice >= 0)
-            { landfall_target_exec.emplace(plan.landfall_target_choice, state.turn_number); }
+            { landfall_target_exec.emplace(plan.landfall_target_choice, state.TurnSeq()); }
+            if (plan.cast_trigger_target_choice >= 0)
+            { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq()); }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -4635,7 +4642,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // casts first): the re-solve's ApplyPlanDirect installed it before its land block, -1 installing
         // nothing (the committed plan's policy stays) -- the same rule here.
         if (x.landfall_target_choice >= 0)
-        { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.turn_number); }
+        { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.TurnSeq()); }
+        if (x.cast_trigger_target_choice >= 0)
+        { cast_trigger_target_exec.reset(); cast_trigger_target_exec.emplace(x.cast_trigger_target_choice, state.TurnSeq()); }
         rs_last = x;
     };
 
@@ -5231,7 +5240,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rp.staged_cards.clear();
         for (StagedCard& sc : snap)
         {
-            if (sc.expiry_turn < state.turn_number) { continue; }
+            if (sc.expiry_turn < state.TurnSeq()) { continue; }
             sc.card.m_is_staged     = true;
             sc.card.m_staged_expiry = sc.expiry_turn;
             EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
@@ -5528,7 +5537,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                            ResolveProvider(state).CondemnsConsideredAtBreakpoint(),
                                            karoo_deferred,
                                            TurnSolver::ManaSourceCount(state),
-                                           rdb_site_activated, state.turn_number,
+                                           rdb_site_activated, state.TurnSeq(),
                                            TurnSolver::NewOnlyBreakpointContinuationsActive(state),
                                            &pre_plan_acts);
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
@@ -5539,7 +5548,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         rp.staged_cards.clear();
         for (StagedCard& sc : snap)
         {
-            if (sc.expiry_turn < state.turn_number) { continue; }
+            if (sc.expiry_turn < state.TurnSeq()) { continue; }
             sc.card.m_is_staged     = true;
             sc.card.m_staged_expiry = sc.expiry_turn;
             EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);

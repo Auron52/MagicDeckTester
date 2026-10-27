@@ -421,7 +421,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         ap.library.insert(ap.library.begin(), std::move(c));
         // Intentional top-stack marker (see GameState::top_stacked_turn): the USER's gate for
         // every top-consumer model -- deliberate stacks only, never a coincidental known top.
-        state.top_stacked_turn        = state.turn_number;
+        state.top_stacked_turn        = state.TurnSeq();
         state.top_stacked_card_number = fetched_num;   // identity, so a consumed stack self-invalidates
     }
 
@@ -464,7 +464,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     if (pp.discard_random_after_tutor && pp.tutor_to_hand && !ap.hand.empty())
     {
         uint64_t mix = state.game_seed * 0x9E3779B97F4A7C15ull
-                     + (static_cast<uint64_t>(state.turn_number) + 1) * 0xD1B54A32D192ED03ull
+                     + (static_cast<uint64_t>(state.TurnSeq()) + 1) * 0xD1B54A32D192ED03ull
                      + (state.search_count + 1) * 0xCA5A826395121157ull
                      + ap.hand.size();
         mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
@@ -2483,9 +2483,9 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
         // line the search never evaluated.
         if (took > 0 && took <= 0xFF && controller == state.active_player_index)
         {
-            if (state.combat_hand_turn != static_cast<std::int16_t>(state.turn_number))
+            if (state.combat_hand_turn != static_cast<std::int16_t>(state.TurnSeq()))
             {
-                state.combat_hand_turn = static_cast<std::int16_t>(state.turn_number);
+                state.combat_hand_turn = static_cast<std::int16_t>(state.TurnSeq());
                 state.combat_hand.fill(0);
             }
             for (std::uint8_t& slot : state.combat_hand)
@@ -2556,7 +2556,7 @@ void ResolveExpressiveIteration(GameState& state)
     {
         Card s = cards[exile_idx];
         s.m_is_staged     = true;
-        s.m_staged_expiry = state.turn_number;   // this turn only (vs turn+1 for Light Up / Soulfire)
+        s.m_staged_expiry = state.TurnSeq();   // this turn only (vs turn+1 for Light Up / Soulfire)
         kept_nums.push_back(s.m_number);
         EnterHand(state, state.active_player_index, std::move(s),
                   HandEntryReason::Stage);                    // [exile_idx] -> exiled, playable now

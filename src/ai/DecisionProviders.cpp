@@ -1866,6 +1866,32 @@ void DecisionProvider::LandfallCounterTargetOrder(const GameState& s, int contro
     for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].second; }
 }
 
+void DecisionProvider::CastTriggerTargetOrder(const GameState& s, int controller, bool destroy,
+                                              std::vector<int>& class_reps) const
+{
+    // ORDER ONLY (see the declaration): the search branches over every class. Keys computed once per class.
+    if (class_reps.size() < 2) { return; }
+    auto tier = [&](const Permanent& q) -> int
+    {
+        if (q.controller_index != controller) { return 0; }
+        if (destroy && q.card.HasKeyword(Keyword::Indestructible)) { return 1; }
+        if (q.card.IsLand() && !q.card.IsCreature()) { return q.tapped ? 2 : 3; }
+        if (q.card.IsCreature() || q.is_animated) { return q.EffectivePower() >= 10 ? 6 : 4; }
+        return 5;
+    };
+    struct Keyed { int tier; int power; int idx; };
+    std::vector<Keyed> keyed;
+    keyed.reserve(class_reps.size());
+    for (int idx : class_reps)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(idx)];
+        keyed.push_back(Keyed{ tier(q), (q.card.IsCreature() || q.is_animated) ? q.EffectivePower() : 0, idx });
+    }
+    std::stable_sort(keyed.begin(), keyed.end(), [](const Keyed& a, const Keyed& b)
+    { return a.tier != b.tier ? a.tier < b.tier : a.power < b.power; });
+    for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].idx; }
+}
+
 void DecisionProvider::LandfallDoubleTargetOrder(const GameState& s, int controller,
                                                  std::vector<int>& class_reps) const
 {
@@ -12160,7 +12186,7 @@ bool BurnProvider::HoldsSacLandBurn(const GameState& state, const std::vector<Ac
                 // m_staged_expiry = the LAST turn this card may be played, so it is use-it-or-lose-it
                 // only on that turn. Earlier than that, holding still costs nothing.
                 sac_is_staged  = true;
-                sac_expires_now = (ap.hand[c.hand_index].m_staged_expiry <= state.turn_number);
+                sac_expires_now = (ap.hand[c.hand_index].m_staged_expiry <= state.TurnSeq());
             }
             continue;
         }
@@ -12437,7 +12463,7 @@ bool BurnProvider::Main2CastAllowed(const GameState& s, const Action& a) const
     if (d->params.on_cast_trigger_damage > 0) { return true; }
     const Player& ap = s.ActivePlayer();
     if (d->params.landfall_damage > 0 && ap.lands_played_this_turn == 0) { return true; }
-    if (s.m2_stage_turn != s.turn_number) { return false; }
+    if (s.m2_stage_turn != s.TurnSeq()) { return false; }
     if (!BurnM2NarrowEnabled()) { return true; }
     if (a.hand_index < 0 || a.hand_index >= static_cast<int>(ap.hand.size())) { return false; }
     const Card& hc = ap.hand[static_cast<std::size_t>(a.hand_index)];
@@ -15453,7 +15479,7 @@ std::vector<int> DragonstormProvider::CleanupDiscardCandidates(
         const CardDefinition* d = def_of(sc.card);
         if (d == nullptr || d->params.sac_for_mana_amount <= 0) { continue; }
         ++blooms_out;
-        if (sc.arrive_turn <= s.turn_number + 2) { ++ready_blooms; }
+        if (sc.arrive_turn <= s.TurnSeq() + 2) { ++ready_blooms; }
     }
 
     // ---- 2. classify the hand ------------------------------------------------------------------
@@ -28162,7 +28188,7 @@ static bool FluctKeepPayable(const GameState& s, const CardDefinition& cost_def,
     std::uint64_t h = 1469598103934665603ULL;
     auto mix = [&h](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
     const int me = s.active_player_index;
-    mix(static_cast<std::uint64_t>(s.turn_number));
+    mix(static_cast<std::uint64_t>(s.TurnSeq()));
     mix(static_cast<std::uint64_t>(me));
     mix(static_cast<std::uint64_t>(s.players[me].life));
     mix(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&cost_def)));
@@ -32450,7 +32476,7 @@ int StompyProvider::ExtraLethalDamage(const GameState& s,
     // the second pass cast two Call enchantments and never took the stacked Hoof). Reading the
     // top here honours the USER's intentionality gate: top_stacked_turn is written only by a
     // deliberate tutor-to-top, never by a coincidentally-known top.
-    if (s.top_stacked_turn == s.turn_number && !ap.library.empty()
+    if (s.top_stacked_turn == s.TurnSeq() && !ap.library.empty()
         && (tt_in_plan > 0 || call_in_plan != nullptr))
     {
         const CardDefinition* td = CardDatabase::Instance().LookupCached(ap.library.front());
@@ -32769,7 +32795,7 @@ StompyProvider::OrderSlots StompyProvider::CanonicalOrderSlots(const GameState& 
         if (d->params.look_top_put_creature_count > 0) { ++n_tt; }
     }
     const Player& ap = s.players[s.active_player_index];
-    const bool stacked = s.top_stacked_turn == s.turn_number && !ap.library.empty()
+    const bool stacked = s.top_stacked_turn == s.TurnSeq() && !ap.library.empty()
                       && ap.library.front().m_number == s.top_stacked_card_number;
     OrderSlots S;
     S.wt_mid    = n_wt > 0 && n_tt > 0 && !stacked;
@@ -35919,6 +35945,8 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         for (const auto& e : s.pending_incinerator_damage)
         { v.push_back(e.source.m_number); v.push_back(e.source.m_name_hash); v.push_back(e.controller); v.push_back(e.damaged_player); v.push_back(e.amount); }
     }
+    // Extra turns (Emrakul): written by a resolving cast trigger / the turn transition. Exact compare only.
+    v.push_back(s.pending_extra_turns); v.push_back(s.extra_turns_taken); v.push_back(s.in_extra_turn);
     v.push_back(s.opponent_lost_life_this_turn); v.push_back(s.opponent_library_dealt); v.push_back(s.opponent_decked);
     v.push_back(s.inf_life_turn); v.push_back(s.inf_life_possible); v.push_back(s.top_stacked_turn);
     v.push_back(s.top_stacked_card_number);
@@ -38205,7 +38233,7 @@ static std::uint64_t BoardKey(const GameState& s, int me)
     if (EdfRouteAuraOrderOn())    { Mix(h, 0xA0EA0D3Fu); }
     if (EdfRouteLoopUntapperOn()) { Mix(h, 0x100B0A77u); }
     if (EdfRouteAuraOrderOn() && EdfRouteAuraPermsOn()) { Mix(h, 0xA0EA9E25u); }   // part 4b
-    Mix(h, static_cast<std::uint64_t>(s.turn_number));
+    Mix(h, static_cast<std::uint64_t>(s.TurnSeq()));
     Mix(h, static_cast<std::uint64_t>(me));
     Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life));
     Mix(h, static_cast<std::uint64_t>(s.players[1 - me].library.size()));
@@ -38257,7 +38285,7 @@ static std::uint64_t BoardKeyDrop(const GameState& s, int me, int g)
 {
     std::uint64_t h = 1469598103934665603ULL;
     Mix(h, static_cast<std::uint64_t>(g));
-    if (g != 5) { Mix(h, static_cast<std::uint64_t>(s.turn_number)); }
+    if (g != 5) { Mix(h, static_cast<std::uint64_t>(s.TurnSeq())); }
     if (g != 7) { Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life)); Mix(h, static_cast<std::uint64_t>(s.players[1 - me].library.size())); }
     const Player& ap = s.players[me];
     if (g != 3) { Mix(h, static_cast<std::uint64_t>(ap.life)); }
@@ -47195,7 +47223,7 @@ static Verdict WalkPass(const GameState& s, int me, bool priced)
         if (priced && (w.price = NodeUnits()) > 0)
         {
             w.budget = TurnSolver::DecisionBudget();
-            w.cut_ok = w.budget != nullptr && s.turn_number > TurnSolver::DecisionRootTurn();
+            w.cut_ok = w.budget != nullptr && s.TurnSeq() > TurnSolver::DecisionRootTurn();
         }
         if (TraceOn()) { v.root_board = BoardText(s, me); }
         std::uint64_t d_n0 = 0, d_pl0 = 0, d_us0 = 0, d_max0 = 0;
@@ -47326,7 +47354,7 @@ static Verdict WalkPass(const GameState& s, int me, bool priced)
                                          std::chrono::steady_clock::now() - t0).count());
             g_walk_us.fetch_add(us, std::memory_order_relaxed);
             const int rt = TurnSolver::DecisionRootTurn();
-            const int b  = rt < 0 ? 0 : std::min(3, 1 + std::max(0, s.turn_number - rt));
+            const int b  = rt < 0 ? 0 : std::min(3, 1 + std::max(0, s.TurnSeq() - rt));
             g_walks_dt[b].fetch_add(1, std::memory_order_relaxed);
             g_walk_us_dt[b].fetch_add(us, std::memory_order_relaxed);
         }
