@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 486a3783a  date 2026-10-27
+# Regression ground truth -- commit 883c24a3a  date 2026-10-27
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-10-27): PLAY-SETTING SHAPE (USER 2026-10-27): d3 rows cut to one d3 b10 sanity row per deck, play rows at each deck's SHIPPED budget absorb the time; overlapping games identical except the re-budgeted decks (hinata b30, melira b60, kittyv3 b14: 8 play-changed, 0 slower)
-# accepted-with-regressions (regression, 2026-10-27): PLAY-SETTING SHAPE (USER 2026-10-27): d3 rows cut to one d3 b10 sanity row per deck, play rows at each deck's SHIPPED budget absorb the time, elementals backstop rows NEW; overlapping games identical except the re-budgeted decks (hinata b30, goblins b60, melira b60, kittyv3 b14): searched 14 faster / 3 slower (hinata d5 s3003 at b30)
 # accepted-with-regressions (overnight, 2026-10-27): Periodic overnight 2026-10-27 on 486a3783a (PGO, 15m19s): lands MTG_GAME_LINE_CACHE default ON, the PLAY-SETTING SHAPE (USER: d3 cut to one d3 b10 sanity row, play rows at SHIPPED budgets -- the old b40/b80 rows now b20, hinata b30, goblins/melira b60, kittyv3 b14), the 10-26 artifact landings (giants/goblins/angels/dragons/mirrorwing keep tables) and everything since 10-24. Overlapping games: searched 992 faster / 774 slower + 40 new wins / 36 to-unwon, d0 3111 / 2821; classify 139 churn / 671 PERSISTS, 646 of them in the five refreshed-keep-table decks (different keep -> draws diverge; giants s4004 gi31 = 0-land Sol Ring 6 kept then 8 straight spells). Net slower only where the budget dropped to ship (creature_giving +0.011/g, th +0.009, kittyv3 +0.009, angels +0.003) and goblins d0 +0.007 (its keep table). elementals backstop rows NEW.
+# accepted-with-regressions (smoke, 2026-10-27): USER 2026-10-27: LandfallElementals staged value leaf at b20 + NivMizzetCombo emulnl at b20 ADOPTED (sidecar presence); only elementals/niv keys move, searched 10 faster / 4 slower, all 4 churn (recover at 4x/16x)
+# accepted-with-regressions (regression, 2026-10-27): USER 2026-10-27: LandfallElementals staged value leaf at b20 + NivMizzetCombo emulnl at b20 ADOPTED (sidecar presence); only elementals/niv keys move, searched 22 faster / 2 slower, both churn; elementals play rows 500 core-ms/game = 0.23x Hinata (USER condition: significantly cheaper than Hinata); refs 0 drift
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -99,7 +99,7 @@ melira2hg_smoke_d5_s1001=4.7600/a077333439bdad56
 pirates2hg_smoke_d5_s1001=4.9000/c61d3e4cd78aeae7
 soldiers2hg_smoke_d5_s1001=4.9800/665bdae63e61943d
 colossus2hg_smoke_d5_s1001=4.1200/8a40a0fa77bdc602
-elementals2hg_smoke_d5_s1001=4.9200/6636d0b6b67ec9c4
+elementals2hg_smoke_d5_s1001=4.9600/f9843463fa3336d7
 pd2hg_smoke_d5_s1001=5.5200/df6a96d24bd0eb39
 fluctuator_smoke_d0_s1001=4.9870/b9ca221376d42c0c
 fluctuator_smoke_d3_s1001=3.4400/f8195dcf152ce11b
@@ -140,8 +140,8 @@ galadriel_smoke_d5_s1001=5.0343/2792b2539e029d24
 galadriel2hg_smoke_d5_s1001=4.8933/d3057555a751735b
 niv_smoke_d0_s1001=6.1010/ebe7518d88e25e82
 niv_smoke_d3_s1001=4.4800/3b2e22e953c75c88
-niv_smoke_d5_s1001=4.4800/600508dc2d66cd57
-niv2hg_smoke_d5_s1001=4.4800/23bf10b50a553159
+niv_smoke_d5_s1001=4.4800/58fda339cd6858bf
+niv2hg_smoke_d5_s1001=4.4800/e94aa86895e236b5
 colossus_smoke_d0_s1001=4.3580/f1a3ce0a59cfc500
 colossus_smoke_d3_s1001=3.3000/2c637b903ddbd91e
 colossus_smoke_d5_s1001=3.2629/d757553c94bf2fa2
@@ -154,8 +154,8 @@ alchemist_smoke_d3_s1001=5.0200/3e606ed8ec791be9
 alchemist_smoke_d5_s1001=4.9333/3129f7d4c4ca8622
 alchemist2hg_smoke_d5_s1001=5.1600/3b9783ebc2ba2d27
 elementals_smoke_d0_s1001=5.6110/03fed2d66e5a6893
-elementals_smoke_d3_s1001=4.4800/3ffd0625223be0b5
-elementals_smoke_d5_s1001=4.3840/d4e387b19ed5e6f8
+elementals_smoke_d3_s1001=4.4600/92003b3289a67020
+elementals_smoke_d5_s1001=4.3360/6ae2c4ad1da84992
 
 # --- regression ---
 alchemist_regression_d3_s30211=5.0000/a3247d7b297bbf58
@@ -378,9 +378,9 @@ galadriel_regression_d5_s3003=4.9600/cd9ddb58b794aa5b
 galadriel2hg_regression_d5_s2002=4.8133/7ab19544b8517de3
 niv_regression_d0_s2002=6.0550/31ba78ead4ff9308
 niv_regression_d3_s2002=4.4400/1cac14c0faffe171
-niv_regression_d5_s2002=4.4200/99648f3aefea488b
+niv_regression_d5_s2002=4.4200/59e714a1a7b5c6bd
 niv_regression_d5_s3003=4.5600/e03d9c564c00f313
-niv2hg_regression_d5_s2002=4.4200/110e02eb325bed45
+niv2hg_regression_d5_s2002=4.4200/403bca4c94f67d78
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
 colossus_regression_d5_s2002=3.4350/8051c222be08e92d
@@ -395,9 +395,9 @@ alchemist_regression_d3_s2002=4.8600/aed958a31af16f27
 alchemist_regression_d5_s2002=4.9429/59d38dc69bd6c5d7
 alchemist_regression_d5_s3003=5.0286/3e28f5b53b1ed8d0
 elementals_regression_d0_s2002=5.6150/bf3d79e38c9750a8
-elementals_regression_d3_s2002=4.4000/9796a2a6a13c4f07
-elementals_regression_d5_s2002=4.3200/16d58ab8d0afc606
-elementals_regression_d5_s3003=4.3200/ff9815da3a37f6f4
+elementals_regression_d3_s2002=4.3600/ca6c8fdbc261ce0a
+elementals_regression_d5_s2002=4.2800/5d9f2fc1c26c6064
+elementals_regression_d5_s3003=4.2400/3f82dd296f144188
 
 # --- overnight ---
 alchemist_overnight_d3_s30101=4.8000/e3ed67adcd562587

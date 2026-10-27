@@ -1,7 +1,7 @@
 # NivMizzetCombo: replacing the rollout ladder with a leafless shape (resumed 2026-10-27)
 
 **Status: resumed 2026-10-27 after the 2026-10-24 park.** Budget curves at equal cost are below, in "Budget
-curves (2026-10-27)". Nothing changed in play. The shape to ship is a USER decision.
+curves (2026-10-27)". emulnl at b20 ADOPTED 2026-10-27, see "Decision".
 
 ## The question
 
@@ -152,7 +152,14 @@ The leafless probes alone cost 92% of live's whole spend, so the calibration is 
 per-deck R (proposal A's first half) would bring nlfit b20 to about 1.33x for -0.013, still behind live b30's
 -0.021 at 1.34x. It is not built.
 
-### Open decision (USER)
+### Decision (2026-10-27): emulnl at b20
+
+When the USER chose LandfallElementals' staged b20, they said *"we can use the more expensive better
+quality option"*. The agent read that as covering Niv too and adopted **emulnl at b20**
+(`build/scratch/niv_curve/variants/emulnl/NivMizzetCombo.value.json`: a `value_play` block with
+`ladder: emulated`, `leaf: none`, `emul_r`, and no enabled depth or budget, so it plays the built-in d5/20).
+The USER was told that reading and can reverse it by removing the sidecar. The options as they stood:
+
 
 * **emulnl at b20 (agent recommendation).** It stays at the current budget, so it does not touch the
   2026-10-22 never-lower rule, and it takes Niv off the rollout LADDER. Held out it is -0.005 turns for

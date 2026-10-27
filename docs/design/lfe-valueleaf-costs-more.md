@@ -2,8 +2,8 @@
 
 **Status (2026-10-27): ROOT-CAUSED, no defect.** The leaf and leafless shapes cost more at b20 because
 they SPEND the budget and the rollout ladder does not. Measured at equal cost (budget curves, below), the
-model leaf dominates the rollout ladder's own curve, and the no-leaf escalation is level with it. What to
-ship is a USER decision (both good points sit below b20), see "Open decision". The USER's position stands:
+model leaf dominates the rollout ladder's own curve, and the no-leaf escalation is level with it. The USER
+chose **staged at b20** on 2026-10-27, see "Decision". The USER's position stands:
 *"Heuristic rollout should never be what we settle on."* The original record follows.
 
 ## What the run measured
@@ -138,7 +138,20 @@ it) and an 8-seed curve plus a held-out wall check first.
 * emul and nlfit sit on or behind live's curve. nlfit pays a per-game R calibration (see
   `niv-rollout-ladder-vs-leafless-shapes.md`, mechanism 4).
 
-### Open decision (USER)
+### Decision (USER 2026-10-27): staged at b20
+
+The USER chose **staged at b20** (-0.034 turns at 1.53x units / 1.75x wall, held out), *"as long as it
+continues to be significantly cheaper than Hinata"*. That is a standing CONDITION: re-check the deck's
+play-row cost per game against Hinata's in every tier accept. b20 also keeps the never-lower rule. What settled the cost question: at play settings (d5 b20) LandfallElementals costs
+310 core-ms per game in the 2026-10-27 regression tier, 0.15x Hinata (2,118). Staged b20 projects to
+about 545, 0.26x, mid-pack next to Melira and NivMizzetCombo. (`test/suite_cost.json`, 10-23, still
+showed 2,179 ms/game. That figure predates the keep table, when every mulligan bottom was a full trial
+game.) The sidecar shipped is `logs/eval/LandfallElementals.value.STAGED.json`, byte-identical. It has
+no `value_play` block, so it plays the built-in d5/20 at the global start-gate alpha 8. Owed: profile
+the ~1.15x per-unit model cost and the 16% rollout escalation, to remove waste rather than to make it
+affordable.
+
+The options as they stood before the decision:
 
 Both good points are below b20. That conflicts with the 2026-10-22 rule that a deck's play budget is
 never lowered (`.claude/skills/value-leaf.md`). The precedent is KittyEquipment's emulated shape, adopted
