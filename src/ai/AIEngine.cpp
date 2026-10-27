@@ -8692,12 +8692,17 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
     else
     {
         if (!sd->params.cycling_cost.has_value()) { return DigOutcome::Failed; }
-        // P1/P2 -- affordability probe and the real payment, both on the Fluctuator-reduced cost,
-        // plus the LIFE half (Street Wraith; CyclingLifePayable / PayCyclingLife, SpellEffects.h).
+        // P1/P2 -- the real payment on the Fluctuator-reduced cost, plus the LIFE half (Street Wraith;
+        // CyclingLifePayable / PayCyclingLife, SpellEffects.h). NO ManaPool::CanPay pre-probe: the payer
+        // itself decides (it leaves the state unchanged on failure), exactly as the rollout's seeded chain,
+        // its dig loop (P4) and human play (P3) do with TapForCostDirect. The pool books a filter land
+        // (Cascade Bluffs) only as its own taps, so the probe refused a cycle the payer makes by feeding the
+        // filter from floating mana -- Seething Song's RRRRR into "{U/R}, {T}: Add {U}{U}" for Curator of
+        // Mysteries' {U} (fd-diverge s93143 gi143: the rollout cycled, the executor did not, a proven
+        // turn-7 kill lost; test_cyclone_stage5.cpp).
         const ManaCost cyc_cost = EffectiveCyclingCostFor(state, *sd);
         if (!CyclingLifePayable(state, state.active_player_index, *sd)) { return DigOutcome::Failed; }
         ManaPool avail = AvailableManaPool(state);
-        if (!avail.CanPay(cyc_cost)) { return DigOutcome::Failed; }
         std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&source](const Card& c) { return c.m_name == source; });
         if (it == ap.hand.end()) { return DigOutcome::Failed; }
