@@ -1,0 +1,36 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "Walking Ballista (2026-10-27). HUMAN PLAY: the Heliod + Ballista loop surfaces as the verified COMBO OFF plan (goff_of recognises PingLoop), and re-applying it kills.",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "resume_at": "main1",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Heliod, Sun-Crowned"
+    },
+    {
+      "name": "Walking Ballista",
+      "sick": true,
+      "plus_counters": 2
+    }
+  ],
+  "hand": [],
+  "expect_combo_off": true
+}

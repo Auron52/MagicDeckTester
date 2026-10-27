@@ -230,6 +230,16 @@ MANIFEST = {
     # reply shape) wired 2026-09-05; fires on EVERY LTB path (sac costs, flickers, evoke).
     # Default = the provider's ReviveCandidates pick (missing combo pieces first).
     "ltb_return_creatures":  ("revive",               positive),
+    # Abiding Grace (LifegainHeliodCombo, 2026-10-27): the end-step "choose one" -- gain 1 life OR
+    # return an MV-1 creature card -- asked as ONE `gy_return_one` pick (a graveyard card image, or
+    # the alt_text button) at the shared PerformEndStepAbidingGrace; only when a return is legal.
+    # Emeria, the Sky Ruin shares the type (alt_text "Return nothing"). MV 0 is a real value here,
+    # so the gate is ">= 0", not positive.
+    "endstep_modal_reanimate_mv": ("gy_return_one",   lambda v: isinstance(v, int) and v >= 0),
+    # Emeria, the Sky Ruin (LifegainHeliodCombo, 2026-10-27): the upkeep "you may return target creature
+    # card" -- the same `gy_return_one` pick (a graveyard card image, or the "Return nothing" alt button)
+    # at the shared PerformUpkeepGyReanimate; asked only when the intervening if holds and a target exists.
+    "upkeep_gy_reanimate":   ("gy_return_one",        truthy),
     # Celes: WHICH cards to rummage away -- its own `rummage` multi-pick chooser
     # (g_play_rummage_chooser at the etb_discard_any_number resolution, the sac_tutor reply
     # shape over the whole hand; zero picks legal) wired 2026-09-05. Default = excess lands.
@@ -268,6 +278,13 @@ MANIFEST = {
     # `target` board-click decision -- no new type.
     "lifegain_target_own_counter": ("target",          truthy),   # "put a +1/+1 counter on target creature or enchantment you control"
     "lifelink_grant_cost":   ("target",               truthy),   # "{1}{W}: Another target creature gains lifelink" (which creature)
+    # LifegainHeliodCombo (2026-10-27): Walking Ballista. "Remove a +1/+1 counter: 1 damage to ANY target"
+    # -- the target is asked at the ping's resolution through the shared `target` decision
+    # (ResolveCounterPing -> g_play_target_chooser, CollectDamageTargets); the X of its {X}{X} is a
+    # `main_phase` plan variant (chosen_x, every X 0..max), and the {4} counter is a main-phase activation.
+    "remove_counter_ping_damage": ("target",          positive),
+    "enters_with_x_plus_counters": ("main_phase",     truthy),
+    "self_counter_cost":     ("main_phase",           truthy),
     # SelesnyaLifegain screen (2026-10-22): Heroes' Reunion / Rest for the Weary, "TARGET PLAYER gains N
     # life". WHICH player is a real choice: the autonomous search branches over Action::player_target
     # (the opponent variant pruned by DecisionProvider::OffersLifegainOpponentTarget by default); a human
@@ -695,6 +712,8 @@ BOARD_ACTIVATIONS = {
     # (a land is never cast; a Khalni may also sit in hand).
     "land_search_activation_cost":               ("verb:landsearch", truthy,  "land_search_activation_cost"),
     "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
+    "self_counter_cost":                         ("activate",       truthy,   "self_counter_cost"),    # Walking Ballista {4}
+    "remove_counter_ping_damage":                ("activate",       positive, None),                   # Walking Ballista ping (counter cost)
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
@@ -1411,6 +1430,7 @@ INERT_PARAMS = {
     "drain_each_opponent": "Scholar of Athreos 'EACH opponent' scope of the drain (rides drain_cost -> main_phase): x opposing heads, no target -- nothing to choose",
     # Brindle Boar: "Sacrifice this creature: You gain 4 life" -- the payload is automatic; the
     # ACTIVATION rides sac_creature_outlet -> activate and the victim is forced (sac_outlet_self_only).
+    "sac_outlet_lifegain_per_revealed_color": "Martyr of Sands' reveal colour; the X it scales is surfaced as x_value (reveal kind) -- mapped in expected_types",
     "sac_outlet_lifegain": "automatic sac-outlet lifegain (Brindle Boar, 4), no choice in the payload; the activation rides sac_creature_outlet -> activate, the victim is the source itself",
     "cast_lifegain_ferocious": (
         "the FEROCIOUS amount of an automatic untargeted lifegain (Feed the Clan: 'you gain 10 life "
@@ -1499,6 +1519,10 @@ INERT_PARAMS = {
     # ---- Prevent Damage (2026-09-27, phase I2) -- the deck's spells ----
     "on_cast_trigger_any_mv": "Spellshock: widens the Eidolon cast trigger to every mana value -- a trigger THRESHOLD, no choice (the damage is automatic, to the caster)",
     "ping_all_amount": "Pyrohemia: damage per activation (1) -- a printed constant; the activation itself (and its count) rides ping_all_cost -> main_phase",
+    "upkeep_gy_reanimate_land_subtype": "Emeria: the intervening-if's land SUBTYPE (Plains) -- a legality condition, no choice; the pick rides upkeep_gy_reanimate -> gy_return_one",
+    "upkeep_gy_reanimate_land_threshold": "Emeria: the intervening-if's land COUNT (7) -- a condition, no choice",
+    "upkeep_gy_reanimate_may": "Emeria: 'you may' -- the decline IS the gy_return_one alt_text button ('Return nothing'), riding upkeep_gy_reanimate",
+    "endstep_modal_lifegain": "Abiding Grace's gain-mode PAYLOAD -- automatic once the mode is chosen; the mode rides endstep_modal_reanimate_mv -> gy_return_one (its alt_text button)",
     "endstep_sac_if_no_creatures": "Pyrohemia: mandatory intervening-if end-step SACRIFICE of this enchantment -- no target, no may",
     "tutor_max_mv_is_lands": "Beseech the Queen: tutor MV cap = lands you control -- a legality FILTER read at resolution; the pick rides tutor_to_hand -> main_phase / the resolution re-ask",
     "shuffles_self_into_library_on_resolve": "Green Sun's Zenith: the resolved spell shuffles itself into the library -- automatic, no choice",
@@ -1783,6 +1807,10 @@ def expected_for_card(card):
     # viewer plan-space valve dropped the card (AccomplishedAlchemist sweep seed 80016, 2026-10-19).
     if card.get("template") == "draw_x":
         exp.add("x_value")
+    # Martyr of Sands' "Reveal X white cards" (sac_outlet_lifegain_per_revealed_color): the X is asked
+    # at the activation's cost in ApplySacCreatureOutlet (x_value, reveal kind).
+    if p.get("sac_outlet_lifegain_per_revealed_color"):
+        exp.add("x_value")
     if card.get("name") in NAME_CHOICES:
         exp.add(NAME_CHOICES[card["name"]])
     return exp, unmapped
@@ -1881,6 +1909,14 @@ def modeled_tokens(card):
         t.add("target")
     # Magnetic Theft's "target Equipment ... target creature" IS the two-click `target` decision.
     if p.get("attach_target_equipment"):
+        t.add("target")
+    # Abiding Grace's end-step "choose one -- ... return TARGET creature card": the mode AND the target are
+    # ONE `gy_return_one` pick (a graveyard card, or the alt_text gain button). Emeria's "you may return
+    # target creature card" is the same decision (upkeep_gy_reanimate, below).
+    if isinstance(p.get("endstep_modal_reanimate_mv"), int) and p.get("endstep_modal_reanimate_mv") >= 0:
+        t.update({"target", "modal"})
+    # Emeria's upkeep "you may return target creature card" -- the same `gy_return_one` pick.
+    if p.get("upkeep_gy_reanimate"):
         t.add("target")
     return t
 

@@ -1,0 +1,45 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Walking Ballista (2026-10-27, rebuilt after review). X = 0 (no mana: the only legal X), cast by a human line, onto a board of Heliod (devotion 1, not a creature), Soul Warden and Archangel of Thune. The 0/0 ENTERS, so Soul Warden gains 1; that gain triggers Heliod (one counter on a target) and Thune (a counter on EACH creature we control). The toughness SBA kills the Ballista before either trigger resolves (CR 704.5f / 704.3), so NEITHER may put a counter on it: without the DoomedEntrant skip, Thune's each-creature loop would hand the 0/0 a counter and it would SURVIVE as a 1/1 (the drain re-verifies toughness). Binding: the Ballista's death is in the history, and no '+1/+1 on Walking Ballista' (Heliod's narration) ever appears. Heliod's own default pick never prefers a 0-power entrant over the 1/1 Warden, so Thune's loop is the observable for the skip; Heliod is on the board so its trigger resolves in the same event.",
+  "battlefield": [
+    {
+      "name": "Heliod, Sun-Crowned"
+    },
+    {
+      "name": "Soul Warden",
+      "sick": true
+    },
+    {
+      "name": "Archangel of Thune",
+      "sick": true
+    }
+  ],
+  "hand": [
+    "Walking Ballista"
+  ],
+  "human_lines": [
+    "cast=Walking Ballista"
+  ],
+  "expect_no_win": true,
+  "expect_active_life": 21,
+  "expect_history_contains": [
+    "Walking Ballista dies (0 toughness)"
+  ],
+  "expect_history_lacks": [
+    "+1/+1 on Walking Ballista"
+  ]
+}

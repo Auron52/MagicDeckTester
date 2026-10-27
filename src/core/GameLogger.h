@@ -771,6 +771,20 @@ extern thread_local SacTutorChooser* g_play_sac_tutor_chooser;
 using ReviveChooser = SacTutorChooser;
 extern thread_local ReviveChooser* g_play_revive_chooser;
 
+// ---- Human-play single graveyard-return chooser (`gy_return_one`; --claude-play / viewer) -----------
+// One "return target creature card from your graveyard to the battlefield" choice with ONE alternative:
+// Abiding Grace's end-step "choose one" (alt_text "Gain 1 life" -- the other mode) and Emeria, the Sky
+// Ruin's upkeep "you may return" (alt_text "Return nothing"). `candidates` = the legal graveyard cards,
+// one per copy, graveyard order. Returns 0 = the alternative, i >= 1 = return candidates[i-1]; any
+// other value keeps `heuristic_default` (same encoding). Asked only when at least one candidate exists
+// (with none, the alternative is the only legal choice). Nulled by RevealLogPause for every
+// search/rollout scope, so autonomous play keeps the searched/provider pick and stays byte-identical.
+using GyReturnOneChooser = std::function<int(const GameState& state, int controller,
+                                             const std::string& source, const std::string& alt_text,
+                                             const std::vector<Card>& candidates,
+                                             int heuristic_default)>;
+extern thread_local GyReturnOneChooser* g_play_gy_return_one_chooser;
+
 // ---- Human-play Celes rummage chooser (--claude-play / viewer) ------------------------------
 // Celes, Rune Knight's ETB: "discard any number of cards, then draw that many cards plus one."
 // WHICH cards (any number, zero is fine -- the bonus draw still happens) is a real human choice
@@ -1031,7 +1045,8 @@ inline bool AllPlayHooksNull()
         && g_play_lifegain_counters_chooser == nullptr
         && g_play_fling_chooser == nullptr
         && g_play_etb_color_chooser == nullptr && g_play_etb_keywords_chooser == nullptr
-        && g_play_madness_chooser == nullptr;
+        && g_play_madness_chooser == nullptr
+        && g_play_gy_return_one_chooser == nullptr;
 }
 
 // 0 = flag fast path (DEFAULT). 1 = MTG_PAUSE_HOOK_FLAG=0, the original 26-pointer scan (identical
@@ -1070,6 +1085,7 @@ struct RevealLogPause
     DragonChooser* saved_dragchooser;
     SacTutorChooser* saved_sacttchooser;
     ReviveChooser* saved_revchooser;
+    GyReturnOneChooser* saved_gyretchooser = nullptr;
     BounceChooser* saved_flickchooser;
     BounceChooser* saved_treasurifychooser;
     RummageChooser* saved_rumchooser;
@@ -1130,6 +1146,7 @@ struct RevealLogPause
         saved_lradchooser = g_play_land_rad_chooser;
         saved_dragchooser = g_play_dragon_chooser; saved_sacttchooser = g_play_sac_tutor_chooser;
         saved_revchooser = g_play_revive_chooser;
+        saved_gyretchooser = g_play_gy_return_one_chooser;
         saved_flickchooser = g_play_flicker_chooser;
         saved_treasurifychooser = g_play_treasurify_chooser;
         saved_rumchooser = g_play_rummage_chooser;
@@ -1160,6 +1177,7 @@ struct RevealLogPause
         g_play_x_value_chooser = nullptr;
         g_play_land_rad_chooser = nullptr; g_play_dragon_chooser = nullptr;
         g_play_sac_tutor_chooser = nullptr; g_play_revive_chooser = nullptr;
+        g_play_gy_return_one_chooser = nullptr;
         g_play_flicker_chooser = nullptr; g_play_rummage_chooser = nullptr;
         g_play_treasurify_chooser = nullptr;
         g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
@@ -1190,6 +1208,7 @@ struct RevealLogPause
                         g_play_land_rad_chooser = saved_lradchooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
                         g_play_revive_chooser = saved_revchooser;
+                        g_play_gy_return_one_chooser = saved_gyretchooser;
                         g_play_flicker_chooser = saved_flickchooser;
                         g_play_treasurify_chooser = saved_treasurifychooser;
                         g_play_rummage_chooser = saved_rumchooser;
@@ -1254,6 +1273,7 @@ struct ComboOffApplyPause
     EtbColorChooser* c32; EtbKeywordsChooser* c33;
     MadnessChooser* c34;
     XValueChooser* c35;
+    GyReturnOneChooser* c36;
     ComboOffApplyPause()
     {
         c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
@@ -1277,6 +1297,7 @@ struct ComboOffApplyPause
         c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser;
         c34 = g_play_madness_chooser;
         c35 = g_play_x_value_chooser;
+        c36 = g_play_gy_return_one_chooser;
         g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
         g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
@@ -1298,6 +1319,7 @@ struct ComboOffApplyPause
         g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
         g_play_madness_chooser = nullptr;
         g_play_x_value_chooser = nullptr;
+        g_play_gy_return_one_chooser = nullptr;
     }
     ~ComboOffApplyPause()
     {
@@ -1322,6 +1344,7 @@ struct ComboOffApplyPause
         g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33;
         g_play_madness_chooser = c34;
         g_play_x_value_chooser = c35;
+        g_play_gy_return_one_chooser = c36;
     }
     ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
     ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;

@@ -101,7 +101,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
     const std::map<std::string, std::string> expected = {
         {"Angels", "Angels"},                 {"Anti-Lifegain", "AntiLifegain"},
         {"Auras", "Auras"},                   {"BreachingDragonstorm", "BreachingDragonstorm"},
-        {"Creature Giving", "CreatureGiving"}, {"CritterLifegain", "CritterLifegain"},
+        {"Creature Giving", "CreatureGiving"}, {"CritterLifegain", "CritterLifegain"}, {"LifegainHeliodCombo", "LifegainHeliodCombo"},
         {"Dragons", "Dragons"},               {"Dragonstorm", "Dragonstorm"},
         {"EldraziDisplacerFlicker", "EldraziFlicker"}, {"FiveColour", "FiveColour"},
         {"Fluctuator", "Fluctuator"},         {"Fungus", "Fungus"},

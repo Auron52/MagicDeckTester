@@ -91,6 +91,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"devourcount",UnprunedGate::DevourCount},
     {"karoobounce",UnprunedGate::KarooBounce},
     {"landpick",   UnprunedGate::LandPick},
+    {"counterping",UnprunedGate::CounterPing},
 };
 
 const char* GateName(UnprunedGate g)
@@ -107,23 +108,23 @@ const char* GateName(UnprunedGate g)
 // short-circuits at the callsites mean the query only fires when the gate's guard condition holds
 // (e.g. Ponder only when a cast_reorder card exists), so "queried" is a faithful "live for this deck".
 static std::atomic<bool>     g_gate_probe{false};
-static std::atomic<uint32_t> g_gates_queried{0};
+static std::atomic<std::uint64_t> g_gates_queried{0};
 
 void     SetGateProbe(bool on) { g_gate_probe.store(on); if (on) { g_gates_queried.store(0); } }
-uint32_t QueriedGatesMask()    { return g_gates_queried.load(); }
+std::uint64_t QueriedGatesMask() { return g_gates_queried.load(); }
 bool     GateProbeArmed()      { return g_gate_probe.load(std::memory_order_relaxed); }
 
 // Parse MTG_UNPRUNE=<comma/space/;/| separated gate names> once into a bitmask over UnprunedGate.
 // "all" (or the legacy MTG_UNPRUNED) sets every bit. Unknown tokens are ignored. Case-insensitive.
-static uint32_t ParseUnpruneMask()
+static std::uint64_t ParseUnpruneMask()
 {
     const char* e = std::getenv("MTG_UNPRUNE");
     if (!e) { return 0; }
     std::string s = e;
     for (char& c : s) { c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
                         if (c == ',' || c == ';' || c == '|') { c = ' '; } }
-    auto bit = [](UnprunedGate g) { return 1u << static_cast<int>(g); };
-    uint32_t mask = 0;
+    auto bit = [](UnprunedGate g) { return std::uint64_t{1} << static_cast<int>(g); };
+    std::uint64_t mask = 0;
     std::size_t pos = 0;
     while (pos < s.size())
     {
@@ -134,15 +135,16 @@ static uint32_t ParseUnpruneMask()
         pos = end;
         if (tok.empty()) { continue; }
         if (tok == "all")
-        { mask = static_cast<uint32_t>((std::uint64_t{1} << static_cast<int>(UnprunedGate::_Count)) - 1u); continue; }
+        { mask = (static_cast<int>(UnprunedGate::_Count) >= 64) ? ~std::uint64_t{0}
+                 : ((std::uint64_t{1} << static_cast<int>(UnprunedGate::_Count)) - 1u); continue; }
         for (const auto& n : kGateNames) { if (tok == n.first) { mask |= bit(n.second); break; } }
     }
     return mask;
 }
 
-static uint32_t UnpruneMask()
+static std::uint64_t UnpruneMask()
 {
-    static const uint32_t m = ParseUnpruneMask();
+    static const std::uint64_t m = ParseUnpruneMask();
     return m;
 }
 
@@ -182,12 +184,12 @@ bool DecisionUnpruned(UnprunedGate g)
     // Gate probe: record that this gate has a REACHABLE callsite for the current deck (see the probe
     // comment above). Cheap relaxed OR, only when probing; normal runs pay one predictable branch.
     if (g_gate_probe.load(std::memory_order_relaxed))
-    { g_gates_queried.fetch_or(1u << static_cast<int>(g), std::memory_order_relaxed); }
+    { g_gates_queried.fetch_or(std::uint64_t{1} << static_cast<int>(g), std::memory_order_relaxed); }
     if (UnpruneHumanExempt(g)) { return false; }     // human play never opens this gate (see above)
     if (g_unpruned_suppressed) { return false; }     // hand-back: shipped gates, mask included
     if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
     if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
-    return (UnpruneMask() >> static_cast<int>(g)) & 1u;
+    return ((UnpruneMask() >> static_cast<int>(g)) & 1u) != 0;
 }
 
 std::vector<std::string> RankedTutorCandidates(const DecisionProvider& prov, const GameState& s,
@@ -795,6 +797,23 @@ std::vector<std::string> DecisionProvider::ReviveCandidates(const GameState& s, 
     std::vector<std::string> order;
     for (const Cand& c : cands) { order.push_back(c.nm); }
     return order;
+}
+
+void DecisionProvider::GyReturnOrder(const GameState& s, int controller, std::vector<int>& cand_numbers) const
+{
+    (void)controller;
+    auto name_of = [&](int num) -> std::string
+    {
+        for (const Player& pl : s.players)
+        { for (const Card& c : pl.graveyard) { if (c.m_number == num) { return c.m_name.str(); } } }
+        return std::string();
+    };
+    std::stable_sort(cand_numbers.begin(), cand_numbers.end(), [&](int a, int b)
+    {
+        const std::string na = name_of(a), nb = name_of(b);
+        if (na != nb) { return na < nb; }
+        return a < b;
+    });
 }
 
 bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
@@ -5089,6 +5108,18 @@ std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefi
     // spends a different amount of the turn's mana -- so no X dominates another in general. Return
     // the whole legal range 0..max (X = 0 included: under Spellshock the cast itself is a damage
     // event). A deck provider may narrow it; the generic default must not.
+    // Walking Ballista ("enters with X +1/+1 counters"): the max-X rule below is WRONG for it too. X is
+    // the body AND the reach, but every X spends a different share of the turn's mana (X = 2 plus
+    // Heliod's {1}{W} is the loop; X = 1 into a Soul Warden trigger is the 4-mana loop), and X = 0 is a
+    // real line (a free creature-enter event for Soul Warden / Auriok Champion before the 0/0 dies).
+    // So the whole legal range 0..max; a deck provider may narrow it, the generic default must not.
+    if (def.params.enters_with_x_plus_counters)
+    {
+        std::vector<int> all;
+        all.reserve(static_cast<std::size_t>(std::max(0, max_affordable)) + 1);
+        for (int x = 0; x <= max_affordable; ++x) { all.push_back(x); }
+        return all;
+    }
     if (def.params.x_damage_each_creature_and_player)
     {
         std::vector<int> all;
@@ -20692,6 +20723,7 @@ namespace
     const SnowProvider           g_snow;
     const FungusProvider         g_fungus;
     const CritterLifegainProvider g_critter;
+    const LifegainHeliodComboProvider g_lifegain_heliod_combo;
     const SelesnyaLifegainProvider g_selesnya_lifegain;
     const AccomplishedAlchemistProvider g_accomplished_alchemist;
     const LandfallProvider       g_landfall;
@@ -22604,6 +22636,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool eldrazi = false;
     bool snow = false;   // Snow midrange -- SnowProvider (Generic + the 5c2 tie-break opt-out)
     bool critter = false; // CritterLifegain -- routes ABOVE goblin (Ranger-Captain's sac outlet) and anti (its tutor)
+    // LifegainHeliodCombo: the critter signature AND one of four params carried only by this list's own
+    // cards (Walking Ballista's counter ping, Abiding Grace's end-step return, Martyr of Sands' reveal,
+    // Emeria's upkeep return). The CONJUNCTION is deliberate: Ballista is a colourless staple and Grace /
+    // Martyr are white cards other decks could add, so on their own they are the archetype-neutral
+    // misroute class -- requiring the "whenever you gain life" watcher signature too means only a
+    // CritterLifegain-shaped list can land here. Routed just ABOVE critter. A CritterLifegain screen arm
+    // that adds one of these cards is pinned to its base deck's provider by MTG_PROVIDER_DECK.
+    bool lhc_piece = false;
     // Angels tribal (mono-white). MUST be detected and MUST return ABOVE `critter`: this deck runs
     // Archangel of Thune (2 on the shipped v2 list; 4 on the archived v1), whose
     // lifegain_each_own_creature_counters ALONE sets the CritterLifegain
@@ -22794,6 +22834,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // goblin (Ranger-Captain of Eos's sac_creature_outlet) and anti (its tutor_to_hand).
         if (p.lifegain_self_counters > 0 || p.lifegain_each_own_creature_counters > 0
             || p.lifegain_target_own_counter) { critter = true; }
+        if (p.remove_counter_ping_damage > 0 || p.endstep_modal_reanimate_mv >= 0
+            || !p.sac_outlet_lifegain_per_revealed_color.empty() || p.upkeep_gy_reanimate)
+        { lhc_piece = true; }
 
         // Angels signature: OR-ed across FIVE different cards' params (Giada's as-enters counter
         // replacement, Lyra's static lifelink lord, Youthful Valkyrie's self-counter watcher,
@@ -23262,6 +23305,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (pirates)     { return g_pirates; }
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
+    // LifegainHeliodCombo: a CritterLifegain-shaped list holding one of its own pieces (see the flag).
+    if (critter && lhc_piece) { return g_lifegain_heliod_combo; }
     if (critter)     { return g_critter; }
     // Fungus: Generic, and it must sit ABOVE the goblin check -- Utopia Mycon and Psychotrope
     // Thallid carry sac_creature_outlet, and GoblinsProvider's default-on DeferSacOutletPreCombat
@@ -35452,7 +35497,8 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.scripted_tectonic_keep); v.push_back(s.scripted_bruna_gather); v.push_back(s.scripted_combat_aura_swap);
     v.push_back(s.scripted_combat_aura_swap_in); v.push_back(s.scripted_discard_choice); v.push_back(s.scripted_vial_charge);
     v.push_back(s.scripted_saga_target); v.push_back(s.scripted_attack_land_search); v.push_back(s.scripted_upkeep_land_search);
-    v.push_back(s.scripted_combat_land_search_crack);
+    v.push_back(s.scripted_combat_land_search_crack); v.push_back(s.scripted_grace_choice);
+    v.push_back(s.scripted_upkeep_gy_reanimate);
     v.push_back(static_cast<long long>(s.battlefield.size()));
     for (const Permanent& p : s.battlefield)
     {
@@ -53547,4 +53593,117 @@ bool NivMizzetComboProvider::SacForManaOnlyIfNeeded(const GameState& s, const st
     // The amendment: a Parun cast (a Firemind one already returned) re-pairs a Lookout the sacrifice frees.
     if (casts_parun && NivServantUnpairOn() && NivServantPairedWithLookout(s, a.sac_source_id)) { return false; }
     return true;
+}
+
+// ---- Abiding Grace dominance folds (see the declaration in DecisionProviders.h) ----------------------
+bool GraceReturnDominatesOn()
+{
+    static const bool on = EnvOn("MTG_GRACE_RETURN_DOMINATES", true);
+    return on;
+}
+
+void LifegainGraceFolds(const GameState& s, int controller, std::vector<int>& opts)
+{
+    if (!GraceReturnDominatesOn() || opts.size() <= 1) { return; }
+    auto def_of_gy = [&](int num) -> const CardDefinition*
+    {
+        for (const Card& c : s.players[static_cast<std::size_t>(controller)].graveyard)
+        { if (c.m_number == num) { return CardDatabase::Instance().LookupCached(c); } }
+        return nullptr;
+    };
+    // B4: behaviourally identical return candidates are one option (keep the earlier).
+    {
+        std::vector<int> kept;
+        std::vector<std::uint64_t> ids;
+        for (int o : opts)
+        {
+            if (o == DecisionProvider::kGraceGainOption) { kept.push_back(o); continue; }
+            const CardDefinition* d = def_of_gy(o);
+            const std::uint64_t id = d ? d->behaviour_identity : 0;
+            if (id != 0 && std::find(ids.begin(), ids.end(), id) != ids.end()) { continue; }
+            if (id != 0) { ids.push_back(id); }
+            kept.push_back(o);
+        }
+        opts.swap(kept);
+    }
+    // B1: a return dominates the gain mode while an unconditional "another creature enters -> gain"
+    // watcher of ours is on the battlefield. The watcher must gain at least the gain mode's amount
+    // (every Grace gains 1) and carry no entering-creature filter, so it provably fires on the return.
+    bool has_return = false;
+    for (int o : opts) { if (o != DecisionProvider::kGraceGainOption) { has_return = true; break; } }
+    if (!has_return) { return; }
+    bool watcher = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->enter_watcher) { continue; }
+        const CardParams& wp = d->params;
+        if (!wp.enters_watch_subtypes.empty() || wp.creature_enters_min_power > 0) { continue; }
+        if (wp.any_creature_enters_lifegain >= 1 || wp.own_creature_enters_lifegain >= 1)
+        { watcher = true; break; }
+    }
+    if (!watcher) { return; }
+    opts.erase(std::remove(opts.begin(), opts.end(), DecisionProvider::kGraceGainOption), opts.end());
+}
+
+// ---- LifegainHeliodComboProvider::GraceOptions ------------------------------
+void LifegainHeliodComboProvider::GraceOptions(const GameState& s, int controller, std::vector<int>& opts) const
+{
+    LifegainGraceFolds(s, controller, opts);
+}
+
+// ---- LifegainHeliodComboProvider::CounterPingCounts (MTG_LHC_PING_PRUNE) ---------
+// THE DECK-POOL NARROWING of Walking Ballista's main-phase FACE pings. The engine already offers only
+// sound targets (CollectCounterPingOffers): every creature target it asks about is a kill whose death
+// pays -- in this list, Abiding Grace (end step, mana value exactly 1) or Emeria returning the body for
+// re-entry life events -- and is NOT pruned here (it is a real line in this deck). What this hook drops
+// is a face ping that is neither lifelinked-and-read nor lethal, by THIS POOL's argument:
+//   * nothing in the LifegainHeliodCombo 60 (or its sideboard) reads opponent life loss or damage
+//     events: no spectacle, no "if an opponent lost life this turn", no Tamanoa/Vito/Dina-style damage
+//     or loss watcher, no draw-on-damage grant -- the opponent's life total matters only at 0;
+//   * the passive goldfish opponent never removes, blocks or shrinks the Ballista, so a counter kept is
+//     still a ping later -- and kept, it also attacks every turn;
+// so a non-lethal ping now is weakly dominated by the SAME ping deferred to the kill turn, where
+// CounterPingFinish (after combat damage, both worlds) fires every lethal ping automatically. A
+// LIFELINKED ping whose gain something reads (SacOutletLifegainRead) is a life-gain EVENT -- Heliod /
+// Pridemate / Voice counters -- and keeps the generic K range. MTG_LHC_PING_PRUNE=0 restores the generic
+// set; MTG_UNPRUNE=counterping bypasses this hook. Human play never asks it.
+std::vector<int> LifegainHeliodComboProvider::CounterPingCounts(const GameState& s, const Permanent& source,
+                                                                int target, int max_counters) const
+{
+    static const bool on = EnvOn("MTG_LHC_PING_PRUNE", true);
+    const std::vector<int> base = DecisionProvider::CounterPingCounts(s, source, target, max_counters);
+    if (!on || target != 0) { return base; }
+    if (CreatureHasLifelink(source, s) && SacOutletLifegainRead(s, source.controller_index)) { return base; }
+    return {};
+}
+
+// ---- LifegainHeliodComboProvider::LifegainCounterTarget (MTG_LHC_BUMP_TARGET) ----------------------
+// Heliod's "+1/+1 counter on target creature or enchantment you control" goes on a ONE-counter Walking
+// Ballista when that counter turns the Heliod + Ballista loop ON (PingLoopBumpTarget: lifelink already on
+// it, or Heliod's {1}{W} grant covered by the mana available NOW); otherwise -1 = the generic pick.
+// Only on OUR turn (controller == the active player). WHY TAKING IT IS NEVER WORSE THAN THE DEFAULT PICK,
+// case by case (the default is "+1 on the attacker that converts soonest"):
+//   * BEFORE COMBAT, in the upkeep (an Emeria return's Soul Warden gain) or in main 1: the mana counted is
+//     untapped NOW, and every plan of this phase either leaves the grant's mana for the loop -- the PingLoop
+//     action, a kill this turn (site 9 re-plans onto it the moment the key appears) -- or spends it. A plan
+//     that spends it reaches the same board as its own SUBSET that stops before those casts and runs the loop
+//     instead; that subset is enumerated too and wins this turn. So the best line from here is a win this
+//     turn: no line the default pick could make better exists. (The pick in a particular non-optimal plan can
+//     be worse than the default's +1 there; the search scores that plan as it plays out.)
+//   * AFTER COMBAT DAMAGE (a lifelink attacker's gain) or IN THE END STEP (Abiding Grace's gain): the
+//     default's +1 can deal no damage before next turn either. The Ballista keeps its two counters and Heliod
+//     stays (the passive opponent removes nothing), and next turn's untapped mana is at least what is
+//     available now (lands only untap), which covers the grant -- so the loop is live next turn: a kill at
+//     the earliest turn the default's counter could matter. A loop needing NO mana (lifelink already on it)
+//     is run this turn by CounterPingFinish right after combat damage; in the END STEP its lifelink can
+//     only have come from Heliod's grant (this pool's sole lifelink source), paid this turn -- so the mana
+//     sources that paid it untap for next turn's grant.
+// MTG_LHC_BUMP_TARGET=0 restores the generic pick.
+int LifegainHeliodComboProvider::LifegainCounterTarget(const GameState& s, int controller) const
+{
+    static const bool on = EnvOn("MTG_LHC_BUMP_TARGET", true);
+    if (!on || controller != s.active_player_index) { return -1; }
+    return PingLoopBumpTarget(s, controller);
 }

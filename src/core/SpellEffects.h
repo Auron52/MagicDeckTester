@@ -6506,6 +6506,40 @@ inline void GainLife(GameState& state, int player, int amount)
     FireLifegainWatchers(state, player, amount);
 }
 
+// ---- WALKING BALLISTA: the pieces the lifegain-counter target needs (defined with the Ballista block
+// beside ApplyPermAbility) ------------------------------------------------------------------------------
+// THE HELIOD PIN: inside the Heliod + Ballista loop (RunPingLoop) every life-gain event's Heliod counter
+// goes back on the pinging Ballista -- the loop IS the kill, so it overrides the provider, the default
+// and the human chooser (the loop is the human's choice already; asking 20 times would be noise).
+// Sound, not a greedy pick: the loop runs only while PingLoopLiveNow, i.e. it wins this turn.
+// 0 = no pin (every other path), so FireLifegainWatchers is byte-identical outside the loop.
+inline thread_local int g_lifegain_counter_target_pin = 0;
+struct LifegainCounterTargetPinScope
+{
+    int prev;
+    explicit LifegainCounterTargetPinScope(int num) : prev(g_lifegain_counter_target_pin)
+    { g_lifegain_counter_target_pin = num; }
+    ~LifegainCounterTargetPinScope() { g_lifegain_counter_target_pin = prev; }
+    LifegainCounterTargetPinScope(const LifegainCounterTargetPinScope&)            = delete;
+    LifegainCounterTargetPinScope& operator=(const LifegainCounterTargetPinScope&) = delete;
+};
+// DOOMED ENTRANTS (CR 704.5f / 704.3): an X = 0 Walking Ballista enters as its printed 0/0. Its enter
+// triggers DO trigger (Soul Warden gains), but the toughness SBA puts it into the graveyard BEFORE they
+// are put on the stack -- so no trigger can ever target it or save it. This engine resolves enter
+// watchers INLINE inside FireEtbWatchers, so the entrant is recorded here (m_number) and every target
+// list of a trigger that resolves inside the cascade skips it (DoomedEntrant); DrainPendingZeroToughness
+// then kills it at the points the other pending queues drain (both worlds, lockstep), because callers
+// of the cascade hold battlefield slot indices an erase would shift. Recorded ONLY for an
+// enters_with_x_plus_counters entrant, so every other deck's queue stays empty (byte-identical); the
+// general 0-toughness entrant is the same rule and a follow-up, not a rider on this card.
+inline thread_local std::vector<int> g_pending_zero_toughness;
+inline bool DoomedEntrant(const Permanent& q, const GameState& state)
+{
+    if (g_pending_zero_toughness.empty()) { return false; }
+    if (std::find(g_pending_zero_toughness.begin(), g_pending_zero_toughness.end(), q.card.m_number)
+        == g_pending_zero_toughness.end()) { return false; }
+    return LethalToughness(q, state) <= 0;   // re-verified: a stale record never hides a live body
+}
 // Heliod's counter TARGET (autonomous default): the creature whose extra +1 converts to face
 // damage SOONEST -- an attacker that can still swing THIS turn (the gain is precombat and the
 // body is attack-eligible), else the highest-power own creature (it attacks next turn); ties to
@@ -6522,6 +6556,7 @@ inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
     {
         const Permanent& q = state.battlefield[i];
         if (q.controller_index != controller) { continue; }
+        if (DoomedEntrant(q, state)) { continue; }   // a 0/0 entrant is already dead (CR 704.3)
         if (!q.card.IsCreature())
         {
             if (q.card.IsEnchantment() && fallback < 0) { fallback = i; }
@@ -6769,6 +6804,7 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
                     Permanent& c = state.battlefield[j];
                     if (c.controller_index != player || !c.card.IsCreature()) { continue; }
                     if (!LifegainCounterSubtypeOk(wp, c.card)) { continue; }
+                    if (DoomedEntrant(c, state)) { continue; }   // a 0/0 entrant is already dead (CR 704.3)
                     AddPlusCounters(c, per);
                     AnnihilateCounters(c);
                 }
@@ -6797,14 +6833,29 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
         // heuristic's pick preselected -- the loyalty-target chooser's shape (board click).
         if (wp.lifegain_target_own_counter)
         {
-            int pick = ResolveProvider(state).LifegainCounterTarget(state, player);
+            // The Heliod + Ballista loop's pin (RunPingLoop): the counter goes back on the pinging
+            // Ballista, ahead of the provider, the default and the human chooser. -1 when unpinned or
+            // when the pinned body is gone (it died paying its last counter) -> the normal pick.
+            int pinned = -1;
+            if (g_lifegain_counter_target_pin != 0)
+            {
+                for (int j = 0; j < n; ++j)
+                {
+                    const Permanent& c = state.battlefield[j];
+                    if (c.controller_index == player && c.card.m_number == g_lifegain_counter_target_pin
+                        && c.card.IsCreature() && !DoomedEntrant(c, state)) { pinned = j; break; }
+                }
+            }
+            int pick = pinned;
+            if (pick < 0) { pick = ResolveProvider(state).LifegainCounterTarget(state, player); }
             if (pick < 0 || pick >= n) { pick = DefaultLifegainCounterTarget(state, player); }
-            if (g_play_loyalty_chooser != nullptr)
+            if (g_play_loyalty_chooser != nullptr && pinned < 0)
             {
                 std::vector<int> legal;
                 for (int j = 0; j < n; ++j)
                 {
                     const Permanent& c = state.battlefield[j];
+                    if (DoomedEntrant(c, state)) { continue; }   // already dead (CR 704.3)
                     if (c.controller_index == player
                         && (c.card.IsCreature() || c.card.IsEnchantment())) { legal.push_back(j); }
                 }
@@ -8380,6 +8431,14 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                               e.card.m_name.str() + " enters with " + std::to_string(PlusCountersOn(e))
                               + " +1/+1 counter" + (PlusCountersOn(e) == 1 ? "" : "s"));
             }
+        }
+        // Walking Ballista with X = 0 (or put onto the battlefield, X = 0 by CR 107.3m): a 0/0 that the
+        // toughness SBA kills before any of its enter triggers resolve. Record it so those triggers do
+        // not target it, and so DrainPendingZeroToughness kills it in both worlds (see the queue).
+        if (ed != nullptr && ed->params.enters_with_x_plus_counters && e.card.IsCreature()
+            && LethalToughness(e, state) <= 0)
+        {
+            g_pending_zero_toughness.push_back(e.card.m_number);
         }
     }
     if (tokenstats::On())
@@ -10834,10 +10893,26 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
                                             d->params.ltb_return_max_power, left.m_name.str());
 }
 
+// "Lands you control with subtype `sub`" -- a LAND-type count. Deliberately not
+// CountControlledSubtypePermanents: that one counts an all-creature-types animation as every subtype,
+// which is wrong for a LAND type (Plains is not a creature type). Emeria, the Sky Ruin's
+// intervening if (PerformUpkeepGyReanimate) and SelfSacHasDeathPayoff's Emeria clause read it.
+inline int CountControlledLandsWithSubtype(const GameState& state, int controller, const std::string& sub)
+{
+    if (sub.empty()) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsLand() && CardHasSubtype(p.card, sub)) { ++n; }
+    }
+    return n;
+}
+
 // Would sacrificing `source_id` (an own creature) produce ANYTHING on death? True iff a
 // controller-side permanent carries a death watcher that would fire for it (Daxos's
 // own_creature_dies_lifegain; a subtype-keyed dies_watch_subtype matching the source; an LTB
-// return watcher), or the source itself persists. Read by the autonomous enumerator to drop a
+// return watcher; a graveyard reanimator that can bring the card back -- Abiding Grace for its exact
+// mana value, Emeria, the Sky Ruin), or the source itself persists. Read by the autonomous enumerator to drop a
 // self-only sac outlet with no payload (Ranger-Captain of Eos) while it is a strictly dominated
 // no-op -- a lossless dominated-action removal, not a heuristic; human play never consults it.
 // Lives beside OnCreatureDies so the two cannot drift.
@@ -10859,6 +10934,45 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
         if (wp.ltb_return_creatures > 0)       { return true; }
         if (!wp.dies_watch_subtype.empty() && CardHasSubtype(src->card, wp.dies_watch_subtype)) { return true; }
     }
+    // A GRAVEYARD REANIMATOR makes the death a real trade-off rather than a no-op: the card comes back
+    // through the enter cascade (Ranger-Captain of Eos re-tutors, Soul Warden & co. fire). Only a CARD
+    // returns (a token ceases to exist, CR 111.7), and only a creature card. Conservative in the TRUE
+    // direction -- this only keeps an option open, never removes one.
+    if (!src->is_token && src->card.m_number < GameState::kFirstTokenNumber && ZoneCard(src->card).IsCreature()
+        && (state.deck_has_endstep_reanimate || state.deck_has_upkeep_reanimate))
+    {
+        const Player& me = state.players[static_cast<std::size_t>(controller)];
+        const int src_mv = ZoneCard(src->card).m_mana_cost.ManaValue();
+        const bool drop_left = me.lands_played_this_turn < 1 + me.bonus_land_drops_this_turn;
+        // Emeria, the Sky Ruin: on our battlefield, or in hand with a land drop left -- AND the land
+        // count could reach its threshold by our next upkeep (this turn's drop, plus slack for a deck
+        // that can search lands onto the battlefield).
+        auto emeria_live = [&](const CardParams& ep)
+        {
+            if (!ep.upkeep_gy_reanimate) { return false; }
+            const int reach = CountControlledLandsWithSubtype(state, controller, ep.upkeep_gy_reanimate_land_subtype)
+                            + (drop_left ? 1 : 0) + (state.deck_has_land_search ? 3 : 0);
+            return ep.upkeep_gy_reanimate_land_threshold <= 0 || reach >= ep.upkeep_gy_reanimate_land_threshold;
+        };
+        for (const Permanent& w : state.battlefield)
+        {
+            if (w.controller_index != controller || w.card.m_number == source_id || w.def_absent) { continue; }
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+            if (!wd) { continue; }
+            // Abiding Grace: its end-step mode returns a creature card of EXACTLY this mana value.
+            if (wd->params.endstep_modal_reanimate_mv >= 0 && wd->params.endstep_modal_reanimate_mv == src_mv)
+            { return true; }
+            if (emeria_live(wd->params)) { return true; }
+        }
+        if (drop_left)
+        {
+            for (const Card& c : me.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                if (hd != nullptr && hd->card.IsLand() && emeria_live(hd->params)) { return true; }
+            }
+        }
+    }
     return false;
 }
 
@@ -10872,7 +10986,7 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
 inline bool SacOutletLifegainRead(const GameState& state, int controller)
 {
     if (state.deck_reads_lifegain_in_play || state.deck_endstep_lifegain_max_threshold > 0
-        || state.dmg_events_armed) { return true; }
+        || state.dmg_events_armed || state.deck_reads_life_total) { return true; }
     for (const Permanent& q : state.battlefield)
     {
         if (q.controller_index != controller) { continue; }
@@ -10889,6 +11003,32 @@ inline bool SacOutletLifegainRead(const GameState& state, int controller)
     return false;
 }
 
+// Martyr of Sands' X: the number of cards of `col` in `controller`'s hand, read off each card's
+// DEFINITION (its colour mask comes from its mana-cost pips: lands -- Plains, Emeria -- and Walking
+// Ballista's {X}{X} are colourless, CR 105.2 / 202.2).
+inline int CountHandCardsOfColor(const GameState& state, int controller, const std::string& col)
+{
+    int n = 0;
+    for (const Card& c : state.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (CardHasColorNamed(d ? d->card : c, col)) { ++n; }
+    }
+    return n;
+}
+
+// The life a self-only lifegain outlet gains if activated NOW: Brindle Boar's flat amount, or Martyr
+// of Sands' per-revealed-card amount times the maximum X (the sound reveal-everything dominance --
+// see CardParams::sac_outlet_lifegain_per_revealed_color). One definition for the executor, the
+// rollout and the scoring sites.
+inline int SacOutletLifegainAmount(const GameState& state, int controller, const CardParams& p)
+{
+    if (p.sac_outlet_lifegain <= 0) { return 0; }
+    if (p.sac_outlet_lifegain_per_revealed_color.empty()) { return p.sac_outlet_lifegain; }
+    return p.sac_outlet_lifegain
+         * CountHandCardsOfColor(state, controller, p.sac_outlet_lifegain_per_revealed_color);
+}
+
 // The self-only outlet's dominated-no-op gate (both TurnSolver sites): sacrificing THIS creature is an
 // option iff its death pays (SelfSacHasDeathPayoff) or its own payload does -- Brindle Boar's life
 // gain while something reads it. Lossless: with neither, the activation only removes our own body.
@@ -10899,7 +11039,8 @@ inline bool SelfSacOutletUseful(const GameState& state, int controller, int sour
     {
         if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        return d && d->params.sac_outlet_lifegain > 0 && SacOutletLifegainRead(state, controller);
+        return d && SacOutletLifegainAmount(state, controller, d->params) > 0
+                 && SacOutletLifegainRead(state, controller);
     }
     return false;
 }
@@ -15902,6 +16043,38 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
     }
     if (!op) { return; }
+    // LIFE payload amount, fixed at ACTIVATION (Martyr of Sands' X is announced and the cards revealed
+    // as the cost is paid, CR 601.2b/h via 602.2b) -- so it is read here, before the sacrifice and
+    // before anything below touches the hand. Brindle Boar: the flat amount. Martyr: per-card x the
+    // maximum X autonomously (the sound reveal-everything dominance); human play is asked for X.
+    int sac_gain_at_cost = SacOutletLifegainAmount(state, controller, *op);
+    if (!op->sac_outlet_lifegain_per_revealed_color.empty() && op->sac_outlet_lifegain > 0
+        && g_play_x_value_chooser != nullptr)
+    {
+        const int per = op->sac_outlet_lifegain;
+        const int max_x = sac_gain_at_cost / per;
+        std::string src_nm;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == source_id) { src_nm = p.card.m_name.str(); break; } }
+        // target 2 = "reveal X, gain per*X" (the x_value emitter's reveal kind); the lethal_x slot
+        // carries the per-card life.
+        int xv = (*g_play_x_value_chooser)(state, controller, src_nm, 2, max_x, max_x, per);
+        if (xv < 0 || xv > max_x) { xv = max_x; }
+        sac_gain_at_cost = per * xv;
+        // The chooser may have reallocated nothing, but re-read `op` defensively (same pointer
+        // discipline as the rest of this function).
+        op = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.m_number == source_id)
+            {
+                const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
+                if (od && od->params.sac_creature_outlet) { op = &od->params; }
+                break;
+            }
+        }
+        if (!op) { return; }
+    }
     // ---- SAME-LINE FODDER, value-outlet twin (MTG_SAC_FODDER_VALUE_OUTLET) -----------------------
     // The mana twin lives in ApplySacForMana; this is the same fusion for an outlet whose payload is
     // a draw or damage rather than mana (Psychotrope Thallid, Deathspore, Vitaspore). It MUST sit
@@ -16016,7 +16189,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                        + (pump_from_victim ? victim_lki_power : 0),
               self_pt  = op->sac_outlet_self_pump_toughness;
     const int ndraw = op->sac_outlet_draw;   // Psychotrope Thallid
-    const int sac_gain = op->sac_outlet_lifegain;   // Brindle Boar
+    const int sac_gain = sac_gain_at_cost;   // Brindle Boar's flat amount / Martyr of Sands' 3X
     const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
     // History visibility (seed-6 play-test): without this the viewer showed only the persist
     // RETURN and the ETB ping per loop iteration -- returns stacking up with no cause. Emit the
@@ -25644,6 +25817,890 @@ inline bool TransformRestrictionMet(const GameState& state, int controller, cons
            >= pp.transform_min_controlled_count;
 }
 
+// ================================================================================================
+// WALKING BALLISTA (LifegainHeliodCombo, 2026-10-27) -- the counter ping, the Heliod loop, the
+// post-combat lethal finish and the doomed-entrant drain. Shared by both worlds (the rollout's
+// apply_one and the executor's trailing pass reach these through ApplyPermAbility; the finish is
+// called from both combat sites), so the two can never disagree.
+// ================================================================================================
+
+// Remove N +1/+1 counters (a COST -- never doubled, CR 601.2h/602.2b). Keeps the canonical counter
+// storage: an emptied entry is erased, so the sim key of "no counters" never depends on history.
+inline void RemovePlusCounters(Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    for (Counter& c : p.counters)
+    {
+        if (c.type != Counter::Type::PlusOnePlusOne) { continue; }
+        c.count -= std::min(n, c.count);
+        break;
+    }
+    p.counters.erase(std::remove_if(p.counters.begin(), p.counters.end(),
+                                    [](const Counter& c) { return c.count <= 0; }),
+                     p.counters.end());
+    RefreshCounterThresholdKeywords(p);
+}
+
+// Would the toughness / lethal-damage SBA (CR 704.5f / 704.5g) kill `q` now? The SAME predicate the
+// executor's GameEngine::CheckStateBasedActions applies (LethalToughness, indestructible saves only
+// from damage), so an inline death here is the death the executor would apply.
+inline bool CounterPingSbaDead(const Permanent& q, const GameState& state)
+{
+    if (!q.card.IsCreature()) { return false; }
+    const int t = LethalToughness(q, state);
+    if (t <= 0) { return true; }
+    return q.damage > 0 && q.damage >= t && !q.card.HasKeyword(Keyword::Indestructible);
+}
+
+// Put the creature at battlefield index `i` into the graveyard as an SBA death (the executor's SBA, exactly),
+// then OnCreatureDies. The caller must hold no saved indices.
+inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
+{
+    const Permanent q = state.battlefield[i];
+    const int num = q.card.m_number;
+    // EXACTLY GameEngine::CheckStateBasedActions' death: the card -- a token too, the graveyard vector
+    // receives tokens there -- goes to its CONTROLLER's graveyard, and Equipment falls off (CR 301.5c).
+    // An Aura's link is left as that SBA leaves it.
+    state.players[q.controller_index].graveyard.push_back(q.card);
+    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to == num) { e.equipped_to = 0; }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "death",
+                      "\xE2\x98\xA0 " + q.card.m_name.str() + " dies (" + why + ")");
+    }
+    OnCreatureDies(state, q.controller_index, q.card, q.is_token, MinusCountersOn(q));
+}
+
+// Drain the doomed-entrant queue (g_pending_zero_toughness): each recorded entrant still at 0
+// toughness dies now. Called at the points the other enter-cascade queues drain, in BOTH worlds (the
+// rollout runs no SBA pass, the executor's would run later -- this keeps them on the same instant).
+inline void DrainPendingZeroToughness(GameState& state)
+{
+    if (g_pending_zero_toughness.empty()) { return; }
+    std::vector<int> pend;
+    pend.swap(g_pending_zero_toughness);
+    for (int num : pend)
+    {
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            if (state.battlefield[i].card.m_number != num) { continue; }
+            if (CounterPingSbaDead(state.battlefield[i], state))
+            { CounterPingKillAt(state, i, "0 toughness"); }
+            break;
+        }
+    }
+}
+
+// ==== GRAVEYARD -> BATTLEFIELD SINGLE-TARGET RETURN: the shared helper set ===========================
+// Abiding Grace's end-step mode 2 ("return target creature card with mana value 1 from your graveyard
+// to the battlefield") and Emeria, the Sky Ruin's upkeep ("you may return target creature card from
+// your graveyard to the battlefield"). One eligibility test, one candidate scan, one resolve -- so the
+// option list the search ranks, the human prompt and the put can never disagree.
+//
+// ELIGIBILITY reads the card's DEFINITION (ZoneCard): a graveyard Card is a name-only placeholder whose
+// own masks are empty (the Unearth / Garth's Regrowth bug class). Mana value is the printed cost with
+// {X} = 0 (CR 202.3e) -- Walking Ballista is MV 0. TOKENS ARE EXCLUDED by id (m_number >=
+// GameState::kFirstTokenNumber): the engine pushes a dead token's Card onto the graveyard vector at
+// most sites, but a token is not a card (CR 111.7) and a ZoneCard type test cannot tell it apart.
+struct GyReanimateFilter
+{
+    int  exact_mv = -1;      // >= 0: mana value must EQUAL this (Abiding Grace: 1)
+    int  max_mv   = -1;      // >= 0: mana value must be <= this
+    bool creature = true;    // creature cards only ("target creature card")
+};
+
+inline bool GyReanimateEligible(const Card& gc, const GyReanimateFilter& f)
+{
+    if (gc.m_number >= GameState::kFirstTokenNumber) { return false; }
+    const Card& c = ZoneCard(gc);
+    if (f.creature && !c.IsCreature()) { return false; }
+    const int mv = c.m_mana_cost.ManaValue();
+    if (f.exact_mv >= 0 && mv != f.exact_mv) { return false; }
+    if (f.max_mv >= 0 && mv > f.max_mv) { return false; }
+    return true;
+}
+
+// Every eligible graveyard card of `controller`, ONE PER COPY, graveyard order (the human prompt's
+// list). `only` (optional) further restricts to card numbers in that set -- the targets that were legal
+// when the trigger was put on the stack (Abiding Grace's beginning-of-end-step snapshot).
+inline std::vector<int> GyReanimateCandidates(const GameState& state, int controller,
+                                              const GyReanimateFilter& f,
+                                              const std::vector<int>* only = nullptr)
+{
+    std::vector<int> out;
+    for (const Card& gc : state.players[static_cast<std::size_t>(controller)].graveyard)
+    {
+        if (!GyReanimateEligible(gc, f)) { continue; }
+        if (only != nullptr && std::find(only->begin(), only->end(), gc.m_number) == only->end()) { continue; }
+        out.push_back(gc.m_number);
+    }
+    return out;
+}
+
+// ONE candidate per distinct NAME (the lowest-numbered copy in graveyard order wins the slot), ordered
+// by the provider's GyReturnOrder (front = default). Two copies of one card are the same object to play
+// -- the SEARCH's list; the human prompt keeps every copy (GyReanimateCandidates).
+inline std::vector<int> GyReanimateCandidateNames(const GameState& state, int controller,
+                                                  const GyReanimateFilter& f,
+                                                  const std::vector<int>* only = nullptr)
+{
+    const std::vector<int> all = GyReanimateCandidates(state, controller, f, only);
+    const std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    auto name_of = [&](int num) -> InternedName
+    {
+        for (const Card& c : gy) { if (c.m_number == num) { return c.m_name; } }
+        return InternedName();
+    };
+    std::vector<int> out;
+    std::vector<InternedName> seen;
+    for (int num : all)
+    {
+        const InternedName nm = name_of(num);
+        if (std::find(seen.begin(), seen.end(), nm) != seen.end()) { continue; }
+        seen.push_back(nm);
+        out.push_back(num);
+    }
+    ResolveProvider(state).GyReturnOrder(state, controller, out);
+    return out;
+}
+
+// RESOLVE one return: erase `card_number` from `controller`'s graveyard and put it onto the battlefield
+// through the universal enter cascade (PutCardOntoBattlefield: FireEtbWatchers + FireOwnEtbTriggers,
+// so every Soul Warden / Auriok Champion fires), under GraveyardEnterScope (Celes's graveyard-enter
+// watcher), then the legend rule and the doomed-0/0 drain (an Emeria-returned Walking Ballista enters
+// as a 0/0, CR 107.3m / 704.5f). Returns false -- the ability does nothing -- when the card is no longer
+// in the graveyard (its only target is illegal, CR 608.2b).
+inline bool ResolveGyReanimate(GameState& state, int controller, int card_number,
+                               const std::string& source_name)
+{
+    std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    int gi = -1;
+    for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+    { if (gy[static_cast<std::size_t>(i)].m_number == card_number) { gi = i; break; } }
+    if (gi < 0) { return false; }
+    const Card back = gy[static_cast<std::size_t>(gi)];
+    gy.erase(gy.begin() + gi);
+    bool legendary = false;
+    {
+        GraveyardEnterScope from_gy;
+        const int idx = PutCardOntoBattlefield(state, controller, back, source_name);
+        legendary = idx >= 0 && idx < static_cast<int>(state.battlefield.size())
+                 && state.battlefield[static_cast<std::size_t>(idx)].card.HasSupertype(Supertype::Legendary);
+    }
+    if (legendary) { EnforceLegendRule(state, controller); }
+    DrainPendingZeroToughness(state);
+    return true;
+}
+
+// ==== ABIDING GRACE: "At the beginning of your end step, choose one -- * You gain 1 life. * Return
+// target creature card with mana value 1 from your graveyard to the battlefield." ====================
+//
+// One trigger per Grace we control, resolved here in battlefield order (the order of ours is ours to
+// pick, CR 603.3b; the searched pin ranks each trigger independently, so every ordering of outcomes is
+// reachable). MODE + TARGET ARE SEARCHED: Plan::grace_choice -> GameState::scripted_grace_choice, a
+// PACKED rank per trigger ordinal into GraceOptions, consumed + cleared here (both worlds, lockstep:
+// GameEngine::EndStep and TurnSolver's SimulateEndAndStartNextTurn). Unpinned (-1) = each list's front,
+// the provider default -- the playout policy beyond the horizon. A rank past the list clamps to its last
+// entry (duplicate-not-whiff, the saga rule).
+//
+// LEGAL TARGETS are fixed when the triggers go on the stack (CR 603.3d) -- the beginning of the end
+// step -- so the caller snapshots them (SnapshotEndStepGraceTargets) BEFORE the step's other
+// beginning-of-step effects run (a delayed sacrifice cannot add a target). Mode 2 is offered only with a
+// legal target (CR 603.3c); with none the gain mode is the only choice. Each trigger's list is built at
+// its own resolution from the snapshot cards STILL in the graveyard, so an earlier trigger's return is
+// never re-targeted (that pick would only fizzle, CR 608.2b -- see LifegainGraceFolds' note).
+constexpr int kGracePinBits      = 4;
+constexpr int kGracePinMask      = (1 << kGracePinBits) - 1;
+constexpr int kGraceMaxOrdinals  = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
+
+inline bool HasEndStepGraceTrigger(const CardParams& p) { return p.endstep_modal_reanimate_mv >= 0; }
+
+inline GyReanimateFilter GraceFilter(const CardParams& p)
+{
+    GyReanimateFilter f;
+    f.exact_mv = p.endstep_modal_reanimate_mv;
+    return f;
+}
+
+// The legal-target snapshot at the beginning of the end step: every graveyard card number that ANY of
+// our Graces could target. Empty (and free) for every deck without the card.
+inline std::vector<int> SnapshotEndStepGraceTargets(const GameState& state)
+{
+    std::vector<int> out;
+    if (!state.deck_has_endstep_reanimate) { return out; }
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !HasEndStepGraceTrigger(d->params)) { continue; }
+        for (int num : GyReanimateCandidates(state, me, GraceFilter(d->params)))
+        { if (std::find(out.begin(), out.end(), num) == out.end()) { out.push_back(num); } }
+    }
+    return out;
+}
+
+// ONE trigger's option list (kGraceGainOption or a graveyard m_number), in the order the searched rank
+// indexes: the engine's default (returns in GyReturnOrder, then the gain mode), then the provider's
+// GraceOptions (reorder / proven-dominance restrict). `snapshot` = the legal targets (nullptr = the
+// current graveyard, used by the enumerator's width estimate).
+inline std::vector<int> GraceOptions(const GameState& state, int controller, const CardParams& pp,
+                                     const std::vector<int>* snapshot)
+{
+    std::vector<int> opts = GyReanimateCandidateNames(state, controller, GraceFilter(pp), snapshot);
+    if (pp.endstep_modal_lifegain > 0) { opts.push_back(DecisionProvider::kGraceGainOption); }
+    if (opts.size() > 1)
+    {
+        std::vector<int> pv = opts;
+        ResolveProvider(state).GraceOptions(state, controller, pv);
+        if (!pv.empty()) { opts.swap(pv); }
+    }
+    return opts;
+}
+
+inline void PerformEndStepAbidingGrace(GameState& state, const std::vector<int>& snapshot)
+{
+    const int pin = state.scripted_grace_choice;
+    state.scripted_grace_choice = -1;   // consumed by this end step whatever happens below
+    if (!state.deck_has_endstep_reanimate) { return; }
+    const int me = state.active_player_index;
+    // Snapshot the TRIGGERING definitions first: a return push_backs onto the battlefield.
+    std::vector<const CardDefinition*> triggers;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && HasEndStepGraceTrigger(d->params)) { triggers.push_back(d); }
+    }
+    for (std::size_t j = 0; j < triggers.size(); ++j)
+    {
+        const CardParams& pp = triggers[j]->params;
+        const std::string src = triggers[j]->card.m_name.str();
+        const std::vector<int> opts = GraceOptions(state, me, pp, &snapshot);
+        if (opts.empty()) { continue; }   // no gain mode and no target: the ability is removed (CR 603.3c)
+        int k = 0;
+        if (pin >= 0 && static_cast<int>(j) < kGraceMaxOrdinals)
+        { k = (pin >> (kGracePinBits * static_cast<int>(j))) & kGracePinMask; }
+        k = std::min(k, static_cast<int>(opts.size()) - 1);
+        int choice = opts[static_cast<std::size_t>(k)];
+        // Human play (`gy_return_one`): every legal option, one per graveyard COPY, unfolded. Asked only
+        // when a return is legal; with none the gain mode is the only choice.
+        if (g_play_gy_return_one_chooser != nullptr)
+        {
+            const std::vector<int> per_copy = GyReanimateCandidates(state, me, GraceFilter(pp), &snapshot);
+            if (!per_copy.empty())
+            {
+                std::vector<Card> cards;
+                const std::vector<Card>& gy = state.players[static_cast<std::size_t>(me)].graveyard;
+                for (int num : per_copy)
+                { for (const Card& c : gy) { if (c.m_number == num) { cards.push_back(c); break; } } }
+                int def = 0;
+                if (choice != DecisionProvider::kGraceGainOption)
+                {
+                    for (std::size_t ci = 0; ci < per_copy.size(); ++ci)
+                    { if (per_copy[ci] == choice) { def = static_cast<int>(ci) + 1; break; } }
+                }
+                else if (pp.endstep_modal_lifegain <= 0) { def = 1; }
+                const std::string alt = pp.endstep_modal_lifegain > 0
+                    ? "Gain " + std::to_string(pp.endstep_modal_lifegain) + " life" : std::string();
+                int r = (*g_play_gy_return_one_chooser)(state, me, src, alt, cards, def);
+                if (r < 0 || r > static_cast<int>(per_copy.size())) { r = def; }
+                if (r == 0 && pp.endstep_modal_lifegain <= 0) { r = def; }
+                choice = (r == 0) ? DecisionProvider::kGraceGainOption : per_copy[static_cast<std::size_t>(r - 1)];
+            }
+        }
+        if (choice == DecisionProvider::kGraceGainOption)
+        {
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              src + " (end step): you gain " + std::to_string(pp.endstep_modal_lifegain) + " life");
+            }
+            GainLife(state, me, pp.endstep_modal_lifegain);
+        }
+        else
+        {
+            ResolveGyReanimate(state, me, choice, src);
+        }
+    }
+}
+
+// ==== EMERIA, THE SKY RUIN: "At the beginning of your upkeep, if you control seven or more Plains, you
+// may return target creature card from your graveyard to the battlefield." =============================
+//
+// INTERVENING IF (CR 603.4): the trigger exists only if the land count holds as the upkeep begins, and
+// it does nothing if the count no longer holds on resolution -- both are checked here (nothing between
+// the two can move the count in this engine, but the re-check is the rule). The count is LANDS you
+// control with the subtype ("Plains": basic or not); Emeria itself has no land subtype.
+//
+// LEGAL TARGETS are fixed when the triggers go on the stack (CR 603.3d): a snapshot at the top of the
+// upkeep, the Grace snapshot rule. Each trigger's list is built at its own resolution from the snapshot
+// cards STILL in the graveyard (GyReanimateCandidateNames: tokens excluded, ZoneCard-based, one per
+// distinct NAME, ordered by the provider's GyReturnOrder). With no legal target the trigger is removed
+// (CR 603.3d) -- nothing to choose.
+//
+// WHICH CARD (or "you may" decline) IS SEARCHED: Plan::upkeep_gy_reanimate_choice ->
+// GameState::scripted_upkeep_gy_reanimate, a PACKED rank per trigger ordinal (kUpkeepReanimatePinBits
+// each, low first), decided in the PREVIOUS turn's main phase and consumed + cleared here (both worlds,
+// lockstep: GameEngine::UpkeepTail and TurnSolver's SimulateEndAndStartNextTurn). A rank past the list
+// clamps to its last entry (duplicate-not-whiff); kUpkeepReanimateDecline declines. Unpinned (-1) = the
+// list's front: the playout policy beyond the horizon (and every executor upkeep whose previous turn
+// did not branch the axis -- MTG_EMERIA_AXIS=0, or a d0 decision).
+//
+// Several triggers (non-legendary: more than one Emeria) resolve in battlefield order, each re-checking
+// the intervening if and seeing the previous return (a returned card is no longer a target).
+constexpr int kUpkeepReanimatePinBits     = 4;
+constexpr int kUpkeepReanimatePinMask     = (1 << kUpkeepReanimatePinBits) - 1;
+constexpr int kUpkeepReanimateDecline     = kUpkeepReanimatePinMask;   // the "you may" decline code
+constexpr int kUpkeepReanimateMaxRanks    = kUpkeepReanimatePinMask;   // ranks 0..14
+constexpr int kUpkeepReanimateMaxOrdinals = 3;   // the int16 pin holds 3 x 4 bits; a 4th+ copy takes its front
+
+inline bool HasUpkeepGyReanimate(const CardParams& p) { return p.upkeep_gy_reanimate; }
+
+inline bool UpkeepGyReanimateConditionMet(const GameState& state, int controller, const CardParams& p)
+{
+    return p.upkeep_gy_reanimate_land_threshold <= 0
+        || CountControlledLandsWithSubtype(state, controller, p.upkeep_gy_reanimate_land_subtype)
+               >= p.upkeep_gy_reanimate_land_threshold;
+}
+
+// Emeria's target class: any creature card (no mana-value limit).
+inline GyReanimateFilter UpkeepGyReanimateFilter(const CardParams&) { return GyReanimateFilter{}; }
+
+// What the upkeep's beginning fixed (CR 603.3d / 603.4): the sources whose intervening if held as the
+// upkeep began (their DEFINITIONS -- a return push_backs onto the battlefield) and the legal targets.
+// Taken at the TOP of the upkeep, BEFORE any other beginning-of-upkeep trigger resolves (upkeep tokens,
+// Fading, Varchild's gifts, Defense of the Heart, Slumber), by both callers: GameEngine::UpkeepTail and
+// the rollout's SimulateEndAndStartNextTurn (lockstep). Empty and free for every deck without the card.
+struct UpkeepGyReanimateSnapshot
+{
+    std::vector<const CardDefinition*> triggers;
+    std::vector<int>                   targets;
+};
+inline UpkeepGyReanimateSnapshot SnapshotUpkeepGyReanimate(const GameState& state)
+{
+    UpkeepGyReanimateSnapshot snap;
+    if (!state.deck_has_upkeep_reanimate) { return snap; }
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && HasUpkeepGyReanimate(d->params) && UpkeepGyReanimateConditionMet(state, me, d->params))
+        { snap.triggers.push_back(d); }
+    }
+    if (!snap.triggers.empty())
+    { snap.targets = GyReanimateCandidates(state, me, UpkeepGyReanimateFilter(snap.triggers[0]->params)); }
+    return snap;
+}
+
+inline void PerformUpkeepGyReanimate(GameState& state, const UpkeepGyReanimateSnapshot& snap)
+{
+    const int pin = state.scripted_upkeep_gy_reanimate;
+    state.scripted_upkeep_gy_reanimate = -1;   // consumed by this upkeep whatever happens below
+    if (!state.deck_has_upkeep_reanimate) { return; }
+    const int me = state.active_player_index;
+    const std::vector<const CardDefinition*>& triggers = snap.triggers;
+    if (triggers.empty()) { return; }
+    const std::vector<int>& snapshot = snap.targets;
+    for (std::size_t j = 0; j < triggers.size(); ++j)
+    {
+        const CardParams& pp = triggers[j]->params;
+        const std::string src = triggers[j]->card.m_name.str();
+        // CR 603.4: re-check the intervening if on resolution.
+        if (!UpkeepGyReanimateConditionMet(state, me, pp)) { continue; }
+        const GyReanimateFilter f = UpkeepGyReanimateFilter(pp);
+        const std::vector<int> opts = GyReanimateCandidateNames(state, me, f, &snapshot);
+        if (opts.empty()) { continue; }   // no legal target: the trigger is removed (CR 603.3d)
+        int k = 0;
+        if (pin >= 0 && static_cast<int>(j) < kUpkeepReanimateMaxOrdinals)
+        { k = (pin >> (kUpkeepReanimatePinBits * static_cast<int>(j))) & kUpkeepReanimatePinMask; }
+        bool decline = pp.upkeep_gy_reanimate_may && k == kUpkeepReanimateDecline;
+        int choice = decline ? -1 : opts[static_cast<std::size_t>(std::min(k, static_cast<int>(opts.size()) - 1))];
+        // Human play (`gy_return_one`, alt_text "Return nothing"): every legal card, one per graveyard
+        // COPY, unfolded. 0 = decline (only when "may").
+        if (g_play_gy_return_one_chooser != nullptr)
+        {
+            const std::vector<int> per_copy = GyReanimateCandidates(state, me, f, &snapshot);
+            if (!per_copy.empty())
+            {
+                std::vector<Card> cards;
+                const std::vector<Card>& gy = state.players[static_cast<std::size_t>(me)].graveyard;
+                for (int num : per_copy)
+                { for (const Card& c : gy) { if (c.m_number == num) { cards.push_back(c); break; } } }
+                int def = 0;
+                if (!decline)
+                {
+                    for (std::size_t ci = 0; ci < per_copy.size(); ++ci)
+                    { if (per_copy[ci] == choice) { def = static_cast<int>(ci) + 1; break; } }
+                }
+                if (def == 0 && !pp.upkeep_gy_reanimate_may) { def = 1; }
+                const std::string alt = pp.upkeep_gy_reanimate_may ? std::string("Return nothing") : std::string();
+                int r = (*g_play_gy_return_one_chooser)(state, me, src, alt, cards, def);
+                if (r < 0 || r > static_cast<int>(per_copy.size())) { r = def; }
+                if (r == 0 && !pp.upkeep_gy_reanimate_may) { r = def; }
+                decline = (r == 0);
+                choice  = decline ? -1 : per_copy[static_cast<std::size_t>(r - 1)];
+            }
+        }
+        if (decline)
+        {
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "trigger", src + " (upkeep): returned nothing");
+            }
+            continue;
+        }
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src + " (upkeep): " + std::to_string(CountControlledLandsWithSubtype(
+                              state, me, pp.upkeep_gy_reanimate_land_subtype))
+                          + " " + pp.upkeep_gy_reanimate_land_subtype + " -- return a creature card");
+        }
+        ResolveGyReanimate(state, me, choice, src);
+    }
+}
+
+// The ping's TARGET pin: 0 = the opponent's face (the only autonomous target), > 0 = a permanent's
+// m_number, -1 = our own face. Human play picks at resolution instead (g_play_target_chooser).
+inline thread_local int g_counter_ping_target_pin = 0;
+struct CounterPingTargetPinScope
+{
+    int prev;
+    explicit CounterPingTargetPinScope(int t) : prev(g_counter_ping_target_pin) { g_counter_ping_target_pin = t; }
+    ~CounterPingTargetPinScope() { g_counter_ping_target_pin = prev; }
+    CounterPingTargetPinScope(const CounterPingTargetPinScope&)            = delete;
+    CounterPingTargetPinScope& operator=(const CounterPingTargetPinScope&) = delete;
+};
+
+// "Remove a +1/+1 counter from this creature: It deals N damage to any target." One activation:
+// target (CR 602.2b: chosen before the cost) -> COST (remove the counter) -> the SBA check that runs
+// before the ability resolves (a body left at 0 toughness dies here, CR 704.3) -> RESOLUTION with the
+// source's last-known information (CR 608.2h): N damage, and if it had lifelink ONE life-gain event of
+// N (CR 702.15b / 119.10) through the shared GainLife hook -- Heliod / Pridemate / Voice fire there.
+// `quiet` suppresses the per-ping history line (the loop prints one summary). Returns false (nothing
+// paid) when the source is gone or has no counter.
+inline bool ResolveCounterPing(GameState& state, int controller, int source_id, bool ask_human, bool quiet)
+{
+    int si = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.card.m_number == source_id && p.controller_index == controller) { si = i; break; }
+    }
+    if (si < 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[si].card);
+    if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { return false; }
+    if (PlusCountersOn(state.battlefield[si]) <= 0) { return false; }
+    const int  dmg      = d->params.remove_counter_ping_damage;
+    const Card src_card = state.battlefield[si].card;
+    const bool lifelink = CreatureHasLifelink(state.battlefield[si], state);   // last-known information
+
+    // TARGET. kind 0 = player (index), kind 1 = permanent (m_number).
+    int t_kind = 0, t_player = 1 - controller, t_num = 0;
+    if (g_counter_ping_target_pin > 0)       { t_kind = 1; t_num = g_counter_ping_target_pin; }
+    else if (g_counter_ping_target_pin == -1) { t_player = controller; }
+    if (ask_human && g_play_target_chooser != nullptr)
+    {
+        const std::vector<ChosenTarget> heur{ ChosenTarget{ 0, 1 - controller, 0 } };
+        const std::vector<ChosenTarget> got = (*g_play_target_chooser)(state, *d, controller, 1, dmg, heur);
+        if (!got.empty())
+        {
+            if (got[0].kind == 0) { t_kind = 0; t_player = got[0].index; }
+            else if (got[0].index >= 0 && got[0].index < static_cast<int>(state.battlefield.size()))
+            { t_kind = 1; t_num = state.battlefield[got[0].index].card.m_number; }
+        }
+    }
+
+    // COST, then the SBA check before resolution.
+    RemovePlusCounters(state.battlefield[si], 1);
+    if (CounterPingSbaDead(state.battlefield[si], state))
+    { CounterPingKillAt(state, static_cast<std::size_t>(si), "its last +1/+1 counter was removed"); }
+
+    // RESOLUTION. A creature target that left is an illegal target: the ability does nothing (CR 608.2b).
+    bool dealt = false;
+    std::string what;
+    if (t_kind == 0)
+    {
+        // THE SHARED NONCOMBAT DAMAGE PATH: an armed board (Prevent Damage: Purity / Tamanoa) takes the
+        // event through dmgev::DealDamageEvent like every other damage source; otherwise the plain
+        // life change every unarmed noncombat source makes. Ballista is a CREATURE source (no Tamanoa).
+        const bool to_me = (t_player == controller);
+        if (state.dmg_events_armed)
+        {
+            dmgev::DealDamageEvent(state, controller, /*src_is_creature=*/true, /*combat=*/false,
+                                   to_me ? dmg : 0, to_me ? 0 : dmg, /*to_creatures_total=*/0,
+                                   src_card.m_name.str().c_str());
+        }
+        else
+        {
+            state.players[t_player].life -= dmg;
+            if (!to_me) { state.opponent_lost_life_this_turn = true; }
+        }
+        dealt = true;
+        what  = to_me ? std::string("you") : std::string("the opponent");
+    }
+    else
+    {
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.card.m_number != t_num || !q.card.IsCreature()) { continue; }
+            q.damage += dmg;
+            dealt = true;
+            what  = q.card.m_name.str();
+            if (CounterPingSbaDead(q, state)) { CounterPingKillAt(state, i, "lethal damage"); }
+            break;
+        }
+    }
+    if (dealt && !quiet && g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xF0\x9F\x8E\xAF " + src_card.m_name.str() + ": removed a +1/+1 counter, "
+                      + std::to_string(dmg) + " damage to " + what
+                      + (t_kind == 0 && t_player != controller
+                             ? " (" + std::to_string(state.players[t_player].life) + " left)" : std::string())
+                      + (lifelink ? " -- lifelink" : ""));
+    }
+    if (dealt && lifelink) { GainLife(state, controller, dmg); }
+    // ...and THE CREATURE-DAMAGE-TO-OPPONENT HOOK the combat path fires (Curiosity / Tandem Lookout
+    // draws), while the source is still on the battlefield to carry them. One bool test for a deck
+    // without the Niv loop (deck_has_draw_ping).
+    if (dealt && t_kind == 0 && t_player != controller && state.deck_has_draw_ping)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[i].card.m_number == source_id && state.battlefield[i].controller_index == controller)
+            { OnCreatureDealtDamageToOpponent(state, i, 1); break; }
+        }
+    }
+    return true;
+}
+
+// What the Heliod + Ballista loop still needs from pinger `src`: true iff the loop is STRUCTURALLY
+// possible (an own lifegain_target_own_counter permanent; `src` a live own pinger with >= 1 counter;
+// lifelink already on it OR an own grant source other than `src`; >= 2 counters OR a self_counter_cost
+// top-up), with `extra` = the MANA still to pay (the cheapest grant if it lacks lifelink, plus one {4}
+// if it has exactly one counter). Total-only affordability is the caller's (ActAffordable's rule).
+inline bool PingLoopNeeds(const GameState& state, int controller, const Permanent& src, ManaCost& extra)
+{
+    if (src.controller_index != controller || !src.card.IsCreature()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+    if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { return false; }
+    if (DoomedEntrant(src, state)) { return false; }
+    const int n = PlusCountersOn(src);
+    if (n <= 0) { return false; }
+    bool heliod = false, have_grant = false;
+    ManaCost grant;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        if (qd->params.lifegain_target_own_counter) { heliod = true; }
+        if (qd->params.lifelink_grant_cost.has_value() && q.card.m_number != src.card.m_number)
+        {
+            const ManaCost c = EffectiveActivationCost(state, controller, q.card, *qd->params.lifelink_grant_cost);
+            if (!have_grant || c.ManaValue() < grant.ManaValue()) { grant = c; have_grant = true; }
+        }
+    }
+    if (!heliod) { return false; }
+    extra = ManaCost{};
+    if (!CreatureHasLifelink(src, state))
+    {
+        if (!have_grant) { return false; }
+        extra = grant;
+    }
+    int topup = 0;
+    if (n < 2)
+    {
+        if (!d->params.self_counter_cost.has_value()) { return false; }
+        extra = extra.PlusAdditionalCost(
+            EffectiveActivationCost(state, controller, src.card, *d->params.self_counter_cost));
+        topup = 1;
+    }
+    // It must survive paying one counter at its post-top-up count (damage marked counts, ruling 2).
+    if (LethalToughness(src, state) + topup - 1 <= src.damage) { return false; }
+    return true;
+}
+
+// Total mana available right now (lands/rocks/dorks + the float) -- the ActAffordable total-only rule.
+inline int PingLoopManaTotal(const GameState& state)
+{
+    ManaPool have = AvailableManaPool(state, nullptr);
+    have.AddPool(state.floating_mana);
+    return static_cast<int>(have.Total());
+}
+
+// Is the loop live from `src` with `total` mana available? (A proven kill: the opponent's life is
+// finite and every iteration returns the counter.)
+inline bool PingLoopLiveNow(const GameState& state, int controller, const Permanent& src, int total)
+{
+    if (state.players[1 - controller].life <= 0) { return false; }
+    ManaCost extra;
+    if (!PingLoopNeeds(state, controller, src, extra)) { return false; }
+    return extra.ManaValue() <= total;
+}
+
+// THE HELIOD "BUMP" PICK (read only by LifegainHeliodComboProvider::LifegainCounterTarget, behind
+// MTG_LHC_BUMP_TARGET): the battlefield index of a ONE-counter pinger that this Heliod counter would make
+// loop-live -- lifelink already on it, or the grant affordable from the mana available NOW -- else -1.
+// The argument for why taking it is never worse than the default pick lives with the provider hook.
+inline int PingLoopBumpTarget(const GameState& state, int controller)
+{
+    int total = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != controller || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { continue; }
+        if (PlusCountersOn(q) != 1 || DoomedEntrant(q, state)) { continue; }
+        // As if the counter were already on it: lifelink + grant only (no {4} top-up -- that is what
+        // this counter replaces).
+        Permanent bumped = q;
+        AddPlusCounters(bumped, 1);
+        ManaCost extra;
+        if (!PingLoopNeeds(state, controller, bumped, extra)) { continue; }
+        if (extra.ManaValue() > 0)
+        {
+            if (total < 0) { total = PingLoopManaTotal(state); }
+            if (extra.ManaValue() > total) { continue; }
+        }
+        return i;
+    }
+    return -1;
+}
+
+// THE LOOP (PermAbilityMode::PingLoop's resolution). The caller has paid PingLoopCostNow -- the grant if it
+// lacks lifelink and the {4} if it holds one counter, priced on this same board a moment ago -- so what
+// this grants and tops up is exactly what was paid (both worlds pay PingLoopCostNow, never the stale plan
+// cost).
+// Grants the lifelink if missing (Heliod's {1}{W}, paid in that cost), tops a one-counter Ballista up
+// with the paid {4}, then pings the opponent's face one real activation at a time with Heliod's counter
+// pinned back on the Ballista, until the opponent is dead. Execution-verified: it stops the moment an
+// iteration fails to return the counter (a premise broke), having dealt exactly the pings it did.
+inline void RunPingLoop(GameState& state, int controller, int source_id)
+{
+    auto find = [&]() -> int
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.card.m_number == source_id && p.controller_index == controller) { return i; }
+        }
+        return -1;
+    };
+    int si = find();
+    if (si < 0) { return; }
+    const std::string name = state.battlefield[si].card.m_name.str();
+    if (!CreatureHasLifelink(state.battlefield[si], state))
+    {
+        state.battlefield[si].temp_lifelink = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability", "\xE2\x9D\xA4\xEF\xB8\x8F Heliod {1}{W}: " + name
+                                                      + " gains lifelink until end of turn"); }
+    }
+    if (PlusCountersOn(state.battlefield[si]) < 2)
+    {
+        PutPlusCounters(state, state.battlefield[si], 1);
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability", name + " {4}: +1/+1 counter"); }
+    }
+    const int life_before = state.players[1 - controller].life;
+    int pings = 0;
+    {
+        LifegainCounterTargetPinScope pin(source_id);
+        const int saved_target = g_counter_ping_target_pin;
+        g_counter_ping_target_pin = 0;   // the opponent's face
+        while (state.players[1 - controller].life > 0 && pings < 100000)
+        {
+            si = find();
+            if (si < 0) { break; }
+            const int before = PlusCountersOn(state.battlefield[si]);
+            if (!ResolveCounterPing(state, controller, source_id, /*ask_human=*/false, /*quiet=*/true)) { break; }
+            ++pings;
+            si = find();
+            if (si < 0 || PlusCountersOn(state.battlefield[si]) < before) { break; }
+        }
+        g_counter_ping_target_pin = saved_target;
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xE2\x99\xBE\xEF\xB8\x8F COMBO -- " + name + " + Heliod: " + std::to_string(pings)
+                      + " lifelinked pings, opponent " + std::to_string(life_before) + " -> "
+                      + std::to_string(state.players[1 - controller].life));
+    }
+}
+
+// ---- THE COUNTER-PING OFFERS (the emission's set, shared by CollectActions, the breakpoint availability
+// mirror and site 9's activation keys so the three cannot drift). One offer = (target, K pings):
+// target 0 = the opponent's face, > 0 = a creature's m_number.
+//
+// The ENGINE applies only SOUND folds here; every deck-pool restriction is the provider's
+// (DecisionProvider::CounterPingCounts, which decides the K set per target -- empty declines):
+//   * the face: always asked, K over 1..counters.
+//   * a CREATURE target is offered only at the K that kills it (fewer pings deal damage that changes
+//     nothing; more cannot land -- the target is gone), and only when that death PAYS: an own creature
+//     whose death fires a payoff (SelfSacHasDeathPayoff -- Daxos, persist, an LTB return, Abiding Grace
+//     for its exact mana value, Emeria), or an opposing one while we hold an opponent-creature-dies
+//     watcher (opp_dies_life_loss). A death that pays nothing is weakly dominated by aiming the same
+//     pings at the face: identical counters spent, identical lifelink gain, and the face damage can
+//     only help. The Ballista itself is never a target (removing its own last counter already kills it).
+//   * a LIVE Heliod loop (PingLoopLiveNow) wins this turn, so every single ping beside it is dominated
+//     (and a ping applied first could take the Ballista below the loop's priced counter count).
+// HUMAN PLAY: one ping per click (the main phase re-prompts), target asked at resolution -- everything.
+// MTG_UNPRUNE=counterping: the provider is bypassed (the generic full K set per target).
+struct CounterPingOffer { int target; int k; };
+inline bool CounterPingCanActivate(const GameState& state, int controller, const Permanent& src)
+{
+    if (src.controller_index != controller || !src.card.IsCreature()) { return false; }
+    return PlusCountersOn(src) > 0 && !DoomedEntrant(src, state);
+}
+inline void CollectCounterPingOffers(const GameState& state, int controller, const Permanent& src, int loop_total,
+                                     std::vector<CounterPingOffer>& out)
+{
+    out.clear();
+    if (!CounterPingCanActivate(state, controller, src)) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+    if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { return; }
+    if (HumanPlayActive()) { out.push_back(CounterPingOffer{ 0, 1 }); return; }
+    if (PingLoopLiveNow(state, controller, src, loop_total)) { return; }
+    const int  dmg  = d->params.remove_counter_ping_damage;
+    const int  have = PlusCountersOn(src);
+    const bool open = DecisionUnpruned(UnprunedGate::CounterPing);
+    const DecisionProvider& prov = ResolveProvider(state);
+    auto add = [&](int target, int max_k)
+    {
+        const std::vector<int> ks = open ? prov.DecisionProvider::CounterPingCounts(state, src, target, max_k)
+                                         : prov.CounterPingCounts(state, src, target, max_k);
+        for (int k : ks) { if (k >= 1 && k <= max_k) { out.push_back(CounterPingOffer{ target, k }); } }
+    };
+    add(0, have);
+    bool opp_death_pays = false;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller || w.def_absent) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (wd != nullptr && wd->params.opp_dies_life_loss > 0) { opp_death_pays = true; break; }
+    }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (!q.card.IsCreature() || q.card.m_number == 0 || q.card.m_number == src.card.m_number) { continue; }
+        if (DoomedEntrant(q, state) || q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        const int need_dmg = LethalToughness(q, state) - q.damage;
+        if (need_dmg <= 0) { continue; }
+        const int k = (need_dmg + dmg - 1) / dmg;
+        if (k > have) { continue; }
+        const bool pays = (q.controller_index == controller)
+                        ? SelfSacHasDeathPayoff(state, controller, q.card.m_number)
+                        : opp_death_pays;
+        if (pays) { add(q.card.m_number, k); }
+    }
+}
+inline bool CounterPingAnyOffer(const GameState& state, int controller, const Permanent& src, int loop_total)
+{
+    std::vector<CounterPingOffer> offers;
+    CollectCounterPingOffers(state, controller, src, loop_total, offers);
+    return !offers.empty();
+}
+
+// A PingLoop activation's TRUE cost at activation (both worlds pay this, lockstep -- the TapBloodCostNow
+// precedent): PingLoopNeeds' extra mana on the board AS IT IS NOW, so a Ballista that dropped to one
+// counter since the plan was priced pays for its {4}, and one that gained lifelink skips the grant.
+// nullopt = the loop is no longer possible (the liveness check refuses it first).
+inline std::optional<ManaCost> PingLoopCostNow(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        ManaCost extra;
+        if (!PingLoopNeeds(state, controller, p, extra)) { return std::nullopt; }
+        return extra;
+    }
+    return std::nullopt;
+}
+
+// Pay-free sum of what the own pingers can deal this turn by pings alone (every +1/+1 counter, the last
+// one included -- removing it kills the body but the damage still resolves).
+inline int CounterPingReachOnBoard(const GameState& state, int controller)
+{
+    int reach = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || d->params.remove_counter_ping_damage <= 0 || DoomedEntrant(q, state)) { continue; }
+        reach += PlusCountersOn(q) * d->params.remove_counter_ping_damage;
+    }
+    return reach;
+}
+
+// THE POST-COMBAT-DAMAGE LETHAL FINISH, called right after combat damage in BOTH worlds
+// (GameEngine::CombatPhase / TurnSolver's combat). Pings are instant-speed, so after combat damage a
+// Ballista that attacked can still remove every counter -- the double dip a single searched main
+// cannot express. Fires ONLY when it WINS this turn: (a) a loop that needs no mana is live, or (b) the
+// pingers' counters alone cover the opponent's remaining life. A sound proven-kill fold, not a greedy
+// pick: any non-lethal non-lifelinked ping is weakly dominated by deferring it (the passive opponent
+// never removes the Ballista), and a lethal one is the best outcome there is. Skipped in human play
+// (the human pings in main 2). Gated on GameState::deck_has_counter_ping.
+inline void CounterPingFinish(GameState& state, int active)
+{
+    if (!state.deck_has_counter_ping || HumanPlayActive()) { return; }
+    if (state.players[1 - active].life <= 0 || state.players[active].life <= 0) { return; }
+    std::vector<int> pingers;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != active || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->params.remove_counter_ping_damage > 0) { pingers.push_back(q.card.m_number); }
+    }
+    if (pingers.empty()) { return; }
+    for (int num : pingers)
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.card.m_number != num || q.controller_index != active) { continue; }
+            ManaCost extra;
+            if (PingLoopNeeds(state, active, q, extra) && extra.ManaValue() == 0)
+            {
+                RunPingLoop(state, active, num);
+                return;
+            }
+            break;
+        }
+    }
+    if (CounterPingReachOnBoard(state, active) < state.players[1 - active].life) { return; }
+    const int saved_target = g_counter_ping_target_pin;
+    g_counter_ping_target_pin = 0;
+    for (int num : pingers)
+    {
+        while (state.players[1 - active].life > 0
+               && ResolveCounterPing(state, active, num, /*ask_human=*/false, /*quiet=*/false)) {}
+        if (state.players[1 - active].life <= 0) { break; }
+    }
+    g_counter_ping_target_pin = saved_target;
+}
+
+// K counter pings beyond the first (the repeatable CounterPing's K-1, both worlds' repeat dispatch).
+// Counter-bounded like SpendSporeActivations; stops when the source is gone or out of counters.
+inline int SpendCounterPingActivations(GameState& state, int controller, int source_id, int extra)
+{
+    int done = 0;
+    for (int k = 0; k < extra; ++k)
+    {
+        if (!ResolveCounterPing(state, controller, source_id, /*ask_human=*/true, /*quiet=*/false)) { break; }
+        ++done;
+    }
+    return done;
+}
+
 // Is an ActivatePermAbility's source still there and still activatable? Checked BEFORE paying in
 // both worlds, so a stranded activation (its source left, or it got tapped earlier in the same
 // plan) is a clean no-op rather than a paid one -- the UntapCreature discipline.
@@ -25655,6 +26712,14 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
     for (const Permanent& p : state.battlefield)
     {
         if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        // Walking Ballista: the ping's cost is a +1/+1 counter (no counter, no activation), and the Heliod
+        // loop's premise must still hold before its grant / top-up is paid (a stale plan is a no-op).
+        if (mode == PermAbilityMode::CounterPing && PlusCountersOn(p) <= 0) { return false; }
+        if (mode == PermAbilityMode::PingLoop)
+        {
+            ManaCost extra;
+            if (!PingLoopNeeds(state, controller, p, extra)) { return false; }
+        }
         // Bilbo: "Activate only if you have 111 or more life." An activation RESTRICTION, checked
         // when the ability is activated (CR 602.5b) -- i.e. here, before any cost is paid (a
         // painland's pain while paying cannot un-activate it).
@@ -25878,6 +26943,9 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
                                               return "tap five untapped Vampires: gain control of target creature";
         case PermAbilityMode::TransformSelf:  return "transform it (you control five or more Vampires)";
         case PermAbilityMode::TapTargetPump:  return "target creature gets a pump until end of turn";
+        case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
+        case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
+        case PermAbilityMode::PingLoop:       return "Heliod loop: ping until the opponent is dead";
         default:                              return "activate";
     }
 }
@@ -26251,6 +27319,24 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             }
             break;
         }
+        case PermAbilityMode::PayCounterSelf:
+        {
+            // Walking Ballista: "{4}: Put a +1/+1 counter on this creature." A put (doubler-aware); not
+            // a life-gain event.
+            PutPlusCounters(state, state.battlefield[idx], 1);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "counter", src_name + ": +1/+1 counter ("
+                              + std::to_string(PlusCountersOn(state.battlefield[idx])) + ")");
+            }
+            break;
+        }
+        case PermAbilityMode::CounterPing:
+            ResolveCounterPing(state, controller, source_id, /*ask_human=*/true, /*quiet=*/false);
+            break;
+        case PermAbilityMode::PingLoop:
+            RunPingLoop(state, controller, source_id);
+            break;
         case PermAbilityMode::GrantLifelink:
         {
             // Heliod, Sun-Crowned: "{1}{W}: Another target creature gains lifelink until end of
@@ -27005,6 +28091,9 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       // player" -- the same silent-zero trap as the note above.
                                       : (mode == PermAbilityMode::PingAll)
                                       ? &def.params.ping_all_cost
+                                      // Walking Ballista's "{4}: Put a +1/+1 counter" -- same trap.
+                                      : (mode == PermAbilityMode::PayCounterSelf)
+                                      ? &def.params.self_counter_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 

@@ -1,0 +1,36 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "Control for lhc_ballista_x1_warden_bump: 3 Plains -- after X = 1 only {1} is left, the grant is unaffordable, so the bump rule does not fire and nothing wins this turn.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Heliod, Sun-Crowned"
+    },
+    {
+      "name": "Soul Warden"
+    }
+  ],
+  "hand": [
+    "Walking Ballista"
+  ],
+  "expect_no_win": true,
+  "resume_at": "main1"
+}

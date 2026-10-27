@@ -8460,7 +8460,7 @@
    "keywords": [],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "When this creature enters, you may search your library for a creature card with mana value 1 or less, reveal it, put it into your hand, then shuffle.\nSacrifice this creature: Your opponents can't cast noncreature spells this turn. [ETB SINGLE-tutor to HAND (Ranger of Eos's params minus etb_tutor_hand_count, which selects the multi path at >1): tutor_to_hand + tutor_types Creature + tutor_max_mv 1 + tutor_shuffle_after. Legal pool in this deck is exactly Soul Warden / Soul's Attendant / Serra Ascendant / Ocelot Pride (every other creature is MV>=2; the archived v1 list had no Ocelot Pride); WHICH one is a searched main_phase plan variant (tutor axis, width 6 >= 4 candidates, so all four are scored; plan-less paths take the first library match, disclosed). 'You may' is ALWAYS taken when a legal target exists -- declining is legal but never right with four castable {W} bodies; the only theoretical cost is the post-search shuffle, disclosed (same treatment as Ranger of Eos). The fetched card lands in HAND and IS castable in the same phase (2026-09-08): the creature-ETB tutor arms the same deferred acquisition re-solve (MTG_ACQ_RESOLVE) a tutor SPELL does, in the rollout as well as the depth-0 executor (only the executor half existed before, so at every searched depth the fetch waited a turn: 0 of 7 spare-mana fetches cast same-turn -> 6 of 7). Guarded by test/scenarios/critter_ranger_captain_fetch_same_turn.json. Clause 2: the effect ('opponents can't cast noncreature spells') is INERT -- the passive goldfish opponent never casts a spell of any kind -- but the SACRIFICE is real and is modelled: sac_creature_outlet + sac_outlet_self_only (the cost is 'Sacrifice this creature', so the source is the ONLY legal victim), with no payload params, so the activation's whole effect is the death event routed through OnCreatureDies. This is the deck's only way to kill its own creature, which matters solely because Daxos, Blessed by the Sun turns it into a lifegain event (-> Pridemate / Voice / Archangel of Thune / Heliod counters). Emitted to the search only when such a payoff is live (SelfSacHasDeathPayoff); with none on board the sac is strictly dominated (loses a 3/3, changes nothing else) so omitting it is lossless. Human play always sees it. A Ranger-Captain cast THIS turn with Daxos out can also sac in the phase it landed: breakpoint site 9 (post-entry activation, TurnSolver::PostEntryActivationPending) re-decides the phase after a permanent with a live, affordable activation enters. Sac timing: the engine plays first main only, so the search sacs pre-combat and forgoes that turn's 3 damage -- a small disclosed under-rating (the Goblins DeferSacOutletPreCombat gap).] [Soldiers (2026-10-04): there the MV<=1 pool is Champion of the Parish / Esper Sentinel / Recruitment Officer; no card in that 60 pays off a death, so the sacrifice is strictly dominated and not emitted to the search (human play still sees it).]",
+   "oracle_text": "When this creature enters, you may search your library for a creature card with mana value 1 or less, reveal it, put it into your hand, then shuffle.\nSacrifice this creature: Your opponents can't cast noncreature spells this turn. [ETB SINGLE-tutor to HAND (Ranger of Eos's params minus etb_tutor_hand_count, which selects the multi path at >1): tutor_to_hand + tutor_types Creature + tutor_max_mv 1 + tutor_shuffle_after. Legal pool in the CritterLifegain list is exactly Soul Warden / Soul's Attendant / Serra Ascendant / Ocelot Pride (every other creature is MV>=2; the archived v1 list had no Ocelot Pride); in LifegainHeliodCombo it is Soul Warden / Soul's Attendant / Serra Ascendant / Martyr of Sands / Walking Ballista (Ballista's {X}{X} is mana value 0 in the library, CR 202.3e -- the fetched Ballista is then cast for any X). WHICH one is a searched main_phase plan variant (tutor axis, width 6 >= 5 candidates, so all are scored; plan-less paths take the first library match, disclosed). 'You may' is ALWAYS taken when a legal target exists -- declining is legal but never right with four castable {W} bodies; the only theoretical cost is the post-search shuffle, disclosed (same treatment as Ranger of Eos). The fetched card lands in HAND and IS castable in the same phase (2026-09-08): the creature-ETB tutor arms the same deferred acquisition re-solve (MTG_ACQ_RESOLVE) a tutor SPELL does, in the rollout as well as the depth-0 executor (only the executor half existed before, so at every searched depth the fetch waited a turn: 0 of 7 spare-mana fetches cast same-turn -> 6 of 7). Guarded by test/scenarios/critter_ranger_captain_fetch_same_turn.json. Clause 2: the effect ('opponents can't cast noncreature spells') is INERT -- the passive goldfish opponent never casts a spell of any kind -- but the SACRIFICE is real and is modelled: sac_creature_outlet + sac_outlet_self_only (the cost is 'Sacrifice this creature', so the source is the ONLY legal victim), with no payload params, so the activation's whole effect is the death event routed through OnCreatureDies. This is the deck's only way to kill its own creature, which matters solely because Daxos, Blessed by the Sun turns it into a lifegain event (-> Pridemate / Voice / Archangel of Thune / Heliod counters). Emitted to the search only when such a payoff is live (SelfSacHasDeathPayoff); with none on board the sac is strictly dominated (loses a 3/3, changes nothing else) so omitting it is lossless. Human play always sees it. A Ranger-Captain cast THIS turn with Daxos out can also sac in the phase it landed: breakpoint site 9 (post-entry activation, TurnSolver::PostEntryActivationPending) re-decides the phase after a permanent with a live, affordable activation enters. Sac timing: the engine plays first main only, so the search sacs pre-combat and forgoes that turn's 3 damage -- a small disclosed under-rating (the Goblins DeferSacOutletPreCombat gap).] [Soldiers (2026-10-04): there the MV<=1 pool is Champion of the Parish / Esper Sentinel / Recruitment Officer; no card in that 60 pays off a death, so the sacrifice is strictly dominated and not emitted to the search (human play still sees it).]",
    "template": "custom",
    "parameters": {
     "tutor_to_hand": true,
@@ -13726,6 +13726,86 @@
     "land_search_on_resolve": true,
     "land_search_count": 2,
     "land_search_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Martyr of Sands",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life. [A self-only sacrifice outlet (sac_creature_outlet + sac_outlet_self_only, the Brindle Boar / Ranger-Captain of Eos shape: the source is the only legal victim) with mana cost sac_creature_cost {1}. Payload: sac_outlet_lifegain 3 PER revealed card of colour sac_outlet_lifegain_per_revealed_color \"W\" (SacOutletLifegainAmount), X read at ACTIVATION, before the sacrifice (CR 601.2b/h via 602.2b). Colour is the card's own mask from its mana-cost pips (CR 105.2 / 202.2): lands (Plains, Emeria) and Walking Ballista ({X}{X}) are colourless and never count; Martyr is on the battlefield, so it never counts itself. X = MAX is a SOUND DOMINANCE, not a heuristic: revealing costs and tells nothing against the passive opponent, the gain is ONE life-gain event whatever X is (CR 119.10; X = 0 gains 0 = no event, just a death), and every life reader in the pool is monotone in life (Heliod / Pridemate / Voice count events; Serra Ascendant's 30-life +5/+5 and Ajani's 0 want more life). Human play is asked for X (the x_value decision, reveal kind; default = max). The enumerator offers it while the gain is read (SacOutletLifegainRead: a lifegain watcher on board, or the deck stamp deck_reads_life_total -- Serra Ascendant / Ajani's 0 read the TOTAL, which persists across turns) or while the death pays (SelfSacHasDeathPayoff); human play always sees it. No {T}: usable the turn it enters (CR 302.6). The sacrifice is a real death into the graveyard, where Abiding Grace (MV 1) and Emeria can return it. Timing: it is a main-phase activation whose POSITION among the plan's casts is SEARCHED (2026-10-27, TurnSolver::RevealOutletSlot): the trailing pass (after every cast, so X counts the hand left after them and every gain watcher cast first sees the event), before every cast (X counts the whole hand), or right after the k-th 'whenever you gain life' cast -- the only points that can differ (moving it earlier past a white non-watcher cast only adds to X; past anything else it changes nothing). Human play sequences it anywhere in the line; instant-speed / opponent's-turn activation is not modelled -- inert vs the goldfish (the hand only grows into our main phase, and Grace's end-step return needs it gone before our end step), PROVISIONAL pending the user's sign-off. Activating before combat forgoes its 1-power attack that turn (no post-combat main; the Ranger-Captain disclosure).]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_outlet_self_only": true,
+    "sac_creature_cost": "{1}",
+    "sac_outlet_lifegain": 3,
+    "sac_outlet_lifegain_per_revealed_color": "W"
+   }
+  },
+  {
+   "name": "Walking Ballista",
+   "mana_cost": "{X}{X}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Construct"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "This creature enters with X +1/+1 counters on it.\n{4}: Put a +1/+1 counter on this creature.\nRemove a +1/+1 counter from this creature: It deals 1 damage to any target. [ENTERS WITH X (enters_with_x_plus_counters): an AS-ENTERS replacement (CR 614.1c) applied in the pre-push window of BOTH creature-enter sites (EffectHandler::EnterBattlefield / TurnSolver apply_one), reading the cast's chosen_x (CR 107.3m) through PutPlusCounters (a put, CR 122.6: a counter doubler doubles it). Any non-cast entry (an Emeria return) has X = 0. MANA VALUE is 0 everywhere but the stack (CR 202.3e): a legal Ranger-Captain of Eos fetch (tutor_max_mv 1), NOT a legal Abiding Grace return (mana value exactly 1). {X} is no coloured pip: no devotion to white for Heliod, and colourless for Martyr of Sands' reveal. X is a SEARCHED axis over every legal X 0..max (GenericProvider::XCandidates). X = 0 is not dominated: the 0/0 still ENTERS, so Soul Warden / Soul's Attendant / Auriok Champion each fire a life-gain event, and then it dies to the toughness SBA (CR 704.5f) BEFORE those triggers resolve (CR 704.3) -- recorded as a doomed entrant, skipped by every trigger's target list (Heliod's counter can never land on it) and killed in both worlds at the enter-cascade drain points (DrainPendingZeroToughness). {4} (self_counter_cost, PermAbilityMode::PayCounterSelf): no {T}, repeatable, legal while summoning-sick (CR 302.6); a put via PutPlusCounters; the counter is NOT a life-gain event. PING (remove_counter_ping_damage 1, PermAbilityMode::CounterPing): target chosen first, the counter removed as the COST, an inline toughness/lethal-damage SBA check before resolution (ruling 2: damage marked on it limits the pings), then 1 damage with the source's last-known lifelink (CR 608.2h / 702.15b) -> ONE GainLife per ping (Heliod / Pridemate / Voice fire there). HELIOD LOOP (PermAbilityMode::PingLoop): with Heliod (lifegain_target_own_counter) on our battlefield, the Ballista lifelinked and holding >= 2 counters, each ping gains 1 and Heliod's counter goes back on the Ballista -- unbounded, a real kill executed ping by ping until the opponent is dead. ONE action whose cost is what the loop still needs (Heliod's {1}{W} grant if it lacks lifelink, one {4} if it holds exactly one counter), emitted only while live, so choosing it is a proven win this turn, never a forced pick. Heliod's counter is pinned to the Ballista inside the loop (sound: the loop is the kill); outside it, a Heliod counter that would take a one-counter Ballista into a LIVE loop goes on the Ballista (LifegainHeliodComboProvider::LifegainCounterTarget, MTG_LHC_BUMP_TARGET; the never-worse argument is in the hook's comment). With exactly 1 counter the Ballista dies paying it, before the gain: Heliod's counter lands elsewhere. POST-COMBAT FINISH (CounterPingFinish, both worlds, right after combat damage): pings are instant-speed, so an attacking Ballista can still remove every counter after damage -- fired ONLY when it wins (a no-mana live loop, or the counters alone cover the opponent's remaining life). AUTONOMOUS PING TARGETS (engine, SOUND folds only -- CollectCounterPingOffers): the opponent's face, plus a creature only at the ping count that KILLS it and only when that death pays (an own creature with a death payoff -- in this list Abiding Grace for mana value exactly 1 or Emeria returning it for re-entry life events; an opposing one only beside an opponent-creature-dies watcher); a live loop supersedes every single ping. DECK-POOL NARROWING (LifegainHeliodComboProvider::CounterPingCounts, MTG_LHC_PING_PRUNE, PROVISIONAL, disclosed 6a): a main-phase face ping is offered only when lifelinked and some card reads the gain -- nothing in this pool reads opponent life loss or damage events, so a non-lethal ping is weakly dominated by deferring it to the kill turn, where the finish fires it. Pings in the opponent's turn are unmodelled (no priority window; dominated by deferral). Our own face and planeswalkers are human-play only (planeswalkers are absent from the human target list: legal, never useful). The finish is skipped in human play (the human pings in main 2).]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_x_plus_counters": true,
+    "self_counter_cost": "{4}",
+    "remove_counter_ping_damage": 1
+   }
+  },
+  {
+   "name": "Abiding Grace",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "At the beginning of your end step, choose one —\n• You gain 1 life.\n• Return target creature card with mana value 1 from your graveyard to the battlefield. [MODAL END-STEP TRIGGER, one per copy, resolved by the SHARED PerformEndStepAbidingGrace, called last in GameEngine::EndStep and in the rollout's SimulateEndAndStartNextTurn (lockstep), after the intervening-if end-step triggers (Ocelot Pride, Pyrohemia), which were checked as the step began (CR 603.4). MODE + TARGET ARE SEARCHED: Plan::grace_choice -> GameState::scripted_grace_choice, a packed rank per trigger ordinal (4 bits each, battlefield order) into GraceOptions, built at each trigger's resolution. Same shape as the saga-target state pin. -1 = each list's front (the provider default), which applies only beyond the horizon. Over-range ranks clamp. Two copies are two triggers, each with its own mode (CR 603.3b). MODE 2 is legal only with a target (CR 603.3c); with none, the gain mode is the only option and nothing is asked. TARGETS: fixed as the trigger goes on the stack (CR 603.3d), i.e. the graveyard as it stood at the beginning of the end step (SnapshotEndStepGraceTargets, taken before the step's other effects). Read off the DEFINITION (ZoneCard): a creature card whose mana value is EXACTLY 1, with {X} = 0 off the stack (CR 202.3e), so Walking Ballista is never a target. Tokens in the graveyard vector are excluded by id. Copies of one card are one option to the search. Each trigger's list holds only the snapshot cards still in the graveyard, so a later trigger never re-targets the card an earlier one returned: that pick would only fizzle (CR 608.2b). That is a modelling simplification: choices are made at each resolution, with the earlier ones known. RETURN: ResolveGyReanimate, which erases the card from the graveyard and runs PutCardOntoBattlefield under GraveyardEnterScope (the universal enter cascade: every Soul Warden / Soul's Attendant / Auriok Champion fires), then the legend rule and the doomed-0/0 drain. entered_this_turn at our end step clears at our next untap, so the body attacks next turn (CR 302.6). GAIN: one GainLife(1) event (CR 119.10). {W} is devotion to white for Heliod. Default ORDER (GraceOptions/GyReturnOrder, ordering only): returns by name, then gain. A lifegain deck provider may apply LifegainGraceFolds (MTG_GRACE_RETURN_DOMINATES): return-dominates-gain with an unconditional enter-lifegain watcher out, and behaviourally identical candidates folded (Soul Warden == Soul's Attendant). HUMAN PLAY: the `gy_return_one` decision (every legal graveyard copy as an image plus a 'Gain 1 life' button).]",
+   "template": "custom",
+   "parameters": {
+    "endstep_modal_lifegain": 1,
+    "endstep_modal_reanimate_mv": 1
+   }
+  },
+  {
+   "name": "Emeria, the Sky Ruin",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nAt the beginning of your upkeep, if you control seven or more Plains, you may return target creature card from your graveyard to the battlefield.\n{T}: Add {W}. [Enters tapped via enters_tapped; {T}: Add {W} via produces. The upkeep trigger is modelled faithfully by PerformUpkeepGyReanimate, called in lockstep from GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn. INTERVENING IF (CR 603.4): it counts LANDS you control with the Plains subtype (basic or not; Emeria itself has no land subtype), when the upkeep begins AND again at resolution. TARGETS are the creature CARDS in your graveyard when the trigger goes on the stack (CR 603.3d); a token in the graveyard vector is never one (CR 111.7); with none the trigger is removed. WHICH card -- or declining ('you may') -- is a SEARCHED choice: Plan::upkeep_gy_reanimate_choice, decided in the previous turn's main phase and pinned on GameState::scripted_upkeep_gy_reanimate until this upkeep (the Search for Tomorrow upkeep_land_search_choice shape); a rank into the resolution-time list of distinct creature-card names ordered by the provider's GyReturnOrder, plus a decline code. Beyond the search horizon the unpinned front is returned (the permitted playout policy). Human play: the gy_return_one decision (one graveyard card per copy, alt 'Return nothing'). The returned creature enters through the full enter cascade (Soul Warden / Auriok Champion fire, Ranger-Captain of Eos tutors again), is summoning sick (CR 302.6), a legendary one meets the legend rule, and a returned Walking Ballista enters as a 0/0 and dies (CR 107.3m / 704.5f). MTG_EMERIA_AXIS=0 is an A/B kill switch for the search axis only.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W"
+    ],
+    "enters_tapped": true,
+    "upkeep_gy_reanimate": true,
+    "upkeep_gy_reanimate_land_subtype": "Plains",
+    "upkeep_gy_reanimate_land_threshold": 7,
+    "upkeep_gy_reanimate_may": true
    }
   }
  ]

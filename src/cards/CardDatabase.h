@@ -548,6 +548,23 @@ struct CardParams
     // already sees the counters. 0 = none -> byte-identical for every other card.
     int enters_with_plus_counters = 0;
 
+    // ---- WALKING BALLISTA (LifegainHeliodCombo, 2026-10-27) ------------------------------------------
+    // "This creature enters with X +1/+1 counters on it." -- the X of the CAST (CR 107.3m): an AS-ENTERS
+    // replacement applied in the pre-push window of BOTH creature-enter sites (EffectHandler::
+    // EnterBattlefield / TurnSolver apply_one), reading the cast's chosen_x, through PutPlusCounters (a
+    // "put", CR 122.6). Any non-cast entry (a graveyard return) has X = 0 and enters as its printed 0/0,
+    // which dies to the toughness SBA before its enter triggers resolve (g_pending_zero_toughness).
+    // X is a SEARCHED axis 0..max (GenericProvider::XCandidates). false -> every other card unchanged.
+    bool enters_with_x_plus_counters = false;
+    // "{4}: Put a +1/+1 counter on this creature." (PermAbilityMode::PayCounterSelf). No {T}: repeatable
+    // within a turn, legal while summoning-sick (CR 302.6); a put (PutPlusCounters). nullopt = none.
+    std::optional<ManaCost> self_counter_cost;
+    // "Remove a +1/+1 counter from this creature: It deals N damage to any target."
+    // (PermAbilityMode::CounterPing, and the Heliod loop PermAbilityMode::PingLoop). The cost is a
+    // COUNTER, so a body that drops to 0 toughness dies before the damage resolves; the damage and its
+    // lifelink use last-known information (CR 608.2h / 702.15b). 0 = none.
+    int remove_counter_ping_damage = 0;
+
     // ---- "EACH CREATURE YOU CONTROL GETS +1/+0 FOR EACH TIME IT HAS ATTACKED THIS TURN" (Moraug; 2026-10-23) --
     // A static ability (CR 611.3a, layer 7c): read in ComputeLordBonus off the creature's own count of
     // attacks this turn (Permanent::AttacksThisTurn, set at each declare-attackers in both worlds, reset at
@@ -2298,6 +2315,32 @@ struct CardParams
     std::optional<ManaCost> ping_all_cost;
     int  ping_all_amount                        = 0;
     bool endstep_sac_if_no_creatures            = false;
+    // Abiding Grace: "At the beginning of your end step, choose one -- * You gain 1 life. * Return
+    // target creature card with mana value 1 from your graveyard to the battlefield."
+    //   endstep_modal_lifegain      -- mode 1's life amount (0 = no such trigger).
+    //   endstep_modal_reanimate_mv  -- mode 2's EXACT mana value filter; -1 = absent (MV 0 is a real
+    //                                  value, so 0 cannot be the sentinel). The trigger exists iff this
+    //                                  is >= 0 (HasEndStepGraceTrigger). Resolved by the SHARED
+    //                                  PerformEndStepAbidingGrace (GameEngine::EndStep + the rollout's
+    //                                  SimulateEndAndStartNextTurn); mode + target are the searched
+    //                                  Plan::grace_choice axis.
+    int  endstep_modal_lifegain                 = 0;
+    int  endstep_modal_reanimate_mv             = -1;
+    // Emeria, the Sky Ruin: "At the beginning of your upkeep, if you control seven or more Plains, you
+    // may return target creature card from your graveyard to the battlefield."
+    //   upkeep_gy_reanimate                 -- the trigger exists (HasUpkeepGyReanimate).
+    //   upkeep_gy_reanimate_land_subtype    -- the intervening-if counts LANDS you control with this
+    //                                          subtype ("Plains": basic or not; Emeria is not one).
+    //   upkeep_gy_reanimate_land_threshold  -- ...at least this many (0 = no condition). CR 603.4:
+    //                                          checked when the upkeep begins AND at resolution.
+    //   upkeep_gy_reanimate_may             -- "you may": declining is a real (searched) option.
+    // Resolved by the SHARED PerformUpkeepGyReanimate (GameEngine::UpkeepTail + the rollout's
+    // SimulateEndAndStartNextTurn); WHICH card (or decline) is the searched next-upkeep axis
+    // Plan::upkeep_gy_reanimate_choice -> GameState::scripted_upkeep_gy_reanimate.
+    bool upkeep_gy_reanimate                    = false;
+    std::string upkeep_gy_reanimate_land_subtype;
+    int  upkeep_gy_reanimate_land_threshold     = 0;
+    bool upkeep_gy_reanimate_may                = false;
     bool x_damage_each_creature_and_player      = false;
     bool tutor_max_mv_is_lands                  = false;
     bool shuffles_self_into_library_on_resolve  = false;
@@ -3849,6 +3892,14 @@ struct CardParams
     // READS the gain (SacOutletLifegainRead): against a passive opponent unread life changes nothing.
     // 0 = no lifegain payload (byte-identical).
     int  sac_outlet_lifegain           = 0;
+    // Martyr of Sands: "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain
+    // three times X life." When set, sac_outlet_lifegain is the life PER revealed card of this colour
+    // and X is the count of hand cards of that colour (SacOutletLifegainAmount, SpellEffects.h), read
+    // at activation (CR 601.2b via 602.2b). The autonomous engine reveals the maximum -- a SOUND
+    // dominance, not a pick: revealing is free against the passive opponent, the gain is ONE event
+    // whatever X is (CR 119.10), and every life reader in the pool is monotone in life. Human play is
+    // asked for X (the x_value decision). Empty = the flat Brindle Boar amount (byte-identical).
+    std::string sac_outlet_lifegain_per_revealed_color;
     // Fulminator Mage: "Sacrifice this creature: Destroy target nonbasic land." A self-only outlet
     // (sac_creature_outlet + sac_outlet_self_only) whose payload destroys a NONBASIC land, either side
     // (the goldfish opponent has none, so the legal set is our own nonbasics). The activation needs a

@@ -1,0 +1,24 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 7,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "Control for lhc_ballista_attack_then_ping: opponent at 7 -- attack 3 + 3 pings is 6, not lethal, so the finish must NOT fire (a non-lethal ping is dominated by keeping the counters): opponent ends the turn at 4 with the Ballista still 3/3.",
+  "battlefield": [
+    {
+      "name": "Walking Ballista",
+      "plus_counters": 3
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "expect_opponent_life": 4,
+  "resume_at": "main1"
+}

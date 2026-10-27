@@ -1,0 +1,38 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "LifegainHeliodCombo (2026-10-27), Martyr of Sands -- REVEAL BEFORE CASTING (the reviewer's probe). 2 Plains untapped (land drop used), Soul Warden + Martyr + Serra Ascendant (not sick); hand Soul's Attendant, Heliod, Ajani (3 WHITE); our life 20, opponent 6. The only kill: Martyr FIRST, X = 3 -> 29, THEN Soul's Attendant (Warden's trigger -> 30), Serra Ascendant 6/6 swings. Casting the Attendant first leaves X = 2 (20 + 1 + 6 = 27) and Serra a 1/1 -> no win. The outlet used to be a TRAILING activation only, so 'sacrifice, then cast' was unfindable at ANY budget (CLAUDE.md 'a budget may re-price work, it may not make a line unfindable'); the fix is the reveal outlet's POSITION twins (TurnSolver::RevealOutletSlot, AppendSubdecisionAxes). Same fixture at a FINITE budget (200 ms, d3): the twin is one extra root plan, so it is reached well inside the budget. BINDING: win T4, active life 36 = 20 + 9 (Martyr) + 1 (Warden on the Attendant) + 6 (Serra's lifelink).",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Soul Warden"
+    },
+    {
+      "name": "Martyr of Sands"
+    },
+    {
+      "name": "Serra Ascendant"
+    }
+  ],
+  "hand": [
+    "Soul's Attendant",
+    "Heliod, Sun-Crowned",
+    "Ajani, Strength of the Pride"
+  ],
+  "expect_win_turn": 4,
+  "expect_active_life": 36
+}

@@ -1249,6 +1249,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
     g_pending_self_bounces.clear();   // thread-scoped queue: a fresh game must never inherit a stray record
     g_pending_look_top.clear();       // ...the same for the look-top queue (Risen Reef)
+    g_pending_zero_toughness.clear(); // ...and the doomed 0/0 entrant queue (Walking Ballista X = 0)
     g_own_etb_depth     = 0;
     g_look_top_draining = false;
     // Does anything in this deck READ the mv-cast accumulator (Call Forth the Tempest's damage
@@ -1297,6 +1298,25 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d && (d->params.mana_per_life_gained
                           || d->params.attack_team_pump_per_life_gained)) { return true; }
+            }
+        }
+        return false;
+    }();
+    // Life-TOTAL readers (GameState::deck_reads_life_total). Same zone set as the stamp above.
+    state.deck_reads_life_total = [&deck]{
+        const bool wish = GoldFishRunner::DeckWishesFromSideboard(deck);
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            if (zone == &deck.sideboard && !wish) { break; }
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { continue; }
+                const CardParams& p = d->params;
+                if (p.life_threshold_pump_life > 0 || p.life_above_start_anthem_life > 0
+                    || p.tap_token_min_life_above_start > 0) { return true; }
+                for (const CardParams::LoyaltyAbilityParam& ab : p.loyalty_abilities)
+                { if (ab.effect == "exile_all_opponent_artifacts_creatures") { return true; } }
             }
         }
         return false;
@@ -1365,6 +1385,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool first_equip_waiver = false;
         // Raubahn's attack attach: the axis fan-out + projection scans (GameState::deck_has_attack_attach).
         bool attack_attach = false;
+        // Walking Ballista's counter ping (GameState::deck_has_counter_ping): the param its sites test.
+        bool counter_ping = false;
+        // Abiding Grace's end-step mode/return (GameState::deck_has_endstep_reanimate).
+        bool endstep_reanimate = false;
+        // Emeria, the Sky Ruin's upkeep return (GameState::deck_has_upkeep_reanimate).
+        bool upkeep_reanimate = false;
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
         // shared hooks (ResolveDrawTriggers, OnCreatureDealtDamageToOpponent) test.
         bool draw_ping = false;
@@ -1428,6 +1454,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.first_equip_free || d->params.storied_first_equip_free)
                 { first_equip_waiver = true; }
                 if (d->params.attack_attach_equipment)        { attack_attach = true; }
+                if (d->params.remove_counter_ping_damage > 0) { counter_ping = true; }
+                if (d->params.endstep_modal_reanimate_mv >= 0) { endstep_reanimate = true; }
+                if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
                     || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
                 { draw_ping = true; }
@@ -1490,6 +1519,15 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no Raubahn can exist, so the attack-attach axis
         // scan and the projection's CountAttackAttachPump scan are provably empty.
         state.deck_has_attack_attach       = garth || attack_attach;
+        // Same reasoning, no lever: a clear bit proves no counter pinger can exist, so CounterPingFinish,
+        // the CounterPingReach projection term and the Heliod bump scan are dead code for that deck.
+        state.deck_has_counter_ping        = garth || counter_ping;
+        // Same reasoning, no lever: a clear bit proves no end-step reanimator can exist, so the end-step
+        // Grace walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
+        state.deck_has_endstep_reanimate   = garth || endstep_reanimate;
+        // Same reasoning, no lever: a clear bit proves no upkeep graveyard reanimator (Emeria) can exist,
+        // so the upkeep walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
+        state.deck_has_upkeep_reanimate    = garth || upkeep_reanimate;
         // Same reasoning, no lever: a clear bit proves no permanent can carry a draw trigger or a
         // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
         state.deck_has_draw_ping           = garth || draw_ping;

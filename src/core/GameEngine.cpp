@@ -288,6 +288,7 @@ void GameEngine::UntapStep(GameState& state)
     state.floating_haste_c = 0;         // Generator Servant's haste tag dies with the float (lockstep)
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
+    DrainPendingZeroToughness(state);   // safety net: a 0/0 Walking Ballista entrant (lockstep w/ the rollout)
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
     DrainPendingLookTop(state);         // safety net (lockstep w/ SimulateEndAndStartNextTurn): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
@@ -298,6 +299,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
+    state.scripted_grace_choice = -1;   // searched Abiding Grace pin is per-turn (same lockstep)
     state.scripted_tectonic_keep = -1;  // ...and its mode-B keep pin (same lockstep)
     state.scripted_bruna_gather = -1;   // searched Bruna gather subset is per-turn (same lockstep)
     state.scripted_combat_aura_swap = -1;   // searched Arcanum Wings combat swap (same lockstep)
@@ -491,6 +493,10 @@ void GameEngine::UpkeepTail(GameState& state)
         if (hold) { p.storage_hold_this_turn = true; }
     }
 
+    // Emeria, the Sky Ruin: its intervening if and legal targets are fixed as the beginning-of-upkeep
+    // triggers go on the stack -- BEFORE any of the upkeep triggers below resolves (CR 603.3d / 603.4).
+    // Lockstep twin before the rollout's upkeep-token loop; empty for every deck without the card.
+    const UpkeepGyReanimateSnapshot emeria_snapshot = SnapshotUpkeepGyReanimate(state);
     // Upkeep token creation (e.g. Thrumming Hivepool: create two 1/1 Sliver tokens).
     // Iterate over initial size only — tokens added here must not trigger their own upkeep.
     int bf_size = static_cast<int>(state.battlefield.size());
@@ -535,6 +541,10 @@ void GameEngine::UpkeepTail(GameState& state)
     PerformUpkeepCumulativeGifts(state);
     PerformUpkeepSacTutor(state);
     PerformUpkeepSlumber(state);   // Marit Lage's Slumber (lockstep twin in SimulateEndAndStartNextTurn)
+    // Emeria, the Sky Ruin's intervening-if return (consumes the previous turn's searched pin), against
+    // the triggers and targets fixed at the top of this upkeep (emeria_snapshot). Lockstep twin in
+    // SimulateEndAndStartNextTurn; gated on deck_has_upkeep_reanimate -> inert elsewhere.
+    PerformUpkeepGyReanimate(state, emeria_snapshot);
     // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
     PerformUpkeepReorder(state);
 
@@ -916,6 +926,9 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // does. Only the real game collects the per-attacker descriptions for the play viewer.
     const CombatDamageResult combat =
         ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr);
+    // Walking Ballista's post-combat-damage lethal finish (shared; rollout twin: SimulateOneCombat). Runs
+    // AFTER the damage and its lifelink gains, BEFORE the history line below reads total_combat_dmg.
+    CounterPingFinish(state, state.active_player_index);
     if (jorn_untap) { UntapSnowPermanents(state, state.active_player_index); }   // Jorn, see above
     const int total_combat_dmg = combat.total_damage;
     const int trigger_life_loss = combat.trigger_life_loss;
@@ -956,6 +969,10 @@ void GameEngine::EndStep(GameState& state)
 {
     state.phase = Phase::Ending;
     state.step  = Step::End;
+    // Abiding Grace's legal targets are fixed as its trigger goes on the stack -- the beginning of
+    // this step, before any other beginning-of-step effect below resolves (CR 603.3d). Lockstep twin
+    // at the top of TurnSolver::SimulateEndAndStartNextTurn; empty for every deck without the card.
+    const std::vector<int> grace_snapshot = SnapshotEndStepGraceTargets(state);
     // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
     // Permanent::exile_at_end). Swept battlefield -> exile here, BEFORE cleanup (CR 512/514
     // order). Lockstep with the top of TurnSolver::SimulateEndAndStartNextTurn; no-op for every
@@ -982,6 +999,11 @@ void GameEngine::EndStep(GameState& state)
     // creature on the battlefield by the time this checks (both are beginning-of-end-step triggers
     // we control; making the token first is the order that keeps the enchantment).
     PerformEndStepNoCreatureSacrifice(state);
+    // Abiding Grace's "choose one" (gain 1 / return an MV-1 creature card), the searched
+    // Plan::grace_choice pin. Last: the intervening-ifs above (Ocelot's "if you gained life this
+    // turn", Pyrohemia's "if no creatures") were checked as the step began (CR 603.4), so neither may
+    // see this trigger's gain or body. Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
+    PerformEndStepAbidingGrace(state, grace_snapshot);
     // TODO: other "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }

@@ -147,6 +147,12 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // through PutPlusCounters, so Doubling Season doubles them (CR 121.6/614.1c -- counters a
     // permanent ENTERS WITH are doubled, the planeswalker double-loyalty ruling). Lockstep with
     // TurnSolver's apply_one creature-enter branch.
+    // WALKING BALLISTA: "This creature enters with X +1/+1 counters on it" -- an AS-ENTERS replacement
+    // (CR 614.1c) reading the X of THIS cast (CR 107.3m), in the same pre-push window as devour, through
+    // PutPlusCounters (a put, CR 122.6). The stack entry records a positive chosen_x only, so X = 0
+    // enters as the printed 0/0 (FireEtbWatchers records it doomed). Lockstep twin: apply_one.
+    if (edef->params.enters_with_x_plus_counters && entry.chosen_x.value_or(0) > 0)
+    { PutPlusCounters(state, perm, *entry.chosen_x); }
     std::vector<DevourDeath> devoured;
     if (edef->params.devour > 0 && entry.devour_count.value_or(0) > 0)
     {
@@ -315,6 +321,9 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // twin: apply_one's DrainPendingSelfBounces calls. No-op (empty check) for every deck
     // without the param.
     DrainPendingSelfBounces(state);
+    // ...and a Walking Ballista that entered at 0 toughness (X = 0) dies now (CR 704.5f), its enter
+    // watchers having already fired. Rollout twin: apply_one's DrainPendingZeroToughness calls.
+    DrainPendingZeroToughness(state);
     // ...and any look-top trigger (Risen Reef) a WATCHER-ONLY entry recorded (a token / conjure made by
     // this resolution -- every full enter already drained at its own FireOwnEtbTriggers exit). Same
     // safety argument. Rollout twin: apply_one's drains. One empty() test without a look-top watcher.

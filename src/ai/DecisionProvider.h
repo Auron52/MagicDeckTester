@@ -248,6 +248,27 @@ public:
     virtual std::vector<std::string>
     ReviveCandidates(const GameState& s, int controller, int max_power, int max_returns) const;
 
+    // GyReturnOrder -- the ORDER of a single-target graveyard -> battlefield return's candidates
+    // (Abiding Grace's mode 2, Emeria, the Sky Ruin). `cand_numbers` = the legal candidates' card
+    // m_numbers (one per distinct NAME -- copies of one card are the same object to play -- in
+    // graveyard order); reorder in place, front = the default. ORDERING ONLY: never drop an entry
+    // (the search branches over all of them). Default: name ascending, then the lowest m_number --
+    // shuffle-independent, the MTG_TUTOR_RANKED_DEFAULT rationale.
+    virtual void GyReturnOrder(const GameState& s, int controller, std::vector<int>& cand_numbers) const;
+
+    // GraceOptions -- Abiding Grace's option list for ONE end-step trigger, in the order the searched
+    // rank (Plan::grace_choice) indexes it; front = the default the playout policy takes beyond the
+    // horizon. Each entry is kGraceGainOption (-1: "You gain N life") or the m_number of a graveyard
+    // card to return. `opts` arrives as the engine's full legal list in its default order (every
+    // return candidate in GyReturnOrder order, then the gain mode). The DEFAULT is that pure ordering,
+    // untouched. A deck provider may REORDER and RESTRICT with a proven dominance (see
+    // LifegainGraceFolds, DecisionProviders.h), but must leave at least one entry -- an emptied list
+    // is ignored and the engine's list is used. Never consulted in human play's prompt (the human
+    // sees every legal option).
+    static constexpr int kGraceGainOption = -1;
+    virtual void GraceOptions(const GameState& s, int controller, std::vector<int>& opts) const
+    { (void)s; (void)controller; (void)opts; }
+
     // FlickerTarget -- Felidar Guardian's ETB flicker ("you may exile another target permanent
     // you control, then return that card"): the target's card.m_number, or 0 to decline. Used on
     // the PUT paths (Pod / Chord / a Reveillark return), where no cast-time plan variant carries
@@ -1579,6 +1600,27 @@ public:
         }
         const int kmax = std::min(3, max_affordable);
         for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+        return out;
+    }
+
+    // CounterPingCounts -- how many Walking Ballista pings ("Remove a +1/+1 counter: 1 damage to any
+    // target") ONE plan action puts on `target` (0 = the opponent's face, > 0 = a creature's m_number)
+    // from `source`; the candidates the search branches over, empty DECLINES that target. The engine
+    // asks only for targets that survive its SOUND folds (CollectCounterPingOffers in SpellEffects.h):
+    // the face always, with `max_counters` = the source's counters; a creature only when the pings KILL
+    // it and its death pays, with `max_counters` = exactly the kill count. A LIVE Heliod loop is not
+    // asked about at all (it wins this turn). Generic = every K for the face (a K decides how many
+    // counters become damage / lifelink events and whether the Ballista survives -- no K dominates
+    // another in general) and the kill count for a creature. A deck provider may narrow with a deck-pool
+    // argument (LifegainHeliodComboProvider, MTG_LHC_PING_PRUNE); MTG_UNPRUNE=counterping bypasses it.
+    // Human play never asks: one ping per click, target chosen at resolution.
+    virtual std::vector<int> CounterPingCounts(const GameState& s, const Permanent& source, int target,
+                                               int max_counters) const
+    {
+        (void)s; (void)source;
+        std::vector<int> out;
+        if (target != 0) { if (max_counters >= 1) { out.push_back(max_counters); } return out; }
+        for (int k = 1; k <= max_counters; ++k) { out.push_back(k); }
         return out;
     }
 

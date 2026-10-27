@@ -316,6 +316,23 @@ enum class PermAbilityMode
     // band (never the ModeSpec K block); the shared resolver reads both off TapTargetPumpPinScope.
     // Appended LAST.
     TapTargetPump,
+    // {4}: Put a +1/+1 counter on this creature  (Walking Ballista; CardParams::self_counter_cost). NO {T}
+    // and NO sacrifice -> the Drain/PayToken shape: REPEATABLE within a turn, legal on a summoning-sick
+    // body (CR 302.6), K bounded by mana (ManaSinkActivationCounts). The counter is a "put" through
+    // PutPlusCounters; it is NOT a life-gain event. Appended LAST.
+    PayCounterSelf,
+    // Remove a +1/+1 counter from this creature: It deals N damage to any target  (Walking Ballista;
+    // CardParams::remove_counter_ping_damage). The cost is a COUNTER (the SporeSaproling shape, never
+    // SpendRepeatActivations); no {T}. Target rides CounterPingTargetPinScope (0 = opponent face).
+    // Resolution: ResolveCounterPing (inline death before the damage, LKI lifelink -> ONE GainLife).
+    // Appended LAST.
+    CounterPing,
+    // THE HELIOD + BALLISTA LOOP (Walking Ballista with lifelink + a lifegain_target_own_counter permanent
+    // + >= 2 counters): ping, gain 1, Heliod's counter back on the Ballista, repeat until the opponent is
+    // dead. ONE action on the Ballista source whose cost is the grant ({1}{W}) and/or the {4} top-up the
+    // loop still needs (PingLoopExtraCost); emitted only while PingLoopLiveNow -- a proven kill, executed
+    // ping by ping (RunPingLoop). Appended LAST.
+    PingLoop,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -338,7 +355,10 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::QuestSacLandSearch   // Khalni Heart Expedition: counters + sac, no {T}
         && m != PermAbilityMode::ReconfigureUnattach  // Lizard Blades: "{2}: unattach" -- no {T}
         && m != PermAbilityMode::TapSubtypeSteal      // Captivating Vampire: taps five OTHER bodies
-        && m != PermAbilityMode::TransformSelf;       // Bloodline Keeper: "{B}: Transform" -- no {T}
+        && m != PermAbilityMode::TransformSelf        // Bloodline Keeper: "{B}: Transform" -- no {T}
+        && m != PermAbilityMode::PayCounterSelf       // Walking Ballista: "{4}: put a counter" -- no {T}
+        && m != PermAbilityMode::CounterPing          // Walking Ballista: "remove a counter: 1 damage"
+        && m != PermAbilityMode::PingLoop;            // the Heliod + Ballista loop (pings, no {T})
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding

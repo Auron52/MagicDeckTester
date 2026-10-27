@@ -664,6 +664,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0 || p.fb_hold_choice >= 0
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
+        || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.combat_transform_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
@@ -704,6 +705,9 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
         && s.scripted_combat_transform != p.combat_transform_choice)                               { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
+    if (p.grace_choice >= 0            && s.scripted_grace_choice != p.grace_choice)               { ok = false; }
+    if (p.upkeep_gy_reanimate_choice >= 0
+        && s.scripted_upkeep_gy_reanimate != p.upkeep_gy_reanimate_choice)                       { ok = false; }
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
     if (p.discard_choice >= 0          && discard_pin != p.discard_choice)                         { ok = false; }
     if (p.vial_charge_choice >= 0      && vial_pin != p.vial_charge_choice)                        { ok = false; }
@@ -3772,6 +3776,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     int         exec_ls_act_seen        = 0;
     bool        exec_ls_act_done        = false;
     int         exec_ls_act_first_mask  = 0;   // Plan::land_search_act_slot <= -2: the pre-cast subset run
+    // ...and the plan's REVEAL OUTLETS at a position (TurnSolver::RevealOutletSlot, Martyr of Sands) --
+    // twin of ApplyPlanDirect's rv_plan / rv_seen: 0 in the pre-cast pass, k >= 1 in exec_slot_hook
+    // after the k-th gain-watcher cast, an unreached k in the trailing pass. False for every other deck.
+    bool        exec_rv_plan            = false;   // set from the CHOSEN plan at the pre-cast pass
+    int         exec_rv_seen            = 0;
     // The deferred drop's SOURCE ZONE (Plan::land_from_top, Courser of Kruphix) -- lockstep twin of
     // ApplyPlanDirect's karoo_from_top: a deferred top land is played from the top or not at all.
     bool        karoo_from_top      = false;
@@ -6071,6 +6080,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 continue;
             }
+            // A reveal outlet that already ran at its position (Martyr of Sands) is not paid for again
+            // (rollout twin). The discard-cost outlets above never carry a position.
+            if (a.chosen_x > 0 && TurnSolver::PositionedRevealOutletSpent(state, a)) { continue; }
             // Courtyard pay-scope fix (MTG_SAC_OUTLET_PAY_SCOPE; lockstep twin of the rollout's).
             std::optional<CreatureAbilityPayScope> sac_pay_scope;
             if (SacOutletPayScopeOn()
@@ -6459,6 +6471,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Kessig Wolf Run's searched target + X (TapTargetPump) -- lockstep twin of the rollout's.
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
             const TapTargetPumpPinScope _tpump_pin(tpump ? a.sac_victim_id : 0, tpump ? a.chosen_x : 0);
+            // Walking Ballista's searched ping TARGET (0 = the opponent's face); twin in the other world.
+            const CounterPingTargetPinScope _cp_pin(
+                a.ability_mode == Action::AbilityMode::CounterPing ? a.sac_victim_id : 0);
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
                                                           src_id, a.ability_mode,
                                                           &a.discard_name.str()))
@@ -6471,8 +6486,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (PermAbilitySourceIsCreature(state, state.active_player_index, src_id))
                 { creature_ability_scope.emplace(AbilitySourceCard(state, state.active_player_index, src_id)); }
                 // Voldaren Estate's TRUE Blood cost at activation (lockstep twin of the rollout's).
+                // ...and the Heliod + Ballista loop pays its TRUE cost now (PingLoopCostNow: the grant and/or
+                // the {4} the board needs at this instant, never the plan-time estimate), lockstep in both
+                // worlds -- so RunPingLoop never grants or tops up anything that was not paid.
                 const ManaCost act_cost = (a.ability_mode == Action::AbilityMode::TapBlood)
-                    ? TapBloodCostNow(state, state.active_player_index, *a.def) : OutletOwnCost(a);
+                    ? TapBloodCostNow(state, state.active_player_index, *a.def)
+                    : (a.ability_mode == Action::AbilityMode::PingLoop)
+                    ? PingLoopCostNow(state, state.active_player_index, src_id).value_or(OutletOwnCost(a))
+                    : OutletOwnCost(a);
                 const ActivationDiscardPinScope _discard_pin(&a.discard_name.str());   // BloodDraw
                 const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));       // A1 (rollout twin)
                 if (taps) { SetPermTapped(state, state.active_player_index, src_id, true); }
@@ -6540,6 +6561,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             (a.ability_mode == Action::AbilityMode::SporeSaproling)
                             ? SpendSporeActivations(state, state.active_player_index,
                                                     src_id, *a.def, a.chosen_x - 1)
+                            // Walking Ballista's counter-costed ping (rollout twin: apply_one).
+                            : (a.ability_mode == Action::AbilityMode::CounterPing)
+                            ? SpendCounterPingActivations(state, state.active_player_index,
+                                                          src_id, a.chosen_x - 1)
                             : (a.ability_mode == Action::AbilityMode::FadeSaproling)
                             ? SpendFadeActivations(state, state.active_player_index,
                                                    src_id, *a.def, a.chosen_x - 1)
@@ -7261,6 +7286,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ONE shared body. The cast window's library-top verdict is frozen across them (rdb_top_verdict).
     auto exec_slot_hook = [&](const Action& a)
     {
+        // The plan's reveal outlets positioned right after THIS gain-watcher cast (twin of slot_hook's;
+        // before the land hook in both worlds), through the executor's own trailing-pass body.
+        if (exec_rv_plan && TurnSolver::RevealSlotCounts(a))
+        {
+            ++exec_rv_seen;
+            for (const Action& ra : plan.actions)
+            {
+                if (TurnSolver::RevealOutletSlot(ra) != exec_rv_seen) { continue; }
+                if (TurnSolver::PositionedRevealOutletSpent(state, ra)) { continue; }
+                exec_trailing_activations(std::vector<Action>{ ra });
+            }
+        }
         const bool land_pending = land_after_deferred && deferred_land_slot > 0;
         const bool acts_pending = plan.land_search_act_slot > 0 && !exec_ls_act_done;
         if (!land_pending && !acts_pending) { return; }
@@ -7328,6 +7365,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         TurnSolver::ApplyLandSearchActs(state, TurnSolver::LandSearchActsMasked(plan.actions, fm, true), m_logger);
         exec_ls_act_first_mask = fm;
+    }
+    // The plan's reveal outlets at position 0 (Martyr of Sands) -- twin of ApplyPlanDirect's pre-cast
+    // dispatch, at the same point (after the land-search pass, before the plan traits / batch prepay).
+    exec_rv_plan = TurnSolver::PlanHasPositionedRevealOutlet(plan.actions);
+    exec_rv_seen = 0;
+    if (exec_rv_plan)
+    {
+        for (const Action& ra : plan.actions)
+        {
+            if (TurnSolver::RevealOutletSlot(ra) != 0) { continue; }
+            if (TurnSolver::PositionedRevealOutletSpent(state, ra)) { continue; }
+            exec_trailing_activations(std::vector<Action>{ ra });
+        }
     }
     // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
     // prepay and every cast payment below. Null scope (levers off) changes nothing.
