@@ -1030,7 +1030,7 @@ struct CombatLandfallTargetScope
         : saved(g_landfall_target_pin), saved_turn(g_landfall_target_pin_turn)
     {
         g_landfall_target_pin      = s.scripted_combat_landfall_target;
-        g_landfall_target_pin_turn = s.turn_number;
+        g_landfall_target_pin_turn = s.TurnSeq();
     }
     ~CombatLandfallTargetScope() { g_landfall_target_pin = saved; g_landfall_target_pin_turn = saved_turn; }
     CombatLandfallTargetScope(const CombatLandfallTargetScope&) = delete;
