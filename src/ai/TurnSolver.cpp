@@ -84908,7 +84908,10 @@ static void FswDeclinedTrace(const GameState& state, int depth, const TurnSolver
                  tail, best, hand.c_str());
 }
 
-// ---- GAME-PERSISTENT LINE CACHE (MTG_GAME_LINE_CACHE; DEFAULT OFF, under measurement 2026-10-27) ----------------
+// ---- GAME-PERSISTENT LINE CACHE (MTG_GAME_LINE_CACHE; DEFAULT ON 2026-10-27, =0 disables) --------------------------
+// ADOPTED as a sound re-pricing: answer-identical at unlimited budget (0 material verify disagreements, every
+// unlimited digest equal), 0.3-9.9% of units removed there. Under a budget it moves play the way any cut does (smoke
+// 2026-10-27: 20 searched games faster, 4 slower, each slower one churn or draw variance; see the design doc).
 // docs/design/cross-decision-tree-reuse.md. The per-decision FSLineCache dies with its decision, yet the next
 // decision of the same game searches many of the same (state, remaining depth) nodes: its warm-up passes are
 // the previous decision's subtrees one ply down (MTG_TREE_REUSE_PROBE: 7.5-11.5% of all units). This cache
@@ -84932,7 +84935,7 @@ static void FswDeclinedTrace(const GameState& state, int depth, const TurnSolver
 // per worker (default 24; a full cache stops storing, it never evicts).
 namespace gamelc
 {
-    inline bool On()     { static const bool v = EnvOn("MTG_GAME_LINE_CACHE"); return v; }
+    inline bool On()     { static const bool v = EnvOn("MTG_GAME_LINE_CACHE", true); return v; }
     inline bool Verify() { static const bool v = EnvOn("MTG_GAME_LINE_CACHE_VERIFY"); return v; }
     // Bytes per worker thread (ApproxFslBytes of each stored line plus the node), MTG_GAME_LINE_CACHE_MB, default 24:
     // 32 workers stay under ~0.8 GB. A full cache stops storing; it never evicts.

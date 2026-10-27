@@ -1,9 +1,9 @@
 # Reusing the searched tree across a game's decisions (2026-10-27)
 
-**Status (2026-10-27): the VALUE cache is BUILT, verified sound, DEFAULT OFF** (`MTG_GAME_LINE_CACHE`, results in
-"The game line cache" at the end). It is answer-identical at unlimited budget and removes 0.3-9.9% of units there. At
-a budget it changes play (freed units buy depth), so adoption needs a held-out A/B and GT acceptance. Built after the
-LandfallElementals / NivMizzetCombo shape work, as the USER asked.
+**Status (2026-10-27): the VALUE cache is BUILT, verified sound and DEFAULT ON** (`MTG_GAME_LINE_CACHE`, `=0`
+disables; results in "The game line cache" at the end). It is answer-identical at unlimited budget and removes
+0.3-9.9% of units there. Under a budget it moves play like any sound cut; smoke and regression GT were accepted
+for it, and the overnight GT is accepted by the 2026-10-27 overnight run (USER-authorised for that day).
 
 ## The idea (USER, 2026-10-27)
 
@@ -145,14 +145,14 @@ Constraints it must keep (from the costs section):
 * Per-game lifetime.
 * (Done: the probe's completed-subtree, same-leaf numbers above are the expected ceiling.)
 
-## The game line cache (built 2026-10-27, `MTG_GAME_LINE_CACHE`, default off)
+## The game line cache (built 2026-10-27, `MTG_GAME_LINE_CACHE`, default ON)
 
 `src/ai/TurnSolver.cpp`, `namespace gamelc` (block comment above it). A per-thread map, cleared per game, holding
 the answer of every non-root `FSLineWin` node whose search completed (no truncation, no budget bind, decision
 ceiling not hit, line not truncated). Keyed by the node's `FSLineCache` key folded with the effective leaf, the
 escalation beam, the coarse second-main mode and the labeller mode. Read with the per-decision cache's rules: a
 win answers any query, a no-win only a query no wider than its bound. `MTG_GAME_LINE_CACHE_VERIFY=1` recomputes
-every hit, plays the fresh answer and counts disagreements; `MTG_GAME_LINE_CACHE_CAP` (default 200000 per game).
+every hit, plays the fresh answer and counts disagreements; `MTG_GAME_LINE_CACHE_MB` bounds its bytes per worker (default 24).
 
 **The bug verify found, and the rule it added.** A node searched under cutoff `c` proves only its best win at or
 before `c`. A win it returns past `c` (a horizon rollout that ran on) is a line it met, not its best. The first
@@ -188,6 +188,11 @@ Niv live, Niv emulnl):
 5.4% on LFE staged, because freed units buy deeper passes. One seed, 500 games: LFE staged 4.370 -> 4.362, LFE
 live 4.416 -> 4.418, both Niv arms unchanged.
 
-**Next:** a held-out A/B on the decks that move at play settings (every
-deck searches through this path, so that is the suite), then GT acceptance if adopted. Memory: entries are full
+**Adoption (smoke, 2026-10-27).** Cache off, HEAD matched GT exactly (149/149, 0 games changed). Cache on: 65
+of 149 configs moved, 198 searched games changed play, 20 faster, 4 slower. The slower four: two recover at 4x/16x
+budget (churn), Hinata gi11 diverges in its draws from T3 (variance), and AccomplishedAlchemist gi103 (seed 1104,
+d3, b10) keeps its draws but its old T5 was itself a truncated-search answer: with the cache OFF the same game
+plays T6 at b160 and at unlimited d3 (and T5 at unlimited d5/d8, cache on or off). The cache reaches the
+full-budget answer sooner. As a sound re-pricing (no held-out A/B needed; that is for lossy changes) it went
+default ON with smoke + regression accepted. Memory: entries are full
 lines; the run above never filled the cap (`full_refusals=0`), but RSS is unmeasured at suite scale.
