@@ -1024,6 +1024,25 @@ inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
                                       int reserve_color_mask = 0,
                                       const ManaCost* pending_cost = nullptr,
                                       const ManaCost* line_cost = nullptr);                   // defined below
+// DIAGNOSTIC (read only by the mana oracle, MTG_MANA_ORACLE): how many engine TAP-AHEADS -- lands
+// tapped into the float ahead of an untap effect, a heuristic choice of which ones -- this thread has
+// run. The oracle drives the cast-site tap-aheads itself; a count that moves under one of its applies
+// is a tap-ahead it did not choose, so it reports that outcome UNMODELED. No game logic reads it.
+inline thread_local long long g_tap_ahead_calls = 0;
+// DIAGNOSTIC (read only by the mana oracle), the same shape: how many untap EFFECTS this thread has
+// resolved with a real CHOICE of what comes back -- more tapped candidates than the count, and not all
+// the same card. Which ones return is a heuristic (yield order) the oracle does not branch on, so a
+// count that moves under one of its applies marks that outcome UNMODELED. No game logic reads it.
+inline thread_local long long g_untap_choice_calls = 0;
+inline void NoteUntapChoice(const GameState& state, const std::vector<int>& candidate_bis, int count)
+{
+    if (static_cast<int>(candidate_bis.size()) <= count) { return; }
+    for (int bi : candidate_bis)
+    {
+        if (state.battlefield[bi].card.m_name.str() != state.battlefield[candidate_bis[0]].card.m_name.str())
+        { ++g_untap_choice_calls; return; }
+    }
+}
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
 // Live {C}-pip activation sink on our board + a source's own (unfed) colours -- both defined below,
 // both read by EtbUntapLands's human-play tie-break above their definitions.
@@ -23289,13 +23308,22 @@ inline void UntapManaSources(GameState& state, int count)
     // retroactive re-pay can no longer assume "untapped now" means "untapped then".
     state.pay_ledger.NoteUntapEffect(state.turn_number, state.active_player_index);
     const int active = state.active_player_index;
+    auto is_src = [&](const Permanent& p)
+    {
+        if (p.controller_index != active || !p.tapped) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        return d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock);
+    };
+    {
+        std::vector<int> cand;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (is_src(state.battlefield[i])) { cand.push_back(i); } }
+        NoteUntapChoice(state, cand, count);
+    }
     for (int i = 0; i < static_cast<int>(state.battlefield.size()) && count > 0; ++i)
     {
         Permanent& p = state.battlefield[i];
-        if (p.controller_index != active || !p.tapped) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        bool is_src = d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock);
-        if (!is_src) { continue; }
+        if (!is_src(p)) { continue; }
         p.tapped = false;
         --count;
     }
@@ -23571,6 +23599,11 @@ inline void RitualUntapSources(GameState& state, int count)
                      [](const std::pair<int, int>& a, const std::pair<int, int>& b)
                      { return a.first > b.first; });
     const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    {
+        std::vector<int> cand;
+        for (const auto& t : tapped) { cand.push_back(t.second); }
+        NoteUntapChoice(state, cand, count);
+    }
     for (int i = 0; i < n; ++i)
     { state.battlefield[tapped[i].second].tapped = false; }
     // Record the REAL game's untap for the prepay ledger (see GameLogger::LogUntapSources).
@@ -23664,6 +23697,7 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
 inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
 {
     if (!SpasmUntapLiteralOn() || chosen_x <= 0) { return; }
+    ++g_tap_ahead_calls;   // diagnostic (the mana oracle's unscripted-tap check)
     const int active = state.active_player_index;
     auto is_src = [&](const Permanent& p, const CardDefinition& d)
     {
@@ -28531,6 +28565,11 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
         tapped.swap(st); is_c.swap(sc);
     }
     const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    {
+        std::vector<int> cand;
+        for (const auto& t : tapped) { cand.push_back(t.second); }
+        NoteUntapChoice(state, cand, count);
+    }
     // {C}-STARVED PROMOTION -- RESERVE ONE UNTAP SLOT FOR A COLOURLESS SOURCE
     // (human play + live {C} sink only; MTG_UNTAP_C_STARVED=0 restores the tie-break-only order).
     //
@@ -29599,6 +29638,7 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                                       const ManaCost* line_cost)
 {
     if (count <= 0) { return; }
+    ++g_tap_ahead_calls;   // diagnostic (the mana oracle's unscripted-tap check)
     // COMBO MODE is scoped to a live loop (g_in_blink_loop), never to a plain ETB-untap cast.
     const bool combo = RefloatComboOn() && g_in_blink_loop;
     // The {C} pip the NEXT activation needs, so step 0 can protect it. Read off the outlet actually

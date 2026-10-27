@@ -7,6 +7,7 @@
 #include "EscStats.h"               // per-thread escalation taken/discarded tallies (diagnostic)
 #include "ContPinScope.h"
 #include "ManaPayment.h"
+#include "ManaOracle.h"             // MTG_MANA_ORACLE: the batch prepay stands down on the oracle's copy
 #include "PayLedger.h"   // MTG_PAY_ROLLBACK_AUDIT: the dig-gate half of the count-only instrument
 #include "PayRollback.h" // MTG_PAY_ROLLBACK: the dig-gate rescue (lockstep with AIEngine's twin)
 #include "PlanContext.h"
@@ -51869,6 +51870,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
     if (!s_enabled) { return false; }
+    // MANA ORACLE (ManaOracle.h): on the oracle's own copy every payment comes from its script, one per
+    // cast -- a joint solve here would tap through the backtracker, outside the script. Null elsewhere.
+    if (manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) { return false; }
     // Attribution (fivecolour-payment-query-fold.md step 0): count every invocation, and every one
     // that DECLINES -- a decline is what routes the turn's casts to the per-cast fallback, i.e. what
     // turns one folded question into one question per cast.
@@ -56482,10 +56486,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // ahead into the float -- resolution untaps everything tapped, so the float is pure
             // profit and the chain the credit priced becomes realisable (see
             // RitualTapAheadIntoFloat; lockstep twins in CastSpellFromHand + SubsetPayableSequential).
-            if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(state, chosen_x); }
+            // MANA ORACLE (ManaOracle.h): on the oracle's own copy the tap-ahead is the oracle's choice --
+            // every set of sources to tap ahead is a scripted step -- not this heuristic's. Null elsewhere.
+            const bool oracle_owns = manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target;
+            if (def.params.untap_x_mana_sources)
+            {
+                if (oracle_owns) { manaoracle::ScriptedTapAhead(state, chosen_x, /*lands_only=*/false); }
+                else             { RitualTapAheadIntoFloat(state, chosen_x); }
+            }
             if (def.params.etb_untap_lands > 0)
-            { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
-                                        ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost); }
+            {
+                if (oracle_owns)
+                { manaoracle::ScriptedTapAhead(state, def.params.etb_untap_lands, /*lands_only=*/true); }
+                else
+                { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
+                                            ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost); }
+            }
             // ...and a sacrifice-a-LAND cast's predicted victim (SacLandPayVictim; executor twin in
             // CastSpellFromHand) -- the land is leaving, so its mana is free.
             PaySacVictimScope _psv(!def.params.sac_additional_creature_color.empty()
@@ -56515,8 +56531,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Coast"). Retried UNRESERVED on failure, so a board whose only payer IS the host still
             // casts the Aura exactly as before (a failed TapForCostDirect restores atomically).
             int reserved_host = -1;
+            // (Not on the MANA ORACLE's copy: the hold is a heuristic, and the oracle tries every payment,
+            // the host's included -- see ManaOracle.h.)
             if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
-                && enchant_target > 0)
+                && enchant_target > 0 && !oracle_owns)
             {
                 for (Permanent& lp : state.battlefield)
                 {
@@ -66054,7 +66072,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (opt.CanPay(oc) && opt_nc.CanPay(oc_nc)) { mana_reject = false; }
             }
         }
-        if (mana_reject) { return; }   // trace label set above (flat-pool or an ef-* reason)
+        // MANA ORACLE observe mode (ManaOracle.h, the oracle's own menu only): record nothing, reject
+        // nothing -- every mana gate below lets the subset through, so the oracle can diff this list
+        // against the real menu and test each mana-rejected plan for a payable line (ENUM-GAP).
+        if (mana_reject && !manaoracle::t_gate_observe) { return; }   // trace label set above (flat-pool or an ef-* reason)
         if (sacrifice_count > total_lands)                   { _ct.label = "sac-lands"; return; }
         if (discard_lands_used > lands_in_hand)              { _ct.label = "discard-lands"; return; }
         // A selection whose own entries include a COLOURED-pip reducer (Ragemonger cast or vialed)
@@ -66086,13 +66107,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel, &colour_demand))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
-            if (!exec_feas_rescues()) { return; }
+            if (!exec_feas_rescues() && !manaoracle::t_gate_observe) { return; }
             _ct.label = "early-gate";
         }
         // MTG_RITUAL_FLOAT_COLOR_EXACT -- twin of Solve::consider's (see there): the fixed-colour
         // ritual float re-asked in its own colour, and the pool handed to the colour-count gate.
         ManaPool eff_cg = eff, eff_nc_cg = eff_nc;
-        if (mana_ok && any_colour_ritual && exec_feas != 1
+        if (!manaoracle::t_gate_observe && mana_ok && any_colour_ritual && exec_feas != 1
             && ColourExactRitualCredit(pool, pool_noncreature, cands, sel, eff_cg, eff_nc_cg)
             && !(eff_cg.CanPay(combined) && eff_nc_cg.CanPay(noncreature_combined))
             && !exec_feas_rescues())
@@ -66102,7 +66123,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         // ... and the COUNT it does not model (see the twin in Solve::consider). Flat-pool path
         // only: the filter fallback and the cost reframe both judge by other means.
-        if (mana_ok && !sel_col_reducer && exec_feas != 1
+        if (!manaoracle::t_gate_observe && mana_ok && !sel_col_reducer && exec_feas != 1
             && ((colour_feas.usable
                  && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff_cg),
                                          /*noncreature_only=*/false, &colour_demand))
@@ -66578,7 +66599,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // tried first and under-counted the {X}-pip forgiveness, silently skipping the gi=22 no-draw
     // go-off position at the odometer). Armed only when the flag is on, she is castable from hand
     // and a reducer is among the cands -> every other configuration byte-identical.
-    const int mana_bound = any_hinata_credit
+    const int mana_bound = (any_hinata_credit || manaoracle::t_gate_observe)   // (the oracle's observe mode: no mana bound)
         ? std::numeric_limits<int>::max()
         : ManaPruneBound(pool, cands,
                          // + the spectacle plan credit's most-forgiven mana (0 unless it is live).
@@ -66640,7 +66661,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // generic, so the waived equip would be charged in full -- the same bail, to the waiver-aware
     // scalar bound (waiver_bound above). The haste-dork precedent; the gate is default OFF.
     if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork && growth_bound == 0
-        && !any_hinata_credit && !spec_ctx.live && !any_storied)
+        && !any_hinata_credit && !spec_ctx.live && !any_storied && !manaoracle::t_gate_observe)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         // `&state`: the ETB-untap refund, per SELECTION (tighter than the scalar bound's whole-list

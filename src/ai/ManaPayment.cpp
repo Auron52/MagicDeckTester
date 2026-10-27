@@ -7,6 +7,7 @@
 #include "EngineFlags.h"
 #include "PayLedger.h"            // MTG_PAY_ROLLBACK_AUDIT: the rollback's count-only instrument
 #include "PayRollback.h"          // MTG_PAY_ROLLBACK: the rollback itself (ledger on the state)
+#include "ManaOracle.h"           // MTG_MANA_ORACLE: the scripted-payment hook (null unless the oracle runs)
 #include "../cards/CardDatabase.h"
 #include "../core/SpellEffects.h"
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
@@ -1540,6 +1541,17 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         cost.generic -= fgh;
         SpendFloatingTowardCost(state.floating_mana, cost);
         cost.generic += fgh;
+    }
+    // MANA ORACLE's float-only payment (ManaOracle.h): whatever the floating pools did not cover, the
+    // oracle's script did not pay for -- fail atomically instead of tapping. Nothing has been tapped
+    // yet, so returning the four pools is the whole restore. False on every thread but the oracle's.
+    if (manaoracle::t_float_only && cost.ManaValue() > 0)
+    {
+        state.floating_mana          = reserve_pre;
+        state.floating_creature_mana = cre_reserve_pre;
+        state.floating_bigspell_mana = big_reserve_pre;
+        state.floating_haste_c       = haste_reserve_pre;
+        return false;
     }
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
@@ -6687,6 +6699,12 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // audit below wants the OUTERMOST failure, the same depth-1 notion the damage flush uses.
     ++t_pay_nest;
     struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
+    // MANA ORACLE (MTG_MANA_ORACLE, ManaOracle.h): the oracle's OWN state copy pays from its script --
+    // the taps it chose, then float-only. Null on every thread unless the oracle is mid-apply, and
+    // keyed on the state object, so every other payment (search, play, a probe on a scratch copy)
+    // takes the path below untouched.
+    if (manaoracle::t_hook != nullptr && t_pay_nest == 1 && &state == manaoracle::t_hook->target)
+    { return manaoracle::ScriptedPay(state, cost_in, for_creature, available, honor_legacy_cco); }
     // MTG_RAMP_FEED_ROUTE (see RampFeedRouteRepay): the outermost payment of an applying line, decided
     // before it is made. Off, outside a line, or with no ramp filter up: a board scan and out.
     std::optional<RampRouteScope> _ramp_route;
@@ -6721,6 +6739,62 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         if (!ok) { payroll::UndoLast(state); }
     }
     return ok;
+}
+
+// MANA ORACLE -- one scripted payment on the oracle's own copy (ManaOracle.h). The script entry's taps
+// go in through ApplyHumanPreTap (the engine's own mechanic per source), its set-aside units leave the
+// general float for the duration, and the payment is then made FLOAT-ONLY through the normal pipeline,
+// so the payer drains exactly what the script put in reach and can tap nothing of its own choosing.
+// Past the end of the script is the FRONTIER: capture the board and the bill, fail, end the probe.
+bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for_creature,
+                             ManaPool* available, bool honor_legacy_cco)
+{
+    Hook& h = *t_hook;
+    if (h.ended) { return false; }
+    if (h.next >= h.script.size())
+    {
+        h.ended          = true;
+        h.frontier       = true;
+        if (h.f_state != nullptr) { *h.f_state = state; }
+        h.f_cost         = cost_in;
+        h.f_for_creature = for_creature;
+        h.f_creature_ability = PayingCreatureAbility();
+        return false;
+    }
+    const PayOption& opt = h.script[h.next++];
+    if (opt.fail) { return false; }   // the oracle found no payment here: dropped, as the engine drops it
+    for (std::size_t i = 0; i < opt.taps.size(); ++i)
+    {
+        const TurnSolver::PreTap& t = opt.taps[i];
+        const bool restricted = i < opt.creature_route.size() && opt.creature_route[i] != 0;
+        const std::string why = restricted ? OracleCreatureTap(state, t) : ApplyHumanPreTap(state, t);
+        if (!why.empty()) { h.ended = true; h.tap_error = why; return false; }
+        h.tapped_by_script.push_back(t.num);
+    }
+    ManaPool& f = state.floating_mana;
+    const ManaPool& st = opt.stash;
+    if (f.white < st.white || f.blue < st.blue || f.black < st.black || f.red < st.red
+        || f.green < st.green || f.colorless < st.colorless || state.floating_haste_c < opt.stash_haste)
+    { h.ended = true; h.tap_error = "set-aside exceeds the floating pool"; return false; }
+    f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+    f.colorless -= st.colorless;
+    state.floating_haste_c -= opt.stash_haste;
+    f.snow_units = std::min(f.snow_units, f.Total());
+    bool ok;
+    {
+        Hook* const saved = t_hook;
+        t_hook       = nullptr;
+        t_float_only = true;
+        ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+        t_float_only = false;
+        t_hook       = saved;
+    }
+    f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+    f.colorless += st.colorless;
+    state.floating_haste_c += opt.stash_haste;
+    if (!ok) { h.ended = true; h.tap_error = "scripted payment did not pay " + cost_in.ToString(); return false; }
+    if (state.dmg_events_armed) { dmgev::FlushDamageEvents(state); }
+    return true;
 }
 
 static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool for_creature,

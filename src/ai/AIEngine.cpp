@@ -8,6 +8,7 @@
 #include "EscStats.h"   // escstats::t_job / t_gi: the [fd-diverge] line names its batch job + game
 #include "Dominance.h"   // ModelFeatureMask (stamped onto GameState::m_model_feat_mask)
 #include "ManaPayment.h"
+#include "ManaOracle.h"   // MTG_MANA_ORACLE: the real-decision audit hook
 #include "PayRollback.h"   // MTG_PAY_ROLLBACK: the dig-gate rescue (lockstep with TurnSolver's twin)
 #include "LandPlay.h"
 #include "Combat.h"
@@ -2819,6 +2820,10 @@ static const std::string& BpNameOf(const Action& a)
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
+    // MANA COMPLETENESS ORACLE (MTG_MANA_ORACLE, default OFF; ManaOracle.h): audit this REAL decision
+    // before anything moves -- on copies, under a RevealLogPause, so play itself is untouched.
+    if (manaoracle::On() && g_real_resolution && !m_in_rollout && !HumanPlayActive())
+    { manaoracle::AuditDecision(state, is_pre_combat_main); }
     // Which main this pass plays (m_exec_post_combat; the main-2 stager stamp reads it). Scoped, so a
     // nested TakeTurn (a rollout's own executor) cannot leave the outer pass reading its phase.
     struct ExecPhaseScope

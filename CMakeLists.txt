@@ -141,6 +141,7 @@ add_library(mtg-core STATIC
     src/ai/DecisionProviders.cpp
     src/ai/TurnSolver.cpp
     src/ai/ManaPayment.cpp
+    src/ai/ManaOracle.cpp
     src/ai/PlanContext.cpp
     src/ai/LandPlay.cpp
     src/ai/Combat.cpp
@@ -293,6 +294,7 @@ unset(CMAKE_POLICY_VERSION_MINIMUM)
 enable_testing()
 add_executable(mtg-test
     test/unit/test_mana_payment.cpp
+    test/unit/test_mana_oracle.cpp
     test/unit/test_counter_list.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp
