@@ -201,6 +201,15 @@ namespace manaoracle
     // `menu` (optional): the frame's menu, for the same-actions sibling check; `plan` may be one of its
     // entries. `node_cap` bounds each payment search (applies) so a validation stays interactive.
     // `deep` = false: the engine and sibling checks only (`partial` says the oracle was not asked).
+    // MTG_ORACLE_PAY (MEASUREMENT ONLY, default off; heurarm ORACLE_PAY): the upper bound on what the
+    // engine's mana payment costs. A top-level plan apply that dropped a cast asks this for a payment of the
+    // SAME plan in the SAME order that the oracle can vouch for (every action paid, the cards the engine's
+    // line meant to use used, no engine-made mana choice); true + `out` = that board. `engine_end` /
+    // `drops` = what the engine's own apply reached and dropped. Bounded (200 applies) so search stays usable.
+    bool OraclePayOn();
+    bool OraclePayLine(const GameState& pre, const TurnSolver::Plan& plan, bool is_pre_combat,
+                       const GameState& engine_end, const std::vector<std::string>& drops, GameState& out);
+
     LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& plan,
                         const std::vector<TurnSolver::Plan>* menu = nullptr, int node_cap = 400, bool deep = true);
 }

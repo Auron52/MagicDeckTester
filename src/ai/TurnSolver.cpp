@@ -54523,11 +54523,38 @@ struct DepletionSbaAtResolution
     DepletionSbaAtResolution& operator=(const DepletionSbaAtResolution&) = delete;
 };
 
+static thread_local bool t_oracle_pay_inner = false;
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
                             int caller_line)
 {
+    // MTG_ORACLE_PAY (MEASUREMENT ONLY, default off -- ManaOracle.h): a top-level full apply whose own
+    // payment dropped a cast takes the oracle's full payment of the same plan instead.
+    if (g_apd_depth == 0 && !t_oracle_pay_inner && out_breakpoint == nullptr && bp_capture == nullptr
+        && bp_resume == nullptr && manaoracle::t_hook == nullptr && manaoracle::OraclePayOn())
+    {
+        GameState pre = state;
+        std::vector<std::string> drops, act_drops;
+        std::vector<std::string>* const saved_cast = g_play_dropped_cast_sink;
+        std::vector<std::string>* const saved_act  = g_act_drop_sink;
+        g_play_dropped_cast_sink = &drops;
+        g_act_drop_sink          = &act_drops;
+        t_oracle_pay_inner = true;
+        ApplyPlanDirect(state, plan, is_pre_combat, nullptr, nullptr, nullptr, caller_line);
+        t_oracle_pay_inner = false;
+        g_play_dropped_cast_sink = saved_cast;
+        g_act_drop_sink          = saved_act;
+        if (!drops.empty() || !act_drops.empty())
+        {
+            GameState paid;
+            if (manaoracle::OraclePayLine(pre, plan, is_pre_combat, state, drops, paid))
+            { state = std::move(paid); drops.clear(); act_drops.clear(); }
+        }
+        if (saved_cast != nullptr) { saved_cast->insert(saved_cast->end(), drops.begin(), drops.end()); }
+        if (saved_act != nullptr)  { saved_act->insert(saved_act->end(), act_drops.begin(), act_drops.end()); }
+        return;
+    }
     PrePlanShare* const pps = PrePlanShareTake(state);   // armed by a sibling loop for exactly this board
     g_apply_caller_line = caller_line;
     // The Niv draw/damage loop: whatever this apply drew outside a flushed resolution (a land's ETB

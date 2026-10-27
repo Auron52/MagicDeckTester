@@ -401,6 +401,15 @@ inline bool PayEnergyLastOn()
     return PayPainLastOn() && heurarm::Flag(heurarm::PAY_ENERGY_LAST, env_on);
 }
 
+// MTG_PAY_SHRINK (2026-10-27; measurement lever, DEFAULT OFF) -- the per-cast payer's give-back: when its
+// backtracker fallback tapped more sources than the bill has mana points, re-solve with each one held back
+// (most flexible first) and keep it untapped if the bill still pays (ManaPayment.cpp, TapForCostSharedOnceImpl).
+inline bool PayShrinkOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_SHRINK");
+    return heurarm::Flag(heurarm::PAY_SHRINK, env_on);
+}
+
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
 // Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's

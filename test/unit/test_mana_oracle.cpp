@@ -8,6 +8,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaOracle.h"
 #include "ai/TurnSolver.h"
 #include "ai/ManaPayment.h"
@@ -280,4 +281,38 @@ TEST_CASE("payment: {U} off a Fertile Ground host taps the host alone, not a use
     CHECK_FALSE(s.battlefield[0].tapped);    // Conservatory: its {G}/{W} cannot pay {U}
     CHECK(s.battlefield[1].tapped);
     CHECK(s.floating_mana.Total() == 1);     // Mariposa's own {C}
+}
+
+// MTG_PAY_SHRINK: the per-cast payer gives back what its backtracker tapped but the bill did not need --
+// the fix for the pin above, behind its measurement lever until the A/B decides.
+TEST_CASE("payment: MTG_PAY_SHRINK gives back the useless land the backtracker tapped for a {U}")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Conservatory", "Mariposa Military Base", "Shivan Gorge", "Fertile Ground" });
+    s.battlefield[3].aura_attached_to = 2;
+    s.deck_has_land_aura = true;
+    const std::int8_t saved = heurarm::t_arm[heurarm::PAY_SHRINK];
+    heurarm::t_arm[heurarm::PAY_SHRINK] = 1;
+    const bool ok = TapForCostDirect(s, Cost(0, 0, 1), /*for_creature=*/false);
+    heurarm::t_arm[heurarm::PAY_SHRINK] = saved;
+    REQUIRE(ok);
+    CHECK_FALSE(s.battlefield[0].tapped);    // Conservatory stays up for a later {W}
+    CHECK(s.battlefield[1].tapped);
+    CHECK(s.floating_mana.Total() == 1);
+}
+
+TEST_CASE("viewer line check: with MTG_PAY_SHRINK the search's own payment casts the EDF seed 3000 T4 line")
+{
+    EnsureOracleCards();
+    const GameState s = Edf3000T4();
+    TurnSolver::Plan plan;
+    plan.actions      = { CastAction(s, "Training Grounds"), CastAction(s, "Eldrazi Displacer") };
+    plan.land_decided = true;
+    const std::int8_t saved = heurarm::t_arm[heurarm::PAY_SHRINK];
+    heurarm::t_arm[heurarm::PAY_SHRINK] = 1;
+    const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
+    heurarm::t_arm[heurarm::PAY_SHRINK] = saved;
+    REQUIRE(a.audited);
+    CHECK(a.engine_full);
+    CHECK(a.dropped.empty());
 }

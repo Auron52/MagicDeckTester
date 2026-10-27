@@ -1985,6 +1985,32 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
                    std::memory_order_relaxed);
 }
 
+// ---- MTG_ORACLE_PAY: the upper-bound measurement (ManaOracle.h) -------------------------------------
+bool OraclePayOn()
+{
+    static const bool env_on = EnvOn("MTG_ORACLE_PAY");
+    return heurarm::Flag(heurarm::ORACLE_PAY, env_on);
+}
+
+bool OraclePayLine(const GameState& pre, const TurnSolver::Plan& plan, bool is_pre_combat,
+                   const GameState& engine_end, const std::vector<std::string>& drops, GameState& out)
+{
+    if (t_hook != nullptr) { return false; }
+    for (const Action& x : plan.actions) { if (x.kind == Action::Kind::ComboRoute) { return false; } }
+    std::multiset<std::string> want = LeftHand(pre, engine_end);
+    for (const std::string& c : drops) { want.insert(c); }
+    RevealLogPause quiet;
+    const int saved_cap = t_node_cap;
+    t_node_cap = 200;
+    const Realization r = Realize(pre, plan, is_pre_combat, /*stop_at_full=*/true, {}, false, &want);
+    t_node_cap = saved_cap;
+    for (const Outcome& o : r.outcomes)
+    {
+        if (o.Clean() && o.unscripted.empty() && Includes(o.left, want)) { out = o.st; return true; }
+    }
+    return false;
+}
+
 // ---- the viewer's line check (ManaOracle.h) ---------------------------------------------------------
 // The same questions AuditPlan asks of an APPLY-DROP, for one plan, answered as data: the engine's own
 // apply first (the common case, one apply, and the only cost a line the search pays for ever pays), then
