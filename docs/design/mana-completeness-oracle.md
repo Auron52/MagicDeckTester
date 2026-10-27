@@ -220,6 +220,16 @@ thread-local that only the oracle sets on its own state copy:
    UNMODELED (`too many actions to try every order`) -- and when no order's realisation was capped,
    unmodelled or touched by an engine choice the oracle does not drive.
 
+10. *A game's cards carry no cost.* A `Card` in a game's hand / library / graveyard holds its name and number;
+   the cost lives on the definition. The useful-colour table (item 7) read `Card::m_mana_cost`, so in a real
+   game it held only the bill's own colours and folded away every colour a LATER card needs -- e.g. the {U}
+   a Fertile Ground bonus floats while paying Living Wish, which the continuation's Training Grounds then
+   spends painlessly (EDF seed 3002 T3, ORACLE-GAP "life engine 20 oracle 19"). Fixed 2026-10-27 (costs
+   read from the definitions; pinned by "a colour only a later card in hand can spend is still offered").
+   EDF census games: ORACLE-GAP 31 -> 15, PHANTOM 2291 -> 2200, CONTINUATION-DIFFERS 540 -> 463, ENUM-GAP
+   107 -> 111; the 38-deck sample barely moves (DOMINATED-LAND +2) at +70% oracle time and CAPPED 248 -> 314.
+   The 15 left: Living Wish continuations one life apart and Conservatory's {4} investigate -- owed.
+
 ## 7. First results (16 decks x 6 games, seed 424200, 798 real decisions, 10,469 menu plans)
 
 **I1 holds: ORACLE-GAP = 0** -- wherever the oracle gives a verdict it reproduces the engine's own

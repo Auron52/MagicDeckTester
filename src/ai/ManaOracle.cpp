@@ -677,14 +677,23 @@ int UsefulColorMask(const GameState& s, const ManaCost& cost)
 {
     int m = 0;
     AddCostColors(m, cost);
+    // A card in a GAME's zones carries its name and number, not its cost (the cost lives on the
+    // definition: EDF seed 3002 T3 read every hand card's cost as empty, so the table kept only the bill's
+    // own colours and folded away the {U} a Fertile Ground bonus floats for a later Training Grounds -- an
+    // ORACLE-GAP). Read the definition, falling back to the card's own field (a unit test's card has both).
+    auto add = [&](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        AddCostColors(m, d != nullptr ? d->card.m_mana_cost : c.m_mana_cost);
+    };
     const Player& pl = s.players[s.active_player_index];
-    for (const Card& c : pl.hand)      { AddCostColors(m, c.m_mana_cost); }
-    for (const Card& c : pl.library)   { AddCostColors(m, c.m_mana_cost); }
-    for (const Card& c : pl.graveyard) { AddCostColors(m, c.m_mana_cost); }
-    for (const Card& c : pl.sideboard) { AddCostColors(m, c.m_mana_cost); }
-    for (const StagedCard& sc : pl.staged_cards) { AddCostColors(m, sc.card.m_mana_cost); }
+    for (const Card& c : pl.hand)      { add(c); }
+    for (const Card& c : pl.library)   { add(c); }
+    for (const Card& c : pl.graveyard) { add(c); }
+    for (const Card& c : pl.sideboard) { add(c); }
+    for (const StagedCard& sc : pl.staged_cards) { add(sc.card); }
     for (const Permanent& p : s.battlefield)
-    { if (p.controller_index == s.active_player_index) { AddCostColors(m, p.card.m_mana_cost); } }
+    { if (p.controller_index == s.active_player_index && !p.def_absent) { add(p.card); } }
     return m;
 }
 

@@ -262,6 +262,37 @@ TEST_CASE("viewer line check: a line the engine's own payment casts in full is s
     CHECK(a.rollback.empty());
 }
 
+// THE USEFUL-COLOUR TABLE READS THE DEFINITIONS (EDF seed 3002 T3 ORACLE-GAP). In a game a card in hand
+// carries only its name and number, so a table built off Card::m_mana_cost saw no colour but the bill's own,
+// and {1}{G} off Conservatory + a Fertile Ground host never offered the Aura's {U} -- the colour a later
+// Training Grounds needs. The hand here is built the way a game holds it: costs stripped.
+TEST_CASE("mana oracle: a colour only a later card in hand can spend is still offered (costs read from the definitions)")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Conservatory", "Adarkar Wastes", "Fertile Ground" });
+    s.battlefield[2].aura_attached_to = 2;
+    s.deck_has_land_aura = true;
+    int n = 100;
+    for (const char* nm : { "Living Wish", "Training Grounds" })
+    {
+        Card c = CardDatabase::Instance().Lookup(nm)->card;
+        c.m_number    = n++;
+        c.m_mana_cost = ManaCost{};   // as a game holds it
+        s.players[0].hand.push_back(c);
+    }
+    const auto opts = manaoracle::MinimalPayments(s, Cost(1, 0, 0, 0, 0, 1), /*for_creature=*/false, nullptr);
+    bool floats_u = false;
+    for (const manaoracle::PayOption& o : opts)
+    {
+        for (const TurnSolver::PreTap& t : o.taps)
+        {
+            if (t.name != "Adarkar Wastes") { continue; }
+            for (int ac : t.aura_colors) { if (ac == static_cast<int>(Color::Blue)) { floats_u = true; } }
+        }
+    }
+    CHECK(floats_u);
+}
+
 // KNOWN ENGINE BUG (2026-10-27, found by the oracle's rollback census; EDF viewer game seed 3000 T4): a
 // {U} whose only blue is Fertile Ground's any-colour bonus on Mariposa Military Base fails the greedy, and
 // the backtracker's DFS -- which taps sources in battlefield order and accepts the FIRST covering tap set
