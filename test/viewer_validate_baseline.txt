@@ -1,0 +1,10 @@
+Landfall/claude_s10_gi9.json | T1/pre_main | land=Forest;cast=Search for Tomorrow
+Landfall/claude_s2_gi1.json | T7/pre_main | land=Evolving Wilds
+Landfall/claude_s3_gi2.json | T1/pre_main | land=Forest;cast=Search for Tomorrow
+Landfall/claude_s4_gi3.json | T1/pre_main | land=Forest;cast=Search for Tomorrow
+Landfall/claude_s4_gi3.json | T2/pre_main | land=Myriad Landscape;cast=Search for Tomorrow
+Landfall/claude_s5_gi4.json | T1/pre_main | land=Forest;cast=Search for Tomorrow
+Landfall/claude_s5_gi4.json | T5/pre_main | land=Evolving Wilds
+Landfall/claude_s9_gi8.json | T1/pre_main | land=Forest;cast=Search for Tomorrow
+LandfallElementals/claude_s9_gi8.json | T3/pre_main | land=Terramorphic Expanse
+LandfallElementals/claude_s9_gi8.json | T4/pre_main | land=Terramorphic Expanse
