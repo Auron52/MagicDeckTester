@@ -30451,6 +30451,147 @@ int CycloneProvider::TutorSearchWidth() const
     return heurarm::Flag(heurarm::CYCLONE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
 }
 
+// ---- CycloneProvider: the searched cycle, the playout dig policy, the free cast, Remand (phase 3) -------
+// See the header for the rationale of each. A "replacer" is a permanent carrying
+// cycle_draw_exile_shared_type_freecast (Unpredictable Cyclone).
+static bool CycloneReplacerOut(const GameState& s, int controller)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { return true; }
+    }
+    return false;
+}
+
+bool CycloneProvider::CyclesAreSearched() const { return true; }
+
+std::vector<std::string> CycloneProvider::SearchedCycleSources(const GameState& s) const
+{
+    const int me = s.active_player_index;
+    struct Src { std::string name; int rank; int mv; };
+    std::vector<Src> srcs;
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.cycling_cost.has_value()) { continue; }
+        if (!CyclingLifePayable(s, me, *d)) { continue; }
+        const std::string nm = c.m_name.str();
+        bool dup = false;
+        for (const Src& x : srcs) { if (x.name == nm) { dup = true; break; } }
+        if (dup) { continue; }
+        // ORDER only: creatures (the walk's combo) -> other nonlands -> lands; cheaper cycles first.
+        const int rank = d->card.IsLand() ? 2 : (d->card.IsCreature() ? 0 : 1);
+        srcs.push_back({ nm, rank, EffectiveCyclingCostFor(s, *d).ManaValue() });
+    }
+    std::stable_sort(srcs.begin(), srcs.end(), [](const Src& a, const Src& b)
+    { return a.rank != b.rank ? a.rank < b.rank : a.mv < b.mv; });
+    std::vector<std::string> out;
+    out.reserve(srcs.size());
+    for (Src& x : srcs) { out.push_back(std::move(x.name)); }
+    return out;
+}
+
+bool CycloneProvider::ShouldConsiderDig(const GameState& s) const
+{
+    if (!HasAnyDigSource(s)) { return false; }
+    const int me = s.active_player_index;
+    if (CycloneReplacerOut(s, me))
+    {
+        for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.cycling_cost.has_value() && !d->card.IsLand()
+                && CyclingLifePayable(s, me, *d))
+            { return true; }
+        }
+    }
+    return GenericProvider::ShouldConsiderDig(s);
+}
+
+std::string CycloneProvider::SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const
+{
+    out_is_sac = false;
+    const int me = s.active_player_index;
+    if (CycloneReplacerOut(s, me))
+    {
+        // The cheapest payable CREATURE cycler (a creature walk is the combo); hand order breaks ties.
+        std::string best;
+        int best_mv = 1 << 20;
+        for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->params.cycling_cost.has_value() || !d->card.IsCreature()) { continue; }
+            if (!CyclingPayable(s, me, *d, pool)) { continue; }
+            const int mv = EffectiveCyclingCostFor(s, *d).ManaValue();
+            if (mv < best_mv) { best_mv = mv; best = c.m_name.str(); }
+        }
+        if (!best.empty()) { return best; }
+    }
+    return GenericProvider::SelectDigSource(s, pool, out_is_sac);
+}
+
+bool CycloneProvider::FreeCastTakeDominated(const GameState& s, int controller, const CardDefinition& hit) const
+{
+    const bool vanilla_creature = hit.tmpl == CardTemplate::VanillaCreature && hit.card.IsCreature();
+    if (!vanilla_creature && !hit.params.cycle_draw_exile_shared_type_freecast) { return false; }
+    if (hit.card.HasSupertype(Supertype::Legendary))
+    {
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == controller && p.card.m_name == hit.card.m_name) { return false; } }
+    }
+    const int need = std::max(hit.params.cast_trigger_exile_target_permanents,
+                              hit.params.cast_trigger_destroy_target_permanents);
+    if (need > 0)
+    {
+        int opp = 0;
+        for (const Permanent& p : s.battlefield) { if (p.controller_index != controller) { ++opp; } }
+        if (opp < need) { return false; }
+    }
+    return true;
+}
+
+bool CycloneProvider::TakeFreeCast(const GameState& s, int controller, const CardDefinition& found) const
+{
+    if (FreeCastTakeDominated(s, controller, found)) { return true; }
+    const int need = std::max(found.params.cast_trigger_exile_target_permanents,
+                              found.params.cast_trigger_destroy_target_permanents);
+    if (need > 0)
+    {
+        int opp = 0;
+        for (const Permanent& p : s.battlefield) { if (p.controller_index != controller) { ++opp; } }
+        if (opp < need) { return false; }   // the trigger would be forced onto our own permanents
+    }
+    return true;
+}
+
+bool CycloneProvider::AdmitRemandOnFreeCast(const GameState& s, int controller, const CardDefinition& hit) const
+{
+    (void)s; (void)controller;
+    const bool targeted_cast_trigger = hit.params.cast_trigger_exile_target_permanents > 0
+                                    || hit.params.cast_trigger_destroy_target_permanents > 0;
+    return hit.params.cant_be_countered || !targeted_cast_trigger;
+}
+
+// MTG_CYCLONE_REMAND_MAX_MV: the hand-cast self-Remand ceiling. The per-job numeric arm wins, then the env,
+// then the shipped default 1 (the wider, searched side -- the USER's suggestion; the Stage 5 A/B is 1 vs -1).
+static int CycloneRemandMaxMv()
+{
+    const int job = valuearm::t_arm.cyclone_remand_max_mv;
+    if (job != valuearm::Arm::kCycloneRemandUnset) { return job; }
+    static const int env = EnvInt("MTG_CYCLONE_REMAND_MAX_MV", 1);   // DEFAULT 1; -1 = never
+    return env;
+}
+
+bool CycloneProvider::AdmitRemandRider(const GameState& s, int controller, const CardDefinition& target) const
+{
+    (void)s; (void)controller;
+    const int ceiling = CycloneRemandMaxMv();
+    return ceiling >= 0 && target.card.m_mana_cost.ManaValue() <= ceiling;
+}
+
 // ---- LandfallElementalsProvider: the USER's fetch rule (2026-10-23) ----------------------------
 // USER: "The order should prioritize Red -> Green -> Blue -> Second Red including mana from lands that can
 // produce all of these or SmokeBraider. Ideally Myriad Landscape would get Red or Green, though Red is

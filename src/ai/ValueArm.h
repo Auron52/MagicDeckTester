@@ -163,6 +163,12 @@ struct Arm
     // candidates for `=0`), so what has to be measured is (slot count x deck) and an env static pins
     // one count per process. -1 unset => env => the deck's BpChainSlotOptIn => 1.
     int         bp_chain_slot     = -1;
+    // CYCLONE HAND-CAST SELF-REMAND CEILING (MTG_CYCLONE_REMAND_MAX_MV; CycloneProvider::AdmitRemandRider):
+    // the largest mana value a Remand may ride on a hand cast (-1 = never). An int, so it lives here, not in
+    // the boolean heurarm::Arm; per-job so the Stage 5 A/B (1 vs -1) pools in one batch.
+    // kCycloneRemandUnset => env => 1.
+    static constexpr int kCycloneRemandUnset = -99;
+    int         cyclone_remand_max_mv = kCycloneRemandUnset;
     // LEAF FIDELITY BY PASS DEPTH (manifest "leaf_greedy_from_depth"): a commit-the-line pass of nominal
     // depth >= this scores its horizon with a greedy playout instead of the 1-ply leaf. Set ONLY by the
     // value-leaf matrix on its unbudgeted H cells, from the per-deck leaf calibration stage

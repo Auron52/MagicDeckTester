@@ -549,6 +549,17 @@ MANIFEST = {
     # prompted.
     "cast_trigger_exile_target_permanents":   ("target", positive),
     "cast_trigger_destroy_target_permanents": ("target", positive),
+    # ---- Unpredictable Cyclone phase 3 (2026-10-27) ----
+    # Unpredictable Cyclone's replaced cycling draw: "You may cast that card without paying its mana cost"
+    # -- the shared `free_cast` decision at the human-play dig (TurnSolver's cyclone_replaced_draw), source
+    # "Unpredictable Cyclone", the walk's non-hits shown; with a Remand in hand that could answer the hit, a
+    # SECOND free_cast prompt offers that Remand (zone "hand"; its cost is paid). The autonomous engine
+    # searches it (the cycle seed's free-cast pin).
+    "cycle_draw_exile_shared_type_freecast":  ("free_cast", truthy),
+    # Curator of Mysteries' "whenever you cycle or discard another card, scry 1": the ordinary `scry`
+    # decision (ScryTop's g_play_top_chooser), one prompt per trigger, at the cycle (before its draw) and at
+    # every other discard (ResolveDiscardScryTriggers). The autonomous engine searches a cycle's j.
+    "cycle_or_discard_trigger_scry":          ("scry", positive),
     # ---- the land-search cluster (2026-10-15; core/LandSearch.h) ----
     # WHICH land(s) every land search finds is asked at RESOLUTION through the shared `tutor_etb`
     # chooser, one sequential prompt per land (PerformLandSearch -- the shared resolution helper, so it
@@ -1837,6 +1848,7 @@ def modeled_tokens(card):
     if real_target(p.get("targeting", "none")) or p.get("spectacle_cost"): t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
     if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")
+    if p.get("cycle_or_discard_trigger_scry", 0) > 0:                      t.add("scry")   # Curator
     if p.get("etb_surveil", 0) > 0:                                        t.add("surveil")
     if p.get("damage_divided"):                                           t.add("divide")
     if p.get("etb_damage_divided_creatures", 0) > 0:                      t.add("divide")   # Fury's ETB

@@ -641,6 +641,19 @@ inline bool MaybeReplaceGraveyardWithLibraryShuffle(GameState& state, int contro
 enum class DiscardDest : std::uint8_t { Graveyard, LibraryShuffle, MadnessExile };
 inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
                                        std::vector<MadnessPending>* mq, const std::string& cause);
+// Curator of Mysteries' watcher, fired by DiscardCardFromHand for every discard that is not a cycle (the
+// cycle sites fire it themselves, once, with the searched pin -- see CycleDiscardScope). Defined with the
+// Cyclone block further down.
+inline int  DiscardScryTriggers(const GameState& state, int controller);
+inline void ResolveDiscardScryTriggers(GameState& state, int controller, int n, int j_pin);
+// The cycle sites discard through the shared DiscardCardFromHand, whose own watcher hook must then stand
+// down (the cycle fires the trigger ONCE, with its searched pin, through ResolveDiscardScryTriggers). Scoped.
+inline thread_local int g_cycle_discard_scope = 0;
+struct CycleDiscardScope
+{
+    CycleDiscardScope()  { ++g_cycle_discard_scope; }
+    ~CycleDiscardScope() { --g_cycle_discard_scope; }
+};
 
 // The CALLER-OWNED madness payer (the g_etb_optional_payer idiom: no core resolution effect taps on its
 // own, because the executor keeps its own payment accounting). `pay(state, cost)` pays `cost` on `state`
@@ -15379,8 +15392,22 @@ inline std::vector<ManaCost> MadnessCostsFor(const GameState& state, int owner, 
     return out;
 }
 
+inline DiscardDest DiscardCardFromHandImpl(GameState& state, int controller, int hand_idx,
+                                           std::vector<MadnessPending>* mq, const std::string& cause);
 inline DiscardDest DiscardCardFromHand(GameState& state, int controller, int hand_idx,
                                        std::vector<MadnessPending>* mq, const std::string& cause)
+{
+    // Curator of Mysteries: "Whenever you cycle or discard another card, scry 1." Counted at the event (the
+    // watchers on the battlefield when the card is discarded), resolved once the card has reached its zone.
+    // A CYCLE's discard stands down here: its site fires the trigger itself with the searched pin.
+    // Deck-gated: n == 0 for every deck without the watcher (one bool test).
+    const int scry_n = g_cycle_discard_scope == 0 ? DiscardScryTriggers(state, controller) : 0;
+    const DiscardDest dest = DiscardCardFromHandImpl(state, controller, hand_idx, mq, cause);
+    if (scry_n > 0) { ResolveDiscardScryTriggers(state, controller, scry_n, -1); }
+    return dest;
+}
+inline DiscardDest DiscardCardFromHandImpl(GameState& state, int controller, int hand_idx,
+                                           std::vector<MadnessPending>* mq, const std::string& cause)
 {
     Player& pl = state.players[controller];
     Card c = pl.hand[static_cast<std::size_t>(hand_idx)];
@@ -39807,6 +39834,271 @@ inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const Ca
             return true;
     }
 }
+
+// ==== UNPREDICTABLE CYCLONE + CURATOR OF MYSTERIES (phase 3 of the Cyclone onboarding, 2026-10-27) ========
+//
+// Unpredictable Cyclone (CardParams::cycle_draw_exile_shared_type_freecast): "If a cycling ability of another
+// nonland card would cause you to draw a card, instead exile cards from the top of your library until you
+// exile a card that shares a card type with the cycled card. You may cast that card without paying its mana
+// cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random
+// order." A REPLACEMENT (CR 614.1a) of the cycling draw, applied at the three cycle sites (executor
+// AIEngine::PerformDig, the human-play DigDraw pass and the rollout dig loop) through the helpers below;
+// only the CAST is world-specific (EffectHandler::PushFreeCast vs the rollout's apply_one recursion), as
+// for cascade. Scryfall rulings (2020-04-17) bind: card types only (supertypes and subtypes do not count);
+// the walk stops at the first card sharing ANY type; a whole-library whiff puts the library back in a
+// random order and draws nothing; the cast happens during the resolution (timing ignored); X = 0.
+//
+// Curator of Mysteries (CardParams::cycle_or_discard_trigger_scry): "Whenever you cycle or discard another
+// card, scry 1." ONE trigger per event per Curator (ruling 2017-04-18: cycling is a discard, the trigger
+// fires once), resolving BEFORE the cycling draw (it goes on the stack above the cycling ability) -- so it
+// sets up a Cyclone walk. "another": a Curator in HAND cycling cannot trigger itself (it is not on the
+// battlefield); it does trigger a second Curator that is.
+
+// The replacement instance that applies to `cycled`'s cycling draw, or null. CR 616.1: with two Cyclones out
+// only ONE replacement can apply to a given draw; the instances are identical, so which is moot -- the
+// first. "another nonland card": a cycled LAND draws normally, and a Cyclone cycled from hand is "another"
+// (a different object) to the one on the battlefield. Every cycling ability in the engine draws a card, so
+// "would cause you to draw" holds for every cycle. Deck-gated (GameState::deck_has_cycle_draw_replacement).
+inline const CardDefinition* CycleDrawReplacer(const GameState& state, int controller, const CardDefinition& cycled)
+{
+    if (!state.deck_has_cycle_draw_replacement) { return nullptr; }
+    if (cycled.card.IsLand()) { return nullptr; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { return d; }
+    }
+    return nullptr;
+}
+
+// The card-type bits of a DEFINITION card (never a library placeholder, whose type mask is empty), over the
+// card types the ruling names plus Battle and Kindred (both card types, CR 300.1); Land excluded (the cycled
+// card is nonland, so a land can share nothing with it).
+inline unsigned CycleWalkTypeMask(const Card& dc)
+{
+    static constexpr CardType kTypes[] = { CardType::Artifact, CardType::Creature, CardType::Enchantment,
+                                           CardType::Instant, CardType::Planeswalker, CardType::Sorcery,
+                                           CardType::Battle, CardType::Kindred };
+    unsigned m = 0;
+    for (CardType t : kTypes) { if (dc.HasType(t)) { m |= 1u << static_cast<int>(t); } }
+    return m;
+}
+
+// THE WALK. Exile from the top until a card sharing a type with `mask`; the hit is returned removed, the
+// walked non-hits in `rest` (walk order) -- NOT bottomed yet: what goes to the bottom depends on the cast
+// decision (a declined or uncastable hit joins them). A walk that exhausts the library returns have=false
+// with everything in `rest` (ruling: the library goes back in a random order, no draw).
+struct CycleWalk
+{
+    bool                     have = false;
+    Card                     hit;
+    std::vector<Card>        rest;
+    std::vector<int>         seen_nums;
+    std::vector<std::string> seen_names;
+};
+inline void WalkExileUntilSharedType(GameState& state, int controller, unsigned mask, CycleWalk& w)
+{
+    Player& p = state.players[static_cast<std::size_t>(controller)];
+    while (!p.library.empty())
+    {
+        Card c = p.library.DrawTop();
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        w.seen_nums.push_back(c.m_number);
+        w.seen_names.push_back(c.m_name.str());
+        if ((CycleWalkTypeMask(cd != nullptr ? cd->card : c) & mask) != 0)
+        {
+            w.hit  = std::move(c);
+            w.have = true;
+            return;
+        }
+        w.rest.push_back(std::move(c));
+    }
+}
+
+// "...on the bottom of your library in a RANDOM order." Implemented, not deferred (the cascade convention of
+// walk order is NOT reused): the order is observable -- a whole-library whiff IS a shuffle, and a later walk
+// or a long extra-turn chain reaches the bottom pile. A common-random-numbers keyed order
+// (Library::ShuffleByKey's key over (seed, search ordinal, m_number) -- ShuffleAfterSearch's seeding, salt
+// and g_shuffle_eval rule included), then the cards go under the library in that order and the search
+// ordinal advances. ONE helper for every world, called at the same point of the replacement, so the worlds
+// stay lockstep. A batch of fewer than two cards has one order and bumps nothing.
+inline void BottomInRandomOrder(GameState& state, int controller, std::vector<Card>&& cards)
+{
+    Player& p = state.players[static_cast<std::size_t>(controller)];
+    if (cards.size() < 2)
+    {
+        for (Card& c : cards) { p.library.push_back(std::move(c)); }
+        return;
+    }
+    Library tmp;
+    for (Card& c : cards) { tmp.push_back(std::move(c)); }
+    const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
+    tmp.ShuffleByKey(SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), salt));
+    for (auto it = tmp.begin(); it != tmp.end(); ++it) { p.library.push_back(std::move(*it)); }
+    ++state.search_count;
+}
+
+// ---- The free cast: take / decline / take-and-Remand ---------------------------------------------------
+// The searched choice rides the DigDraw seed action (Action::ponder_keep, see TurnSolver) and, as REALISED,
+// the recorded DigDraw (the executor replays the record's value). -1 = the provider default (TakeFreeCast).
+enum : int { kCycFcDefault = -1, kCycFcDecline = 0, kCycFcTake = 1, kCycFcTakeRemand = 2 };
+
+// THE TAKE-DOMINANCE FOLD (no decline variant, and a decline pin takes) is the PROVIDER's: a restriction
+// justified by a dominance argument about its own deck (DecisionProvider::FreeCastTakeDominated; base false
+// = never folded, every offer is branched -- the sound default). CycloneProvider states its fold there.
+inline bool CycleFreeCastTakeDominated(const GameState& s, int controller, const CardDefinition& hit)
+{
+    return ResolveProvider(s).FreeCastTakeDominated(s, controller, hit);
+}
+
+// The Remand that could answer the free cast: a counters_target_spell_to_hand card in hand whose cost the
+// available mana pays (the cycle's own cost is already paid), admitted by the provider, with a cast left
+// in a restrictor's budget for it. Null = no Remand option.
+inline const CardDefinition* CycleFreeCastRemand(const GameState& s, int controller, const CardDefinition& hit,
+                                                 const ManaPool& pool)
+{
+    if (s.casts_remaining_this_turn == 0) { return nullptr; }
+    if (!ResolveProvider(s).AdmitRemandOnFreeCast(s, controller, hit)) { return nullptr; }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.counters_target_spell_to_hand) { continue; }
+        if (!pool.CanPay(EffectiveSpellCost(*d, s, 1))) { continue; }
+        return d;
+    }
+    return nullptr;
+}
+
+// The realised choice for one offer, shared by every world (the human chooser overrides it at the human-play
+// site). `castable` = the hit can be cast at all (a nonland card, FreeCastHasLegalTargets, a cast left).
+// `remand` = CycleFreeCastRemand's answer.
+inline int ResolveCycleFreeCastChoice(const GameState& s, int controller, const CardDefinition& hit, bool castable,
+                                      int pin, const CardDefinition* remand)
+{
+    if (!castable) { return kCycFcDecline; }
+    switch (pin)
+    {
+        case kCycFcDecline:    return CycleFreeCastTakeDominated(s, controller, hit) ? kCycFcTake : kCycFcDecline;
+        case kCycFcTake:       return kCycFcTake;
+        case kCycFcTakeRemand: return remand != nullptr ? kCycFcTakeRemand : kCycFcTake;
+        default: break;
+    }
+    return ResolveProvider(s).TakeFreeCast(s, controller, hit) ? kCycFcTake : kCycFcDecline;
+}
+
+// Can the walk's hit be cast? A LAND (an artifact land shares the artifact type) is never cast; a spell
+// with no legal target is not cast (CR 601.2c, the shared FreeCastHasLegalTargets); a cast restrictor with
+// no cast left forbids it.
+inline bool CycleHitCastable(const GameState& s, int controller, const CardDefinition* hd)
+{
+    return hd != nullptr && !hd->card.IsLand() && s.casts_remaining_this_turn != 0
+        && FreeCastHasLegalTargets(s, controller, *hd);
+}
+
+// The viewer / log record of the walk (both sinks; nulled in search). `cast` = the hit was cast.
+inline void EmitCycloneWalk(const GameState& s, const CardDefinition& replacer, const CardDefinition& cycled,
+                            const CycleWalk& w, bool cast)
+{
+    if (!RevealVisible()) { return; }
+    std::vector<int> kept, bottomed;
+    std::vector<std::string> disp;
+    for (int n : w.seen_nums)
+    {
+        const bool is_hit = w.have && n == w.hit.m_number;
+        if (is_hit && cast) { kept.push_back(n); disp.push_back("cast (free)"); }
+        else { bottomed.push_back(n); disp.push_back(is_hit ? "found, not cast: bottom (random order)"
+                                                           : "bottom (random order)"); }
+    }
+    std::string types;
+    const unsigned m = CycleWalkTypeMask(cycled.card);
+    static constexpr std::pair<CardType, const char*> kNm[] = {
+        { CardType::Artifact, "artifact" }, { CardType::Creature, "creature" },
+        { CardType::Enchantment, "enchantment" }, { CardType::Instant, "instant" },
+        { CardType::Planeswalker, "planeswalker" }, { CardType::Sorcery, "sorcery" },
+        { CardType::Battle, "battle" }, { CardType::Kindred, "kindred" } };
+    for (const auto& t : kNm)
+    { if ((m & (1u << static_cast<int>(t.first))) != 0) { types += types.empty() ? t.second : std::string("/") + t.second; } }
+    EmitReveal(s.turn_number, replacer.card.m_name.str() + " (cycled " + cycled.card.m_name.str()
+               + ": exile until " + (types.empty() ? std::string("a shared type") : types) + ")",
+               w.seen_nums, w.seen_names, kept, bottomed, disp);
+}
+
+// ---- Curator of Mysteries' trigger ------------------------------------------------------------------------
+// How many "whenever you cycle or discard another card, scry N" triggers one discard by `controller` fires:
+// one per watcher permanent it controls. Deck-gated (GameState::deck_has_discard_scry_watcher).
+inline int DiscardScryTriggers(const GameState& state, int controller)
+{
+    if (!state.deck_has_discard_scry_watcher) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_or_discard_trigger_scry > 0) { ++n; }
+    }
+    return n;
+}
+// Every watcher scries exactly 1 (the fold below is exact only then).
+inline bool DiscardScryTriggersAllOne(const GameState& state, int controller)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_or_discard_trigger_scry > 1) { return false; }
+    }
+    return true;
+}
+
+// Resolve this discard's watcher triggers. `j_pin` >= 0 = the SEARCHED disposition: N scry-1s on one library
+// fold EXACTLY to "bottom the top j, j = 0..N" (a keep changes nothing; each bottom removes the current
+// top), so a pin of j bottoms the top min(j, N) cards and keeps the rest -- an identity fold, not a
+// narrowing (exact only when every watcher scries 1, which is checked; otherwise each trigger runs ScryTop).
+// -1 = unpinned: each trigger is ScryTop -- the human chooser at a real resolution, else the provider's
+// ScryKeepOnTop (the permitted playout policy beyond the horizon, and the disclosed in-window heuristic for a
+// NON-CYCLE discard -- the cleanup discard -- see the Cyclone ledger). Any land-ETB scry pin in force
+// (g_scripted_top_choice) is set aside for the look, so neither consumes the other's pin.
+inline void ResolveDiscardScryTriggers(GameState& state, int controller, int n, int j_pin)
+{
+    if (n <= 0 || controller != state.active_player_index) { return; }
+    const ScriptedTopChoice _no_pin(-1);
+    if (j_pin >= 0 && DiscardScryTriggersAllOne(state, controller))
+    {
+        Player& ap = state.players[static_cast<std::size_t>(controller)];
+        for (int t = 0; t < n && !ap.library.empty(); ++t)
+        {
+            std::vector<Card> looked(ap.library.begin(), ap.library.begin() + 1);
+            TopDisposition disp;
+            const bool keep = t >= j_pin;
+            if (keep) { disp.top_order.push_back(0); }
+            if (RevealVisible())
+            {
+                std::vector<int> kept, bottomed;
+                (keep ? kept : bottomed).push_back(looked[0].m_number);
+                EmitReveal(state.turn_number, "Curator of Mysteries (scry 1)", { looked[0].m_number },
+                           { looked[0].m_name.str() }, kept, bottomed);
+            }
+            ap.library.erase(ap.library.begin());
+            ApplyTopDisposition(state, looked, disp, LookKind::Scry);
+        }
+        return;
+    }
+    for (const Permanent* w : [&]{
+             std::vector<const Permanent*> ws;
+             for (const Permanent& p : state.battlefield)
+             {
+                 if (p.controller_index != controller) { continue; }
+                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                 if (d != nullptr && d->params.cycle_or_discard_trigger_scry > 0) { ws.push_back(&p); }
+             }
+             return ws; }())
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(w->card);
+        ScryTop(state, d->params.cycle_or_discard_trigger_scry, d->card.m_name.str() + " (scry)");
+    }
+}
+
 
 // The human's default when the plan names no own target: our LOWEST-power legal creature (the cheapest
 // body to trade for a tapped basic), else the opponent target. -1 = nothing legal.

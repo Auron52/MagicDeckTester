@@ -521,6 +521,25 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         && plan.land_to_play.empty())
     {
         const Action& a = plan.actions[0];
+        // Under UNPREDICTABLE CYCLONE the draw of a nonland's cycling is REPLACED -- "to draw" would be
+        // false; name the walk (the shared CycleDrawReplacer + the cycled card's types).
+        if (!a.dig_sacrifice)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupInterned(a.card_name);
+            const CardDefinition* rep = cd ? CycleDrawReplacer(s, s.active_player_index, *cd) : nullptr;
+            if (rep != nullptr)
+            {
+                std::string types;
+                if (cd->card.IsCreature())     { types += types.empty() ? "creature" : "/creature"; }
+                if (cd->card.HasType(CardType::Artifact))    { types += types.empty() ? "artifact" : "/artifact"; }
+                if (cd->card.IsEnchantment())  { types += types.empty() ? "enchantment" : "/enchantment"; }
+                if (cd->card.IsInstant())      { types += types.empty() ? "instant" : "/instant"; }
+                if (cd->card.IsSorcery())      { types += types.empty() ? "sorcery" : "/sorcery"; }
+                if (cd->card.HasType(CardType::Planeswalker)) { types += types.empty() ? "planeswalker" : "/planeswalker"; }
+                return "cycle " + a.card_name.str() + " (" + rep->card.m_name.str() + ": exile until a "
+                     + (types.empty() ? std::string("shared type") : types) + ", may cast it free)";
+            }
+        }
         return (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw";
     }
     if (plan.land_decided && !plan.land_to_play.empty())

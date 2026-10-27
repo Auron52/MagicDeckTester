@@ -13811,6 +13811,42 @@
    }
   },
   {
+   "name": "Unpredictable Cyclone",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If a cycling ability of another nonland card would cause you to draw a card, instead exile cards from the top of your library until you exile a card that shares a card type with the cycled card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.\nCycling {2} ({2}, Discard this card: Draw a card.) [cycle_draw_exile_shared_type_freecast: a REPLACEMENT of the cycling draw (no stack, CR 614.1a), applied at all three cycle sites (the executor's PerformDig, the human-play dig, the rollout's dig chain) through one shared walk (SpellEffects.h WalkExileUntilSharedType / BottomInRandomOrder), AFTER the cycle's own triggers (Curator of Mysteries' scry resolves first and sets up the walk). The walk stops at the first card sharing ANY card type with the cycled card (types only; Scryfall ruling 2020-04-17), so a cycled creature walks to the next creature. The hit may be cast without paying its mana cost -- a real CAST (storm count, cast triggers: Emrakul's extra turn, the Ulamogs' targets) -- and a land hit, a hit with no legal target or a hit a cast restrictor forbids is not cast. TAKE / DECLINE / TAKE-AND-REMAND is SEARCHED (the cycle action's free-cast pin); declining is offered only where the deck's provider cannot prove taking dominant (CycloneProvider::FreeCastTakeDominated: a forced own-target Ulamog, a legend-rule Emrakul). Everything not cast -- the walked cards and a declined or uncastable hit -- goes to the bottom in a REAL random order (a common-random-numbers keyed sort, both worlds); a whole-library whiff is therefore a shuffle with no draw (ruling). Two Cyclones: one replacement applies to a given draw (CR 616.1); the instances are identical. 'another nonland card': a cycled LAND draws normally, and a Cyclone cycled from hand while one is out walks to the next enchantment; this card's own cycling {2} with no Cyclone out is an ordinary draw. X = 0 is moot (no X spell in the pool). Instant-speed cycling on the opponent's turn collapses to our main phases (PROVISIONAL, ledger Q7).]",
+   "template": "custom",
+   "parameters": {
+    "cycling_cost": "{2}",
+    "cycle_draw_exile_shared_type_freecast": true
+   }
+  },
+  {
+   "name": "Curator of Mysteries",
+   "mana_cost": "{2}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Sphinx"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Flying\nWhenever you cycle or discard another card, scry 1.\nCycling {U} ({U}, Discard this card: Draw a card.) [Watcher modelled by cycle_or_discard_trigger_scry: ONE trigger per discard event per Curator on the battlefield (Scryfall ruling 2017-04-18: cycling is a discard, so a cycle triggers once), fired by the shared discard hook (DiscardCardFromHand) for every non-cycle discard -- the cleanup discard -- and by the three cycle sites themselves for a cycle, where it resolves BEFORE the cycling draw (it goes on the stack above the cycling ability), so it sets up an Unpredictable Cyclone walk. 'another card' is structural: a Curator cycled from HAND is not on the battlefield and cannot trigger itself; it does trigger a second Curator that is. A cycle's N scry-1 triggers fold EXACTLY to 'bottom the top j, j = 0..N' and j is SEARCHED (the cycle action's scry pin); a non-cycle discard's scry is the provider's ScryKeepOnTop (an in-window heuristic for the rare cleanup-discard case -- disclosed in the Cyclone ledger); the human scries each trigger in the viewer. Flying is inert against the never-blocking goldfish opponent.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cycling_cost": "{U}",
+    "cycle_or_discard_trigger_scry": 1
+   }
+  },
+  {
    "name": "Emrakul, the Aeons Torn",
    "mana_cost": "{15}",
    "types": [

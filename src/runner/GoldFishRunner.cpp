@@ -1224,6 +1224,28 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_gy_shuffle  = gy;
         state.deck_has_annihilator = ann;
     }
+    // Unpredictable Cyclone's cycling-draw replacement: MAINBOARD ONLY (it changes what a cycle does, a
+    // behaviour -- the Moraug reasoning). Curator of Mysteries' discard watcher: BOTH ZONES (the stamp only
+    // gates a scan that would find nothing).
+    state.deck_has_cycle_draw_replacement = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.cycle_draw_exile_shared_type_freecast) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_discard_scry_watcher = [&deck]{
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.cycle_or_discard_trigger_scry > 0) { return true; }
+            }
+        }
+        return false;
+    }();
     // Jorn's per-turn main 2 (UntapSecondMainLive) is only ever live in a deck that runs the card.
     state.deck_has_attack_untap = [&deck]{
         for (const Card& c : deck.mainboard)

@@ -220,6 +220,10 @@ TEST_CASE("Cyclone phase 1: the rollout dig loop pays the life in lockstep and s
     TurnSolver::Plan dig;      // "dig while affordable" -- the affordability filter is the only gate
     dig.land_decided = true;
     dig.dig_choice   = 1;
+    // PHASE 3: CycloneProvider SEARCHES its cycles (CyclesAreSearched) -- inside the search window a cycle is
+    // a plan's cycle seed, and the legacy dig loop runs only as the PLAYOUT policy, i.e. for the horizon
+    // leaf's plan. That is the loop this test pins, so the plan is marked as one.
+    dig.horizon_leaf = true;
     {   // life 3, two Wraiths: the first cycle pays 3 -> 1, the second is refused (1 <= 2).
         GameState s = WraithState(3, 2);
         TurnSolver::ApplyPlan(s, dig, /*is_pre_combat=*/true);

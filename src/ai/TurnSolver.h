@@ -896,6 +896,20 @@ inline bool IsSelfDrawXCast(const CardDefinition& d, int draw_target)
     return d.tmpl == CardTemplate::DrawX && (!d.params.draw_target_player || draw_target == 0);
 }
 
+// A SEARCHED CYCLE seed (CollectActions, Unpredictable Cyclone phase 3): a hand-cycle DigDraw carried by
+// NAME (hand_index -1) WITH its definition, Curator's scry pin in devour_count and Cyclone's free-cast pin in
+// ponder_keep. Neither the human-play standalone dig action (AppendHumanPlayDigPlans) nor a recorded DigDraw
+// (the breakpoint script) carries `def`, so neither ever reads as a seed.
+inline bool IsCycleSeed(const Action& a)
+{
+    return a.kind == Action::Kind::DigDraw && !a.dig_sacrifice && a.hand_index < 0 && a.def != nullptr;
+}
+inline const Action* CycleSeedOf(const std::vector<Action>& acts)
+{
+    for (const Action& a : acts) { if (IsCycleSeed(a)) { return &a; } }
+    return nullptr;
+}
+
 struct CastRiders
 {
     int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
@@ -917,6 +931,9 @@ struct CastRiders
                                         // ApplyCastLifegain in both worlds
     InternedName pitch_name;            // Action::pitch_name: the hand card a pitch evoke exiles as its
                                         // cost (Fury); empty for every other cast
+    bool     free_remand     = false;   // the remand_by rider rides a FREE walk cast (Unpredictable
+                                        // Cyclone's take-and-Remand): only the Remand is paid. Set by the
+                                        // walk itself, never by CastRiders::Of (no plan Action carries it)
 
     static CastRiders Of(const Action& a)
     {

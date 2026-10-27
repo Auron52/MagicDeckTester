@@ -503,6 +503,7 @@ static std::atomic<long long> g_dig_twins_emitted{0};
 static std::atomic<long long> g_dig_applied_auto{0}, g_dig_applied_leaf{0};
 static std::atomic<long long> g_dig_applied_twin{0}, g_dig_applied_axis1{0};
 static std::atomic<long long> g_dig_applied_pruned{0};   // a provider whose DigOfferAt PRUNED the dig to its gate (no no-dig world)
+static std::atomic<long long> g_dig_applied_seed{0};     // a SEARCHED cycle step (a plan's / continuation's cycle seed)
 // `auto` split by WHY the plan had no sibling: a breakpoint variant (bp_choice >= 0), another axis
 // clone (scry / tutor / ponder / ... pinned), a cast-nothing plan, or a plain base plan whose source
 // the pre-gate could not see (drawn mid-apply).
@@ -521,10 +522,11 @@ struct DigCensusDumper
     {
         if (!DigCensusOn()) { return; }
         std::fprintf(stderr, "[dig-census] variants_emitted=%lld folded=%lld applied: auto=%lld leaf=%lld twin=%lld axis1=%lld"
-                             " pruned=%lld | auto: bp_premise=%lld bp_after=%lld axis=%lld idle=%lld base=%lld\n",
+                             " pruned=%lld seed=%lld | auto: bp_premise=%lld bp_after=%lld axis=%lld idle=%lld base=%lld\n",
                      g_dig_twins_emitted.load(), g_dig_folded.load(),
                      g_dig_applied_auto.load(), g_dig_applied_leaf.load(),
                      g_dig_applied_twin.load(), g_dig_applied_axis1.load(), g_dig_applied_pruned.load(),
+                     g_dig_applied_seed.load(),
                      g_dig_auto_bppre.load(),
                      g_dig_auto_bp.load(), g_dig_auto_axis.load(), g_dig_auto_idle.load(),
                      g_dig_auto_base.load());
@@ -17378,6 +17380,7 @@ static int CopiesOfNameUsed(const Action& b, const InternedName& name)
     if (b.kind == Action::Kind::PutFromHandAbility && b.card_name == name) { ++n; }
     if (!b.pitch_name.empty() && b.pitch_name == name) { ++n; }
     if (!b.remand_by.empty() && b.remand_by == name) { ++n; }
+    if (b.kind == Action::Kind::DigDraw && !b.dig_sacrifice && b.card_name == name) { ++n; }   // a cycle seed
     return n;
 }
 
@@ -20204,6 +20207,7 @@ static void BuildCopyCap(const GameState& state, const std::vector<Action>& cand
         if (a.kind == Action::Kind::PutFromHandAbility) { bump(a.card_name); }
         if (!a.pitch_name.empty())                      { bump(a.pitch_name); }
         if (!a.remand_by.empty())                       { bump(a.remand_by); }
+        if (a.kind == Action::Kind::DigDraw && !a.dig_sacrifice) { bump(a.card_name); }   // a cycle seed
     }
     if (by_name.empty()) { return; }
     const std::vector<Card>& hand = state.ActivePlayer().hand;
@@ -41548,6 +41552,113 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             a.is_noncreature = true;
             actions.push_back(std::move(a));
         }
+        // SEARCHED CYCLING (Unpredictable Cyclone phase 3, 2026-10-27): WHICH hand card to cycle is a plan
+        // action, one per DISTINCT name the provider admits (DecisionProvider::SearchedCycleSources --
+        // restrict / order only; copies are one option: every apply world cycles BY NAME). The Channel shape
+        // (pay + discard from hand), but realised as the FIRST STEP of the plan's cycle chain (ApplyPlanDirect's
+        // cycle_chain_step, after the plan's casts): a cycle is followed by the site-4 re-solve, whose continuation
+        // may carry the NEXT cycle action, so the chain is searched one step at a time instead of by
+        // SelectDigSource's single pick (the greedy-in-window this replaces). All seeds share ONE odometer
+        // family (PlanGroupKey: one cycle per section; kDupCopies stops a seed and a cast spending one
+        // copy twice). Each seed carries its two in-resolution choices as searched pins:
+        //   * devour_count = Curator of Mysteries' disposition j: N scry-1 triggers fold EXACTLY to "bottom
+        //     the top j, j = 0..N" (ResolveDiscardScryTriggers). N counts the watchers on the battlefield AND
+        //     in hand (a Curator the plan casts first also triggers); a j above the realised N is a duplicate
+        //     line, never a missing one. -1 when no watcher can exist (nothing to choose).
+        //   * ponder_keep = Unpredictable Cyclone's free cast: take / decline / take-and-Remand (kCycFc*).
+        //     Offered only for a nonland cycler while a replacer is on the battlefield or in hand; DECLINE
+        //     only when the library holds a card of a shared type whose take the provider does not prove
+        //     dominant (FreeCastTakeDominated), and TAKE-AND-REMAND only with a Remand in hand that the
+        //     provider admits on such a hit. -1 = the provider default (no replacer possible).
+        // DECISION SPACE ONLY (the Remand / phyrexian precedent): the rollout LEAF (greedy) plays the legacy
+        // gate. Human play gets no seeds -- its cycles are the standalone dig plans (AppendHumanPlayDigPlans),
+        // and the human answers each scry / free cast at resolution.
+        if ((g_search_candidate_enum || g_condemn_root_turn < 0) && !HumanPlayActive())
+        {
+            const DecisionProvider& cyc_prov = ResolveProvider(state);
+            const std::vector<std::string> cyc_names = cyc_prov.SearchedCycleSources(state);
+            if (!cyc_names.empty())
+            {
+                const int me = state.active_player_index;
+                bool replacer_out = false, replacer_held = false;
+                int  watchers_bf = 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != me) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d == nullptr) { continue; }
+                    if (d->params.cycle_draw_exile_shared_type_freecast) { replacer_out = true; }
+                    if (d->params.cycle_or_discard_trigger_scry > 0) { ++watchers_bf; }
+                }
+                int  watchers_hand = 0;
+                bool remand_held   = false;
+                for (const Card& c : ap.hand)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d == nullptr) { continue; }
+                    if (d->params.cycle_draw_exile_shared_type_freecast) { replacer_held = true; }
+                    if (d->params.cycle_or_discard_trigger_scry > 0) { ++watchers_hand; }
+                    if (d->params.counters_target_spell_to_hand) { remand_held = true; }
+                }
+                const bool replacer_possible = state.deck_has_cycle_draw_replacement
+                                            && (replacer_out || replacer_held);
+                for (const std::string& nm : cyc_names)
+                {
+                    const CardDefinition* cd = CardDatabase::Instance().Lookup(nm);
+                    if (cd == nullptr || !cd->params.cycling_cost.has_value()) { continue; }
+                    int copies = 0;
+                    for (const Card& c : ap.hand) { if (!c.m_is_staged && c.m_name == cd->card.m_name) { ++copies; } }
+                    if (copies == 0) { continue; }
+                    if (!CyclingLifePayable(state, me, *cd)) { continue; }
+                    const ManaCost cc = EffectiveCyclingCostFor(state, *cd);
+                    if (g_emit_prune && cc.ManaValue() > mana_ceiling) { continue; }
+                    // Curator's j range: every watcher that can be on the battlefield when this card is cycled
+                    // ("another card": the cycled copy itself is in hand and cannot trigger).
+                    const int n_watch = watchers_bf + watchers_hand
+                                      - (cd->params.cycle_or_discard_trigger_scry > 0 ? 1 : 0);
+                    std::vector<int> js;
+                    if (n_watch > 0) { for (int j = 0; j <= n_watch; ++j) { js.push_back(j); } }
+                    else { js.push_back(-1); }
+                    // Cyclone's options for THIS cycler's walk.
+                    std::vector<int> fcs;
+                    if (replacer_possible && !cd->card.IsLand())
+                    {
+                        fcs.push_back(kCycFcTake);
+                        const unsigned mask = CycleWalkTypeMask(cd->card);
+                        bool need_decline = false, remand_ok = false;
+                        for (const Card& lc : ap.library)
+                        {
+                            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                            if (ld == nullptr || ld->card.IsLand() || (CycleWalkTypeMask(ld->card) & mask) == 0) { continue; }
+                            if (!need_decline && !cyc_prov.FreeCastTakeDominated(state, me, *ld)) { need_decline = true; }
+                            if (!remand_ok && remand_held && cyc_prov.AdmitRemandOnFreeCast(state, me, *ld)) { remand_ok = true; }
+                            if (need_decline && (remand_ok || !remand_held)) { break; }
+                        }
+                        if (need_decline) { fcs.push_back(kCycFcDecline); }
+                        if (remand_ok)    { fcs.push_back(kCycFcTakeRemand); }
+                    }
+                    else { fcs.push_back(kCycFcDefault); }
+                    for (int j : js)
+                    {
+                        for (int fc : fcs)
+                        {
+                            Action a;
+                            a.kind           = Action::Kind::DigDraw;
+                            a.dig_sacrifice  = false;
+                            a.card_name      = cd->card.m_name;
+                            a.def            = cd;
+                            a.hand_index     = -1;   // by NAME (copies fold); the copy count is kDupCopies'
+                            a.cost           = cc;
+                            a.devour_count   = j;
+                            a.ponder_keep    = fc;
+                            a.eval           = 0;
+                            a.is_noncreature = true;
+                            actions.push_back(std::move(a));
+                        }
+                    }
+                }
+            }
+        }
         // Dimir House Guard TRANSMUTE ({1}{B}{B}, discard: search for a card with the same mana
         // value -> hand, shuffle; sorcery speed -- every main-phase enumeration is). The Channel
         // shape (from-hand activation, card discarded as part of the cost), with the FOUND CARD as
@@ -42479,6 +42590,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     || (b.def->card.IsCreature()
                         && CanReplicate(*b.def, state.battlefield, state.active_player_index)))
                 { return false; }
+                // The deck's own restriction (DecisionProvider::AdmitRemandRider; default: admit all --
+                // CycloneProvider's mana-value ceiling, USER 2026-10-27).
+                if (!ResolveProvider(state).AdmitRemandRider(state, state.active_player_index, *b.def))
+                { return false; }
                 return true;
             };
             // The fold key: everything that decides what the cast-and-counter COSTS or what it is ON
@@ -42801,6 +42916,10 @@ static int PlanGroupKey(const Action& a, const std::vector<int>& multi_sac)
     // every other key space here (hand slots >= 0, activation families -1000 - id, the free bank
     // -1001000 - slot, -999, sac bursts -3000000 - id).
     if (!a.remand_by.empty() && a.remand_slot >= 0) { return -5000000 - a.remand_slot; }
+    // SEARCHED CYCLE seeds (CollectActions; hand_index -1, by name): ONE family for every seed of every
+    // cycler -- a plan section cycles at most once, the chain continues through the site-4 re-solve. Not
+    // behind s_off: the seed has no ungrouped form (two seeds in one plan are not a legal selection).
+    if (IsCycleSeed(a)) { return -6000000; }
     if (a.hand_index >= 0) { return a.hand_index; }
     if (!s_off && a.kind == Action::Kind::SacForMana
         && std::binary_search(multi_sac.begin(), multi_sac.end(), a.sac_source_id))
@@ -55416,6 +55535,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     bool cont_canon_cast_section = false;
     // Every breakpoint CONTINUATION apply goes through here, never a bare apply_plan_actions(extra..),
     // so a continuation is applied under the same plan-level scopes it was scored with.
+    // THE SEARCHED CYCLE CHAIN's one step (Unpredictable Cyclone phase 3; assigned after apply_one and
+    // cyclone_replaced_draw, below). Declared here so apply_continuation_plan can run a continuation's own
+    // cycle seed.
+    std::function<void(const Action&)> cycle_chain_step;
     auto apply_continuation_plan = [&](const TurnSolver::Plan& cp)
     {
         PlanSoulbondDeclineScope _sbd(cp.soulbond_decline);   // Plan::soulbond_decline, lockstep w/ executor
@@ -55429,6 +55552,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         apply_plan_actions(cp.actions, cp.searched_order);
         if (owns_land && cont_land.pending && cont_land.owner == &cp) { play_cont_land(); }
         cont_canon_cast_section = saved_canon;
+        // A continuation's CYCLE SEED (the next step of a searched cycle chain, or a cycle a mid-turn
+        // breakpoint made possible -- "Brainstorm, then cycle the Street Wraith it drew") runs right after
+        // its cast section, recorded into the current sink, so the executor's replay meets it in the same
+        // place. NOT for an unbranched-canon continuation (Plan::cont_canon): like its board activations
+        // it is an unchallengeable default, and the executor's committed-line canon mirror applies casts
+        // only (lockstep). Inert without a seed.
+        if (!s_human_play && !cp.cont_canon && cycle_chain_step)
+        { if (const Action* sd = CycleSeedOf(cp.actions)) { cycle_chain_step(*sd); } }
     };
 
     // ---- HUMAN PRE-TAPS, at their declared positions (docs/design/viewer-manual-tap-pay.md) -----
@@ -56146,6 +56277,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Path no-target guard, a breakpoint truncation) can never make a LATER cast free. Executor twin:
     // EffectHandler::PushFreeCast, which pushes the hit itself and leaves nothing armed.
     bool cascade_free = false;
+    // ...and its RECORDING twin (Unpredictable Cyclone, hazard R2): the walk's free cast is realised by the
+    // executor's replay of the DigDraw record (PerformDig walks and casts it), so the cast itself must NOT be
+    // recorded as a CastFromHand -- that would replay as a HAND cast (paid, or of a same-name copy in hand).
+    // Its own nested breakpoint records still nest under the DigDraw (the caller pushes its sink). One-shot,
+    // taken at apply_one's head like cascade_free.
+    bool suppress_cast_record = false;
     // Maelstrom Archangel's banked charge is NOT armed here: a plan action marked free_cast carries
     // it as a cast rider (CastRiders::free_cast) and apply_one spends the bank AT PAYMENT -- after
     // every early return, exactly where the executor's CastSpellFromHand spends it -- so a skipped
@@ -56175,6 +56312,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const CastRiders riders = cast_riders.Take();
         const bool     cascade_hit_free = cascade_free;   // ...and the cascade one-shot, likewise
         cascade_free = false;
+        const bool     no_cast_record = suppress_cast_record;   // ...and its recording twin (Cyclone R2)
+        suppress_cast_record = false;
         const ManaPool cast_put_credit = riders.land_put;
         const int      cast_loyalty    = riders.loyalty_ability;
         const int      cast_devour     = riders.devour_count;
@@ -56347,7 +56486,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // and a cast left in the Irencrag budget for it (X takes one, the Remand another). Checked
         // before any mutation; a void rider casts X plainly. Lockstep: AIEngine::CastSpellFromHand.
         const CardDefinition* remand_def = nullptr;
-        if (!cast_remand.empty() && !from_graveyard && !alt_cost && !cascade_hit_free && !riders.free_cast
+        // A FREE walk cast may carry the rider too when its walk armed it (CastRiders::free_remand --
+        // Unpredictable Cyclone's take-and-Remand): only the Remand is paid then (below).
+        if (!cast_remand.empty() && !from_graveyard && !alt_cost
+            && (!cascade_hit_free || riders.free_remand) && !riders.free_cast
             && state.casts_remaining_this_turn != 1)
         {
             const CardDefinition* rd = CardDatabase::Instance().Lookup(cast_remand.str());
@@ -56612,6 +56754,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 SubManaCost(g_line_unpaid_cost, rep_share);
             }
         }
+        // A FREE walk cast's Remand (CastRiders::free_remand -- Unpredictable Cyclone's take-and-Remand):
+        // the spell costs nothing, the Remand its own cost, paid now. Unpayable -> no Remand, the spell
+        // resolves. Lockstep twin: AIEngine::PerformDigFull's TapForCost.
+        if (free_cast && remand_def != nullptr && riders.free_remand
+            && !TapForCostDirect(state, EffectiveSpellCost(*remand_def, state, 1), false))
+        { remand_def = nullptr; }
         // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
         // another Apex's staged exile has m_is_staged == true -> false (float withheld). Inert otherwise.
@@ -56912,7 +57060,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // cast (empty stack) is not recorded -- the committed plan.actions already holds
         // it -- but its re-solve still records into the top-level out_breakpoint.
         std::vector<Action>* my_bp_sink = out_breakpoint;
-        if (out_breakpoint && !sink_stack.empty())
+        // A Cyclone walk's free cast (no_cast_record): not recorded -- the DigDraw record replays it -- but
+        // its nested breakpoint casts land in the sink the walk pushed (the DigDraw's breakpoint_casts).
+        if (out_breakpoint && !sink_stack.empty() && no_cast_record) { my_bp_sink = sink_stack.back(); }
+        else if (out_breakpoint && !sink_stack.empty())
         {
             Action rec;
             rec.kind = from_graveyard ? Action::Kind::CastFromGraveyard
@@ -58724,6 +58875,183 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     };
 
+    // ---- UNPREDICTABLE CYCLONE: the replaced cycling draw, this file's two worlds ------------------------
+    // Called by the human-play DigDraw pass (D2) and the rollout dig loop (D3) right after a cycle's cost,
+    // its Curator triggers and OnCardCycled, IN PLACE OF the draw. Returns false (nothing replaced: the
+    // caller draws) unless a replacer applies. The walk, the take decision and the bottoming are the shared
+    // SpellEffects.h helpers; only the cast is this world's (EnterHand(Reveal) + the cascade_free apply_one
+    // recursion, the cascade idiom). The order inside the resolution matches the executor's
+    // (AIEngine::PerformDigFull): walk -> cast the hit -> bottom the rest in a random order -> (priority) the
+    // Remand. The bottoming runs BEFORE apply_one here because apply_one resolves the hit inline; nothing in
+    // between reads the library (the executor's PushFreeCast fires the same cast-time triggers, which read
+    // only the battlefield). `pin_fc` = the seed's searched choice (kCycFc*); `realised_fc` = what happened
+    // (the DigDraw record carries it, so the executor's replay repeats it). `nest` = the sink the hit's own
+    // nested breakpoint records go to (the DigDraw record's breakpoint_casts), null when not recording.
+    auto cyclone_replaced_draw = [&](const CardDefinition& sd, int pin_fc, int& realised_fc,
+                                     std::vector<Action>* nest) -> bool
+    {
+        const int me = state.active_player_index;
+        const CardDefinition* rep = CycleDrawReplacer(state, me, sd);
+        if (rep == nullptr) { return false; }
+        CycleWalk w;
+        WalkExileUntilSharedType(state, me, CycleWalkTypeMask(sd.card), w);
+        const CardDefinition* hd = w.have ? CardDatabase::Instance().LookupCached(w.hit) : nullptr;
+        const bool castable = w.have && CycleHitCastable(state, me, hd);
+        const CardDefinition* rm =
+            castable ? CycleFreeCastRemand(state, me, *hd, AvailableManaPool(state)) : nullptr;
+        int fc = castable ? ResolveCycleFreeCastChoice(state, me, *hd, true, pin_fc, rm) : kCycFcDecline;
+        // HUMAN PLAY (a real resolution only: RevealLogPause nulls the chooser in every search scope): take or
+        // decline through the free_cast decision (the walk's non-hits shown), then -- when a Remand could
+        // answer the hit -- a second free_cast prompt offering that Remand in hand (its cost is paid;
+        // declining lets the hit resolve).
+        if (castable && g_play_free_cast_chooser)
+        {
+            std::vector<Card> cands{ w.hit };
+            const bool take = (*g_play_free_cast_chooser)(state, me, rep->card.m_name.str(), cands,
+                                                          fc != kCycFcDecline ? 0 : -1,
+                                                          WalkedNonHitNames(w.seen_nums, w.seen_names,
+                                                                            w.hit.m_number)) == 0;
+            fc = take ? kCycFcTake : kCycFcDecline;
+            if (take && rm != nullptr)
+            {
+                std::vector<Card> rcands;
+                for (const Card& hc : ap.hand)
+                { if (!hc.m_is_staged && hc.m_name == rm->card.m_name) { rcands.push_back(hc); break; } }
+                if (!rcands.empty()
+                    && (*g_play_free_cast_chooser)(state, me, rm->card.m_name.str() + " on the free-cast "
+                                                   + hd->card.m_name.str() + " (pays its cost)",
+                                                   rcands, -1, std::vector<std::string>{}) == 0)
+                { fc = kCycFcTakeRemand; }
+            }
+        }
+        EmitCycloneWalk(state, *rep, sd, w, fc != kCycFcDecline);
+        realised_fc = fc;
+        if (fc == kCycFcDecline)
+        {
+            if (w.have) { w.rest.push_back(std::move(w.hit)); }
+            BottomInRandomOrder(state, me, std::move(w.rest));
+            return true;
+        }
+        BottomInRandomOrder(state, me, std::move(w.rest));
+        const std::string hname = w.hit.m_name.str();
+        // At the FRONT of the hand, so apply_one (which casts the first copy of a name) casts THIS card, not a
+        // same-name copy already held (the executor casts the hit itself, by its copy number).
+        EnterHand(state, me, std::move(w.hit), HandEntryReason::Reveal);
+        std::rotate(ap.hand.begin(), ap.hand.end() - 1, ap.hand.end());
+        if (fc == kCycFcTakeRemand)
+        {
+            cast_riders.remand_by   = rm->card.m_name;
+            cast_riders.free_remand = true;
+        }
+        cascade_free         = true;   // free cast (one-shot, consumed by the recursion)
+        suppress_cast_record = true;   // R2: the DigDraw record replays this cast
+        if (nest != nullptr) { bp_sink_push(nest); }
+        apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
+                  std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
+        if (nest != nullptr) { bp_sink_pop(); }
+        return true;
+    };
+
+    // ---- THE SEARCHED CYCLE CHAIN: ONE STEP (Unpredictable Cyclone phase 3) -----------------------------
+    // A cycle seed (CollectActions: one per DISTINCT cycler, by name, with Curator's scry pin and Cyclone's
+    // free-cast pin) is cycled here: paid (the copy must still be in hand -- a same-plan cast or put-back can
+    // void it, nothing paid; the life half; the mana half), discarded (CycleDiscardScope: the cycle fires
+    // Curator's trigger itself, once), Curator's triggers resolve with the pin, OnCardCycled, then the draw
+    // OR Unpredictable Cyclone's replacement. Then EVERY step opens the site-4 re-solve -- the cycle changed
+    // the hand (under Cyclone also the board and the library), a new decision point -- whose continuation
+    // decides what follows: cast what the cycle enabled, play a drawn land, cycle AGAIN (its own seed runs
+    // through apply_continuation_plan's hook: the chain's next step) or stop (EMPTY). So which card is cycled,
+    // at EVERY step, is a searched choice, not SelectDigSource's single pick.
+    // RECORDING: the step is a DigDraw record in the CURRENT sink (top level: out_breakpoint, in its own
+    // main-level segment after every segment this apply opened -- Action::rec_bp_ord -- so the executor
+    // replays it at the end-of-main catch-all; inside a continuation: that continuation's list), pushed
+    // BEFORE a Cyclone walk (hazard R2) and carrying the step's REALISED pins; the walk's free cast and the
+    // re-solve's continuation nest in its breakpoint_casts. The executor replays it through PerformDigFull.
+    // BOUNDED: each step spends the cycled card (a Remand rebuy spends a Remand), and the depth guard is a
+    // backstop.
+    int cycle_chain_depth = 0;
+    cycle_chain_step = [&](const Action& seed_in)
+    {
+        if (cycle_chain_depth >= 32) { return; }
+        const Action seed = seed_in;   // the continuation that owns seed_in is re-entered below
+        const int me = state.active_player_index;
+        const CardDefinition* sd = CardDatabase::Instance().LookupInterned(seed.card_name);
+        if (sd == nullptr || !sd->params.cycling_cost.has_value()) { return; }
+        auto find_copy = [&]() {
+            return std::find_if(ap.hand.begin(), ap.hand.end(),
+                                [&](const Card& c) { return !c.m_is_staged && c.m_name == seed.card_name; });
+        };
+        if (find_copy() == ap.hand.end()) { return; }
+        if (!CyclingLifePayable(state, me, *sd)) { return; }
+        if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { return; }
+        std::vector<Card>::iterator it = find_copy();   // the payment may have moved the hand
+        if (it == ap.hand.end()) { return; }
+        ++cycle_chain_depth;
+        apd_dug = true;
+        PayCyclingLife(state, me, *sd);
+        {   // THE SHARED DISCARD HOOK -- lockstep with the executor's D1 site.
+            std::vector<MadnessPending> mq;
+            const CycleDiscardScope _cds;
+            DiscardCardFromHand(state, me, static_cast<int>(it - ap.hand.begin()), &mq, seed.card_name.str());
+            ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, seed.card_name.str());
+        }
+        // Curator's triggers, with the seed's SEARCHED disposition j (before the draw / the walk).
+        ResolveDiscardScryTriggers(state, me, DiscardScryTriggers(state, me), seed.devour_count);
+        OnCardCycled(state, me);   // D3b -- the searched chain's cycle site (lockstep with D1)
+        std::vector<Action>* const rec_sink = sink_stack.empty() ? out_breakpoint : sink_stack.back();
+        std::size_t rec_idx = std::numeric_limits<std::size_t>::max();
+        if (out_breakpoint != nullptr && rec_sink != nullptr)
+        {
+            Action rec;
+            rec.kind          = Action::Kind::DigDraw;
+            rec.card_name     = seed.card_name;
+            rec.dig_sacrifice = false;
+            rec.devour_count  = seed.devour_count;   // the scry pin the executor's PerformDig replays
+            rec.ponder_keep   = seed.ponder_keep;    // overwritten with the REALISED free-cast choice
+            if (rec_sink == out_breakpoint) { rec.rec_bp_ord = main_bp_ord + 1; }
+            rec_sink->push_back(rec);
+            rec_idx = rec_sink->size() - 1;
+        }
+        auto step_sink = [&]() -> std::vector<Action>*
+        { return rec_idx < rec_sink->size() ? &(*rec_sink)[rec_idx].breakpoint_casts : nullptr; };
+        int fc_real = kCycFcDefault;
+        const bool replaced = cyclone_replaced_draw(*sd, seed.ponder_keep, fc_real,
+                                                    rec_idx != std::numeric_limits<std::size_t>::max()
+                                                        ? step_sink() : nullptr);
+        if (rec_idx != std::numeric_limits<std::size_t>::max())
+        { (*rec_sink)[rec_idx].ponder_keep = replaced ? fc_real : seed.ponder_keep; }
+        if (!replaced && !ap.library.empty())
+        {
+            Card drawn = ap.library.DrawTop();
+            ap.cards_drawn_this_turn += 1;   // a cycle is a real draw
+            EnterHand(state, me, std::move(drawn), HandEntryReason::Draw);
+            if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
+        }
+        if (DigCensusOn()) { g_dig_applied_seed.fetch_add(1, std::memory_order_relaxed); }
+        // The re-solve (site 4): this plan's searched continuation at this occurrence, else its canon / EMPTY.
+        std::vector<Action>* const sink = rec_idx != std::numeric_limits<std::size_t>::max() ? step_sink() : nullptr;
+        if (out_breakpoint != nullptr && sink != nullptr) { bp_sink_push(sink); }
+        TurnSolver::Plan extra;
+        bp_searched_plan(4, extra);
+        {
+            ContPinFrame _cpf(extra, sink);
+            bp_play_searched_land(extra, sink);
+            apply_continuation_precasts(extra);
+            apply_continuation_plan(extra);   // ...whose own cycle seed, if any, is the chain's next step
+            // ...INCLUDING an unbranched-canon continuation's seed HERE, at site 4 (apply_continuation_plan
+            // skips canon seeds because the executor MIRRORS a canon continuation at the other sites, casts
+            // only). A site-4 continuation is never mirrored: the executor meets it only as this step's
+            // recorded breakpoint_casts and replays it verbatim, the seed's DigDraw record included -- so
+            // the canon default (the value-best continuation, exactly as its casts) continues the chain
+            // lockstep, and a base plan's chain is not cut at its first cycle.
+            if (extra.cont_canon && !s_human_play)
+            { if (const Action* nsd = CycleSeedOf(extra.actions)) { cycle_chain_step(*nsd); } }
+            apply_continuation_activations(extra, out_breakpoint != nullptr && sink != nullptr);
+        }
+        if (out_breakpoint != nullptr && sink != nullptr) { bp_sink_pop(); }
+        --cycle_chain_depth;
+    };
+
     // Canonical execution order, applied within each kind:
     //   ActivateVial -> hand casts (non-sacrifice, in provider CastOrderRank order)
     //   -> hand casts (sacrifice-land) -> graveyard casts (Retrace).
@@ -59645,12 +59973,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 PayCyclingLife(state, state.active_player_index, *sd);
                 {   // THE SHARED DISCARD HOOK (Vampires A1) -- see the executor's D1 site.
                     std::vector<MadnessPending> mq;
+                    const CycleDiscardScope _cds;   // the cycle fires Curator's trigger itself (below)
                     DiscardCardFromHand(state, state.active_player_index,
                                         static_cast<int>(it - ap.hand.begin()), &mq, a.card_name.str());
                     ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, a.card_name.str());
                 }
+                // Curator of Mysteries: its triggers resolve BEFORE the cycling draw (the human scries each
+                // at the real resolution -- ScryTop's chooser). Deck-gated: 0 triggers elsewhere.
+                ResolveDiscardScryTriggers(state, state.active_player_index,
+                                           DiscardScryTriggers(state, state.active_player_index), -1);
                 // D2 -- the human-play cycle site.
                 OnCardCycled(state, state.active_player_index);
+                // Unpredictable Cyclone replaces the draw (the human answers the free cast at resolution).
+                int fc_real = kCycFcDefault;
+                if (cyclone_replaced_draw(*sd, kCycFcDefault, fc_real, nullptr)) { continue; }
             }
             if (!ap.library.empty())
             {
@@ -61287,7 +61623,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // 2 (MTG_DIG_SEARCHED_CHOICE): a base plan whose NO-DIG TWIN is in the same candidate list -- the
     // same gate as -1; the twin is the searched no-dig world (see the mark at the end of
     // AppendSubdecisionAxes).
-    if (!s_human_play && plan.dig_choice != 0
+    // THE SEARCHED CYCLE CHAIN (Unpredictable Cyclone phase 3): the plan's own cycle seed (CollectActions: at
+    // most one per plan section) is cycled HERE, after the plan's casts and its trailing activations -- the dig
+    // loop's position -- and its chain continues through each step's site-4 re-solve (cycle_chain_step).
+    if (!s_human_play)
+    {
+        if (const Action* seed0 = CycleSeedOf(plan.actions)) { cycle_chain_step(*seed0); }
+    }
+
+    // A provider that SEARCHES its hand cycling (DecisionProvider::SearchedCycleSources / CyclesAreSearched --
+    // CycloneProvider) owns it through the plan's cycle seeds inside the search window (the seeded chain
+    // below): its in-window plans run NO legacy hand cycle here, so no gate decides a cycle and no
+    // SelectDigSource picks one of several. The legacy loop stays its PLAYOUT policy (the horizon leaf's
+    // greedy plan -- the permitted greedy). Every other provider: unchanged.
+    const bool legacy_dig_ok = plan.horizon_leaf || !ResolveProvider(state).CyclesAreSearched();
+    if (!s_human_play && plan.dig_choice != 0 && legacy_dig_ok
         && ResolveProvider(state).HasAnyDigSource(state))
     {
         bool dig_census_counted = !DigCensusOn();   // MTG_DIG_CENSUS: count this apply once, if it digs
@@ -61357,23 +61707,54 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 PayCyclingLife(state, state.active_player_index, *sd);
                 {   // THE SHARED DISCARD HOOK (Vampires A1) -- lockstep with the executor's D1 site.
                     std::vector<MadnessPending> mq;
+                    const CycleDiscardScope _cds;   // the cycle fires Curator's trigger itself (below)
                     DiscardCardFromHand(state, state.active_player_index,
                                         static_cast<int>(it - ap.hand.begin()), &mq, src);
                     ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, src);
                 }
+                // Curator of Mysteries' triggers resolve before the cycling draw: unpinned here (this
+                // loop is the playout policy for a deck that searches its cycles; ScryKeepOnTop). 0 for
+                // every deck without the watcher.
+                ResolveDiscardScryTriggers(state, state.active_player_index,
+                                           DiscardScryTriggers(state, state.active_player_index), -1);
                 // D3 -- the rollout's cycle site (lockstep with D1 in AIEngine::PerformDig).
                 OnCardCycled(state, state.active_player_index);
+            }
+
+            // UNPREDICTABLE CYCLONE replaces the draw (the playout's default take: TakeFreeCast). The DigDraw
+            // record is pushed BEFORE the walk (hazard R2), so the hit's nested breakpoint records nest under
+            // the record the executor replays, and it carries the realised free-cast choice.
+            bool dig_replaced = false;
+            if (!is_sac && CycleDrawReplacer(state, state.active_player_index, *sd) != nullptr)
+            {
+                std::vector<Action>* rep_sink = nullptr;
+                if (out_breakpoint)
+                {
+                    Action rec;
+                    rec.kind          = Action::Kind::DigDraw;
+                    rec.card_name     = src;
+                    rec.dig_sacrifice = false;
+                    out_breakpoint->push_back(rec);
+                    last_dig_rec = out_breakpoint->size() - 1;
+                    rep_sink = &out_breakpoint->back().breakpoint_casts;
+                }
+                int fc_real = kCycFcDefault;
+                dig_replaced = cyclone_replaced_draw(*sd, kCycFcDefault, fc_real, rep_sink);
+                if (out_breakpoint) { (*out_breakpoint)[last_dig_rec].ponder_keep = fc_real; }
             }
 
             // Draw one. Record EVERY dig (even a land) so the executor replays the exact
             // cycle/sacrifice sequence and stays in library/hand sync. Deck-out safe: stop digging
             // if the library is empty (can't draw from an empty library).
+            bool drew_land = false;
+            std::string drawn_land_name;   // filled only under the drawn-land hook (see below)
+            if (!dig_replaced)
+            {
             if (ap.library.empty()) { break; }
             Card drawn = ap.library.DrawTop();
             ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
             const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
-            bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
-            std::string drawn_land_name;   // filled only under the drawn-land hook (see below)
+            drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
             if (drop_hook && drew_land && ap.lands_played_this_turn < ap.LandDropsAvailable())
             {
                 chain_lands.push_back(drawn.m_number);
@@ -61382,6 +61763,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             EnterHand(state, state.active_player_index, std::move(drawn),
                       HandEntryReason::Draw);
             if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (executor twin: PerformDig)
+            }
             if (!dig_census_counted)
             {
                 dig_census_counted = true;
@@ -61426,7 +61808,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
 
             std::vector<Action>* my_bp_sink = out_breakpoint;
-            if (out_breakpoint)
+            if (out_breakpoint && dig_replaced)
+            { my_bp_sink = &(*out_breakpoint)[last_dig_rec].breakpoint_casts; }   // pushed before the walk
+            else if (out_breakpoint)
             {
                 Action rec;
                 rec.kind          = Action::Kind::DigDraw;
@@ -63811,7 +64195,16 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
             case Action::Kind::SacForMana:
                 w.Begin(kSigM); w.Put(act.card_name); w.Put('#'); w.Put(act.chosen_float_color);
                 w.Put('#'); w.Int(act.sac_source_id); w.Put('#'); w.Int(act.ritual_float); w.End(); break;
-            case Action::Kind::DigDraw:  break;
+            // A SEARCHED CYCLE seed (CollectActions): which card, and its two pins, are distinct plans.
+            // (A human-play dig action carries hand_index -1 too, with both pins -1; its plans are
+            // appended after the dedup, so keying it moves nothing.)
+            case Action::Kind::DigDraw:
+                if (!act.dig_sacrifice)
+                {
+                    w.Begin(kSigS); w.Put("CYCLE#"); w.Put(act.card_name); w.Put('#'); w.Int(act.ponder_keep);
+                    w.Put('#'); w.Int(act.devour_count); w.End();
+                }
+                break;
             case Action::Kind::PlayLand: break;
             case Action::Kind::TapForTokens:
                 w.Begin(kSigU); w.Put("KRENKO#"); w.Int(act.sac_source_id); w.End(); break;
@@ -67949,7 +68342,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     msf.push_back(act.card_name + "#" + act.chosen_float_color
                                   + "#" + std::to_string(act.sac_source_id)
                                   + "#" + std::to_string(act.ritual_float)); break;   // sac-1 vs sac-k burst distinct
-                case Action::Kind::DigDraw:  break;  // human-play only; not a plan.actions signature key
+                // A SEARCHED CYCLE seed: which card and its two pins (lockstep with PlanSignatureFast).
+                case Action::Kind::DigDraw:
+                    if (!act.dig_sacrifice)
+                    {
+                        s.push_back("CYCLE#" + act.card_name.str() + "#" + std::to_string(act.ponder_keep)
+                                    + "#" + std::to_string(act.devour_count));
+                    }
+                    break;
                 case Action::Kind::PlayLand: break;  // never appears in plan.actions
                 // Krenko tap: key on which source so a tap plan is distinct from a no-tap plan.
                 case Action::Kind::TapForTokens:
@@ -70257,6 +70657,9 @@ static bool BpDigFanoutPending(const GameState& state, int sites)
 {
     if ((sites & (1 << 4)) == 0) { return false; }
     const DecisionProvider& prov = ResolveProvider(state);
+    // A provider that searches its hand cycling runs no in-window legacy dig (ApplyPlanDirect's
+    // legacy_dig_ok): its site-4 breakpoints come from cycle SEEDS, which BpDigFanoutForPlan marks.
+    if (prov.CyclesAreSearched()) { return false; }
     return prov.HasAnyDigSource(state) && prov.ShouldConsiderDig(state);
 }
 
@@ -70272,7 +70675,14 @@ static bool BpDigFanoutPending(const GameState& state, int sites)
 // unsafe direction, and an extra fanned plan is a wasted node, never a wrong answer.
 static bool BpDigFanoutForPlan(const GameState& state, int sites, const TurnSolver::Plan& p)
 {
-    if ((sites & (1 << 4)) == 0 || p.dig_choice == 0) { return false; }
+    if ((sites & (1 << 4)) == 0) { return false; }
+    // A SEARCHED CYCLE seed (CollectActions): every step of its chain opens the site-4 re-solve
+    // unconditionally (ApplyPlanDirect's seeded chain), so the plan always reaches one. EXACT, not merely
+    // conservative. Checked before the dig_choice exit: a seed's chain ignores dig_choice.
+    for (const Action& a : p.actions)
+    { if (IsCycleSeed(a)) { return true; } }
+    if (p.dig_choice == 0) { return false; }
+    if (ResolveProvider(state).CyclesAreSearched()) { return false; }   // no in-window legacy dig (see above)
     static const bool on = EnvOn("MTG_BP_DIG_AXIS_FANOUT", true);   // =0 restores the old bypass
     if (!heurarm::Flag(heurarm::BP_DIG_AXIS_FANOUT, on)) { return false; }
     // NOTE WHAT IS *NOT* ASKED HERE: ShouldConsiderDig. That is the DIG HEURISTIC -- the very
@@ -72547,6 +72957,60 @@ static void AxisTrace(const char* stage, const GameState& state, const std::vect
     std::fflush(stderr);
 }
 
+// THE CYCLE SEED's targeted cast trigger (Unpredictable Cyclone phase 3; AppendSubdecisionAxes' cast-trigger
+// axis): the largest target count of a card the seed's walk can FREE-CAST, 0 if none. EXACT when the walk is
+// predictable -- a replacer already on the battlefield and a plan that does nothing else (no cast, no land
+// drop: nothing can reorder the library before the cycle), so the walk's hit is the first card of a shared
+// type below the j cards Curator's pinned scries bottom (the walk reaches those last). Otherwise an UPPER
+// BOUND: any library card of a shared type. Never narrower than the reachable set, so no option is lost.
+static int CycleSeedCastTriggerTargets(const GameState& state, const TurnSolver::Plan& p, const Action& seed)
+{
+    if (!state.deck_has_cycle_draw_replacement) { return 0; }
+    const CardDefinition* cd = seed.def ? seed.def : CardDatabase::Instance().LookupInterned(seed.card_name);
+    if (cd == nullptr || cd->card.IsLand()) { return 0; }
+    const int me = state.active_player_index;
+    bool rep_out = false, rep_held = false;
+    for (const Permanent& pm : state.battlefield)
+    {
+        if (pm.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { rep_out = true; break; }
+    }
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { rep_held = true; break; }
+    }
+    if (!rep_out && !rep_held) { return 0; }
+    const unsigned mask = CycleWalkTypeMask(cd->card);
+    auto targets_of = [](const CardDefinition& d)
+    { return std::max(d.params.cast_trigger_exile_target_permanents, d.params.cast_trigger_destroy_target_permanents); };
+    const Library& lib = state.players[static_cast<std::size_t>(me)].library;
+    const bool exact = rep_out && p.actions.size() == 1 && p.land_to_play.empty();
+    if (exact)
+    {
+        const int n = static_cast<int>(lib.size());
+        const int skip = seed.devour_count > 0
+                       ? std::min({ seed.devour_count, DiscardScryTriggers(state, me), n }) : 0;
+        for (int k = 0; k < n; ++k)
+        {
+            const Card& lc = *(lib.begin() + ((k + skip) % n));   // below the bottomed j first, them last
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+            if (ld == nullptr || (CycleWalkTypeMask(ld->card) & mask) == 0) { continue; }
+            return targets_of(*ld);
+        }
+        return 0;
+    }
+    int n_max = 0;
+    for (const Card& lc : lib)
+    {
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+        if (ld == nullptr || (CycleWalkTypeMask(ld->card) & mask) == 0) { continue; }
+        n_max = std::max(n_max, targets_of(*ld));
+    }
+    return n_max;
+}
+
 // MTG_LOOKTOP_FLIP_FOLD (default ON, =0 restores the {0,1} land fan): see the look-top pin axis below.
 static bool LookTopFlipFoldOn() { static const bool on = EnvOn("MTG_LOOKTOP_FLIP_FOLD", true); return on; }
 // MTG_ROLLOUT_FAN_NARROW (default ON, =0 restores the full fan in playouts): inside the full-depth search's
@@ -74056,7 +74520,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // GATED: a targeted cast-trigger card in the list (deck_has_cast_target_trigger), a plan that CASTS
     // one from hand, more than one option. Outer plans only (cont_axes_only): the policy is installed for
     // the whole turn, so a continuation inherits it. Human play picks on the board.
-    // (Phase 3 -- Unpredictable Cyclone -- must also emit it for plans whose cycle walk can free-cast one.)
+    // PHASE 3 (Unpredictable Cyclone): a plan whose CYCLE SEED can walk to such a card free-casts it, and its
+    // trigger reads the same policy -- so the plan gets the axis too (CycleSeedCastTriggerTargets: the exact
+    // hit when the walk is predictable, else every library card of a shared type). Same no-cap rule.
     if (!cont_axes_only && !HumanPlayActive() && state.deck_has_cast_target_trigger)
     {
         const int me = state.active_player_index;
@@ -74092,6 +74558,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (n > 0) { n_max = std::max(n_max, n); }
                 if (d->card.IsPermanentCard()) { ++added; }   // may add a class before (or be) the trigger
             }
+            if (const Action* seed = CycleSeedOf(p.actions))
+            { n_max = std::max(n_max, CycleSeedCastTriggerTargets(state, p, *seed)); }
             if (n_max <= 0) { continue; }
             std::vector<int> counts = board_counts();
             for (int k = 0; k < added; ++k) { counts.push_back(1); }
