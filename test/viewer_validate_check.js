@@ -238,6 +238,7 @@ function main() {
   // menu entry can) is a line the human reached with their own order or taps that the search never scores.
   const searchTally = { findable: 0, lost: 0, unaudited: 0 };
   const searchLost = [];
+  const unauditedWhy = new Map();   // why a line was not audited -> count (a combo-route macro, an old binary)
   let unaligned = 0;   // refs/frames the resolver could not place (reported, never silent)
   const aligned = resolveAlignment(refs.map(r => r.file));
   for (const { deck, file } of refs) {
@@ -401,9 +402,15 @@ function main() {
                           + (gaps.length > 5 ? ` (+${gaps.length - 5} more)` : ''));
         }
       }
-      if (verdict === 'accept') {
+      if (verdict === 'accept' && v.plan_index >= 0) {   // (a pass commits no plan)
         const sl = (v.search_lines || []).find(x => x && x.plan_index === v.plan_index);
-        if (!sl || !sl.audited) { searchTally.unaudited++; }
+        if (!sl || !sl.audited) {
+          searchTally.unaudited++;
+          const why = !sl ? 'no search_lines entry for the accepted plan' : (sl.partial || '?');
+          const e = unauditedWhy.get(why) || { n: 0, eg: `${rel} | T${d.turn}/${d.phase} | ${line} | plan ${v.plan_index}` };
+          e.n++;
+          unauditedWhy.set(why, e);
+        }
         else if (sl.engine_full || sl.sibling >= 0) { searchTally.findable++; }
         else {
           searchTally.lost++;
@@ -450,6 +457,7 @@ function main() {
   console.log(`  Search can find the accepted line (mana): ${searchTally.findable} yes, ${searchTally.lost} NO, `
               + `${searchTally.unaudited} not audited`);
   searchLost.forEach(g => console.log('    SEARCH-CANNOT-PAY  ' + g));
+  for (const [why, e] of unauditedWhy) { console.log(`    not audited: ${e.n} x ${why}  (e.g. ${e.eg})`); }
   if (contractGaps.length) {
     console.log(`  CONTRACT: ${contractGaps.length} verdict(s) carry no matched_plans for a plan they can commit`);
     contractGaps.slice(0, 8).forEach(g => console.log('    ' + g));

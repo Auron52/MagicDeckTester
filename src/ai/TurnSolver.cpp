@@ -59069,6 +59069,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     for (std::uint64_t v : parts) { h = (h ^ (v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2))); }
                     return h;
                 };
+                // Which queued step is being dispatched, for the mana oracle's hook (ManaOracle.h
+                // t_seq_step): the viewer's "can any taps pay this order" places each payment it finds
+                // before the step it was made in. A thread_local int nothing else reads.
+                struct SeqStepScope
+                {
+                    const int saved = manaoracle::t_seq_step;
+                    ~SeqStepScope() { manaoracle::t_seq_step = saved; }
+                } _seq_step;
                 for (std::size_t i = 0; i < acts.size(); ++i)
                 {
                     const Action& a = acts[i];
@@ -59078,10 +59086,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     {
                         human_land_due();
                         if (inline_taps) { flush_pre_taps(step); }
+                        manaoracle::t_seq_step = step;
                         ++step;
                     }
-                    else if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend)
-                    { continue; }   // implicit mana / suspend: the pre-cast pass already ran it
+                    else
+                    {
+                        manaoracle::t_seq_step = -1;   // nobody queued it: no position to put a tap at
+                        if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend)
+                        { continue; }   // implicit mana / suspend: the pre-cast pass already ran it
+                    }
                     // EACH STEP IS JUDGED BY ITS OWN EFFECT where it has a checkable one (re-review
                     // 2026-10-22: a state-unchanged test reads a step as done when something unrelated
                     // moved). A step aimed at a PERMANENT -- an equip / equip-all host, a blinked

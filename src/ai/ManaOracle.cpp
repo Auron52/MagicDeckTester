@@ -30,6 +30,7 @@ namespace manaoracle
 thread_local Hook* t_hook         = nullptr;
 thread_local bool  t_float_only   = false;
 thread_local bool  t_gate_observe = false;
+thread_local int   t_seq_step     = -1;
 
 int Level()
 {
@@ -74,6 +75,7 @@ bool TakeEngineStep(const GameState& s, int count)
 {
     if (count <= 0 || !NextIsEngineStep(s)) { return false; }
     ++t_hook->next;
+    t_hook->pay_steps.push_back(t_seq_step);
     return true;
 }
 
@@ -102,6 +104,7 @@ EngineStepSpan::EngineStepSpan(GameState& s, bool active)
     if (!active || !NextIsEngineStep(s)) { return; }
     h    = t_hook;
     step = h->next++;
+    h->pay_steps.push_back(t_seq_step);
     es.emplace(s, true);
     t_hook = nullptr;
 }
@@ -111,7 +114,7 @@ void EngineStepSpan::End(bool ok, bool made)
     if (h == nullptr) { return; }
     t_hook = h;
     es.reset();
-    if (!made) { h->next = step; }
+    if (!made) { h->next = step; h->pay_steps.resize(step); }
     else if (!ok && h->first_fail < 0) { h->first_fail = static_cast<int>(step); }
     h = nullptr;
 }
@@ -131,6 +134,7 @@ void ScriptedTapAhead(GameState& state, int count, bool lands_only)
         return;
     }
     const PayOption& opt = h.script[h.next++];
+    h.pay_steps.push_back(t_seq_step);
     if (opt.fail) { return; }
     for (std::size_t i = 0; i < opt.taps.size(); ++i)
     {
@@ -207,11 +211,12 @@ std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies
 // (keep blue up instead of white), ... The rest name lines no payment rollback in this order reaches.
 enum Rb
 {
-    RB_D0, RB_D1, RB_D2, RB_D3P, RB_INCONSISTENT, RB_CAPPED, RB_UNFAITHFUL, RB_NO_FAIL, RB_ORDER, RB_OFF_MENU, RB_N
+    RB_D0, RB_D1, RB_D2, RB_D3P, RB_INCONSISTENT, RB_CAPPED, RB_UNFAITHFUL, RB_NO_FAIL, RB_UNMODELED, RB_ORDER,
+    RB_OFF_MENU, RB_N
 };
 const char* const kRbName[RB_N] = {
     "depth0", "depth1", "depth2", "depth3+", "inconsistent", "capped", "unfaithful", "no-failed-payment",
-    "reorder", "off-menu"
+    "unmodeled", "reorder", "off-menu"
 };
 std::atomic<long long> g_rb[RB_N];
 // ...whether the action it lost was declared IN THE PLAN before the payment that must be re-made (so a
@@ -1138,6 +1143,7 @@ struct Outcome
     std::multiset<std::string> left;        // hand cards the line used
     std::string                line;        // LineKey
     std::vector<PayOption>     script;
+    std::vector<int>           pay_steps;   // Hook::pay_steps: the human-sequence step of each payment
     std::string                unscripted;  // a mana source the ENGINE tapped outside any payment
     int                        first_fail = -1;  // the first ENGINE step that failed (the census replay)
     // No drop reported: the engine-comparable sense (an optional payment with no option fails the same
@@ -1257,6 +1263,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             o.cast_drops = std::move(cast_drops);
             o.act_drops  = std::move(act_drops);
             o.script     = script;
+            o.pay_steps  = h.pay_steps;
             o.first_fail = h.first_fail;
             o.left       = LeftHand(root, copy);
             o.line       = LineKey(root, copy);
@@ -1281,7 +1288,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 }
             }
             o.st = std::move(copy);
-            const bool full = o.Clean() && (want == nullptr || Includes(o.left, *want));
+            // (An outcome resting on a mana choice the engine made on its own is no caller's hit, so it does
+            // not end the search either: a scripted payment further on may still realise the line.)
+            const bool full = o.Clean() && o.unscripted.empty() && (want == nullptr || Includes(o.left, *want));
             r.outcomes.push_back(std::move(o));
             if (stop_at_full && full) { return r; }
         }
@@ -1602,6 +1611,7 @@ Census RollbackCore(const GameState& root, bool pre, const TurnSolver::Plan& pla
         return c;
     }
     bool capped = false;
+    std::string unscripted;   // a paying outcome that rests on a mana choice the oracle does not drive
     for (int k = c.failed; k >= 0; --k)
     {
         std::vector<PayOption> prefix(static_cast<std::size_t>(k));
@@ -1610,7 +1620,8 @@ Census RollbackCore(const GameState& root, bool pre, const TurnSolver::Plan& pla
         capped = capped || rk.capped;
         for (const Outcome& o : rk.outcomes)
         {
-            if (!o.Clean() || !Includes(o.left, e_want) || !o.unscripted.empty()) { continue; }
+            if (!o.Clean() || !Includes(o.left, e_want)) { continue; }
+            if (!o.unscripted.empty()) { if (unscripted.empty()) { unscripted = o.unscripted; } continue; }
             const int d = c.failed - k;
             c.bucket = d == 0 ? RB_D0 : d == 1 ? RB_D1 : d == 2 ? RB_D2 : RB_D3P;
             c.keep   = k;
@@ -1618,9 +1629,13 @@ Census RollbackCore(const GameState& root, bool pre, const TurnSolver::Plan& pla
             return c;
         }
     }
-    c.bucket = capped ? RB_CAPPED : RB_INCONSISTENT;
+    // Every paying line found rests on an engine choice the oracle does not drive (the blink loop's
+    // tap-ahead, an untap effect's choice of lands): the audit's APPLY-DROP accepts such a line, the census
+    // cannot vouch for a depth -- UNMODELED, not a disagreement.
+    c.bucket = capped ? RB_CAPPED : !unscripted.empty() ? RB_UNMODELED : RB_INCONSISTENT;
     c.detail = capped ? "the payment search hit its cap before a prefix was found"
-                      : "no prefix of the engine's decisions reaches it, not even none -- the census disagrees with the audit";
+             : !unscripted.empty() ? "every paying line rests on a mana choice the oracle does not drive: " + unscripted
+                                   : "no prefix of the engine's decisions reaches it, not even none -- the census disagrees with the audit";
     return c;
 }
 std::string RollbackCensus(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er,
@@ -2027,12 +2042,14 @@ LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& pl
     // What the engine's line meant to use from hand: what it did use, plus the casts it dropped.
     std::multiset<std::string> want = LeftHand(state, er.st);
     for (const std::string& c : er.cast) { want.insert(c); }
-    auto to_pays = [](const std::vector<PayOption>& script)
+    auto to_pays = [](const std::vector<PayOption>& script, const std::vector<int>& steps)
     {
         std::vector<LinePayment> v;
-        for (const PayOption& o : script)
+        for (std::size_t k = 0; k < script.size(); ++k)
         {
+            const PayOption& o = script[k];
             LinePayment p;
+            p.step   = k < steps.size() ? steps[k] : -1;
             p.what   = o.what;
             p.engine = o.engine;
             p.fail   = o.fail;
@@ -2077,7 +2094,7 @@ LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& pl
     {
         a.payable = true;
         a.partial.clear();
-        a.pays    = to_pays(hit->script);
+        a.pays    = to_pays(hit->script, hit->pay_steps);
         const Census c = RollbackCore(state, pre, plan, er, want);
         a.rollback     = kRbName[c.bucket];
         a.keep         = c.keep;
@@ -2093,7 +2110,7 @@ LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& pl
         if (hit == nullptr) { continue; }
         a.payable = true;
         a.partial.clear();
-        a.pays    = to_pays(hit->script);
+        a.pays    = to_pays(hit->script, hit->pay_steps);
         for (const Action& x : alt.actions)
         {
             if (x.kind == Action::Kind::PlayLand) { continue; }

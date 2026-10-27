@@ -6775,6 +6775,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
     if (h.next < h.script.size() ? h.script[h.next].engine : h.all_engine)
     {
         const std::size_t step = h.next++;
+        h.pay_steps.push_back(t_seq_step);
         bool ok;
         {
             EngineStepScope es(state, true);
@@ -6799,6 +6800,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         return false;
     }
     const PayOption& opt = h.script[h.next++];
+    h.pay_steps.push_back(t_seq_step);
     if (opt.fail) { return false; }   // the oracle found no payment here: dropped, as the engine drops it
     for (std::size_t i = 0; i < opt.taps.size(); ++i)
     {

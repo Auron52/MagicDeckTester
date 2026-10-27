@@ -87,9 +87,16 @@ namespace manaoracle
         bool                   all_engine = false;
         int                    first_fail = -1;      // the first engine-step PAYMENT that failed (step index)
         long long              engine_tapaheads = 0; // engine tap-aheads run inside engine steps (expected)
+        // Parallel to the steps served (script entries consumed): the human-sequence step each was made
+        // in (t_seq_step at the time; -1 outside a human sequence) -- where a viewer pre-tap must sit.
+        std::vector<int>       pay_steps;
     };
 
     extern thread_local Hook* t_hook;
+    // The human "**" sequence step being applied (TurnSolver's v2 walk: the index of the queued step,
+    // the land included, that is being dispatched); -1 outside one. Written by the walk, read only by the
+    // oracle's hook, so a payment can be placed where the viewer's pre-tap would have to sit.
+    extern thread_local int   t_seq_step;
 
     // Is the next mana decision on the oracle's copy `s` an ENGINE step? (False when `s` is not the
     // oracle's copy -- every normal apply.) The engine-only machinery that stands down on the oracle's
@@ -179,6 +186,7 @@ namespace manaoracle
         std::vector<std::string> taps;      // viewer pre-tap tokens: tap=<name>#<num>:<face>[+<aura>]
         std::string              text;      // the same taps for a person ("Conservatory for G, ...")
         std::string              keep_floating;   // floating units set aside for a later payment
+        int                      step = -1; // the human-sequence step it was made in (-1 = not one)
     };
     struct LineAudit
     {

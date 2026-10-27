@@ -3729,8 +3729,8 @@ function rollbackHtml(sl) {
     const d = sl.failed - sl.keep, n = sl.failed + 1;
     out.push(d === 0
       ? `Only the payment that failed (the engine's mana decision #${n}) has to change: the automatic tapping missed a way to pay it.`
-      : `Rolling back finds it: keep the engine's first ${sl.keep} mana decision${sl.keep === 1 ? '' : 's'} and re-make the rest — `
-        + `${d === 1 ? 'the decision' : `the ${d} decisions`} before the one that failed (#${n}) ${d === 1 ? 'has' : 'have'} to change too `
+      : `Rolling back finds it: re-make the engine's mana decisions from #${sl.keep + 1} on. The one that failed is #${n}, so `
+        + `${d === 1 ? 'the decision before it has' : `the ${d} decisions before it have`} to change too `
         + `(for example keeping a different colour up).`);
   } else if (sl.rollback) {
     out.push(`Rollback census: ${sl.rollback}.`);
@@ -3770,6 +3770,48 @@ function showSearchNote(note) {
   ve.style.display='block';
   $('snok').onclick=hideVerdict;
 }
+// "Queue these taps": put the mana check's taps into the queue, each right before the step its payment
+// was made in (`pays[].step` -- the engine's index of the queued step, the land included, which is the
+// viewer's index over the segment's non-tap entries: LB.sequenceSteps' count). The check chose EVERY tap
+// (it left the human's own out), so the segment's existing manual taps are replaced. Nothing is committed:
+// the human looks at the queue and clicks Commit, which validates it as usual. Offered only when every
+// payment has a step and every tap is one the viewer's manual tap can make (not the oracle's
+// creature-only route).
+function parsePreTapToken(t) {
+  const m = /^tap=(.*)#(\d+):([A-Z]+)((?:\+[A-Z])*)$/.exec(t || '');
+  if (!m) return null;
+  const ac = m[4] ? m[4].split('+').filter(Boolean) : [];
+  return { kind:'pretap', name:m[1], num:+m[2], color:m[3], auraColors:ac, sac:false, fed:false, note:'' };
+}
+function oracleTapsQueueable(oa) {
+  const pays = (oa && oa.pays) || [];
+  if (!pays.length) return false;
+  return pays.every(p => p.step >= 0 && !p.engine && !p.fail && !/creature-only/.test(p.text || '')
+                         && (p.taps || []).every(t => parsePreTapToken(t)));
+}
+function queueOracleTaps(oa) {
+  const seg0 = LB.segmentParts(S.plan || [])[0] || [];
+  const rest = (S.plan || []).filter(p => seg0.indexOf(p) < 0);
+  const byStep = new Map();
+  for (const p of (oa.pays || [])) {
+    for (const t of (p.taps || [])) {
+      const e = parsePreTapToken(t);
+      if (!e) return;
+      if (!byStep.has(p.step)) byStep.set(p.step, []);
+      byStep.get(p.step).push(e);
+    }
+  }
+  const out = [];
+  let k = 0;
+  for (const p of seg0) {
+    if (LB.isPreTap(p)) continue;
+    if (!p.sacMana) { (byStep.get(k) || []).forEach(e => out.push(e)); ++k; }
+    out.push(p);
+  }
+  S.plan = out.concat(rest);
+  hideVerdict(); renderBoard();
+  flashHint('Queued the mana check’s taps before the spells they pay for — check the queue and Commit Line.');
+}
 // The reject panel's mana check: when the queued ORDER cannot pay, can any taps pay it?
 function orderAuditHtml(oa) {
   if (!oa || !oa.audited) return '';
@@ -3780,7 +3822,10 @@ function orderAuditHtml(oa) {
   }
   if (oa.payable && !oa.other_order)
     return `<div style="margin-top:6px"><b>Mana check: the board can pay this order</b> if you tap like this `
-      + `(queue each payment’s taps just before the spell it pays for):</div>${payListHtml(oa.pays)}`;
+      + `(each payment’s taps go just before the spell it pays for):</div>${payListHtml(oa.pays)}`
+      + (oracleTapsQueueable(oa)
+          ? `<div class="actions"><button id="oracletaps" class="primary">Queue these taps</button></div>`
+          : '');
   if (oa.payable)
     return `<div style="margin-top:6px"><b>Mana check:</b> not in this order — but <b>${esc(oa.other_order)}</b> pays every spell:</div>${payListHtml(oa.pays)}`;
   if (oa.partial) return `<div class="hint" style="margin-top:6px"><b>Mana check:</b> no verdict — ${esc(oa.partial)}.</div>`;
@@ -3869,6 +3914,7 @@ function handleVerdict(v, line) {
     `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
   ve.style.display='block';
   $('retrybtn').onclick=clearPlan; $('artbtn').onclick=()=>storeArtifact(v, line);
+  if ($('oracletaps')) { $('oracletaps').onclick=()=>queueOracleTaps(v.order_audit); }
   if ($('anywaybtn')) { $('anywaybtn').onclick=()=>playAnyway(v, line); }
   // Wire each model-plan button to submit its index. Clear S.plan first so the rejected hand-built
   // queue doesn't seed a false dropped-cast check against the (different) model plan's actual casts.

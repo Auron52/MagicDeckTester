@@ -5656,7 +5656,7 @@ static void WriteLineAuditJson(std::ostream& os, const manaoracle::LineAudit& a)
         JsonStr(os, p.text);
         os << ", \"keep_floating\": ";
         JsonStr(os, p.keep_floating);
-        os << " }";
+        os << ", \"step\": " << p.step << " }";
     }
     os << "], \"rollback\": ";
     JsonStr(os, a.rollback);

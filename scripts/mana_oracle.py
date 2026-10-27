@@ -259,14 +259,15 @@ def main():
             rb[f["job"]]["off-menu"] += 1
     if rb:
         rcols = ["depth0", "depth1", "depth2", "depth3+", "capped", "unfaithful", "no-failed-payment",
-                 "inconsistent", "no-census", "reorder", "off-menu", "rescued", "need-later"]
+                 "unmodeled", "inconsistent", "no-census", "reorder", "off-menu", "rescued", "need-later"]
         rcols = [c for c in rcols if any(rb[k][c] for k in rb)]
         rep.append("## Rollback census\n")
         rep.append("_Lost lines: APPLY-DROP split by DEPTH -- how many of the engine's mana decisions before the "
                    "failing payment must be re-made (0 = the failing payment itself had a way; 1 = the payment before "
                    "it, i.e. a one-step rollback); reorder = only another cast order pays (APPLY-DROP-ORDER); off-menu "
                    "= a mana gate kept it off the menu (ENUM-GAP). rescued = MTG_PAY_ROLLBACK forced on recovers the "
-                   "APPLY-DROP; need-later = a lost action the plan did not declare._\n")
+                   "APPLY-DROP; need-later = a lost action the plan did not declare; unmodeled = every paying line rests "
+                   "on an engine mana choice the oracle does not drive (no depth)._\n")
         rep.append("| deck | " + " | ".join(rcols) + " |")
         rep.append("|---|" + "---|" * len(rcols))
         for j in jobs:

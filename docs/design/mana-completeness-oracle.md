@@ -313,7 +313,9 @@ some payment of the same order realises in full) gets a DEPTH:
    a draw -- `need-later`, which no earlier payment could plan for), and whether `MTG_PAY_ROLLBACK` forced on
    recovers it.
 
-Buckets: `depth0/1/2/3+`, `capped`, `unfaithful`, `no-failed-payment`, `inconsistent`; plus `reorder`
+Buckets: `depth0/1/2/3+`, `capped`, `unfaithful`, `no-failed-payment`, `unmodeled` (every paying line
+rests on an engine mana choice the oracle does not drive -- the blink loop's tap-ahead, an untap effect's
+choice of lands -- so no depth can be vouched for), `inconsistent`; plus `reorder`
 (APPLY-DROP-ORDER: only another order pays) and `off-menu` (ENUM-GAP: a mana gate kept it off the menu),
 counted alongside so the table answers "how many lost lines, of which kind". Exit line `=== MANA ORACLE
 rollback census: ... ===`; `scripts/mana_oracle.py` adds a "Rollback census" table per deck.
@@ -325,7 +327,20 @@ rollback census: ... ===`; `scripts/mana_oracle.py` adds a "Rollback census" tab
 (need-later); 3 lost a declared one (Niv 2, Hinata 1). Off the menu: 82 ENUM-GAP (Alchemist 44, EDF 15,
 Slivers 11, Niv 6, Mirrorwing 3, Selesnya 2, Landfall 1).
 
-**What causes EDF's (viewer seed 3000 T4, the deck owner's manual-tap report):** Training Grounds {U} then
+**EDF, viewer seeds 3000-4000 (the deck owner's manual-tap report).** 134 of 1,001 games hold an
+APPLY-DROP (689 flags; T3 311, T4 326): Eladamri's Call 172, Living Wish 136, Eldrazi Displacer 129,
+Training Grounds 73, Emiel 68, Trace of Abundance 63. The census over those 144 games (`edf_s<seed>` jobs):
+depth0 46, **depth1 512**, depth2 45, depth3+ 27, 59 resting on an engine choice the oracle does not drive
+(reported `inconsistent` by the first build, `unmodeled` since); 110 more pay only in another order
+(reorder), 107 are off the menu (ENUM-GAP). `MTG_PAY_ROLLBACK` forced on rescues **0 of 689**. 559 lost a
+cast the plan declared, 130 a continuation's. So on EDF the typical lost line is exactly the USER's example:
+one earlier payment spent the colour a later cast needed. ORACLE-GAP 31 in the same games, NOT yet diagnosed: e.g.
+seed 3002 T3 "cast Living Wish", whose continuation plays the fetched Adarkar Wastes and casts Training
+Grounds -- the engine's line ends at 20 life with the new Wastes untapped (its Wish payment tapped
+Conservatory + the Fertile Ground host, floating the bonus for the {U}), while every same-line oracle
+outcome pays the {U} with the new Wastes' painful face (19 life). An oracle defect to fix (I1), owed.
+
+**What causes EDF's (viewer seed 3000 T4):** Training Grounds {U} then
 Eldrazi Displacer {2}{W} on Conservatory, Mariposa Military Base + Fertile Ground, Shivan Gorge. Depth 1:
 the Grounds' payment has to change. (a) The greedy cannot pay {U} (its only blue is Fertile Ground's bonus),
 and the backtracker's DFS walks battlefield order and accepts the FIRST covering set, so it taps
@@ -360,5 +375,15 @@ in the viewer and still be one the search never reaches.
   the board lacks the mana.
 * MANA ONLY: whether the search's own enumeration offers the line (the viewer's menu is the unpruned human
   menu) is not asked.
-* Next: a "queue these taps" action. The tokens are already in `pays[].taps` (`tap=<name>#<num>:<face>[+aura]`);
-  placing each before the step it pays for needs the payment -> action index recorded per payment.
+* **Queue these taps** (the reject panel, when the queued order is payable in that order): each payment
+  carries the human-sequence step it was made in (`pays[].step`: the v2 walk writes `manaoracle::t_seq_step`
+  for the step it dispatches, the hook records it per payment), so the viewer puts each payment's
+  `tap=<name>#<num>:<face>[+aura]` tokens right before that step, replacing the segment's own manual taps
+  (the check chose every tap). Nothing is committed: the human clicks Commit and the line validates as usual.
+  Not an auto-pick, deliberately -- the manual-tap dialog exists because the engine choosing for the human was
+  the bug. Worked case (EDF `claude_s1_gi0` T3): "Mariposa, Living Wish, Trace of Abundance" is rejected
+  (auto-tap drops Trace); the check pays it with Aether Hub {C} (+ its Wild Growths) before Living Wish and
+  Conservatory {W} before Trace, and the line with those taps queued validates.
+* **On the USER's own games** (`node test/viewer_validate_check.js`, every reference, 2026-10-27): every
+  accepted line the check could audit is one the search's own payment casts -- 2,795 yes, 0 no, 307 not
+  audited (the sample looked at: passes, which commit no plan and are no longer counted).
