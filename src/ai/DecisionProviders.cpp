@@ -31037,6 +31037,390 @@ bool CycloneProvider::AdmitRemandRider(const GameState& s, int controller, const
     return ceiling >= 0 && target.card.m_mana_cost.ManaValue() <= ceiling;
 }
 
+// ---- CycloneProvider: the USER's search heuristics (phase 5, 2026-10-27) ------------------------------
+// USER 2026-10-27: "We'll have to optimize of course. We should have heuristics for searches (long term plans and
+// fetches) and likely prunes for cantrips as well. Fetches are easy You can just always take shock lands,
+// prioritizing steam vents. Arguably the triome should be fetched if we don't need the mana." ... "Honestly we can
+// probably rank the other cards based on need. You only ever need 2 red, so blue would be fine to take after all
+// steam vents are out." ... "The point is that the 2 steam vents themselves are sufficient red." ... "Whereas
+// Myriad Landscape should consider 2 mountains if we are short on red between board and hand." ... "Note that
+// seething song can count as Red 2." ... "Also, a triome in hand counts differently because we cannot get red from
+// it this turn." ... "Long-Term plans is a good way to get a missing cyclone or to set up an Emrakul for getting
+// with Cyclone." ... "If we have no other way to put an Emrakul on top."
+// Everything below is read off card PROPERTIES (produces / etb / params), never a card name.
+namespace
+{
+bool CycloneFetchRuleOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_FETCH_RULE", true);   // DEFAULT ON (the USER's rule)
+    return heurarm::Flag(heurarm::CYCLONE_FETCH_RULE, on);
+}
+bool CycloneMyriadRuleOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_MYRIAD_RULE", true);   // DEFAULT ON (the USER's rule)
+    return heurarm::Flag(heurarm::CYCLONE_MYRIAD_RULE, on);
+}
+bool CycloneLtpRuleOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_LTP_RULE", true);   // DEFAULT ON (the USER's rule)
+    return heurarm::Flag(heurarm::CYCLONE_LTP_RULE, on);
+}
+bool CycloneLtpUlamogOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_LTP_ULAMOG");   // DEFAULT OFF (the AGENT's proposal)
+    return heurarm::Flag(heurarm::CYCLONE_LTP_ULAMOG, on);
+}
+bool CycloneLtpSongOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_LTP_SONG");   // DEFAULT OFF (the USER's "maybe", measured)
+    return heurarm::Flag(heurarm::CYCLONE_LTP_SONG, on);
+}
+bool DefMakes(const CardDefinition& d, Color c)
+{
+    for (Color x : d.params.produces) { if (x == c) { return true; } }
+    return false;
+}
+// THE SHARED RED COUNT (the Tarn fallback and Myriad Landscape). Red sources that can make red THIS turn:
+//   * every permanent we control that produces red itself (Steam Vents, Mountain, Blood Crypt, Xander's
+//     Lounge once it is out); a fetchland is not one (it advertises every colour and is sacrificed);
+//   * Cascade Bluffs (a FILTER land: {U/R},{T}: add {R}{R}) counts TWO when we control another land that
+//     makes blue or red to feed it, and none alone (it then makes only {C}) -- the agent's reading;
+//   * at most ONE red land in HAND, and only one that enters untapped ("a triome in hand counts differently
+//     because we cannot get red from it this turn"; one land drop per turn -- the agent's reading);
+//   * Seething Song ({2}{R}: add RRRRR) in hand is the SECOND red only -- it needs one real red to be cast.
+// Short on red = fewer than two, with the Song counted that way.
+bool CycloneShortOnRed(const GameState& s, int me)
+{
+    int  red = 0, filters = 0;
+    bool feeder = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->params.fetch_land_types.empty()) { continue; }
+        if (d->params.is_filter) { if (DefMakes(*d, Color::Red)) { ++filters; } continue; }
+        if (DefMakes(*d, Color::Red)) { ++red; }
+        if (d->card.IsLand() && (DefMakes(*d, Color::Red) || DefMakes(*d, Color::Blue))) { feeder = true; }
+    }
+    if (filters > 0 && feeder) { red += 2 * filters; }
+    bool hand_red = false, song = false;
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand())
+        {
+            if (!d->params.enters_tapped && d->params.fetch_land_types.empty() && !d->params.is_filter
+                && DefMakes(*d, Color::Red)) { hand_red = true; }
+        }
+        else if (d->params.ritual_floating_mana > 0 && d->params.ritual_float_color == "R") { song = true; }
+    }
+    if (hand_red) { ++red; }
+    if (red >= 2) { return false; }
+    if (red == 1 && song) { return false; }
+    return true;
+}
+// Tarn rank tiers (lower first). "Steam Vents" = an untapped-entering land making BOTH blue and red.
+int CycloneFetchTier(const CardDefinition* d, bool short_red)
+{
+    if (d == nullptr) { return 9; }
+    const bool u = DefMakes(*d, Color::Blue), r = DefMakes(*d, Color::Red);
+    if (d->params.enters_tapped) { return 7; }   // Xander's Lounge: searched beside the pick, never the pick
+    if (u && r) { return 0; }
+    const bool basic = IsBasicLandCard(*d);
+    if (short_red) { return r ? (basic ? 2 : 1) : u ? (basic ? 4 : 3) : 6; }
+    return u ? (basic ? 2 : 1) : r ? (basic ? 4 : 3) : 6;
+}
+bool IsLongTermPlansTutor(const CardParams& pp) { return IsLibraryTutor(pp) && pp.tutor_library_position > 0; }
+// The LTP rule's admitted names, in order, out of `all` (the generic every-legal-name list). Empty = HOLD.
+// USER 2026-10-27, on top of the two targets: "We can always cast long-term plans later If we have brainstorm +
+// Emrakul in hand" (the hold is right); "a street wraith might be worth it if we have no cyclers ... and have
+// nothing else missing. I would probably only apply the nothing missing + no cyclers and see how that goes to
+// start. Maybe even consider Seething Song if we have a way to pull it off the top."
+std::vector<std::string> CycloneLtpTargets(const GameState& s, int me, const std::vector<std::string>& all)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    bool cyclone_have = false, emrakul_hand = false, putback_hand = false, cycler_hand = false;
+    bool song_hand = false, top_drawer_hand = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { cyclone_have = true; }
+    }
+    auto is_song = [](const CardDefinition& d)
+    { return !d.card.IsLand() && d.params.ritual_floating_mana > 0 && d.params.ritual_float_color == "R"; };
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        if (pp.cycle_draw_exile_shared_type_freecast) { cyclone_have = true; }
+        if (d->card.IsCreature() && pp.cast_trigger_extra_turns > 0) { emrakul_hand = true; }
+        if (pp.put_back_from_hand > 0) { putback_hand = true; }
+        if (d->card.IsCreature() && pp.cycling_cost.has_value()) { cycler_hand = true; }
+        if (is_song(*d)) { song_hand = true; }
+        // A way to pull a card off the top: a draw spell that also puts back or reorders (Brainstorm, Brainsurge,
+        // Ponder).
+        if (pp.draw > 0 && (pp.put_back_from_hand > 0 || pp.cast_reorder > 0)) { top_drawer_hand = true; }
+    }
+    std::vector<std::string> cyc, emr, ula, cycler, song;
+    std::vector<int> ula_mv;
+    int cycler_mv = 1 << 20;
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        if (pp.cycle_draw_exile_shared_type_freecast) { cyc.push_back(nm); }
+        else if (d->card.IsCreature() && pp.cast_trigger_extra_turns > 0) { emr.push_back(nm); }
+        else if (d->card.IsCreature() && (pp.cast_trigger_exile_target_permanents > 0
+                                          || pp.cast_trigger_destroy_target_permanents > 0))
+        { ula.push_back(nm); ula_mv.push_back(d->card.m_mana_cost.ManaValue()); }
+        else if (d->card.IsCreature() && pp.cycling_cost.has_value())
+        {
+            // The cycler target: the CHEAPEST creature cycler to cycle (Street Wraith: {0} and 2 life).
+            const int mv = EffectiveCyclingCostFor(s, *d).ManaValue();
+            if (mv < cycler_mv) { cycler_mv = mv; cycler.assign(1, nm); }
+        }
+        else if (is_song(*d) && song.empty()) { song.push_back(nm); }
+    }
+    std::vector<std::string> out;
+    if (!cyclone_have) { out.insert(out.end(), cyc.begin(), cyc.end()); }
+    // "another way to put an Emrakul on top" (the agent's reading, USER-confirmed 2026-10-27): an Emrakul in hand
+    // AND a put-back cantrip (Brainstorm / Brainsurge) in hand.
+    const bool other_way = emrakul_hand && putback_hand;
+    bool eldrazi_admitted = false;
+    if (!other_way && !emr.empty()) { out.insert(out.end(), emr.begin(), emr.end()); eldrazi_admitted = true; }
+    if (!other_way && emr.empty() && CycloneLtpUlamogOn() && !ula.empty())
+    {
+        std::vector<std::size_t> o(ula.size());
+        for (std::size_t i = 0; i < o.size(); ++i) { o[i] = i; }
+        std::stable_sort(o.begin(), o.end(), [&](std::size_t a, std::size_t b) { return ula_mv[a] < ula_mv[b]; });
+        for (std::size_t i : o) { out.push_back(ula[i]); }
+        eldrazi_admitted = true;
+    }
+    // Street Wraith: no creature cycler in hand AND nothing else missing (a Cyclone held or out, and no Eldrazi
+    // target admitted).
+    if (!cycler_hand && cyclone_have && !eldrazi_admitted) { out.insert(out.end(), cycler.begin(), cycler.end()); }
+    // Seething Song (MTG_CYCLONE_LTP_SONG, OFF): a way to draw it off the top, and none held.
+    if (CycloneLtpSongOn() && top_drawer_hand && !song_hand) { out.insert(out.end(), song.begin(), song.end()); }
+    return out;
+}
+}   // namespace
+
+std::vector<std::string> CycloneProvider::FetchCandidates(const GameState& s, int controller,
+                                                          const CardParams& fetch_pp) const
+{
+    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    if (all.size() <= 1 || !CycloneFetchRuleOn()) { return all; }
+    const bool short_red = CycloneShortOnRed(s, controller);
+    std::vector<int> tier(all.size());
+    for (std::size_t i = 0; i < all.size(); ++i)
+    { tier[i] = CycloneFetchTier(CardDatabase::Instance().Lookup(all[i]), short_red); }
+    std::vector<std::size_t> o(all.size());
+    for (std::size_t i = 0; i < o.size(); ++i) { o[i] = i; }
+    std::stable_sort(o.begin(), o.end(), [&](std::size_t a, std::size_t b) { return tier[a] < tier[b]; });
+    std::vector<std::string> out;
+    out.reserve(all.size());
+    for (std::size_t i : o) { out.push_back(std::move(all[i])); }
+    return out;
+}
+
+std::vector<std::string> CycloneProvider::FetchSearchCandidates(const GameState& s, int controller,
+                                                                const CardParams& fetch_pp,
+                                                                const std::vector<std::string>& ranked) const
+{
+    if (!CycloneFetchRuleOn()) { return DeckProvider::FetchSearchCandidates(s, controller, fetch_pp, ranked); }
+    if (ranked.size() <= 1) { return ranked; }
+    // The rule's pick, plus the enters-tapped triome (Xander's Lounge) beside it: "arguably the triome should be
+    // fetched if we don't need the mana" -- the search decides whether the mana is needed.
+    std::vector<std::string> out{ ranked.front() };
+    for (std::size_t i = 1; i < ranked.size(); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(ranked[i]);
+        if (d != nullptr && d->params.enters_tapped && d->params.produces.size() >= 3) { out.push_back(ranked[i]); break; }
+    }
+    return out;
+}
+
+namespace
+{
+// The basic colour of a pick made only of basics of one colour (WUBRG index), else -1.
+int CyclonePickColour(const std::vector<std::string>& pick)
+{
+    int col = -1;
+    for (const std::string& nm : pick)
+    {
+        const int ci = BasicColourOf(CardDatabase::Instance().Lookup(nm));
+        if (ci < 0 || (col >= 0 && ci != col)) { return -1; }
+        col = ci;
+    }
+    return col;
+}
+bool CycloneIsMyriadSearch(bool basic_only, bool share_land_type, int count)
+{ return basic_only && share_land_type && count >= 2; }
+}   // namespace
+
+bool CycloneProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
+{
+    DecisionProvider::LandSearchPickOrderKey(s, controller, key);   // the base lack mask (5 bits)
+    if (!CycloneMyriadRuleOn()) { return true; }
+    key |= static_cast<std::uint64_t>(1) << 5;
+    key |= static_cast<std::uint64_t>(CycloneShortOnRed(s, controller) ? 1 : 0) << 6;
+    return true;
+}
+
+void CycloneProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                          bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                          std::vector<std::vector<std::string>>& picks) const
+{
+    DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, subtype, picks);
+    if (!CycloneMyriadRuleOn() || !CycloneIsMyriadSearch(basic_only, share_land_type, count) || picks.size() < 2)
+    { return; }
+    // Two Islands first, then two Mountains, then the rest (each group in the base order).
+    constexpr int kU = static_cast<int>(Color::Blue), kR = static_cast<int>(Color::Red);
+    auto rank = [&](const std::vector<std::string>& p)
+    {
+        const int c = CyclonePickColour(p);
+        const bool full = static_cast<int>(p.size()) >= count;
+        return c == kU && full ? 0 : c == kR && full ? 1 : 2;
+    };
+    std::stable_sort(picks.begin(), picks.end(),
+                     [&](const std::vector<std::string>& a, const std::vector<std::string>& b) { return rank(a) < rank(b); });
+    (void)s; (void)controller;
+}
+
+int CycloneProvider::LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                                         bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                         const std::vector<std::vector<std::string>>& picks) const
+{
+    (void)to_hand; (void)subtype;
+    const int full_n = static_cast<int>(picks.size());
+    if (!CycloneMyriadRuleOn() || !CycloneIsMyriadSearch(basic_only, share_land_type, count) || picks.size() < 2)
+    { return full_n; }
+    constexpr int kU = static_cast<int>(Color::Blue), kR = static_cast<int>(Color::Red);
+    // Prune only when the two-Island pick IS the front (a list the rule cannot express keeps the full fan).
+    if (CyclonePickColour(picks[0]) != kU || static_cast<int>(picks[0].size()) < count) { return full_n; }
+    if (!CycloneShortOnRed(s, controller)) { return 1; }
+    // Short on red: the two Mountains are searched beside the Islands (LandSearchPickOrder put them second).
+    if (CyclonePickColour(picks[1]) == kR && static_cast<int>(picks[1].size()) >= count) { return 2; }
+    return 1;
+}
+
+std::vector<std::string> CycloneProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
+    if (!IsLongTermPlansTutor(pp) || !CycloneLtpRuleOn() || DecisionUnpruned(UnprunedGate::Tutor)) { return all; }
+    std::vector<std::string> out = CycloneLtpTargets(s, controller, all);
+    // Never a forced whiff: a resolution reached with nothing admitted (the cast was held at enumeration, so only a
+    // state the plan changed mid-turn gets here) keeps the full list.
+    return out.empty() ? all : out;
+}
+
+bool CycloneProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    (void)is_pre_combat;
+    if (a.kind != Action::Kind::CastFromHand) { return true; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (d == nullptr || !IsLongTermPlansTutor(d->params)) { return true; }
+    if (!CycloneLtpRuleOn() || DecisionUnpruned(UnprunedGate::Tutor)) { return true; }
+    // HOLD Long-Term Plans when the rule admits no target: a Cyclone is already ours and there is another way to top
+    // an Emrakul (or none is left to find).
+    const std::vector<std::string> all = DeckProvider::TutorCandidates(s, s.active_player_index, d->params);
+    return !CycloneLtpTargets(s, s.active_player_index, all).empty();
+}
+
+// ---- CycloneProvider: the CANTRIP PROPOSALS (phase 5; DEFAULT OFF, the USER's call) ----------------------
+// The ledger's plan: "Cantrip prunes ... then proposed lossy prunes for the USER (e.g. put-backs keep Emrakul on top
+// when a Cyclone walk can reach it; dead cards such as Toxic Deluge go back first)". Measured and reported; none is
+// adopted by the agent.
+namespace
+{
+bool CyclonePutBackRuleOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PUTBACK_RULE");   // DEFAULT OFF (proposal)
+    return heurarm::Flag(heurarm::CYCLONE_PUTBACK_RULE, on);
+}
+bool CyclonePutBackSingleOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PUTBACK_SINGLE");   // DEFAULT OFF (proposal)
+    return heurarm::Flag(heurarm::CYCLONE_PUTBACK_SINGLE, on);
+}
+bool CyclonePonderKeepShuffleOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_KEEPSHUFFLE");   // DEFAULT OFF (proposal)
+    return heurarm::Flag(heurarm::CYCLONE_PONDER_KEEPSHUFFLE, on);
+}
+}   // namespace
+
+std::vector<int> CycloneProvider::PutBackRanking(const GameState& s, int controller) const
+{
+    std::vector<int> base = DeckProvider::PutBackRanking(s, controller);
+    if (!CyclonePutBackRuleOn()) { return base; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    bool replacer = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { replacer = true; }
+    }
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { replacer = true; }
+    }
+    // Tiers (lower = more expendable = put back first; candidate 0 puts the two most expendable back with the
+    // LESS expendable of them on top -- so Emrakul ranked after an Ulamog / a dead card lands on top).
+    std::vector<int> tier(pl.hand.size(), 9);
+    // base order = the deck's shed order (most expendable first), so the LAST land in it is the one kept.
+    int kept_land = -1;
+    for (int i : base)
+    {
+        if (i < 0 || i >= static_cast<int>(pl.hand.size())) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(i)]);
+        if (d != nullptr && d->card.IsLand()) { kept_land = i; }
+    }
+    for (int i : base)
+    {
+        if (i < 0 || i >= static_cast<int>(pl.hand.size())) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(i)]);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        const bool eldrazi_target = d->card.IsCreature() && (pp.cast_trigger_exile_target_permanents > 0
+                                                             || pp.cast_trigger_destroy_target_permanents > 0);
+        const bool eldrazi_turn   = d->card.IsCreature() && pp.cast_trigger_extra_turns > 0;
+        int t = 9;
+        if (pp.goldfish_inert)                    { t = 0; }
+        else if (eldrazi_target)                  { t = replacer ? 1 : 4; }
+        else if (eldrazi_turn)                    { t = replacer ? 2 : 4; }
+        else if (d->card.IsLand())                { t = i == kept_land ? 9 : 3; }
+        else if (pp.counters_target_spell_to_hand) { t = 5; }
+        tier[static_cast<std::size_t>(i)] = t;
+    }
+    std::vector<int> out = base;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b)
+    {
+        const int ta = (a >= 0 && a < static_cast<int>(tier.size())) ? tier[static_cast<std::size_t>(a)] : 9;
+        const int tb = (b >= 0 && b < static_cast<int>(tier.size())) ? tier[static_cast<std::size_t>(b)] : 9;
+        return ta < tb;
+    });
+    return out;
+}
+
+bool CycloneProvider::PutBackSingleCandidate(const GameState& s) const
+{
+    (void)s;
+    return CyclonePutBackRuleOn() && CyclonePutBackSingleOn();
+}
+
+bool CycloneProvider::ReorderKeepShuffleOnly(const GameState& s) const
+{
+    (void)s;
+    return CyclonePonderKeepShuffleOn();
+}
+
 // ---- LandfallElementalsProvider: the USER's fetch rule (2026-10-23) ----------------------------
 // USER: "The order should prioritize Red -> Green -> Blue -> Second Red including mana from lands that can
 // produce all of these or SmokeBraider. Ideally Myriad Landscape would get Red or Green, though Red is
