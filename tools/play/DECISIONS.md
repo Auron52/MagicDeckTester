@@ -584,7 +584,10 @@ the `g_play_soulfire_chooser` (`SoulfireTargetChooser`) lambda in `main.cpp` **r
 — so at runtime these surface as a `target` decision with a full subset enumeration, not as a
 `soulfire_targets` type. `WriteSoulfireDecisionJson` exists but is **dead code (never called)**;
 treat `target` (source-matched) as the decision to verify. *(Confirmed by live trace 2026-07-08:
-Soulfire cast → `target`, source="Soulfire Eruption", 256 = 2⁸ subset options.)* The plan-variant
+Soulfire cast → `target`, source="Soulfire Eruption", 256 = 2⁸ subset options.)* **Its reply is NOT an
+option index:** the chooser reads ONE 0/1 flag per `legal_targets` entry, in order (issue #8; the frame
+repeats until all are in), so `options` only illustrates sets and `options[heuristic_default]` is the AI's
+pick. `test/viewer_protocol_check.py` `engine_default(d, nth)` answers an unrecorded one that way. The plan-variant
 own-target **count** (`soulfire_own_targets`) still rides the `main_phase` plan list separately.
 
 Plan-variant sub-decisions ride the `main_phase` plan list rather than their own `type`

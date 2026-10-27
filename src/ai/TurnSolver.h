@@ -13,6 +13,7 @@
 #include <vector>
 
 class TranspositionTable;  // per-decision SimulateToEnd memo (see TranspositionTable.h)
+class GameLogger;         // ApplyLandSearchActs: the executor's logger (null in the rollout)
 
 // A single atomic play the active player can make in a main phase. Unifies the
 // formerly-separate action sources (hand cast, Aether Vial activation, Land's Edge
@@ -2812,8 +2813,12 @@ public:
     // two worlds apply the positioned land-search activations through ONE body): is `a` a land-search
     // activation; apply every such action of `acts` now (live source, {T} first, shared payer,
     // stranded -> the tap restored and nothing happens); and `acts` minus them (the trailing list).
+    // `log` (the executor's logger; null in the rollout) records each activation that fired as an
+    // ABILITY entry, OUTSIDE the play digest: these cracks used to run unlogged, so a game log showed a
+    // land vanishing into the graveyard with no action naming it (ref_promote had to infer them).
     static bool IsLandSearchActivation(const Action& a);
-    static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts);
+    static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts,
+                                    GameLogger* log = nullptr);
     static std::vector<Action> WithoutLandSearchActs(const std::vector<Action>& acts);
     // ...and the PRE-CAST SUBSET form of the position (Plan::land_search_act_slot <= -2, 2026-10-19):
     // bit i of the mask = the plan's i-th land-search activation (in `actions` order) runs in the

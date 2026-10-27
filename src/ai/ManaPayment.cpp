@@ -6512,9 +6512,19 @@ static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool
 //
 // HUMAN PLAY TOO, on ActLineHoldMask's argument: the human CHOSE a line holding both casts, so paying it in
 // a way that drops one is not a tap-order preference being overridden, it is the line not being executed.
-// The route fires only where the plain payment would have dropped a later cast of that line, so a replayed
-// reference moves only if its recorded line itself lost a cast to this hole; its --tap-pref preference is
-// consulted by the trials exactly as by the real payment.
+// Its --tap-pref preference is consulted by the trials exactly as by the real payment.
+//
+// ...AND IN HUMAN PLAY THE STRAND ALONE FIRES IT (2026-10-27). A human builds a phase as several lines, and
+// the next one is often a card this line DRAWS, so "the rest of the line" is empty exactly where it matters.
+// NivMizzetCombo s4_gi3 T4 (promoting the search's game): Island, Spirebluff Canal, Cascade Bluffs and an
+// Izzet Signet up; the line {Brainstorm, Izzet Signet} paid Brainstorm with the Island and the Signet with
+// the Canal + the Bluffs' {C}, leaving the old Signet untapped with nothing to feed it. Brainstorm had drawn a
+// second Signet, and the next line could not cast it: one land through the old Signet pays the {2} and leaves
+// the other land to feed the new one, which is what the search did. A stranded ramp filter is dead mana for
+// the rest of the turn, so the routed payment leaves the same sources minus the feeder and plus one more
+// untapped source -- never less mana. It is still taken only when it does not strand a filter itself and
+// pays whatever the line still owes. Human play only (HumanPlayActive: false in every rollout and every
+// autonomous game), so batch play and ground truth do not move.
 
 // A warm per-thread scratch board pool (PayScratch's shape in TurnSolver.cpp): the trials copy-ASSIGN into
 // a reused GameState, so their zone vectors reuse capacity. A deque, so a nested trial (none today) could
@@ -6554,9 +6564,9 @@ ManaCost RampLaterBill(const ManaCost& cost_in)
 // The cheap gate. A ramp filter of ours is untapped and could be fed now, and this payment needs at least
 // as many taps as there are feeders (a payment of n mana taps at most n sources, so with more feeders than
 // that one always survives).
-bool RampFeedRoutePrecheck(const GameState& s, const ManaCost& cost_in, const ManaCost& later)
+bool RampFeedRoutePrecheck(const GameState& s, const ManaCost& cost_in, const ManaCost& later, bool human)
 {
-    if (later.ManaValue() <= 0) { return false; }
+    if (later.ManaValue() <= 0 && !human) { return false; }
     const int need = cost_in.ManaValue() - static_cast<int>(s.floating_mana.Total());
     if (need <= 0) { return false; }
     const int active = s.active_player_index;
@@ -6653,7 +6663,11 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
                                ManaPool* available, bool honor_legacy_cco)
 {
     const ManaCost later = RampLaterBill(cost_in);
-    if (!RampFeedRoutePrecheck(state, cost_in, later)) { return false; }
+    // HUMAN PLAY: the strand alone decides (see the block above RampScratch). The engine's own line is
+    // the whole phase, so "the rest of the line" is everything the turn will cast; a human's line is one
+    // step, and what comes next -- often a card this line draws -- is invisible to the payment.
+    const bool human = HumanPlayActive();
+    if (!RampFeedRoutePrecheck(state, cost_in, later, human)) { return false; }
     g_rr_trial.fetch_add(1, std::memory_order_relaxed);
     // The cast being paid, if it is a mana rock that enters untapped (Izzet Signet, Sol Ring).
     const CardDefinition* rock = nullptr;
@@ -6677,8 +6691,11 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
     // Short of MANA, not of a route: the routed trial leaves the same amount (the filter's +1 the bound
     // already credits on the greedy board becomes the routed board's floating unit), so it cannot pay
     // what this board cannot either -- no second trial.
-    bool a_short = false;
-    if (RampLaterPayable(a.Board(), later, rock, &a_short) || a_short) { return false; }
+    if (!human)
+    {
+        bool a_short = false;
+        if (RampLaterPayable(a.Board(), later, rock, &a_short) || a_short) { return false; }
+    }
     g_rr_routed.fetch_add(1, std::memory_order_relaxed);
     RampScratch b(state);
     ManaPool av_b = available ? *available : ManaPool{};
@@ -6687,7 +6704,8 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
         RampRouteScope _route;
         ok_b = TapForCostSharedDiag(b.Board(), cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco);
     }
-    const bool fire = ok_b && RampLaterPayable(b.Board(), later, rock);
+    const bool fire = ok_b && !RampFilterStranded(state, b.Board())
+                   && (later.ManaValue() <= 0 || RampLaterPayable(b.Board(), later, rock));
     if (fire) { g_rr_fired.fetch_add(1, std::memory_order_relaxed); }
     return fire;
 }

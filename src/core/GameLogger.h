@@ -119,8 +119,11 @@ public:
     // An activated ability firing (mana tap, sac, pay-life, discard-cost, etc.).
     // For mana abilities the board `tapped` rotation already conveys the visible
     // result; this records the activation event for non-tap abilities and audit.
+    // fold_digest=false records the entry for the log reader only: the play digest stays put. For an
+    // activation the engine always performed but used to leave unlogged (the positioned land-search
+    // cracks, TurnSolver::ApplyLandSearchActs), so making it visible does not move any fingerprint.
     void LogAbility(int source_card_num, const std::string& source_card_name,
-                    const std::string& ability);
+                    const std::string& ability, bool fold_digest = true);
 
     // Captures board state snapshot at the end of the current phase. `opp_battlefield` is the
     // OPPONENT's side (Forbidden Orchard tokens, scheduled spawns) so targets are visible.

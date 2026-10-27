@@ -88,5 +88,16 @@ chk(v.find_plan(rec, now2, recorded_index=11) == 1, "the (land, casts) tier keep
 chk(v._strip_copy_labels("land=none; cast: blink #0") == "land=none; cast: blink #0",
     "a legacy 'blink #0' spawn reference is not a copy label")
 
+# 4. engine_default on a FLAGS frame answers flag by flag, never the index as every flag.
+sf = {"type": "target", "random_damage": True, "heuristic_default": 1,
+      "legal_targets": [{"kind": "player", "index": -1}, {"kind": "permanent", "index": 3},
+                        {"kind": "permanent", "index": 5}],
+      "options": [{"targets": [{"kind": "player", "index": -1}]},
+                  {"targets": [{"kind": "player", "index": -1}, {"kind": "permanent", "index": 5}]}]}
+chk([v.engine_default(sf, i)[0] for i in range(3)] == [1, 0, 1], "Soulfire's default = options[hd] as flags")
+dr = {"type": "sac_tutor", "max_puts": 2, "ai_set": [1], "candidates": [{"name": "A"}, {"name": "B"}]}
+chk([v.engine_default(dr, i)[0] for i in range(2)] == [0, 1], "a put-any-subset default = ai_set as flags")
+chk(v.engine_flags({"type": "target", "heuristic_default": 2}) is None, "an ordinary target is an index")
+
 print("FAIL (%d)" % len(fails) if fails else "PASS")
 sys.exit(1 if fails else 0)

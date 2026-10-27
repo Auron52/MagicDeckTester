@@ -7269,7 +7269,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (acts_pending && ++exec_ls_act_seen == plan.land_search_act_slot)
         {
             const bool top_new_before = TurnSolver::TopLandNewlyPlayable(rdb_top, state, karoo_deferred);
-            TurnSolver::ApplyLandSearchActs(state, plan.actions);
+            TurnSolver::ApplyLandSearchActs(state, plan.actions, m_logger);
             exec_ls_act_done = true;
             rdb_top_verdict  = top_new_before ? 1 : 0;
         }
@@ -7319,14 +7319,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // after in both); the trailing pass skips them.
     if (plan.land_search_act_slot == 0)
     {
-        TurnSolver::ApplyLandSearchActs(state, plan.actions);
+        TurnSolver::ApplyLandSearchActs(state, plan.actions, m_logger);
         exec_ls_act_done = true;
     }
     // ...the PRE-CAST SUBSET (slot <= -2) -- lockstep twin of ApplyPlanDirect's: only the masked
     // activations run now, the rest keep the trailing pass.
     else if (const int fm = TurnSolver::LandSearchActFirstMask(plan.land_search_act_slot); fm != 0)
     {
-        TurnSolver::ApplyLandSearchActs(state, TurnSolver::LandSearchActsMasked(plan.actions, fm, true));
+        TurnSolver::ApplyLandSearchActs(state, TurnSolver::LandSearchActsMasked(plan.actions, fm, true), m_logger);
         exec_ls_act_first_mask = fm;
     }
     // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the

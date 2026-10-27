@@ -3609,9 +3609,14 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     { d.Note("reply an option index. The chosen creature is " + remove_desc
              + ". Only legal targets are listed. Default = the AI's pick."); }
     else if (random_damage)
-    { d.Note("reply an option index. Each chosen target is dealt a RANDOM exiled card's "
-             "mana value (assigned positionally, not steerable); pick " + std::to_string(min_targets)
-             + "-" + std::to_string(max_targets) + " targets. Default = the AI's pick."); }
+    // The reply is NOT an option index: soulfire_chooser reads ONE 0/1 flag per legal_targets entry
+    // (the capped option list cannot hold a wide set). The note used to say "reply an option index",
+    // and a reader that sent heuristic_default as every flag targeted everything, its own side too.
+    { d.Note("reply ONE 0/1 flag per legal_targets entry, in order (1 = target it; the frame repeats "
+             "until all " + std::to_string(legal.size()) + " are in). Each chosen target is dealt a "
+             "RANDOM exiled card's mana value (assigned positionally, not steerable); pick "
+             + std::to_string(min_targets) + "-" + std::to_string(max_targets) + " targets. The options "
+             "list only illustrates sets; options[heuristic_default] is the AI's pick."); }
     else if (!copy_desc.empty())
     { d.Note("reply an option index. Sakashima's Protege enters as a COPY of the chosen "
              "this-turn entrant (any permanent that entered this turn; a Breaching Dragonstorm "

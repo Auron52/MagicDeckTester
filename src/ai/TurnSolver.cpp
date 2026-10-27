@@ -10732,7 +10732,7 @@ bool TurnSolver::IsLandSearchActivation(const Action& a)
             || a.ability_mode == Action::AbilityMode::QuestSacLandSearch);
 }
 
-void TurnSolver::ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts)
+void TurnSolver::ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts, GameLogger* log)
 {
     const int me = state.active_player_index;
     for (const Action& a : acts)
@@ -10747,6 +10747,8 @@ void TurnSolver::ApplyLandSearchActs(GameState& state, const std::vector<Action>
             continue;
         }
         ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
+        if (log != nullptr)   // same entry as the trailing pass's crack, minus the digest fold
+        { log->LogAbility(a.sac_source_id, a.card_name.str(), PermAbilityLabelFor(a.ability_mode, a.def), false); }
     }
 }
 

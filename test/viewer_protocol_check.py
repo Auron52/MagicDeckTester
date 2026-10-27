@@ -1120,12 +1120,38 @@ def find_option(recorded, options, recorded_index=None):
     return hits[0]
 
 
-def engine_default(d):
+def engine_flags(d):
+    """The AI's own answer to a FLAGS frame as its full 0/1 vector, or None for any other frame. Two
+    shapes read one 0/1 flag per entry, not an index, and re-emit the frame until all are in:
+      * put-any-subset (dragon / sac_tutor / revive / rummage: max_puts + candidates + ai_set), whose
+        default is the ai_set candidates -- a lone 0 there means "put nothing";
+      * Soulfire Eruption's `target` frame (random_damage), one flag per legal_targets entry, whose
+        default is options[heuristic_default]'s set -- sending heuristic_default itself as each flag
+        targets EVERYTHING, your own creatures included."""
+    if (isinstance(d.get("max_puts"), int) and isinstance(d.get("candidates"), list)
+            and isinstance(d.get("ai_set"), list)):
+        on = set(d["ai_set"])
+        return [1 if i in on else 0 for i in range(len(d["candidates"]))]
+    if d.get("type") == "target" and d.get("random_damage") and isinstance(d.get("legal_targets"), list):
+        opts, hd = d.get("options") or [], d.get("heuristic_default")
+        if isinstance(hd, int) and 0 <= hd < len(opts):
+            want = {(t.get("kind"), t.get("index")) for t in opts[hd].get("targets") or []}
+            return [int((t.get("kind"), t.get("index")) in want) for t in d["legal_targets"]]
+        return [1] + [0] * (len(d["legal_targets"]) - 1)
+    return None
+
+
+def engine_default(d, nth=0):
     """The answer the engine itself would give for a frame the reference never recorded.
     Every emitted frame carries `heuristic_default` (= the AI's pick); the mulligan/bottom
     frames carry `ai_choice` instead. Answering from these makes a NEWLY ADDED decision point
     non-destructive: the replay proceeds exactly as the unattended engine would, and the
-    reference's own recorded picks stay aligned to the decisions it actually recorded."""
+    reference's own recorded picks stay aligned to the decisions it actually recorded.
+    A flags frame (engine_flags) is answered one flag at a time: `nth` = how many of its flags were
+    already sent (the caller counts its re-emissions)."""
+    fl = engine_flags(d)
+    if fl is not None:
+        return (fl[nth] if 0 <= nth < len(fl) else 0), "ai_flags"
     ac = d.get("ai_choice")
     if isinstance(ac, int):
         return ac, "ai_choice"
@@ -1390,6 +1416,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
     mt = max(8, ref.get("win_turn") or 0)
 
     resolved = []        # the pick stream actually sent (content-resolved + defaults filled in)
+    flag_sent = {}       # (frame ident, decision_index) -> flags already sent to an unrecorded flags frame
     # Aligned MAIN-PHASE frames, in walk order: where each one sits in `resolved`. This is the
     # alignment that viewer_validate_check.js needs and used to approximate on its own -- it lets
     # that check replay the exact prefix that lands the engine on a given recorded frame, instead
@@ -1609,6 +1636,12 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 # where the reference's own plan aimed it (see target_intent).
                 intent = target_intent(dec, kept, ri)
                 pick, src = intent if intent else engine_default(dec)
+            elif engine_flags(dec) is not None:
+                # A flags frame re-emits with the same decision_index until all its flags are in:
+                # count what this one has been sent so far.
+                fk = (frame_ident(dec), dec.get("decision_index"))
+                pick, src = engine_default(dec, flag_sent.get(fk, 0))
+                flag_sent[fk] = flag_sent.get(fk, 0) + 1
             else:
                 pick, src = engine_default(dec)
             inserted.append(f"{frame_ident(dec)}<-{pick}({src})")

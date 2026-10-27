@@ -121,8 +121,9 @@ def phase_names(log, from_turn):
                     out[(s["turn"], ph)]["cards"].add(names_of[num])
         # A LAND that went from the battlefield to the graveyard with no action naming it: a land-search
         # crack (Myriad Landscape, Evolving Wilds) the executor ran at its searched PRE-CAST position
-        # through TurnSolver::ApplyLandSearchActs, which never logs (LandfallElementals s10_gi9 T4,
-        # 2026-10-26). Ahead of the phase's named actions -- where slot 0 runs it.
+        # through TurnSolver::ApplyLandSearchActs, which did not log (LandfallElementals s10_gi9 T4,
+        # 2026-10-26). Ahead of the phase's named actions -- where slot 0 runs it. The engine logs
+        # these as ABILITY entries since 2026-10-27; this covers logs written before that.
         if prev_bf is not None and s.get("phase") in ("MAIN_1", "MAIN_2"):
             b = s.get("boardAfter") or {}
             now = {x.get("card") for x in b.get("battlefield") or []}
@@ -386,15 +387,10 @@ def is_flags(d):
 
 
 def default_answer(d):
-    """The engine's own answer to a non-main frame, as the list of ints it is sent as. A flags frame's
-    default is the AI's set; vpc.engine_default has no heuristic_default there and falls back to 0,
-    which is "put nothing" (Defense of the Heart, Creature_Giving s2_gi1 / s6_gi5, 2026-10-26)."""
-    if is_flags(d):
-        on = set(d["ai_set"])
-        return [1 if i in on else 0 for i in range(len(d["candidates"]))]
-    if flag_frame(d):
-        return default_flags(d)
-    return [vpc.engine_default(d)[0]]
+    """The engine's own answer to a non-main frame, as the list of ints it is sent as: a flags frame's
+    whole vector (vpc.engine_flags: the AI's set, Defense of the Heart / Soulfire), else one pick."""
+    fl = vpc.engine_flags(d)
+    return fl if fl is not None else [vpc.engine_default(d)[0]]
 
 
 def answers(d):
@@ -443,10 +439,7 @@ def flags_of(d, targets):
 
 def default_flags(d):
     """The AI's pick (options[heuristic_default]) as flags."""
-    opts, hd = d.get("options") or [], d.get("heuristic_default")
-    if isinstance(hd, int) and 0 <= hd < len(opts):
-        return flags_of(d, opts[hd].get("targets") or [])
-    return [1] + [0] * (len(d["legal_targets"]) - 1)
+    return vpc.engine_flags(d)
 
 
 def search_flags(d, log, turn, phase, nth):
@@ -918,7 +911,7 @@ def walk(c, prefix, extra, log, from_turn):
                     continue
                 # A target, a tutor pick, a scry, a put-into-play: the answer whose board, once play
                 # reaches the next main-phase frame, is closest to the search's at that point.
-                best, ties = (10 ** 9, picks_[0]), []
+                best, ties, lost = (10 ** 9, picks_[0]), [], {}
                 for o in picks_[:MAX_PROBES]:
                     k2, d2, win = probe_on(c, extra, list(s.picks) + o, want_win)
                     if win:
@@ -934,11 +927,20 @@ def walk(c, prefix, extra, log, from_turn):
                     sg = projected(d2, rest.get(cur_key) or collections.Counter(), tgt) if k2key == cur_key \
                         else frame_sig(d2)
                     dist = sig_diff(sg, tgt)[0]
+                    lost[tuple(o)] = sg[4] if len(sg) > 4 else 0
                     say("   %s option %s -> %d" % (d.get("type"), o, dist))
                     if dist < best[0]:
                         best, ties = (dist, o), [o]
                     elif dist == best[0]:
                         ties.append(o)
+                # Among equally close answers, one that loses a card the search still plays this phase is
+                # out: Brainstorm putting back the Remand the search casts next ties with putting back a
+                # Curiosity (the other only swaps which Curiosity copy is in hand), and the next turn's
+                # board cannot tell them apart (NivMizzetCombo s4_gi3 T3, 2026-10-27).
+                if len(ties) > 1:
+                    keep = min(lost.get(tuple(o), 0) for o in ties)
+                    ties = [o for o in ties if lost.get(tuple(o), 0) == keep]
+                    best = (best[0], ties[0])
                 # Answers that leave the same visible board (a card tutored to the top of the library)
                 # are told apart at the start of the next turn, after the draw.
                 if len(ties) > 1:
