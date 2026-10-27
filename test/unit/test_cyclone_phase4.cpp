@@ -13,6 +13,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
@@ -248,11 +249,19 @@ TEST_CASE("Cyclone phase 4: the tutor cast is emitted, its target axis spans eve
     }
     CHECK(ltp >= 1);
     CHECK(deluge == 0);   // goldfish_inert: never cast (USER ruling)
-    // The candidate list the axis indexes covers all eight distinct names (width 32 >= 8).
-    const std::vector<std::string> cands =
-        RankedTutorCandidates(Prov4(), s, 0, Def4(kLtp).params);
-    CHECK(cands.size() == 8);
-    CHECK(std::find(cands.begin(), cands.end(), kEmrakul) != cands.end());
+    // The candidate list the axis indexes covers all eight distinct names (width 32 >= 8) -- with the USER's
+    // LTP rule (phase 5, MTG_CYCLONE_LTP_RULE) off; with it on, the list is the rule's (test_cyclone_phase5.cpp).
+    {
+        const heurarm::Arm saved = heurarm::t_arm;
+        heurarm::t_arm[static_cast<int>(heurarm::CYCLONE_LTP_RULE)] = 0;
+        const std::vector<std::string> cands =
+            RankedTutorCandidates(Prov4(), s, 0, Def4(kLtp).params);
+        heurarm::t_arm = saved;
+        CHECK(cands.size() == 8);
+        CHECK(std::find(cands.begin(), cands.end(), kEmrakul) != cands.end());
+    }
+    // Rule on: a Cyclone is not held and no Emrakul is in hand -> Cyclone? none left in this library; Emrakul.
+    CHECK(RankedTutorCandidates(Prov4(), s, 0, Def4(kLtp).params) == std::vector<std::string>{ kEmrakul });
     CHECK(Prov4().TutorSearchWidth() >= 8);
 }
 
