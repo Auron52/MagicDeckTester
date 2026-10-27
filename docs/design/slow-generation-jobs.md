@@ -94,6 +94,22 @@ untouched. Generation was restarted on the fixed commit with `MTG_KEEP_RETAIN_FO
 2026-10-27: "it would be nicer if we could retain what we have done") -- the rollouts banked under the old engine
 stay in the journal.
 
+**After the restart (2026-10-27 20:41 UTC, PGO, play 008e4fce2050a0cd).** The resume kept **600,866 completed
+cell-sides (9,394,320 rollouts)** from the old engine and dropped 3,152,320 PARTIAL size-7 records, which re-roll.
+The in-memory work since the journal's last write (17:56) was also lost. The SIGSTOP used for the A/B inflates
+the last few pre-restart SLOW-ROLLOUT ages (~1,620 s each); ignore those entries.
+
+| | before (12:25 session, 60f525f17) | after (99977194b, first 65 min) |
+|---|---|---|
+| size-7 rollouts | 560k in 28,700 s, with ~2 h at 0/s | 542k in 3,900 s, 100-150/s, no stalls |
+| journal | unwritten for up to 8,852 s (subwave 274,256) | written continuously (subwave 35,031) |
+| generator RSS | 16.5 GB | 4.8 GB |
+| worst rollout so far | 22,027 s (6.1 h) | 2,082 s, the SAME hand and seed |
+
+Still open: that hand (`Kitchen Finks x3; Caves of Koilos x2; Carrion Feeder x1; Bloodthrone Vampire x1`, size 7
+play r=1, seed 4354685568366855579) still costs 35 min. It has two DIFFERENT free outlets (Feeder, Bloodthrone),
+which the twin fold does not merge. That is the next replay to profile.
+
 **Originally listed checks** (1 is answered above; 2-3 remain):
 1. Single-rollout repro of the 7,642 s hand (Basilica, Forest, Feeder ×4: the smallest hand, nearly pure
    Feeder), run under the per-decision census. Does the time go to sacrifice-activation enumeration, and
