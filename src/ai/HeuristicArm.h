@@ -685,6 +685,8 @@ enum Slot : int
     LFE_HARB_SMOKE_FIRST,     // MTG_LFE_HARB_SMOKE_FIRST  ORDER amendment (ADOPTED 2026-10-23, DEFAULT ON; -12/-12 turns held-out): when the early-ramp condition admits Smokebraider it is ranked FIRST, not last -- smoke d3 gi122: the unrestricted search fetched it on T1 for the ramp and won T4; ranked last, the budgeted search took Brushfire (T5, persists at 16x)
     PAINLESS_AURA_PIP,        // MTG_PAINLESS_AURA_PIP  a COLOURED pip off a painland whose land Aura already pays it (Brushland + Wild Growth for Living Wish's {G}) taps the painless {C} face, when the Aura's fixed-colour units cover every pip of that colour still owed and a generic pip is left to spend the {C} on: the same two pips, one life more (EDF, 724 of 1,001 viewer games DOMINATED-LIFE). Only EldraziDisplacerFlicker runs a painland under a land Aura. Default ON; =0 -> the historical coloured tap
     PAY_SHRINK,               // MTG_PAY_SHRINK  the per-cast payer gives back what its backtracker tapped but the bill did not need -- the whole-turn prepay's MTG_PREPAY_SHRINK pass for one cast, subset-only (never a swap) (2026-10-27; mana oracle rollback census: EDF viewer seed 3000 T4 tapped Conservatory AND the Fertile Ground host for a {U}, and the Displacer behind it had no {W}). Default ON; =0 -> the first covering tap set
+    PREPAY_COLOURS,           // MTG_PREPAY_COLOURS  the whole-turn prepay (BatchPrepayMainCasts) carries the casts' HYBRID pips into its joint bill and, when the joint solve's pool holds any-colour units (a land Aura's bonus: Fertile Ground, Trace of Abundance), assigns each hybrid pip and each any-colour unit a concrete colour the pool covers instead of declining (PP_WILD, a wild float). EDF: a batch with Trace of Abundance ({R/W}{G}) read {R}-short, and every Aura-bonus batch declined to the per-cast payer, which dropped casts the board pays (seed 3040 T3: Fertile Ground + Living Wish). Default ON; =0 -> the flat bill and the decline
+    PREPAY_AURA_HOST,         // MTG_PREPAY_AURA_HOST  the whole-turn prepay (BatchPrepayMainCasts) never taps the untapped host of a land Aura the batch casts (Fertile Ground, Wild Growth, Utopia Sprawl, Trace of Abundance, Overgrowth): tapped before its Aura resolves, the host makes its own mana and loses the bonus for the rest of the turn. A batch the board cannot pay without the host declines to the per-cast payer, which pays the Aura with the host held (AIEngine's twin) and then taps the host for its own mana AND the bonus. Only a host the rest of the board can pay the Aura without is held (else every realisation taps it before the Aura resolves: EDF gi 1011 T2, Trace onto a Wild Growth'd Coast). EDF A/B gi188 (seed 950189) T3: {Fertile Ground on Conservatory, Eladamri's Call} tapped Conservatory, so the tutored Cloud of Faeries had no {U} and the T3 kill became T4 at every budget. Default ON; =0 -> the host is an ordinary source
     COUNT
 };
 
@@ -1320,6 +1322,8 @@ inline const char* Name(int slot)
         "MTG_LFE_HARB_SMOKE_FIRST",
         "MTG_PAINLESS_AURA_PIP",
         "MTG_PAY_SHRINK",
+        "MTG_PREPAY_COLOURS",
+        "MTG_PREPAY_AURA_HOST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

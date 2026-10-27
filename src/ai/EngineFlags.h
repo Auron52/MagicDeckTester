@@ -420,6 +420,25 @@ inline bool PayShrinkOn()
     return heurarm::Flag(heurarm::PAY_SHRINK, env_on);
 }
 
+// MTG_PREPAY_COLOURS (2026-10-27; DEFAULT ON, =0 -> the flat joint bill and the any-colour decline): the
+// whole-turn prepay keeps the casts' hybrid pips in its joint bill and pins the any-colour units of its
+// pool to the colours the bill needs -- see PrepayColoursFit (TurnSolver.cpp).
+inline bool PrepayColoursOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_COLOURS", true);
+    return heurarm::Flag(heurarm::PREPAY_COLOURS, env_on);
+}
+
+// MTG_PREPAY_AURA_HOST (2026-10-27; DEFAULT ON, =0 -> the host is an ordinary source of the joint solve):
+// the whole-turn prepay holds the untapped host of every land Aura the batch casts out of its solve --
+// see PrepayAuraHostHold (TurnSolver.cpp). The per-cast payer's twin is AIEngine's RESERVE THE AURA'S
+// OWN HOST.
+inline bool PrepayAuraHostOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_AURA_HOST", true);
+    return heurarm::Flag(heurarm::PREPAY_AURA_HOST, env_on);
+}
+
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
 // Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's

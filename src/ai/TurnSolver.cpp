@@ -51190,6 +51190,117 @@ inline bool Pp(PrepayOutcome o)
     return false;   // every decline site returns false, so `return Pp(...)` reads as the decline
 }
 
+// THE JOINT POOL'S COLOURS (MTG_PREPAY_COLOURS). The pre-load below pins every coloured pip of the batch
+// to a unit of its own colour and carries the generic requirement as `wild`, so it needs a pool whose
+// colours are SETTLED. Two things leave them open, and each used to send the whole batch to the per-cast
+// payer (which then strands what the joint solve would have paid):
+//   * ANY-COLOUR UNITS. A land Aura's "add one mana of any color" (Fertile Ground, Trace of Abundance,
+//     an unchosen Utopia Sprawl) is booked as `wild`, so every batch whose solve tapped such a host
+//     declined (PP_WILD). The colour is the controller's choice as the mana is made, and the prepay
+//     makes all of the batch's mana at once -- so choosing it here, for the pips the batch needs, is
+//     exactly the choice a player makes. Only plain any-colour units are pinned: a pool whose `wild`
+//     carries a subset that is not "any of the five" (wild_c / wild_phantom / wild_conv) keeps the
+//     decline. Units the batch does not need stay `wild` and float on as any colour, as the per-cast
+//     payer's leftover does.
+//   * HYBRID PIPS. The bill used to be summed from the flat colour ints, which bake each hybrid pip
+//     into its FIRST colour (Card.h), so Trace of Abundance's {R/W} entered the joint solve as {R}: an
+//     EDF batch with Trace read unpayable on a board whose {W} pays it. With the hybrid pairs carried
+//     (at most four, ManaCost's limit), the solve may pay either colour, and this settles each pip to
+//     the colour the pool holds -- assignments tried in ExpandHybrids' bits order, so bits 0 (the flat
+//     bill) is always the first, and a batch with no hybrid pip and no `wild` is returned unchanged.
+// Feasible iff some assignment's coloured deficits (pips the pool's typed units do not cover) fit in
+// `wild`, and its {C} pips in the pool's own {C} (no any-colour unit pays {C}, CR 107.4c). `out_cost` /
+// `out_pool` (optional) receive the settled bill (no hybrid pairs left) and the pool with the needed
+// `wild` units turned into their colours. Lever off: exactly the historical `produced.wild == 0`.
+bool PrepayColoursFit(const ManaPool& produced, const ManaCost& cost, ManaCost* out_cost, ManaPool* out_pool)
+{
+    if (produced.wild == 0 && cost.hybrid_count == 0)
+    {
+        if (out_cost != nullptr) { *out_cost = cost; }
+        if (out_pool != nullptr) { *out_pool = produced; }
+        return true;
+    }
+    if (!PrepayColoursOn()) { return false; }   // (a hybrid pair is only ever carried with the lever on)
+    if (produced.wild_c != 0 || produced.wild_phantom != 0 || produced.wild_conv != 0) { return false; }
+    const int have[5] = { produced.white, produced.blue, produced.black, produced.red, produced.green };
+    const unsigned n_assign = 1u << cost.hybrid_count;
+    for (unsigned bits = 0; bits < n_assign; ++bits)
+    {
+        const ManaCost c = cost.hybrid_count > 0 ? cost.ExpandHybrids(bits) : cost;
+        if (produced.colorless < c.colorless) { continue; }
+        const int need[5] = { c.white, c.blue, c.black, c.red, c.green };
+        int deficit[5], sum = 0;
+        for (int k = 0; k < 5; ++k) { deficit[k] = std::max(0, need[k] - have[k]); sum += deficit[k]; }
+        if (sum > produced.wild) { continue; }
+        if (out_cost != nullptr) { *out_cost = c; }
+        if (out_pool != nullptr)
+        {
+            ManaPool p = produced;
+            p.white += deficit[0]; p.blue += deficit[1]; p.black += deficit[2];
+            p.red   += deficit[3]; p.green += deficit[4];
+            p.wild  -= sum;
+            *out_pool = p;
+        }
+        return true;
+    }
+    return false;
+}
+
+// THE LAND AURA'S OWN HOST (MTG_PREPAY_AURA_HOST). A land Aura the batch casts (Fertile Ground, Wild
+// Growth, Utopia Sprawl, Trace of Abundance, Overgrowth) adds its bonus each time its host is tapped for
+// mana -- from the moment it resolves. The prepay makes the whole batch's mana before any cast resolves,
+// so a host it taps yields its own mana only, and the bonus is gone for the rest of the turn. The per-cast
+// payer holds the host while it pays the Aura (AIEngine's RESERVE THE AURA'S OWN HOST, and the rollout's
+// apply_one twin) and taps it afterwards for its own mana AND the bonus. So the joint solve runs with
+// every such host held: marked tapped for the whole call, exactly the per-cast idiom, and untapped again
+// on every exit. A batch the board cannot pay without the host declines to the per-cast payer, whose
+// realisation has the bonus unit the joint solve cannot see. EDF A/B gi188 (seed 950189) T3: {Fertile
+// Ground on Conservatory, Eladamri's Call} tapped Conservatory, so the tutored Cloud of Faeries found no
+// {U} and the T3 kill became T4 at every budget.
+// ONLY A HOST THE AURA CAN BE PAID WITHOUT. When the rest of the board cannot pay the Aura's own cost,
+// every realisation taps the host before the Aura resolves -- the per-cast payer's reservation retries
+// unreserved -- so the bonus is lost whatever pays, and holding the host would only trade the joint
+// solve for the per-cast walk. EDF gi 1011 (seed 5301012) T2: Trace of Abundance {R/W}{G} onto a Wild
+// Growth'd Yavimaya Coast beside a fresh Aether Hub; the Hub alone cannot pay Trace, and the joint solve
+// is what pays {Trace, Training Grounds} at all (test_edf_aura_payer_as_executed). The test is the
+// pool-level CanPay of the board with the host (and every host held before it) out. Only an UNTAPPED
+// host the action names is considered (an Aura whose host is picked at resolution, or a host already
+// tapped, has nothing to protect), so a batch without a land Aura is byte-identical.
+struct PrepayAuraHostHold
+{
+    GameState* s = nullptr;
+    int        held[8];
+    int        n = 0;
+    PrepayAuraHostHold(GameState& state, const std::vector<Action>& acts)
+    {
+        if (!PrepayAuraHostOn()) { return; }
+        const int active = state.active_player_index;
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0 || n == 8) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d == nullptr || !d->params.is_land_aura || d->params.land_aura_extra_mana <= 0) { continue; }
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.tapped || !p.card.IsLand()
+                    || p.card.m_number != a.enchant_target) { continue; }
+                p.tapped = true;
+                const ManaCost own = a.cost.ManaValue() > 0 ? a.cost : EffectiveCost(*d, state);
+                if (AvailableManaPool(state).CanPay(own)) { held[n++] = a.enchant_target; s = &state; }
+                else { p.tapped = false; }
+                break;
+            }
+        }
+    }
+    ~PrepayAuraHostHold()
+    {
+        for (int k = 0; k < n; ++k)
+        { SetPermTapped(*s, s->active_player_index, held[k], false); }
+    }
+    PrepayAuraHostHold(const PrepayAuraHostHold&) = delete;
+    PrepayAuraHostHold& operator=(const PrepayAuraHostHold&) = delete;
+};
+
 // PREVENT DAMAGE BATCH TIMING (dmgev::BatchTimingEnabled has the case and the rule). Is paying this
 // batch's casts ONE AT A TIME, each after the ones before it resolved, never worse than paying them all
 // up front -- and better? The taps are the same set either way (every land gets tapped once this main
@@ -52039,7 +52150,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (float_in)
     {
         const ManaPool& f = state.floating_mana;
-        if (!PrepayFloatPoolOn() || f.wild != 0 || f.snow_units != 0) { return Pp(PP_FLOAT_NZ); }
+        // MTG_PREPAY_COLOURS: a plain any-colour float is settled with the rest of the pool (PrepayColoursFit).
+        const bool wild_ok = f.wild == 0
+                          || (PrepayColoursOn() && f.wild_c == 0 && f.wild_phantom == 0 && f.wild_conv == 0);
+        if (!PrepayFloatPoolOn() || !wild_ok || f.snow_units != 0) { return Pp(PP_FLOAT_NZ); }
     }
     // SUBTYPE-RESTRICTED MANA WITH AN ABILITY / ANY-COMBINATION CLAUSE (Smokebraider: "Spend this mana
     // only to cast Elemental spells or activate abilities of Elementals"). The joint solve pays every
@@ -52084,6 +52198,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (bd != nullptr && BigSpellOnlySource(bd->params)) { big_only_p = &bd->params; break; }
     }
     ManaCost c_bigq;
+    bool hybrid_overflow = false;  // MTG_PREPAY_COLOURS: more hybrid pips than ManaCost carries
     bool any_reveal_act = false;   // a reveal_or_pay cast (Daring Buccaneer) -> order-aware debit below
     for (const Action& a : acts)
     {
@@ -52192,6 +52307,17 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
         combined.colorless += ec.colorless;
+        // MTG_PREPAY_COLOURS: the hybrid pairs ride along (their first colour is already in the flat
+        // ints), so the joint solve may pay either colour -- see PrepayColoursFit. More than ManaCost's
+        // four: the bill goes back to flat, as before.
+        if (ec.hybrid_count > 0 && PrepayColoursOn())
+        {
+            for (int h = 0; h < ec.hybrid_count; ++h)
+            {
+                if (combined.hybrid_count < 4) { combined.hybrid_pair[combined.hybrid_count++] = ec.hybrid_pair[h]; }
+                else { hybrid_overflow = true; }
+            }
+        }
         ManaCost& part = d->card.IsCreature() ? c_crea : c_nonc;   // mixed two-stage split
         part.generic += ec.generic; part.white += ec.white; part.blue += ec.blue;
         part.black += ec.black; part.red += ec.red; part.green += ec.green;
@@ -52230,6 +52356,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         crea_part.colorless -= rs.noncreature.colorless;
         AddManaCost(c_crea, crea_part);
     }
+    if (hybrid_overflow) { combined.hybrid_count = 0; for (int h = 0; h < 4; ++h) { combined.hybrid_pair[h] = 0; } }
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
@@ -52329,6 +52456,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     BigSpellBatchScope _big_batch_scope(big_batch);
 
+    // The batch's land-Aura hosts sit out every solve below (PrepayAuraHostHold). Taken BEFORE the
+    // snapshot, so each rollback keeps them held; the destructor frees them on every exit.
+    const PrepayAuraHostHold _aura_host_hold(state, acts);
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
     const ManaPool               fm_snap = state.floating_mana;
@@ -52732,7 +52862,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/hold,
                                  /*out_full_pool=*/&produced)
-             && produced.wild == 0;
+             && PrepayColoursFit(produced, combined, nullptr, nullptr);
         if (paid) { won_hold = hold; }
         // MTG_PREPAY_HOLD_TRACE=1 (diagnosis only, print-only): each rung tried, the creatures it
         // held, and whether it paid -- the read that shows WHICH body a hold ladder spent.
@@ -52814,6 +52944,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (!ok && big_mixed && !float_in)
     {
         ManaCost c_small = combined;
+        c_small.hybrid_count = 0;   // the stages pay the flat bill (c_bigq carries no hybrid pairs)
+        for (int h = 0; h < 4; ++h) { c_small.hybrid_pair[h] = 0; }
         c_small.generic -= c_bigq.generic; c_small.white -= c_bigq.white; c_small.blue -= c_bigq.blue;
         c_small.black -= c_bigq.black; c_small.red -= c_bigq.red; c_small.green -= c_bigq.green;
         c_small.colorless -= c_bigq.colorless;
@@ -52852,7 +52984,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 sum.white += p2.white; sum.blue += p2.blue; sum.black += p2.black;
                 sum.red += p2.red; sum.green += p2.green; sum.colorless += p2.colorless;
                 sum.wild += p2.wild;
-                if (sum.wild != 0) { continue; }
+                if (!PrepayColoursFit(sum, combined, nullptr, nullptr)) { continue; }
                 bool crea_only_tapped = false;
                 const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
                 for (int bi = 0; bi < nb && !crea_only_tapped; ++bi)
@@ -52932,7 +53064,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 sum.white += p2.white; sum.blue += p2.blue; sum.black += p2.black;
                 sum.red += p2.red; sum.green += p2.green; sum.colorless += p2.colorless;
                 sum.wild += p2.wild;
-                if (sum.wild != 0) { continue; }   // same ambiguous-pinning bar as the single solve
+                if (!PrepayColoursFit(sum, combined, nullptr, nullptr)) { continue; }   // the single solve's bar
                 produced = sum; ok = true; mixed_ok = true; won_hold = hold;
                 mixed_p_crea = first_c ? p1 : p2;
                 mixed_p_nonc = first_c ? p2 : p1;
@@ -52942,7 +53074,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     // Decline when the full batch is unaffordable (fall back to greedy, which casts what it can) or
     // when the tap set makes "any colour" (wild) mana -- pinning colours to pips is then ambiguous.
-    if (!ok || produced.wild > 0)
+    if (!ok || !PrepayColoursFit(produced, combined, nullptr, nullptr))
     {
         state.battlefield                  = bf_snap;
         state.floating_mana                = fm_snap;
@@ -53075,7 +53207,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                                     /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                                     /*tapped_mask=*/0, /*untapped_max=*/-1,
                                                     /*reserved_mask=*/trial, /*out_full_pool=*/&p2)
-                                 && p2.wild == 0;
+                                 && PrepayColoursFit(p2, combined, nullptr, nullptr);
                 if (o2 && !(pain_guard && state.players[active].life < best_la)
                        && !(pain_guard && PayEnergyLastOn() && state.players[active].energy_counters < best_ea))
                 {
@@ -53107,6 +53239,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
     }
 
+    // MTG_PREPAY_COLOURS: settle the hybrid pips and the any-colour units (PrepayColoursFit) before the
+    // pre-load pins them. Every solve accepted above passed the same test, so this always succeeds; with
+    // no hybrid pip and no `wild` it hands both back unchanged.
+    {
+        ManaCost settled;
+        ManaPool pinned_pool;
+        if (PrepayColoursFit(produced, combined, &settled, &pinned_pool)) { combined = settled; produced = pinned_pool; }
+    }
     // OVER-TAP METER (MTG_TAP_STATS): how much more the accepted solve produced than the batch
     // needed, and how many sources were touched beyond the minimum the surplus could have come from.
     // See tapstats::g_prepay_overtap_* for why this number is the one that matters.

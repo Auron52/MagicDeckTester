@@ -500,6 +500,44 @@ the old payer): APPLY-DROP 757 -> 697 (rollback depth 1: 569 -> 507), games with
 declining whenever its tap set makes any-colour mana (`BatchPrepayMainCasts`, "wild -> pip pinning
 ambiguous": every land-Aura bonus does), which hands the line to the per-cast payer.
 
+* **The whole-turn prepay settles its colours (`MTG_PREPAY_COLOURS`, default ON) and holds a land Aura's host
+  (`MTG_PREPAY_AURA_HOST`, default ON).** The USER: "We want the mana payment to be as close to fully reliable
+  as possible." `MTG_PREPAY_PROBE` on EDF (40 games, seed 940001): of ~252k multi-cast prepay calls only 10,117
+  (4%) prepaid; 13,915 declined on any-colour mana (PP_WILD) and 11,592 on a non-empty float, and those lines
+  went to the per-cast payer, which drops casts the board pays (seed 3040 T3, Fertile Ground + Living Wish).
+  Two causes, one lever: a land Aura's "any colour" bonus is booked as `wild`, and the joint bill was summed
+  from the flat colour ints, so a hybrid pip entered as its FIRST colour (Trace of Abundance's {R/W} read
+  {R}). `PrepayColoursFit` (TurnSolver.cpp) carries the hybrid pairs into the bill and settles every hybrid
+  pip and every plain any-colour unit to a colour the pool covers; a `wild` with a non-"any of five" subset
+  (wild_c / wild_phantom / wild_conv) still declines. Same probe after: 29,286 prepaid (x2.9), PP_WILD and
+  the float decline 0. The first held-out A/B (seed 950001, 21,001 paired games at play settings) found one
+  slower game, EDF gi188 T3 -> T4 at EVERY budget (b20..unlimited): the joint solve now paid {Fertile Ground
+  onto Conservatory, Eladamri's Call} and tapped Conservatory, the new Aura's own host, before the Aura
+  resolved -- its bonus gone, so the tutored Cloud of Faeries had no {U}. The per-cast payer and the rollout
+  already hold that host (AIEngine's RESERVE THE AURA'S OWN HOST); `PrepayAuraHostHold` is the prepay's twin:
+  every untapped host the batch's land Auras name sits out the joint solve, and a batch the board cannot pay
+  without it declines to the per-cast payer (which pays the Aura first and then has host + bonus). A host is
+  held only when the rest of the board can pay its Aura's own cost: otherwise every realisation taps it
+  before the Aura resolves, and holding it only trades the joint solve for the per-cast walk (EDF gi 1011 T2,
+  `test_edf_aura_payer_as_executed`).
+  EDF census (edfcensus5, the colours lever alone, vs census4): APPLY-DROP 697 -> 203, rollback depth 1 507 ->
+  68, games with a lost line 128 -> 70, DOMINATED-LIFE 4,611 -> 3,768.
+  ADOPTED (both default ON) on a fresh held-out A/B at every deck's SHIPPED play setting (seed 960001, all 38
+  suite decks, both levers off vs on): 21,001 paired games, **0 slower, 2 faster** (both EDF), 56 play digests
+  changed in seven decks (EDF 28, FungusV3 17, Bruna 3, Hinata 3, FiveColour 2, Melira 2, AccomplishedAlchemist
+  1); units 229,297,747 -> 229,121,049 (-0.08%; EDF -3.6% -- the colours lever alone had cost EDF +5.9%, which
+  the host hold took back). The viewer fixture `edf_wish_first_keeps_trace` (the USER's "it skips to T4 after
+  Living Wish") now pins the historical payer: on the new one the USER's own Wish-then-Trace order pays both
+  casts, which `edf_wish_first_pays_trace_jointly` pins.
+  The census on the adopted binary (edfcensus6; the 142 games all three runs finished) shows what the host hold
+  TRADES: APPLY-DROP 695 (census4) -> 203 (colours alone) -> 309 (colours + hold), CONTINUATION-DIFFERS 365 ->
+  442 -> 284; the two together 1,060 -> 645 -> 593. A batch the hold makes unpayable declines to the per-cast
+  payer, and that walk drops named casts the unheld joint solve paid -- e.g. {Emiel the Blessed, Wild Growth}
+  (29 of the 122 hold-only drops), whose batch needs the host's mana but not the bonus. NEXT (owed): instead of
+  declining, a STAGED joint solve -- the held Auras' own bills without their hosts, then the rest with each
+  host carrying its new Aura (host + bonus) -- and only then the unheld joint solve; it would also prepay the
+  batches that need a mid-line Aura's bonus at all (root cause 4 of the probe).
+
 **Owed: EDF seed 3003 T5** (9 ORACLE-GAPs on the new payer, one board: Aether Hub #3 under Wild Growth,
 Aether Hub #4, Brushland, Adarkar Wastes; plans casting Trace of Abundance then Essence Depleter / a blink).
 Every full oracle realisation taps Adarkar Wastes as well; the engine pays with the three others. The first

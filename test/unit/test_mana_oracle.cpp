@@ -215,8 +215,10 @@ Action CastAction(const GameState& s, const char* nm)
 // pinned below spends Conservatory's {W} on the {U} -- while Mariposa's bonus {U} alone pays the Grounds
 // and leaves Conservatory for the Displacer. So the search can never score this line, the board can pay
 // it, and the rollback has to reach back one decision: the Grounds' payment (#1) before the Displacer's
-// (#2), which is the one that failed. The per-cast give-back (MTG_PAY_SHRINK, default on) fixed that
-// over-tap, so the case runs with the give-back OFF, the historical payer; the next test is the fixed one.
+// (#2), which is the one that failed. Two levers now pay it, each on its own: the per-cast give-back
+// (MTG_PAY_SHRINK) fixes that over-tap, and the whole-turn prepay (MTG_PREPAY_COLOURS) settles Fertile
+// Ground's any-colour bonus to {U} and pays both casts jointly. So the case runs with BOTH off, the
+// historical payer; the next test is the fixed one.
 TEST_CASE("viewer line check: the search's payment drops a cast the board pays for, and says how to pay it")
 {
     EnsureOracleCards();
@@ -224,10 +226,13 @@ TEST_CASE("viewer line check: the search's payment drops a cast the board pays f
     TurnSolver::Plan plan;
     plan.actions      = { CastAction(s, "Training Grounds"), CastAction(s, "Eldrazi Displacer") };
     plan.land_decided = true;
-    const std::int8_t saved = heurarm::t_arm[heurarm::PAY_SHRINK];
-    heurarm::t_arm[heurarm::PAY_SHRINK] = 0;
+    const std::int8_t saved    = heurarm::t_arm[heurarm::PAY_SHRINK];
+    const std::int8_t saved_pc = heurarm::t_arm[heurarm::PREPAY_COLOURS];
+    heurarm::t_arm[heurarm::PAY_SHRINK]     = 0;
+    heurarm::t_arm[heurarm::PREPAY_COLOURS] = 0;
     const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
-    heurarm::t_arm[heurarm::PAY_SHRINK] = saved;
+    heurarm::t_arm[heurarm::PAY_SHRINK]     = saved;
+    heurarm::t_arm[heurarm::PREPAY_COLOURS] = saved_pc;
     REQUIRE(a.audited);
     CHECK_FALSE(a.engine_full);
     CHECK(a.sibling == -1);

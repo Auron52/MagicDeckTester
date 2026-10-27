@@ -439,6 +439,7 @@ add_executable(mtg-test
     test/unit/test_edf_prospective_null.cpp
     test/unit/test_edf_untap_credit.cpp
     test/unit/test_edf_prepay_energy.cpp
+    test/unit/test_prepay_colours.cpp
     test/unit/test_edf_aura_payer.cpp
     test/unit/test_edf_route_board_deploy.cpp
     test/unit/test_edf_goff_verify.cpp
