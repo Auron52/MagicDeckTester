@@ -78803,9 +78803,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
 //   expanded = an INTERIOR node whose state an earlier decision already expanded (searched at depth >= 1, at
 //            any depth): an EXPANSION (child-state) cache could skip its plan enumeration and applies.
 // Units are the per-GAME meter (gamework::Used). For exact hits, the delta under the TOPMOST hit (inclusive,
-// counted once). For expansion, each node's OWN units (its delta minus its children's), split interior / leaf. Keys are recorded at node ENTRY, truncated subtrees included, so the
-// shares are an UPPER bound on what a cache restricted to completed subtrees could reuse. Per GAME only
-// (cleared in ClearPerGameCaches), never per worker.
+// counted once). For expansion, each node's OWN units (its delta minus its children's), split interior / leaf.
+// A key is recorded only when its subtree COMPLETED (no g_fs_trunc_events inside it), and the exact key also
+// folds the leaf kind (the forced heuristic / value / constant leaf), so a hit is something a cache could reuse.
+// Per GAME only (cleared in ClearPerGameCaches), never per worker.
 namespace treereuse
 {
     inline bool On() { static const bool v = EnvOn("MTG_TREE_REUSE_PROBE"); return v; }
@@ -78870,14 +78871,15 @@ namespace treereuse
     {
         bool hit_e = false, top_exact = false, expanded_before = false, leaf = false;
         long long u0 = 0;
+        unsigned long long trunc0 = 0;
+        TranspositionTable::Key key_e, key_b;
         Node(const TranspositionTable::Key& base, const TranspositionTable::Key& exact, int depth)
         {
             ++t.nodes;
             leaf = depth <= 0;
             hit_e = t.prev_exact.count(exact) != 0;
             expanded_before = !leaf && t.prev_expanded.count(base) != 0;
-            t.cur_exact.insert(exact);
-            if (!leaf) { t.cur_expanded.insert(base); }
+            key_e = exact; key_b = base; trunc0 = g_fs_trunc_events;
             if (hit_e) { ++t.n_exact; if (t.covered_exact++ == 0) { top_exact = true; } }
             u0 = gamework::Used();
             t.child_units.push_back(0);
@@ -78885,6 +78887,12 @@ namespace treereuse
         ~Node()
         {
             const long long incl = gamework::Used() - u0;
+            // Only a COMPLETED subtree is reusable: one with no truncation event inside it.
+            if (g_fs_trunc_events == trunc0)
+            {
+                t.cur_exact.insert(key_e);
+                if (!leaf) { t.cur_expanded.insert(key_b); }
+            }
             const long long own  = incl - t.child_units.back();
             t.child_units.pop_back();
             if (!t.child_units.empty()) { t.child_units.back() += incl; }
@@ -84863,7 +84871,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (treereuse::On() && treereuse::t.nest > 0)
     {
         const TranspositionTable::Key kb = BuildSimKeyBase(state, max_turns, second_main);
-        _treereuse.emplace(kb, SimKeyAtDepth(kb, depth), depth);
+        TranspositionTable::Key ke = SimKeyAtDepth(kb, depth);
+        Fold(ke, 0x1EAF);   // the leaf kind: an entry answers only a pass scoring its leaves the same way
+        Fold(ke, (g_force_heuristic_leaf ? 1u : 0u) | (g_force_value_leaf ? 2u : 0u) | (g_force_constant_leaf ? 4u : 0u));
+        _treereuse.emplace(kb, ke, depth);
     }
     if (depth <= 0)
     {

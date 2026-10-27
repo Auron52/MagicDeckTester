@@ -2,7 +2,7 @@
 
 **Status (2026-10-27): the overlap is MEASURED (below); the cache is not built.** The USER deferred this until the
 LandfallElementals / NivMizzetCombo shape work was done (it is; `lfe-valueleaf-costs-more.md`,
-`niv-rollout-ladder-vs-leafless-shapes.md`). Next: the exact-key VALUE cache, which the measurement favours.
+`niv-rollout-ladder-vs-leafless-shapes.md`). Next: the exact-key VALUE cache, which the measurement favours (~10% of units).
 
 ## The idea (USER, 2026-10-27)
 
@@ -108,6 +108,29 @@ By decision turn, staged LandfallElementals (turn 1 has no earlier decision, by 
   cut would bring it to ~8.75M.
 * The two kinds overlap (an exact hit's subtree contains re-expanded nodes), so their shares do not add.
 
+**Restricted to what a cache could actually reuse** (probe as committed now). A key is recorded only when its
+subtree completed (no `g_fs_trunc_events` inside it), and the exact key also folds the leaf kind (forced
+heuristic / value / constant leaf). Same batch, still byte-identical to probe-off:
+
+| arm | exact: upper bound -> reusable | re-expanded own: upper bound -> reusable |
+|---|---|---|
+| LandfallElementals live b20 | 12.1% -> **11.4%** | 1.2% -> **1.0%** |
+| NivMizzetCombo live b20 | 7.8% -> **7.5%** | 0.6% -> **0.6%** |
+| NivMizzetCombo emulnl b20 | 15.4% -> **10.5%** | 1.0% -> **0.8%** |
+| LandfallElementals staged b16 | 25.6% -> **10.6%** | 18.7% -> **10.8%** |
+
+Most of staged's upper bound was truncated subtrees: 30% of its units run past the budget, so its passes are
+often cut. Part of it was passes on a different leaf. On turn-2+ decisions the reusable exact share is
+24-33% on LandfallElementals (both shapes) and 11-25% on NivMizzetCombo.
+
+So the realistic prize is **~7.5-11.5% of all units for the value cache, on every shape**, about half the
+20-30% estimated above. The expansion cache pays only on the model leaf (~11%), and much of that overlaps the
+value cache.
+
+The key is exact across decisions. `BuildSimKeyBase` folds an ordered digest of the whole live library, so a
+real-play shuffle between decisions changes the key: hits are lost, nothing is reused wrongly. The "per-call"
+comment on `line_cache` in `FullSearchLine` predates that digest.
+
 **Decision by the rule above: build the exact-key VALUE cache first.** It is the cheaper cache and the larger
 share on every shape. The expansion cache only adds what the value cache misses on the leaf shape (subtrees
 whose depth changed).
@@ -119,4 +142,4 @@ Constraints it must keep (from the costs section):
   rule as the intra-decision `FSLineCache` that a warm-up pass's entry never answers the committing pass on a
   different leaf.
 * Per-game lifetime.
-* Re-measure with the probe restricted to completed subtrees before the A/B.
+* (Done: the probe's completed-subtree, same-leaf numbers above are the expected ceiling.)
