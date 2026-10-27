@@ -1623,7 +1623,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -1646,7 +1646,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Swamp card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Swamp card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -1669,7 +1669,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -1692,7 +1692,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -3796,7 +3796,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (this deck's Forest/Island-typed targets reach all five colours via its duals); it never taps for mana (never reaches the battlefield).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (this deck's Forest/Island-typed targets reach all five colours via its duals); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -3868,7 +3868,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Swamp/Forest-typed targets -- Stomping Ground, Overgrown Tomb, Breeding Pool, Godless Shrine, Blood Crypt, Jetmir's Garden, Zagoth Triome -- reach all five colours); it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Swamp/Forest-typed targets -- Stomping Ground, Overgrown Tomb, Breeding Pool, Godless Shrine, Blood Crypt, Jetmir's Garden, Zagoth Triome -- reach all five colours); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -3892,7 +3892,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled: PerformFetch ends with ShuffleAfterSearch (CR 701.19; deterministic and lockstep in both worlds, ON by default -- MTG_NO_SEARCH_SHUFFLE is the opt-out), so the fetched land thins the library and cards a Brainstorm-style put-back left on top are shuffled away; the search sees the post-shuffle order (the engine-wide known-library simplification). One residual simplification: a fail-to-find (no Island or Mountain card left, or the chosen target already gone) pays the life but returns before the shuffle.]",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled: PerformFetch ends with ShuffleAfterSearch (CR 701.19; deterministic and lockstep in both worlds, ON by default -- MTG_NO_SEARCH_SHUFFLE is the opt-out), so the fetched land thins the library and cards a Brainstorm-style put-back left on top are shuffled away; the search sees the post-shuffle order (the engine-wide known-library simplification). A fail-to-find (no Island or Mountain card left, or the chosen target already gone) pays the life and STILL shuffles (CR 701.19b; USER 2026-10-27: 'Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle' -- WhiffShuffle, SpellEffects.h; before that date a whiff returned before the shuffle).]",
    "template": "basic_land",
    "parameters": {
     "produces": [

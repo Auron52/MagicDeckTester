@@ -221,6 +221,8 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         {
             taped_name = (*routetape::t_tutor_play)[routetape::t_tutor_pos++];
             if (taped_name == routetape::NoneName()) { return; }
+            if (taped_name == routetape::WhiffShuffledName())
+            { WhiffShuffle(state, controller_index, "tutor"); return; }
             taped = true;
         }
         else { routetape::t_miss = true; }
@@ -242,7 +244,15 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     {
         std::vector<std::string> cands;
         { routetape::Suspend _rts; cands = LiveTutorCandidates(state, controller_index, pp); }   // not the link's own
-        if (cands.empty()) { return; }
+        // Nothing legal to find. A required library search still shuffles (CR 701.19b; the fetch fix of
+        // 2026-10-27, Q14) -- HumanFailToFindShuffles is exactly "a library was searched": not a "you MAY
+        // search" (that one declines), not a wish (sideboard) or a regrowth (graveyard).
+        if (cands.empty())
+        {
+            if (HumanFailToFindShuffles(pp))
+            { tape_rec.name = routetape::WhiffShuffledName(); WhiffShuffle(state, controller_index, "tutor"); }
+            return;
+        }
         want = cands.front();
         // "You MAY search" declined by the SEARCH (kTutorDeclineChoice). Checked BEFORE the clamp
         // below, which would otherwise fold the sentinel onto the last candidate. Gated on
@@ -401,7 +411,12 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
         { if (ap.library[i].m_name == want) { idx = i; break; } }
     }
-    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    if (idx < 0)   // chosen target no longer present (search/real drift guard): a fail-to-find
+    {
+        if (HumanFailToFindShuffles(pp))
+        { tape_rec.name = routetape::WhiffShuffledName(); WhiffShuffle(state, controller_index, "tutor"); }
+        return;
+    }
     Card c = wish ? ap.sideboard[idx] : regrow ? ap.graveyard[static_cast<std::size_t>(idx)]
                                                : ap.library[idx];
     const int         fetched_num  = c.m_number;   // capture before the move into hand/library

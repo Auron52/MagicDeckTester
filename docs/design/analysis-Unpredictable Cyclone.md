@@ -393,6 +393,43 @@ Deluge never is, the candidate list spans every distinct name; human -1 takes th
 cyclone_long_term_plans_emrakul_third_walk (Curator on top so a bare Wraith cycle walks to the Curator; LTP for
 Emrakul first puts it third, the walk reaches it -> extra turn -> round-3 kill; negative control without LTP: no win).
 
+**Phase 4b: the fail-to-find shuffle (Q14, a GENERIC play change).** One shared helper `WhiffShuffle`
+(SpellEffects.h, beside ShuffleAfterSearch): a library search that finds nothing still shuffles (CR 701.19b).
+Applied at every fetch-shaped early return, all shared by the executor and the rollout:
+- `PerformFetch` (every fetchland): no legal target, and the drift guard (the chosen target gone). Life is still paid.
+- `PerformLandTutorToBattlefield` (Crop Rotation): no land left, the drift guard, the non-land guard.
+- `PerformTutorToBattlefield` (Dragonstorm, Natural Order, Chord of Calling, Green Sun's Zenith, Birthing Pod --
+  cards with `tutor_shuffle_after`): an empty put list AND the explicit `kTutorDeclineTarget` fail-to-find variant
+  (a chosen fail-to-find is still a search). Bilbo's caller keeps its once-per-activation guard (satisfied).
+- `PerformTutor` (every card tutor): no legal candidate, and the drift guard -- only for a REQUIRED library search
+  (`HumanFailToFindShuffles`: not a "you MAY search" -- the Harbingers / Forerunner decline instead -- not a wish,
+  not a regrowth). The route tape (AccomplishedAlchemist) records such a whiff as a new sentinel
+  `WhiffShuffledName` so its replay shuffles identically.
+- Already correct, unchanged: `PerformLandSearch` (Evolving Wilds, Terramorphic, Myriad Landscape, Khalni, Primeval
+  Titan, Rampant Growth: it shuffles on a whiff and returns early only on a declined optional search),
+  `PerformEtbTutorToHandMulti` (Ranger of Eos), Bilbo, the human fail-to-find paths. Light-Paws' aura search is a
+  "you may search": declining is a legal line, left as is.
+- Levers: `MTG_LEGACY_WHIFF_NO_SHUFFLE=1` restores the old early return (an isolation arm, the MTG_LEGACY_SHUFFLE
+  precedent); `MTG_WHIFF_TRACE=1` prints every REAL-resolution whiff to stderr. Viewer: a play event "searched the
+  library, found nothing -- library shuffled".
+- Notes: Scalding Tarn's residual sentence replaced; the six other fetchlands' stale "library order/thinning not
+  modelled" sentences replaced; PerformFetch's header comment fixed.
+- Unit: test_cyclone_phase4.cpp "Phase 4b" case (Tarn whiff + drift guard, Crop Rotation whiff, Worldly Tutor whiff
+  shuffle, Giant Harbinger "may" whiff does NOT shuffle).
+
+**Results (2026-10-27).** Commit (a): unit 2072/2072, scenarios 321/321, smoke 149 passed with play-changed 0 on
+every deck (searched and d0), cost audit 498/498, field audit offline rc 0. Commit (b): unit 2073/2073, scenarios
+321/321, viewer_protocol_check --strict 0 play-drift / 0 board-diverged / 0 enum-gap (668 refs), smoke 146 passed /
+3 FAILED (GT NOT accepted -- the orchestrator's call), every move at **d0 only** (searched: 0 slower, 0 faster, 0
+play-changed): antilife d0 7 games (gi944 7->loss, gi460 loss->8, gi482 7->6, four digest-only), fluctuator d0 9
+(gi295 6->8, eight digest-only), pd d0 4 (gi299 loss->6, three digest-only); avg antilife 4.8920 -> 4.8920,
+fluctuator 4.9870 -> 4.9890, pd 7.3010 -> 7.2980. **All 20 isolated to the whiff shuffle**: each single game
+re-run as a one-game batch job (seed base+gi, game_index gi) reproduces GT under the (a) binary, reproduces the
+smoke result under the (b) binary, and reproduces GT again under the (b) binary with MTG_LEGACY_WHIFF_NO_SHUFFLE=1;
+MTG_WHIFF_TRACE=1 finds a REAL-resolution whiff in every one of the 20 games (antilife: a fetchland with no
+fetchable land left, T5-T8; fluctuator: Enlightened Tutor with no artifact/enchantment left, T3-T7; pd: a Green
+Sun's Zenith fail-to-find, T5-T6). Evidence: logs/cyclone/phase4b-whiff-evidence.txt (gitignored).
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -437,7 +474,7 @@ Emrakul first puts it third, the walk reaches it -> extra turn -> round-3 kill; 
   perf cost for this deck only; a sound refinement later. Default: off for extra-turn decks.
 - Q8. CycloneProvider TutorSearchWidth 32 (coverage fix: AL's width 2 makes Emrakul unreachable for
   Long-Term Plans). Default: yes.
-- Q14. ANSWERED 2026-10-27: USER *"Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle."* -> FIX QUEUED LAST, after phases 2-4 (USER: "can happen after everything else ... It isn't a key change"; generic engine fix in PerformFetch; may move other decks whose fetch can whiff -- measure in smoke/regression as a play change). Holding / late-cracking a fetch stays DEFERRED (USER: "isn't often super relevant"), recorded in docs/design/uncracked-fetchland.md. Original question:
+- Q14. **FIXED 2026-10-27 (phase 4b, WhiffShuffle -- see the Phase 4 section).** ANSWERED 2026-10-27: USER *"Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle."* -> FIX QUEUED LAST, after phases 2-4 (USER: "can happen after everything else ... It isn't a key change"; generic engine fix in PerformFetch; may move other decks whose fetch can whiff -- measure in smoke/regression as a play change). Holding / late-cracking a fetch stays DEFERRED (USER: "isn't often super relevant"), recorded in docs/design/uncracked-fetchland.md. Original question:
   "then shuffle" (PerformFetch returns early). Rules-wrong but rare; fixing it moves any deck whose fetch
   whiffs. Default: disclosed, not changed (phase 1).
 - Q15. APPROVED 2026-10-27: USER *"Swampwalk is fine to treat as inert until 1v1 play."* Original: Street Wraith swampwalk (+ Landwalk tag) inert vs the never-blocking goldfish -- PROVISIONAL deferral.
@@ -506,6 +543,11 @@ Emrakul first puts it third, the walk reaches it -> extra turn -> round-3 kill; 
   ("search your library for a card" names no quality, so CR 701.19b's fail-to-find does not apply). Gamble, the
   other quality-less tutor, keeps its recorded -1 = fail-to-find semantics so existing references replay unchanged.
   Default: LTP only.
+- Q28. The fail-to-find shuffle (phase 4b) also covers a CHOSEN fail-to-find: the searched `kTutorDeclineTarget`
+  variant of an X-capped put tutor (Chord of Calling / Green Sun's Zenith) now shuffles, since the library was
+  searched. NOT changed: a "you MAY search" with nothing to find (the Harbingers, Forerunner: treated as a decline, no
+  search, no shuffle) and Light-Paws' optional aura search -- both legal lines. Default: as built (rules); flag if the
+  USER reads "may" differently.
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
