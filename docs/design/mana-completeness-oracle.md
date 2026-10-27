@@ -387,3 +387,29 @@ in the viewer and still be one the search never reaches.
 * **On the USER's own games** (`node test/viewer_validate_check.js`, every reference, 2026-10-27): every
   accepted line the check could audit is one the search's own payment casts -- 2,795 yes, 0 no, 307 not
   audited (the sample looked at: passes, which commit no plan and are no longer counted).
+
+## 11. What the lost lines cost -- the upper bound (2026-10-27)
+
+The census counts lost OPTIONS. Whether they cost win turns was measured two ways, both measurement-only levers
+built in a scratch worktree (`.claude/worktrees/smarttap`, not on the branch):
+
+* **`MTG_PAY_SHRINK`** -- the per-cast payer gives back what its backtracker tapped but the bill did not need
+  (the whole-turn prepay's `MTG_PREPAY_SHRINK` pass for one cast; subset-only, never a swap). Fixes the EDF
+  seed 3000 T4 over-tap (`should_fail` pin in test_mana_oracle.cpp passes with it). On the 144 EDF census
+  games it recovers **56 of 689** lost lines (depth1 512 -> 455; games with a lost line 134 -> 125). Smoke and
+  regression: no searched-depth win turn moves (16 searched configs change play at equal score); d0 15
+  slower / 4 faster. Held-out (seed 900001; 3,000 d0 + 120 d3 games per deck per arm, the 9 decks that
+  moved): d3 identical everywhere; d0 EDF -0.0007, niv -0.0006, PD -0.0010, Snow -0.0010, TH +0.0017, rest
+  identical. Sound, neutral, NOT strictly better -> USER decision (not adopted).
+* **`MTG_ORACLE_PAY`** -- the UPPER BOUND: every top-level full plan apply whose own payment drops a cast takes
+  the oracle's full payment of the same plan in the same order (executor and search share the apply). Seed
+  910001, 200 d3 b10 + 1,000 d0 games per deck per arm: **EDF 3.980 -> 3.980**, Fungus 4.590 -> 4.590,
+  AccomplishedAlchemist 5.000 -> 5.000, Hinata 5.525 -> 5.520, NivMizzetCombo 4.665 -> 4.655; d0 identical on
+  all five (EDF's play digest moves, its win turns do not). Not covered by the bound: breakpoint-captured
+  rollout applies (they keep the engine's payment) and ENUM-GAP lines (off the menu).
+
+So a perfect payer for menu plans buys at most ~0.01 turn on these decks: when a line is lost to mana the
+search nearly always has an equally fast alternative. The mana misses matter where the HUMAN's line is the
+point -- the viewer, which is what section 10 serves ("Queue these taps") -- not in the search's win turns.
+The remaining levers to look at for search are the ENUM-GAP gates (AccomplishedAlchemist's 44 off-menu
+lifegain-then-Alchemist lines are the largest class) and the CONTINUATION classes.
