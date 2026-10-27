@@ -1318,6 +1318,19 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Curator of Mysteries": {
+    "cmc": 4.0,
+    "keywords": [
+      "Cycling",
+      "Flying",
+      "Scry"
+    ],
+    "mana_cost": "{2}{U}{U}",
+    "oracle_text": "Flying\nWhenever you cycle or discard another card, scry 1.\nCycling {U} ({U}, Discard this card: Draw a card.)",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Sphinx"
+  },
   "Curiosity": {
     "cmc": 1.0,
     "keywords": [
@@ -6109,6 +6122,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Unpredictable Cyclone": {
+    "cmc": 5.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "If a cycling ability of another nonland card would cause you to draw a card, instead exile cards from the top of your library until you exile a card that shares a card type with the cycled card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Urza's Incubator": {
     "cmc": 3.0,

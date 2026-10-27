@@ -5365,7 +5365,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
-            { PerformDig(state, a.card_name, a.dig_sacrifice); }
+            {
+                // ORDER: the rollout cycles AFTER the board activations of everything recorded before
+                // this dig (a continuation's activations follow its casts; the dig loop and the searched
+                // cycle chain run after the trailing pass), so those activations must be dispatched NOW,
+                // not after the whole list. Unflushed, a continuation's Myriad Landscape search (a
+                // shuffle) ran after the recorded cycle in the executor and before it in the rollout --
+                // the walk then found a different card (Cyclone s7322 gi22: proven T7, realised T9).
+                if (!rec_acts.empty())
+                {
+                    rec_unlock.reset();   // the cast section ends before its trailing activations
+                    exec_continuation_activations(rec_acts);
+                    rec_acts.clear();
+                }
+                // The record carries the step's REALISED pins (a searched cycle seed: Curator's scry j in
+                // devour_count, Cyclone's free cast in ponder_keep; -1 / -1 for every legacy dig), and a
+                // replaced draw's free cast is resolved before the nested records replay.
+                PerformDigFull(state, a.card_name, a.dig_sacrifice, a.devour_count, a.ponder_keep, resolve_stack);
+            }
             // A GO-OFF ROUTE recorded as the continuation. This branch was MISSING, and a missing
             // branch here is silent: the search's own continuation apply (apply_continuation_plan ->
             // apply_plan_actions) dispatches ComboRoute provider-wise, so a line whose continuation
@@ -8368,12 +8385,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // uncommitted and a heuristic dig would realise a cycle the search never modelled (fluctuator
     // d3 s1001 gi87: a T3 main-2 Canyon Slough cycle spent a Drannith Stinger ping the T4 kill
     // needed, T4 -> T5 at every budget).
-    if (is_pre_combat_main && !fd_plan_committed)
+    // ...and a searched CYCLE SEED (the plan's own cycle action, Unpredictable Cyclone phase 3) is realised
+    // here in EITHER main: it is the line's choice, not a heuristic dig, so the main-1-only rule does not
+    // apply to it (in main 2 the reactive loop itself still never runs: dig_choice 0 there).
+    const Action* eom_seed = CycleSeedOf(eom.actions);
+    if ((is_pre_combat_main || eom_seed != nullptr) && !fd_plan_committed)
     {
         // A drawn land played as the drop (depth 0, DigUsesDrawnLandDrop): re-solve with its mana.
         // The dig pin: the last searched re-solve's when there was one (its candidates ran their own dig
         // loop under their own dig_choice), else the plan's.
-        if (UseSurplusLandAbilities(state, resolve_stack, eom.dig_choice)) { cast_draw_engine = true; }
+        if (UseSurplusLandAbilities(state, resolve_stack, is_pre_combat_main ? eom.dig_choice : 0, eom_seed))
+        { cast_draw_engine = true; }
     }
     // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: Mutavault and the token
     // taps are searched plan actions, realised in exec_trailing_activations below.)
@@ -8515,11 +8537,23 @@ bool AIEngine::TryPlayLand(GameState& state)
 
 bool AIEngine::UseSurplusLandAbilities(GameState& state,
                                        const std::function<void(GameState&)>& resolve_stack,
-                                       int dig_choice)
+                                       int dig_choice, const Action* cycle_seed)
 {
     Player& ap = state.ActivePlayer();
     bool dug_a_land = false;   // the drawn-land drop below (DigUsesDrawnLandDrop)
     if (!state.stack.empty()) { return false; }   // let pending spells resolve first
+    // THE PLAN'S SEARCHED CYCLE (a cycle seed, CollectActions) on this uncommitted path: the line the search
+    // scored cycles that card first, with its pins. A provider that searches its cycles then stops here --
+    // its next cycle was a decision the uncommitted path has no searched answer for, and the reactive gate
+    // below is its PLAYOUT policy, not an in-window choice (the rollout's legacy_dig_ok) -- and asks for the
+    // second pass, which re-solves the main with what the cycle brought.
+    if (cycle_seed != nullptr)
+    {
+        const DigOutcome o = PerformDigFull(state, cycle_seed->card_name, false, cycle_seed->devour_count,
+                                            cycle_seed->ponder_keep, resolve_stack);
+        if (o != DigOutcome::Failed && ResolveProvider(state).CyclesAreSearched()) { return true; }
+        if (o == DigOutcome::DrewLand) { dug_a_land = true; }
+    }
     // THE SEARCHED CHOICE, REALISED (MTG_DIG_SEARCHED_CHOICE, default ON). This path runs only when the
     // turn carries no recorded script (d0, or the develop-when-stuck fallback), and there the plan's
     // dig_choice is all that says which world the search scored: ApplyPlanDirect suppresses the loop at
@@ -8561,9 +8595,12 @@ bool AIEngine::UseSurplusLandAbilities(GameState& state,
         // distinction load-bearing: `cards_drawn_this_turn` moves iff a dig actually happened, so
         // "could not perform" still breaks unconditionally (else an unaffordable/absent source
         // would spin forever) while "drew a nonland" is the one the provider may continue past.
-        const int  drawn_before = ap.cards_drawn_this_turn;
-        const bool drew_land    = PerformDig(state, src, is_sac);
-        if (ap.cards_drawn_this_turn == drawn_before) { break; }   // dig did not happen
+        // The tri-state (hazard R1): a REPLACED cycle (Unpredictable Cyclone) draws nothing, so the old
+        // "cards_drawn_this_turn moved" test would read it as "no dig" and end the chain; and a free cast it
+        // made is resolved inside (resolve_stack) before the chain goes on.
+        const DigOutcome o   = PerformDigFull(state, src, is_sac, -1, kCycFcDefault, resolve_stack);
+        if (o == DigOutcome::Failed) { break; }   // dig did not happen
+        const bool drew_land = o == DigOutcome::DrewLand;
         if (drew_land) { dug_a_land = true; }
         // The rebuy deployment (Fluctuator: cycle Stinger -> Unearth). This reactive path runs
         // AFTER the turn's cast loop, so a reanimation the dig just made live would otherwise sit
@@ -8619,13 +8656,20 @@ bool AIEngine::UseSurplusLandAbilities(GameState& state,
 
 bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_sacrifice)
 {
+    return PerformDigFull(state, source, is_sacrifice, -1, kCycFcDefault, {}) == DigOutcome::DrewLand;
+}
+
+AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::string& source, bool is_sacrifice,
+                                              int scry_pin, int fc_pin,
+                                              const std::function<void(GameState&)>& resolve_stack)
+{
     Player& ap = state.ActivePlayer();
     const CardDefinition* sd = CardDatabase::Instance().Lookup(source);
-    if (!sd) { return false; }
+    if (!sd) { return DigOutcome::Failed; }
 
     if (is_sacrifice)
     {
-        if (!sd->params.sacrifice_draw_cost.has_value()) { return false; }
+        if (!sd->params.sacrifice_draw_cost.has_value()) { return DigOutcome::Failed; }
         int idx = -1;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
@@ -8633,13 +8677,13 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
             if (p.controller_index == state.active_player_index
                 && !p.tapped && p.card.m_name == source) { idx = i; break; }
         }
-        if (idx < 0) { return false; }
+        if (idx < 0) { return DigOutcome::Failed; }
         ManaPool avail = AvailableManaPool(state);
         state.battlefield[idx].tapped = true;  // {T}; tap before paying so it isn't its own source
         if (!TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false))
         {
             state.battlefield[idx].tapped = false;
-            return false;
+            return DigOutcome::Failed;
         }
         if (m_logger) { m_logger->LogDiscard(state.battlefield[idx].card.m_number, source); }
         ap.graveyard.push_back(state.battlefield[idx].card);
@@ -8647,31 +8691,100 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     }
     else
     {
-        if (!sd->params.cycling_cost.has_value()) { return false; }
+        if (!sd->params.cycling_cost.has_value()) { return DigOutcome::Failed; }
         // P1/P2 -- affordability probe and the real payment, both on the Fluctuator-reduced cost,
         // plus the LIFE half (Street Wraith; CyclingLifePayable / PayCyclingLife, SpellEffects.h).
         const ManaCost cyc_cost = EffectiveCyclingCostFor(state, *sd);
-        if (!CyclingLifePayable(state, state.active_player_index, *sd)) { return false; }
+        if (!CyclingLifePayable(state, state.active_player_index, *sd)) { return DigOutcome::Failed; }
         ManaPool avail = AvailableManaPool(state);
-        if (!avail.CanPay(cyc_cost)) { return false; }
+        if (!avail.CanPay(cyc_cost)) { return DigOutcome::Failed; }
         std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&source](const Card& c) { return c.m_name == source; });
-        if (it == ap.hand.end()) { return false; }
-        if (!TapForCost(state, cyc_cost, avail, false)) { return false; }
+        if (it == ap.hand.end()) { return DigOutcome::Failed; }
+        if (!TapForCost(state, cyc_cost, avail, false)) { return DigOutcome::Failed; }
+        // TapForCost may have moved the hand (a payment that mutates zones): re-find the copy.
+        it = std::find_if(ap.hand.begin(), ap.hand.end(), [&source](const Card& c) { return c.m_name == source; });
+        if (it == ap.hand.end()) { return DigOutcome::Failed; }
         PayCyclingLife(state, state.active_player_index, *sd);
         if (m_logger) { m_logger->LogDiscard(it->m_number, it->m_name); }
         {   // THE SHARED DISCARD HOOK (Vampires A1): cycling's "discard this" is a COST, so a madness
             // trigger would resolve before the draw (the pool's cycling cards are lands: uniformity).
             std::vector<MadnessPending> mq;
+            const CycleDiscardScope _cds;   // the cycle fires Curator's trigger itself (below)
             DiscardCardFromHand(state, state.active_player_index, static_cast<int>(it - ap.hand.begin()),
                                 &mq, source);
             ResolvePendingMadness(state, mq, MadnessWindowNow(state), MadnessPin{}, source);
         }
+        // Curator of Mysteries' triggers resolve BEFORE the cycling draw, with the line's searched pin
+        // (lockstep with the rollout's seeded chain / dig loop). 0 triggers for every deck without one.
+        ResolveDiscardScryTriggers(state, state.active_player_index,
+                                   DiscardScryTriggers(state, state.active_player_index), scry_pin);
         // D1 -- the executor's cycle site: Hollow One's counter + Drannith Stinger's trigger.
         OnCardCycled(state, state.active_player_index);
+        // UNPREDICTABLE CYCLONE: the draw is REPLACED (lockstep with TurnSolver's cyclone_replaced_draw:
+        // walk -> cast the hit -> bottom the rest in a random order -> the Remand). The human never reaches
+        // this site (human play applies through TurnSolver), so there is no chooser here.
+        if (const CardDefinition* rep = CycleDrawReplacer(state, state.active_player_index, *sd))
+        {
+            const int me = state.active_player_index;
+            CycleWalk w;
+            WalkExileUntilSharedType(state, me, CycleWalkTypeMask(sd->card), w);
+            const CardDefinition* hd = w.have ? CardDatabase::Instance().LookupCached(w.hit) : nullptr;
+            const bool castable = w.have && CycleHitCastable(state, me, hd);
+            const CardDefinition* rm =
+                castable ? CycleFreeCastRemand(state, me, *hd, AvailableManaPool(state)) : nullptr;
+            const int fc = castable ? ResolveCycleFreeCastChoice(state, me, *hd, true, fc_pin, rm) : kCycFcDecline;
+            EmitCycloneWalk(state, *rep, *sd, w, fc != kCycFcDecline);
+            const Card hit = w.hit;   // the copy PushFreeCast puts on the stack (the Remand's target)
+            bool cast = false;
+            if (fc != kCycFcDecline) { cast = EffectHandler::PushFreeCast(state, hit, me); }
+            if (cast)
+            {
+                if (m_logger) { m_logger->LogCastSpell(hit.m_number, hit.m_name, "free (" + rep->card.m_name.str() + ")"); }
+            }
+            else if (w.have) { w.rest.push_back(std::move(w.hit)); }
+            BottomInRandomOrder(state, me, std::move(w.rest));
+            // TAKE-AND-REMAND: with priority after the cycling ability has resolved, the Remand is cast on the
+            // hit (its only target); the passive opponent passes, so it resolves now -- the hit to hand (unless
+            // it can't be countered: then it stays on the stack and resolves after), and a card. Lockstep with
+            // apply_one's free_remand rider (CastAndResolveRemand is the shared resolution).
+            if (cast && fc == kCycFcTakeRemand && rm != nullptr)
+            {
+                ManaPool pool = AvailableManaPool(state);
+                const ManaCost rc = EffectiveSpellCost(*rm, state, 1);
+                if (TapForCost(state, rc, pool, /*for_creature=*/false))
+                {
+                    const bool countered = !hd->params.cant_be_countered;
+                    if (countered)
+                    {
+                        for (auto sit = state.stack.end(); sit != state.stack.begin(); )
+                        {
+                            --sit;
+                            if (sit->type == StackEntry::EntryType::Spell && !sit->is_copy
+                                && sit->source.m_number == hit.m_number)
+                            { state.stack.erase(sit); break; }
+                        }
+                    }
+                    Card remand_card;
+                    const std::size_t before_draw =
+                        CastAndResolveRemand(state, me, *rm, m_exec_post_combat, countered, hit, &remand_card);
+                    if (m_logger)
+                    {
+                        m_logger->LogCastSpell(remand_card.m_number, remand_card.m_name,
+                                               rc.ToString() + " (target: " + hit.m_name.str()
+                                               + (countered ? ", countered to hand)" : ", can't be countered)"));
+                        const Player& cp = state.players[me];
+                        for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
+                        { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
+                    }
+                }
+            }
+            if (resolve_stack) { resolve_stack(state); }
+            return DigOutcome::Replaced;
+        }
     }
 
-    if (ap.library.empty()) { return false; }
+    if (ap.library.empty()) { return DigOutcome::Failed; }
     // MTG_TRACE=dig -- the REALISED dig, in the real game (the rollout has its own inline loop).
     // This is the census instrument for the generic dig gate: a capability whose only symptom is
     // "an ability is never offered" cannot be verified by a digest diff, because zero-variants-
@@ -8687,7 +8800,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::Draw);
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // the Niv loop (rollout twins: both dig loops)
     LandDrawCensusAfterDig(state, drew_land, drawn_num);   // MTG_LANDDRAW_CENSUS (diagnostic only)
-    return drew_land;
+    return drew_land ? DigOutcome::DrewLand : DigOutcome::DrewNonland;
 }
 
 // ---- MTG_LANDDRAW_CENSUS (diagnostic only; see AIEngine::LandDrawCensusEndTurn) ------------------
