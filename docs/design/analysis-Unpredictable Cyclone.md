@@ -61,7 +61,7 @@ Research verdicts:
 | Curator of Mysteries | 3 | cycle-or-discard watcher -> scry 1, ONE trigger per event, resolves before the cycling draw; N scry-1s fold exactly to "bottom top j, j=0..N" (searched) |
 | Xander's Lounge, Watery Grave | 1 | triome w/ cycling {3}; shock |
 | Brainsurge | 1 | draw_spell draw 4 + put_back_from_hand 2 (no draw-3 assumption in put-back code) |
-| Long-Term Plans | 2 | new `tutor_library_position 3` (NOT tutor_to_top: routes to anti and ~30 sites read it as next-draw); provider TutorSearchWidth 32 |
+| Long-Term Plans | 2 | new `tutor_library_position 3` (NOT tutor_to_top: routes to anti and ~30 sites read it as next-draw); provider TutorSearchWidth 32. **Built in phase 4.** |
 | Toxic Deluge | 1 | **`goldfish_inert` (USER 2026-10-27: *"I wouldn't cast Toxic Deluge, personally. That is fine to prune, just like the do-nothing-in-goldfish cards"*)**. The research draft's faithful pay-X-life / -X/-X design (and its one niche line: killing our own Emrakul/Gyre to reshuffle the graveyard) is NOT built; the card is a dead draw in hand, as the USER rules. USER's reason: *"You can argue that getting the shuffle and card back in the library is useful, but it's not worth losing your threat on board."* (Use this as the card's bracket-note WHY.) |
 | Myriad Landscape | — | already fully implemented (sac-search searched) |
 | Scalding Tarn | — | note STALE: PerformFetch does shuffle; rewrite note |
@@ -316,6 +316,83 @@ The deck is expensive with or without it: single-thread 16 games (seed 7600) 12.
 on one worker (4.8-5.8 GB on eight; Hinata2: 113 MB). Not root-caused in phase 3 (Q26). Census (96 games):
 in-window automatic digs 0, playout (leaf) cycles 1.30M, searched cycle steps 48.8M.
 
+## Optimization plan (USER 2026-10-27) -- the next phase after phase 4, before suite entry
+USER: *"We'll have to optimize of course. We should have heuristics for searches (long term plans and fetches) and
+likely prunes for cantrips as well. Fetches are easy You can just always take shock lands, prioritizing steam vents.
+Arguably the triome should be fetched if we don't need the mana."*
+- PROFILE FIRST (Q26: 13.6x Hinata2 at d3/b10, ~3 GB resident per worker): attribute the cost to axes (fetch target,
+  tutor target, cantrip put-back/order, which-cycler, freecast, scry-j, Ulamog targets) before cutting anything.
+- **Fetch target (Scalding Tarn; USER heuristic, a provider restriction).** Shock lands first, Steam Vents ahead of the
+  others. Black only pays Toxic Deluge (goldfish_inert), so in practice Watery Grave = an Island and Blood Crypt = a
+  Mountain. USER 2026-10-27: *"Honestly we can probably rank the other cards based on need. You only ever need 2 red,
+  so blue would be fine to take after all steam vents are out."* So after the Vents are gone, RANK BY NEED: while we
+  control fewer than 2 red sources, a red one (Blood Crypt, then Mountain); otherwise blue (Watery Grave, then Island).
+  The deck's red pips: Cyclone {3}{R}{R}, Seething Song {2}{R}. Count a red source the way the mana payer would (Steam
+  Vents, Mountain, Blood Crypt, Xander's Lounge; Cascade Bluffs filters {U/R} into RR, so state how it counts).
+  Top-ranked land is the one-option pick. USER clarification: *"The point is that the 2 steam vents themselves are
+  sufficient red."* So the rule is effectively: Steam Vents while any is left in the library, then blue (Watery Grave,
+  then Island). The red-need check is only the general form and matters only when a Vents never reached play (still
+  in hand, or bottomed); count red sources on the battlefield plus red lands in hand. Xander's Lounge (enters tapped; also cycles for {3}) is
+  admitted ALONGSIDE the shock -- "arguably ... if we don't need the mana" -- so the search decides between them
+  rather than a predicate guessing whether the mana is needed. Basics only once no shock is left (which keeps the basics
+  for Myriad Landscape too). One-option fetch prunes are the explicitly allowed provider kind; held-out A/B
+  vs the searched baseline is still run and reported.
+- **Myriad Landscape (USER heuristic, provider restriction).** USER 2026-10-27: *"Whereas Myriad Landscape should
+  consider 2 mountains if we are short on red between board and hand."* Two Islands is the default; two Mountains is
+  ADMITTED (searched against two Islands) only while red sources on the battlefield plus red lands in hand number
+  fewer than 2. Otherwise two Islands is the one-option pick.
+- **The red count (shared by the Tarn fallback and Myriad Landscape).** USER 2026-10-27: *"Note that seething song
+  can count as Red 2."* Seething Song ({2}{R}: add {R}{R}{R}{R}{R}) in hand counts as a red source, but it needs one
+  real red source to be cast, so it can only be the SECOND: short on red = red lands (battlefield + hand) == 0, or
+  red lands == 1 and no Seething Song in hand.
+  USER 2026-10-27: *"Also, a triome in hand counts differently because we cannot get red from it this turn."* An
+  enters-tapped red land in hand (Xander's Lounge) does NOT count toward this turn's red; it counts once it is on the
+  battlefield. (Implementer note, for the USER to confirm if it matters: the same "this turn" logic means at most one
+  red land from hand can count, since only one land can be played per turn.)
+- **Long-Term Plans target (USER heuristic, provider restriction).** USER: *"Long-Term plans is a good way to get a
+  missing cyclone or to set up an Emrakul for getting with Cyclone."* So the candidates are Unpredictable Cyclone (only
+  when we have none in hand or on the battlefield) and Emrakul (third from the top, where a Cyclone walk or the
+  top-setting cantrips reach it) -- USER: *"If we have no other way to put an Emrakul on top."* Agent's reading, for
+  the USER to confirm: "another way" = an Emrakul already in hand plus a put-back cantrip we can cast this turn
+  (Brainstorm / Brainsurge); then LTP-for-Emrakul is pruned. When both targets survive, the search picks. When NEITHER
+  survives (a Cyclone in hand AND another way to top an Emrakul), casting LTP is pruned this turn (held), rather than
+  falling back to the width-32 set -- the agent's default, flagged. Agent's fallback, for
+  the USER to confirm: an Ulamog when no Emrakul is left in the library (Ulamog CH before Gyre: {10} vs {11}).
+  Measured against the width-32 searched baseline.
+- **Cantrip prunes (Brainstorm / Brainsurge put-back, Ponder order/shuffle).** Candidate SOUND folds first (identical
+  cards, a put-back set equal under the deck's needs), then proposed lossy prunes for the USER (e.g. put-backs keep
+  Emrakul on top when a Cyclone walk can reach it; dead cards such as Toxic Deluge go back first). Each is measured.
+- Every heuristic lives in CycloneProvider (restrict/order only), each prune behind its own lever, measured paired on
+  held-out seeds; results to the USER.
+
+### Phase 4 (Long-Term Plans, Toxic Deluge; then the empty-fetch shuffle) -- implemented 2026-10-27
+| card | tier | what landed |
+|---|---|---|
+| Long-Term Plans | 2 | {2}{U} instant (Scryfall). NEW int `tutor_library_position` (3); the loader refuses 1 (that is `tutor_to_top`) and any combination with `tutor_to_hand` / `tutor_to_top`. NOT `tutor_to_top` (about 30 provider sites read it as "the found card is the next draw", and it alone sets the anti signature). Shared predicate `IsLibraryTutor(p)` (CardDatabase.h, beside IsManaConversionSource). Resolution = the shared `PerformTutor` (both worlds): remove, search shuffle, insert at `min(N-1, library size)` (fewer than three cards left -> the bottom, the ruling); NOT a top stack (`top_stacked_turn` unset); the reveal disposition reads "3rd from top". Target SEARCHED (`Plan::tutor_choice` / named `tutor_target` variants over the generic every-legal-name list, CycloneProvider width 32). Human play: the instant re-asks at resolution (`HumanPlayDefersTutorTarget`); a -1 takes the default (Q27). Instant timing collapsed (USER-approved, Q7). Viewer: `main_phase` (tutor plan variants) + the `tutor` chooser; manifest row `tutor_library_position -> main_phase`, oracle "search" token. |
+| Toxic Deluge | 1 | {2}{B} sorcery (Scryfall). `goldfish_inert` (USER ruling; the Memory Lapse / Distorting Wake shape: never cast, a dead card that can still be bottomed, discarded or put back). Bracket note quotes the USER's two sentences as the WHY. The pay-X-life / -X/-X design in the research draft is NOT built. Viewer: none (self-declared inert). |
+
+**`tutor_to_top` / `tutor_to_hand` site classification** (re-grepped 2026-10-27; 206 reads). Moved to `IsLibraryTutor`:
+EffectHandler.cpp spell resolution (executor -> PerformTutor); TurnSolver.cpp apply_one's tutor branch (rollout twin);
+CollectActions' tutor emission; the two tutor-axis fans in AppendSubdecisionAxes (index mode and named mode);
+`PutBackPredictionUnsafe` (LTP shuffles before a same-plan Brainstorm / Brainsurge draws); the "plan may hold a land
+at the bounce" predicate and the `may_draw` width predicate (conservative direction); the default-off
+MTG_DOUBT_MAIN2 classifier; SpellEffects.h `HumanPlayDefersTutorTarget`. Added beside them:
+`ActionReadsLibraryTop` (LTP writes the top three after a shuffle -> a fetch crack before vs after it differs; no
+`tutor_types` test, any card is legal). LEFT ALONE (they mean something LTP is not): `ParamKeyedDrawClass` (LTP gains
+no hand card and opens no breakpoint; listing it would make the payer's unseen-colour guard treat it as an opener),
+`PutBodyGainsCards`, the AcqResolve / TopResolve breakpoint masks and re-arms (TurnSolver ~58290 / ~70217, AIEngine
+x4: next-draw semantics), SpellEffects.h ETB tutors (~10331, permanents only) and the Hoof projection (~18925), the
+aura-swap diagnostic key (~1646), the equipment and Genesis Wave predicates, every provider-specific site in
+DecisionProviders.cpp (cast ranks, discard buckets, finders, wish logic, routing -- LTP deliberately sets no
+signature: a generic blue tutor), LandPlay.cpp's Worldly-Tutor line.
+
+**Tests.** test/unit/test_cyclone_phase4.cpp (6 cases: card data + routing still Cyclone + LTP alone not AntiLifegain;
+placement at library sizes 0/1/2/3/10 -> index 0/1/2/2/2, the shuffle counted, no top stack; LOCKSTEP executor stack
+resolution vs the rollout's ApplyPlan, library ORDER; LTP-for-Emrakul then Brainstorm draws it; the cast is emitted,
+Deluge never is, the candidate list spans every distinct name; human -1 takes the default). Scenario
+cyclone_long_term_plans_emrakul_third_walk (Curator on top so a bare Wraith cycle walks to the Curator; LTP for
+Emrakul first puts it third, the walk reaches it -> extra turn -> round-3 kill; negative control without LTP: no win).
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -425,6 +502,10 @@ in-window automatic digs 0, playout (leaf) cycles 1.30M, searched cycle steps 48
   (a) a seed-only plan with a replacer out has an exactly predictable walk, so its decline / take-and-Remand / j
   variants whose outcome equals another's are duplicates and can be folded; (b) the per-step site-4 re-solve's
   continuation list carries every seed variant again. Default: report; the suite-entry cost work is Stage 4's.
+- Q27. Long-Term Plans in HUMAN play: a -1 at its resolution takes the default card instead of failing to find
+  ("search your library for a card" names no quality, so CR 701.19b's fail-to-find does not apply). Gamble, the
+  other quality-less tutor, keeps its recorded -1 = fail-to-find semantics so existing references replay unchanged.
+  Default: LTP only.
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").

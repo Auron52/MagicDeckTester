@@ -3284,6 +3284,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Long-Term Plans": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Search your library for a card, then shuffle and put that card third from the top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Lord of Lineage": {
     "cmc": 4.0,
     "keywords": [
@@ -5793,6 +5802,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Toxic Deluge": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "As an additional cost to cast this spell, pay X life.\nAll creatures get -X/-X until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Trace of Abundance": {
     "cmc": 2.0,

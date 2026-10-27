@@ -1357,6 +1357,16 @@ struct CardParams
     // Tutor (enchantment -> hand), Enlightened Tutor (artifact/enchantment -> top).
     bool                     tutor_to_hand = false;
     bool                     tutor_to_top  = false;
+    // "Search your library for a card, then shuffle and put that card N-th from the top" (Long-Term
+    // Plans: 3). 0 = off; N >= 2 (1 IS tutor_to_top, and the loader refuses it and any combination
+    // with tutor_to_hand / tutor_to_top). Deliberately NOT tutor_to_top: about 30 provider sites read
+    // tutor_to_top as "the found card is the NEXT DRAW" (Stompy's Worldly Tutor line, the TopResolve
+    // re-arm, Fluctuator's order slot, the Harbinger finders, top_stacked_turn), and tutor_to_top
+    // alone sets the anti-lifegain routing signature. Every site that must treat this card as a
+    // library tutor asks IsLibraryTutor() (below the struct). Resolution: PerformTutor inserts the
+    // card at index min(N-1, library size) after the search shuffle -- with fewer than N-1 cards
+    // left, that is the bottom (the Long-Term Plans ruling). Not a top stack (top_stacked_turn unset).
+    int                      tutor_library_position = 0;
     // "You MAY search" -- opens a DECLINE arm on the searched tutor axis
     // (kTutorDeclineChoice, SpellEffects.h). Default false keeps every existing tutor deck
     // byte-identical, so this is opt-in per card rather than a blanket behaviour change.
@@ -4456,6 +4466,14 @@ inline bool IsManaConversionSource(const CardParams& p)
 inline bool IsSacManaOutlet(const CardParams& p)
 { return p.sac_creature_outlet
       && (!p.sac_outlet_add_mana_color.empty() || p.sac_outlet_add_mana_any_color); }
+
+// A LIBRARY TUTOR: a spell that searches the library for a card and puts it in hand
+// (tutor_to_hand), on top (tutor_to_top) or N-th from the top (tutor_library_position, Long-Term
+// Plans). THE single predicate for every generic site that must emit, resolve, size the target axis
+// of, or classify a tutor -- so the position tutor cannot silently miss one (IsManaConversionSource's
+// reason). Provider sites that mean "the found card is the next draw" keep reading tutor_to_top.
+inline bool IsLibraryTutor(const CardParams& p)
+{ return p.tutor_to_hand || p.tutor_to_top || p.tutor_library_position > 1; }
 
 // A fully resolved card definition: base Card data plus template + parameters.
 struct CardDefinition

@@ -1162,6 +1162,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.destroy_all_enchantments  = params.value("destroy_all_enchantments", false);
     p.tutor_to_hand             = params.value("tutor_to_hand", false);
     p.tutor_to_top              = params.value("tutor_to_top", false);
+    p.tutor_library_position    = params.value("tutor_library_position", 0);
+    if (p.tutor_library_position != 0
+        && (p.tutor_library_position < 2 || p.tutor_to_hand || p.tutor_to_top))
+        throw std::runtime_error("tutor_library_position must be >= 2 (1 is tutor_to_top) and cannot "
+                                 "combine with tutor_to_hand / tutor_to_top");
     p.tutor_optional            = params.value("tutor_optional", false);
     for (const std::string& s : params.value("tutor_types", json::array()))
         p.tutor_types.push_back(s);
