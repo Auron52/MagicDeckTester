@@ -105,6 +105,13 @@ sanity row.
   rows that nothing ships at.
 * **Re-tuning a deck's play setting re-tunes its rows** in all three tiers, in the same commit. GT moves
   anyway when play does.
+* **Floor: once a deck has its keep table, never fewer play-row games than Hinata** in the same tier
+  (hinata2hg's for a 2HG row). USER 2026-10-27: *"If the numbers of games are still less than Hinata we might
+  need to upgrade them"*, *"for decks that have mulligan profile and maybe the value-leaf. The low numbers are
+  for decks that are in progress."* An in-progress deck keeps its small ENTRY set, and its keep-table adoption
+  raises it to at least this floor ("Sizing a deck's overnight rows"). Applied 2026-10-27 to EDF, Landfall,
+  Melira, Niv, PD and Snow: all six had keep tables, and Landfall's resize at its 10-20 adoption had been missed.
+  The guard WARNs about rows below the floor.
 * **Size a deck by its play-row cost**, not by d3. The d3 b10 sanity row is about a third of one former
   d3 row.
 

@@ -128,7 +128,10 @@ declare -A DECK_PROF=(
 # deck's value_play block picks it (d4/d5/d6/d7 per deck), and its budget is the deck's SHIPPED value_play
 # budget_ms (b20 without an enabled block; Hinata b30, Goblins b60, Melira b60, Kitty b14). The overnight tier's
 # former generous budgets (d3 b20/b80, play-depth b40/b80) became the shipped ones. 2HG rows that were d3-only
-# became play rows on the same seed. regression.sh WARNs when a play row's budget differs from the deck's shipped
+# became play rows on the same seed. FLOOR (USER 2026-10-27, "If the numbers of games are still less than Hinata we
+# might need to upgrade them" -- "for decks that have mulligan profile and maybe the value-leaf. The low numbers are for
+# decks that are in progress"): a deck WITH A KEEP TABLE has no play row with fewer games than Hinata's play rows in
+# the same tier (hinata2hg's for a 2HG row). An in-progress deck keeps its small ENTRY set until its keep table. regression.sh WARNs when a play row's budget differs from the deck's shipped
 # budget (a re-tuned play setting must re-tune these rows). The per-deck sizing comments below predate this
 # reshape: their game counts and budgets are historical.
 
@@ -337,7 +340,7 @@ SMOKE_CASES=(
   # and fluctuator (1.67 / 3.10). Full record: docs/design/analysis-Melira Pod.md SESSION 2026-09-08.
   "melira 0 1001 1000 0"
   "melira     3  1001    25 10"
-  "melira     5  1001    25 60"
+  "melira     5  1001    100 60"
   # angels: ADDED 2026-09-18 (mono-white Angels tribal; analysis-Angels.md). Full kitty/critter
   # shape because it is one of the CHEAPEST decks in the matrix -- measured single-threaded at the
   # tier's own budgets: d0 ~0 s, d3 b10 0.066 s/game, d5 b20 0.060 s/game (cf. dragons 0.98 / 2.00).
@@ -480,7 +483,7 @@ SMOKE_CASES=(
   # artifacts land.
   "pd 0 1001 1000 0"
   "pd         3  1001    25 10"
-  "pd         5  1001    25 20"
+  "pd         5  1001    100 20"
   # bruna: RESTORED TO ALL THREE TIERS 2026-10-09 (USER: "see if Bruna earns a spot back in the suite").
   # It was removed 2026-10-06 (USER: "Yes, we should take Bruna out.") for failing the 3x suite-cost rule
   # (~3.9 s/game after the Glittering Wish sideboard widened from 4 to 11 names). The Wish / Open the
@@ -503,7 +506,7 @@ SMOKE_CASES=(
   "edf2hg     5  1001    25 20"
   "edf 0 1001 1000 0"
   "edf        3  1001    25 10"
-  "edf        5  1001    25 20"
+  "edf        5  1001    100 20"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -538,7 +541,7 @@ SMOKE_CASES=(
   # starting-life-relative card for a second head to scale.
   "landfall 0 1001 1000 0"
   "landfall   3  1001    25 10"
-  "landfall   5  1001    25 20"
+  "landfall   5  1001    100 20"
   # galadriel: ADDED 2026-10-17 (docs/design/analysis-Galadriel.md) at Landfall's pre-keep-table admission
   # shape; RESIZED 2026-10-18 after the keep table + value leaf landed (USER: "we should resize all of the
   # regression test rows for the deck") -- smoke/regression to the Selesnya/Bruna shape, overnight to the
@@ -556,7 +559,7 @@ SMOKE_CASES=(
   # needs a longer draw/ping loop -- and Tandem Lookout's draws are MANDATORY.
   "niv 0 1001 1000 0"
   "niv        3  1001    25 10"
-  "niv        5  1001    25 20"
+  "niv        5  1001    100 20"
   "niv2hg     5  1001    25 20"
   # colossus: ADDED 2026-10-17 by the analysis (docs/design/analysis-Colossus Hammer.md), all three tiers
   # at once (the all-or-none rule), at the pirates / soldiers gate shape and the overnight ENTRY set.
@@ -821,8 +824,8 @@ REGRESSION_CASES=(
   # melira: restored 2026-09-08 (see the SMOKE block).
   "melira 0 2002 1000 0"
   "melira     3  2002    25 10"
-  "melira     5  2002    40 60"
-  "melira     5  3003    40 60"
+  "melira     5  2002    150 60"
+  "melira     5  3003    150 60"
   # angels: ADDED 2026-09-18 (see the SMOKE block). ~77 core-s for this tier.
   "angels 0 2002 1000 0"
   "angels     3  2002   100 10"
@@ -838,12 +841,12 @@ REGRESSION_CASES=(
   "goblins2hg 5  2002    75 60"
   "knights2hg 5  2002   100 20"
   "whiteknights2hg 5  2002   100 20"
-  "fivecolour2hg 5  2002    50 20"
+  "fivecolour2hg 5  2002    75 20"
   "fluctuator2hg 5  2002   100 20"
   # angels2hg: antilife/minotaur sizing again (~10 core-s at 0.066 s/game).
   "angels2hg  5  2002   150 20"
   # pd2hg: see the pd SMOKE block (a 2HG-relevant deck).
-  "pd2hg      5  2002    25 20"
+  "pd2hg      5  2002    75 20"
   # fluctuator: gate budgets at both seeds (~14 core-min). See the SMOKE block for measured costs.
   "fluctuator 0 2002 1000 0"
   "fluctuator 3  2002    50 10"
@@ -877,8 +880,8 @@ REGRESSION_CASES=(
   # pd: see the SMOKE block. These are the GATED cells (worst searched case d5 b20 s3003).
   "pd 0 2002 1000 0"
   "pd         3  2002    25 10"
-  "pd         5  2002    50 20"
-  "pd         5  3003    50 20"
+  "pd         5  2002    150 20"
+  "pd         5  3003    150 20"
   # bruna: RESTORED 2026-10-09, see the SMOKE block.
   "bruna 0 2002 1000 0"
   "bruna      3  2002    50 10"
@@ -887,8 +890,8 @@ REGRESSION_CASES=(
   # edf: see the SMOKE block.
   "edf 0 2002 1000 0"
   "edf        3  2002    25 10"
-  "edf        5  2002    50 20"
-  "edf        5  3003    50 20"
+  "edf        5  2002    150 20"
+  "edf        5  3003    150 20"
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
@@ -897,13 +900,13 @@ REGRESSION_CASES=(
   # does not become the pole.
   "snow 0 2002 1000 0"
   "snow       3  2002    25 10"
-  "snow       5  2002    75 20"
-  "snow       5  3003    75 20"
+  "snow       5  2002    150 20"
+  "snow       5  3003    150 20"
   # landfall: see the SMOKE block.
   "landfall 0 2002 1000 0"
   "landfall   3  2002    25 10"
-  "landfall   5  2002    50 20"
-  "landfall   5  3003    50 20"
+  "landfall   5  2002    150 20"
+  "landfall   5  3003    150 20"
   # galadriel: see the SMOKE block.
   "galadriel 0 2002 1000 0"
   "galadriel  3  2002    50 10"
@@ -913,9 +916,9 @@ REGRESSION_CASES=(
   # niv: see the SMOKE block.
   "niv 0 2002 1000 0"
   "niv        3  2002    25 10"
-  "niv        5  2002    50 20"
-  "niv        5  3003    50 20"
-  "niv2hg     5  2002    50 20"
+  "niv        5  2002    150 20"
+  "niv        5  3003    150 20"
+  "niv2hg     5  2002    75 20"
   # colossus: see the SMOKE block.
   "colossus 0 2002 1000 0"
   "colossus   3  2002    50 10"
@@ -1328,10 +1331,10 @@ OVERNIGHT_CASES=(
   "melira 0 8008 2000 0"
   "melira 0 10010 2000 0"
   "melira     3  4004    75 10"
-  "melira     5  4004   150 60"
-  "melira     5  5005   150 60"
-  "melira     5  6006   150 60"
-  "melira     5  7007   150 60"
+  "melira     5  4004   425 60"
+  "melira     5  5005   425 60"
+  "melira     5  6006   425 60"
+  "melira     5  7007   425 60"
   # angels: ADDED 2026-09-18 (see the SMOKE block). Full kitty/critter overnight shape -- it
   # projects to ~11 core-minutes against an 8 h tier budget, so there is nothing to trim for.
   "angels 0  4004 2000 0"
@@ -1396,10 +1399,10 @@ OVERNIGHT_CASES=(
   "pd 0  8008 2000 0"
   "pd 0 10010 2000 0"
   "pd         3  4004    75 10"
-  "pd         5  4004   300 20"
-  "pd         5  5005   300 20"
-  "pd         5  6006   300 20"
-  "pd         5  7007   300 20"
+  "pd         5  4004   425 20"
+  "pd         5  5005   425 20"
+  "pd         5  6006   425 20"
+  "pd         5  7007   425 20"
   # bruna: RESTORED 2026-10-09, see the SMOKE block. ENTRY SET (regression-testing skill, "Sizing a deck's
   # overnight rows"): Hinata's shape until Bruna's keep table is adopted. The rows restored on 10-09 were
   # the pre-removal standard shape (d3 4x1000 b20, d5 4x500 b40) -- 6,000 searched games against
@@ -1475,10 +1478,10 @@ OVERNIGHT_CASES=(
   "fivecolour2hg 5  5005   100 20"
   "fivecolour2hg 5  6006   100 20"
   "fivecolour2hg 5  7007   100 20"
-  "fluctuator2hg 5  4004    80 20"
-  "fluctuator2hg 5  5005    80 20"
-  "fluctuator2hg 5  6006    80 20"
-  "fluctuator2hg 5  7007    80 20"
+  "fluctuator2hg 5  4004    100 20"
+  "fluctuator2hg 5  5005    100 20"
+  "fluctuator2hg 5  6006    100 20"
+  "fluctuator2hg 5  7007    100 20"
   # angels2hg: minotaur2hg's exact shape -- 150 games against the deck's own 500-game d5 rows,
   # at the same b40. This is the tier that actually exercises Righteous Valkyrie's anthem under
   # a 37-life threshold over a full game, rather than just tripping a digest. ~1 core-min.
@@ -1493,10 +1496,10 @@ OVERNIGHT_CASES=(
   "pirates2hg 5  7007   150 20"
   # pd2hg: 50 against the deck's own 125-game d5 rows, b40 (it reads heads/life -- see the pd SMOKE block).
   # Unchanged at the 2026-10-12 resize: ~1/3-2/3 of the d5 rows, as for the other 2HG decks.
-  "pd2hg      5  4004    50 20"
-  "pd2hg      5  5005    50 20"
-  "pd2hg      5  6006    50 20"
-  "pd2hg      5  7007    50 20"
+  "pd2hg      5  4004    100 20"
+  "pd2hg      5  5005    100 20"
+  "pd2hg      5  6006    100 20"
+  "pd2hg      5  7007    100 20"
   # fluctuator: breaching-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
   # budgets 2026-09-05: d3 b20 ~2.78 s/game, d5 b40 ~4.29 s/game, NO game over 30 s at either
   # => ~2.7 core-hours added, breaching's bracket. Counts obey the seed-spacing rule
@@ -1523,10 +1526,10 @@ OVERNIGHT_CASES=(
   # where a doubled budget stops being free.
   "snow 0 4004 1000 0"
   "snow       3  4004    50 10"
-  "snow       5  4004   175 20"
-  "snow       5  5005   175 20"
-  "snow       5  6006   175 20"
-  "snow       5  7007   175 20"
+  "snow       5  4004   425 20"
+  "snow       5  5005   425 20"
+  "snow       5  6006   425 20"
+  "snow       5  7007   425 20"
   # landfall: see the SMOKE block. A SMALLER-than-entry set (USER 2026-10-16: d3 4x250, d5 4x150 where
   # Hinata's entry shape is 400/300); it expands to the FULL set just before a keep table is adopted
   # (regression-testing.md "Sizing a deck's overnight rows").
@@ -1535,10 +1538,10 @@ OVERNIGHT_CASES=(
   "landfall 0 8008 2000 0"
   "landfall 0 10010 2000 0"
   "landfall   3  4004    75 10"
-  "landfall   5  4004   250 20"
-  "landfall   5  5005   250 20"
-  "landfall   5  6006   250 20"
-  "landfall   5  7007   250 20"
+  "landfall   5  4004   425 20"
+  "landfall   5  5005   425 20"
+  "landfall   5  6006   425 20"
+  "landfall   5  7007   425 20"
   # galadriel: see the SMOKE block. Landfall's smaller-than-entry set until the keep table (expand then).
   "galadriel 0 4004 2000 0"
   "galadriel 0 6006 2000 0"
