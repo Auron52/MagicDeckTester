@@ -102,6 +102,7 @@ def phase_names(log, from_turn):
                                            "xs": collections.defaultdict(set), "found": [], "seq": [],
                                            "oseq": []})
     names_of = card_names(log)
+    LOG_LANDS.clear()
     prev_hand, prev_bf, cur_bf = None, None, None
     for s in log.get("turns") or []:
         ph = PHASE_OF.get(s.get("phase"))
@@ -131,7 +132,7 @@ def phase_names(log, from_turn):
             named = {a.get("card") for a in s.get("actions") or []}
             for x in prev_bf:
                 if (x.get("isLand") and x.get("card") not in now and x.get("card") in gy
-                        and x.get("card") not in named):
+                        and x.get("card") not in named and cracks(x.get("cardName"))):
                     o, n = out[(s["turn"], ph)], x.get("cardName")
                     o["cards"].add(n)
                     o["count"][n] += 1
@@ -142,20 +143,72 @@ def phase_names(log, from_turn):
             # tutor target is the search's action as much as the cast is.
             if a.get("type") == "REVEAL" and str(a.get("source") or "").endswith("(searched)"):
                 kept = set(a.get("kept") or [])
-                out[(s["turn"], ph)]["found"] += [x.get("cardName") for x in a.get("lookedAt") or []
+                # (tutor, card): Natural Order's put is not a "(searched)" reveal, so a plan's Natural
+                # Order -> Priest of Titania must not claim Worldly Tutor's Priest (StompySurprise
+                # s2_gi1 T3, 2026-10-27).
+                src = str(a.get("source"))[:-len(" (searched)")]
+                out[(s["turn"], ph)]["found"] += [(src, x.get("cardName")) for x in a.get("lookedAt") or []
                                                   if x.get("card") in kept and x.get("cardName")]
             n = a.get("cardName")
             if not n or a.get("type") in NOT_PLAYED:
                 continue
             land = a.get("type") == "PLAY_LAND"
+            if land:
+                # The FACE in play: the log names a modal double-faced card's front even when its land
+                # back face was played ("Turntimber Symbiosis" for Turntimber, Serpentine Wood), while
+                # plan_land reads the face the plan plays (StompySurprise s2_gi1 T2, 2026-10-27).
+                n = next((x.get("cardName") for x in (s.get("boardAfter") or {}).get("battlefield") or []
+                          if x.get("card") == a.get("card") and x.get("cardName")), n)
+            if land:
+                LOG_LANDS.add(n)
             out[(s["turn"], ph)]["lands" if land else "cards"].add(n)
-            out[(s["turn"], ph)]["count"][("land:" if land else "") + n] += 1
-            out[(s["turn"], ph)]["oseq"].append(("land:" if land else "") + n)
+            k = "land:" + n if land else log_key(a)
+            out[(s["turn"], ph)]["count"][k] += 1
+            out[(s["turn"], ph)]["oseq"].append(k)
             if not land:
-                out[(s["turn"], ph)]["seq"].append(n)
+                out[(s["turn"], ph)]["seq"].append(k)
             if a.get("type") == "CAST_SPELL" and isinstance(a.get("chosenX"), int):
                 out[(s["turn"], ph)]["xs"][n].add(a["chosenX"])
     return out
+
+
+def log_key(a):
+    """The key of a named log action: an equip activation is "equip:<Equipment>", apart from a CAST of it."""
+    n = a.get("cardName")
+    return "equip:" + n if a.get("type") == "ABILITY" and str(a.get("ability") or "").startswith("equip") else n
+
+
+def plan_key(a):
+    """The same key for a plan action. `equip all free` names its HOST as the card, so it is keyed apart from
+    a cast of that creature too ("equipall:")."""
+    v = a.get("verb")
+    if v == "equip":
+        return "equip:" + a.get("card")
+    if v == "equipallfree":
+        return "equipall:" + a.get("card")
+    # Any other activation is logged under the permanent that ACTIVATES it: "put Fury onto the battlefield
+    # (Incandescent Soulstoke)" is the log's ABILITY Incandescent Soulstoke, not a Fury (LandfallElementals
+    # s3_gi2 handoff_T2 T4, 2026-10-27).
+    if a.get("activate") and a.get("activate_source"):
+        return a["activate_source"]
+    return a.get("card")
+
+
+_CRACKS = None
+
+
+def cracks(name):
+    """Does this land have a sacrifice-to-search activation (cards.json land_search_activation_sacrifice_self)?
+    A land that went to the graveyard any other way went by itself: Remote Farm is sacrificed when its last
+    depletion counter goes, and counting that as an unplayed action left it in `rest` for good -- no plan
+    plays it, so the walk could never pass and moved Cathar's Shield onto Cid and back until the frame cap
+    (KittyEquipment v2 s13_gi12 T3)."""
+    global _CRACKS
+    if _CRACKS is None:
+        data = json.load(open(os.path.join(ROOT, "src", "cards", "data", "cards.json")))
+        _CRACKS = {c.get("name") for c in data.get("cards") or []
+                   if (c.get("parameters") or {}).get("land_search_activation_sacrifice_self")}
+    return name in _CRACKS
 
 
 def card_names(log):
@@ -174,18 +227,29 @@ def card_names(log):
     return out
 
 
+LOG_LANDS = set()   # every land name the log being promoted plays (phase_names fills it)
+
+
 def plan_land(p):
     """The land the plan really plays: a modal double-faced land's BACK face is named only in the summary
-    ("land=Branchloft Pathway -> Boulderloft Pathway (back face)"), and the search log names the face."""
+    ("land=Branchloft Pathway -> Boulderloft Pathway (back face)"), and the search log names the face.
+    Except when it does not: a spell // land card logs its FRONT ("Turntimber Symbiosis" for Turntimber,
+    Serpentine Wood), and when the land leaves play the same phase (Terastodon) no board shows the face.
+    So the name the log uses wins (StompySurprise s2_gi1 handoff_T3, 2026-10-27)."""
     if not p.get("land"):
         return None
     m = re.match(r"land=[^;]*? -> (.+?) \(back face\)", p.get("summary") or "")
+    if m and m.group(1) not in LOG_LANDS and p["land"] in LOG_LANDS:
+        return p["land"]
     return m.group(1) if m else p["land"]
 
 
 def plays(p):
-    """The plan's actions it really performs: a cast listed in "drops" is one it cannot make (the plan
-    keeps its name for the menu; SelesnyaLifegain s15_gi14 T5 back-face plans drop Feed the Clan)."""
+    """The plan's actions it really performs, in the order it performs them: a cast listed in "drops" is
+    one it cannot make (the plan keeps its name for the menu; SelesnyaLifegain s15_gi14 T5 back-face plans
+    drop Feed the Clan), and a combat TRICK is cast in combat, after the main-phase casts, wherever the
+    plan lists it ("Expedite -> Goblin Instigator #1, Goblin Instigator": Mirrorwing s8_gi7 T3,
+    2026-10-27)."""
     drops = collections.Counter(p.get("drops") or [])
     out = []
     for a in p.get("actions") or []:
@@ -193,14 +257,14 @@ def plays(p):
             drops[a.get("card")] -= 1
             continue
         out.append(a)
-    return out
+    return [a for a in out if not a.get("trick")] + [a for a in out if a.get("trick")]
 
 
 def plan_seq(p):
     """The plan's actions in execution order as tokens ('<card>' / 'land:<name>'), the land drop at its
     searched position (land_after_casts / land_slot k = after the k-th landfall-watcher cast, named in
     the summary / karoo_before r = before the r-th cast)."""
-    acts = [a.get("card") for a in plays(p) if a.get("card")]
+    acts = [plan_key(a) for a in plays(p) if a.get("card")]
     if not p.get("land"):
         return acts
     at = 0
@@ -257,11 +321,13 @@ def boards(log):
 
 
 def bf_names(rows, name, host):
-    """Battlefield names, an attached Aura / Equipment as "<name>@<host name>": WHICH creature carries it
-    is the line (Bruna s14_gi13, 2026-10-26: Mythic Proportions on Avacyn's Pilgrim matched the search's
-    board on Linvala at distance 0, and the T4 swing dealt 3 instead of 11)."""
+    """Battlefield names, an attached Aura / Equipment as "<name>@<host name>#<host card number>": WHICH
+    creature carries it is the line (Bruna s14_gi13, 2026-10-26: Mythic Proportions on Avacyn's Pilgrim
+    matched the search's board on Linvala at distance 0, and the T4 swing dealt 3 instead of 11), and the
+    host's NAME cannot tell two copies apart (KittyEquipment v1 s6_gi5 T4: Lightning Greaves on the Kor
+    Duelist already carrying Bonesplitter matched at distance 0 and the swing dealt 7, not 8)."""
     by_num = {r.get("num", r.get("card")): r.get(name) for r in rows}
-    return collections.Counter(r.get(name) + ("@%s" % by_num.get(r[host], "?") if r.get(host) else "")
+    return collections.Counter(r.get(name) + ("@%s#%s" % (by_num.get(r[host], "?"), r[host]) if r.get(host) else "")
                                for r in rows)
 
 
@@ -492,6 +558,11 @@ def search_dig_answer(d, log, key, used_reveals):
             if a.get("type") != "REVEAL" or (si, ai) in used_reveals:
                 continue
             la = a.get("lookedAt") or []
+            # A scry / reorder logs no disposition per card; a reveal that does ("battlefield (tapped)":
+            # Galadriel of Lothlorien's land put, "to hand", "stays on top") is another effect showing the
+            # same card, and its empty `kept` read as "bottom it" (Galadriel s5_gi4 T4, 2026-10-27).
+            if any(x.get("to") for x in la):
+                continue
             if collections.Counter(x.get("cardName") for x in la) != looked:
                 continue
             name = {x.get("card"): x.get("cardName") for x in la}
@@ -528,10 +599,35 @@ def search_tutor_answer(d, log, key, used_reveals):
 
 
 
+ROUTE = "Combo Off"   # an engine go-off route (TurnSolver ComboRoute): ONE logged action for a whole chain
+LOOK = 8              # boards looked one segment past, and plans probed from each
+
+
+def attachments(b):
+    """{(Equipment / Aura name, host card number)} on a log board."""
+    return {(x.get("cardName"), x.get("attachedTo")) for x in (b or {}).get("battlefield") or []
+            if x.get("attachedTo")}
+
+
+def equip_score(p, want, d):
+    """How faithful a plan's equips are to the search's end-of-phase attachments `want`: +1 per equip the
+    search's board has, -1 per one it does not. `equip all free` moves the frame's free pieces onto its
+    host (the frame lists them in free_equips)."""
+    sc = 0
+    for a in p.get("actions") or []:
+        if a.get("verb") == "equip":
+            sc += 1 if (a.get("card"), a.get("equip_host")) in want else -1
+        elif a.get("verb") == "equipallfree":
+            fe = next((f for f in d.get("free_equips") or [] if f.get("host") == a.get("host")), {})
+            for pc in fe.get("pieces") or []:
+                sc += 1 if (pc.get("name"), a.get("host")) in want else -1
+    return sc
+
+
 def plan_ok(p, used):
     """A plan the search could have been playing: its land drop (if any) is one the search made this
     phase, and every card it uses is one the search used."""
-    if p.get("land") and plan_land(p) not in used["lands"]:
+    if p.get("land") and plan_land(p) not in used["lands"] and p["land"] not in used["lands"]:
         return False
     cards = {a.get("card") for a in p.get("actions") or [] if a.get("card")}
     # "X + Remand on it" casts Remand too (back to hand, draw a card): only the search's if it did
@@ -551,7 +647,11 @@ def wrong_x(a, xs):
 
 
 def content(p, xs=None):
-    c = collections.Counter(a.get("card") for a in plays(p)     # "drops" cannot be cast (burn s8_gi7)
+    """The search-log keys the plan plays. An equip is keyed apart from a cast (plan_key): "equip Kite Shield"
+    counted as a third Kite Shield CAST, so a plan casting two and equipping one matched the search's three
+    casts and left a Kite Shield on Puresteel Paladin that the search's board does not have, one Paladin
+    draw short (KittyEquipment v2 s13_gi12 T2)."""
+    c = collections.Counter(plan_key(a) for a in plays(p)     # "drops" cannot be cast (burn s8_gi7)
                             if a.get("card") and not wrong_x(a, xs or {}))
     c.update(a["remand_by"] for a in p.get("actions") or [] if a.get("remand_by"))
     if p.get("land"):
@@ -561,11 +661,11 @@ def content(p, xs=None):
 
 def found_match(p, found):
     """How many of the plan's tutor targets, in the plan's order, are the cards the search's tutors
-    fetched NEXT this phase (`found`: those names, not yet fetched, in log order)."""
+    fetched NEXT this phase (`found`: (tutor, card) pairs, not yet fetched, in log order)."""
     n = 0
     for a in plays(p):
         if a.get("tutor_target"):
-            if n < len(found) and found[n] == a["tutor_target"]:
+            if n < len(found) and found[n] == (a.get("card"), a["tutor_target"]):
                 n += 1
             else:
                 break
@@ -579,14 +679,30 @@ def in_order(p, seq, xs=None):
     for a in plays(p):
         if not a.get("card") or wrong_x(a, xs or {}):
             continue
-        if n < len(seq) and seq[n] == a["card"]:
+        if n < len(seq) and seq[n] == plan_key(a):
             n += 1
         else:
             break
     return n
 
 
-def progress(p, rest, xs=None, found=(), seq=()):
+def land_misplaced(p, oseq):
+    """Does the plan play the search's land drop at a different point among the search's actions than the
+    search did (`oseq`: its remaining named actions this phase, lands included, in log order)? The search
+    cast Gold Rush and Luxurious Libation, THEN played Gruul Turf -- a bounce land, so playing it first
+    returns a land before it has paid (Mirrorwing v2 s4_gi3 T3, 2026-10-27)."""
+    if not p.get("land") or not oseq:
+        return False
+    tok = "land:" + plan_land(p)
+    if tok not in oseq:
+        return False
+    before_search = sum(1 for t in oseq[:oseq.index(tok)] if not t.startswith("land:"))
+    ps = plan_seq(p)
+    before_plan = sum(1 for t in ps[:ps.index(tok)] if t in oseq) if tok in ps else 0
+    return before_plan != before_search
+
+
+def progress(p, rest, xs=None, found=(), seq=(), oseq=None):
     """(how many of the search's next actions this phase the plan plays IN THE SEARCH'S ORDER, how many
     of its still-unplayed actions it plays at all, minus its casts at an X the search did not use) --
     compared as a tuple. A tutor target the search fetched next counts as an action in both.
@@ -600,8 +716,12 @@ def progress(p, rest, xs=None, found=(), seq=()):
     HAND holds (Cloud of Faeries) and the land drop is lost (s7_gi6 T3)."""
     tut = found_match(p, list(found))
     land = 1 if p.get("land") and rest["land:" + plan_land(p)] else 0
-    return (in_order(p, list(seq), xs) + land + tut,
-            sum((content(p, xs) & rest).values()) + tut,
+    # The land drop at the wrong point is worse than no land drop: no credit, and it ranks below the plan
+    # that leaves the land for its own segment (the board probe would still prefer it -- the land is on
+    # the battlefield the search ends with -- but what it costs, the bounced land's mana, shows only later).
+    off = land if land_misplaced(p, oseq) else 0
+    return (in_order(p, list(seq), xs) + land - 2 * off + tut,
+            sum((content(p, xs) & rest).values()) - off + tut,
             -sum(wrong_x(a, xs or {}) for a in p.get("actions") or []),
             # Last: the fewest actions BEYOND the search's (an extra tap-for-life Wellwisher activation
             # probes closer only because its life stands in for a Feed the Clan still to come, then
@@ -898,7 +1018,11 @@ def walk(c, prefix, extra, log, from_turn):
                 # every answer probes alike, and the search may play it only a segment later.
                 cn = [x.get("name") if isinstance(x, dict) else None for x in d.get("candidates") or []]
                 fq = found.get(cur_key) or []
-                want = claimed[0] if claimed else (fq[0] if fq else None)
+                head = claimed[0] if claimed else (fq[0] if fq else None)
+                # ...made by THIS tutor: another tutor's frame (Natural Order's, while the queue holds
+                # Worldly Tutor's find) probes its options instead.
+                want = head[1] if head is not None and (not d.get("source")
+                                                        or str(d["source"]).startswith(head[0])) else None
                 if want is not None and want in cn and not is_flags(d):
                     (claimed if claimed else fq).pop(0)
                     o = d["candidates"][cn.index(want)].get("index", cn.index(want))
@@ -979,6 +1103,14 @@ def walk(c, prefix, extra, log, from_turn):
             # never names it (a cascaded-into Land's Edge discarding lands shows only as damage lines).
             used = dict(used, cards=used["cards"] | {x.get("cardName") for b in (b0, b1) if b
                                                      for x in b.get("battlefield") or []})
+            # A go-off ROUTE logs one action for its whole chain, the land drop included: a land on the
+            # search's end-of-phase battlefield that was not on it before is a drop the search made
+            # (KittyEquipment v2 s6_gi5 T3: the route drew Ancient Den and played it).
+            route = ROUTE in used["cards"]
+            if route and b1:
+                lands = lambda b: collections.Counter(x.get("cardName") for x in (b or {}).get("battlefield") or []
+                                                      if x.get("isLand"))
+                used = dict(used, lands=set(used["lands"]) | set(lands(b1) - lands(b0)))
             # On the search's WIN turn the viewer's verified COMBO OFF is the search's own go-off. The
             # autonomous log shows the loop only as untaps and draws (no 'Combo Off' marker when the search
             # stepped through it), so no per-card plan matches it and the distance -- dominated by a
@@ -996,13 +1128,24 @@ def walk(c, prefix, extra, log, from_turn):
                 s.send(-1)
                 continue
             left = rest.setdefault(key, collections.Counter())
+            # ...and the route is a plan only where the frame OFFERS it (the viewer's COMBO OFF entry). Where
+            # it does not, counting it as still unplayed forbids passing for the rest of the phase, so every
+            # segment takes SOME plan however far it moves from the search's board (KittyEquipment v2
+            # s6_gi5 T3: equip Spidersilk Net 7 -> 9, then equip Kite Shield -> 11).
+            if left[ROUTE] and not any(a.get("card") == ROUTE for p in cands for a in p.get("actions") or []):
+                left = rest[key] = left - collections.Counter({ROUTE: left[ROUTE]})
+                for q in (seqs.get(key), rest_oseq.get(key)):
+                    while q and ROUTE in q:
+                        q.remove(ROUTE)
+            want = attachments(b1)
             fq, sq = found.setdefault(key, []), seqs.setdefault(key, [])
             claimed = []
             if +left or fq:
                 xs = used.get("xs") or {}
-                top = max(progress(p, left, xs, fq, sq) for p in cands)
+                ol = rest_oseq.get(key) or []
+                top = max(progress(p, left, xs, fq, sq, ol) for p in cands)
                 if top[0] > 0 or top[1] > 0:
-                    cands = [p for p in cands if progress(p, left, xs, fq, sq) == top]
+                    cands = [p for p in cands if progress(p, left, xs, fq, sq, ol) == top]
             # Probe the plans that do least BEYOND the search's actions first, so a tie (and the stop at
             # distance 0) goes to the cleaner one: an extra tap-for-life Wellwisher activation leaves the
             # same names, hand and opponent life, but the tapped Wellwisher then misses the search's
@@ -1013,7 +1156,10 @@ def walk(c, prefix, extra, log, from_turn):
             for p in cands:
                 can |= content(p, used.get("xs") or {})
             oseq_here = [t for t in oseq if can[t]]
-            cands.sort(key=lambda p: (order_cost(p, oseq_here, used.get("xs") or {}),
+            # Equips are content no NAME shows, so the plans whose equips match the search's board come
+            # first: MAX_PROBES cuts the list (KittyEquipment v2 s6_gi5 T3: 157 plans, the search's
+            # "Colossus Hammer, Shadowspear, equip Colossus Hammer -> Puresteel Paladin" was #35).
+            cands.sort(key=lambda p: (-equip_score(p, want, d), order_cost(p, oseq_here, used.get("xs") or {}),
                                       sum((content(p, used.get("xs") or {}) - left).values())))
             # The plan must beat PASSING (`here`) only once the search's named actions are all played.
             here = sig_diff(frame_sig(d), target)[0]
@@ -1045,7 +1191,7 @@ def walk(c, prefix, extra, log, from_turn):
                 else:
                     sg = frame_sig(d2)
                 dist = sig_diff(sg, target)[0]
-                dists.append((dist, p))
+                dists.append((dist, p, d2))
                 say("   [%d] %-70s -> %d" % (p["index"], p.get("summary", "")[:70], dist))
                 if dist < best[0]:
                     best = (dist, p)
@@ -1057,7 +1203,7 @@ def walk(c, prefix, extra, log, from_turn):
             # beginning-of-main mill, the log's start-of-phase board predates it; whatever the search
             # then cast counts the same for every twin). One twin per distinct summary.
             tw, seen = [], set()
-            for dd, p in dists:
+            for dd, p, _ in dists:
                 if best[0] >= 0 and dd == best[0] and twin(p, best[1]) and p.get("summary") not in seen:
                     seen.add(p.get("summary"))
                     tw.append(p)
@@ -1073,6 +1219,47 @@ def walk(c, prefix, extra, log, from_turn):
                     if dd < deep[0]:
                         deep = (dd, p)
                 best = (best[0], deep[1])
+            # ONE SEGMENT ON. The viewer cuts a phase at every draw, so a cheap first cast pays off only in
+            # the next segment: KittyEquipment v1 s12_gi11 T3, Colossus Hammer first (it draws Sol Ring and
+            # leaves the mana for it; Grafted Wargear then makes metalcraft and both Hammers equip free) is 9
+            # from the search's board, Grafted Wargear first (all three Plains, nothing after) is 7. Boards
+            # that tie are always looked past; in a ROUTE phase every board is, because the route's one log
+            # line names neither its casts nor their order, so only the myopic distance is left to steer.
+            if best[0] > 0:
+                look, seen = [], set()
+                for dd, p, d2 in dists:
+                    if route or (best[1] is not None and dd == best[0]):
+                        sg = frame_sig(d2)
+                        fk = (d2.get("turn"), d2.get("phase"), repr(sorted(sg[0].items())),
+                              repr(sorted(sg[1].items())), sg[2], sg[3])
+                        if fk not in seen:
+                            seen.add(fk)
+                            look.append((dd, p, d2))
+                # Bounded: the LOOK closest boards, each probed LOOK plans deep (a Puresteel frame offers 1,300
+                # plans and every probe replays the game).
+                look.sort(key=lambda v: v[0])
+                look = look[:LOOK]
+                if len(look) > 1 or (route and look):
+                    deep = best
+                    for dd, p, d2 in look:
+                        sub = dd
+                        if (d2.get("turn"), d2.get("phase")) == key and d2.get("type") == "main_phase":
+                            nxt = [q for q in d2.get("plans") or [] if plan_ok(q, used)]
+                            nxt.sort(key=lambda q: -equip_score(q, want, d2))
+                            for q in nxt[:LOOK]:
+                                k3, d3, win3 = probe_on(c, extra, list(s.picks) + [p["index"], q["index"]], want_win)
+                                if win3:
+                                    sub = -1
+                                    break
+                                if k3 == "decision" and d3 is not None:
+                                    sg3 = (projected(d3, left - content(p, used.get("xs") or {})
+                                                     - content(q, used.get("xs") or {}), target)
+                                           if (d3.get("turn"), d3.get("phase")) == key else frame_sig(d3))
+                                    sub = min(sub, sig_diff(sg3, target)[0])
+                        say("   [%d] one segment on -> %d" % (p["index"], sub))
+                        if sub < deep[0]:
+                            deep = (sub, p)
+                    best = deep
             if best[1] is None:
                 say("   pass")
                 s.send(-1)
@@ -1082,8 +1269,8 @@ def walk(c, prefix, extra, log, from_turn):
             for i in sorted(seq_match(best[1], oseq, used.get("xs") or {}), reverse=True):
                 del oseq[i]
             for a in best[1].get("actions") or []:
-                if a.get("card") in sq and not wrong_x(a, used.get("xs") or {}):
-                    sq.remove(a["card"])
+                if a.get("card") and plan_key(a) in sq and not wrong_x(a, used.get("xs") or {}):
+                    sq.remove(plan_key(a))
             m = found_match(best[1], fq)
             claimed = fq[:m]
             del fq[:m]
