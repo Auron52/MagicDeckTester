@@ -359,6 +359,26 @@ Arguably the triome should be fetched if we don't need the mana."*
   falling back to the width-32 set -- the agent's default, flagged. Agent's fallback, for
   the USER to confirm: an Ulamog when no Emrakul is left in the library (Ulamog CH before Gyre: {10} vs {11}).
   Measured against the width-32 searched baseline.
+  USER 2026-10-27 (confirms the readings): *"We can always cast long-term plans later If we have brainstorm + Emrakul in
+  hand."* So holding LTP when neither target qualifies is right. On OTHER targets: *"how much do we need to consider
+  something else missing from hand? For example a street wraith might be worth it if we have no cyclers, have
+  brainstorm or brainsurge to draw it or need a few turns before Cyclone and have nothing else missing. I would
+  probably only apply the nothing missing + no cyclers and see how that goes to start. Maybe even consider Seething
+  Song if we have a way to pull it off the top."* So:
+  - Street Wraith (the cycler target) is ADMITTED when there is no cycler in hand AND nothing else is missing (a
+    Cyclone in hand or on the battlefield, and the Emrakul target not admitted). Start with only this condition. The
+    USER's other two triggers (a Brainstorm / Brainsurge to draw it; several turns before Cyclone) are NOT built yet;
+    they are the next refinement if this one measures well.
+  - Seething Song: proposed, behind its own lever (default OFF): admitted when we hold a way to draw it off the top
+    this turn or next (Brainstorm / Brainsurge / Ponder). Measured and reported.
+  - **CLAIRVOYANCE CAVEAT (USER):** *"Unfortunately this deck is very very susceptible to clairvoyance artifacts so in
+    some cases allowing it to be cast might give better results just because of the shuffling that occurs."* LTP
+    shuffles, and the search sees the post-shuffle library (the engine-wide known-library simplification), so a less
+    restricted LTP can look better in an A/B purely by buying the search a "good shuffle". Every LTP-restriction A/B
+    must therefore be READ for this: for each game the restriction makes slower, check whether the unrestricted line's
+    gain came from cards revealed by the shuffle (a target that did nothing itself) rather than from the tutored card.
+    Report that split alongside the raw delta. The same applies to any other shuffle (fetches, Myriad Landscape,
+    Emrakul / Gyre graveyard shuffles).
 - **Cantrip prunes (Brainstorm / Brainsurge put-back, Ponder order/shuffle).** Candidate SOUND folds first (identical
   cards, a put-back set equal under the deck's needs), then proposed lossy prunes for the USER (e.g. put-backs keep
   Emrakul on top when a Cyclone walk can reach it; dead cards such as Toxic Deluge go back first). Each is measured.
@@ -429,6 +449,161 @@ smoke result under the (b) binary, and reproduces GT again under the (b) binary 
 MTG_WHIFF_TRACE=1 finds a REAL-resolution whiff in every one of the 20 games (antilife: a fetchland with no
 fetchable land left, T5-T8; fluctuator: Enlightened Tutor with no artifact/enchantment left, T3-T7; pd: a Green
 Sun's Zenith fail-to-find, T5-T6). Evidence: logs/cyclone/phase4b-whiff-evidence.txt (gitignored).
+
+### Phase 5 (the cost gate: profile, sound folds, the USER's search heuristics) -- 2026-10-27
+**COST ATTRIBUTION BEFORE ANY CHANGE (f586cb53b, written before the first edit).** Settings: the deck has NO profile, so
+it plays at the built-in defaults -- the d3 rows pin d3 b10, the d5 rows get the built-in d5 at b20 -- and the DEFAULT
+keep policy (min 1 / max 5 lands, curve check TwoDrop: mulligan a hand with fewer than two lands or no nonland of mana
+value <= 2) with lookahead bottoming (no keep table: every mulligan's bottom is chosen by playing EACH candidate bottom
+as a full game at play settings). Probe: 144 games pooled on 24 threads (d3 b10 x96 seed 72000, d5 b20 x48 seed 71000),
+plus a single-thread perf + turn census (8 games, seed 7600) and the cantrip / seed / tutor attribution
+(MTG_CANTRIP_ATTRIB, extended in this phase with the seed and tutor axes) over the 84 KEPT games.
+
+| where the work goes | d3 b10 | d5 b20 |
+|---|---|---|
+| all games: units / game (thread-wall s / game, 24 threads) | 1.57M (29.1 s) | 2.77M (70.1 s) |
+| games that mulligan (default keep policy) | 38% (37/96) | 48% (23/48) |
+| share of ALL units spent in mulligan games (the bottoming trial games) | **83%** | **88%** |
+| a mulligan game vs a kept game | 7.7x | 7.9x |
+| kept games: units / game (Hinata2's suite rows) | 440K (42-49K) | 646K (55-63K) |
+
+Kept-game search (84 games, 42.1M units; inclusive units of the plans carrying each variant, so the rows overlap):
+| axis | units | share |
+|---|---|---|
+| Brainstorm / Brainsurge PUT-BACK variants (putback_choice >= 1; resolution width mean 55, median 57, p90 73) | 25.0M | **59%** |
+| Ponder ORDER variants (m!+1 = 7) | 6.0M | 14% |
+| plans carrying a cycle seed (the searched which-cycler chain) | 9.4M | 22% |
+| seed PIN variants (Curator j > 0, Cyclone decline / take-and-Remand) | 1.1M | 2.7% |
+| Long-Term Plans TARGET variants (width 32) | 1.9M | 4.5% (but 15% of all plans returned for scoring; one LTP fan reached 225K plans) |
+| Scalding Tarn target | 0 (the generic default is ONE option: the library-order top pick) | -- |
+| Myriad Landscape picks, Ulamog targets | not separable (rare) | -- |
+| the extra-turn transition (Q13 turn-edge prunes off) | no lever to isolate it | -- |
+
+Budget discipline (census, single thread): decisions overrun their budget (median 43K units against 9K; 13% of all units
+are rolled-back overrun passes): the FIRST iterative-deepening pass over the root's candidate list does not fit, because
+the list is wide (the put-back fan). Floor probe (MTG_PUTBACK_AXIS=0 MTG_PONDER_AXIS=0, both axes at the provider
+default): units 4.55x (d3) / 3.88x (d5) fewer, kept games at Hinata's level (83K / 94K units), but worse play (avg win turn
+5.44 -> 5.52 d3, 5.29 -> 5.67 d5, n = 48 / 24) and STILL 10.7 s / game at d5 because the mulligan games remain ~11x a
+kept game.
+
+**MEMORY (Q26's ~3 GB / worker).** Not a leak: the shared PLAN-CACHE pool (the enumeration memo's promoted plan lists +
+the breakpoint continuation cache; ONE global pool sized from RAM, 2,400 MB here) fills to its cap. 24-thread probe:
+hiwater 2,400 / 2,400 MB, 11,741 refused stores; with the pool raised to 11.7 GB (MTG_PLAN_CACHE_KB=12000000) it filled
+that too within ten minutes (rss 19.5 G). One worker alone reaches 2.2 GB. The lists are what is huge: a put-back fan clones
+every base plan casting a Brainstorm ~55 times, and the width-32 LTP axis clones every LTP plan once per name (one list
+reached 225K plans). Hinata never fills the pool (113 MB). A refusal is result-neutral for a single thread but makes
+per-game units -- and so budgeted play at the start gate's edge -- depend on what OTHER workers hold (the batch prints
+the [determinism] WARNING): this deck's pooled results are not byte-reproducible across thread counts (Q34).
+
+**WHAT WAS BUILT (phase 5).** Every lever is per-job (heurarm) so the arms pool in one batch; human play and MTG_UNPRUNED
+keep every option (the engine-side bypasses of each hook).
+- **THE CYCLE-SEED PIN FOLD** (`MTG_CYCLE_SEED_FOLD`, SOUND, default ON; TurnSolver.cpp `CycleSeedPinRedundant`, at the
+  head of EnumeratePlans' eval_and_push). CollectActions cannot see the plan, so it emits Curator j = 0..(watchers out +
+  in hand) and the free-cast pins whenever a Cyclone is out OR in hand. Inside one plan: a j above the watchers that can be
+  out when the seed is cycled (out now + those the plan casts) bottoms exactly min(j, N) cards, and with no Cyclone out
+  or cast by the plan the free-cast pin is never read -- both are the SAME state as a sibling the odometer emits beside them
+  (same name, same other selections, same cost, the readable pin emitted first), so the duplicate is not emitted. Applied
+  only where exact: a plan with any non-cast action, or a cast that draws / looks / tutors / Remands (a breakpoint whose
+  continuation could cast a found Curator / Cyclone before the seed) is left alone. Pinned by
+  test_cyclone_phase5.cpp (fold on vs off: only the unreadable pins vanish; a Curator-casting plan keeps j = 1; a
+  Brainstorm plan is not folded). Q26 (a) (the EXACT walk of a seed-only plan with a Cyclone out) is NOT built: the seed
+  pins are 2.7% of the work, so the remaining fold is small; recorded as owed.
+- **SCALDING TARN** (`MTG_CYCLONE_FETCH_RULE`, the USER's rule, default ON; CycloneProvider::FetchCandidates /
+  FetchSearchCandidates). Rank: an untapped-entering U+R land (Steam Vents) first; then by the shared red count -- short:
+  red shock (Blood Crypt), red basic (Mountain), then blue; not short: blue shock (Watery Grave), blue basic (Island), then
+  red; the enters-tapped triome last. The search's set: the top pick, plus the triome (Xander's Lounge) beside it.
+- **THE SHARED RED COUNT** (CycloneShortOnRed): our permanents that make red (not a fetchland), Cascade Bluffs TWO beside
+  another U/R land (none alone -- it then makes only {C}), at most ONE red land in hand that enters untapped (the Lounge in
+  hand does not count), Seething Song in hand as the SECOND red only. Short = fewer than two.
+- **MYRIAD LANDSCAPE** (`MTG_CYCLONE_MYRIAD_RULE`, the USER's rule, default ON; LandSearchPickOrder / Width / Key): two
+  Islands first and the one option; two Mountains second and searched beside them only while short on red; a list with no
+  two-Island pick keeps the full fan. The memo key carries the red verdict.
+- **LONG-TERM PLANS** (`MTG_CYCLONE_LTP_RULE`, the USER's rule, default ON; TutorCandidates + CollectedActionAllowed):
+  Unpredictable Cyclone while none is in hand or out; Emrakul unless an Emrakul AND a put-back cantrip are both in hand;
+  Street Wraith (the cheapest creature cycler) when no creature cycler is in hand and nothing else is missing (a Cyclone
+  held or out, no Eldrazi target admitted -- USER 2026-10-27, built as the first condition only); none admitted -> the
+  cast is HELD (dropped from the enumeration; a resolution reached anyway, after a mid-plan change, keeps the full list,
+  never a forced whiff). `MTG_CYCLONE_LTP_ULAMOG` (the agent's fallback, default OFF): an Ulamog once no Emrakul is left
+  (Ceaseless Hunger first). `MTG_CYCLONE_LTP_SONG` (the USER's "maybe", default OFF): Seething Song while we hold a
+  Brainstorm / Brainsurge / Ponder and none is in hand.
+- **CANTRIP PROPOSALS** (the agent's, from the USER's examples; ALL default OFF, the USER's call): `MTG_CYCLONE_PUTBACK_RULE`
+  (put-back ORDER: goldfish_inert first, then the Eldrazi -- Ulamogs before Emrakul so an Emrakul put back lands ON TOP --
+  while a Cyclone is out or in hand, then lands beyond the one kept, then Remand, then the deck's shed order; order only);
+  `MTG_CYCLONE_PUTBACK_SINGLE` (prune the put-back fan to that pick; the Niv BRAINSTORM_SINGLE shape; inert without the
+  rule); `MTG_CYCLONE_PONDER_KEEPSHUFFLE` (Ponder: keep in the provider's order vs shuffle; the Niv shape).
+- Instruments: MTG_CANTRIP_ATTRIB gains three rows (plans carrying a seed, a seed with a non-default pin, a tutor variant);
+  MTG_AXIS_TRACE_DUMP=1 lists every plan of a traced list.
+
+**MEASUREMENT (held-out, paired, ONE pooled batch, 2026-10-27; f3d4974fa).** 12 arms as per-job flags; d3 b10 x200 (seed
+81000) for every arm, d5 b20 x100 (seed 82000) for four; 24 threads, MTG_PLAN_CACHE_KB=12000000 (the pool still filled:
+results are paired but not byte-reproducible across interleavings, Q34). Reference = `all` (the shipped defaults: fold +
+the USER's three rules ON, every proposal OFF). delta = arm - all in avg win turn (an unwon game scores 9); + = the arm
+is SLOWER, i.e. the lever it turns off was helping. "slower / faster" count the games the ARM loses / wins.
+| arm (what differs from `all`) | depth | n | delta avg turn | se | arm slower / faster | units vs all |
+|---|---|---|---|---|---|---|
+| base (fold + all three rules OFF = the committed tree before phase 5) | d3 | 200 | +0.120 | 0.047 | 38 / 19 | x1.075 |
+| base | d5 | 100 | +0.110 | 0.078 | 15 / 11 | x1.108 |
+| fold OFF | d3 | 200 | +0.030 | 0.023 | 5 / 3 | x1.037 |
+| Tarn rule OFF | d3 | 200 | +0.060 | 0.041 | 30 / 18 | x0.948 |
+| Myriad rule OFF | d3 | 200 | +0.010 | 0.012 | 4 / 2 | x1.007 |
+| LTP rule OFF | d3 | 200 | +0.005 | 0.037 | 9 / 11 | x1.090 |
+| + LTP Ulamog (OFF lever ON) | d3 | 200 | 0.000 | 0.000 | 0 / 0 (inert in this sample) | x1.000 |
+| + LTP Seething Song (OFF lever ON) | d3 | 200 | 0.000 | 0.007 | 1 / 1 | x1.005 |
+| + put-back RULE (order only) | d3 | 200 | +0.010 | 0.050 | 36 / 33 | x1.068 |
+| + put-back rule + SINGLE (prune to the rule's pick) | d3 | 200 | **-0.105** | 0.058 | 35 / 44 | **x0.270** |
+| + put-back rule + SINGLE | d5 | 100 | **-0.110** | 0.072 | 12 / 18 | **x0.246** |
+| + Ponder keep-vs-shuffle | d3 | 200 | +0.010 | 0.030 | 13 / 11 | x0.978 |
+| + all three cantrip proposals | d3 | 200 | -0.080 | 0.057 | 36 / 41 | x0.245 |
+| + all three cantrip proposals | d5 | 100 | -0.080 | 0.077 | 19 / 21 | x0.227 |
+Against `base`: the shipped set is -0.120 (d3, se 0.047) / -0.110 (d5, se 0.078) turns at x0.930 / x0.903 units; the
+put-back single pick on top of it -0.225 (se 0.062) / -0.220 (se 0.099) at x0.252 / x0.222.
+Readings: the fold is a sound collapse and stays ON; it is not byte-identical under a budget (fewer duplicates re-price the
+first pass), as expected. The Tarn rule is the one USER rule with a clear gain. LTP is quality-neutral and 8% cheaper.
+Myriad is neutral. The put-back SINGLE pick is BETTER at both depths and ~4x cheaper: the searched fan (width ~55) cannot
+be covered by the budget, so the first pass overruns, rolls back and the search ends up with a worse line than the rule's
+pick. Ponder keep/shuffle is neutral and buys little.
+
+**THE CLAIRVOYANCE READING (USER 2026-10-27).** For each shuffle-bearing restriction, every game it made SLOWER (rule arm
+worse than the lever-off arm) was replayed (a) single-threaded with the real-resolution tutor trace, and (b) under four
+OTHER search-shuffle salts (shuffle_salt_search 1-4; same opening, different post-search shuffles), both arms:
+- **LTP (11 slower games).** Trace split: 5 shuffle-only (the unrestricted search tutored a card it never used --
+  Island, Seething Song, either Ulamog, an Emrakul a turn early), 2 the tutored card was used (Street Wraith on T3,
+  Seething Song on T3), 3 the rule's arm cast LTP and the other did not (a different line, not a looser LTP), 1 no LTP
+  difference. Salts: the rule is still slower in 1 of 11, faster in 2, tied in 8 (mean -0.14 for the rule). So the raw
+  +0.005 is NOT a hidden cost of the restriction: its losses are shuffle luck.
+- **Scalding Tarn (18 slower games).** Salts: still slower in 6, faster in 9, tied 3 (mean -0.04). Mostly luck; gi 25, 61,
+  130, 154, 184 stay slower across salts and are the games to root-cause if the USER wants the rule refined.
+- **Myriad Landscape (2).** 1 / 1.
+
+**MEMORY, root-caused.** Single thread, 8 games (seed 7600), the plan-cache pool UNBOUNDED (MTG_PLAN_CACHE_KB=0): the
+shipped tree's pool demand is 3.27 GB (max RSS 3.85 GB); the LTP rule does not move it (3.27 GB); the put-back SINGLE pick
+takes it to 123 MB (max RSS 190 MB, Hinata's level). The ~3 GB / worker is the Brainstorm / Brainsurge put-back fan's plan
+lists, held by the enumeration memo and the breakpoint continuation cache.
+
+**COST AFTER (the shipped set: fold + the three USER rules; held-out seeds 81000 d3 / 82000 d5).**
+| | before (`base` arm) | after (`all`, shipped) | + put-back SINGLE (proposal, OFF) |
+|---|---|---|---|
+| d3 b10 units / game (thread-wall s, 24 threads) | 1.39M (27.7 s) | 1.29M (26.0 s) | 0.35M (7.3 s) |
+| d5 b20 units / game | 2.05M (41.4 s) | 1.85M (36.7 s) | 0.45M (9.4 s) |
+| kept games d3 / d5 (units) | 428K / 637K | 411K / 574K | 98K / 118K |
+| mulligan games d3 / d5 (units; 37% / 35% of games) | 3.03M / 4.67M | 2.80M / 4.22M | 0.78M / 1.08M |
+| share of all units in mulligan games | 81% / 80% | 80% / 80% | 82% / 83% |
+| plan-cache demand, one worker, 8 games | 3.27 GB | 3.27 GB | 123 MB |
+Kept-game axes after (126 games, seed 81000 d3, the shipped set): put-back variants 57%, Ponder 13%, plans carrying a
+seed 22%, seed pins 1.7%, LTP target variants 0.2% (from 4.5%). The put-back fan is still the search's cost and the
+mulligan bottoming still ~80% of everything.
+
+**THE COST GATE (`suite_gate.py --cost`, provisional cases at Niv's pre-keep-table shape -- smoke d3 30 / d5 15 / 2hg 30,
+regression d3 2x40 / d5 2x20 / 2hg 40, overnight the ENTRY set; no backstop block, owed as for niv).**
+| run | cyclone worst searched case | hinata worst (same run) | ratio | verdict |
+|---|---|---|---|---|
+| the shipped set (OFFICIAL) | 49,009 ms/game (d5 s3003) | 2,823 | **17.36x** | **FAIL** |
+| what-if: + the three cantrip proposals (env) | 11,493 (d5 s2002) | 2,960 | 3.88x | FAIL |
+| what-if: + proposals + MTG_BOTTOM_ROLLOUTS=0 (the blind bottomer: the cost a keep table would leave) | 2,003 (d5 s2002) | 2,809 | 0.71x | pass |
+The what-ifs adopt nothing (env only; test/suite_cost.json restored to HEAD). Hinata's nine regression keys matched GT in
+all three runs. The provisional cases are left UNCOMMITTED in test/regression_cases.sh (the brief: commit only on PASS).
+The deck reaches the gate only with the USER's put-back decision (Q33) AND the mulligan stage's keep table (or cheaper
+bottoming) -- Q32.
 
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
@@ -518,6 +693,12 @@ Sun's Zenith fail-to-find, T5-T6). Evidence: logs/cyclone/phase4b-whiff-evidence
   two Triomes, treasure_hunt's three cycling lands + Fiery Islet, Fluctuator's many cyclers; EDF and WhiteKnights hold one
   cycler name each, so nothing to choose) -- a residual in-window pick, disclosed. Recommendation: opt them in one deck at
   a time as a measured play change (smoke + held-out A/B), FiveColour first.
+  **USER RULING 2026-10-27:** *"Not searching but just choosing one is okay iff it is a provider heuristic that is
+  shown to do well against searched."* So the pick may stay for FiveColour / treasure_hunt / Fluctuator, but only as a
+  PROVIDER heuristic (SelectDigSource in the deck's provider, not a generic first-affordable default), and only once a
+  paired held-out A/B shows it doing well against the searched cycle (the deck opted in via CyclesAreSearched). Owed
+  after Cyclone, one deck at a time: build the opt-in arm, A/B searched vs the provider pick (quality AND cost), report
+  to the USER; where the pick does not hold up, opt the deck in (a measured play change).
 - Q21. Curator's scry on a NON-cycle discard (the cleanup discard) uses the provider's ScryKeepOnTop in-window (the
   cycle's scry is searched; this one is not: it happens at cleanup, outside the plan). Rare (more than seven cards at
   cleanup with a Curator out). And when an Emrakul is discarded in the same cleanup, the scry resolves before the
@@ -548,6 +729,44 @@ Sun's Zenith fail-to-find, T5-T6). Evidence: logs/cyclone/phase4b-whiff-evidence
   searched. NOT changed: a "you MAY search" with nothing to find (the Harbingers, Forerunner: treated as a decline, no
   search, no shuffle) and Light-Paws' optional aura search -- both legal lines. Default: as built (rules); flag if the
   USER reads "may" differently.
+- Q29. Scalding Tarn tie order past the Vents (phase 5): not short on red -> Watery Grave, Island, then Blood Crypt,
+  Mountain; short -> Blood Crypt, Mountain, then Watery Grave, Island ("then blue (Watery Grave, then Island)" read as the
+  specific statement over "basics only once no shock is left"). Xander's Lounge is searched beside the pick whatever it is.
+  Default: as built.
+- Q30. The shared red count's agent readings: at most ONE red land from hand counts (one land drop a turn); a fetchland in
+  hand is not a red land; Cascade Bluffs counts TWO red beside another land that makes U or R (it filters {U/R} into
+  {R}{R}) and none alone. Default: as built.
+- Q31. LTP's Street Wraith target is "the cheapest creature cycler left" (Street Wraith; Curator of Mysteries once no
+  Wraith is left), "no cycler in hand" = no CREATURE with cycling in hand (Cyclone's and the Lounge's cycling do not count),
+  and the Seething Song lever also requires no Song in hand ("missing"). Default: as built.
+- Q32. **THE 3x GATE FAILS: 17.36x Hinata** (cyclone 49,009 ms/game at d5 b20 s3003 vs hinata 2,823, same run), and it
+  cannot pass with the shipped (USER-sanctioned) set, because ~80% of the deck's work is MULLIGAN BOTTOMING: with no keep
+  table the default keep policy (curve check TwoDrop -- it counts neither Street Wraith's free cycle nor Curator's {U}
+  cycle as a play) mulligans 35-48% of games, and each mulligan plays every candidate bottom as a full game at play
+  settings (7-8x a kept game). Options, all the USER's: (a) let the mulligan profile run BEFORE suite entry
+  (MTG_ALLOW_UNTESTED_DECK=1, a USER-only override) -- the keep table replaces the bottoming trials with a lookup;
+  (b) adopt the put-back SINGLE pick (Q33), which is ~4x cheaper AND better; (c) a provisional profile with cheaper
+  bottoming rollouts (bottom_eval_depth / budget) -- a mulligan setting; (d) a deck keep policy. Default taken: the
+  provisional suite cases are left UNCOMMITTED in the worktree; the deck is not added. What-if gates (env, nothing
+  adopted) in the Phase 5 section.
+- Q33. **The put-back SINGLE pick (MTG_CYCLONE_PUTBACK_RULE + MTG_CYCLONE_PUTBACK_SINGLE) measures BETTER and ~4x cheaper**
+  (-0.105 turns d3, -0.110 d5 vs the shipped set; -0.225 / -0.220 vs the pre-phase-5 tree; units x0.27 / x0.25; memory
+  3.27 GB -> 123 MB per worker). It is a LOSSY prune (the fan is not searched), so it ships OFF: adopt? The rule as built:
+  put back dead cards (goldfish_inert) first, then the Eldrazi (Ulamogs before Emrakul, so an Emrakul put back lands on top)
+  while a Cyclone is out or in hand, then lands beyond the one kept, then Remand, then the deck's shed order. Recommended:
+  adopt (with the put-back RULE), and consider the Ponder keep-vs-shuffle proposal neutral (+0.01, x0.98: not worth it on
+  its own). Default: OFF until the USER answers.
+- Q34. The plan-cache pool BINDS on this deck even at 11.7 GB on 24 threads, so its pooled results are not byte-identical
+  across thread counts / interleavings (the batch's [determinism] WARNING). Once in the suite its GT would not be
+  reproducible at a different thread count. The put-back single pick removes it (123 MB per worker). Default: disclosed;
+  no pool change made.
+- Q35. LTP measured neutral (+0.005, se 0.037) and 8% cheaper; its 11 losses are shuffle luck by the salt ensemble (still
+  slower in 1 of 11 under four other search shuffles). The Tarn rule is the only USER rule with a clear gain (-0.06 turns);
+  5 of its 18 losses persist across salts (gi 25, 61, 130, 154, 184 of seed 81000 d3) -- root-cause them if the rule is to
+  be refined. Myriad neutral. Ulamog / Song amendments inert or neutral in this sample. Default: all as built (USER rules
+  ON, amendments OFF).
+- Q36. Q26 (a) (fold the decline / take-and-Remand / j variants of a seed-only plan whose Cyclone walk is EXACTLY
+  predictable) is not built: the whole seed-pin axis is 2.7% of the work. Owed as a sound collapse. Default: deferred.
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
