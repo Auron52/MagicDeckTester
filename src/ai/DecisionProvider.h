@@ -941,6 +941,38 @@ public:
     virtual bool TakeFreeCast(const GameState& /*s*/, int /*controller*/,
                               const CardDefinition& /*found*/) const { return true; }
 
+    // ---- Searched CYCLING (Unpredictable Cyclone phase 3, 2026-10-27) ------------------------------
+    // SearchedCycleSources -- WHICH hand cyclers the search may cycle as a plan action (Action::Kind::
+    // DigDraw with dig_sacrifice false, a "seed" of the plan's dig chain; see CollectActions). An ORDERED,
+    // RESTRICTED list of DISTINCT card names (copies are one option: the apply worlds cycle BY NAME, so
+    // which copy is unobservable). A provider may restrict or order the set, never collapse a set it
+    // admits to an unbranched pick -- the engine emits one action per name and the search chooses.
+    // DEFAULT EMPTY: the deck keeps the legacy dig loop (ShouldConsiderDig + SelectDigSource), byte-
+    // identical. A provider that returns a non-empty list OWNS hand cycling through these actions inside
+    // the search window: its in-window plans run no legacy hand cycle (TurnSolver's dig loop), and the
+    // legacy gate + SelectDigSource remain only the permitted playout policy (the horizon leaf, the d0
+    // runner). [Opting the other cycling decks in is an open USER question -- see the Cyclone ledger.]
+    virtual std::vector<std::string> SearchedCycleSources(const GameState& /*s*/) const { return {}; }
+    // The cheap STATE-FREE twin of the above (read per apply): does this provider search its hand cycling
+    // at all? Must be true exactly when SearchedCycleSources can be non-empty. Default false.
+    virtual bool CyclesAreSearched() const { return false; }
+    // FreeCastTakeDominated -- is TAKING this free cast (Unpredictable Cyclone's walk hit) provably no worse
+    // than declining it (the hit to the bottom)? True folds the decline option away (no decline variant;
+    // a decline pin takes). A dominance RESTRICTION owned by the deck. DEFAULT FALSE: nothing is folded,
+    // every offer's take / decline is branched -- the sound default.
+    virtual bool FreeCastTakeDominated(const GameState& /*s*/, int /*controller*/,
+                                       const CardDefinition& /*hit*/) const { return false; }
+    // AdmitRemandOnFreeCast -- may a Remand (counters_target_spell_to_hand) in hand answer this FREE
+    // cast (Unpredictable Cyclone's walk hit, on the stack)? A RESTRICTION hook (default: admit all);
+    // the take / decline / take-and-Remand choice itself is searched (the DigDraw seed's free-cast pin).
+    virtual bool AdmitRemandOnFreeCast(const GameState& /*s*/, int /*controller*/,
+                                       const CardDefinition& /*hit*/) const { return true; }
+    // AdmitRemandRider -- may a Remand ride THIS hand cast of `target` (CollectActions' remand post-pass)?
+    // A RESTRICTION hook (default: admit all), so a deck can prune self-Remands it does not want offered
+    // (CycloneProvider: a mana-value ceiling, MTG_CYCLONE_REMAND_MAX_MV).
+    virtual bool AdmitRemandRider(const GameState& /*s*/, int /*controller*/,
+                                  const CardDefinition& /*target*/) const { return true; }
+
     // DemonstrateCopy -- Creative Technique's "you may copy this spell" (CR 702.145). Default
     // TRUE: the copy is a second free payload at zero cost and the opponent's copy is inert
     // here (never dealt a library, never casts). Provider-owned for the same core-invariant
