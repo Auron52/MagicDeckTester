@@ -63,6 +63,7 @@ import queue
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -265,19 +266,103 @@ def find(args):
     return cands, totals
 
 
+# ---- the persistent claude-play child ------------------------------------------------------
+
+class Driver:
+    """A persistent `--claude-play --interactive` child, like hunt.Session, that SURVIVES the frames
+    where interactive mode does not wait for more input. Some choosers end the process when the pick
+    stream runs out instead of blocking on stdin (a Utopia Sprawl `choose_color` did, 2026-10-24), so
+    the child exits with no result after the answer is sent. On that EOF the child is respawned with
+    every pick so far PRE-FILLED in --choices; it replays them silently and continues interactively
+    from the next frame. Same engine, same determinism; only the transport differs."""
+
+    def __init__(self, c, extra, valve=None):
+        """`valve`: MTG_VIEWER_PLAN_CAP_POSITIONS for the child (None = the engine default)."""
+        self.c, self.extra, self.picks, self.queue = c, list(extra), [], []
+        self.valve = valve
+        self._spawn()
+
+    def _spawn(self):
+        c = self.c
+        argv = [vpc.MTG, c["deck"], "--claude-play", "--interactive", "--seed", str(c["seed"]),
+                "--game-index", str(c["gi"]), "--max-turns", str(c["mt"]), "--depth", "0",
+                "--profile", c["prof"], "--choices", ",".join(str(p) for p in self.picks)]
+        if c["force"] is not None:
+            argv += ["--force-mulligan", c["force"]]
+        argv += self.extra
+        env = dict(os.environ)
+        env.update(hunt.REPLAY_ENV)
+        if self.valve:
+            env["MTG_VIEWER_PLAN_CAP_POSITIONS"] = str(self.valve)
+        self.err = tempfile.TemporaryFile(mode="w+")
+        self.proc = subprocess.Popen(vpc.capped(argv), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=self.err, text=True, cwd=ROOT, env=env, bufsize=1)
+        self.sent_since_spawn = 0
+
+    def read(self):
+        for _ in range(2):
+            buf = []
+            while True:
+                line = self.proc.stdout.readline()
+                if not line:
+                    break
+                buf.append(line)
+                if line.startswith("<<<END_DECISION>>>"):
+                    d = hunt.decision_of("".join(buf))
+                    return ("decision", d) if isinstance(d, dict) else ("eof", "malformed decision")
+                if line.startswith("<<<END_RESULT>>>"):
+                    r = hunt.result_of("".join(buf))
+                    return ("result", r) if isinstance(r, dict) else ("eof", "malformed result")
+            if not self.sent_since_spawn:          # it died on the stream it was GIVEN: a real stop
+                return "eof", "".join(buf[-12:])
+            self.close()
+            self._spawn()                          # resume past the chooser that would not wait
+        return "eof", "".join(buf[-12:])
+
+    def send(self, pick):
+        self.picks.append(int(pick))
+        self.sent_since_spawn += 1
+        try:
+            self.proc.stdin.write("%d\n" % int(pick))
+            self.proc.stdin.flush()
+        except (BrokenPipeError, ValueError):
+            pass
+
+    def answer(self, ints):
+        """Send a frame's answer: its first int now, the rest one per re-emitted frame (pending())."""
+        self.queue = list(ints[1:])
+        self.send(ints[0])
+
+    def pending(self):
+        """True (and the next queued int sent) while a multi-int answer is still being delivered."""
+        if not self.queue:
+            return False
+        self.send(self.queue.pop(0))
+        return True
+
+    def close(self):
+        for f in (self.proc.stdin, self.proc.stdout):
+            try:
+                f.close()
+            except Exception:                                    # noqa: BLE001
+                pass
+        try:
+            self.proc.wait(timeout=20)
+        except Exception:                                        # noqa: BLE001
+            self.proc.kill()
+        self.err.close()
+
+
 # ---- step 2+3: localise + hint -------------------------------------------------------------
-
-SESSION_LOCK = threading.Lock()   # hunt.Session reads the module globals DECK/PROF when it starts
-
 
 def enumerate_starts(cand, c):
     """Walk the resolved pick stream once (one persistent child) and keep the first main-phase frame
-    of each turn: 'your board at the start of T'. Same walk as ref_handoff_sweep.enumerate_frames,
-    with the Session construction under a lock so references can be walked concurrently."""
+    of each turn: 'your board at the start of T'. Same walk as ref_handoff_sweep.enumerate_frames, on a
+    Driver so a chooser that ends the child instead of waiting (Utopia Sprawl's choose_color cut the
+    AccomplishedAlchemist ladders at the first one, 2026-10-27) does not end the walk. Driver takes the
+    deck and profile from `c`, so references walk concurrently."""
     res = c["resolved"]
-    with SESSION_LOCK:
-        hunt.DECK, hunt.PROF = c["deck"], c["prof"]
-        s = hunt.Session(c["seed"], c["gi"], c["force"], c["side"], c["mt"])
+    s = Driver(c, c["side"] or [], c.get("valve"))
     last = cand["human_win"] if cand["human_win"] is not None else c["mt"]
     starts, seen = [], set()
     try:

@@ -5642,22 +5642,29 @@ function firebreathePanelHtml(d){
     h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
   return h+`</div>`;
 }
-// Umezawa's Jitte counter-spend: same modal + turn-keyed side-channel shape as firebreathing.
+// Umezawa's Jitte counter-spend: same modal + turn-keyed side-channel shape as firebreathing. Shown only
+// when a DOUBLE STRIKER carries the Jitte (engine `mid_step`): the counters its first strike earns can be
+// spent on its regular-damage half, which no main-phase activation can do. Every other spend is a
+// main-phase Jitte activation (USER 2026-08-27: no dialog on attack). -1 = "spend as they arrive".
+function jitteLabel(k, max){
+  return k<0 ? 'jitte: spend as they arrive' : `jitte ×${k}${k<max?` (held ${max-k})`:''}, first-strike counters banked`;
+}
 function jittePanelHtml(d){
-  const max=d.max_count||0, def=(d.heuristic_default==null?max:d.heuristic_default);
+  const max=d.max_count||0, def=(d.heuristic_default==null?-1:d.heuristic_default);
   const atk=(d.attackers||[]).map(a=>a.name);
-  let h=`<h3>Umezawa's Jitte — spend how many counters?</h3>`;
-  h+=`<div class="sub">Spend charge counters pre-strike on +2/+2 for the equipped attacker. You can spend up to <b>${max}</b>; the AI spends everything (incl. double-strike mid-step earnings). Hold counters to bank them for a bigger turn.</div>`;
+  let h=`<h3>Umezawa's Jitte — spend the counters as they arrive?</h3>`;
+  h+=`<div class="sub">A double striker carries the Jitte. <b>Spend as they arrive</b> spends all <b>${max}</b> counter${max===1?'':'s'} now, then the 2 its first-strike damage earns on the regular-damage half (+2/+2 each) — what the AI does. Or spend exactly ×N now and bank the rest, including the first strike's 2.</div>`;
   h+=`<div class="tutgrid">`+atk.map(n=>cardMini(n)).join('')+`</div>`;
   h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+  h+=`<button class="${def<0?'primary':'ghost'}" data-opt="-1">spend as they arrive${def<0?'  ·  AI':''}</button>`;
   for (let k=0;k<=max;k++)
-    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
+    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k} now, bank the rest${k===def?'  ·  AI':''}</button>`;
   return h+`</div>`;
 }
 function commitJitte(d, k){
   const t=d.turn, max=d.max_count||0;
   (S.jitte=S.jitte||{})[t]=k;
-  S.history.push({ turn:t, label:`jitte ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.history.push({ turn:t, label:jitteLabel(k, max) });
   S.prev=S.decision;
   (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), jt:t });   // consumes NO --choices slot
   renderHistory(); hideDecPanel(); step();

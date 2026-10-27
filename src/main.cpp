@@ -4576,18 +4576,33 @@ static void WriteAttachHostDecisionJson(std::ostream& os, const GameState& s,
 // --choices (fires mid-combat; existing references replay byte-identically as greedy).
 static void WriteJitteDecisionJson(std::ostream& os, const GameState& s,
                                    const std::vector<int>& attacker_indices,
-                                   int max_count, int decision_index)
+                                   int max_count, int decision_index, bool mid_step)
 {
     DecisionJson d(os, decision_index);
     d.Type("jitte").Turn(s.turn_number).Board(s)
-     .Int("max_count", max_count).HeuristicDefault(max_count);
+     .Int("max_count", max_count).Bool("mid_step", mid_step).HeuristicDefault(-1);
     d.Array("attackers", attacker_indices.size(), [&](std::size_t j)
     {
         const Permanent& p = s.battlefield[attacker_indices[j]];
         os << "{ \"name\": "; JsonStr(os, p.card.m_name.str()); os << " }";
     });
-    d.Note("reply how many Jitte charge counters to spend pre-strike on +2/+2 (0..max_count), "
-           "or -1 for the greedy default (spend all, incl. double-strike mid-step earnings).");
+    d.Note("reply how many Jitte charge counters to spend pre-strike on +2/+2 (0..max_count; the "
+           "counters the first strike earns are then banked), or -1 to spend as the counters arrive "
+           "(all pre-strike, then the first strike's earnings on the regular half -- the AI's default).");
+}
+
+// True when a Jitte-carrying attacker has double strike: the only combat in which the counter spend is
+// a decision a main-phase activation cannot make, because the counters its first strike earns can be
+// spent on its regular-damage half (JitteDamageMath's s1). Pre-strike spending is an until-EOT pump,
+// which a main-phase JitteModeAbility activation already expresses.
+static bool JitteMidStepSpendable(const GameState& s, const std::vector<int>& attacker_indices)
+{
+    for (int idx : attacker_indices)
+    {
+        const Permanent& p = s.battlefield[idx];
+        if (FindAttachedChargeEquip(s, p) >= 0 && CreatureHasDoubleStrike(p, s)) { return true; }
+    }
+    return false;
 }
 
 // Firebreathe-amount decision (#4): at combat, how many pump ACTIVATIONS to buy with leftover mana
@@ -7414,24 +7429,32 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
+            const bool mid_step = JitteMidStepSpendable(s, attackers);
             auto it = jitte_by_turn.find(s.turn_number);
             if (it != jitte_by_turn.end())
             {
+                // -1 = spend as the counters arrive (JitteDamageMath's greedy, incl. a double
+                // striker's mid-step earnings); 0..max_count = exactly that many pre-strike.
                 int chosen = it->second;
-                if (chosen < 0 || chosen > max_count) { chosen = max_count; }
+                if (chosen < -1 || chosen > max_count) { chosen = max_count; }
                 if (!log_dir.empty())
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteJitteDecisionJson(ss, s, attackers, max_count, di);
+                    WriteJitteDecisionJson(ss, s, attackers, max_count, di, mid_step);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return chosen;
             }
-            if (!jitte_prompt) { return -1; }   // reference replay / autonomous -> greedy default
+            // Unanswered: BANK, exactly as human play does with no chooser installed (Combat.cpp,
+            // USER 2026-08-27) -- recording one turn's answer must not turn every other turn greedy.
+            // The prompt fires only where the spend is a real combat decision (mid_step); everywhere
+            // else the main-phase JitteModeAbility pumps already express it, and there is no dialog
+            // on attack.
+            if (!jitte_prompt || !mid_step) { return 0; }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteJitteDecisionJson(std::cout, s, attackers, max_count, di);
+            WriteJitteDecisionJson(std::cout, s, attackers, max_count, di, mid_step);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);

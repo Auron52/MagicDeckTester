@@ -120,7 +120,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `dig` (reuse: **Tectonic Giant mode B, "choose one of them"**) | same `g_play_dig_chooser` | `ApplyAttackModalTriggers` impulse branch (SpellEffects.h, shared) | `WriteDigDecisionJson` | `digPanelHtml` | modal |
 | `demonstrate` | `g_play_demonstrate_chooser` (`DemonstrateChooser`) | `EffectHandler::ResolveDemonstrate` (Creative Technique's cast trigger; the copy resolves before the original) | `WriteDemonstrateDecisionJson` | `demonstratePanelHtml` | modal (yes/no, echo's shape) |
 | `attach_host` | `g_play_attach_host_chooser` (`BounceChooser` shape) | `FireAttackDigAttach` (SpellEffects.cpp, shared executor+rollout combat) | `WriteAttachHostDecisionJson` | `promptPanelHtml` (attach_host case) | board |
-| `jitte` | `g_play_jitte_chooser` (`FirebreatheChooser` shape) | `ResolveCombatDamage` (Combat.cpp, shared executor+rollout) | `WriteJitteDecisionJson` | `jittePanelHtml` | modal (turn-keyed `--jitte` side-channel, like `firebreathe`) |
+| `jitte` | `g_play_jitte_chooser` (`FirebreatheChooser` shape) | `ResolveCombatDamage` (Combat.cpp, shared executor+rollout) — prompted ONLY when a double striker carries the Jitte (`mid_step`); reply `-1` = spend as the counters arrive, `N >= 0` = exactly N pre-strike; unanswered = bank | `WriteJitteDecisionJson` | `jittePanelHtml` | modal (turn-keyed `--jitte` side-channel, like `firebreathe`) |
 
 KittyEquipment reuse notes (2026-08-13): the Armored Skyhunter attack-dig's *put* pick reuses the
 `dig` type (`FireAttackDigAttach` → `g_play_dig_chooser`, source = the Skyhunter); only the attach
@@ -432,6 +432,17 @@ an unattached activation is a guaranteed no-op and a plan menu must never contai
 per plan), spending SEVERAL counters is a repeat COUNT on `chosen_x` (the Call of the Wild pattern)
 and surfaces as the `activations` sub, not as N actions. Both routes coexist: the main phase spends
 what the human asks for, combat spends whatever is left.
+
+**Spend the counters as they arrive (USER 2026-10-27).** One Jitte spend is NOT a main-phase activation:
+a double striker's first-strike damage earns 2 counters, and those can be spent on its regular-damage
+half (`JitteDamageMath`'s `s1`), which the search does by default. KittyEquipment v1 s15_gi14 T6 is the
+case: Kor Duelist with Bonesplitter and a 2-counter Jitte swings 7 + 11 (+ Kemba's 2) = 20 into 18 life,
+while any pre-combat spend tops out at 16. So `--jitte-prompt` (the viewer passes it) emits the `jitte`
+frame for that combat only — when an attacker carrying the Jitte has double strike — and the frame offers
+**spend as they arrive** (`-1`, the AI default) or **×N now, bank the rest** (the first strike's 2 are then
+banked too). No other combat prompts (still no dialog on attack); an unanswered turn banks, even when
+another turn of the same game has a recorded answer. `test/viewer_protocol_check.py` rebuilds `--jitte`
+from the recorded `jitte` frames, and `scripts/ref_promote.py` pins `-1` on the search's turns.
 
 **Firebreathe amount (#4) — the first COMBAT-phase decision, and the first on a KEYED SIDE-CHANNEL.**
 At combat, leftover mana is spent greedily on attacker pumps (`ApplyFirebreathing`). The human instead

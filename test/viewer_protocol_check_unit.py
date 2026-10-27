@@ -99,5 +99,11 @@ dr = {"type": "sac_tutor", "max_puts": 2, "ai_set": [1], "candidates": [{"name":
 chk([v.engine_default(dr, i)[0] for i in range(2)] == [0, 1], "a put-any-subset default = ai_set as flags")
 chk(v.engine_flags({"type": "target", "heuristic_default": 2}) is None, "an ordinary target is an index")
 
+# 5. A recorded Jitte answer rides --jitte, never --choices; -1 ("spend as they arrive") survives.
+jd = [{"decision": {"type": "jitte", "turn": 6, "max_count": 2, "mid_step": True}, "chosen": -1},
+      {"decision": {"type": "jitte", "turn": 7, "max_count": 4, "mid_step": True}, "chosen": 1}]
+chk(v.side_channel_args(jd) == ["--jitte", "6:-1,7:1"], "jitte frames rebuild --jitte, -1 kept")
+chk(v.flatten_choices(jd) == [], "a jitte answer takes no --choices slot")
+
 print("FAIL (%d)" % len(fails) if fails else "PASS")
 sys.exit(1 if fails else 0)

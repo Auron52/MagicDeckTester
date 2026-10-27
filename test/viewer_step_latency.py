@@ -39,7 +39,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold"}
+SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold", "jitte"}
 
 
 def flatten_choices(decisions):
@@ -59,12 +59,14 @@ def side_channels(decisions):
     """The keyed side channels tools/play/server.js actually passes: --cast-order,
     --firebreathe, --storage-hold. Keyed, so passing the full set for a PREFIX is
     safe (the engine applies each only when it reaches that turn/ordinal)."""
-    fb, sh, co = [], [], []
+    fb, sh, co, jt = [], [], [], []
     for d in decisions:
         dec = d.get("decision", {})
         t = dec.get("type")
         if t == "firebreathe":
             fb.append(f'{dec.get("turn")}:{int(d["chosen"])}')
+        elif t == "jitte":     # -1 = spend as the counters arrive; N >= 0 = exactly N pre-strike
+            jt.append(f'{dec.get("turn")}:{int(d["chosen"])}')
         elif t == "storage_hold":
             sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
         elif t == "main_phase" and d.get("cast_order"):
@@ -72,6 +74,8 @@ def side_channels(decisions):
     extra = []
     if fb:
         extra += ["--firebreathe", ",".join(fb)]
+    if jt:
+        extra += ["--jitte", ",".join(jt)]
     if sh:
         extra += ["--storage-hold", ",".join(sh)]
     if co:

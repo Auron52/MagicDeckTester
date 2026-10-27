@@ -287,7 +287,7 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>\s*(\{.*?\})\s*<<<END_RESULT>>>", re.S)
 # Decision types that ride a KEYED SIDE-CHANNEL, not the positional --choices stream: their recorded
 # `chosen` must NOT be folded into --choices (that would desync the positional replay). They are
 # reconstructed separately in side_channel_args() and passed as --firebreathe / --storage-hold.
-SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold"}
+SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold", "jitte"}
 
 
 # Decision types that --force-mulligan resolves INTERNALLY (keep/mull answers and the bottoming
@@ -490,12 +490,14 @@ def side_channel_args(decisions, pin_lines=False, ordmap=None):
     an ordinal (or a recorded one it no longer shows) shifts every later key. Without the remap the
     pins land on the wrong frame, or on none. None = keys as recorded (the historical behaviour)."""
     om = ordmap if ordmap is not None else (lambda o: o)
-    fb, sh, co, fe = [], [], [], []
+    fb, sh, co, fe, jt = [], [], [], [], []
     for d in decisions:
         dec = d.get("decision", {})
         t = dec.get("type")
         if t == "firebreathe":
             fb.append(f'{dec.get("turn")}:{int(d["chosen"])}')
+        elif t == "jitte":     # -1 = spend as the counters arrive; N >= 0 = exactly N pre-strike
+            jt.append(f'{dec.get("turn")}:{int(d["chosen"])}')
         elif t == "storage_hold":
             sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
         if t == "main_phase" and d.get("cast_order"):
@@ -570,6 +572,8 @@ def side_channel_args(decisions, pin_lines=False, ordmap=None):
     extra = []
     if fb:
         extra += ["--firebreathe", ",".join(fb)]
+    if jt:
+        extra += ["--jitte", ",".join(jt)]
     if sh:
         extra += ["--storage-hold", ",".join(sh)]
     if co:

@@ -809,88 +809,38 @@ def with_attackers(extra, pins):
     return out + ["--force-attackers", ";".join("%d:%s" % (t, have[t]) for t in sorted(have))]
 
 
+
+def with_jitte(extra, log, from_turn, max_turns):
+    """`extra` with `--jitte t:-1` ("spend the counters as they arrive") on every turn from `from_turn`
+    on, when the search's game holds Umezawa's Jitte; the human's turns keep their own answers. The
+    search spends greedily, including the counters a double striker's first strike earns, while human
+    play with no answer BANKS them, so without the pin the replayed swing falls short (KittyEquipment
+    v1 s15_gi14 T6: the search's 20 into 18 life replayed as 16, 2026-10-27). Turns where no Jitte
+    carrier attacks never consult the answer, and write nothing into the reference."""
+    if "Umezawa's Jitte" not in card_names(log).values():
+        return list(extra)
+    out, have = [], {}
+    i = 0
+    while i < len(extra):
+        if extra[i] == "--jitte" and i + 1 < len(extra):
+            for e in extra[i + 1].split(","):
+                if e:
+                    t, _, n = e.partition(":")
+                    have[int(t)] = n
+            i += 2
+            continue
+        out.append(extra[i])
+        i += 1
+    for t in range(from_turn, max_turns + 1):
+        have.setdefault(t, "-1")
+    return out + ["--jitte", ",".join("%d:%s" % (t, have[t]) for t in sorted(have))]
+
 # ---- the walk -----------------------------------------------------------------------------------
 
-class Driver:
-    """A persistent `--claude-play --interactive` child, like hunt.Session, that SURVIVES the frames
-    where interactive mode does not wait for more input. Some choosers end the process when the pick
-    stream runs out instead of blocking on stdin (a Utopia Sprawl `choose_color` did, 2026-10-24), so
-    the child exits with no result after the answer is sent. On that EOF the child is respawned with
-    every pick so far PRE-FILLED in --choices; it replays them silently and continues interactively
-    from the next frame. Same engine, same determinism; only the transport differs."""
+def Driver(c, extra):
+    """rr.Driver at the protocol checker's plan-list valve (the bound every promotion is checked at)."""
+    return rr.Driver(c, extra, c.get("valve") or vpc.VALVE_POSITIONS)
 
-    def __init__(self, c, extra):
-        self.c, self.extra, self.picks, self.queue = c, list(extra), [], []
-        self._spawn()
-
-    def _spawn(self):
-        c = self.c
-        argv = [vpc.MTG, c["deck"], "--claude-play", "--interactive", "--seed", str(c["seed"]),
-                "--game-index", str(c["gi"]), "--max-turns", str(c["mt"]), "--depth", "0",
-                "--profile", c["prof"], "--choices", ",".join(str(p) for p in self.picks)]
-        if c["force"] is not None:
-            argv += ["--force-mulligan", c["force"]]
-        argv += self.extra
-        env = dict(os.environ)
-        env.update(hunt.REPLAY_ENV)
-        env["MTG_VIEWER_PLAN_CAP_POSITIONS"] = str(c.get("valve") or vpc.VALVE_POSITIONS)
-        self.err = tempfile.TemporaryFile(mode="w+")
-        self.proc = subprocess.Popen(vpc.capped(argv), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=self.err, text=True, cwd=ROOT, env=env, bufsize=1)
-        self.sent_since_spawn = 0
-
-    def read(self):
-        for _ in range(2):
-            buf = []
-            while True:
-                line = self.proc.stdout.readline()
-                if not line:
-                    break
-                buf.append(line)
-                if line.startswith("<<<END_DECISION>>>"):
-                    d = hunt.decision_of("".join(buf))
-                    return ("decision", d) if isinstance(d, dict) else ("eof", "malformed decision")
-                if line.startswith("<<<END_RESULT>>>"):
-                    r = hunt.result_of("".join(buf))
-                    return ("result", r) if isinstance(r, dict) else ("eof", "malformed result")
-            if not self.sent_since_spawn:          # it died on the stream it was GIVEN: a real stop
-                return "eof", "".join(buf[-12:])
-            self.close()
-            self._spawn()                          # resume past the chooser that would not wait
-        return "eof", "".join(buf[-12:])
-
-    def send(self, pick):
-        self.picks.append(int(pick))
-        self.sent_since_spawn += 1
-        try:
-            self.proc.stdin.write("%d\n" % int(pick))
-            self.proc.stdin.flush()
-        except (BrokenPipeError, ValueError):
-            pass
-
-    def answer(self, ints):
-        """Send a frame's answer: its first int now, the rest one per re-emitted frame (pending())."""
-        self.queue = list(ints[1:])
-        self.send(ints[0])
-
-    def pending(self):
-        """True (and the next queued int sent) while a multi-int answer is still being delivered."""
-        if not self.queue:
-            return False
-        self.send(self.queue.pop(0))
-        return True
-
-    def close(self):
-        for f in (self.proc.stdin, self.proc.stdout):
-            try:
-                f.close()
-            except Exception:                                    # noqa: BLE001
-                pass
-        try:
-            self.proc.wait(timeout=20)
-        except Exception:                                        # noqa: BLE001
-            self.proc.kill()
-        self.err.close()
 
 def probe_on(c, extra, picks, want_win):
     """Play `picks`, then engine defaults through every non-main-phase frame, and stop at the next
@@ -1451,6 +1401,7 @@ def promote(key, source, apply_it, note=""):
             raise Refused("could not reach your board at T%d" % from_turn)
         extra = side_before(c["side"], from_turn, d.get("main_ordinal", 10 ** 6))
     extra = with_attackers(extra, search_attackers(log, from_turn))
+    extra = with_jitte(extra, log, from_turn, c["mt"])
     try:
         picks, notes = walk(c, prefix, extra, log, from_turn)
     except Refused as err:
