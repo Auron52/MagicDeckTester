@@ -8963,11 +8963,46 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             });
     }
 
+    // The REAL game's reveal / put-back record (GameEngine::RunGame binds the same; PlayOut does not), so the
+    // scenario's log (log_out, expect_log_sequence) carries what a goldfish game's log does. Log only.
+    GameLogger* const scen_saved_reveal = g_reveal_logger;
+    g_reveal_logger = &logger;
     const int win_turn = resume_at.empty()
         ? engine.PlayOut(state, max_turns)
         : engine.PlayOutFrom(state, max_turns, resume_at == "main1" ? GameEngine::ResumeAt::Main1
                                                                      : GameEngine::ResumeAt::Main2);
+    g_reveal_logger = scen_saved_reveal;
     logger.EndGame(win_turn);
+    // "expect_log_sequence": ["T2 MAIN_1 CAST_SPELL Brainstorm", "REVEAL Brainstorm (put back): Toxic Deluge", ...]
+    // -- an ORDERED subsequence of the game log's action lines (GameLogger::ActionLines), each entry a substring
+    // of its line. Pins WHICH line the autonomous search chose at the fixture's budget, not just its win turn.
+    if (j.contains("expect_log_sequence"))
+    {
+        const std::vector<std::string> lines = logger.ActionLines();
+        const std::vector<std::string> want = j.at("expect_log_sequence").get<std::vector<std::string>>();
+        std::size_t at = 0;
+        std::size_t matched = 0;
+        for (const std::string& w : want)
+        {
+            while (at < lines.size() && lines[at].find(w) == std::string::npos) { ++at; }
+            if (at >= lines.size()) { break; }
+            ++at;
+            ++matched;
+        }
+        if (matched != want.size())
+        {
+            for (const std::string& l : lines) { std::cout << "scenario:   log " << l << "\n"; }
+            std::cout << "scenario: FAIL log has no ordered match for \"" << want[matched] << "\" (matched "
+                      << matched << " of " << want.size() << ")\n";
+            return 1;
+        }
+        if (j.value("show_log", false)) { for (const std::string& l : lines) { std::cout << "scenario:   log " << l << "\n"; } }
+        std::cout << "scenario: PASS (log sequence, " << want.size() << " entries)\n";
+    }
+    else if (j.value("show_log", false))
+    {
+        for (const std::string& l : logger.ActionLines()) { std::cout << "scenario:   log " << l << "\n"; }
+    }
     if (!human_lines.empty())
     {
         g_play_event_sink = nullptr;
