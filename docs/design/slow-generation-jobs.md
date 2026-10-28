@@ -156,3 +156,9 @@ reproduced). **640.8 s, win turn 6, only 374k units.** Almost all of it is ONE d
 re-admitted, refine resumed). Status 12:18 UTC: refine **36.3%** of 1,576,162 cell-sides frozen at 4,500 s, ~130
 cell-sides/s (roll7 ~180/s), idle 0.0%, load 32/32. At that rate the refine finishes in roughly 2 h, so ~14:30 UTC,
 then validation. The slow-rollout tail persists: a 176 s size-7 Reveillark/Redcap/Feeder hand in the current top-3.
+
+Status 14:18 UTC: refine **70.0%** frozen at 11,700 s, idle 0.0%, load 32/32, but freezing has slowed from ~130 to
+~28 cell-sides/s (rollouts still ~140/s, so the cells now left need more rollouts each to converge). At that rate the
+remaining 472k take ~4.7 h, so ~19:00 UTC before validation. The tail is still the Feeder/Bloodthrone sac-loop board:
+a **779 s** size-7 hand (`Llanowar Wastes, Ignoble Hierarch, Forest, Caves of Koilos, Carrion Feeder x2, Bloodthrone
+Vampire`, draw r=2, seed 15755400944471724403), consistent with the breakpoint subset derive found in the replay above.
