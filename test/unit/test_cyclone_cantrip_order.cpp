@@ -477,3 +477,62 @@ TEST_CASE("Cyclone cantrip order: the ranking cache -- a hit equals the referenc
     { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 0); check_ref(base); }
     { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 0).Set(heurarm::CYCLONE_PUTBACK_RULE, 1); check_ref(base); }
 }
+
+// AMENDMENT (1) (ledger Q44; MTG_CYCLONE_PUTBACK_USABLE, from d5 gi13): a put-back card drawn back before go-off that
+// cannot be USED before it returns costs nothing to put back (the Niv rule: "followed by the ones you can't use yet so
+// you can draw them later"). gi13 (seed 102013) T1: Steam Vents tapped for the Brainstorm, the land drop used, no
+// Cyclone (k = 3); the hand after the draws holds two Brainsurges ({2}{U}), two Remands ({1}{U}), two Ponders, the
+// Brainstorm it drew, Xander's Lounge and a Scalding Tarn. Next turn projects 2 mana: a Remand at position 2 could be
+// cast before it returns, a Brainsurge could not. The old score put back [Remand, Remand] (the lowest keep needs).
+TEST_CASE("Cyclone cantrip order: amendment (1) -- a card that cannot be used before its redraw goes back first")
+{
+    const char* kBsurge = "Brainsurge";
+    const char* kRemand = "Remand";
+    GameState s = StateCo({ kVentsC }, { kBsurge, kBsurge, kPonderC, "Xander's Lounge", kPonderC, kRemand, "Brainstorm",
+                                         kTarnC, kRemand });
+    s.battlefield[0].tapped = true;
+    s.turn_number = 1;
+    {
+        ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_USABLE, 1);
+        const CantripReadiness r = ReadyCo(s);
+        REQUIRE(r.k == 3);
+        REQUIRE_FALSE(r.shuffle_after);
+        const Names p0 = PickNames(s, 0);
+        REQUIRE(p0.size() == 2);
+        CHECK(p0[1] == kBsurge);   // position 2: the card that cannot be cast before it is drawn again
+        CHECK(p0[0] != kRemand);
+        CHECK(p0[1] != kRemand);
+    }
+    {
+        ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_USABLE, 0);
+        CHECK(PickNames(s, 0) == Names{ kRemand, kRemand });   // the pre-amendment pick (gi13's A arm)
+    }
+    SUBCASE("ORDER ONLY: the same candidate set either way")
+    {
+        std::multiset<Names> on, off;
+        { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_USABLE, 1); on = AllPicks(s); }
+        { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_USABLE, 0); off = AllPicks(s); }
+        CHECK(on == off);
+    }
+    SUBCASE("a shuffle after the cantrip (the land drop open, a fetchland in hand) leaves the old score in force")
+    {
+        GameState t = s;
+        t.players[0].lands_played_this_turn = 0;
+        std::vector<Names> on, off;
+        { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_USABLE, 1);
+          REQUIRE(ReadyCo(t).shuffle_after); on = OrderedPicks(t); }
+        { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_USABLE, 0); off = OrderedPicks(t); }
+        CHECK(on == off);
+    }
+    SUBCASE("a card castable before its redraw keeps its charge: with three untapped lands the Remand is not free")
+    {
+        // The land drop open (no fetchland, so no shuffle): the Lounge could be played before its redraw too.
+        GameState t = StateCo({ kVentsC, "Island", "Island" }, { kBsurge, kRemand, kPonderC, "Xander's Lounge", kRemand }, {}, 0);
+        ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_USABLE, 1);
+        REQUIRE(ReadyCo(t).k >= 2);
+        // Everything here is castable now (3 mana): the amendment changes nothing, the old pick stands.
+        std::vector<Names> on = OrderedPicks(t), off;
+        { ArmCo b; b.Set(heurarm::CYCLONE_PUTBACK_USABLE, 0); off = OrderedPicks(t); }
+        CHECK(on == off);
+    }
+}

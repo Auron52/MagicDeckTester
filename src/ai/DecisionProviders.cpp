@@ -31397,6 +31397,15 @@ bool CyclonePonderKeepShuffleOn()
 // positions (no "placed / seen since the last shuffle" record), so a Long-Term Plans card placed earlier is not read.
 namespace
 {
+// MTG_CYCLONE_PUTBACK_USABLE (amendment (1), ledger Q44; see HeuristicArm.h for the full statement). DEFAULT OFF:
+// measured WORSE on held-out seeds (2026-10-28: d3 +0.015 se 0.027, d5 +0.045 se 0.039; ledger "Cantrip scorer:
+// item 8 cache + Q44(1)") -- zeroing every early unusable card flattens most of the fan to score 0, so rank 0 falls
+// to the generic shed order's tie-break.
+bool CyclonePutBackUsableOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PUTBACK_USABLE");
+    return heurarm::Flag(heurarm::CYCLONE_PUTBACK_USABLE, on);
+}
 bool CycloneCantripOrderOn()
 {
     static const bool on = EnvOn("MTG_CYCLONE_CANTRIP_ORDER", true);   // DEFAULT ON (an ORDER; inert at unlimited budget)
@@ -31427,7 +31436,7 @@ constexpr int kCycCyclone = 1000, kCycLandNeeded = 300, kCycSongNeeded = 300, kC
               kCycSong = 25, kCycLandSurplus = 20, kCycCyclerSurplus = 15, kCycEldrazi = 10, kCycDead = 0;
 // aux[] layout of the Cyclone readiness (provider-private).
 enum CycAux { kAuxCycBf = 0, kAuxCycHand, kAuxFree, kAuxManaCyc, kAuxLandsHand, kAuxLandsNeeded, kAuxSongNeeded,
-              kAuxSongHand, kAuxEldHand, kAuxBranch };
+              kAuxSongHand, kAuxEldHand, kAuxBranch, kAuxAvail0, kAuxAvail1, kAuxDropOpen };
 
 // A library card's keep need if it joined the hand (Ponder's look). Same tiers, judged against the hand as it is.
 int CycNeedOfNew(const CantripReadiness& r, const CardDefinition& d)
@@ -31496,6 +31505,14 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
         if (CycIsEldrazi(*d)) { ++eld; }
         if (IsLongTermPlansTutor(pp)) { ltp = true; }
     }
+    // The projected mana on turn t (0 = this turn), Seething Song included.
+    auto avail_at = [&](int t)
+    {
+        int avail = t == 0 ? untapped + ((drop_open && lands_u > 0) ? 1 : 0)
+                           : total + std::min(lands_u + lands_t, t + (drop_open ? 1 : 0));
+        if (song && avail >= 3) { avail += 2; }
+        return avail;
+    };
     // k and c.
     bool missing = (!cyc_bf && cyc_hand == 0) || (free_c + mana_c == 0);
     int k = 3, c = 0;
@@ -31506,9 +31523,7 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
         bool found = false;
         for (int t = 0; t <= 3 && !found; ++t)
         {
-            int avail = t == 0 ? untapped + ((drop_open && lands_u > 0) ? 1 : 0)
-                               : total + std::min(lands_u + lands_t, t + (drop_open ? 1 : 0));
-            if (song && avail >= 3) { avail += 2; }
+            const int avail = avail_at(t);
             const int left = avail - (cyc_bf ? 0 : 5);
             if (left < 0 || !red_ok) { continue; }
             const int cc = std::min(free_c, wraith_life) + std::min(mana_c, left);
@@ -31574,6 +31589,9 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
     r.aux[kAuxSongNeeded]  = song_needed ? 1 : 0;
     r.aux[kAuxSongHand]    = song ? 1 : 0;
     r.aux[kAuxEldHand]     = eld;
+    r.aux[kAuxAvail0]      = avail_at(0);
+    r.aux[kAuxAvail1]      = avail_at(1);
+    r.aux[kAuxDropOpen]    = drop_open ? 1 : 0;
     // THE SHUFFLE LINE (design §3.2 item 3): admitted only when ALL hold -- go-off 2+ draws away, 1-2 dead cards
     // in hand, a piece missing, and a shuffle available after the cantrip this turn.
     r.aux[kAuxBranch] = (k >= 2 && dead >= 1 && dead <= 2 && missing && r.shuffle_after) ? 1 : 0;
@@ -31604,6 +31622,20 @@ int CycWalkScore(const TopDispositionView& v, int from, int walks)
     score += 2 * (v.n_top - cur);
     return score;
 }
+// AMENDMENT (1) (ledger Q44; MTG_CYCLONE_PUTBACK_USABLE): can a card put back at library position p (1-based; drawn
+// back on our p-th draw step) be USED before it returns -- on this turn or any turn before turn p? A land: a land drop
+// before then (the open drop this turn, or any later turn). Anything else: its cheapest use (its mana value, or its
+// cycling cost's when it has one) within the mana projected for turn p - 1 (the projection is nondecreasing in t, so
+// the last turn before the redraw is the one to test). Colours are not modelled (the go-off estimate's own reading).
+// Only positions 1 and 2 occur (a put-back places two cards); a deeper one is treated as usable.
+bool CycUsableBeforeRedraw(const CantripReadiness& r, const CardDefinition& d, int p)
+{
+    if (p <= 0 || p > 2) { return true; }
+    if (d.card.IsLand()) { return p >= 2 || r.aux[kAuxDropOpen] != 0; }
+    int cost = d.card.m_mana_cost.ManaValue();
+    if (d.params.cycling_cost.has_value()) { cost = std::min(cost, d.params.cycling_cost->ManaValue()); }
+    return cost <= (p == 1 ? r.aux[kAuxAvail0] : r.aux[kAuxAvail1]);
+}
 }   // namespace
 
 bool CycloneProvider::CantripReadinessOf(const GameState& s, int controller, CantripReadiness& out) const
@@ -31625,7 +31657,7 @@ bool CycloneProvider::CantripOrderKey(const GameState& s, int controller, std::v
     const Player& pl = s.players[static_cast<std::size_t>(controller)];
     auto name = [](const Card& c) { return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&c.m_name.str())); };
     auto opt  = [](const std::optional<int>& v) { return static_cast<std::uint64_t>(v ? static_cast<std::int64_t>(*v) + 1 : 0); };
-    key.push_back(0xC1C10000ull | (order ? 1u : 0u) | (rule ? 2u : 0u));
+    key.push_back(0xC1C10000ull | (order ? 1u : 0u) | (rule ? 2u : 0u) | (CyclonePutBackUsableOn() ? 4u : 0u));
     key.push_back(static_cast<std::uint64_t>(controller));
     key.push_back(static_cast<std::uint64_t>(static_cast<std::int64_t>(pl.life)));
     key.push_back(static_cast<std::uint64_t>(pl.lands_played_this_turn));
@@ -31722,12 +31754,16 @@ bool CycloneProvider::ScoreTopDisposition(const GameState& s, int controller, co
     };
     bool lost_piece = false, any_eld = false, any_dead = false;
     int removed_cyclers = 0;
+    // AMENDMENT (1): with no shuffle after the cantrip (a shuffle would lose the card), a card drawn back before
+    // go-off that could not be used before it returns costs nothing to put back.
+    const bool usable_rule = CyclonePutBackUsableOn() && !r.shuffle_after;
     for (int j = 0; j < v.n_removed; ++j)
     {
         const int p = j + 1;   // 1-based library position after the put-back
         const int need = need_at(j);
-        score += p <= k ? need / 4 : need;
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*v.top[j]);
+        if (p <= k) { score += (usable_rule && d != nullptr && !CycUsableBeforeRedraw(r, *d, p)) ? 0 : need / 4; }
+        else        { score += need; }
         if (d != nullptr)
         {
             if (CycIsCreatureCycler(*d)) { ++removed_cyclers; }
