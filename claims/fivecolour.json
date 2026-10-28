@@ -9,6 +9,8 @@
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-28T18:36:40Z",
  "host": "58199181d02e",
+ "landed": "1db4218a98b700dd919199b8a32142664e2470de",
+ "landed_at": "2026-10-28T19:03:25Z",
  "result_branch": "artifact-refresh/fivecolour-20261028-1848",
  "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
  "score": 0.9057,
