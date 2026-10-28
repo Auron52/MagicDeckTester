@@ -126,3 +126,10 @@ Carrion Feeder. The residual tail is therefore Bloodthrone Vampire + several Kit
    dominance to collapse.
 3. The unbanked-journal warning: a 4,400 s gap at 16 GB RSS is the durability risk named in the barrier
    doc. Check whether defect 1 (producer barrier) is still open at `60f525f17`.
+
+**PAUSED by the USER 2026-10-28 03:43 UTC** ("cancel it for now ... restart it overnight to finish"), in the size-7
+refine phase: 6.9% of 1,576,162 cell-sides frozen and accelerating (~100/s at pause). Estimate given to the USER
+for the remainder: refine ~1-3 h, validation ~0.5-1 h, value leaf ~0.5-1 h (the generator's own "~91 h" guide is
+pessimistic; it said 79 h for Goblins, whose size-7 phase took 11.4 h). Journal copied to
+`.journal.prepause-20261028` (377 MB). Owed: the replay of the 994 s Bloodthrone hand
+(`build/scratch/melira_replay/bt.err`, `MTG_DECISION_PROGRESS` + `MTG_BP_DERIVE_SLOW_MS` output).
