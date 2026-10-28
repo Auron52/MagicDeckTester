@@ -6533,8 +6533,49 @@ struct LifegainCounterTargetPinScope
 // enters_with_x_plus_counters entrant, so every other deck's queue stays empty (byte-identical); the
 // general 0-toughness entrant is the same rule and a follow-up, not a rider on this card.
 inline thread_local std::vector<int> g_pending_zero_toughness;
+// LEGEND-RULE LOSER (MTG_LEGEND_SBA_FIRST, HeuristicArm.h). The legend rule is a state-based action
+// (CR 704.5j), and SBAs are performed BEFORE any triggered ability goes on the stack (CR 704.3), so
+// the copy the legend rule removes is gone before an enter trigger RESOLVES -- it cannot see the
+// life Soul Warden gains for its own entry, and it cannot be that trigger's target. The engine runs
+// the enter cascade inline and calls EnforceLegendRule only after it (EffectHandler::Resolve's note:
+// ETB code holds the entrant's battlefield slot, so the erase cannot move earlier). Inside that
+// window the duplicate is therefore treated exactly like a 0-toughness entrant: dead to every
+// trigger's watcher and target list, killed at the usual sweep. Computed from the board (no queue,
+// so nothing goes stale across search branches): `q` is a loser iff a same-name legendary
+// permanent of the same controller is on the battlefield and LegendKeepIndex -- the SAME choice
+// EnforceLegendRule will make -- keeps another copy. A board outside the window never holds two.
+// LifegainHeliodCombo claude-play sweep seed 95005: a redundant second Heliod, Sun-Crowned saw
+// every enter-lifegain event, 4 events -> 6 counters. Also CritterLifegain (Heliod x2).
+inline bool LegendRuleLoser(const Permanent& q, const GameState& state)
+{
+    if (!q.card.HasSupertype(Supertype::Legendary)) { return false; }
+    static const bool s_env = EnvOn("MTG_LEGEND_SBA_FIRST", true);
+    if (!heurarm::Flag(heurarm::LEGEND_SBA_FIRST, s_env)) { return false; }
+    const int n = static_cast<int>(state.battlefield.size());
+    auto same = [&](const Permanent& p)
+    {
+        return p.controller_index == q.controller_index && p.card.HasSupertype(Supertype::Legendary)
+            && p.card.m_name_hash == q.card.m_name_hash && p.card.m_name.str() == q.card.m_name.str();
+    };
+    int copies = 0;
+    for (int i = 0; i < n; ++i) { if (same(state.battlefield[i])) { ++copies; } }
+    if (copies < 2) { return false; }
+    std::vector<int> dup;
+    int self = -1;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (!same(p)) { continue; }
+        if (p.card.m_number == q.card.m_number) { self = i; }
+        dup.push_back(i);
+    }
+    if (self < 0) { return false; }
+    const int keep = ResolveProvider(state).LegendKeepIndex(state, q.controller_index, dup);
+    return keep != self;
+}
 inline bool DoomedEntrant(const Permanent& q, const GameState& state)
 {
+    if (LegendRuleLoser(q, state)) { return true; }
     if (g_pending_zero_toughness.empty()) { return false; }
     if (std::find(g_pending_zero_toughness.begin(), g_pending_zero_toughness.end(), q.card.m_number)
         == g_pending_zero_toughness.end()) { return false; }
@@ -6550,6 +6591,10 @@ inline bool DoomedEntrant(const Permanent& q, const GameState& state)
 inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
 {
     const bool precombat = (state.battlefield_at_combat < 0);
+    // MTG_LG_TARGET_COMBAT_POWER (HeuristicArm.h): rank by the power combat will deal, lords and
+    // conditional statics included (Serra Ascendant's +5/+5), not the counters-only EffectivePower.
+    static const bool s_env_combat_power = EnvOn("MTG_LG_TARGET_COMBAT_POWER", true);
+    const bool combat_power = heurarm::Flag(heurarm::LG_TARGET_COMBAT_POWER, s_env_combat_power);
     int best = -1, best_key = -1;
     int fallback = -1;   // an own enchantment (a non-creature Heliod) when no own creature exists
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -6564,7 +6609,7 @@ inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
         }
         const bool swings_now = precombat && !q.tapped
                              && CanAttackFull(q, state.battlefield, controller);
-        const int key = (swings_now ? 1000 : 0) + q.EffectivePower();
+        const int key = (swings_now ? 1000 : 0) + (combat_power ? CombatPowerOf(q, state) : q.EffectivePower());
         if (key > best_key) { best_key = key; best = i; }
     }
     return best >= 0 ? best : fallback;
@@ -6733,6 +6778,8 @@ inline void FireLifegainWatchers(GameState& state, int player, int amount)
     for (int i = 0; i < n; ++i)
     {
         if (state.battlefield[i].controller_index != player) { continue; }
+        // The copy the legend rule removes is gone before this gain happens (LegendRuleLoser).
+        if (LegendRuleLoser(state.battlefield[i], state)) { continue; }
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!wd) { continue; }
         const CardParams& wp = wd->params;
