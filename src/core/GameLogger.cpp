@@ -533,6 +533,67 @@ void GameLogger::LogDraw(int card_num, const std::string& card_name)
     m_current.actions.push_back(std::move(a));
 }
 
+void GameLogger::NotePutBack(const std::string& source, const std::vector<int>& nums,
+                             const std::vector<std::string>& names)
+{
+    if (m_digest_only || !m_in_phase) { return; }   // log only: nothing here touches the digest
+    if (!m_pb_source.empty()) { FlushPutBack({}); }  // a second put-back before a flush: keep both
+    m_pb_source = source;
+    m_pb_nums   = nums;
+    m_pb_names  = names;
+}
+
+std::vector<std::string> GameLogger::ActionLines() const
+{
+    std::vector<std::string> out;
+    for (const PhaseEntry& pe : m_phases)
+    {
+        for (const Action& a : pe.actions)
+        {
+            std::string l = "T" + std::to_string(pe.turn) + " " + pe.phase + " " + a.type + " " + a.card_name;
+            if (!a.looked_at_names.empty())
+            {
+                l += ":";
+                for (std::size_t i = 0; i < a.looked_at_names.size(); ++i) { l += (i ? ", " : " ") + a.looked_at_names[i]; }
+            }
+            out.push_back(std::move(l));
+        }
+    }
+    return out;
+}
+
+void GameLogger::FlushPutBack(const std::vector<int>& hand_before_nums)
+{
+    if (m_pb_source.empty()) { return; }
+    if (!m_digest_only && m_in_phase)
+    {
+        // The cards drawn by this resolution and put straight back: in no hand-diff DRAW line, so logged here.
+        if (!hand_before_nums.empty())
+        {
+            for (std::size_t i = 0; i < m_pb_nums.size(); ++i)
+            {
+                if (std::find(hand_before_nums.begin(), hand_before_nums.end(), m_pb_nums[i]) != hand_before_nums.end())
+                { continue; }
+                Action d;
+                d.type      = "DRAW";
+                d.card_num  = m_pb_nums[i];
+                d.card_name = i < m_pb_names.size() ? m_pb_names[i] : std::string();
+                m_current.actions.push_back(std::move(d));
+            }
+        }
+        Action a;
+        a.type            = "REVEAL";
+        a.card_name       = m_pb_source + " (put back)";
+        a.looked_at       = m_pb_nums;
+        a.looked_at_names = m_pb_names;
+        a.kept            = m_pb_nums;   // top first: the first is drawn first
+        m_current.actions.push_back(std::move(a));
+    }
+    m_pb_source.clear();
+    m_pb_nums.clear();
+    m_pb_names.clear();
+}
+
 void GameLogger::LogDiscard(int card_num, const std::string& card_name)
 {
     if (!m_in_phase) { return; }
@@ -566,6 +627,7 @@ void GameLogger::CommitPhase(int player_life, int opp_life,
                               int library_top)
 {
     if (!m_in_phase) { return; }
+    FlushPutBack({});   // a put-back no ResolveStack flushed (log only)
     // MTG_DUMP_CARDS availability, taken from the HAND SNAPSHOT rather than from draw events.
     // Draw events are not enough: a card put into hand by a spell is logged only when the engine's
     // draw-spell reconciliation recognises the source (`params.draw`/`etb_dig_count`), and Ancestral

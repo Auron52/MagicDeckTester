@@ -1160,6 +1160,7 @@ void GameEngine::ResolveStack(GameState& state)
                                            c.m_number) != hand_before_nums.end();
                 if (!was_there) { m_logger->LogDraw(c.m_number, c.m_name); }
             }
+            m_logger->FlushPutBack(hand_before_nums);   // Brainstorm's drawn-and-put-back cards + the put-back (log only)
         }
 
         CheckStateBasedActions(state);

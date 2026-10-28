@@ -57917,7 +57917,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
             if (!is_ei && def.params.cast_scry > 0)    { ScryTop(state, def.params.cast_scry); }
-            if (!is_ei && def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, ponder_keep); }
+            if (!is_ei && def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, ponder_keep, def.params.draw); }
             int n = is_ei ? 0 : std::min(def.params.draw, static_cast<int>(ap.library.size()));
             if (!is_ei && def.params.stages_cards)
             {

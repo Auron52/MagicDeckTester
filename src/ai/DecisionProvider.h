@@ -75,6 +75,32 @@ struct TopDisposition;   // core/GameLogger.h
 enum class LookKind;     // core/GameLogger.h
 #include <vector>
 
+// THE SCORED CANTRIP ORDER's inputs (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; design:
+// docs/design/cantrip-search-optimization.md §3.3). Computed ONCE per resolution, before the candidates
+// are scored.
+struct CantripReadiness
+{
+    int  k = -1;                 // our draw steps before the payoff turn (0 = this turn); -1 = unknown
+    int  c = 0;                  // payoff actions payable on that turn (Cyclone: creature cycles)
+    bool missing_piece = false;  // a piece the payoff needs is not in hand / on the battlefield
+    bool shuffle_after = false;  // a library shuffle is available AFTER the cantrip this turn
+    int  dead_in_hand  = 0;      // hand cards the provider rates as dead (keep need 0)
+    std::vector<int> keep_need;  // per HAND index: the provider's cost of removing that card (its scale)
+    int  aux[12] = {};           // provider-private context computed with the readiness (read by its scorer)
+};
+// ONE candidate of a put-back / reorder resolution, as its RESULT. The pointers live for the duration of the
+// ScoreTopDisposition call only.
+struct TopDispositionView
+{
+    bool putback  = false;       // Brainstorm-style: cards leave the hand for the library top
+    bool shuffle  = false;       // the candidate shuffles the library (Ponder's "you may shuffle")
+    int  draw_now = 0;           // how many of `top` the resolving spell itself draws right after (Ponder: 1)
+    const Card* top[8] = {};     // the KNOWN top-of-library sequence after the candidate, top first
+    int  n_top = 0;
+    int  removed[2] = { -1, -1 };   // put-back: the HAND indices that leave the hand, top first
+    int  n_removed = 0;
+};
+
 // A "scaled cast" variant of a spell whose mana cost depends on how much OUTPUT it commits -- the
 // divided-damage analogue of an {X} value. `face` damage reaches the opponent; the total `cost` is
 // what committing that much face costs (all discounts already applied). An archetype's
@@ -580,6 +606,31 @@ public:
     // whose provider carries a user-given put-back rule. Human play is never pruned (its put-back is
     // asked at resolution). Default false -> every candidate is searched.
     virtual bool PutBackSingleCandidate(const GameState& s) const { (void)s; return false; }
+
+    // ---- THE SCORED CANTRIP ORDER (docs/design/cantrip-search-optimization.md §3.2-3.3) -----------------
+    // CantripReadinessOf -- the provider's cheap GO-OFF estimate at a cantrip resolution: k = our draw steps
+    // before the payoff turn (0 = this turn), c = payoff actions payable on that turn, plus per-HAND-index
+    // keep needs. TRUE turns on the scored order for this resolution: the engine scores every candidate
+    // with ScoreTopDisposition and STABLE-sorts them by score, the existing order being the tie-break,
+    // inside the shared PutBackPickAt / PutBackCandidates / TopDispositionCandidates (core/SpellEffects.h)
+    // -- so the executor, the rollout and human play's default see the same ranks (ordinal lockstep). AN
+    // ORDER ONLY: the candidate SET and its size are untouched, so at an unlimited budget the search reaches
+    // exactly what it reached before. Must read only what the player KNOWS (hand, battlefield, life, the
+    // cards this resolution reveals or places). Default false -> today's order, byte-identical.
+    virtual bool CantripReadinessOf(const GameState& s, int controller, CantripReadiness& out) const
+    { (void)s; (void)controller; (void)out; return false; }
+
+    // ScoreTopDisposition -- score ONE candidate of a put-back / reorder resolution; LOWER = earlier in the
+    // fan. A pure function of (state, readiness, candidate) -- the ordinal pin names a rank, so the two
+    // worlds must sort identically. `view` holds the RESULT of the candidate: the known top-of-library
+    // sequence after it (top first), the hand indices it removes (put-back), whether it shuffles, and how
+    // many of the top cards the resolving spell draws right after (Ponder: 1). A shuffle candidate is placed
+    // by the engine at index 0 or 1 of a reorder fan (the USER's "the shuffle is ALWAYS searched, beside
+    // the best keep order"): its score only decides which of the two goes first. Returning false for any
+    // candidate keeps the existing order for the whole resolution. Default false.
+    virtual bool ScoreTopDisposition(const GameState& s, int controller, const CantripReadiness& r,
+                                     const TopDispositionView& view, int& score_out) const
+    { (void)s; (void)controller; (void)r; (void)view; (void)score_out; return false; }
 
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
