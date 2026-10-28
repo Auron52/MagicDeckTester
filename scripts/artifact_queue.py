@@ -34,7 +34,8 @@ WHAT "STALE" MEANS HERE -- every axis is computed from git and the files themsel
   * PIPELINE ORDER (exact, value leaves): the keep table was re-adopted after the leaf was fitted, so the
     leaf was fitted to the hands an older table kept (USER order 2026-10-18: profile -> mulligan -> leaf).
   * MANUAL MARK (USER): scripts/artifact_queue.json "marks" -- puts an artifact at the front regardless
-    of measured drift, with a reason (the 2026-10-10 Snow keep table is the motivating case).
+    of measured drift, with a reason (the 2026-10-10 Snow keep table is the motivating case), until a run
+    started after the mark records a verdict for it in the deck's ledger (mark_answer).
 
 THE WORKER. A machine that runs `run` claims ONE DECK at a time from the shared queue branch
 (`artifact-queue` on origin; a claim is a compare-and-swap push, so two machines can never claim the same
@@ -419,6 +420,44 @@ def append_ledger(root, key, entry):
         f.write("\n")
 
 
+# A USER mark is a REQUEST to regenerate, and a finished run ANSWERS it: any verdict the deck's ledger records for
+# the marked kind from a run that STARTED after the mark was set (adopted, kept-incumbent, or a trade held for the
+# USER). Before this a mark outlived its answer and re-queued the same artifact on every pick (2026-10-28: Angels
+# regenerated again right after its marked table landed; Giants, answered 2026-10-25, started a third run).
+MARK_ANSWERS = VERIFYING + ("trade",)
+RUN_ID_TIME = re.compile(r"(\d{8}T\d{6})$")
+
+
+def mark_time(m):
+    """When the USER set the mark. `mark` records it to the second; an older date-only mark counts from the END of
+    its day, so a run earlier that same day (possibly frozen before the mark's reason landed) never answers it."""
+    if m.get("set"):
+        return parse_iso(m["set"])
+    if not m.get("date"):
+        return None
+    return datetime.datetime.strptime(m["date"], "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc) \
+        + datetime.timedelta(days=1)
+
+
+def run_started(e):
+    """When a ledger entry's run first claimed its deck: the stamp run_job puts on run_id, kept across a resume."""
+    mt = RUN_ID_TIME.search(e.get("run_id") or "")
+    return datetime.datetime.strptime(mt.group(1), "%Y%m%dT%H%M%S").replace(tzinfo=datetime.timezone.utc) \
+        if mt else None
+
+
+def mark_answer(m, kind, ledger):
+    """-> the ledger entry that answers USER mark `m` on `kind`, or None while the mark is still owed."""
+    t = mark_time(m)
+    if t is None:
+        return None
+    for e in ledger:
+        s = run_started(e)
+        if e.get("kind") == kind and e.get("verdict") in MARK_ANSWERS and s is not None and s >= t:
+            return e
+    return None
+
+
 def artifact_ident(kind, root, path):
     """The identity an artifact is verified/claimed under. A keep table: its file's git blob. A leaf: its
     eval_model's hash, NOT the sidecar's blob -- value.json also carries value_play settings, and an edit
@@ -545,7 +584,13 @@ def assess_deck(H, d, cfg, smap):
             it["flags"].append(("card-data", "cards.json changed for %d deck card(s): %s"
                                 % (len(cdc), ", ".join(cdc[:6]) + (" ..." if len(cdc) > 6 else ""))))
         mk = marks.get((d.key, kind))
-        if mk:
+        ans = mark_answer(mk, kind, ledger) if mk else None
+        if ans:
+            it["mark_answered"] = ans
+            it["notes"].append("USER MARK p%s (%s) ANSWERED by run %s: %s -- `unmark` it to tidy" % (
+                mk.get("priority", 0), mk.get("set") or mk.get("date"), ans["run_id"],
+                ans.get("detail", ans["verdict"])))
+        elif mk:
             it["mark"] = mk
         if not suite_key:
             it["blocked"] = "not in test/regression_cases.sh (both generators refuse: exit 3)"
@@ -705,6 +750,8 @@ def fmt_item(it):
     tags = []
     if it.get("mark"):
         tags.append("MARKED(p%s)" % it["mark"].get("priority", 0))
+    if it.get("mark_answered"):
+        tags.append("mark-answered(unmark)")
     tags += [f for f, _ in it["flags"]]
     if it.get("uncommitted"):
         tags.append("uncommitted")
@@ -724,7 +771,7 @@ def cmd_status(a):
                                                     "suite-GT play drift since adoption or last verdict", "flags"))
     shown = 0
     for it in items:
-        if a.all or it["queued"] or it.get("flags") or it.get("mark"):
+        if a.all or it["queued"] or it.get("flags") or it.get("mark") or it.get("mark_answered"):
             print(fmt_item(it))
             shown += 1
     hidden = len(items) - shown
@@ -787,7 +834,7 @@ def cmd_mark(a):
     marks = [m for m in cfg.get("marks", []) if not (m["deck"] == a.deck and m["kind"] == a.kind)]
     if a.cmd == "mark":
         marks.append({"deck": a.deck, "kind": a.kind, "why": a.why, "priority": a.priority,
-                      "date": datetime.date.today().isoformat()})
+                      "date": datetime.date.today().isoformat(), "set": iso(utcnow())})
     save_marks(marks)
     print("%s %s/%s in %s -- commit + push it so every worker sees it" % (
         "marked" if a.cmd == "mark" else "unmarked", a.deck, a.kind, CONFIG_REL))
@@ -1835,6 +1882,22 @@ def cmd_selftest(a):
               claim_blocks(kept, job, cfg, "A", utcnow() + datetime.timedelta(days=cfg["retry_rejected_days"] + 30)))
         check("...and stops blocking once it has landed (the ledger governs)",
               not claim_blocks(kept, dict(job, ledger_runs=["r9"]), cfg, "A", utcnow()))
+
+        print("a USER mark is answered by a later run of its kind:")
+        led = [{"run_id": "giants-w-20261025T145443", "kind": "mulligan", "verdict": "adopted"},
+               {"run_id": "giants-w-20261025T145443", "kind": "valueleaf", "verdict": "kept-incumbent"}]
+        check("a date-only mark is answered by a run the next day", mark_answer({"date": "2026-10-24"}, "mulligan", led) is led[0])
+        check("...but not by a run on the mark's own day", mark_answer({"date": "2026-10-25"}, "mulligan", led) is None)
+        check("a timestamped mark is answered by a run started after it",
+              mark_answer({"set": "2026-10-25T14:00:00Z"}, "mulligan", led) is led[0])
+        check("...not by one started before it", mark_answer({"set": "2026-10-25T15:00:00Z"}, "mulligan", led) is None)
+        check("...and not by a run of the other kind", mark_answer({"date": "2026-10-24"}, "mulligan", led[1:]) is None)
+        check("a trade held for the USER answers it",
+              mark_answer({"date": "2026-10-24"}, "mulligan", [dict(led[0], verdict="trade")]) is not None)
+        check("an unknown verdict does not", mark_answer({"date": "2026-10-24"}, "mulligan", [dict(led[0], verdict="x")]) is None)
+        it = mkit("e", "mulligan", 0.0)
+        score(it, cfg)
+        check("an answered mark (no it['mark']) leaves a fresh artifact unqueued", not it["queued"])
     finally:
         shutil.rmtree(T, ignore_errors=True)
         for k, v in saved.items():

@@ -1,5 +1,5 @@
 {
-  "_doc": "Config + USER marks for scripts/artifact_queue.py (docs/design/artifact-staleness-queue.md). Each worker reads this file from ITS OWN checkout when it STARTS, so commit + push an edit AND pull it into every worker's checkout and restart that worker (stop, then start) for it to take effect. marks: [{deck, kind: mulligan|valueleaf, why, priority, date}] -- a marked artifact sorts first regardless of measured drift (higher priority first). Set with `artifact_queue.py mark`. recipe_overrides: {deck: fast|complete} -- a USER override of the never-below-the-incumbent plan (mull_plan).",
+  "_doc": "Config + USER marks for scripts/artifact_queue.py (docs/design/artifact-staleness-queue.md). Each worker reads this file from ITS OWN checkout when it STARTS, so commit + push an edit AND pull it into every worker's checkout and restart that worker (stop, then start) for it to take effect. marks: [{deck, kind: mulligan|valueleaf, why, priority, date, set}] -- a marked artifact sorts first regardless of measured drift (higher priority first) until a run started after `set` (date-only: after that day) records a verdict for it in the deck's ledger; then the mark is inert (`status` shows mark-answered) and `unmark` tidies it. Set with `artifact_queue.py mark`. recipe_overrides: {deck: fast|complete} -- a USER override of the never-below-the-incumbent plan (mull_plan).",
   "branch": "phase-1-2-deck-analyzer",
   "min_drift": 0.02,
   "kind_weight": {
@@ -13,13 +13,5 @@
   "heartbeat_minutes": 20,
   "idle_poll_minutes": 5,
   "retry_rejected_days": 14,
-  "marks": [
-    {
-      "deck": "giants",
-      "kind": "mulligan",
-      "why": "USER bucket ruling 2026-10-24: Lightning Greaves kept apart from Pyroclasm, K 13 -> 14; the shipped table still has the merged bucket",
-      "priority": 5,
-      "date": "2026-10-24"
-    }
-  ]
+  "marks": []
 }

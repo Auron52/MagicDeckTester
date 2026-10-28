@@ -132,7 +132,12 @@ unreadable artifact (1.0), settings drift (0.1; table generated at a depth/budge
 current `mull_gen_*`, only when the raw recorded one). Reported at weight 0 because their play effect is
 already in the drift: cards.json change to a deck card since adoption (canonicalised exactly as
 `CardDefHash`), pipeline order (leaf fitted before the current keep table was adopted). A USER mark sorts first
-regardless of score. An artifact is queued when score >= `min_drift` (0.02 turns), it is committed, and its deck
+regardless of score, **until a run answers it**: any verdict the deck's ledger records for the marked kind
+(adopted, kept-incumbent, or a trade held for the USER) from a run that started after the mark was set. `mark`
+stamps the time to the second (`set`); an older date-only mark counts from the end of its day. An answered mark
+is inert and `status` tags it `mark-answered(unmark)`. Before this, a mark outlived its answer: on 2026-10-28
+the worker regenerated Angels again right after its marked table landed, then started a third Giants run for a
+ruling answered on 10-25. An artifact is queued when score >= `min_drift` (0.02 turns), it is committed, and its deck
 is in the suite (both drivers refuse otherwise). A settings-only sidecar (no `eval_model`, e.g. Snow's
 `leaf: none`) is not a leaf and is not queued unless marked.
 
