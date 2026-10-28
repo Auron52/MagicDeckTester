@@ -509,6 +509,41 @@ static std::vector<std::string> ConvokeLabelsFor(const GameState& s, const TurnS
     return labels;
 }
 
+// The label of ONE dig action (a cycle / a sacrifice-to-draw). Under UNPREDICTABLE CYCLONE the draw of a
+// nonland's cycling is REPLACED -- "to draw" would be false; name the walk (the shared CycleDrawReplacer +
+// the cycled card's types). A replacer the PLAN itself casts counts too: a plan's cycle runs after its
+// casts (the cycle seed, "cast Unpredictable Cyclone, cycle Street Wraith"), so it is out by then.
+static std::string DigActionLabel(const Action& a, const GameState& s, const TurnSolver::Plan& plan)
+{
+    if (!a.dig_sacrifice)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().LookupInterned(a.card_name);
+        const CardDefinition* rep = cd ? CycleDrawReplacer(s, s.active_player_index, *cd) : nullptr;
+        if (cd != nullptr && rep == nullptr && !cd->card.IsLand())
+        {
+            for (const Action& b : plan.actions)
+            {
+                if (b.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* bd = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
+                if (bd != nullptr && bd->params.cycle_draw_exile_shared_type_freecast) { rep = bd; break; }
+            }
+        }
+        if (rep != nullptr)
+        {
+            std::string types;
+            if (cd->card.IsCreature())     { types += types.empty() ? "creature" : "/creature"; }
+            if (cd->card.HasType(CardType::Artifact))    { types += types.empty() ? "artifact" : "/artifact"; }
+            if (cd->card.IsEnchantment())  { types += types.empty() ? "enchantment" : "/enchantment"; }
+            if (cd->card.IsInstant())      { types += types.empty() ? "instant" : "/instant"; }
+            if (cd->card.IsSorcery())      { types += types.empty() ? "sorcery" : "/sorcery"; }
+            if (cd->card.HasType(CardType::Planeswalker)) { types += types.empty() ? "planeswalker" : "/planeswalker"; }
+            return "cycle " + a.card_name.str() + " (" + rep->card.m_name.str() + ": exile until a "
+                 + (types.empty() ? std::string("shared type") : types) + ", may cast it free)";
+        }
+    }
+    return (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw";
+}
+
 // `swap_in_combat` = the action index of a main-phase Aura swap human play will apply in the COMBAT
 // window instead (TurnSolver::HumanSwapDefersToCombat), -1 = none; that swap's label says so.
 static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& s, int swap_in_combat = -1)
@@ -520,27 +555,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
     if (plan.actions.size() == 1 && plan.actions[0].kind == Action::Kind::DigDraw
         && plan.land_to_play.empty())
     {
-        const Action& a = plan.actions[0];
-        // Under UNPREDICTABLE CYCLONE the draw of a nonland's cycling is REPLACED -- "to draw" would be
-        // false; name the walk (the shared CycleDrawReplacer + the cycled card's types).
-        if (!a.dig_sacrifice)
-        {
-            const CardDefinition* cd = CardDatabase::Instance().LookupInterned(a.card_name);
-            const CardDefinition* rep = cd ? CycleDrawReplacer(s, s.active_player_index, *cd) : nullptr;
-            if (rep != nullptr)
-            {
-                std::string types;
-                if (cd->card.IsCreature())     { types += types.empty() ? "creature" : "/creature"; }
-                if (cd->card.HasType(CardType::Artifact))    { types += types.empty() ? "artifact" : "/artifact"; }
-                if (cd->card.IsEnchantment())  { types += types.empty() ? "enchantment" : "/enchantment"; }
-                if (cd->card.IsInstant())      { types += types.empty() ? "instant" : "/instant"; }
-                if (cd->card.IsSorcery())      { types += types.empty() ? "sorcery" : "/sorcery"; }
-                if (cd->card.HasType(CardType::Planeswalker)) { types += types.empty() ? "planeswalker" : "/planeswalker"; }
-                return "cycle " + a.card_name.str() + " (" + rep->card.m_name.str() + ": exile until a "
-                     + (types.empty() ? std::string("shared type") : types) + ", may cast it free)";
-            }
-        }
-        return (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw";
+        return DigActionLabel(plan.actions[0], s, plan);
     }
     if (plan.land_decided && !plan.land_to_play.empty())
     {
@@ -732,7 +747,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 break;
             }
             case Action::Kind::DigDraw:
-                tag = (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw"; break;
+                tag = DigActionLabel(a, s, plan); break;
             // Battlefield activations (FiveColour): label as abilities, not bare card names --
             // a bare name reads as a CAST of a card that is not in hand (it confused the
             // play_invariants hand check and any human reading the plan list).
@@ -4759,7 +4774,8 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 // "equip=<equipment name>[#<source m_number>][@<host m_number>]",
 // "attachall=<name>", "equipallfree=<host m_number>", "sfput=<equipment name>",
 // "jittemode=<1|2>", "gyexile=<1|2>",
-// "channel=<card name>", "tap=<name>#<m_number>:<W|U|B|R|G|C>" (the manual tap/pay fallback --
+// "channel=<card name>", "cycle=<card name>" (cycle it from hand), "sacdraw=<land name>",
+// "tap=<name>#<m_number>:<W|U|B|R|G|C>" (the manual tap/pay fallback --
 // docs/design/viewer-manual-tap-pay.md), or the bare word "pass". Card
 // names may contain spaces and commas (no MTG name contains ';' or '='), so they pass through
 // verbatim.
@@ -4848,6 +4864,8 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "gyreturn")  { ls.gy_returns.push_back(val); }    // Haven rebuy (returned card)
         else if (key == "gyplay")    { ls.gy_plays.push_back(val); }      // Kaldring gy-play (played card)
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
+        else if (key == "cycle")     { ls.cycles.push_back(val); }        // cycle a card from hand (DigDraw)
+        else if (key == "sacdraw")   { ls.sac_draws.push_back(val); }     // sacrifice a land to draw (DigDraw)
         // Adventure (CR 715): cast the adventure half rather than the creature. See LineSpec.
         else if (key == "adventure") { ls.adventures.push_back(val); }
         // Kicker (CR 702.33): PAY the kicker on this cast. See LineSpec::kickeds -- like

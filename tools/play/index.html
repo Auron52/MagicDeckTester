@@ -1318,11 +1318,34 @@ function digSources() {
   for (const p of (d.plans || [])) {
     const a = p.actions || [];
     if (a.length === 1 && a[0] && a[0].dig) {
-      if (a[0].dig_sacrifice) sac[a[0].card] = p.index; else cyc[a[0].card] = p.index;
+      // The land-less plan is THE dig (a deck whose cycles are plan actions also offers "land=X; cycle Y").
+      const m = a[0].dig_sacrifice ? sac : cyc;
+      if (m[a[0].card] == null || !p.land) m[a[0].card] = p.index;
     }
   }
   S._digFor = d; S._dig = { cyc, sac };
   return S._dig;
+}
+// Does this decision offer cycling `name` INSIDE a plan with other actions (a deck whose cycles are plan
+// items -- the engine's cycle seeds)? Then a queued cycle joins the line it ends; otherwise it is a
+// standalone dig and commits as a segment of its own (LineBuild.segmentParts reads `alone`).
+function cycleCombines(name) {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return false;
+  return (d.plans || []).some(p => { const a = p.actions || [];
+    return (a.length > 1 || p.land) && a.some(x => x && x.dig && !x.dig_sacrifice && x.card === name); });
+}
+// Queue a CYCLE of a hand card as a line item (USER 2026-10-28: "Cycling should be a plan item like any
+// other"): `cycle=<name>` in the line, after whatever is queued before it, so the line's payment knows the
+// cycle is coming (the engine holds the colour it needs). Click again to take the last one back.
+function queueCycle(name) {
+  if (S.busy || S.over) return;
+  const d = S.decision;
+  const cap = LineBuild.castableCount(d, name) - LineBuild.plannedCount(S.plan, name);
+  if (cap <= 0) { flashHint(`No copy of ${name} left in hand to cycle.`); return; }
+  S.plan.push({ name, kind: 'cycle', alone: !cycleCombines(name) });
+  flashHint(`Cycle ${name} queued — it runs after what is queued before it. Click ✕ on the chip to take it back.`);
+  renderBoard();
 }
 // Fire a dig (cycle a hand land / sacrifice a board land to draw). It is a STANDALONE action, so clear
 // any half-built line first -- otherwise applyAccepted's dropped-cast detector would see the queued
@@ -2462,7 +2485,7 @@ function renderBoard() {
     if(p.target && p.kind==='activate'){ return; }
     // 'channel' is a from-HAND ability: the card is discarded for an effect, so like an activation it
     // puts nothing onto the battlefield and belongs in the spells row, not the planned-permanents row.
-    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // The CAST half of a from-hand cast-and-equip: its equip half is already drawn on the host, so
     // drawing this too would put the same card in two places on the field.
@@ -2730,12 +2753,13 @@ function renderPlanbar() {
         `<span class="nm" data-name="${esc(p.name)}">⛏ ${p.sac?'sac':'tap'} ${esc(p.name)} → ${esc(preTapFaceText(p.color))}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
         `<span class="x" data-rm="${i}">✕</span></span>`;
     }
-    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize')?'act':(p.kind==='land'?'land':'spell');
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle')?'act':(p.kind==='land'?'land':'spell');
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
     // of them equips, attaches everything, or puts a card from hand.
     const act = p.kind==='channel' ? (channelSources()[p.name]==='transmute' ? ' ⚡ transmute (discard)' : ' ⚡ channel (discard)')
               : p.kind==='suspend' ? ' ⌛ suspend (exile)'
+              : p.kind==='cycle' ? ' ↻ cycle (discard)'
               : p.kind==='eternalize' ? ' ⟳ eternalize (from graveyard)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
@@ -2884,7 +2908,7 @@ function renderHand() {
       // land-face / channel / suspend badges below do -- and, unlike them, cycling RESOLVES ON THE
       // SPOT (fireDig commits the plan), so it must never be what an ordinary click on the card body
       // does. Clicking the body plays the card.
-      (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — discard ${esc(c.name)} to draw a card (resolves immediately). Click the card itself to play it instead.">↻ cycle</span>`:'')+
+      (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — queue cycling ${esc(c.name)} as part of your line (it runs after what is queued before it; commit the line to do it). Click the card itself to play it instead.">↻ cycle</span>`:'')+
       // MDFC land side: an explicit badge, because the card's own kind is the FRONT's and every
       // other route on this thumb (double-click, drag) casts that front. Clicking it queues the
       // land drop instead (`land=<front name>`, which is how the engine names the play).
@@ -2938,7 +2962,7 @@ function renderHand() {
     b.onclick = e => { e.stopPropagation(); e.preventDefault();
       const nm = b.dataset.cycle, idx = digSources().cyc[nm];
       if (idx == null) return;                       // re-rendered since; not offered any more
-      fireDig(idx, `cycle ${nm} to draw`); };
+      queueCycle(nm); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
   // MDFC land-side badge: queue the LAND drop, not the front cast. stopPropagation keeps the

@@ -41598,9 +41598,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         //     dominant (FreeCastTakeDominated), and TAKE-AND-REMAND only with a Remand in hand that the
         //     provider admits on such a hit. -1 = the provider default (no replacer possible).
         // DECISION SPACE ONLY (the Remand / phyrexian precedent): the rollout LEAF (greedy) plays the legacy
-        // gate. Human play gets no seeds -- its cycles are the standalone dig plans (AppendHumanPlayDigPlans),
-        // and the human answers each scry / free cast at resolution.
-        if ((g_search_candidate_enum || g_condemn_root_turn < 0) && !HumanPlayActive())
+        // gate.
+        // HUMAN PLAY gets the SAME seeds, one per distinct cycler (USER 2026-10-28: *"Cycling should be a plan
+        // item like any other."*), so a line "cast Seething Song, cast Unpredictable Cyclone, cycle Curator of
+        // Mysteries" is ONE plan whose payment sees the cycle (PlanTraits::cycle_seed_pips) -- the standalone
+        // dig plan it replaces could not, and its auto-tap spent the Island the cycle needed (reference s8 gi7
+        // T4: the human had to tap by hand). The human answers Curator's scry and Cyclone's free cast at
+        // resolution, so a human seed carries no pins (j = -1, fc = default); AppendHumanPlayDigPlans skips the
+        // cyclers these seeds cover.
+        const bool human_seeds = HumanPlayActive();
+        if (((g_search_candidate_enum || g_condemn_root_turn < 0) && !human_seeds) || human_seeds)
         {
             const DecisionProvider& cyc_prov = ResolveProvider(state);
             const std::vector<std::string> cyc_names = cyc_prov.SearchedCycleSources(state);
@@ -41652,11 +41659,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const int n_watch = watchers_bf + watchers_hand
                                       - (cd->params.cycle_or_discard_trigger_scry > 0 ? 1 : 0);
                     std::vector<int> js;
-                    if (n_watch > 0) { for (int j = 0; j <= n_watch; ++j) { js.push_back(j); } }
+                    if (n_watch > 0 && !human_seeds) { for (int j = 0; j <= n_watch; ++j) { js.push_back(j); } }
                     else { js.push_back(-1); }
                     // Cyclone's options for THIS cycler's walk.
                     std::vector<int> fcs;
-                    if (replacer_possible && !cd->card.IsLand())
+                    if (human_seeds) { fcs.push_back(kCycFcDefault); }   // answered at resolution
+                    else if (replacer_possible && !cd->card.IsLand())
                     {
                         fcs.push_back(kCycFcTake);
                         const unsigned mask = CycleWalkTypeMask(cd->card);
@@ -51591,6 +51599,33 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     for (const Action& a : acts)
     {
         if (a.kind == Action::Kind::DigDraw) { t.mid_turn_casts = true; }
+        // CYCLE SEED HOLD (PlanTraits::cycle_seed_pips): the plan's cycle, paid after its casts. From the
+        // CARD's effective cycling cost, never a.cost -- a recorded DigDraw carries none, and the executor
+        // builds these traits off its records while the rollout builds them off the plan (lockstep). The
+        // first cycle of the list only: a section holds at most one seed.
+        if (a.kind == Action::Kind::DigDraw && !a.dig_sacrifice && t.cycle_seed_def == nullptr
+            && ActLineHoldEnabled() && ResolveProvider(state).CyclesAreSearched())
+        {
+            const CardDefinition* cd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (cd != nullptr && cd->params.cycling_cost.has_value())
+            {
+                const ManaCost cc = EffectiveCyclingCostFor(state, *cd);
+                const int pips[5] = { cc.white, cc.blue, cc.black, cc.red, cc.green };
+                if (pips[0] + pips[1] + pips[2] + pips[3] + pips[4] > 0)
+                {
+                    int copies = 0, casts = 0;
+                    for (const Card& c : state.players[active].hand)
+                    { if (!c.m_is_staged && c.m_name == cd->card.m_name) { ++copies; } }
+                    for (const Action& b : acts)
+                    {
+                        if ((b.kind == Action::Kind::CastFromHand) && b.card_name == cd->card.m_name) { ++casts; }
+                    }
+                    for (int c = 0; c < 5; ++c) { t.cycle_seed_pips[c] = pips[c]; }
+                    t.cycle_seed_def        = cd;
+                    t.cycle_seed_hand_floor = std::max(1, copies - casts);
+                }
+            }
+        }
         if (TurnSolver::IsTrailingActivation(a.kind)) { t.act_mana_total += a.cost.ManaValue(); }
         // Line {C} hold input: the largest colourless pip count among the plan's own blink
         // activations (one crank; see PlanTraits::act_c_pips).
@@ -53984,6 +54019,8 @@ static bool HumanVerbMatchesKind(const std::string& verb, Action::Kind k)
     if (verb == "suspend")    { return k == K::Suspend; }
     if (verb == "channel")    { return k == K::Channel; }
     if (verb == "eternalize") { return k == K::Eternalize; }
+    // A cycle / sacrifice-to-draw (USER 2026-10-28: "Cycling should be a plan item like any other").
+    if (verb == "cycle" || verb == "sacdraw") { return k == K::DigDraw; }
     if (verb == "sacout")     { return k == K::SacForMana || k == K::SacCreatureOutlet; }
     // `act=` and every board-activation verb (equip / blink / pod / landsearch / ...): an ability of a
     // permanent on the battlefield, never a card leaving the hand or the graveyard.
@@ -54012,6 +54049,7 @@ static const char* HumanStepLabel(const Action& a)
         case K::ActivatePod:       return "Pod";
         case K::TapForTokens:      return "tap";
         case K::ActivateUntap:     return "untap";
+        case K::DigDraw:           return "cycle";
         default:                   return "activate";
     }
 }
@@ -54262,9 +54300,12 @@ const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
         // The activated untapper (AccomplishedAlchemist): `untapact=<source>#<src>@<target>`, its closed-form
         // LOOP `untaploop=` (chosen_x >= kUntapLoopToNeed) -- never matched to each other.
         case K::ActivateUntap:          return "untapact";
-        // Never a step of a "**" line: a dig is committed alone (fireDig clears the queue), the COMBO OFF
-        // route alone (its button), and a PlayLand action exists only in breakpoint records.
-        case K::DigDraw:
+        // A cycle is a step (`cycle=<name>`, the viewer's queued cycle -- USER 2026-10-28: "Cycling should
+        // be a plan item like any other"); the ordered walk leaves it to the DigDraw pass after the casts,
+        // which is where the viewer's segmenting puts it (a queued cycle ENDS its segment).
+        case K::DigDraw:                return "cycle";
+        // Never a step of a "**" line: the COMBO OFF route is committed alone (its button), and a PlayLand
+        // action exists only in breakpoint records.
         case K::ComboRoute:
         case K::PlayLand:               return "";
     }
@@ -59218,7 +59259,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         };
         if (find_copy() == ap.hand.end()) { return; }
         if (!CyclingLifePayable(state, me, *sd)) { return; }
-        if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { return; }
+        {
+            const CycleSeedPayScope _csp;   // the hold must not hold back this payment's own pips
+            if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { return; }
+        }
         std::vector<Card>::iterator it = find_copy();   // the payment may have moved the hand
         if (it == ap.hand.end()) { return; }
         ++cycle_chain_depth;
@@ -60201,7 +60245,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // P3 -- human-play payment, on the Fluctuator-reduced cost, plus the LIFE half
                 // (Street Wraith; lockstep with the executor's P1/P2 and the rollout's P4).
                 if (!CyclingLifePayable(state, state.active_player_index, *sd)) { continue; }
-                if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { continue; }
+                {
+                    const CycleSeedPayScope _csp;   // lockstep with cycle_chain_step's seed payment
+                    if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { continue; }
+                }
                 std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
                     [&a](const Card& c) { return c.m_name == a.card_name; });
                 if (it == ap.hand.end()) { continue; }
@@ -69993,6 +70040,13 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     };
 
     std::unordered_set<std::string> seen;
+    // A provider that SEARCHES its cycles offers every cycler it admits as a plan ACTION (CollectActions'
+    // cycle seeds, human play included), so the human combines it with the turn's casts in one line; a
+    // standalone twin here would only duplicate the seed-only plan.
+    if (ResolveProvider(state).CyclesAreSearched())
+    {
+        for (const std::string& nm : ResolveProvider(state).SearchedCycleSources(state)) { seen.insert("c:" + nm); }
+    }
     for (const Card& c : ap.hand)   // cycling lands in hand
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -98800,6 +98854,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
                       spec.equip_all_free.empty() &&
                       spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.gy_plays.empty() && spec.channels.empty() &&
+                      spec.cycles.empty() && spec.sac_draws.empty() &&
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
                       spec.pods.empty() && spec.ooze_exiles.empty() && spec.blinks.empty() &&
@@ -98948,6 +99003,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     std::sort(sortedGyPlays.begin(), sortedGyPlays.end());
     std::vector<std::string> sortedChannels = spec.channels;
     std::sort(sortedChannels.begin(), sortedChannels.end());
+    std::vector<std::string> sortedCycles = spec.cycles;
+    std::sort(sortedCycles.begin(), sortedCycles.end());
+    std::vector<std::string> sortedSacDraws = spec.sac_draws;
+    std::sort(sortedSacDraws.begin(), sortedSacDraws.end());
     const bool channel_declared   = !spec.channels.empty();
     std::vector<std::string> sortedSuspends = spec.suspends;
     std::sort(sortedSuspends.begin(), sortedSuspends.end());
@@ -99058,6 +99117,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         // >= 2) -- the flexible sacout fallback below only bends counts for these.
         std::vector<std::string> sacLoopNames;
         std::vector<std::string> attachAllNames, sfPutNames, channelNames, suspendNames;
+        std::vector<std::string> cycleNames, sacDrawNames;   // DigDraw: ALWAYS its own verb (cycle= / sacdraw=)
         std::vector<std::string> auraSwapNames;   // Arcanum Wings' swap: ALWAYS its own verb
         std::vector<std::string> adventureNames;
         std::vector<std::string> kickedNames;
@@ -99086,6 +99146,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
             if (a.kind == Action::Kind::ActivateVial)       { vialNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::DigDraw)
+            { (a.dig_sacrifice ? sacDrawNames : cycleNames).push_back(a.card_name.str()); continue; }
             if (a.kind == Action::Kind::CastFromGraveyard)  { retraceNames.push_back(a.card_name); continue; }
             // A declared sac-outlet line matches BOTH outlet kinds against spec.sac_outlets, with
             // one entry per ACTIVATION (a burst of k sacs is k entries -- sac_count is how many
@@ -99308,6 +99370,14 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<std::string> v2 = channelNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedChannels) { continue; }
+        }
+        {   // unconditional: a plan that cycles matches only a line that says so (LineSpec::cycles)
+            std::vector<std::string> v2 = cycleNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedCycles) { continue; }
+            v2 = sacDrawNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedSacDraws) { continue; }
         }
         if (suspend_declared || !suspendNames.empty())
         {
@@ -100212,6 +100282,15 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         return out;
     }
 
+    // A cycle / sacrifice-to-draw the enumerated plans do not carry: the ramp sim below models neither
+    // (it would grade the line on its casts alone), so say so rather than guess.
+    if (!spec.cycles.empty() || !spec.sac_draws.empty())
+    {
+        out.verdict = V::Unsupported;
+        out.failed_action = !spec.cycles.empty() ? "cycle=" + spec.cycles.front() : "sacdraw=" + spec.sac_draws.front();
+        out.reason = "no enumerated plan cycles this way here (a cycle is validated against the plans only)";
+        return out;
+    }
     // --- 2) Not enumerated: is it rules-legal (modelling same-turn ramp)? ------
     GameState s = state;   // work on a copy; CheckLine must not mutate the real game
 

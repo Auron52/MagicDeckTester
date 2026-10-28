@@ -115,6 +115,10 @@
     // (so it is not a board activation) but it is not a cast either -- "{1}{R}, Discard this card"
     // plays the same card a different way, and `cast=` cannot say which.
     if (p.kind === 'channel') return 'channel';
+    // ... and a CYCLE (cycle a card from HAND to draw, or into Unpredictable Cyclone's walk): the same
+    // card played a different way, so `cast=` cannot say it. USER 2026-10-28: "Cycling should be a plan
+    // item like any other." (LineSpec::cycles; a plan's cycle is matched only by this verb.)
+    if (p.kind === 'cycle') return 'cycle';
     // ... and SUSPEND is the second: exiling the card from hand with time counters is an
     // alternative to casting it (CR 702.61a), and `cast=` cannot say which of the two was meant.
     if (p.kind === 'suspend') return 'suspend';
@@ -186,7 +190,12 @@
     const flush = () => { if (cur.length) { parts.push(cur); } cur = []; seen = {}; hasLand = false; };
     (plan || []).forEach((p, i) => {
       const k = (p.kind === 'activate' && p.repeatable) ? (p.src || p.name) : null;
-      const cut = (i > 0 && isDeferred(p)) || (k && seen[k]) || (p.kind === 'land' && hasLand);
+      // A CYCLE ends its segment: the engine's plan cycles AFTER its casts (the cycle seed's position), and
+      // a plan holds one cycle, so "cast A, cycle B, cast C" commits as [A, cycle B] then [C] -- the queue
+      // order, exactly. On a deck whose cycles are standalone plans (`alone`, stamped at queue time from
+      // the decision's own plans) the cycle is a segment by itself.
+      const cut = (i > 0 && (isDeferred(p) || (p.kind === 'cycle' && p.alone))) || (k && seen[k])
+               || (p.kind === 'land' && hasLand) || (i > 0 && cur.length && cur[cur.length - 1].kind === 'cycle');
       if (cut) { flush(); }
       if (k) { seen[k] = true; }
       if (p.kind === 'land') { hasLand = true; }
@@ -251,7 +260,7 @@
   // equip/enchant host -- is the human's declared choice and is kept verbatim, so a looped `tap=`
   // token names the same land it named the first time.
   const HAND_KINDS = { land: true, nonpermanent: true, permanent: true, vial: true,
-                       retrace: true, channel: true, suspend: true };
+                       retrace: true, channel: true, suspend: true, cycle: true };
   function loopBlock(segments, n) {
     const flat = [];
     (segments || []).forEach(seg => (seg || []).forEach((p, j) => {
@@ -512,6 +521,9 @@
   // string keeps its `sacout=` (CheckLine matches the plan with the burst by it).
   function sequenceToken(p) {
     if (p && p.sacMana) return null;
+    // A CYCLE is a step like any other (`cycle=<name>`); it always ENDS its segment (segmentParts), which is
+    // where the engine runs a plan's cycle -- after the line's casts.
+    if (p && p.kind === 'cycle') return 'cycle=' + p.name;
     if (isPreTap(p)) return preTapToken(p);
     if (p.kind === 'land') return (p.fromTop ? 'landtop=' : 'land=') + p.name;
     if (p.kind === 'le') return 'le=' + p.name;

@@ -8544,7 +8544,10 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&source](const Card& c) { return c.m_name == source; });
         if (it == ap.hand.end()) { return DigOutcome::Failed; }
-        if (!TapForCost(state, cyc_cost, avail, false)) { return DigOutcome::Failed; }
+        {
+            const CycleSeedPayScope _csp;   // lockstep with the rollout's cycle_chain_step (PlanTraits::cycle_seed_pips)
+            if (!TapForCost(state, cyc_cost, avail, false)) { return DigOutcome::Failed; }
+        }
         // TapForCost may have moved the hand (a payment that mutates zones): re-find the copy.
         it = std::find_if(ap.hand.begin(), ap.hand.end(), [&source](const Card& c) { return c.m_name == source; });
         if (it == ap.hand.end()) { return DigOutcome::Failed; }

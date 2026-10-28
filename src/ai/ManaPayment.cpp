@@ -6079,6 +6079,7 @@ thread_local std::vector<int> g_plan_reserved_sources;
 thread_local ManaCost g_line_unpaid_cost;
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
 thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
+thread_local bool g_cycle_seed_paying = false;   // see ManaPayment.h (CycleSeedPayScope)
 thread_local ManaCost g_act_line_current;
 
 void AddManaCost(ManaCost& dst, const ManaCost& add)
@@ -6915,7 +6916,19 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     if (!pt) { return 0; }
     const int cab_total = pt->act_pips_cab[0] + pt->act_pips_cab[1] + pt->act_pips_cab[2]
                         + pt->act_pips_cab[3] + pt->act_pips_cab[4];
-    if (pt->act_src_count == 0 && cab_total == 0
+    // THE CYCLE SEED's pips (PlanTraits::cycle_seed_pips): owed while the cycler is still in hand and
+    // the seed is not the payment being made right now (CycleSeedPayScope).
+    int seed_need[5] = { 0, 0, 0, 0, 0 };
+    if (pt->cycle_seed_def != nullptr && !g_cycle_seed_paying)
+    {
+        int copies = 0;
+        for (const Card& c : state.players[state.active_player_index].hand)
+        { if (!c.m_is_staged && c.m_name == pt->cycle_seed_def->card.m_name) { ++copies; } }
+        if (copies >= pt->cycle_seed_hand_floor && copies > 0)
+        { for (int c = 0; c < 5; ++c) { seed_need[c] = pt->cycle_seed_pips[c]; } }
+    }
+    const int seed_total = seed_need[0] + seed_need[1] + seed_need[2] + seed_need[3] + seed_need[4];
+    if (pt->act_src_count == 0 && cab_total == 0 && seed_total == 0
         && pt->act_pips[0] + pt->act_pips[1] + pt->act_pips[2]
          + pt->act_pips[3] + pt->act_pips[4] == 0) { return 0; }
     const int n = static_cast<int>(state.battlefield.size());
@@ -6967,6 +6980,13 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
         if (all < 0) { all = 0; }
         need_cab[c] = std::min(all, pt->act_pips_cab[c]);
         need[c] = all - need_cab[c];
+        // The seed's pips, net of whatever float the activations above did not already claim. Kept
+        // apart from `all` so a deck without a seed computes exactly what it always did.
+        if (seed_need[c] > 0)
+        {
+            const int float_spare = std::max(0, float_left - std::max(0, pt->act_pips[c] + pt->act_pips_cab[c] - paid[c]));
+            need[c] += std::max(0, seed_need[c] - float_spare);
+        }
         if (need[c] > 0 || need_cab[c] > 0) { any_pip = true; }
     }
 
