@@ -157,8 +157,11 @@ Remaining:
 - OVERNIGHT GT for lhc / lhc2hg: the overnight tier was last accepted 2026-10-27 and has moved since (Bruna TUTOR FIT,
   the Melira loop fold, these fixes), so a `--deck=lhc` accept would write every stale key (split GT halves). The keys
   land with the next full periodic overnight run; `regression_tiers:partial` must NOT be signed off.
-- Optionally `mine_heuristics.sh` (5g); 5c2 at `--blocks 96` on the current binary, or record it as unbindable (only
-  16 of 48,000 paired games changed).
+- Optionally `mine_heuristics.sh` (5g).
+
+5c2 RE-RUN 2026-10-28 on 2a490b78d (`leaf_tiebreak_check.py --blocks 96`, play settings, 96,000 paired games): net
+-33 turns, 36 better / 4 worse (half A -13, 2/15; half B -20, 2/21); binding 40 changed (0.042%), above the 20-change
+bar. VERDICT: KEEP THE DEFAULT (ON) -- the tie-break lowers this deck's average.
 - References (USER, in progress), then the generation stages (mulligan profile first, then the value leaf).
 - Closing report: Stage 6 + 6a disclosure + the open questions.
 
