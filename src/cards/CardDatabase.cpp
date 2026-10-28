@@ -1213,6 +1213,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.equip_tough_bonus         = params.value("equip_tough_bonus", 0);
     p.equip_grants_lifelink     = params.value("equip_grants_lifelink", false);
     p.equip_grants_vigilance    = params.value("equip_grants_vigilance", false);
+    p.equip_grants_tap_mana_any = params.value("equip_grants_tap_mana_any", false);
     p.equip_min_power           = params.value("equip_min_power", 0);
     p.equip_sacrifices_prior_host = params.value("equip_sacrifices_prior_host", false);
     p.equip_scale_power_per_equipment = params.value("equip_scale_power_per_equipment", 0);

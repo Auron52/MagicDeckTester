@@ -30085,6 +30085,25 @@ inline const CardDefinition& GrantedManaFace(Color c)
     return faces[(i >= 0 && i < 6) ? static_cast<std::size_t>(i) : 4u];   // default green
 }
 
+// Paradise Mantle's face: "{T}: Add one mana of any color." The Birds of Paradise shape (all five
+// colours in `produces`, produces_amount 1 = ONE mana of a chosen colour). A separate stable
+// pointer from the single-colour faces, so ManaCacheKey and the backtracker's dup-collapse never
+// confuse an any-colour host with a Badger-granted {G} body.
+inline const CardDefinition& AnyColorGrantFace()
+{
+    static const CardDefinition face = []
+    {
+        CardDefinition f{};
+        f.tmpl = CardTemplate::ManaDork;
+        f.card.m_name = "(granted {T}: Add one mana of any color)";
+        f.card.RehashName();
+        f.params.produces        = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+        f.params.produces_amount = 1;
+        return f;
+    }();
+    return face;
+}
+
 inline Color GrantedManaColorOf(const std::string& s)
 {
     if (s == "W") { return Color::White; }
@@ -30109,7 +30128,15 @@ struct ManaGrant
     // def_absent short-circuit). Under Concordant Crossroads -- the very card that makes this grant
     // worth playing -- EVERY fresh token is sick, so that is precisely the hot case.
     bool     blanket_haste = false;
-    bool valid() const { return live; }
+    // PARADISE MANTLE (CardParams::equip_grants_tap_mana_any): the hosts -- card.m_number of each
+    // creature an any-colour-granting Equipment is attached to. A host is a REAL card with its own
+    // definition (Puresteel, Sram...), so this is the grant's "definition but no mana ability"
+    // population, never the token one. Eight is far beyond any reachable board (a 4-of Equipment);
+    // a ninth host is simply not credited -- the pessimistic direction for the executor, and it
+    // cannot happen in a 60-card list with at most four copies.
+    int      n_hosts       = 0;
+    int      hosts[8]      = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    bool valid() const { return live || n_hosts > 0; }
 };
 
 inline ManaGrant LiveManaGrant(const GameState& state, int controller)
@@ -30125,10 +30152,19 @@ inline ManaGrant LiveManaGrant(const GameState& state, int controller)
         // The blanket-haste half of the walk (Concordant Crossroads). Kept here rather than in
         // CanTapNow so the whole question costs ONE battlefield pass per payment.
         if (d->params.grants_haste && d->params.affects_all_creatures) { g.blanket_haste = true; }
+        // Paradise Mantle: an attached any-colour Equipment makes its HOST a mana source. The
+        // Equipment's own state (tapped, etc.) is irrelevant -- it is a static grant (CR 611).
+        if (d->params.equip_grants_tap_mana_any && p.equipped_to != 0 && g.n_hosts < 8)
+        {
+            bool dup = false;   // two Mantles on one host grant the same single ability
+            for (int i = 0; i < g.n_hosts; ++i) { if (g.hosts[i] == p.equipped_to) { dup = true; break; } }
+            if (!dup) { g.hosts[g.n_hosts++] = p.equipped_to; }
+        }
         if (d->params.granted_tap_mana_subtypes.empty())
         {
-            // Both halves found -- nothing later in the walk can change either answer.
-            if (g.live && g.blanket_haste) { break; }
+            // Both halves found -- nothing later in the walk can change either answer. Not so
+            // when an equip grant may sit later on the board: that walk has to finish.
+            if (g.live && g.blanket_haste && !state.deck_has_equip_mana_grant) { break; }
             continue;
         }
         if (g.live) { continue; }   // a second Badger grants the same ability; nothing changes
@@ -30139,19 +30175,36 @@ inline ManaGrant LiveManaGrant(const GameState& state, int controller)
             if (g.n_subs >= 4) { break; }
             g.subs[g.n_subs++] = SubtypeRegistry::Instance().Id(s);
         }
-        if (g.blanket_haste) { break; }
+        if (g.blanket_haste && !state.deck_has_equip_mana_grant) { break; }
     }
     return g;
 }
 
 // Does the grant reach this permanent? Subtypes are read off the permanent's OWN Card, never a
 // CardDefinition -- that is the entire point (see the header comment above).
+// Paradise Mantle's half: is `p` the host of an any-colour-granting Equipment?
+inline bool EquipGrantReaches(const ManaGrant& g, const Permanent& p)
+{
+    if (g.n_hosts == 0 || !p.card.IsCreature()) { return false; }
+    for (int i = 0; i < g.n_hosts; ++i) { if (g.hosts[i] == p.card.m_number) { return true; } }
+    return false;
+}
+
 inline bool GrantReaches(const ManaGrant& g, const Permanent& p)
 {
+    if (EquipGrantReaches(g, p)) { return true; }
     if (!g.live || !p.card.IsCreature()) { return false; }
     for (int i = 0; i < g.n_subs; ++i)
     { if (g.subs[i] != 0 && CardHasSubtypeId(p.card, g.subs[i])) { return true; } }
     return false;
+}
+
+// The synthetic face a granted body taps as. An equip host gets the any-colour face (a superset of
+// any single-colour subtype grant on the same body -- it can only tap once either way).
+inline const CardDefinition& GrantFaceFor(const ManaGrant& g, const Permanent& p)
+{
+    if (EquipGrantReaches(g, p)) { return AnyColorGrantFace(); }
+    return GrantedManaFace(g.color);
 }
 
 // Can a granted body use its {T} right now? CR 302.6 -- the ability is a {T} ability, so a body
@@ -30208,7 +30261,7 @@ inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& 
     const CardDefinition* d = p.def_absent ? nullptr
                                            : CardDatabase::Instance().LookupCached(p.card);
     if (d != nullptr && IsBaselineManaSource(*d)) { return d; }
-    if (GrantReaches(g, p) && GrantedBodyCanTap(g, p, state.battlefield)) { return &GrantedManaFace(g.color); }
+    if (GrantReaches(g, p) && GrantedBodyCanTap(g, p, state.battlefield)) { return &GrantFaceFor(g, p); }
     return d;
 }
 
@@ -40136,7 +40189,7 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
         if (d == nullptr)
         {
             if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
-            d = &GrantedManaFace(grant.color);
+            d = &GrantFaceFor(grant, p);
         }
         else if (!IsBaselineManaSource(*d) && GrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield))
         {
@@ -40150,7 +40203,7 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
             // and the executor then cast it by tapping the attackers -- T5 predicted, T6 realised.
             // Over-counting is this bound's licence, so fall through with the REAL definition too:
             // the body keeps any credit of its own (e.g. a sacrifice-for-mana face).
-            total += SourceMaxNetLive(state, p, GrantedManaFace(grant.color), aura_fold);
+            total += SourceMaxNetLive(state, p, GrantFaceFor(grant, p), aura_fold);
         }
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                          || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))

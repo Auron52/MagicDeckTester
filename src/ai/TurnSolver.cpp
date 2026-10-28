@@ -36827,6 +36827,24 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 { delta += 2; }                                        // Kemba: a 2/2 Cat per upkeep
                 if (ed2->params.equip_combat_damage_charges > 0) { delta += 2; }  // Jitte engine
                 if (ed2->params.equip_grants_lifelink)           { delta += 1; }  // life fidelity
+                // Paradise Mantle: the host becomes a mana source ({T}: one mana of any colour).
+                // Without this term the attach reads 0 and the `rd > 0` ranking never OFFERS the
+                // pair, so the grant was unreachable in search (1 equip in 46 probe games). Only
+                // when it adds something: a host with a printed mana ability or an attached Mantle
+                // already taps for mana, and a second grant cannot make it tap twice.
+                if (ed2->params.equip_grants_tap_mana_any
+                    && !(st.def != nullptr && st.def->tmpl == CardTemplate::ManaDork))
+                {
+                    bool already = false;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.equipped_to != id || q.controller_index != state.active_player_index)
+                        { continue; }
+                        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                        if (qd != nullptr && qd->params.equip_grants_tap_mana_any) { already = true; break; }
+                    }
+                    if (!already) { delta += 1; }
+                }
                 return delta;
             };
             // USER equip-consolidation doctrine (2026-08-14, provider-owned -- see

@@ -1624,6 +1624,14 @@ struct CardParams
     // Pilot can still pay its {T} rebuy). Contrast the same cards' REACH grant, which stays a
     // bracket note because Keyword::Reach has no readers anywhere in the engine.
     bool equip_grants_vigilance = false;
+    // Paradise Mantle: "Equipped creature has '{T}: Add one mana of any color.'" A STATIC grant of
+    // an activated MANA ability (CR 605.1a) to the host (layer 6). Resolved by LiveManaGrant /
+    // ManaDefOf (SpellEffects.h), the same chokepoint as Brightcap Badger's subtype grant: the
+    // host is handed a synthetic any-colour ManaDork face, so every payment site taps it with no
+    // per-site body change, and summoning sickness (CR 302.6) rides GrantedBodyCanTap/CanTapNow.
+    // GameState::deck_has_mana_grant (and deck_has_equip_mana_grant) gate the board walk away for
+    // every deck that plays no such Equipment.
+    bool equip_grants_tap_mana_any = false;
     int  equip_min_power    = 0;
     bool equip_sacrifices_prior_host = false;
     // Dragonfire Blade: "Equip {4}. This ability costs {1} less to activate for each color of

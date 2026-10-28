@@ -2054,7 +2054,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 {
                     if (!p.tapped && GrantReaches(mana_grant, p)
                         && GrantedBodyCanTap(mana_grant, p, state.battlefield))
-                    { def = &GrantedManaFace(mana_grant.color); }
+                    { def = &GrantFaceFor(mana_grant, p); }
                 }
                 // DO NOT BAIL ON A MISSING DEFINITION HERE. TAPPING needs one (the produces list,
                 // the filter params); EATING does not -- the outlet is the permission and the body is

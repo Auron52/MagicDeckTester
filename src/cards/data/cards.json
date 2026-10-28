@@ -4891,6 +4891,26 @@
    }
   },
   {
+   "name": "Paradise Mantle",
+   "mana_cost": "{0}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature has \"{T}: Add one mana of any color.\"\nEquip {1} [FULLY MODELED. The grant is a STATIC layer-6 grant of an activated MANA ability (CR 605.1a) to the host, resolved at the same chokepoint as Brightcap Badger's subtype grant (LiveManaGrant / ManaDefOf / GrantFaceFor, SpellEffects.h): the host taps as a synthetic any-colour ManaDork face (the Birds of Paradise shape) at every payment site -- the greedy payer, the tap backtracker's source list, ManaCacheKey, and the castability ceilings -- so it is credited exactly like a mana dork. {T} cost: the host must be untapped and not summoning-sick (CR 302.6) unless it has haste from any source (Skateboard's equip haste counts), via GrantedBodyCanTap/CanTapNow. Tapping the host for mana taps the creature, so it cannot then attack -- the search weighs that like any dork. The Equipment's own tapped state is irrelevant (static grant). Two Mantles on one host grant one ability (deduplicated). Its role in Kitty is the 0-drop role first: a free artifact toward Puresteel's metalcraft, a Sram draw on cast, a Puresteel draw on enter, one more Equipment for Golem-Skin Gauntlets / Adelbert to count; equip {1} drops to {0} under metalcraft and is bypassed by Sigarda's Aid's attach. Any-colour is inert in mono-W (W only).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 1,
+    "equip_grants_tap_mana_any": true
+   }
+  },
+  {
    "name": "Cathar's Shield",
    "mana_cost": "{0}",
    "types": [

@@ -567,6 +567,11 @@ struct GameState
     // partially built GameState) keeps the scan and stays correct, it just does not skip work.
     // Erring the other way would silently drop mana the board really has.
     bool                     deck_has_mana_grant        = true;   // granted_tap_mana_subtypes in the list
+    // Paradise Mantle's equip-borne grant (CardParams::equip_grants_tap_mana_any). Kept apart from
+    // deck_has_mana_grant only so LiveManaGrant's early `break` stays valid for the Badger decks:
+    // an equip grant can sit anywhere on the board, so its walk cannot stop at the first Badger.
+    // Defaults TRUE for the same reason as deck_has_mana_grant (an unstamped state stays correct).
+    bool                     deck_has_equip_mana_grant  = true;   // equip_grants_tap_mana_any in the list
     // Same shape once more, for the SPELL-COST REDUCERS: Ruby Medallion (reduces_spell_color),
     // Goblin Warchief / Dragonspeaker Shaman / Stinkdrinker Daredevil / Cid (reduces_spell_subtype),
     // Urza's Incubator (chooses_creature_type) and Ragemonger (reduces_subtype_colored_*).

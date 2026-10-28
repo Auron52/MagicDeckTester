@@ -3698,12 +3698,19 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
                 if (granted_taken >= granted_cap) { continue; }
                 ++granted_taken;
-                s_src_cands_buf.push_back({ i, &GrantedManaFace(grant.color) });
+                s_src_cands_buf.push_back({ i, &GrantFaceFor(grant, p) });
                 continue;
             }
             if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
                 || d->params.mana_rock || IsPaySacSource(*d))   // §2a
             { s_src_cands_buf.push_back({ i, d }); }
+            else if (EquipGrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield))
+            {
+                // PARADISE MANTLE's host: a real creature card with no mana ability of its own,
+                // tapping as the any-colour face. Uncapped -- hosts are distinct cards (at most
+                // one per Mantle), not interchangeable tokens. Lockstep with ManaCacheKey below.
+                s_src_cands_buf.push_back({ i, &AnyColorGrantFace() });
+            }
         }
         src_cands = &s_src_cands_buf;
         // Arm the interior feasibility cut (below) for this payment: a filter on the board, fresh count.
@@ -5481,7 +5488,13 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             // No new hash TERM is needed: the granted bodies simply enter the hashed sequence,
             // carrying the synthetic face's stable pointer below.
             if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
-            d = &GrantedManaFace(grant.color);
+            d = &GrantFaceFor(grant, p);
+        }
+        else if (!IsBaselineManaSource(*d) && !IsPaySacSource(*d) && EquipGrantReaches(grant, p)
+                 && GrantedBodyCanTap(grant, p, state.battlefield))
+        {
+            // PARADISE MANTLE's host -- lockstep with the backtracker's source list above.
+            d = &AnyColorGrantFace();
         }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
               || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
