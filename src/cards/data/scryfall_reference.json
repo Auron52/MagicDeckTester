@@ -1,4 +1,13 @@
 {
+  "Abiding Grace": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "At the beginning of your end step, choose one —\n• You gain 1 life.\n• Return target creature card with mana value 1 from your graveyard to the battlefield.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Abominable Treefolk": {
     "cmc": 4.0,
     "keywords": [
@@ -1632,6 +1641,15 @@
     "toughness": "2",
     "type_line": "Creature — Elf Druid"
   },
+  "Elvish Harbinger": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "When this creature enters, you may search your library for an Elf card, reveal it, then shuffle and put that card on top.\n{T}: Add one mana of any color.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Elf Druid"
+  },
   "Elvish Mystic": {
     "cmc": 1.0,
     "keywords": [],
@@ -1640,6 +1658,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Emeria, the Sky Ruin": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nAt the beginning of your upkeep, if you control seven or more Plains, you may return target creature card from your graveyard to the battlefield.\n{T}: Add {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Emiel the Blessed": {
     "cmc": 4.0,
@@ -1687,6 +1714,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Shaman"
+  },
+  "Eternal Witness": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}{G}",
+    "oracle_text": "When this creature enters, you may return target card from your graveyard to your hand.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Shaman"
   },
   "Ethereal Armor": {
     "cmc": 1.0,
@@ -3379,6 +3415,15 @@
     "toughness": "2",
     "type_line": "Creature — Human Knight"
   },
+  "Martyr of Sands": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
   "Massacre Wurm": {
     "cmc": 6.0,
     "keywords": [],
@@ -3706,6 +3751,15 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Dragon Wizard"
+  },
+  "Nourish": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{G}",
+    "oracle_text": "You gain 6 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Nykthos Paragon": {
     "cmc": 6.0,
@@ -4628,6 +4682,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Seedcradle Witch": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G/W}",
+    "oracle_text": "{2}{G}{W}: Target creature gets +3/+3 until end of turn. Untap that creature.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Shaman"
   },
   "Seething Song": {
     "cmc": 3.0,
@@ -5696,6 +5759,15 @@
     "toughness": "3",
     "type_line": "Legendary Creature — Vedalken Scout"
   },
+  "Trufflesnout": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "When this creature enters, choose one —\n• Put a +1/+1 counter on this creature.\n• You gain 4 life.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Boar"
+  },
   "Tukatongue Thallid": {
     "cmc": 1.0,
     "keywords": [],
@@ -5993,6 +6065,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Walking Ballista": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "{X}{X}",
+    "oracle_text": "This creature enters with X +1/+1 counters on it.\n{4}: Put a +1/+1 counter on this creature.\nRemove a +1/+1 counter from this creature: It deals 1 damage to any target.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Artifact Creature — Construct"
   },
   "Waterlogged Grove": {
     "cmc": 0.0,
