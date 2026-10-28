@@ -3465,6 +3465,9 @@ public:
     bool CantripReadinessOf(const GameState& s, int controller, CantripReadiness& out) const override;
     bool ScoreTopDisposition(const GameState& s, int controller, const CantripReadiness& r,
                              const TopDispositionView& view, int& score_out) const override;
+    // The per-fan ranking cache's key (design item 8): everything CycloneGoOff / CycloneShortOnRed / the scorer
+    // read -- our permanents (name, tapped, def_absent), the hand (name, P/T), life, the land drop, the flags.
+    bool CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const override;
     // CANTRIP PROPOSALS (DEFAULT OFF pending the USER, Q33): MTG_CYCLONE_PUTBACK_RULE = rank 0 of the scored
     // order is the put-back rule (it turns the scorer on for the put-back by itself); MTG_CYCLONE_PUTBACK_SINGLE
     // prunes the put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.

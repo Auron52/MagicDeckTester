@@ -35794,6 +35794,67 @@ struct Report
     }
 };
 inline Report g_report;
+
+// THE PER-FAN RANKING CACHE (design item 8; docs/design/cantrip-search-optimization.md §6; a PURE SPEEDUP).
+// Every searched member of a put-back / Ponder fan re-applies the same prefix and so reaches the SAME
+// resolution, where the readiness and the whole fan's scores used to be re-derived (4.07 us per resolution,
+// 8.9% of a Cyclone process's wall). The scores are a pure function of (the provider's inputs -- its
+// DecisionProvider::CantripOrderKey -- and the candidate list), so they are computed once and read back by
+// every later resolution with the same key. The key is compared WORD FOR WORD (a hash only picks the slot),
+// so a hit returns exactly what a recomputation would: play is byte-identical. Per thread, direct-mapped,
+// overwrite on collision; a provider without a key (every deck but Cyclone) never reaches it.
+// MTG_CANTRIP_RANK_CACHE=0 turns it off (A/B); MTG_CANTRIP_RANK_CACHE_VERIFY=1 (diagnostic) recomputes on
+// every hit and aborts on a mismatch.
+inline bool RankCacheOn() { static const bool v = EnvOn("MTG_CANTRIP_RANK_CACHE", true); return v; }
+inline bool RankCacheVerify() { static const bool v = EnvOn("MTG_CANTRIP_RANK_CACHE_VERIFY"); return v; }
+inline std::atomic<long long> g_hits{0}, g_lookups{0};
+struct RankCacheEntry
+{
+    std::uint64_t h = 0;
+    bool used = false;
+    bool ok   = false;                 // the provider scored every candidate (false = the existing order)
+    std::vector<std::uint64_t> key;
+    std::vector<int> val;              // put-back: the sorted permutation; reorder: the score per candidate
+};
+struct RankCache
+{
+    static constexpr std::size_t kSlots = 256;
+    std::array<RankCacheEntry, kSlots> e;
+};
+inline RankCache& Cache() { static thread_local RankCache c; return c; }
+inline std::uint64_t KeyHash(const std::vector<std::uint64_t>& k)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    for (std::uint64_t w : k) { h ^= w + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); h *= 1099511628211ull; }
+    return h;
+}
+// The slot holding `key`, or nullptr (a miss).
+inline const RankCacheEntry* Find(const std::vector<std::uint64_t>& key, std::uint64_t h)
+{
+    if (CostOn()) { g_lookups.fetch_add(1, std::memory_order_relaxed); }
+    const RankCacheEntry& x = Cache().e[h % RankCache::kSlots];
+    if (!x.used || x.h != h || x.key != key) { return nullptr; }
+    if (CostOn()) { g_hits.fetch_add(1, std::memory_order_relaxed); }
+    return &x;
+}
+inline void Store(const std::vector<std::uint64_t>& key, std::uint64_t h, bool ok, const std::vector<int>& val)
+{
+    RankCacheEntry& x = Cache().e[h % RankCache::kSlots];
+    x.used = true; x.h = h; x.ok = ok;
+    x.key.assign(key.begin(), key.end());
+    x.val.assign(val.begin(), val.end());
+}
+struct HitReport
+{
+    ~HitReport()
+    {
+        if (!CostOn()) { return; }
+        std::fprintf(stderr, "[cantrip-rank-cache] lookups=%lld hits=%lld\n", g_lookups.load(), g_hits.load());
+    }
+};
+inline HitReport g_hit_report;
+inline std::uint64_t CardWord(const Card& c)
+{ return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&c.m_name.str())); }
 }   // namespace cantriporder
 
 // A reorder disposition written out as a FULL permutation (a provider pick may list only its wanted cards;
@@ -36090,29 +36151,85 @@ inline bool ScoredReorderCandidates(const GameState& state, const std::vector<Ca
     const DecisionProvider& prov = ResolveProvider(state);
     const int me = state.active_player_index;
     cantriporder::CostScope cost;
-    CantripReadiness rd;
-    if (!prov.CantripReadinessOf(state, me, rd)) { return false; }
     const int m = static_cast<int>(looked.size());
+    // The per-fan ranking cache (see cantriporder::RankCache): the provider's inputs + the candidate list + the
+    // looked cards + the library top the shuffle's score reads.
+    std::vector<std::uint64_t> key;   // local: the derivation below calls back into the provider
+    const bool keyed = cantriporder::RankCacheOn() && prov.CantripOrderKey(state, me, key);
+    CantripReadiness rd;
     std::vector<TopDisposition> base;
-    base.push_back(CanonicalReorder(prov.TopDispositionPick(state, looked, LookKind::Reorder, keep_decision), m));
-    const TopDisposition h = base.front();
-    for (const TopOption& o : EnumerateTopDispositions(LookKind::Reorder, looked))
+    auto build_base = [&]()
     {
-        if (o.disp.shuffle == h.shuffle && (h.shuffle || o.disp.top_order == h.top_order)) { continue; }
-        base.push_back(o.disp);
-    }
-    std::vector<int> score(base.size(), 0);
-    for (std::size_t i = 0; i < base.size(); ++i)
-    {
-        TopDispositionView v;
-        v.shuffle  = base[i].shuffle;
-        v.draw_now = g_reorder_draw_after;
-        if (!base[i].shuffle)
+        base.push_back(CanonicalReorder(prov.TopDispositionPick(state, looked, LookKind::Reorder, keep_decision), m));
+        const TopDisposition h = base.front();
+        for (const TopOption& o : EnumerateTopDispositions(LookKind::Reorder, looked))
         {
-            for (int idx : base[i].top_order)
-            { if (v.n_top < 8 && idx >= 0 && idx < m) { v.top[v.n_top++] = &looked[static_cast<std::size_t>(idx)]; } }
+            if (o.disp.shuffle == h.shuffle && (h.shuffle || o.disp.top_order == h.top_order)) { continue; }
+            base.push_back(o.disp);
         }
-        if (!prov.ScoreTopDisposition(state, me, rd, v, score[i])) { return false; }
+    };
+    std::vector<int> score;
+    // The readiness + every candidate's score; false = the provider does not score this resolution.
+    auto derive = [&](std::vector<int>& sc, bool have_rd) -> bool
+    {
+        if (!have_rd && !prov.CantripReadinessOf(state, me, rd)) { return false; }
+        sc.assign(base.size(), 0);
+        for (std::size_t i = 0; i < base.size(); ++i)
+        {
+            TopDispositionView v;
+            v.shuffle  = base[i].shuffle;
+            v.draw_now = g_reorder_draw_after;
+            if (!base[i].shuffle)
+            {
+                for (int idx : base[i].top_order)
+                { if (v.n_top < 8 && idx >= 0 && idx < m) { v.top[v.n_top++] = &looked[static_cast<std::size_t>(idx)]; } }
+            }
+            if (!prov.ScoreTopDisposition(state, me, rd, v, sc[i])) { return false; }
+        }
+        return true;
+    };
+    if (!keyed)
+    {
+        if (!prov.CantripReadinessOf(state, me, rd)) { return false; }
+        build_base();
+        if (!derive(score, true)) { return false; }
+    }
+    else
+    {
+        build_base();
+        key.push_back(0x504F4E44ull);   // "POND"
+        key.push_back(static_cast<std::uint64_t>(g_reorder_draw_after));
+        key.push_back(static_cast<std::uint64_t>(m));
+        for (const Card& c : looked) { key.push_back(cantriporder::CardWord(c)); }
+        key.push_back(static_cast<std::uint64_t>(base.size()));
+        for (const TopDisposition& d : base)
+        {
+            key.push_back((d.shuffle ? 1ull : 0ull) | (static_cast<std::uint64_t>(d.top_order.size()) << 1));
+            for (int idx : d.top_order) { key.push_back(static_cast<std::uint64_t>(static_cast<std::int64_t>(idx))); }
+        }
+        const Player& pl = state.players[static_cast<std::size_t>(me)];
+        const int look = std::min(3, static_cast<int>(pl.library.size()));
+        key.push_back(static_cast<std::uint64_t>(look));
+        for (int i = 0; i < look; ++i) { key.push_back(cantriporder::CardWord(pl.library[static_cast<std::size_t>(i)])); }
+        const std::uint64_t kh = cantriporder::KeyHash(key);
+        if (const cantriporder::RankCacheEntry* hit = cantriporder::Find(key, kh))
+        {
+            if (cantriporder::RankCacheVerify())
+            {
+                std::vector<int> fresh;
+                const bool ok = derive(fresh, false);
+                if (ok != hit->ok || (ok && fresh != hit->val))
+                { std::fprintf(stderr, "[cantrip-rank-cache] VERIFY MISMATCH (reorder)\n"); std::abort(); }
+            }
+            if (!hit->ok) { return false; }
+            score = hit->val;
+        }
+        else
+        {
+            const bool ok = derive(score, false);
+            cantriporder::Store(key, kh, ok, score);
+            if (!ok) { return false; }
+        }
     }
     std::vector<std::size_t> keep, shuf;
     for (std::size_t i = 0; i < base.size(); ++i) { (base[i].shuffle ? shuf : keep).push_back(i); }
@@ -36934,28 +37051,71 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
     if (out.count > 1)
     {
         cantriporder::CostScope cost;
+        const DecisionProvider& prov = ResolveProvider(state);
+        // The scored permutation of sc.seq into sc.perm; false = the existing order stands.
         CantripReadiness rd;
-        if (ResolveProvider(state).CantripReadinessOf(state, controller, rd))
+        auto derive = [&](bool have_rd) -> bool
         {
-            sc.seq.clear();
-            walk([&](int i0, int i1) { sc.seq.push_back({ i0, i1 }); return false; });
+            if (!have_rd && !prov.CantripReadinessOf(state, controller, rd)) { return false; }
             const std::size_t n_seq = sc.seq.size();
             sc.score.assign(n_seq, 0);
             bool all = true;
             for (std::size_t q = 0; q < n_seq && all; ++q)
             { all = ScorePutBackCandidate(state, controller, rd, sc.seq[q].data(), take, sc.score[q]); }
-            if (all && static_cast<int>(n_seq) == out.count)
+            if (!all || static_cast<int>(n_seq) != out.count) { return false; }
+            sc.perm.resize(n_seq);
+            for (std::size_t q = 0; q < n_seq; ++q) { sc.perm[q] = static_cast<int>(q); }
+            std::stable_sort(sc.perm.begin(), sc.perm.end(),
+                             [&](int a, int b) { return sc.score[static_cast<std::size_t>(a)] < sc.score[static_cast<std::size_t>(b)]; });
+            return true;
+        };
+        // The per-fan ranking cache (see cantriporder::RankCache): the provider's inputs + the candidate list.
+        std::vector<std::uint64_t> key;   // local: the derivation below calls back into the provider
+        bool ok = false;
+        if (cantriporder::RankCacheOn()) { key.reserve(96); }
+        if (cantriporder::RankCacheOn() && prov.CantripOrderKey(state, controller, key))
+        {
+            sc.seq.clear();
+            walk([&](int i0, int i1) { sc.seq.push_back({ i0, i1 }); return false; });
+            key.push_back(0x50424B00ull | static_cast<std::uint64_t>(take));   // "PBK" + take
+            key.push_back(static_cast<std::uint64_t>(out.count));
+            key.push_back(static_cast<std::uint64_t>(sc.seq.size()));
+            for (const std::array<int, 2>& pq : sc.seq)
+            { key.push_back((static_cast<std::uint64_t>(static_cast<std::uint32_t>(pq[0])) << 32) | static_cast<std::uint32_t>(pq[1])); }
+            const std::uint64_t kh = cantriporder::KeyHash(key);
+            if (const cantriporder::RankCacheEntry* hit = cantriporder::Find(key, kh))
             {
-                sc.perm.resize(n_seq);
-                for (std::size_t q = 0; q < n_seq; ++q) { sc.perm[q] = static_cast<int>(q); }
-                std::stable_sort(sc.perm.begin(), sc.perm.end(),
-                                 [&](int a, int b) { return sc.score[static_cast<std::size_t>(a)] < sc.score[static_cast<std::size_t>(b)]; });
-                const std::array<int, 2>& pk = sc.seq[static_cast<std::size_t>(sc.perm[static_cast<std::size_t>(r)])];
-                out.idx[0] = pk[0];
-                out.idx[1] = take == 2 ? pk[1] : -1;
-                cost.Done(static_cast<long long>(n_seq));
-                return out;
+                if (cantriporder::RankCacheVerify())
+                {
+                    const bool fresh_ok = derive(false);
+                    if (fresh_ok != hit->ok || (fresh_ok && sc.perm != hit->val))
+                    { std::fprintf(stderr, "[cantrip-rank-cache] VERIFY MISMATCH (put-back)\n"); std::abort(); }
+                }
+                ok = hit->ok;
+                if (ok) { sc.perm = hit->val; }
             }
+            else
+            {
+                ok = derive(false);
+                cantriporder::Store(key, kh, ok, ok ? sc.perm : std::vector<int>{});
+            }
+        }
+        else
+        {
+            if (prov.CantripReadinessOf(state, controller, rd))
+            {
+                sc.seq.clear();
+                walk([&](int i0, int i1) { sc.seq.push_back({ i0, i1 }); return false; });
+                ok = derive(true);
+            }
+        }
+        if (ok)
+        {
+            const std::array<int, 2>& pk = sc.seq[static_cast<std::size_t>(sc.perm[static_cast<std::size_t>(r)])];
+            out.idx[0] = pk[0];
+            out.idx[1] = take == 2 ? pk[1] : -1;
+            cost.Done(static_cast<long long>(sc.seq.size()));
+            return out;
         }
     }
     int seen = 0;

@@ -31168,6 +31168,41 @@ bool CycloneProvider::CantripReadinessOf(const GameState& s, int controller, Can
     return true;
 }
 
+// THE PER-FAN RANKING CACHE's key (DecisionProvider::CantripOrderKey; a pure speedup). Exactly the inputs the
+// readiness (CycloneGoOff, CycloneShortOnRed) and the scorer read for `controller`: every permanent we control
+// (its definition by interned name, tapped, def_absent), the hand in order (definition, P/T, the name hash the
+// copy match reads), life, the land drop (played / available) and the per-job flags. KEEP IN STEP with them:
+// a new read there is a new word here (MTG_CANTRIP_RANK_CACHE_VERIFY=1 checks every hit).
+bool CycloneProvider::CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const
+{
+    const bool order = CycloneCantripOrderOn(), rule = CyclonePutBackRuleOn();
+    if (!order && !rule) { return false; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    auto name = [](const Card& c) { return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&c.m_name.str())); };
+    auto opt  = [](const std::optional<int>& v) { return static_cast<std::uint64_t>(v ? static_cast<std::int64_t>(*v) + 1 : 0); };
+    key.push_back(0xC1C10000ull | (order ? 1u : 0u) | (rule ? 2u : 0u));
+    key.push_back(static_cast<std::uint64_t>(controller));
+    key.push_back(static_cast<std::uint64_t>(static_cast<std::int64_t>(pl.life)));
+    key.push_back(static_cast<std::uint64_t>(pl.lands_played_this_turn));
+    key.push_back(static_cast<std::uint64_t>(pl.LandDropsAvailable()));
+    key.push_back(static_cast<std::uint64_t>(pl.hand.size()));
+    for (const Card& c : pl.hand)
+    {
+        key.push_back(name(c));
+        key.push_back(static_cast<std::uint64_t>(c.m_name_hash));
+        key.push_back(opt(c.m_power) * 0x10001ull + opt(c.m_toughness));
+    }
+    std::uint64_t n_bf = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        ++n_bf;
+        key.push_back(name(q.card) * 4 + (q.tapped ? 1 : 0) + (q.def_absent ? 2 : 0));
+    }
+    key.push_back(n_bf);
+    return true;
+}
+
 bool CycloneProvider::ScoreTopDisposition(const GameState& s, int controller, const CantripReadiness& r,
                                           const TopDispositionView& v, int& score_out) const
 {
