@@ -4,9 +4,11 @@
   "valueleaf": "em:15713f7430a43656572a"
  },
  "deck": "fivecolour",
+ "detail": "paused by the USER: resumes when worker artifact-queue-tool-647f24 next starts; set aside for every other worker",
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
- "heartbeat": "2026-10-28T03:34:38Z",
+ "heartbeat": "2026-10-28T03:48:58Z",
  "host": "58199181d02e",
+ "paused": "2026-10-28T03:48:53Z",
  "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
  "score": 0.9057,
  "stage": "mulligan",
@@ -15,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-27T11:00:42Z",
- "state": "running",
+ "state": "paused",
  "worker": "artifact-queue-tool-647f24"
 }
