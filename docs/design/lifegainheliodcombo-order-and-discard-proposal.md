@@ -28,8 +28,8 @@ What that settles:
   first would add only 1 (its trigger on Martyr's entry), and payoffs are only one counter per event either way.
 - **Q1** (Heliod ahead of Voice / Pridemate with a Ballista in the list) was not ruled on; the recommendation (no)
   stands as the default.
-- Open (agent, surfaced): the USER notes Grace "is good with Martyr". Not built into the rule unless the USER asks: a
-  Martyr in hand / play / graveyard could lift Grace above Ranger-Captain in the fill.
+- Grace with Martyr: NOT built. USER: *"Not as crucial unless we are unable to hit life breakpoints, but I think that
+  is a rare enough case we could ignore it."*
 
 USER, same day, verbatim: *"Ballista's X should be maximum or less to ensure the combo can go off. Unless we have
 reason to believe we need more mana in the turn I would just max it. The activations may as well wait until they would
