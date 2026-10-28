@@ -1,8 +1,10 @@
-# Regression ground truth -- commit 510167bf0  date 2026-10-27
+# Regression ground truth -- commit 018db276c  date 2026-10-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (smoke, 2026-10-27): MTG_PREPAY_COLOURS + MTG_PREPAY_AURA_HOST default ON (the whole-turn prepay settles hybrid pips and land-Aura any-colour units, and holds a land Aura's own host): held-out A/B seed 960001, all 38 decks at play settings, 21,001 paired games 0 slower / 2 faster (EDF). Smoke searched: 1 slower alchemist_smoke_d3_s1001 gi3 6->7 = budget churn (both arms T6, same digest, at b160 and b640), 1 faster; d0 10 slower / 10 faster (greedy runner, payment shift). Scenario edf_wish_first_keeps_trace pinned to MTG_PREPAY_COLOURS=0; new edf_wish_first_pays_trace_jointly
 # accepted-with-regressions (regression, 2026-10-27): MTG_PREPAY_COLOURS + MTG_PREPAY_AURA_HOST default ON (see the smoke note; held-out A/B seed 960001 0 slower / 2 faster). Regression searched: 0 slower / 2 faster / 61 play-changed (alchemist, edf, fungusv3, bruna, melira, fivecolour, hinata, minotaur); d0 11 slower / 7 faster (greedy runner, payment shift); refs 0 drift (247 ok, 420 repaired, 1 beaten)
+# accepted-with-regressions (smoke, 2026-10-28): Bruna TUTOR FIT (MTG_BRUNA_TUTOR_FIT, default ON, USER 2026-10-11) landed onto 510167bf0+: only bruna/bruna2hg move (146 other configs unchanged). Searched 0 slower / 2 faster / 6 play-changed; d0 10 slower / 19 faster (6.144 -> 6.128).
+# accepted-with-regressions (regression, 2026-10-28): Bruna TUTOR FIT (MTG_BRUNA_TUTOR_FIT, default ON, USER 2026-10-11): only bruna moves (236 other configs unchanged). Searched 1 slower / 3 faster / 25 play-changed; the slower bruna d5 s2002 gi95 7->8 = budget churn (7 at 4x and 16x); d0 12 slower / 19 faster (6.188 -> 6.173).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -120,10 +122,10 @@ soldiers_smoke_d5_s1001=4.2457/407a6c3763ff92fb
 pd_smoke_d0_s1001=7.3010/51a1f65d2e0cb438
 pd_smoke_d3_s1001=5.3600/d9e7e511ba11a394
 pd_smoke_d5_s1001=5.5100/cae58b31593693cd
-bruna2hg_smoke_d5_s1001=5.4000/1765dedfc8ad0b6f
-bruna_smoke_d0_s1001=6.1440/4e04c22af7df015c
+bruna2hg_smoke_d5_s1001=5.3800/1ad546683fbd1cee
+bruna_smoke_d0_s1001=6.1280/d15a04daa8626e86
 bruna_smoke_d3_s1001=4.8200/ceddfd62b1e07d58
-bruna_smoke_d5_s1001=4.8400/46795b801891e1d1
+bruna_smoke_d5_s1001=4.8333/1cfa1086cb054468
 edf2hg_smoke_d5_s1001=3.9600/cb4737cf06affb70
 edf_smoke_d0_s1001=5.3110/d383eb3621821b72
 edf_smoke_d3_s1001=4.0000/e64725f38970a86e
@@ -355,10 +357,10 @@ pd_regression_d0_s2002=7.3590/96f503ab3abcdb3a
 pd_regression_d3_s2002=5.7200/b58c45764e1d7cf2
 pd_regression_d5_s2002=5.4600/4436a620713ecad1
 pd_regression_d5_s3003=5.5067/f8444465c5d5bc53
-bruna_regression_d0_s2002=6.1880/1a6e9639766be714
-bruna_regression_d3_s2002=5.0400/3e0fa868d6f79902
-bruna_regression_d5_s2002=5.1267/28d06c72712fb273
-bruna_regression_d5_s3003=5.0267/c680a695f3fe8ee9
+bruna_regression_d0_s2002=6.1730/96dd5beb320b55aa
+bruna_regression_d3_s2002=5.0400/32b86ad7063a2641
+bruna_regression_d5_s2002=5.1267/fec79422578dcd96
+bruna_regression_d5_s3003=5.0133/a5565d8dce5f9d1e
 edf_regression_d0_s2002=5.3260/2058763b85a24104
 edf_regression_d3_s2002=3.9600/f9076d2187324d41
 edf_regression_d5_s2002=4.0600/2813fcd2b87f837a
