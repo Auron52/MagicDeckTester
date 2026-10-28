@@ -3555,11 +3555,15 @@ public:
     std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
     bool RestrictsCollectedActions() const override { return true; }
     bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
-    // CANTRIP PROPOSALS (the agent's, from the USER's examples; every one DEFAULT OFF pending the USER):
-    // MTG_CYCLONE_PUTBACK_RULE orders the put-back (dead cards, then the Eldrazi with Emrakul on top while a
-    // Cyclone is ours or in hand, then lands beyond one, then Remand); MTG_CYCLONE_PUTBACK_SINGLE prunes the
-    // put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.
-    std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
+    // THE SCORED CANTRIP ORDER (MTG_CYCLONE_CANTRIP_ORDER, DEFAULT ON; an ORDER, inert at unlimited budget):
+    // the go-off estimate {k, c} (CycloneGoOff) and the USER's put-back / Ponder rules (2026-10-27) score every
+    // Brainstorm / Brainsurge put-back and every Ponder order; the engine stable-sorts the fan by it.
+    bool CantripReadinessOf(const GameState& s, int controller, CantripReadiness& out) const override;
+    bool ScoreTopDisposition(const GameState& s, int controller, const CantripReadiness& r,
+                             const TopDispositionView& view, int& score_out) const override;
+    // CANTRIP PROPOSALS (DEFAULT OFF pending the USER, Q33): MTG_CYCLONE_PUTBACK_RULE = rank 0 of the scored
+    // order is the put-back rule (it turns the scorer on for the put-back by itself); MTG_CYCLONE_PUTBACK_SINGLE
+    // prunes the put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.
     bool PutBackSingleCandidate(const GameState& s) const override;
     bool ReorderKeepShuffleOnly(const GameState& s) const override;
 };

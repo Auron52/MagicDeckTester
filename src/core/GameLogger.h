@@ -96,6 +96,21 @@ public:
                       const std::string& mana_paid, int chosen_x = -1,
                       const std::vector<TargetDesc>& targets = {});
     void LogDraw(int card_num, const std::string& card_name);
+    // THE PUT-BACK RECORD (Brainstorm / Brainsurge; cantrip item 1, 2026-10-28). The hand-diff DRAW lines of a
+    // draw spell (GameEngine::ResolveStack) cannot see a card that was drawn AND put back by the same
+    // resolution, and nothing logged which cards went back, in what order -- so a 3-card Brainstorm read as two
+    // DRAWs and the card put back appeared as the next turn's draw. ResolvePutBackFromHand NOTES the put-back
+    // (real resolution only); ResolveStack then FLUSHES it right after its DRAW lines: a DRAW for every put-back
+    // card that was not in hand before the spell resolved, then a REVEAL "<card> (put back)" listing the cards,
+    // top first, all "kept" (on top). LOG ONLY -- deliberately NOT folded into the play digest, so every recorded
+    // fingerprint and GT digest stays byte-identical (the put-back's effect on play is already in the digest
+    // through the later draws). A note never flushed by ResolveStack is written at CommitPhase (REVEAL only).
+    void NotePutBack(const std::string& source, const std::vector<int>& nums, const std::vector<std::string>& names);
+    // One line per recorded action, in order: "T<turn> <PHASE> <TYPE> <card>[: <cards looked at / put back>]".
+    // The scenario harness's `expect_log_sequence` assertion reads these (a statement about the PLAY, which a
+    // win-turn assertion cannot make).
+    std::vector<std::string> ActionLines() const;
+    void FlushPutBack(const std::vector<int>& hand_before_nums);
     void LogDiscard(int card_num, const std::string& card_name);
     void LogAttack(int damage, int opp_life_after);
 
@@ -257,6 +272,10 @@ private:
     std::vector<std::string>                m_opening_hand_names;
     std::vector<PhaseEntry>                 m_phases;
     PhaseEntry                              m_current;
+    // NotePutBack / FlushPutBack: the pending put-back of the resolving spell (empty source = none).
+    std::string                             m_pb_source;
+    std::vector<int>                        m_pb_nums;
+    std::vector<std::string>                m_pb_names;
     bool                                    m_in_phase    = false;
     int                                     m_win_turn    = -1;
     bool                                    m_digest_only = false;
