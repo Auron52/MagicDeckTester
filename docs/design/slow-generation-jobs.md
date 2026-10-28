@@ -162,3 +162,7 @@ Status 14:18 UTC: refine **70.0%** frozen at 11,700 s, idle 0.0%, load 32/32, bu
 remaining 472k take ~4.7 h, so ~19:00 UTC before validation. The tail is still the Feeder/Bloodthrone sac-loop board:
 a **779 s** size-7 hand (`Llanowar Wastes, Ignoble Hierarch, Forest, Caves of Koilos, Carrion Feeder x2, Bloodthrone
 Vampire`, draw r=2, seed 15755400944471724403), consistent with the breakpoint subset derive found in the replay above.
+
+Status 16:18 UTC: refine **80.0%** frozen at 18,900 s, idle 0.0%, load 32/32. Freezing keeps slowing: ~20
+cell-sides/s now (vs ~28 at 14:18 and ~130 at 12:18), and rollouts are steady at ~150/s. The remaining 314k would take
+~4.4 h at the current rate, so ~20:40 UTC at the earliest. The top-3 slow list is unchanged since 14:18 (worst 779 s).
