@@ -4,9 +4,11 @@
   "valueleaf": "em:b8979a38ce5ac04339f6"
  },
  "deck": "giants",
+ "detail": "paused by the USER: resumes when worker artifact-queue-tool-647f24 next starts; set aside for every other worker",
  "frozen": "6199dc396b7c6c304dad2e30005d7e64832e7eee",
- "heartbeat": "2026-10-28T21:19:23Z",
+ "heartbeat": "2026-10-28T21:27:44Z",
  "host": "58199181d02e",
+ "paused": "2026-10-28T21:27:39Z",
  "run_id": "giants-artifact-queue-tool-647f24-20261028T211910",
  "score": 0.0,
  "stage": "mulligan",
@@ -14,6 +16,6 @@
   "mulligan"
  ],
  "started": "2026-10-28T21:19:10Z",
- "state": "running",
+ "state": "paused",
  "worker": "artifact-queue-tool-647f24"
 }
