@@ -38793,12 +38793,72 @@ inline TopDisposition DefaultTopDisposition(const GameState& state, const std::v
     return disp;
 }
 
-// Every engine consumer asks the PROVIDER (DecisionProvider::TopDispositionPick, default above).
-inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
-                                              LookKind kind, int keep_decision = -1)
+// ---- THE SCORED CANTRIP ORDER (DecisionProvider::CantripReadinessOf / ScoreTopDisposition) ----------------
+// docs/design/cantrip-search-optimization.md §3.2-3.3. When the provider returns a readiness for a resolution,
+// every candidate of that resolution is scored and the list is STABLE-sorted by score, the existing order
+// being the tie-break -- ONE rule, run inside the shared candidate functions below (the Ponder fan here, the
+// Brainstorm put-back in PutBackCandidates / PutBackPickAt), so the executor, the rollout and human play's
+// default read the same ranks off the same state (the pins are ORDINALS). An ORDER ONLY: the candidate set
+// and its size never change, so the search reaches exactly the same lines at an unlimited budget; under a
+// finite budget it reaches the provider's best-scored lines first (the base plan IS rank 0).
+//
+// How many cards the resolving reorder spell draws right after the look (Ponder: 1) -- set by
+// ReorderTopOrShuffle for the duration of its resolution, read into TopDispositionView::draw_now.
+inline thread_local int g_reorder_draw_after = 0;
+
+// MTG_CANTRIP_ORDER_COST (DIAGNOSTIC, default off; print-only): the scored order's own cost -- resolutions
+// scored, candidates scored and the wall spent (readiness + scoring + sort), printed at exit.
+namespace cantriporder
 {
-    return ResolveProvider(state).TopDispositionPick(state, looked, kind, keep_decision);
+inline bool CostOn() { static const bool v = EnvOn("MTG_CANTRIP_ORDER_COST"); return v; }
+inline std::atomic<long long> g_res{0}, g_cands{0}, g_ns{0};
+struct CostScope
+{
+    std::chrono::steady_clock::time_point t0;
+    bool on;
+    explicit CostScope() : on(CostOn()) { if (on) { t0 = std::chrono::steady_clock::now(); } }
+    void Done(long long cands)
+    {
+        if (!on) { return; }
+        on = false;
+        g_res.fetch_add(1, std::memory_order_relaxed);
+        g_cands.fetch_add(cands, std::memory_order_relaxed);
+        g_ns.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(),
+                       std::memory_order_relaxed);
+    }
+};
+struct Report
+{
+    ~Report()
+    {
+        if (!CostOn()) { return; }
+        const long long r = g_res.load(), c = g_cands.load(), ns = g_ns.load();
+        std::fprintf(stderr, "[cantrip-order-cost] scored resolutions=%lld candidates=%lld wall=%.3fs "
+                             "(%.2f us/resolution, %.3f us/candidate)\n",
+                     r, c, static_cast<double>(ns) / 1e9, r ? static_cast<double>(ns) / 1e3 / r : 0.0,
+                     c ? static_cast<double>(ns) / 1e3 / c : 0.0);
+    }
+};
+inline Report g_report;
+}   // namespace cantriporder
+
+// A reorder disposition written out as a FULL permutation (a provider pick may list only its wanted cards;
+// ApplyTopDisposition keeps the rest on top in look order, so this is the same placement).
+inline TopDisposition CanonicalReorder(const TopDisposition& d, int m)
+{
+    if (d.shuffle) { return d; }
+    TopDisposition c;
+    std::vector<char> seen(static_cast<std::size_t>(m), 0);
+    for (int idx : d.top_order)
+    { if (idx >= 0 && idx < m && !seen[static_cast<std::size_t>(idx)]) { seen[static_cast<std::size_t>(idx)] = 1; c.top_order.push_back(idx); } }
+    for (int i = 0; i < m; ++i) { if (!seen[static_cast<std::size_t>(i)]) { c.top_order.push_back(i); } }
+    return c;
 }
+
+// Defined after EnumerateTopDispositions (the scored Ponder fan needs it). Every engine consumer asks the
+// PROVIDER (DecisionProvider::TopDispositionPick) -- except a reorder the provider SCORES.
+inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
+                                              LookKind kind, int keep_decision = -1);
 
 // SEARCH-SCRIPTED disposition (see docs/design/searched-scry-disposition.md). A scry/surveil/reorder
 // resolves INLINE, deep inside a land ETB or a spell resolution, so the plan search cannot branch on
@@ -39063,6 +39123,78 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
     return opts;
 }
 
+// The SCORED Ponder fan, when the provider scores this resolution: the existing list (the provider's pick,
+// then every other order and the shuffle, the pick's duplicate dropped) STABLE-sorted by score, with the
+// SHUFFLE placed at index 0 or 1 -- the USER's rule (2026-10-27): "We can search the shuffle as needed and
+// realistically it probably is safest to do so most of the time", so it always sits beside the best keep
+// order at the head of the fan, and its score only decides which of the two goes first. Returns false (and
+// leaves `out` empty) when the provider does not score it: the caller keeps today's list.
+inline bool ScoredReorderCandidates(const GameState& state, const std::vector<Card>& looked, int keep_decision,
+                                    std::vector<TopDisposition>& out)
+{
+    out.clear();
+    const DecisionProvider& prov = ResolveProvider(state);
+    const int me = state.active_player_index;
+    cantriporder::CostScope cost;
+    CantripReadiness rd;
+    if (!prov.CantripReadinessOf(state, me, rd)) { return false; }
+    const int m = static_cast<int>(looked.size());
+    std::vector<TopDisposition> base;
+    base.push_back(CanonicalReorder(prov.TopDispositionPick(state, looked, LookKind::Reorder, keep_decision), m));
+    const TopDisposition h = base.front();
+    for (const TopOption& o : EnumerateTopDispositions(LookKind::Reorder, looked))
+    {
+        if (o.disp.shuffle == h.shuffle && (h.shuffle || o.disp.top_order == h.top_order)) { continue; }
+        base.push_back(o.disp);
+    }
+    std::vector<int> score(base.size(), 0);
+    for (std::size_t i = 0; i < base.size(); ++i)
+    {
+        TopDispositionView v;
+        v.shuffle  = base[i].shuffle;
+        v.draw_now = g_reorder_draw_after;
+        if (!base[i].shuffle)
+        {
+            for (int idx : base[i].top_order)
+            { if (v.n_top < 8 && idx >= 0 && idx < m) { v.top[v.n_top++] = &looked[static_cast<std::size_t>(idx)]; } }
+        }
+        if (!prov.ScoreTopDisposition(state, me, rd, v, score[i])) { return false; }
+    }
+    std::vector<std::size_t> keep, shuf;
+    for (std::size_t i = 0; i < base.size(); ++i) { (base[i].shuffle ? shuf : keep).push_back(i); }
+    std::stable_sort(keep.begin(), keep.end(), [&](std::size_t a, std::size_t b) { return score[a] < score[b]; });
+    out.reserve(base.size());
+    for (std::size_t q = 0; q < keep.size(); ++q)
+    {
+        if (q == 0 && !shuf.empty() && score[shuf.front()] < score[keep.front()]) { out.push_back(base[shuf.front()]); }
+        out.push_back(base[keep[q]]);
+        if (q == 0 && !shuf.empty() && !(score[shuf.front()] < score[keep.front()])) { out.push_back(base[shuf.front()]); }
+    }
+    if (keep.empty()) { for (std::size_t i : shuf) { out.push_back(base[i]); } }
+    cost.Done(static_cast<long long>(base.size()));
+    return true;
+}
+
+// Every engine consumer asks the PROVIDER (DecisionProvider::TopDispositionPick, default above) -- except a
+// reorder the provider SCORES (above), whose default is the scored fan's index 0 (keep_decision 1: its best
+// keep order; 0: the shuffle, unchanged), so the unpinned base plan, the playout and human play's default
+// are rank 0 of the same list the searched pins index.
+inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
+                                              LookKind kind, int keep_decision)
+{
+    if (kind == LookKind::Reorder && keep_decision != 0)
+    {
+        std::vector<TopDisposition> scored;
+        if (ScoredReorderCandidates(state, looked, -1, scored) && !scored.empty())
+        {
+            if (keep_decision == 1)
+            { for (const TopDisposition& d : scored) { if (!d.shuffle) { return d; } } }
+            return scored.front();
+        }
+    }
+    return ResolveProvider(state).TopDispositionPick(state, looked, kind, keep_decision);
+}
+
 // The heuristic pick first, then every OTHER legal disposition in EnumerateTopDispositions order.
 // Deduped against the heuristic by top_order + shuffle so candidate 0 is never repeated later.
 inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& state,
@@ -39070,6 +39202,8 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
                                                             LookKind kind, int keep_decision)
 {
     std::vector<TopDisposition> out;
+    // THE SCORED ORDER (see ScoredReorderCandidates): the same set, provider-sorted.
+    if (kind == LookKind::Reorder && ScoredReorderCandidates(state, looked, keep_decision, out)) { return out; }
     out.push_back(HeuristicTopDisposition(state, looked, kind, keep_decision));
     // COPY, not a reference: the loop below push_backs into `out`, which reallocates and would
     // leave a reference to out.front() dangling -- and the dedup then compares against freed
@@ -39320,11 +39454,18 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 // ScryKeepOnTop only supplies the ORDER (wanted cards first) within the keep branch. Both the
 // rollout and the executor pass the same carried decision -> identical realised library (lockstep).
 inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& source = "Ponder",
-                                int keep_decision = -1)
+                                int keep_decision = -1, int draw_after = 0)
 {
     Player& ap = state.ActivePlayer();
     const int look = std::min(n, static_cast<int>(ap.library.size()));
     if (look <= 0) { return; }
+    // The spell's own draw after the look (Ponder: 1), for the scored order's TopDispositionView::draw_now.
+    struct DrawAfterScope
+    {
+        int saved;
+        explicit DrawAfterScope(int d) : saved(g_reorder_draw_after) { g_reorder_draw_after = d; }
+        ~DrawAfterScope() { g_reorder_draw_after = saved; }
+    } draw_after_scope(draw_after);
 
     std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
     // Human play (claude-play) picks the reorder/shuffle; otherwise the searched keep_decision +
@@ -39520,6 +39661,23 @@ inline int PutBackPerCardDefault(const Player& pl, const std::vector<int>& ranki
     return got;
 }
 
+// THE SCORED PUT-BACK ORDER (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; see the scored
+// Ponder fan above): one candidate's score. `idx` = the candidate's hand indices, top first.
+inline bool ScorePutBackCandidate(const GameState& state, int controller, const CantripReadiness& rd,
+                                  const int* idx, int take, int& score)
+{
+    const Player& pl = state.players[controller];
+    TopDispositionView v;
+    v.putback = true;
+    for (int j = 0; j < take && j < 2; ++j)
+    {
+        v.top[j]     = &pl.hand[static_cast<std::size_t>(idx[j])];
+        v.removed[j] = idx[j];
+    }
+    v.n_top = v.n_removed = std::min(take, 2);
+    return ResolveProvider(state).ScoreTopDisposition(state, controller, rd, v, score);
+}
+
 // Every distinct ordered selection of min(n, eligible) classes, PROVIDER-ORDERED. Each candidate is a
 // list of HAND indices, element 0 = the card that ends on TOP. Index 0 is the default: the classes the
 // provider ranks most expendable, the less expendable of them on top (drawn first). Deterministic.
@@ -39619,6 +39777,28 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
         { pick.push_back(classes[static_cast<std::size_t>(ci)].members[static_cast<std::size_t>(taken[ci]++)]); }
         out.push_back(std::move(pick));
     }
+    // THE SCORED ORDER (n <= 2; PutBackPickAt's twin): stable by score, the order above the tie-break.
+    if (take <= 2 && out.size() > 1)
+    {
+        CantripReadiness rd;
+        if (ResolveProvider(state).CantripReadinessOf(state, controller, rd))
+        {
+            std::vector<int> score(out.size(), 0);
+            bool all = true;
+            for (std::size_t q = 0; q < out.size() && all; ++q)
+            { all = ScorePutBackCandidate(state, controller, rd, out[q].data(), take, score[q]); }
+            if (all)
+            {
+                std::vector<std::size_t> perm(out.size());
+                for (std::size_t q = 0; q < perm.size(); ++q) { perm[q] = q; }
+                std::stable_sort(perm.begin(), perm.end(), [&](std::size_t a, std::size_t b) { return score[a] < score[b]; });
+                std::vector<std::vector<int>> sorted;
+                sorted.reserve(out.size());
+                for (std::size_t q : perm) { sorted.push_back(std::move(out[q])); }
+                out.swap(sorted);
+            }
+        }
+    }
     return out;
 }
 
@@ -39644,6 +39824,8 @@ struct PutBackClassScratch   // per-thread, reused: no allocation once warm
 {
     std::vector<std::uint64_t> key;
     std::vector<int> cnt, m0, m1, rank, ord, hand_cls;
+    std::vector<std::array<int, 2>> seq;   // the scored order: every candidate, existing order
+    std::vector<int> score, perm;
 };
 inline PutBackClassScratch& PutBackScratch() { static thread_local PutBackClassScratch s; return s; }
 
@@ -39758,41 +39940,79 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
         }
     }
     const bool per_card = def_top >= 0;
-    if (take == 1)
+    // THE EXISTING ORDER, walked: candidate q of it -> (top, second) hand indices (second = -1 for take 1).
+    // `emit` returns true to stop. Rank 0 is the per-card default when there is one; then (take 2) the pairs
+    // by a + b ascending, a DESCENDING, the default's own pair skipped.
+    auto walk = [&](auto&& emit)
     {
-        if (!per_card) { out.idx[0] = sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(r)])]; return out; }
-        if (r == 0) { out.idx[0] = sc.m0[static_cast<std::size_t>(def_top)]; return out; }
-        int seen1 = 0;
-        for (int q = 0; q < C; ++q)
+        if (take == 1)
         {
-            const int cq = sc.ord[static_cast<std::size_t>(q)];
-            if (cq == def_top) { continue; }
-            if (++seen1 == r) { out.idx[0] = sc.m0[static_cast<std::size_t>(cq)]; return out; }
+            if (per_card && emit(sc.m0[static_cast<std::size_t>(def_top)], -1)) { return; }
+            for (int q = 0; q < C; ++q)
+            {
+                const int cq = sc.ord[static_cast<std::size_t>(q)];
+                if (per_card && cq == def_top) { continue; }
+                if (emit(sc.m0[static_cast<std::size_t>(cq)], -1)) { return; }
+            }
+            return;
         }
-        return out;   // unreachable: r < count
-    }
-    if (per_card && r == 0)
-    {
-        out.idx[0] = sc.m0[static_cast<std::size_t>(def_top)];
-        out.idx[1] = def_top == def_deep ? sc.m1[static_cast<std::size_t>(def_top)] : sc.m0[static_cast<std::size_t>(def_deep)];
-        return out;
-    }
-    int seen = per_card ? 1 : 0;   // rank 0 is the per-card default; the walk fills ranks 1.. around it
-    for (int s = 0; s <= 2 * (C - 1); ++s)
-    {
-        for (int a = std::min(s, C - 1); a >= std::max(0, s - (C - 1)); --a)
+        if (per_card
+            && emit(sc.m0[static_cast<std::size_t>(def_top)],
+                    def_top == def_deep ? sc.m1[static_cast<std::size_t>(def_top)] : sc.m0[static_cast<std::size_t>(def_deep)]))
+        { return; }
+        for (int s = 0; s <= 2 * (C - 1); ++s)
         {
-            const int b  = s - a;
-            const int ca = sc.ord[static_cast<std::size_t>(a)];
-            if (a == b && sc.cnt[static_cast<std::size_t>(ca)] < 2) { continue; }
-            if (per_card && ca == def_top && sc.ord[static_cast<std::size_t>(b)] == def_deep) { continue; }
-            if (seen++ != r) { continue; }
-            out.idx[0] = sc.m0[static_cast<std::size_t>(ca)];
-            out.idx[1] = a == b ? sc.m1[static_cast<std::size_t>(ca)] : sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(b)])];
-            return out;
+            for (int a = std::min(s, C - 1); a >= std::max(0, s - (C - 1)); --a)
+            {
+                const int b  = s - a;
+                const int ca = sc.ord[static_cast<std::size_t>(a)];
+                if (a == b && sc.cnt[static_cast<std::size_t>(ca)] < 2) { continue; }
+                if (per_card && ca == def_top && sc.ord[static_cast<std::size_t>(b)] == def_deep) { continue; }
+                if (emit(sc.m0[static_cast<std::size_t>(ca)],
+                         a == b ? sc.m1[static_cast<std::size_t>(ca)] : sc.m0[static_cast<std::size_t>(sc.ord[static_cast<std::size_t>(b)])]))
+                { return; }
+            }
+        }
+    };
+    // THE SCORED ORDER (DecisionProvider::CantripReadinessOf / ScoreTopDisposition): every candidate scored,
+    // stable-sorted by score with the existing order as the tie-break -- PutBackCandidates' twin. The same
+    // count; only which candidate sits at which rank moves.
+    if (out.count > 1)
+    {
+        cantriporder::CostScope cost;
+        CantripReadiness rd;
+        if (ResolveProvider(state).CantripReadinessOf(state, controller, rd))
+        {
+            sc.seq.clear();
+            walk([&](int i0, int i1) { sc.seq.push_back({ i0, i1 }); return false; });
+            const std::size_t n_seq = sc.seq.size();
+            sc.score.assign(n_seq, 0);
+            bool all = true;
+            for (std::size_t q = 0; q < n_seq && all; ++q)
+            { all = ScorePutBackCandidate(state, controller, rd, sc.seq[q].data(), take, sc.score[q]); }
+            if (all && static_cast<int>(n_seq) == out.count)
+            {
+                sc.perm.resize(n_seq);
+                for (std::size_t q = 0; q < n_seq; ++q) { sc.perm[q] = static_cast<int>(q); }
+                std::stable_sort(sc.perm.begin(), sc.perm.end(),
+                                 [&](int a, int b) { return sc.score[static_cast<std::size_t>(a)] < sc.score[static_cast<std::size_t>(b)]; });
+                const std::array<int, 2>& pk = sc.seq[static_cast<std::size_t>(sc.perm[static_cast<std::size_t>(r)])];
+                out.idx[0] = pk[0];
+                out.idx[1] = take == 2 ? pk[1] : -1;
+                cost.Done(static_cast<long long>(n_seq));
+                return out;
+            }
         }
     }
-    return out;   // unreachable: r < count
+    int seen = 0;
+    walk([&](int i0, int i1)
+    {
+        if (seen++ != r) { return false; }
+        out.idx[0] = i0;
+        out.idx[1] = i1;
+        return true;
+    });
+    return out;
 }
 
 // HOW MANY candidates PutBackCandidates would produce over an arbitrary multiset of cards -- the
@@ -39984,6 +40204,15 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n, cons
     }
     // pick[0] must end on TOP: insert the last first.
     for (std::size_t i = moved.size(); i-- > 0; ) { pl.library.insert(pl.library.begin(), moved[i]); }
+    // The saved game log's put-back record (real resolution only: g_reveal_logger is null in every search
+    // scope). Log only, never folded into the digest -- see GameLogger::NotePutBack.
+    if (g_reveal_logger != nullptr)
+    {
+        std::vector<int> nums;
+        std::vector<std::string> nms;
+        for (const Card& mc : moved) { nums.push_back(mc.m_number); nms.push_back(mc.m_name.str()); }
+        g_reveal_logger->NotePutBack(source, nums, nms);
+    }
     if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
     {
         std::string names;
