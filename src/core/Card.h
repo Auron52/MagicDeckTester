@@ -409,13 +409,16 @@ struct ManaCost
     // not get wrong. Identical to ToString() for every cost with no hybrid pip.
     std::string ToDisplayString() const
     {
-        if (hybrid_count == 0 && twobrid_count == 0) { return ToString(); }
+        // x_pips > 1 ({X}{X} Walking Ballista, {X}{X}{X} Crackle with Power) takes the long path too:
+        // ToString() prints a single {X} (digest-folded, so it stays), which told the player the
+        // Ballista costs X rather than 2X (LifegainHeliodCombo claude-play sweep).
+        if (hybrid_count == 0 && twobrid_count == 0 && x_pips <= 1) { return ToString(); }
         int rem[6] = { white, blue, black, red, green, colorless };
         static const char* kSym[6] = { "W", "U", "B", "R", "G", "C" };
         auto sym = [&](int col) -> const char*
         { return (col >= 0 && col < 6) ? kSym[col] : "?"; };
         std::string s;
-        if (has_x)       { s += "{X}"; }
+        if (has_x)       { for (int i = 0; i < std::max(1, x_pips); ++i) { s += "{X}"; } }
         // TWOBRID pips ({2/B}) are baked into `generic` as {2} each (see twobrid_color); un-bake
         // them for display, or Beseech the Queen reads "{6}" (claude-play sweep gi7).
         const int gen = generic - 2 * static_cast<int>(twobrid_count);

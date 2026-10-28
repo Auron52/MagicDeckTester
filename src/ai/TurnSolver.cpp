@@ -81706,6 +81706,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         }
         // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: the sinks are plan actions.)
 
+        // A main-1 kill ends the game before combat -- twin of GameEngine::RunTurnFrom's check.
+        if (OpponentHasLost(state))
+        {
+            leafeval::Publish(leafeval::kInvalid);
+            leafeval::t_inf = state.inf_life_turn;
+            return state.turn_number;
+        }
+
         // Combat
         SimulateCombat(state);
         if (OpponentHasLost(state))

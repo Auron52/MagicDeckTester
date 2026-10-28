@@ -231,6 +231,13 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (state.player_lost_on_draw) { return; }
     }
     if (at <= static_cast<int>(ResumeAt::Main1)) { MainPhase(state, /*is_pre_combat=*/true); }
+    // A main phase that killed the opponent ends the game here (CR 704.5a / 104.3a), exactly like
+    // the post-combat check below. Without it a main-1 kill (Walking Ballista pings, a Heliod loop)
+    // still played combat: the win turn was unchanged, but the final life totals were wrong and the
+    // viewer asked the human for lifelink-trigger Heliod targets in a game that was already over
+    // (LifegainHeliodCombo claude-play sweep, seeds 95004/95010/95013/95016/95017/95019). Checked
+    // before own death: opp-loss wins even if we also died. Lockstep twin: SimulateToEndImpl.
+    if (CheckWinCondition(state)) { return; }
     // OWN DEATH (own_death_live decks only -- Prevent Damage, or MTG_OWN_DEATH_ALL): a main phase
     // that killed us ends the game here (CR 704.5a), before combat could gain the life back
     // (a lifelinking Faithmender) or deal the opponent a now-meaningless lethal. PlayOutFrom then

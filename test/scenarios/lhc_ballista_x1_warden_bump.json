@@ -10,7 +10,7 @@
   "budget_ms": 200,
   "max_turns": 4,
   "lands_played_this_turn": 1,
-  "_comment": "Walking Ballista (2026-10-27). The 4-mana loop: Heliod + Soul Warden out, 4 Plains, Ballista in hand. X = 1 ({2}): the Ballista enters with 1 counter, Soul Warden gains 1, and Heliod's counter goes ON THE BALLISTA because one more counter makes the loop live with the {1}{W} grant still affordable (DefaultLifegainCounterTarget's bump rule) -> 2 counters -> grant + loop wins from 20 this turn. Control: lhc_ballista_x1_warden_bump_short_control (3 Plains). BINDING: active life 41 = Soul Warden's 1 + 20 lifelinked pings; opponent -1 = the 20 pings plus the Warden's post-kill swing (the executor still plays combat after a main-phase kill).",
+  "_comment": "Walking Ballista (2026-10-27). The 4-mana loop: Heliod + Soul Warden out, 4 Plains, Ballista in hand. X = 1 ({2}): the Ballista enters with 1 counter, Soul Warden gains 1, and Heliod's counter goes ON THE BALLISTA because one more counter makes the loop live with the {1}{W} grant still affordable (DefaultLifegainCounterTarget's bump rule) -> 2 counters -> grant + loop wins from 20 this turn. Control: lhc_ballista_x1_warden_bump_short_control (3 Plains). BINDING: active life 41 = Soul Warden's 1 + 20 lifelinked pings; opponent 0 = the 20 pings; the main-phase kill ends the game before combat (it read -1 with the Warden's post-kill swing until the 2026-10-28 main-1 opp-loss check).",
   "battlefield": [
     {
       "name": "Plains"
@@ -36,6 +36,6 @@
   ],
   "expect_win_turn": 4,
   "resume_at": "main1",
-  "expect_opponent_life": -1,
+  "expect_opponent_life": 0,
   "expect_active_life": 41
 }
