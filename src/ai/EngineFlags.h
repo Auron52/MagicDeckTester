@@ -460,6 +460,27 @@ inline bool PrepayAuraUnheldOn()
     return heurarm::Flag(heurarm::PREPAY_AURA_UNHELD, env_on);
 }
 
+// MTG_SCARCE_COLOR_MASK (DEFAULT OFF; heurarm SCARCE_COLOR_MASK since 2026-10-28): the per-cast payer's held first
+// attempt keeps the line's scarce colour providers up -- see ScarceColorHoldMask (ManaPayment.cpp). Held-out A/B (seed
+// 1080001, 39 decks, 20,910 paired games): 3 slower / 0 faster (EDF gi103, Hinata gi223, Snow gi239), work +0.18%
+// (EDF +1.29%) -- not adopted; the losses are owed a root cause.
+inline bool ScarceColorMaskOn()
+{
+    static const bool env_on = EnvOn("MTG_SCARCE_COLOR_MASK");
+    return heurarm::Flag(heurarm::SCARCE_COLOR_MASK, env_on);
+}
+
+// MTG_AUTO_LINE_GENERIC (2026-10-28; DEFAULT ON, =0 -> WUBRG outside human play): the three line-aware generic-pip
+// orders (SpendFloatingTowardCost's surplus-first drain, ConsumeFloatingAny, LineDemandAnyPipColor -- SpellEffects.h)
+// outside human play too, for lines that name everything they will cast. Read through LineGenericOrderLive
+// (SpellEffects.h), which adds human play. Held-out A/B (seed 1080001, 39 decks at play settings, 20,910 paired
+// games): 0 slower / 1 faster (Dragons), work +0.024%.
+inline bool AutoLineGenericOn()
+{
+    static const bool env_on = EnvOn("MTG_AUTO_LINE_GENERIC", true);
+    return heurarm::Flag(heurarm::AUTO_LINE_GENERIC, env_on);
+}
+
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
 // Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's

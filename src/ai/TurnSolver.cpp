@@ -57557,7 +57557,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // tagged {C} floats -> byte-identical.
             ManaCost pay_bill = ec;
             cast_haste_from_mana = is_creature && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
-            bool paid_ok = TapForCostDirect(state, pay_bill, is_creature);
+            bool paid_ok;
+            {
+                ScarceHeldOnlyScope _sho(reserved_host > 0);   // the scarce hold outranks the host's (ManaPayment.h)
+                paid_ok = TapForCostDirect(state, pay_bill, is_creature);
+            }
             if (reserved_host > 0)
             {
                 SetPermTapped(state, state.active_player_index, reserved_host, false);

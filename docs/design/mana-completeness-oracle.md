@@ -623,6 +623,45 @@ ambiguous": every land-Aura bonus does), which hands the line to the per-cast pa
   faster on all four decks; EDF d0 seed 1020001 (12,000): 5 slower / 7 faster, net -6 turns, and all five
   slower games tie between the arms at d8 b0.
 
+* **The per-cast payer's line-aware generic order in autonomous play (`MTG_AUTO_LINE_GENERIC`, default ON) and
+  the scarce-colour hold (`MTG_SCARCE_COLOR_MASK`, default OFF)** (2026-10-28). The staged prepay's stage-shadow
+  sweep showed every remaining WORSE realisation coming down to the per-cast payer, and the mana oracle found the
+  same payer dropping casts on a smoke board. Three defects:
+  - *A generic pip spends WUBRG-first.* The three line-aware generic orders human play has had since 2026-09-10
+    (the float drain's surplus-first order, the payment pool's order, a choice source's colour) were gated on
+    `HumanPlayActive()`; autonomous play and the search's rollouts spent a {U} the line still owed before a spare
+    {B} (AccomplishedAlchemist gi682 T5: the triple-Sprawl Forest's {G}{B}{U}{U} paid Accomplished Alchemist's
+    {3}{G}, Crab Umbra was dropped; Bruna: Open the Armory's {1} took the Remote Farm's second {W}).
+    `LineGenericOrderLive()` now admits autonomous play under the lever -- but NOT for a line that casts a
+    breakpoint opener (`g_line_opens_unseen`: a cantrip, a tutor, Treasure Hunt), whose named casts understate
+    what the turn will owe. Without that guard the regression tier found TreasureHunt s3003 gi96 T4 -> T6 at every
+    budget and at d8 b0: the line {Treasure Hunt, Treasure Hunt} kept the second Hunt's {U} and spent {R} on the
+    first's generic, the first Hunt revealed Land's Edge {1}{R}{R} (the kill), and the continuation could not pay
+    it; WUBRG had spent the {U}. Held-out A/B without the guard (seed 1080001, 39 decks at play settings, 20,910
+    paired games): 0 slower / 2 faster (Dragons gi214 6 -> 5, Niv gi211 7 -> 6), 29 digests, work +0.001%. With the
+    guard (the same baseline; the lever-off path is unchanged): 0 slower / 1 faster (Dragons gi214), 19 digests,
+    work +0.024%. ADOPTED.
+  - *A coloured pip taps the line's only source of another colour it owes.* EDF smoke s1009 T3 (Mariposa, Yavimaya
+    Coast, a fresh Brushland; Wild Growth onto Mariposa, then Cloud of Faeries {1}{U}): Wild Growth's {G} took the
+    Coast -- the board's only {U} -- over Brushland's {G}, battlefield order breaking the tie. The existing
+    default-off `ScarceColorHoldMask` is the per-cast hold for exactly this; it now reads the line's remaining
+    demand (`g_line_unpaid_cost` less this payment's pips) instead of the plan's totals, and sits behind heurarm
+    `SCARCE_COLOR_MASK`.
+  - *A land Aura's host hold forces the scarce source.* With Wild Growth onto Brushland the per-cast host hold
+    keeps Brushland up and the Coast is the only {G} left; the payment's ladder ends in the unrestricted greedy, so
+    the hold's own fallback took it. `ScarceHeldOnlyScope` (both host holds: the rollout's apply_one, AIEngine's
+    cast) makes a failed scarce-held attempt return false so the caller releases the host first: Wild Growth is
+    paid off its own host, the bonus lost, and the Coast pays Cloud of Faeries.
+  The scarce hold's A/B (same batch): 3 slower / 0 faster (EDF gi103 4 -> 5, Hinata gi223 5 -> 6, Snow gi239
+  7 -> 8), work +0.18% (EDF +1.29%) -- NOT adopted, owed a root cause; with the line-aware order on as well, the
+  same three. EDF gi103 (seed 1080104) is T4 -> T5 at d8 b0 too: the held arm's search picks Shivan Gorge over
+  Kitchen on T2 and casts Cloud of Faeries a turn early, so the hold changes what the rollouts read, not one cast. The v7 staged prepay already pays the Mariposa batch before the per-cast payer is asked, so the pins
+  run with the split off.
+  Not yet: the line hold (`g_line_unpaid_cost`) is hybrid-blind -- `AddManaCost` drops the hybrid pairs, so Trace of
+  Abundance's {R/W} reads as a hard {R} to every reader of the hold, the line-aware orders included. In EDF there
+  is little {R} to protect and WUBRG spends {W} first anyway, so it is no worse than before; the big-mana and
+  mixed prepay splits still pay flat bills too.
+
 **EDF seed 3003 T5** (9 ORACLE-GAPs on the new payer) was the oracle's own frontier prune, not the payer: see
 section 6 item 16.
 

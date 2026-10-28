@@ -6224,6 +6224,7 @@ thread_local std::vector<int> g_plan_reserved_sources;
 
 // Line-scoped unpaid cost (see the header). Zero unless a plan application set it.
 thread_local ManaCost g_line_unpaid_cost;
+thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
 thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
 thread_local ManaCost g_act_line_current;
@@ -6545,10 +6546,11 @@ static std::uint64_t PayloadReserveMask(const GameState& state)
 // SCARCE-COLOR HOLD (MTG_SCARCE_COLOR_HOLD -- see ScarceColorHoldEnabled in SpellEffects.h for the
 // mw326 trace). While a plan apply is paying ONE cast of a multi-cast plan, hold every untapped
 // source that is a SCARCE provider of a colour the plan's OTHER casts still need: if the untapped
-// providers of colour c number no more than the plan's remaining c-pips beyond this payment's own
+// providers of colour c number no more than the line's remaining c-pips beyond this payment's own
 // cost, every one of them will be needed, so this payment must route around them if it can. The
-// remaining-need estimate is conservative (already-paid casts still count -- an over-hold costs one
-// extra solve attempt, never a cast, by the held-first/unrestricted-retry contract). Unlike the
+// remaining need is the line hold (g_line_unpaid_cost) when one is live, else the plan's pip totals,
+// which still count already-paid casts -- an over-hold costs one extra solve attempt, never a cast,
+// by the held-first/unrestricted-retry contract. Unlike the
 // whole-turn prepay this also protects the shapes the prepay DECLINES -- mw326's joint cost is only
 // payable via the mid-turn mint, so the prepay fails up front and only this per-cast hold can keep
 // the greedy from burning the lone {R} land on a colour-flexible cost.
@@ -6559,18 +6561,28 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
     // the prepay-declined multi-cast class, which has NO motivating case yet -- and the held-out
     // mirrorwing A/B of the combined lever ran net-worse, so the unproven half must be
     // independently measurable (and stays off) until a case motivates it.
-    static const bool s_mask_on = EnvOn("MTG_SCARCE_COLOR_MASK");
-    if (!s_mask_on) { return 0; }
+    // A MOTIVATING CASE NOW EXISTS (2026-10-28, the mana oracle on EDF smoke s1009 T3): {Cloud of Faeries, Wild
+    // Growth onto Mariposa Military Base} off Mariposa, Yavimaya Coast and a fresh Brushland. Wild Growth's {G} took
+    // the Coast -- the board's only {U}, battlefield order breaking a tie with Brushland's {G} -- and Cloud of
+    // Faeries was dropped. Behind heurarm SCARCE_COLOR_MASK so the A/B runs both arms in one batch.
+    if (!ScarceColorMaskOn()) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
     if (!pt || pt->mana_casts < 2) { return 0; }
     const int n = static_cast<int>(state.battlefield.size());
     if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
-    // Pips the plan's OTHER casts need, beyond this payment's own cost.
+    // Pips the REST of the line still owes, beyond this payment's own cost: the line hold (g_line_unpaid_cost, bound
+    // by both plan-apply paths and decremented as each cast lands) when one is live, else the plan's pip totals
+    // (which still count the casts already paid -- an over-hold, never a refusal).
     const int cur[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+    const ManaCost& lu = g_line_unpaid_cost;
+    const bool line_live = (lu.white + lu.blue + lu.black + lu.red + lu.green + lu.generic + lu.colorless) > 0;
+    const int owed[5] = { line_live ? lu.white : pt->cast_pips[0], line_live ? lu.blue : pt->cast_pips[1],
+                          line_live ? lu.black : pt->cast_pips[2], line_live ? lu.red : pt->cast_pips[3],
+                          line_live ? lu.green : pt->cast_pips[4] };
     int need[5]; bool any = false;
     for (int c = 0; c < 5; ++c)
     {
-        need[c] = pt->cast_pips[c] - cur[c];
+        need[c] = owed[c] - cur[c];
         if (need[c] > 0) { any = true; }
     }
     if (!any) { return 0; }
@@ -7508,9 +7520,10 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     // question, and attributing it needs to know whether this mask was rmask's sole contributor.
     // The value folded in is identical, and with the audit off nothing below it executes.
     const std::uint64_t act_hold = ActLineHoldMask(state, cost_in);
+    const std::uint64_t scarce   = ScarceColorHoldMask(state, cost_in);
     const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
                               | OneShotHoldMask(state) | PayloadReserveMask(state)
-                              | ScarceColorHoldMask(state, cost_in)
+                              | scarce
                               | LineColorlessHoldMask(state, cost_in)
                               | act_hold;
     if (ActDropAuditOn())
@@ -7576,6 +7589,9 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     if (rmask != 0)
     {
         if (held_attempt(rmask, "impl.rmask")) { return true; }
+        // A land Aura's host is held by the caller (ScarceHeldOnlyScope): let it release the host before the
+        // scarce providers are spent.
+        if (t_scarce_held_only && scarce != 0) { return false; }
         // Fell through: this payment now costs a SECOND full solve. Attribute it (audit only).
         if (ActDropAuditOn() && act_hold != 0)
         {

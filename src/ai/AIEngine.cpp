@@ -9236,7 +9236,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // the full bill for the line-hold accounting below. A bestowed cast is an Aura spell.
         ManaCost pay_bill = effective;
         haste_from_mana = def->card.IsCreature() && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
-        bool paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature());
+        bool paid_ok;
+        {
+            ScarceHeldOnlyScope _sho(reserved_host > 0);   // the scarce hold outranks the host's (ManaPayment.h)
+            paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature());
+        }
         if (reserved_host > 0)
         {
             SetPermTapped(state, state.active_player_index, reserved_host, false);

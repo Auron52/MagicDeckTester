@@ -1131,6 +1131,21 @@ inline void LineOwedAfterOwnPips(int out[5])
     for (int i = 0; i < 5; ++i) { out[i] = std::max(0, owed[i] - g_pay_own_line_pips[i]); }
 }
 
+// THE GATE OF THE THREE LINE-AWARE GENERIC ORDERS (the float drain's surplus-first order, ConsumeFloatingAny's and
+// LineDemandAnyPipColor's): human play, where they began (USER, EDF seed 9 gi=8 T4 / seed 6 T4, 2026-09-10), or the
+// autonomous lever MTG_AUTO_LINE_GENERIC (EngineFlags.h). Each order reads g_line_unpaid_cost, which every plan apply
+// binds (rollouts included) and is zero elsewhere, so outside a line they keep the historical WUBRG order either way.
+// NOT for an autonomous line that casts a breakpoint opener (g_line_opens_unseen, ManaPayment.h): its named casts are
+// a lower bound on what the turn will owe, and the continuation re-solves on whatever the opener reveals.
+// TreasureHunt regression s3003 gi96 T4 (T4 -> T6 at every budget and at d8 b0): the line {Treasure Hunt, Treasure
+// Hunt} kept the second Hunt's {U} and spent the {R} on the first's generic; the first Hunt revealed Land's Edge
+// {1}{R}{R}, the kill, and the continuation could not pay it. Such a line keeps the historical order.
+extern thread_local bool g_line_opens_unseen;   // ManaPayment.cpp (see ManaPayment.h); false outside a line
+inline bool LineGenericOrderLive()
+{
+    return HumanPlayActive() || (AutoLineGenericOn() && !g_line_opens_unseen);
+}
+
 // Colours the human's REMAINING QUEUED line declared it still wants (a bitmask over
 // static_cast<int>(Color); defined in ManaPayment.cpp, bound around both plan-apply paths by
 // HumanUntapNeedScope). Redeclared here so EtbUntapLands' continuation-demand promotion below can
@@ -35552,7 +35567,7 @@ inline bool ConsumeFloating(ManaPool& floating, Color c)
 // fall-through). Off everywhere but human play, so every autonomous game is byte-identical.
 //
 // ...AND AMONG THE COLOURS, SURPLUS FIRST while the human's LINE still owes coloured pips
-// (MTG_PAY_LINE_GENERIC_ORDER, default ON, human play only). The WUBRG list above is an arbitrary
+// (MTG_PAY_LINE_GENERIC_ORDER, default ON; human play, or MTG_AUTO_LINE_GENERIC). The WUBRG list above is an arbitrary
 // ranking, and it is the second half of the seed-6 T4 defect: the pool this payment had just built
 // was {U:1, G:2} with `Training Grounds` ({U}) still unpaid in the SAME committed line, and the two
 // generic pips of `Eldrazi Displacer` ({2}{W}) ate the {U} first -- so the {U} had to be re-bought
@@ -35566,8 +35581,8 @@ inline bool ConsumeFloating(ManaPool& floating, Color c)
 // A REORDER, never a refusal: every colour is still tried, so nothing becomes unpayable. Colourless
 // keeps its existing position (first, or last under the {C} hold) -- that tier is already decided by
 // a separate, measured rule and this one only breaks ties among the five colours.
-// `g_line_unpaid_cost` is zero outside a plan application and the gate is HumanPlayActive(), so
-// rollouts and every autonomous game are byte-identical by construction.
+// `g_line_unpaid_cost` is zero outside a plan application and the gate is LineGenericOrderLive() (human play, or
+// the autonomous lever MTG_AUTO_LINE_GENERIC), so with the lever off rollouts and every autonomous game keep WUBRG.
 inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
 {
     static const Color kCFirst[] = { Color::Colorless, Color::White, Color::Blue,
@@ -35576,7 +35591,7 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
                                      Color::Red, Color::Green, Color::Colorless };
     static const bool s_line_order = EnvOn("MTG_PAY_LINE_GENERIC_ORDER", true);   // DEFAULT ON; =0 off
     const ManaCost& lu = g_line_unpaid_cost;
-    if (s_line_order && HumanPlayActive()
+    if (s_line_order && LineGenericOrderLive()
         && (lu.white + lu.blue + lu.black + lu.red + lu.green) > 0)
     {
         // Surplus against what the line owes AFTER this payment's own (already-settled) coloured
@@ -35608,7 +35623,7 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
     return false;
 }
 
-// WHICH COLOUR a CHOICE SOURCE takes when it is tapped for a GENERIC pip (human play only;
+// WHICH COLOUR a CHOICE SOURCE takes when it is tapped for a GENERIC pip (human play, or MTG_AUTO_LINE_GENERIC;
 // MTG_PAY_LINE_TAP_COLOR, default ON).
 //
 // The payment's generic tap has always taken `prod[0]` -- the card's first declared colour, i.e.
@@ -35636,7 +35651,7 @@ inline Color LineDemandAnyPipColor(const GameState& state, const std::vector<Col
                                    const ManaPool& payment_float, Color fallback)
 {
     static const bool s_on = EnvOn("MTG_PAY_LINE_TAP_COLOR", true);   // DEFAULT ON; =0 restores prod[0]
-    if (!s_on || prod.size() < 2 || !HumanPlayActive()) { return fallback; }
+    if (!s_on || prod.size() < 2 || !LineGenericOrderLive()) { return fallback; }
     // What the REST of the line owes: this payment's own coloured pips are already paid by the time
     // a generic pip is tapped (see g_pay_own_line_pips) -- counting them made a Forbidden Orchard
     // tap for the {R} Crackle had just paid instead of keeping the {U} the line's Preordain needed.
@@ -35799,7 +35814,7 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
             return;
         }
     }
-    // SURPLUS-FIRST GENERIC ORDER (human play only; USER, EDF seed 9 gi=8 T4, 2026-09-10). The
+    // SURPLUS-FIRST GENERIC ORDER (human play, or MTG_AUTO_LINE_GENERIC; USER, EDF seed 9 gi=8 T4, 2026-09-10). The
     // historical order below is WUBRG -- an arbitrary ranking that spent a banked {W} on Cloud of
     // Faeries' generic {1} while three green floated untouched, stranding the Emiel {W}{W} the
     // bank existed for. The user's stated general rule: "with the spend green first, that is
@@ -35809,11 +35824,11 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     // most in surplus, and a scarce demanded colour survives to its own pip. Demand is
     // g_line_unpaid_cost: live during any plan application and bound by the payability walks,
     // zero (-> historical order, byte-identical) everywhere else; autonomous play and rollouts
-    // are excluded by the HumanPlayActive gate besides. MTG_LINE_SURPLUS_GENERIC=0 restores the
-    // WUBRG order in human play too.
+    // take it only under MTG_AUTO_LINE_GENERIC (LineGenericOrderLive). MTG_LINE_SURPLUS_GENERIC=0
+    // restores the WUBRG order everywhere.
     static const bool s_line_surplus = EnvOn("MTG_LINE_SURPLUS_GENERIC", true);
     const ManaCost& _lu = g_line_unpaid_cost;
-    if (s_line_surplus && HumanPlayActive()
+    if (s_line_surplus && LineGenericOrderLive()
         && (_lu.white + _lu.blue + _lu.black + _lu.red + _lu.green) > 0)
     {
         struct Ent { int* res; int surplus; };

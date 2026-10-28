@@ -762,6 +762,24 @@ private:
     ManaCost m_prev;
 };
 
+// THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
+// apply_one and AIEngine's cast) mark the Aura's host tapped for a first payment and release it only if that payment
+// FAILS -- and the payment's own ladder ends in the unrestricted greedy, so a board whose only other payer is the
+// line's scarce colour source paid the Aura with it and kept the host (EDF smoke s1009 T3: Wild Growth onto Brushland
+// off Yavimaya Coast's {G}, then Cloud of Faeries had no {U}). While this scope is live, a payment whose scarce hold
+// actually holds something and whose held attempt fails returns false instead of falling through; the caller then
+// releases the host and pays again, scarce providers still held first -- so the Aura is paid off its own host (the
+// bonus lost) rather than off the colour the line needs. Inert when the scarce hold holds nothing (lever off).
+extern thread_local bool t_scarce_held_only;
+struct ScarceHeldOnlyScope
+{
+    bool prev;
+    explicit ScarceHeldOnlyScope(bool on) : prev(t_scarce_held_only) { if (on) { t_scarce_held_only = true; } }
+    ~ScarceHeldOnlyScope() { t_scarce_held_only = prev; }
+    ScarceHeldOnlyScope(const ScarceHeldOnlyScope&)            = delete;
+    ScarceHeldOnlyScope& operator=(const ScarceHeldOnlyScope&) = delete;
+};
+
 // The cost a mid-line greedy sink must clear: its own cost PLUS everything the line still owes.
 // Off-switch MTG_NO_LINE_HOLD=1 drops the hold (the pre-fix greedy) for the standing A/B.
 ManaCost SinkCostWithLineHold(const ManaCost& own);
