@@ -84811,10 +84811,14 @@ static long long BpLazyFullBytes(const std::vector<TurnSolver::Plan>& real, cons
 // a materialising run, at the price of a pool that reports "full" for bytes that are never resident --
 // Unpredictable Cyclone's 3 GB / worker of put-back fans filled even an 11.7 GB pool on 24 threads, and
 // every refusal made a game's units depend on what OTHER workers held (the [determinism] WARNING). Pricing
-// the stored size changes admission wherever the pool binds, so it is a play change (measured, ledger).
+// the stored size changes admission wherever the pool binds, so it is a play change -- MEASURED 2026-10-28
+// (Cyclone, held-out seeds 107000 d3 b10 x200 + 108000 d5 b20 x100, the shipped 2.4 GB pool, 6 threads per
+// arm): 300 / 300 digests and win turns identical, units identical in 299 (one game -86 of 6.3M), refusals
+// 4,458 -> 0 (pool peak 1.25 GB) and the [determinism] warning gone; the same 72-game manifest at 6 and at
+// 12 threads byte-identical. ADOPTED DEFAULT ON; =0 restores the materialised price.
 static bool PlanCacheStoredPriceOn()
 {
-    static const bool v = EnvOn("MTG_PLAN_CACHE_STORED_PRICE", false);
+    static const bool v = EnvOn("MTG_PLAN_CACHE_STORED_PRICE", true);
     return v;
 }
 static long long PbLazyStoredBytes(const std::vector<TurnSolver::Plan>& real, const PbLazyLayout& lz,
@@ -104395,8 +104399,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         demoted.shrink_to_fit();
         // M1: a lazy list is priced as the materialised list it stands for (BpLazyFullBytes: exact, the
         // shrunk list has no growth slack to reproduce), so the pool admits it exactly when it admitted the
-        // whole list -- the same residency, the same units. M2 (MTG_PLAN_CACHE_STORED_PRICE) prices what is
-        // actually resident instead (PbLazyStoredBytes).
+        // whole list -- the same residency, the same units (MTG_PLAN_CACHE_STORED_PRICE=0). M2, the shipped
+        // default, prices what is actually resident instead (PbLazyStoredBytes).
         const long long psz = (plans_lz.active
                                   ? (PlanCacheStoredPriceOn() ? PbLazyStoredBytes(plans, plans_lz, &plans_ord)
                                                               : BpLazyFullBytes(plans, plans_lz, plans_ord))
