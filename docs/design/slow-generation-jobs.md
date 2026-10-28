@@ -166,3 +166,9 @@ Vampire`, draw r=2, seed 15755400944471724403), consistent with the breakpoint s
 Status 16:18 UTC: refine **80.0%** frozen at 18,900 s, idle 0.0%, load 32/32. Freezing keeps slowing: ~20
 cell-sides/s now (vs ~28 at 14:18 and ~130 at 12:18), and rollouts are steady at ~150/s. The remaining 314k would take
 ~4.4 h at the current rate, so ~20:40 UTC at the earliest. The top-3 slow list is unchanged since 14:18 (worst 779 s).
+
+Status 18:18 UTC: refine **86.1%** frozen at 26,100 s, idle 0.0%, load 32/32, rollouts steady ~150/s. Freezing is down
+to ~11 cell-sides/s (130 -> 28 -> 20 -> 11 over the day), so a linear ETA is no longer meaningful; the 218k left would be
+~5.5 h at today's rate and the rate is still falling. New worst rollout: **1,994 s** (33 min), size 7 draw r=8,
+`Orzhov Basilica, Kitchen Finks x2, Caves of Koilos x2, Carrion Feeder x2`, seed 10372713029942101962 -- another
+Feeder board, and no Bloodthrone this time, so the sac outlet in the loop is the Feeder itself.
