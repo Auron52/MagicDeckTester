@@ -61,6 +61,29 @@
     "budget": null
    },
    "detail": "mulligan: ADOPTED (new-vs-old -0.000792 t, cost 0.999x (se 0.001, 96 seeds), recipe complete)"
+  },
+  {
+   "run_id": "angels-artifact-queue-tool-647f24-20261028T201937",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "fb8b9cc7035c1be4389ed15320219c2a0c3548b3",
+   "frozen": "78694cdf93629aa41d9c9cdc8fec57a91ef9946a",
+   "src_tree": "6f0ca7ae7b6fd9565a7b85d7fba5b6e84a88b6dc",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": 0.0,
+   "cost": [
+    1.0,
+    0.0,
+    96
+   ],
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old 0.0 t, cost 1.000x (se 0.000, 96 seeds), recipe complete)"
   }
  ]
 }
