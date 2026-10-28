@@ -4485,6 +4485,22 @@ function freeCastPanelHtml(d){
   // redundant and the affordance the user rejected ("not in a separate dialog"). Declining is a
   // first-class button because the card grants a PERMISSION, not an obligation -- World War Hulk's
   // chapter I reads "CAN be cast without paying its mana cost".
+  // A PAID follow-up that reuses this decision (the engine's `paid_cost`): Remand on an Unpredictable
+  // Cyclone walk's hit, or a second Remand on that Remand. NOT a free cast -- the spell is cast for its
+  // cost (USER 2026-10-28: "it isn't really a free cast"), so say what is paid, what it targets and what
+  // happens. Same answer encoding as ever (0 = cast it, -1 = decline), so recorded games replay as before.
+  if (d.paid_cost){
+    const nm=(cands[0]||{}).name||'the spell';
+    const aiName=(cands.find(c=>c.index===aiPick)||{}).name;
+    return `<h3>Cast ${esc(nm)} on ${esc(d.paid_target||'the spell')}? (pay ${esc(d.paid_cost)})</h3>`+
+      `<div class="sub">This is a <b>paid</b> cast, not a free one: you pay <b>${esc(d.paid_cost)}</b>`+
+      ` to cast ${esc(nm)} targeting <b>${esc(d.paid_target||'')}</b>.`+
+      (d.paid_outcome?` If you do: ${esc(d.paid_outcome)}.`:'')+
+      ` Decline to let it resolve without ${esc(nm)}.`+
+      (aiName?` The AI would cast it.`:` The AI would decline.`)+`</div>`+
+      `<div class="pbtns"><span class="spacer"></span><button id="fcdecline" class="ghost">Decline</button>`+
+      `<button id="fcpaid" class="primary">Cast ${esc(nm)} (pay ${esc(d.paid_cost)})</button></div>`;
+  }
   if (d.zone==='hand'){
     const cands=d.candidates||[];
     const pickName=(cands.find(c=>c.index===S.handSel)||{}).name;
@@ -5074,6 +5090,10 @@ function wireDecisionPanel(d, dec){
       // it or declines. Confirm is disabled with nothing picked, so the reply is never ambiguous.
       const cb=panel.querySelector('#decconfirm');
       if (cb) cb.onclick=()=>{ if (S.handSel!=null) commitFreeCast(d, S.handSel); };
+      const db=panel.querySelector('#fcdecline'); if (db) db.onclick=()=>commitFreeCast(d, -1);
+      const pb=panel.querySelector('#fcpaid'); if (pb) pb.onclick=()=>commitFreeCast(d, 0);   // a paid prompt
+    } else if (d.paid_cost){
+      const pb=panel.querySelector('#fcpaid'); if (pb) pb.onclick=()=>commitFreeCast(d, 0);
       const db=panel.querySelector('#fcdecline'); if (db) db.onclick=()=>commitFreeCast(d, -1);
     } else {
       panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));

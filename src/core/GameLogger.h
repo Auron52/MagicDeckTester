@@ -837,6 +837,30 @@ using FreeCastChooser = std::function<int(const GameState& state, int controller
                                           const std::vector<Card>& candidates, int heuristic_index,
                                           const std::vector<std::string>& walked)>;
 extern thread_local FreeCastChooser* g_play_free_cast_chooser;
+// A PAID follow-up asked through the free_cast decision (PRESENTATION ONLY). Unpredictable Cyclone's walk
+// reuses free_cast for "Remand the free-cast hit?" (and "...then Remand that Remand?"), but those spells
+// are NOT free -- each Remand pays its own cost (USER 2026-10-28: *"it isn't really a free cast"*). The
+// site installs this (FreeCastPaidScope) around the chooser call and the decision JSON then carries
+// `paid_cost` / `paid_target` / `paid_outcome`, which the viewer words as a paid cast. The decision's
+// type, source, candidates and answer encoding are unchanged, so every recorded game replays as before.
+struct FreeCastPaidInfo
+{
+    std::string cost;      // the total mana paid, e.g. "{1}{U}" (two Remands: both costs)
+    std::string target;    // what the paid spell targets (the walk's hit, or the first Remand)
+    std::string outcome;   // what happens if accepted, in words
+};
+extern thread_local const FreeCastPaidInfo* g_play_free_cast_paid;
+class FreeCastPaidScope
+{
+public:
+    explicit FreeCastPaidScope(const FreeCastPaidInfo* info) : m_prev(g_play_free_cast_paid)
+    { g_play_free_cast_paid = info; }
+    ~FreeCastPaidScope() { g_play_free_cast_paid = m_prev; }
+    FreeCastPaidScope(const FreeCastPaidScope&)            = delete;
+    FreeCastPaidScope& operator=(const FreeCastPaidScope&) = delete;
+private:
+    const FreeCastPaidInfo* m_prev;
+};
 
 // ---- Human-play MADNESS chooser (Vampires A1, 2026-10-18; CR 702.35) -------------------------
 // "If you discard a card with madness, discard it into exile. When you do, cast it for its madness

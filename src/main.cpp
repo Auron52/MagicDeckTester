@@ -4121,7 +4121,20 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     {
         d.Array("walked", walked.size(), [&](std::size_t i) { JsonStr(os, walked[i]); });
     }
+    // A PAID follow-up (FreeCastPaidInfo): the candidate is cast FOR ITS COST, not free -- say so.
+    if (g_play_free_cast_paid != nullptr)
+    {
+        d.Str("paid_cost", g_play_free_cast_paid->cost);
+        d.Str("paid_target", g_play_free_cast_paid->target);
+        d.Str("paid_outcome", g_play_free_cast_paid->outcome);
+    }
     EmitRevealsField(os, reveals);
+    if (g_play_free_cast_paid != nullptr)
+    {
+        d.Note("reply 0 to cast it PAYING " + g_play_free_cast_paid->cost + " (targeting "
+               + g_play_free_cast_paid->target + "), or -1 to decline. Default = the AI's pick.");
+        return;
+    }
     d.Note("reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick.");
 }
 
