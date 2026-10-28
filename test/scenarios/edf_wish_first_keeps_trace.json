@@ -61,7 +61,13 @@
     "{Living Wish, Trace} in EITHER order -- the Wish-first ordering no longer drops Trace, the drop filter",
     "has nothing to remove, and the order preference rightly keeps the human's own Wish-then-Trace. That is",
     "the sibling fixture edf_wish_first_pays_trace_jointly. This one keeps testing the FILTER, on the payer",
-    "where Wish-first still drops Trace."
+    "where Wish-first still drops Trace.",
+    "",
+    "AND TO NO PAYMENT REFINE SINCE 2026-10-28 (env MTG_PAY_REFINE=0). The per-payment refine remakes the",
+    "Wish's payment out of the payer's own taps: Aether Hub under the two Wild Growths pays {1}{G} alone and",
+    "Conservatory is given back, so Trace pays after the Wish on the historical payer too and the human's",
+    "Wish-then-Trace order rightly survives (verdict choose, 3 variants, all Wish-first). Pinned off so this",
+    "fixture keeps testing the drop filter."
   ],
   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
   "turn": 3,
@@ -82,7 +88,7 @@
   "depth": 3,
   "budget_ms": 50,
   "max_turns": 4,
-  "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1", "MTG_PREPAY_COLOURS": "0" },
+  "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1", "MTG_PREPAY_COLOURS": "0", "MTG_PAY_REFINE": "0" },
   "validate_line": "land=Mariposa Military Base;cast=Living Wish;cast=Trace of Abundance",
   "expect_verdict": "choose",
   "expect_variants": 3,

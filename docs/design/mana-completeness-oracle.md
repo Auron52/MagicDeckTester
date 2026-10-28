@@ -665,3 +665,167 @@ ambiguous": every land-Aura bonus does), which hands the line to the per-cast pa
 **EDF seed 3003 T5** (9 ORACLE-GAPs on the new payer) was the oracle's own frontier prune, not the payer: see
 section 6 item 16.
 
+
+## 13. The payment refine and the executor's payment script (2026-10-28)
+
+The USER: *"Because the mana not being searched was a compromise just for performance we are really looking for a
+way to address all of the issues we can find"* -- and every fix lossless, by mechanism and dominance, never a lever
+that trades one game for another.
+
+**The structural fact.** The census's DOMINATED classes compare RESOURCES, and a tapped source is a resource. So a
+payment that dominates the engine's can tap nothing the engine's left untapped: the better payment, whenever there
+is one, is made of the engine's own taps -- fewer of them (Remote Farm alone for Giada's {1}{W}, where the greedy
+tapped the Plains beside it and floated a {W} away), or the same ones on cheaper faces (Llanowar Wastes' {C} for a
+generic pip instead of its painful {G}). That makes "is this payment dominated?" a small, exact question.
+
+* **The per-payment refine (`MTG_PAY_REFINE`, default OFF -- the adoption call is the USER's, see 13.3).** After every OUTERMOST payment (not the oracle's own
+  copy, not a float-only probe, not an armed damage board) that spent life, energy or a haste-tagged {C} on a
+  noncreature bill, or left mana floating off two or more taps, `RefinePayment` (ManaOracle.cpp) enumerates the
+  minimal payments of the same bill on a board where ONLY the payment's own taps are untapped, replays each on the
+  real board, and keeps one only if (a) its taps are a subset of the engine's, (b) its end resources cover the
+  engine's -- strictly, or with a source given back -- and (c) the sources it gives back can re-make every unit
+  the engine's payment left floating (`ReachesByTapping`), so nothing the rest of the turn could have used is
+  lost. Best = most sources given back, then life, then energy. The payment is then remade in place on the real
+  board (`PayRefineAfter`, ManaPayment.cpp); a remake the payer refuses keeps the engine's own. Dominating by
+  construction: never a swap, never a guess about the rest of the turn. Skipped where a field-wise restore is not
+  exact (a sacrificed source, a graveyard or the opponent's life the payment moved). It runs at every budget and
+  in every playout, so the search sees the refined board everywhere it pays.
+* **Not where a same-phase untapper lives (`GameState::deck_has_mana_untapper`).** The trade in (c) -- a source
+  given back for the unit the engine floated off it -- rests on "an untapped source is worth what it would float".
+  That fails when something can untap the source again in the same phase: Cloud of Faeries' enter untaps two lands,
+  so the engine's {1}{U} off Brushland AND Adarkar Wastes (one unit floating) comes back with both lands up and the
+  unit still floating, where Adarkar alone (its {C} + Fertile Ground's {U}) leaves Brushland up and nothing
+  floating -- one mana down. The fifth seed found it twice in EDF (1170001 gi38, regression s2002 gi108: the T3
+  Cloud + Displacer go-off a mana short, T3 -> T4 even at d8 b0). So a deck holding a card that untaps a mana
+  source mid-phase (Cloud of Faeries, Peregrine Drake, Reality Spasm, Arbor Elf, Wirewood Lodge, Staff of
+  Domination, Galvanic Alchemist, Seedcradle Witch; stamped in `StampDeckTraits`, default true) gets no trade: a
+  candidate must cover the engine's float outright. Jorn's and Moraug's untaps come at a phase boundary, where the
+  float is gone anyway, and keep the trade.
+* **What per-payment dominance cannot promise: the greedy payer after it.** A refined board is resource-for-resource
+  no worse, but the per-cast payer is greedy, and one more untapped source can change its next choice.
+  NivMizzetCombo seed 1180001 gi521 T2: the engine paid Ponder off Saprazzan Skerry AND Cascade Bluffs (a {U} and a
+  {C} floating); the refine gave Bluffs back and kept the {U}. From there the turn went Sol Ring + Generator Servant
+  instead of Sol Ring + Tandem Lookout, and the T3 Niv + Lookout kill became T4 -- at d8 b0 too. The {C} float had
+  protected the {U} (the payer drains colourless before colour for a generic pip); an untapped Bluffs does not. A
+  rule that let the line-float rung (`MTG_LINE_FLOAT_TAP_FIRST`) count Bluffs as spare when the float already covers
+  the line was tried and did NOT recover the game, so it was not kept. This is the residue of a greedy payer, not of
+  the refine's comparison; the lossless answer is a searched payment, not another per-payment rule.
+* **Quality, six held-out seeds at every deck's play settings (base = `MTG_PAY_REFINE=0`):**
+
+  | seed | paired games | slower | faster | note |
+  |---|---|---|---|---|
+  | 1110001 | 20,910 | 1 | 7 | Hinata gi63 T6 -> T7 is budget churn (both arms T6 at d8 b0) |
+  | 1130001 | 20,910 | 0 | 2 | SelesnyaLifegain gi17, gi209 T5 -> T4 |
+  | 1150001 | 19,658 | 1 | 1 | Niv gi1 T5 -> T6: the arms split at T1 on Ponder vs Brainstorm (no payment differs there); both T5 at d8 b0 |
+  | 1160001 | 17,747 | 0 | 5 | |
+  | 1170001 | 49,330 | 3 | 13 | with the untapper rule; Bruna excluded (its keep table landed between the arms). Niv 1180001 gi390 / gi462 T4 -> T5 recover (T4 both at d8 b0); **gi521 T3 -> T4 does not** (below) |
+  | 1190001 + Niv 1200001 | 49,570 | 1 | 6 | held out, the final build: Niv gi262 T6 -> T7 recovers (T5 both at d8 b0) |
+
+  The first four rows are the refine before the untapper rule (below); the last two are the build that lands. Before
+  the rule seed 1170001 read 4 slower / 15 faster, two of the slower EDF games failing at d8 b0 -- the rule fixed both
+  (and the regression tier's EDF s2002 gi108, the same shape). Per deck the Niv net is negative on every seed of the
+  final build (-1 / -7 / 0 / -1).
+* **Census (10 decks x 30 games, seed 1100001, `logs/mana_oracle/rf1`):** DOMINATED-LIFE 3,444 -> 2,204,
+  DOMINATED-LAND 1,649 -> 1,377, DOMINATED-CREATURE 44 -> 31. Every remaining DOMINATED flag is LINE-level -- a
+  unit left floating at the end of a line, or a face choice that only pays off two payments later -- which the
+  per-payment rule correctly refuses, because the float it would give up might be the next payment's.
+
+### 13.1 Its cost, and the exact cuts that pay for it
+
+As first built the refine made the A/B's wall +17.7% (FiveColour +746%). Every cut below is EXACT -- the same
+payment chosen in every case -- and each was shown so on a pooled identity run over every suite deck.
+
+* **The lazy surplus (`MTG_PAY_REFINE_LAZY`, default ON).** Profiled (FiveColour, 2 games, one thread), 90% of all
+  time was the refine and 68% of that the superset step: a paying set holding a multi-unit source (Faeburrow
+  Elder, Bloom Tender) is also tried with each one-more one-unit tap. 432 of the 903 refines were ONE payment,
+  Nicol Bolas {4}{U}{B}{B}{R} over six taps, re-paid by the search from the same board (830 sets + 3,267 supersets
+  each, hitting the enumeration's 4,096-probe cap). With every face REGULAR (its tap turns its own source and
+  nothing else; `Face::regular`, measured in `MeasureFace`) a superset of a paying set S releases exactly
+  |taps| - |S| - 1 sources, and the choice takes the most released first; so supersets are parked and a set's are
+  verified only when they can still reach the best release found, each in its eager place in the order so ties
+  break as before. The Bolas refine: 370 verifies instead of 2,250.
+* **The memo (`MTG_PAY_REFINE_MEMO`, default ON).** The refine is a function of its boards: keyed on the engine's
+  mid-turn identity of the board before (`MidTurnStateKeyOf`), every payment field read on BOTH boards
+  (`PayFieldsDigest`: tapped flags, counters, all three floating pools -- the restricted ones the identity does not
+  fold -- life, energy), the bill (`ManaCostDigest`, every field of the cost), its context, the useful-colour mask
+  (the identity reads a library by size and front only), and the payer's own context (`PayContextDigest`,
+  ManaPayment.cpp: the line being paid, the holds and budgets around it, the heuristic arm -- the float-only
+  payment's leftover depends on them). A plan-source mask (the oracle's own Realize) is not memoised.
+  `MTG_PAY_REFINE_MEMO_VERIFY=1` recomputes every hit.
+* **The wild cap (`MTG_PAY_REFINE_WILD_OUT`, default ON).** After those two, EDF was still 3.2x: single games ran
+  57 s against 7 s (seed 1130464 gi463: 486,000 refines, 15.8 million verified candidates, almost none accepted).
+  Over half were Brushland under Fertile Ground or Trace of Abundance. The payer credits an any-colour land Aura's
+  bonus as `wild` -- a unit whose colour is decided later -- and when that unit is still floating after the
+  payment, no candidate can cover it: the table's faces always take a concrete colour, and every acceptance ends in
+  covering the engine's floating pools key by key, `wild` a key of its own. With every face regular, a candidate
+  and its re-taps can float no more wild than was already floating plus each source's wildest face (`Face::wild`,
+  measured), so a payment that leaves more is answered before any search. 136,104 of gi463's 248,589 refines.
+* **The Aura-pick fold (`MTG_ORACLE_FACE_FOLD`, default ON).** Two any-colour Auras on one land that credit the
+  same amount (`AuraPicksSymmetric`) spell the same tap twice when their colours are swapped, so `BuildSources`
+  keeps only non-decreasing pick pairs. It folds the oracle's own table too.
+* **The positional cover (`CoversBoards`).** The acceptance compared full resource tables built for both boards on
+  every candidate. Two boards that differ only in tapped flags, pools, life and energy -- a candidate replayed on
+  the engine's board always does -- are now compared field by field in place; anything else falls back to the
+  tables. `MTG_ORACLE_COVERS_VERIFY=1` checks every positional answer against the tables. The candidate is also
+  ranked BEFORE it is proven: one the choice would not take changes nothing, so it is never covered or re-tapped.
+* **Cheaper keys.** The bill is digested, not printed; the useful-colour mask is computed once per refine; the
+  payer-context digest folds the ~590-slot heuristic arm eight slots to a word instead of one.
+
+  | run | what it adds | identity | wall rf/base |
+  |---|---|---|---|
+  | first build | | | 1.177 (FiveColour 8.5x) |
+  | seed 1120001 | lazy surplus + memo | eager vs lazy+memo 12,714 paired: 0 digests changed; 6,050,533 memo hits verified, 0 mismatches | |
+  | seed 1130001 | | | 1.185 (EDF 3.21x) |
+  | seed 1140001 | Aura-pick fold | 12,714 paired: 0 digests changed | |
+  | seed 1160001 | wild cap, positional cover, rank-first | wild cap off vs on, 17,747 paired: 0 digests changed; positional cover 0 mismatches | 1.096 (EDF 1.68x) |
+  | seeds 1170001 / 1190001 | the untapper rule, packed digests | lazy tables + positional cover + digests vs the seed-1160001 build: 15,788 paired, 0 digests changed; refine-off arm vs the previous binary's: 4,954 paired, 0 changed | 1.105 (EDF 1.64x) / 1.060 held out |
+
+  EDF seed 1130464 gi463: 56.9 s -> 13.6 s (7.4 s with the refine off). The held-out 1.060 is low: FiveColour ran
+  with every trade blocked there (the Garth bug, fixed after it), and FiveColour alone measured about 1.25x before.
+  Heaviest decks on the final build: EDF 1.63x, FiveColour ~1.25-1.6x, AccomplishedAlchemist and SelesnyaLifegain
+  ~1.4x -- the refine still enumerates where the untapper rule then refuses the trade; an exact pre-check (no trade
+  possible and no face cheaper) would cut that, and is the next cost item.
+
+### 13.2 The executor's payment script (`MTG_REAL_PAY_SCRIPT`, default OFF -- a USER decision)
+
+Real play only. Before the executor applies the chosen plan, `PlanPaymentScript` (ManaOracle.cpp) runs the
+search's own apply on a copy; when that apply pays every action but on a DOMINATED set of taps, the oracle's
+dominating realisation (masked to the engine's own end-untapped sources, replayed on the real board, same line
+and same core key) becomes the payment script. The executor pays through a SAFE hook (`RealPayScope`): an entry
+is used only while its bill matches and it pays; otherwise the board is restored and the engine pays this payment
+and every later one. Not for a line that draws or casts a card the plan did not name, a combo route, or an armed
+damage board; node cap `MTG_REAL_PAY_NODES` (600).
+
+* **It no longer pays a DROP.** As first built it also paid lines whose search apply DROPPED an action the board
+  could pay for. Held-out A/B (seed 1130001, 20,910 paired): 17 slower / 0 faster, 15 of them drop-paid -- the
+  executor cast a spell the search's apply had dropped (Niv gi214 Preordain, Dragonstorm gi234 Kolaghan, Slivers
+  gi27 replicate vs Aether Vial, Melira gi138 Chord, Hinata gi219 Preordain), i.e. it played a line the search
+  never evaluated. That breaks the search-executor contract, so the branch is gone (`PlanPaymentScript` returns
+  false on a partial apply). A dropped action is the SEARCH's problem to fix (section 13.4, item C).
+* **Dominating-only:** seed 1150001, 19,658 paired: 0 slower / 0 faster, wall +1.1%. Its one slower game anywhere
+  is FiveColour seed 1130288 gi287, T6 -> T7, NOT recovered at d8 b0. Root cause: the script leaves Breeding Pool
+  untapped on T5 (a dominating payment), and the attack heuristic then keeps Deathrite Shaman home, so T6's
+  attack is one damage short. The defect is in combat, not mana; the script stays OFF until the USER decides
+  (fix the attack rule first, then re-measure).
+
+### 13.3 The adoption call (USER)
+
+`MTG_PAY_REFINE` lands DEFAULT OFF, so default play is byte-identical (smoke 153/153, regression 246/246, 0
+reference drift). Whether to turn it on is the USER's call, because it fails one clause of the bar:
+
+* For: a lossless rule per payment (the untapper rule included); held out 1 slower / 6 faster with the slower game
+  recovering at d8 b0; every deck's net <= 0 on the final build; it removes the census's single-payment DOMINATED
+  flags (Remote Farm + Plains, painland faces) in real play, the viewer's auto-tap and the search alike.
+* Against: NivMizzetCombo 1180001 gi521 stays T3 -> T4 at d8 b0 (the greedy payer after a give-back, above), and the
+  wall cost is +6-10% (EDF 1.6x).
+* Recommendation: turn it on; the gi521 shape belongs to the greedy payer and is the argument for a searched payment
+  (program item C), not against a payment that is no worse on its own.
+
+### 13.4 What is left
+
+Every DOMINATED flag that survives the refine is line-level: a unit left floating at the end of a line, or a face
+choice that only pays two payments later. The design for the search side is an end-of-line masked re-apply: when
+a plan's apply ends with mana floating, re-apply with a tapped source whose units are no more than the leftover
+reserved, and keep it only if the line and its core key are unchanged and the end board strictly covers. The
+census's other classes stay on the program: C (a dropped action the board could pay -- the search-level
+fallback), D (exact menu gates for ENUM-GAP and PHANTOM), E (oracle coverage: UNMODELED, CAPPED, ORACLE-GAP).

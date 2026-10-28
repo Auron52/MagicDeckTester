@@ -90,6 +90,12 @@ namespace manaoracle
         // Parallel to the steps served (script entries consumed): the human-sequence step each was made
         // in (t_seq_step at the time; -1 outside a human sequence) -- where a viewer pre-tap must sit.
         std::vector<int>       pay_steps;
+        // SAFE (RealPayScope, the REAL board): a scripted entry is used only while it fits -- its bill is the one
+        // asked for and its taps and float-only payment succeed; at the first that does not, the board is put
+        // back and this and every later payment is the engine's own (`abandoned`). Past the script's end, the
+        // engine's too. Never a frontier, never a failed payment the engine would not have failed.
+        bool                   safe      = false;
+        bool                   abandoned = false;
     };
 
     extern thread_local Hook* t_hook;
@@ -168,8 +174,48 @@ namespace manaoracle
     // float into a later payment). Each option is VERIFIED by performing it on a scratch copy
     // and paying float-only, so a listed option always pays. `unmodeled` collects what the
     // enumeration could not drive (e.g. a restricted-mana source the manual-tap routes refuse).
+    // `whole_float` (the refine's fast form): no set-aside enumeration -- the payment drains the floating pool as
+    // the payer does, so each tap set is one option.
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
-                                           std::vector<std::string>* unmodeled, bool creature_ability = false);
+                                           std::vector<std::string>* unmodeled, bool creature_ability = false,
+                                           bool whole_float = false);
+
+    // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
+    // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead
+    // when one DOMINATES it: it taps a subset of the sources the engine's payment tapped (any faces -- the
+    // minimal payments of the bill on a board where only those are untapped), costs no more life, energy or
+    // haste-tagged {C}, and the sources it gives back can still make every unit the engine's payment left
+    // floating (`post` is reachable from it by mana abilities alone) -- and is strictly better somewhere. Among
+    // several, the one giving back the most sources, then the most life, then energy. Never a source the
+    // engine's payment left untapped, so never a guess about the rest of the turn. Works on copies only.
+    bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
+                       bool creature_ability, PayOption& out);
+    // An option's taps, through the routes MinimalPayments verified them with (ApplyHumanPreTap /
+    // OracleCreatureTap). False = a tap was refused (the state may be part-tapped: the caller restores).
+    bool PerformPayTaps(GameState& state, const PayOption& o);
+
+    // THE EXECUTOR'S PAYMENT SCRIPT (MTG_REAL_PAY_SCRIPT; AIEngine::TakeTurn, real play only). For the plan the
+    // executor is about to apply on `state`: when the engine's own apply of it (the search's, TurnSolver::ApplyPlan)
+    // pays every action but is DOMINATED at the line level, the oracle's realisation of the same plan that
+    // dominates it -- made of the engine's own taps, CoreKey and line equal, replayed and compared on the real
+    // board -- as a payment script. False: keep the engine's payments -- for a DROP too (the search scored the
+    // plan by that apply, the drop included; paying the dropped cast plays a line nobody evaluated), a line that
+    // draws, reveals or casts a card the plan did not name (its continuation is searched on cards no payment could
+    // have known), a combo route, an armed damage board. `what` (optional): why. Bounded by MTG_REAL_PAY_NODES
+    // applies (default 600).
+    bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, bool pre,
+                           std::vector<PayOption>& script, std::string* what = nullptr);
+    // Serve `script` on the REAL board `s` for the scope's life, as a SAFE hook (Hook::safe): the executor's
+    // outermost payments on `s` take its entries in order while they fit, the engine's own payment otherwise.
+    struct RealPayScope
+    {
+        Hook  h;
+        Hook* saved = nullptr;
+        RealPayScope(GameState& s, std::vector<PayOption> script);
+        ~RealPayScope();
+        RealPayScope(const RealPayScope&)            = delete;
+        RealPayScope& operator=(const RealPayScope&) = delete;
+    };
 
     // AIEngine::TakeTurn's entry hook: audit this real decision (no-op unless On()).
     void AuditDecision(const GameState& state, bool is_pre_combat);

@@ -535,6 +535,10 @@ static_assert(sizeof(Player) == 200,
 // turn boundary, the scripted_upkeep_land_search class), FOLDED in Build() value-gated (and in
 // BuildDedupKey's pending pins); the bool is a DECK CONSTANT stamped once in StampDeckTraits that only
 // skips provably-empty upkeep walks -- nothing to fold.
+// +0 bytes (2026-10-28, the payment refine's untapper rule): `deck_has_mana_untapper` (a bool, in the bool padding
+// after deck_has_look_top_watcher). Classification: a DECK CONSTANT stamped once in StampDeckTraits -- identical
+// across every pair of states Build() compares, nothing to fold. It decides whether the payment refine may trade a
+// floated unit for a released source (ManaOracle.cpp RefinePayment); the refine memo keys it in its context bits.
 static_assert(sizeof(GameState) == 1152,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

@@ -4571,6 +4571,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // replay pays in the world the line was scored in. A searched breakpoint re-solve replaces the
     // pair for the rest of the phase (rs_pay, below).
     PlanPaymentPinScope _pay_exec(plan);
+    // MTG_REAL_PAY_SCRIPT (ManaOracle.h PlanPaymentScript; real play only): when the search's own apply of this plan
+    // drops an action the board can pay for, or pays it on a dominated set of taps, the executor pays with the mana
+    // oracle's realisation of the same plan. A SAFE hook: each scripted payment is used only while it fits (its bill
+    // is the one asked for, its taps and float-only payment succeed); the first that does not puts the board back
+    // and the engine pays that one and every later one itself.
+    std::optional<manaoracle::RealPayScope> _real_pay;
+    if (g_real_resolution && RealPayScriptOn() && !plan.actions.empty())
+    {
+        std::vector<manaoracle::PayOption> script;
+        if (manaoracle::PlanPaymentScript(state, plan, is_pre_combat_main, script)) { _real_pay.emplace(state, std::move(script)); }
+    }
 
     // The plan's post-apply STATE pins (the Lackey put, the declare-attackers pins, the Saga target, the
     // land-search picks) -- ApplyPlanDirect's own body (TurnSolver::WritePostApplyStatePins), so the real

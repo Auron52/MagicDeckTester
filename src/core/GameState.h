@@ -770,6 +770,17 @@ struct GameState
     // from the param, mainboard + sideboard, Garth holding it open, so a clear bit PROVES no look-top
     // trigger can be recorded (dead-code elimination, no lever). DEFAULT TRUE == walk.
     bool                     deck_has_look_top_watcher       = true;  // Risen Reef
+    // AND 2026-10-28 -- a SAME-PHASE MANA UNTAPPER: a card that can untap a tapped mana source while
+    // its float still stands (Cloud of Faeries / Peregrine Drake etb_untap_lands, Reality Spasm
+    // untap_x_mana_sources, Arbor Elf's Forest untap, Wirewood Lodge, Staff of Domination's creature
+    // untap, Galvanic Alchemist's soulbond untap, Seedcradle Witch). Read by the payment refine
+    // (MTG_PAY_REFINE, ManaOracle.cpp): with such a card in the deck, an untapped source does NOT
+    // dominate the same source tapped plus the mana it floated -- the untap refunds the tapped one
+    // and the float stays -- so the refine may not trade a floated unit for a released source.
+    // Stamped from the params, mainboard + sideboard (Garth's six fixed copies untap nothing, so he does
+    // not hold it open). DEFAULT TRUE == no trade, so an unstamped GameState (the scenario harness, a
+    // unit test) only ever errs safe.
+    bool                     deck_has_mana_untapper          = true;
     // AND 2026-10-17 -- the NIV-MIZZET DRAW/DAMAGE LOOP (CardParams::draw_trigger_damage,
     // cast_trigger_instant_sorcery_draw, aura_damage_trigger_draw, soulbond_damage_trigger_draw).
     // Gates ResolveDrawTriggers' flush (called after every draw-producing resolution in both worlds)

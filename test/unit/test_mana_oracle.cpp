@@ -18,6 +18,7 @@
 #include "core/HeuristicDefaults.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -217,7 +218,8 @@ Action CastAction(const GameState& s, const char* nm)
 // it, and the rollback has to reach back one decision: the Grounds' payment (#1) before the Displacer's
 // (#2), which is the one that failed. Two levers now pay it, each on its own: the per-cast give-back
 // (MTG_PAY_SHRINK) fixes that over-tap, and the whole-turn prepay (MTG_PREPAY_COLOURS) settles Fertile
-// Ground's any-colour bonus to {U} and pays both casts jointly. So the case runs with BOTH off, the
+// Ground's any-colour bonus to {U} and pays both casts jointly -- and since 2026-10-28 the per-payment refine
+// (MTG_PAY_REFINE) gives the over-tapped Conservatory back too. So the case runs with all three off, the
 // historical payer; the next test is the fixed one.
 TEST_CASE("viewer line check: the search's payment drops a cast the board pays for, and says how to pay it")
 {
@@ -228,11 +230,14 @@ TEST_CASE("viewer line check: the search's payment drops a cast the board pays f
     plan.land_decided = true;
     const std::int8_t saved    = heurarm::t_arm[heurarm::PAY_SHRINK];
     const std::int8_t saved_pc = heurarm::t_arm[heurarm::PREPAY_COLOURS];
+    const std::int8_t saved_rf = heurarm::t_arm[heurarm::PAY_REFINE];
     heurarm::t_arm[heurarm::PAY_SHRINK]     = 0;
     heurarm::t_arm[heurarm::PREPAY_COLOURS] = 0;
+    heurarm::t_arm[heurarm::PAY_REFINE]     = 0;
     const manaoracle::LineAudit a = manaoracle::AuditLine(s, /*pre=*/true, plan);
     heurarm::t_arm[heurarm::PAY_SHRINK]     = saved;
     heurarm::t_arm[heurarm::PREPAY_COLOURS] = saved_pc;
+    heurarm::t_arm[heurarm::PAY_REFINE]     = saved_rf;
     REQUIRE(a.audited);
     CHECK_FALSE(a.engine_full);
     CHECK(a.sibling == -1);
@@ -265,6 +270,82 @@ TEST_CASE("viewer line check: with the give-back the search's own payment casts 
     REQUIRE(a.audited);
     CHECK(a.engine_full);
     CHECK(a.dropped.empty());
+}
+
+// MTG_REAL_PAY_SCRIPT never pays a DROP: the search scored the plan by the engine's own apply, the drop included,
+// so paying the dropped cast would play a line nobody evaluated (the A/B: 17 slower, 0 faster, 15 of them drops).
+// The historical payer (the give-back, the joint colours and the refine off) drops Eldrazi Displacer here; no
+// script is offered, and the fixed payer casts both on its own.
+TEST_CASE("executor payment script: a dropped cast gets no script -- the drop is the search's apply to fix (MTG_REAL_PAY_SCRIPT)")
+{
+    EnsureOracleCards();
+    const GameState s = Edf3000T4();
+    TurnSolver::Plan plan;
+    plan.actions      = { CastAction(s, "Training Grounds"), CastAction(s, "Eldrazi Displacer") };
+    plan.land_decided = true;
+    heurarm::t_arm[heurarm::PAY_SHRINK]     = 0;
+    heurarm::t_arm[heurarm::PREPAY_COLOURS] = 0;
+    heurarm::t_arm[heurarm::PAY_REFINE]     = 0;
+    std::vector<manaoracle::PayOption> script;
+    const bool got = manaoracle::PlanPaymentScript(s, plan, /*pre=*/true, script);
+    heurarm::t_arm[heurarm::PAY_SHRINK]     = -1;
+    heurarm::t_arm[heurarm::PREPAY_COLOURS] = -1;
+    heurarm::t_arm[heurarm::PAY_REFINE]     = -1;
+    CHECK_FALSE(got);
+    CHECK_FALSE(manaoracle::PlanPaymentScript(s, plan, /*pre=*/true, script));
+}
+
+// MTG_REAL_PAY_SCRIPT's dominating script: a LINE-level over-tap the per-payment refine must refuse. Angels seed
+// 1100025 gi 24 T2 (census DOMINATED-LAND): Remote Farm up, Seraph Sanctuary to play, Lightning Greaves {2}. The
+// greedy pays Sanctuary's {C} and Farm's {W}{W}, floating a {W}; per payment that {W} is a resource the Sanctuary
+// cannot re-make, so the refine keeps it -- but the line ends there and the {W} empties. The script pays Greaves
+// off the Farm alone and the Sanctuary stays up.
+TEST_CASE("executor payment script: a line that floats a unit away is paid by the oracle's dominating script (MTG_REAL_PAY_SCRIPT, Angels s1100025)")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Remote Farm" });
+    s.turn_number = 2;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    int n = 100;
+    for (const char* nm : { "Seraph Sanctuary", "Lightning Greaves" })
+    {
+        Card c = CardDatabase::Instance().Lookup(nm)->card;
+        c.m_number = n++;
+        s.players[0].hand.push_back(c);
+    }
+    TurnSolver::Plan plan;
+    plan.actions      = { CastAction(s, "Lightning Greaves") };
+    plan.land_decided = true;
+    plan.land_to_play = "Seraph Sanctuary";
+    auto sanctuary_tapped = [](const GameState& g)
+    {
+        for (const Permanent& p : g.battlefield) { if (p.card.m_name.str() == "Seraph Sanctuary") { return p.tapped; } }
+        FAIL("no Seraph Sanctuary on the battlefield");
+        return false;
+    };
+    auto greaves_in = [](const GameState& g)
+    {
+        for (const Permanent& p : g.battlefield) { if (p.card.m_name.str() == "Lightning Greaves") { return true; } }
+        return false;
+    };
+    {
+        GameState g = s;
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        CHECK(greaves_in(g));
+        CHECK(sanctuary_tapped(g));   // the line-level over-tap, pinned
+    }
+    std::vector<manaoracle::PayOption> script;
+    std::string what;
+    REQUIRE(manaoracle::PlanPaymentScript(s, plan, /*pre=*/true, script, &what));
+    CHECK(what.find("dominates") != std::string::npos);
+    GameState g = s;
+    {
+        manaoracle::RealPayScope rp(g, script);
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+    }
+    CHECK(greaves_in(g));
+    CHECK_FALSE(sanctuary_tapped(g));
 }
 
 TEST_CASE("viewer line check: a line the engine's own payment casts in full is search-findable, and nothing more is asked")
@@ -380,21 +461,35 @@ TEST_CASE("payment: {U} off a Fertile Ground host taps the host alone, not a use
     CHECK(s.floating_mana.Total() == 1);     // Mariposa's own {C}
 }
 
-// MTG_PAY_SHRINK=0: the backtracker's first covering tap set, Conservatory as well as the host.
+// MTG_PAY_SHRINK=0: the backtracker's first covering tap set, Conservatory as well as the host -- unless the
+// per-payment refine (MTG_PAY_REFINE, pinned on here) gives Conservatory back, which it does on its own in a deck
+// with no same-phase untapper. EDF holds Cloud of Faeries and Peregrine Drake (deck_has_mana_untapper): there the
+// floated unit is worth more than the untapped Conservatory, so the refine keeps the engine's payment (and
+// MTG_PAY_SHRINK, default on, is what gives the over-tap back in play).
 TEST_CASE("payment: MTG_PAY_SHRINK=0 keeps the backtracker's first covering tap set for a {U}")
 {
     EnsureOracleCards();
-    GameState s = Board({ "Conservatory", "Mariposa Military Base", "Shivan Gorge", "Fertile Ground" });
-    s.battlefield[3].aura_attached_to = 2;
-    s.deck_has_land_aura = true;
-    const std::int8_t saved = heurarm::t_arm[heurarm::PAY_SHRINK];
-    heurarm::t_arm[heurarm::PAY_SHRINK] = 0;
-    const bool ok = TapForCostDirect(s, Cost(0, 0, 1), /*for_creature=*/false);
-    heurarm::t_arm[heurarm::PAY_SHRINK] = saved;
-    REQUIRE(ok);
-    CHECK(s.battlefield[0].tapped);
-    CHECK(s.battlefield[1].tapped);
-    CHECK(s.floating_mana.Total() == 2);
+    for (int refine : { 0, 1 })
+    for (bool untapper : { false, true })
+    {
+        CAPTURE(refine);
+        CAPTURE(untapper);
+        GameState s = Board({ "Conservatory", "Mariposa Military Base", "Shivan Gorge", "Fertile Ground" });
+        s.battlefield[3].aura_attached_to = 2;
+        s.deck_has_land_aura = true;
+        s.deck_has_mana_untapper = untapper;
+        const std::int8_t saved = heurarm::t_arm[heurarm::PAY_SHRINK];
+        heurarm::t_arm[heurarm::PAY_SHRINK] = 0;
+        heurarm::t_arm[heurarm::PAY_REFINE] = static_cast<std::int8_t>(refine);
+        const bool ok = TapForCostDirect(s, Cost(0, 0, 1), /*for_creature=*/false);
+        heurarm::t_arm[heurarm::PAY_SHRINK] = saved;
+        heurarm::t_arm[heurarm::PAY_REFINE] = -1;
+        REQUIRE(ok);
+        const bool kept = refine == 0 || untapper;
+        CHECK(s.battlefield[0].tapped == kept);
+        CHECK(s.battlefield[1].tapped);
+        CHECK(s.floating_mana.Total() == (kept ? 2 : 1));
+    }
 }
 
 // THE FRONTIER PRUNE KEYS A PERMANENT BY WHAT IS ATTACHED TO IT (EDF seed 3003 T5, nine ORACLE-GAPs). Aether Hub #1

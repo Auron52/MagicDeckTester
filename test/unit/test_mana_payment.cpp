@@ -1057,11 +1057,13 @@ GameState PainAuraBoard(const std::vector<std::string>& more)
     s.players[1].life    = 20;
     return s;
 }
-int PainAuraLife(GameState s, const ManaCost& c, int arm)
+int PainAuraLife(GameState s, const ManaCost& c, int arm, int refine = -1)
 {
     heurarm::t_arm[heurarm::PAINLESS_AURA_PIP] = static_cast<std::int8_t>(arm);
+    heurarm::t_arm[heurarm::PAY_REFINE]        = static_cast<std::int8_t>(refine);
     const bool ok = TapForCostShared(s, c, /*for_creature=*/false, nullptr, true);
     heurarm::t_arm[heurarm::PAINLESS_AURA_PIP] = -1;
+    heurarm::t_arm[heurarm::PAY_REFINE]        = -1;
     REQUIRE(ok);
     return s.players[0].life;
 }
@@ -1071,7 +1073,8 @@ TEST_CASE("payment: {1}{G} off Brushland + Wild Growth taps the painless {C}, th
 {
     const GameState s = PainAuraBoard({});
     CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), -1) == 20);
-    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), 0) == 19);    // =0: the historical coloured tap
+    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), 0, 0) == 19); // =0 (and no refine): the historical coloured tap
+    CHECK(PainAuraLife(s, Cost(1, 0, 0, 0, 0, /*g=*/1), 0, 1) == 20); // ...which MTG_PAY_REFINE re-faces on its own
     GameState t = s;
     REQUIRE(TapForCostShared(t, Cost(1, 0, 0, 0, 0, /*g=*/1), false, nullptr, true));
     CHECK(t.battlefield[0].tapped);

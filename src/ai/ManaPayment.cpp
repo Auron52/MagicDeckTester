@@ -13,12 +13,14 @@
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
+#include <chrono>
 #include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
 #include <atomic>
 #include <cstdio>
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
 #include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
+#include <initializer_list>   // ManaCostDigest packs byte fields
 #include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
 #include <vector>
 
@@ -6674,8 +6676,8 @@ static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool
 // autonomous game), so batch play and ground truth do not move.
 
 // A warm per-thread scratch board pool (PayScratch's shape in TurnSolver.cpp): the trials copy-ASSIGN into
-// a reused GameState, so their zone vectors reuse capacity. A deque, so a nested trial (none today) could
-// never relocate a board an outer frame holds.
+// a reused GameState, so their zone vectors reuse capacity. A deque, so a nested trial could never relocate a
+// board an outer frame holds. (PayRefineAfter's pre-payment board comes from the same pool.)
 namespace
 {
 struct RampScratch
@@ -6857,6 +6859,173 @@ static bool RampFeedRouteRepay(const GameState& state, const ManaCost& cost_in, 
     return fire;
 }
 
+// ---- MTG_PAY_REFINE: the cheapest payment of the same bill out of the same taps --------------------------
+//
+// THE DEFECT (the mana oracle census, 39 decks x 30 games, seed 1100001). Every DOMINATED flag -- a payment of a
+// plan that leaves strictly fewer resources than another payment of it -- taps a SUBSET of the engine's own
+// sources: that is what dominating means when a tapped source is a resource. The engine's greedy taps one source
+// per pip in rank order and the backtracker takes the first covering set, so a payment can carry a tap the bill
+// did not need (Angels: Plains then Remote Farm for Giada's {1}{W}, a {W} floating away; Dragons: Mountain, Mind
+// Stone and Gruul Turf for Urza's Incubator's {3}) or pay on a face that costs something the same taps need not
+// spend (Melira Pod: Llanowar Wastes' {G}, 1 life, where its {C} pays and another tap covers the {G}).
+// MTG_PAY_SHRINK gives back only on the backtracker path and only past one source per mana point, so a
+// two-mana land never triggers it.
+//
+// THE REPAIR is a dominance check, not a preference. Once an outermost payment has committed, if it cost life,
+// energy or a haste-tagged {C} on a noncreature bill, or left mana floating off two or more taps, the mana oracle
+// enumerates the minimal payments of the SAME bill on a board where only the sources this payment tapped are
+// untapped (RefinePayment), makes each on a copy of the real board, and keeps the one that dominates: a subset of
+// the taps, no less life, energy or haste {C}, and the sources it gives back able to make again every unit the
+// engine's payment left floating. That payment is then made instead -- the board restored field by field (no
+// GameState reassignment: callers hold references into the battlefield), its taps through the manual-tap routes,
+// the bill paid float-only. A source the engine's payment did not tap is never touched, so nothing about the rest
+// of the turn is guessed. Skipped where a field-wise restore is not exact: a sacrificed source (Treasure,
+// Generator Servant), a graveyard the payment touched (Deathrite), an opponent's life it moved (Grove drip), an
+// armed damage board, the oracle's own copies and its float-only probes.
+namespace
+{
+thread_local bool t_pay_refining = false;
+std::atomic<long long> g_refine_seen{0}, g_refine_trig{0}, g_refine_found{0}, g_refine_fail{0}, g_refine_us{0};
+struct RefineStatsReport
+{
+    ~RefineStatsReport()
+    {
+        static const bool s_on = EnvOn("MTG_PAY_REFINE_STATS");
+        if (!s_on) { return; }
+        std::fprintf(stderr, "=== PAY REFINE: payments=%lld triggered=%lld refined=%lld commit_failed=%lld ms=%lld ===\n",
+                     g_refine_seen.load(), g_refine_trig.load(), g_refine_found.load(), g_refine_fail.load(),
+                     g_refine_us.load() / 1000);
+    }
+} g_refine_stats_report;
+
+int FloatTotal(const GameState& s)
+{
+    return s.floating_mana.Total() + s.floating_creature_mana.Total() + s.floating_bigspell_mana.Total();
+}
+
+struct PayRefineSnap
+{
+    std::vector<PermPaySnap> bf;
+    std::vector<int>         charge;
+    ManaPool                 fm, fcm, fbm;
+    int                      fhc = 0;
+    ManaPool                 av;
+    int                      life = 0, opp_life = 0, energy = 0;
+    bool                     oll = false;
+    std::size_t              gy = 0;
+    PayRollbackLedger        ledger;
+
+    void Take(const GameState& s, const ManaPool* available)
+    {
+        const int a = s.active_player_index;
+        SnapPayFields(s.battlefield, bf);
+        charge.resize(s.battlefield.size());
+        for (std::size_t i = 0; i < s.battlefield.size(); ++i) { charge[i] = s.battlefield[i].charge_counters; }
+        fm = s.floating_mana; fcm = s.floating_creature_mana; fbm = s.floating_bigspell_mana;
+        fhc = s.floating_haste_c;
+        av = available != nullptr ? *available : ManaPool{};
+        life = s.players[a].life; opp_life = s.players[1 - a].life; energy = s.players[a].energy_counters;
+        oll = s.opponent_lost_life_this_turn;
+        gy = s.players[a].graveyard.size();
+        ledger = s.pay_ledger;
+    }
+    // In place, field by field (the size invariant holds: the caller checked the battlefield did not change size).
+    void Restore(GameState& s, ManaPool* available) const
+    {
+        const int a = s.active_player_index;
+        RestorePayFields(s.battlefield, bf);
+        for (std::size_t i = 0; i < s.battlefield.size() && i < charge.size(); ++i) { s.battlefield[i].charge_counters = charge[i]; }
+        s.floating_mana = fm; s.floating_creature_mana = fcm; s.floating_bigspell_mana = fbm;
+        s.floating_haste_c = fhc;
+        if (available != nullptr) { *available = av; }
+        s.players[a].life = life; s.players[1 - a].life = opp_life; s.players[a].energy_counters = energy;
+        s.opponent_lost_life_this_turn = oll;
+        s.pay_ledger = ledger;
+    }
+};
+
+void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature, ManaPool* available,
+                    bool honor_legacy_cco, const PayRefineSnap& pre)
+{
+    g_refine_seen.fetch_add(1, std::memory_order_relaxed);
+    const int a = state.active_player_index;
+    if (state.battlefield.size() != pre.bf.size() || state.players[a].graveyard.size() != pre.gy
+        || state.players[1 - a].life != pre.opp_life || state.opponent_lost_life_this_turn != pre.oll)
+    { return; }
+    int newly = 0;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == a && p.tapped && !pre.bf[i].tapped) { ++newly; }
+    }
+    if (newly == 0) { return; }
+    const ManaPool fm_pre = pre.fm;
+    const int float_pre = fm_pre.Total() + pre.fcm.Total() + pre.fbm.Total();
+    const bool spent = state.players[a].life < pre.life || state.players[a].energy_counters < pre.energy
+                    || (!for_creature && state.floating_haste_c < pre.fhc);
+    const bool surplus = newly >= 2 && FloatTotal(state) > float_pre;
+    if (!spent && !surplus) { return; }
+    g_refine_trig.fetch_add(1, std::memory_order_relaxed);
+    static const bool s_clock = EnvOn("MTG_PAY_REFINE_STATS");
+    struct Clock
+    {
+        bool on;
+        std::chrono::steady_clock::time_point t0;
+        explicit Clock(bool o) : on(o) { if (on) { t0 = std::chrono::steady_clock::now(); } }
+        ~Clock()
+        {
+            if (!on) { return; }
+            g_refine_us.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(
+                                      std::chrono::steady_clock::now() - t0).count(), std::memory_order_relaxed);
+        }
+    } clock(s_clock);
+    RampScratch before_scr(state);   // the warm scratch board (a copy-assign, not a fresh copy per trigger)
+    GameState& before = before_scr.Board();
+    pre.Restore(before, nullptr);
+    manaoracle::PayOption opt;
+    {
+        t_pay_refining = true;
+        const bool found = manaoracle::RefinePayment(before, state, cost_in, for_creature, PayingCreatureAbility(), opt);
+        t_pay_refining = false;
+        if (!found) { return; }
+    }
+    g_refine_found.fetch_add(1, std::memory_order_relaxed);
+    // Make it on the real board: back to the pre-payment fields, the option's taps, the bill float-only.
+    PayRefineSnap made;
+    made.Take(state, available);
+    pre.Restore(state, available);
+    t_pay_refining = true;
+    bool ok = manaoracle::PerformPayTaps(state, opt) && state.battlefield.size() == pre.bf.size();
+    if (ok)
+    {
+        ManaPool& f = state.floating_mana;
+        const ManaPool& st = opt.stash;
+        ok = f.white >= st.white && f.blue >= st.blue && f.black >= st.black && f.red >= st.red
+          && f.green >= st.green && f.colorless >= st.colorless && state.floating_haste_c >= opt.stash_haste;
+        if (ok)
+        {
+            f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+            f.colorless -= st.colorless;
+            state.floating_haste_c -= opt.stash_haste;
+            f.snow_units = std::min(f.snow_units, f.Total());
+            manaoracle::t_float_only = true;
+            ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+            manaoracle::t_float_only = false;
+            f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+            f.colorless += st.colorless;
+            state.floating_haste_c += opt.stash_haste;
+        }
+    }
+    t_pay_refining = false;
+    if (!ok && state.battlefield.size() == made.bf.size())
+    {
+        // Verified on a copy, refused here: an oracle/payer disagreement. Keep the engine's own payment.
+        g_refine_fail.fetch_add(1, std::memory_order_relaxed);
+        made.Restore(state, available);
+    }
+}
+} // namespace
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
@@ -6876,6 +7045,13 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     if (t_pay_nest == 1 && !t_ramp_route && RampFeedRouteOn()
         && RampFeedRouteRepay(state, cost_in, for_creature, available, honor_legacy_cco))
     { _ramp_route.emplace(); }
+    // MTG_PAY_REFINE (above): the board as this payment found it, for the dominance check once it has committed.
+    // (The oracle's own copy never gets here -- its payments returned through ScriptedPay above -- and its
+    // float-only probes, like the refine's own, are skipped.)
+    const bool refine = t_pay_nest == 1 && !t_pay_refining && !manaoracle::t_float_only && !state.dmg_events_armed
+                     && PayRefineOn();
+    std::optional<PayRefineSnap> refine_pre;
+    if (refine) { refine_pre.emplace(); refine_pre->Take(state, available); }
     bool ok;
     if (!state.dmg_events_armed)
     { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
@@ -6903,6 +7079,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // so the re-pay is undone too (its own taps were restored by the failure path above).
         if (!ok) { payroll::UndoLast(state); }
     }
+    if (ok && refine_pre) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
     return ok;
 }
 
@@ -6916,6 +7093,57 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
 {
     Hook& h = *t_hook;
     if (h.ended) { return false; }
+    // SAFE (RealPayScope, the real board -- ManaOracle.h): the script's entry only while it fits; else the board
+    // is put back and the engine pays, this time and every time after.
+    if (h.safe)
+    {
+        auto engine_pay = [&]() -> bool
+        {
+            Hook* const saved = t_hook;
+            t_hook = nullptr;
+            --t_pay_nest;
+            const bool ok = TapForCostShared(state, cost_in, for_creature, available, honor_legacy_cco);
+            ++t_pay_nest;
+            t_hook = saved;
+            return ok;
+        };
+        if (h.abandoned || h.next >= h.script.size()) { ++h.next; return engine_pay(); }
+        const PayOption& opt = h.script[h.next++];
+        h.pay_steps.push_back(t_seq_step);
+        if (opt.engine) { return engine_pay(); }
+        if (opt.fail || opt.what != cost_in.ToString()) { h.abandoned = true; return engine_pay(); }
+        PayRefineSnap before;
+        before.Take(state, available);
+        const std::size_t n0 = state.battlefield.size();
+        bool ok = PerformPayTaps(state, opt) && state.battlefield.size() == n0;
+        if (ok)
+        {
+            ManaPool& f = state.floating_mana;
+            const ManaPool& st = opt.stash;
+            ok = f.white >= st.white && f.blue >= st.blue && f.black >= st.black && f.red >= st.red
+              && f.green >= st.green && f.colorless >= st.colorless && state.floating_haste_c >= opt.stash_haste;
+            if (ok)
+            {
+                f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+                f.colorless -= st.colorless;
+                state.floating_haste_c -= opt.stash_haste;
+                f.snow_units = std::min(f.snow_units, f.Total());
+                Hook* const saved = t_hook;
+                t_hook       = nullptr;
+                t_float_only = true;
+                ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+                t_float_only = false;
+                t_hook       = saved;
+                f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+                f.colorless += st.colorless;
+                state.floating_haste_c += opt.stash_haste;
+            }
+        }
+        if (ok) { return true; }
+        if (state.battlefield.size() == n0) { before.Restore(state, available); }
+        h.abandoned = true;
+        return engine_pay();
+    }
     // ENGINE STEP (the rollback census): the engine's own payment, made exactly as an unhooked apply
     // makes it -- the hook stood down and the nest unwound, so it is the normal outermost payment. A
     // failure drops the cast and the apply goes on, as it does in search; the first one is recorded.
@@ -7964,8 +8192,12 @@ std::vector<std::string> HumanPreTapFedFaces(const GameState& state, const Perma
 std::vector<HumanPreTapAura>
 HumanPreTapAuraFaces(const GameState& state, const Permanent& p)
 {
+    return HumanPreTapAuraFaces(state, p, HumanPreTapOfferFor(state, p));
+}
+std::vector<HumanPreTapAura>
+HumanPreTapAuraFaces(const GameState& state, const Permanent& p, const HumanPreTapOffer& offer)
+{
     std::vector<HumanPreTapAura> out;
-    const HumanPreTapOffer offer = HumanPreTapOfferFor(state, p);
     if (offer.free_faces.empty() && offer.fed_faces.empty()) { return out; }
     for (const Permanent* a : AnyColorLandAuras(state, p))
     { out.push_back({ a->card.m_name.str(), a->card.m_number, "WUBRG" }); }
@@ -8103,7 +8335,7 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
     // made it for them by crediting `wild`. Every rejection below reports its reason verbatim, for
     // the same reason the face's do: this fallback exists because a silently-made mana choice is
     // the defect, so a silently-DROPPED one would be the same defect wearing a different hat.
-    const std::vector<HumanPreTapAura> auras = HumanPreTapAuraFaces(state, *found);
+    const std::vector<HumanPreTapAura> auras = HumanPreTapAuraFaces(state, *found, offer);
     if (!t.aura_colors.empty())
     {
         if (auras.empty())
@@ -8227,4 +8459,63 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
                      f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild, haste.c_str());
     }
     return std::string();
+}
+
+// ManaCostDigest (ManaPayment.h): every field of the cost, in declaration order.
+std::uint64_t ManaCostDigest(const ManaCost& c)
+{
+    std::uint64_t h = 0xC057C057ULL;
+    auto mix = [&](std::uint64_t v) { h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2); h *= 0xBF58476D1CE4E5B9ULL; };
+    // Packed two 32-bit counts to a word, the byte-sized metadata eight to a word: four mixes, not twenty.
+    auto two = [](int x, int y)
+    { return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32) | static_cast<std::uint32_t>(y); };
+    auto bytes = [](std::initializer_list<std::uint8_t> v)
+    { std::uint64_t w = 0; for (std::uint8_t b : v) { w = (w << 8) | b; } return w; };
+    mix(two(c.generic, c.white)); mix(two(c.blue, c.black)); mix(two(c.red, c.green));
+    mix(two(c.colorless, c.x_pips));
+    mix(bytes({ static_cast<std::uint8_t>(c.has_x ? 1 : 0), c.twobrid_count, c.hybrid_count, c.hybrid_pair[0],
+                c.hybrid_pair[1], c.hybrid_pair[2], c.hybrid_pair[3], c.phyrexian_count }));
+    mix(bytes({ c.phyrexian_color[0], c.phyrexian_color[1], c.twobrid_color[0], c.twobrid_color[1], c.twobrid_color[2],
+                static_cast<std::uint8_t>(c.snow_pips) }));
+    return h;
+}
+
+// PayContextDigest (ManaPayment.h). Folded field by field; a pointer context folds what it points at.
+std::uint64_t PayContextDigest()
+{
+    std::uint64_t h = 0xC0471E57ULL;
+    auto mix = [&](std::uint64_t v) { h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2); h *= 0xBF58476D1CE4E5B9ULL; };
+    auto cost = [&](const ManaCost& c) { mix(ManaCostDigest(c)); };
+    cost(g_line_unpaid_cost);
+    cost(g_act_line_paid);
+    cost(g_act_line_current);
+    mix((g_line_opens_unseen ? 1u : 0u) | (t_scarce_held_only ? 2u : 0u) | (t_ramp_route ? 4u : 0u)
+        | (HumanPlayActive() ? 8u : 0u) | (LineGenericOrderLive() ? 16u : 0u) | (g_hold_colorless_for_pips ? 32u : 0u)
+        | (g_snow_pay_strict ? 64u : 0u) | (g_hold_colorless_in_payment ? 128u : 0u) | (g_in_blink_loop ? 256u : 0u)
+        | (g_tap_speculating ? 512u : 0u) | (g_pay_need_live ? 1024u : 0u) | (g_paysac_cracked ? 2048u : 0u));
+    mix(static_cast<std::uint32_t>(t_float_generic_hold));
+    mix(static_cast<std::uint32_t>(g_human_untap_need));
+    mix(static_cast<std::uint32_t>(g_pay_remaining_mv));
+    mix(static_cast<std::uint32_t>(g_pay_full_mv));
+    mix(static_cast<std::uint32_t>(g_tap_keep_last_card));
+    mix(static_cast<std::uint32_t>(g_pain_sweep_defer));
+    mix(static_cast<std::uint32_t>(g_pay_sac_victim));
+    for (int i = 0; i < 5; ++i)
+    {
+        mix(static_cast<std::uint32_t>(g_pay_own_line_pips[i]));
+        mix(static_cast<std::uint32_t>(g_pay_colored_need[i]));
+    }
+    if (g_generic_spend_budget != nullptr)
+    { mix(0xB06E7); for (int i = 0; i < 5; ++i) { mix(static_cast<std::uint32_t>(g_generic_spend_budget[i])); } }
+    if (g_untap_loop_owed != nullptr) { mix(0x0BED); cost(*g_untap_loop_owed); }
+    mix(g_plan_reserved_sources.size());
+    for (int n : g_plan_reserved_sources) { mix(static_cast<std::uint32_t>(n)); }
+    if (g_etb_untap_priority != nullptr)
+    { mix(0xE7B); for (int n : *g_etb_untap_priority) { mix(static_cast<std::uint32_t>(n)); } }
+    // The arm eight slots to a word (~590 slots: a byte at a time was most of this digest's cost).
+    const heurarm::Arm& arm = heurarm::t_arm;
+    std::size_t i = 0;
+    for (; i + 8 <= arm.size(); i += 8) { std::uint64_t w; std::memcpy(&w, arm.data() + i, 8); mix(w); }
+    if (i < arm.size()) { std::uint64_t w = 0; std::memcpy(&w, arm.data() + i, arm.size() - i); mix(w); }
+    return h;
 }

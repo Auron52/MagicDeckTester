@@ -1368,6 +1368,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool scry_watcher = false;
         // The look-top enter watcher (see GameState::deck_has_look_top_watcher): the param itself.
         bool look_top_watcher = false;
+        // A same-phase mana untapper (see GameState::deck_has_mana_untapper): the params below.
+        bool mana_untapper = false;
         // Courser of Kruphix's top-of-library land drop (see GameState::deck_has_top_land_play): the
         // same param TopLandPlayStaticSource tests on the battlefield.
         bool top_land = false;
@@ -1444,6 +1446,11 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                     || !d->params.transform_front_name.empty())           { transform = true; }
                 if (d->params.steal_tap_count > 0)                       { tap_steal = true; }
                 if (d->params.enters_look_top_land_or_hand) { look_top_watcher = true; }
+                if (d->params.etb_untap_lands > 0 || d->params.untap_x_mana_sources
+                    || !d->params.mana_requires_land_subtype.empty() || d->params.untap_creature_cost.has_value()
+                    || d->params.untap_target_creature_cost.has_value()
+                    || d->params.soulbond_grants_untap_self_cost.has_value() || d->params.untap_pump_cost.has_value())
+                { mana_untapper = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
@@ -1497,6 +1504,11 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_scry_watcher      = garth || scry_watcher;
         // Same reasoning, no lever: a clear bit proves no look-top trigger (Risen Reef) can be recorded.
         state.deck_has_look_top_watcher  = garth || look_top_watcher;
+        // Not a walk gate but a dominance premise (the payment refine's float-for-source trade). NOT held open
+        // by Garth: his copies are six fixed cards (Disenchant, Braingeyser, Terror, Shivan Dragon, Regrowth,
+        // Black Lotus), none of which untaps anything, and Regrowth returns only this deck's own cards -- the
+        // ones scanned here. (Holding it open cost FiveColour every trade: 2,019 refines -> 0 on 3 games.)
+        state.deck_has_mana_untapper     = mana_untapper;
         // Same reasoning, no lever: a clear bit PROVES TopLandPlayStaticSource's walk finds no
         // play-from-top permanent, so every library-top land read is dead code for that deck.
         state.deck_has_top_land_play     = garth || top_land;

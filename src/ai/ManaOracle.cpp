@@ -16,12 +16,15 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <map>
 #include <mutex>
 #include <optional>
 #include <set>
 #include <string>
+#include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -68,11 +71,18 @@ bool NextIsEngineStep(const GameState& s)
 {
     const Hook* h = t_hook;
     if (h == nullptr || h->target != &s || h->ended) { return false; }
+    // A SAFE hook (RealPayScope) that has given up on its script, or run past it, hands every step back.
+    if (h->safe && (h->abandoned || h->next >= h->script.size())) { return true; }
     return h->next < h->script.size() ? h->script[h->next].engine : h->all_engine;
 }
 
 bool TakeEngineStep(const GameState& s, int count)
 {
+    // A SAFE hook whose next entry is not a tap-ahead gives up on its script here (the engine taps ahead).
+    Hook* const sh = t_hook;
+    if (count > 0 && sh != nullptr && sh->target == &s && sh->safe && !sh->ended && !sh->abandoned
+        && sh->next < sh->script.size() && !sh->script[sh->next].engine && sh->script[sh->next].what != "tap-ahead")
+    { sh->abandoned = true; }
     if (count <= 0 || !NextIsEngineStep(s)) { return false; }
     ++t_hook->next;
     t_hook->pay_steps.push_back(t_seq_step);
@@ -557,6 +567,70 @@ bool Covers(const Res& a, const Res& b, bool* strict)
     return true;
 }
 
+// Covers(Resources(x, with_float), Resources(y, with_float), strict), read off the two boards
+// without building x's table: when they hold the same permanents in the same places with the same class keys
+// (ClassKey + AttachedKey) and x untaps at least every permanent y does, the "U:" counts cover class by class and
+// are strictly larger exactly where x untaps one y tapped; "H:", life, energy and the pools compare as numbers. Any
+// other pair of boards takes the tables. The refine compares a re-payment against the engine's own payment of one
+// bill from one board, thousands of times a game (EDF seed 1130464 gi463: 3.1M candidates, the tables ~18% of the
+// game's time -- AttachedKey walks the battlefield per permanent). MTG_ORACLE_COVERS_VERIFY=1 checks every fast
+// answer against the tables.
+bool CoversBoards(const GameState& x, const GameState& y, bool with_float, bool* strict)
+{
+    const int a = x.active_player_index;
+    bool fast = a == y.active_player_index && x.battlefield.size() == y.battlefield.size();
+    bool st = false;
+    for (std::size_t i = 0; fast && i < x.battlefield.size(); ++i)
+    {
+        const Permanent& p = x.battlefield[i];
+        const Permanent& q = y.battlefield[i];
+        if (p.card.m_number != q.card.m_number || p.controller_index != q.controller_index
+            || p.aura_attached_to != q.aura_attached_to || p.equipped_to != q.equipped_to
+            || p.card.m_name_hash != q.card.m_name_hash) { fast = false; break; }
+        if (p.controller_index != a) { continue; }
+        if (p.temp_haste != q.temp_haste || p.storage_counters != q.storage_counters
+            || p.charge_counters != q.charge_counters || p.entered_this_turn != q.entered_this_turn
+            || p.is_token != q.is_token || p.card.IsLand() != q.card.IsLand() || p.card.IsCreature() != q.card.IsCreature()
+            || (p.tapped && !q.tapped)
+            || ((!p.counters.empty() || !q.counters.empty()) && p.counters.KeyFragment() != q.counters.KeyFragment()))
+        { fast = false; break; }
+        if (!p.tapped && q.tapped) { st = true; }
+    }
+    if (!fast) { return Covers(Resources(x, with_float), Resources(y, with_float), strict); }
+    const Player& px = x.players[a];
+    const Player& py = y.players[a];
+    bool ok = px.life >= py.life && px.energy_counters >= py.energy_counters;
+    st = st || px.life > py.life || px.energy_counters > py.energy_counters;
+    if (ok && with_float)
+    {
+        const ManaPool* xs[3] = { &x.floating_mana, &x.floating_creature_mana, &x.floating_bigspell_mana };
+        const ManaPool* ys[3] = { &y.floating_mana, &y.floating_creature_mana, &y.floating_bigspell_mana };
+        for (int i = 0; i < 3 && ok; ++i)
+        {
+            const ManaPool& f = *xs[i];
+            const ManaPool& g = *ys[i];
+            const int u[7] = { f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild };
+            const int v[7] = { g.white, g.blue, g.black, g.red, g.green, g.colorless, g.wild };
+            for (int c = 0; c < 7; ++c) { if (u[c] < v[c]) { ok = false; break; } if (u[c] > v[c]) { st = true; } }
+        }
+        if (x.floating_haste_c < y.floating_haste_c) { ok = false; }
+        if (x.floating_haste_c > y.floating_haste_c) { st = true; }
+    }
+    static const bool s_verify = EnvOn("MTG_ORACLE_COVERS_VERIFY");
+    if (s_verify)
+    {
+        bool st2 = false;
+        const bool ok2 = Covers(Resources(x, with_float), Resources(y, with_float), &st2);
+        if (ok2 != ok || (ok && st2 != st))
+        {
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[oracle-covers] MISMATCH fast %d/%d tables %d/%d\n", ok ? 1 : 0, st ? 1 : 0, ok2 ? 1 : 0, st2 ? 1 : 0);
+        }
+    }
+    if (ok && strict != nullptr) { *strict = st; }
+    return ok;
+}
+
 // Where `a` has MORE than `b`, as "key a>b" -- what a "fewer resources" verdict is about.
 std::string MoreText(const Res& a, const Res& b)
 {
@@ -636,6 +710,10 @@ struct Face
     int  net      = 0;                       // measured net units (a fed face: outputs minus its feed)
     bool fed      = false;
     bool creature = false;                   // the restricted route (OracleCreatureTap)
+    // The tap turns exactly its own source from untapped to tapped and nothing else (no sacrifice, no
+    // other permanent tapped or untapped). RefinePayment's surplus bound counts released sources by it.
+    bool regular  = false;
+    int  wild     = 0;                       // measured: the `wild` units the tap adds (every pool)
 };
 struct SrcClass
 {
@@ -655,11 +733,37 @@ int LetterIndex(char ch)
 int AllFloat(const GameState& s)
 { return s.floating_mana.Total() + s.floating_creature_mana.Total() + s.floating_bigspell_mana.Total(); }
 
+// A warm per-thread scratch board (RampScratch / PayScratch's shape): the probes below copy-ASSIGN into a reused
+// GameState, so its zone vectors keep their capacity instead of being allocated per probe -- the refine runs a
+// table, verifies and replays per triggered payment, a few thousand board copies a game. A deque, so a nested
+// probe never relocates a board an outer frame holds.
+struct OracleScratch
+{
+    explicit OracleScratch(const GameState& src)
+    {
+        static thread_local std::deque<GameState> pool;
+        static thread_local std::size_t           depth = 0;
+        while (pool.size() <= depth) { pool.emplace_back(); }
+        m_state = &pool[depth];
+        m_depth = &depth;
+        ++depth;
+        *m_state = src;
+    }
+    ~OracleScratch() { --(*m_depth); }
+    OracleScratch(const OracleScratch&)            = delete;
+    OracleScratch& operator=(const OracleScratch&) = delete;
+    GameState& Board() const { return *m_state; }
+private:
+    GameState*   m_state = nullptr;
+    std::size_t* m_depth = nullptr;
+};
+
 // Measure a face on a scratch copy: what the tap adds. A fed face is asked with a generous pre-fill so
 // its feed can always be met; its net is then (outputs - feed).
 bool MeasureFace(const GameState& state, Face& f)
 {
-    GameState sc = state;
+    OracleScratch scr(state);
+    GameState& sc = scr.Board();
     if (f.fed)
     {
         sc.floating_mana.white += 2; sc.floating_mana.blue  += 2; sc.floating_mana.black += 2;
@@ -679,6 +783,16 @@ bool MeasureFace(const GameState& state, Face& f)
     const std::string why = f.creature ? OracleCreatureTap(sc, f.pt) : ApplyHumanPreTap(sc, f.pt);
     if (!why.empty()) { return false; }
     f.net = AllFloat(sc) - before;
+    f.regular = sc.battlefield.size() == state.battlefield.size();
+    for (std::size_t i = 0; i < sc.battlefield.size() && f.regular; ++i)
+    {
+        const Permanent& p0 = state.battlefield[i];
+        const Permanent& p1 = sc.battlefield[i];
+        if (p0.card.m_number != p1.card.m_number) { f.regular = false; }
+        else if (p0.card.m_number == f.pt.num) { f.regular = !p0.tapped && p1.tapped; }
+        else if (p0.tapped != p1.tapped) { f.regular = false; }
+    }
+    f.wild = std::max(0, all_pools(sc).wild - fb.wild);
     if (!f.fed)
     {
         const ManaPool fa = all_pools(sc);
@@ -748,6 +862,25 @@ int UsefulColorMask(const GameState& s, const ManaCost& cost)
 // painless line the engine pays with #14 (an ORACLE-GAP, "life engine 20 oracle 19").
 thread_local const std::set<int>* t_plan_srcs = nullptr;
 
+// Do the first two Aura colour picks on `land` commute? They do when the first two Auras LandAuraAddToPoolOfLand
+// credits a pick to (attached, controlled alike, adding one mana of any colour on this board) add the same amount.
+bool AuraPicksSymmetric(const GameState& s, const Permanent& land)
+{
+    if (!land.card.IsLand() || !s.deck_has_land_aura) { return false; }
+    int amt[2] = { 0, 0 };
+    int n = 0;
+    for (const Permanent& a : s.battlefield)
+    {
+        if (a.aura_attached_to != land.card.m_number || a.controller_index != land.controller_index) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (ad == nullptr || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
+        if (!LandAuraProducesFor(*ad, a).empty()) { continue; }
+        amt[n++] = ad->params.land_aura_extra_mana;
+        if (n == 2) { break; }
+    }
+    return n == 2 && amt[0] == amt[1];
+}
+
 std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, std::vector<std::string>* unmodeled,
                                    int useful)
 {
@@ -781,7 +914,15 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         }
         if (d != nullptr && !d->params.mana_only_subtype.empty() && unmodeled != nullptr)
         { unmodeled->push_back("subtype-restricted mana from " + p.card.m_name.str()); }
-        const std::size_t n_auras = HumanPreTapAuraFaces(state, p).size();
+        const std::size_t n_auras = HumanPreTapAuraFaces(state, p, o).size();
+        // THE SAME TAP, SPELLED TWICE. The Auras' colours multiply the faces (Brushland under two Fertile Grounds:
+        // 3 faces x 25 colour pairs, EDF seed 1130464), and when the two Auras are interchangeable a pair and its
+        // swap are one tap: LandAuraAddToPoolOfLand credits the i-th pick to the i-th any-colour Aura, its
+        // land_aura_extra_mana units, into one bonus pool, and nothing else reads the picks. So such a pair is
+        // taken once, in order (the first of the two the enumeration reaches): a set holding the swap pays as the
+        // set holding the pair, so it could only re-prove a result already recorded, and spend the probes that
+        // bound the table.
+        const bool sym_auras = n_auras >= 2 && OracleFaceFoldOn() && AuraPicksSymmetric(state, p);
         std::string key = p.card.m_name.str() + "|" + o.free_faces + "|" + restricted + "|";
         // Whatever is attached (a land Aura's bonus -- Utopia Sprawl, Wild Growth) is part of the yield,
         // so a copy carrying one is a different source from its bare twins.
@@ -854,7 +995,11 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
                 {
                     std::vector<std::vector<int>> next;
                     for (const std::vector<int>& pk : picks)
-                        for (int c : aura_cols) { std::vector<int> q = pk; q.push_back(c); next.push_back(q); }
+                        for (int c : aura_cols)
+                        {
+                            if (sym_auras && !pk.empty() && c < pk.back()) { continue; }
+                            std::vector<int> q = pk; q.push_back(c); next.push_back(q);
+                        }
                     picks.swap(next);
                 }
             }
@@ -897,6 +1042,10 @@ bool PerformTaps(GameState& sc, const PayOption& o)
 }
 
 struct Pick { int cls; int face; };
+// MTG_PAY_REFINE_TRACE: one [refine-trc] line per refine -- the engine's taps, the verifies by origin (the DFS,
+// ExtendFed, ExtendSurplus), the parked/expanded surplus slots and the choice.
+thread_local long t_trc_v[3] = {0, 0, 0};
+thread_local int  t_trc_site = 0;
 
 // The payment search for ONE set-aside: classes in battlefield order, each tapped 0..n times with a
 // non-decreasing face sequence (copies are interchangeable). At an OPTIMISTIC cover the candidate is
@@ -920,7 +1069,12 @@ struct PayEnum
     std::size_t                     probes = 0;
     std::size_t                     cap    = 4096;
     bool                            capped = false;
+    bool                            whole_float = false;   // MinimalPayments' fast form: no leftover split either
     std::vector<Pick>               cur;
+    // RefinePayment's LAZY SURPLUS: a paying set's one-more-tap supersets are parked here (the set, and where in
+    // `out` they would have gone) instead of being verified at once -- see RefinePaymentImpl.
+    struct Slot { std::vector<Pick> picks; std::size_t pos; };
+    std::vector<Slot>*              defer = nullptr;
 
     PayOption Build(const std::vector<Pick>& picks) const
     {
@@ -953,13 +1107,14 @@ struct PayEnum
     // keeps the payer's own leftover.
     bool Verify(const std::vector<Pick>& picks)
     {
+        ++t_trc_v[t_trc_site];
         if (++probes > cap) { capped = true; return false; }
         const PayOption o = Build(picks);
         ManaPool offered, left;
         if (!PayAndRecord(o, &offered, &left)) { return false; }
         // Only a multi-unit tap makes a leftover of its own: a set of one-unit taps pays exactly, and
         // the floating pool it was offered is already split by the outer set-aside enumeration.
-        if (!HasMultiUnit(picks)) { return true; }
+        if (whole_float || !HasMultiUnit(picks)) { return true; }
         const int n = left.white + left.blue + left.black + left.red + left.green + left.colorless;
         if (n == 0 || offered.wild != 0 || left.wild != 0) { return true; }
         const int have[6] = { offered.white, offered.blue, offered.black, offered.red, offered.green, offered.colorless };
@@ -989,7 +1144,8 @@ struct PayEnum
     // the set-aside; `wild` set when a haste-tagged {C} or a wild unit is in it) and what it left of it.
     bool PayAndRecord(PayOption o, ManaPool* offered, ManaPool* left)
     {
-        GameState sc = state;
+        OracleScratch scr(state);
+        GameState& sc = scr.Board();
         auto why = [&](const char* w)
         {
             if (Level() >= 4)
@@ -1055,6 +1211,11 @@ struct PayEnum
     void ExtendSurplus()
     {
         if (!HasMultiUnit(cur)) { return; }
+        if (defer != nullptr) { defer->push_back({ cur, out.size() }); return; }
+        ExtendSurplusNow();
+    }
+    void ExtendSurplusNow()
+    {
         for (std::size_t c = 0; c < srcs.size() && !capped; ++c)
         {
             const SrcClass& sc = srcs[c];
@@ -1065,7 +1226,7 @@ struct PayEnum
                 // multi-unit tap is a deeper superset (see above).
                 if (sc.faces[fi].fed || sc.faces[fi].net != 1) { continue; }
                 cur.push_back({ static_cast<int>(c), static_cast<int>(fi) });
-                Verify(cur);
+                t_trc_site = 2; Verify(cur); t_trc_site = 0;
                 cur.pop_back();
             }
         }
@@ -1082,7 +1243,10 @@ struct PayEnum
             {
                 if (!sc.faces[fi].fed) { continue; }
                 cur.push_back({ static_cast<int>(c), static_cast<int>(fi) });
-                if (Verify(cur)) { ExtendFed(c); }
+                const int site = t_trc_site; t_trc_site = 1;
+                const bool vok = Verify(cur);
+                t_trc_site = site;
+                if (vok) { ExtendFed(c); }
                 cur.pop_back();
             }
         }
@@ -1161,7 +1325,7 @@ std::vector<PayOption> StashChoices(const GameState& s, std::vector<std::string>
 } // namespace
 
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
-                                       std::vector<std::string>* unmodeled, bool creature_ability)
+                                       std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
     // Secluded Courtyard clause). Replayed around every measure and verification below.
@@ -1198,7 +1362,7 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
                            (for_creature ? fc.green : 0) + fbg.green,
                            (for_creature ? fc.colorless : 0) + fbg.colorless };
     std::unordered_set<std::uint64_t> seen;
-    for (const PayOption& st : StashChoices(state, unmodeled))
+    for (const PayOption& st : whole_float ? std::vector<PayOption>(1) : StashChoices(state, unmodeled))
     {
         const ManaPool& f = state.floating_mana;
         int col[6] = { f.white - st.stash.white, f.blue - st.stash.blue, f.black - st.stash.black,
@@ -1207,6 +1371,7 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         int total = col[0] + col[1] + col[2] + col[3] + col[4] + col[5] + f.wild;
         if (f.wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += f.wild; } }
         PayEnum pe{ state, cost, for_creature, srcs, suffix_max, st, seen, out };
+        pe.whole_float = whole_float;
         pe.Dfs(0, col, total);
         if (pe.capped && unmodeled != nullptr) { unmodeled->push_back("payment enumeration capped"); }
     }
@@ -1278,6 +1443,383 @@ std::vector<PayOption> TapAheadOptions(const GameState& state, int count, bool l
     rec(0, count);
     if (capped && unmodeled != nullptr) { unmodeled->push_back("tap-ahead enumeration capped"); }
     return out;
+}
+
+bool PerformPayTaps(GameState& state, const PayOption& o) { return PerformTaps(state, o); }
+
+// ---- PAY REFINE (ManaOracle.h) ------------------------------------------------------------------------
+// WHY A SUBSET IS THE WHOLE QUESTION. The census's DOMINATED classes compare resources, and a tapped source
+// is a resource: an oracle payment can only dominate the engine's if it taps nothing the engine's left
+// untapped. So the better payment, when there is one, is always made of the engine's own taps -- fewer of
+// them (a Plains beside a Remote Farm for Giada's {1}{W}), or the same ones on cheaper faces (Llanowar
+// Wastes' {C} where the bill had a generic pip). The minimal payments of the bill on a board where ONLY
+// those sources are untapped are exactly the candidates; each is then made on a copy of the REAL board (the
+// mask only narrows the table: an Arbor Elf's untap target reads differently on it) and kept only if it
+// dominates.
+namespace
+{
+// Taps, set-aside and the float-only payment: MinimalPayments' own verification, on `sc`.
+bool PayOptionOn(GameState& sc, const PayOption& o, const ManaCost& cost, bool for_creature)
+{
+    if (!PerformTaps(sc, o)) { return false; }
+    ManaPool& sf = sc.floating_mana;
+    if (sf.white < o.stash.white || sf.blue < o.stash.blue || sf.black < o.stash.black
+        || sf.red < o.stash.red || sf.green < o.stash.green || sf.colorless < o.stash.colorless
+        || sc.floating_haste_c < o.stash_haste)
+    { return false; }
+    sf.white -= o.stash.white; sf.blue -= o.stash.blue; sf.black -= o.stash.black;
+    sf.red -= o.stash.red; sf.green -= o.stash.green; sf.colorless -= o.stash.colorless;
+    sc.floating_haste_c -= o.stash_haste;
+    sf.snow_units = std::min(sf.snow_units, sf.Total());
+    t_float_only = true;
+    const bool paid = TapForCostShared(sc, cost, for_creature, nullptr, true);
+    t_float_only = false;
+    sf.white += o.stash.white; sf.blue += o.stash.blue; sf.black += o.stash.black;
+    sf.red += o.stash.red; sf.green += o.stash.green; sf.colorless += o.stash.colorless;
+    sc.floating_haste_c += o.stash_haste;
+    return paid;
+}
+
+// Can mana abilities alone take `c` to at least `e`'s resources, floating pools included? Only by tapping the
+// sources `c` left untapped that `e` tapped -- each on any of its faces (BuildSources' table for them, every
+// colour useful). Bounded: a few sources, a few faces.
+bool ReachesByTapping(const GameState& c, const GameState& e)
+{
+    const int a = c.active_player_index;
+    std::vector<int> released;
+    OracleScratch mscr(c);
+    GameState& masked = mscr.Board();
+    for (std::size_t i = 0; i < masked.battlefield.size(); ++i)
+    {
+        Permanent& p = masked.battlefield[i];
+        if (p.controller_index != a || p.tapped) { continue; }
+        if (e.battlefield[i].tapped) { released.push_back(p.card.m_number); continue; }
+        p.tapped = true;
+    }
+    if (released.empty()) { return CoversBoards(c, e, true, nullptr); }
+    if (released.size() > 4) { return false; }
+    // (for_creature: the table then also holds a restricted source's creature-only route.)
+    const std::vector<SrcClass> srcs = BuildSources(masked, /*for_creature=*/true, nullptr, 31);
+    std::vector<std::vector<std::pair<TurnSolver::PreTap, bool>>> faces_of;   // per released source: (tap, restricted)
+    for (int num : released)
+    {
+        std::vector<std::pair<TurnSolver::PreTap, bool>> fs;
+        for (const SrcClass& sc : srcs)
+        {
+            if (std::find(sc.nums.begin(), sc.nums.end(), num) == sc.nums.end()) { continue; }
+            for (const Face& f : sc.faces) { TurnSolver::PreTap t = f.pt; t.num = num; fs.emplace_back(t, f.creature); }
+        }
+        if (fs.empty()) { return false; }
+        faces_of.push_back(std::move(fs));
+    }
+    std::vector<std::size_t> k(faces_of.size(), 0);
+    for (int guard = 0; guard < 256; ++guard)
+    {
+        OracleScratch cscr(c);
+        GameState& c2 = cscr.Board();
+        bool ok = true;
+        for (std::size_t r = 0; r < faces_of.size() && ok; ++r)
+        {
+            const auto& f = faces_of[r][k[r]];
+            ok = (f.second ? OracleCreatureTap(c2, f.first) : ApplyHumanPreTap(c2, f.first)).empty();
+        }
+        if (ok && CoversBoards(c2, e, true, nullptr)) { return true; }
+        std::size_t r = 0;
+        while (r < k.size() && ++k[r] == faces_of[r].size()) { k[r] = 0; ++r; }
+        if (r == k.size()) { break; }
+    }
+    return false;
+}
+} // namespace
+
+namespace
+{
+std::atomic<long long> g_refine_wild_out{0};   // refines the wild cap answered (MTG_PAY_REFINE_STATS)
+}
+
+static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
+                              bool creature_ability, int useful, bool no_trade, PayOption& out)
+{
+    const int a = pre.active_player_index;
+    const std::size_t n = pre.battlefield.size();
+    if (post.battlefield.size() != n) { return false; }
+    std::set<int> taps;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const Permanent& p0 = pre.battlefield[i];
+        const Permanent& p1 = post.battlefield[i];
+        if (p0.card.m_number != p1.card.m_number) { return false; }
+        if (p0.controller_index == a && !p0.tapped && p1.tapped) { taps.insert(p0.card.m_number); }
+    }
+    if (taps.empty()) { return false; }
+    OracleScratch mscr(pre);
+    GameState& masked = mscr.Board();
+    for (Permanent& p : masked.battlefield)
+    { if (p.controller_index == a && !p.tapped && taps.count(p.card.m_number) == 0) { p.tapped = true; } }
+    std::optional<CreatureAbilityPayScope> _cap;
+    if (creature_ability) { _cap.emplace(); }
+    // MinimalPayments' whole-float table on the masked board, its PayEnum held here so the surplus supersets can
+    // be verified lazily (below).
+    const std::vector<SrcClass> srcs = BuildSources(masked, for_creature, nullptr, useful);
+    bool all_regular = true;
+    for (const SrcClass& sc : srcs) { for (const Face& fx : sc.faces) { if (!fx.regular) { all_regular = false; } } }
+    // A FLOAT NO PAYMENT OF THESE TAPS CAN MAKE. Every acceptance below ends in covering the engine's floating pools
+    // key by key -- the candidate itself, or the candidate with its released sources re-tapped (ReachesByTapping) --
+    // and a `wild` unit is a key of its own: the payer credits an any-colour land Aura's bonus as wild, where the
+    // table's faces take a concrete colour. Those taps (every face regular: a candidate and its re-taps tap the
+    // engine's own sources, each once) can float no more wild than was floating already plus each source's wildest
+    // face. When the engine's payment leaves more than that, no candidate covers it and there is nothing to search:
+    // EDF seed 1130464 gi463, 136,104 of 248,589 refines (Brushland under Fertile Ground / Trace of Abundance).
+    if (all_regular && PayRefineWildOutOn())
+    {
+        auto wild_all = [](const GameState& g)
+        { return g.floating_mana.wild + g.floating_creature_mana.wild + g.floating_bigspell_mana.wild; };
+        int wild_cap = wild_all(pre);
+        for (const SrcClass& sc : srcs)
+        {
+            int mw = 0;
+            for (const Face& fx : sc.faces) { mw = std::max(mw, fx.wild); }
+            wild_cap += mw * static_cast<int>(sc.nums.size());
+        }
+        if (wild_all(post) > wild_cap) { g_refine_wild_out.fetch_add(1, std::memory_order_relaxed); return false; }
+    }
+    std::vector<int> suffix_max(srcs.size() + 1, 0);
+    for (std::size_t i = srcs.size(); i-- > 0;)
+    { suffix_max[i] = suffix_max[i + 1] + srcs[i].max_net * static_cast<int>(srcs[i].nums.size()); }
+    const ManaPool& fc  = masked.floating_creature_mana;
+    const ManaPool& fbg = masked.floating_bigspell_mana;
+    const ManaPool& f   = masked.floating_mana;
+    int col[6] = { f.white + (for_creature ? fc.white : 0) + fbg.white, f.blue + (for_creature ? fc.blue : 0) + fbg.blue,
+                   f.black + (for_creature ? fc.black : 0) + fbg.black, f.red + (for_creature ? fc.red : 0) + fbg.red,
+                   f.green + (for_creature ? fc.green : 0) + fbg.green,
+                   f.colorless + (for_creature ? fc.colorless : 0) + fbg.colorless };
+    const int total = col[0] + col[1] + col[2] + col[3] + col[4] + col[5] + f.wild;
+    if (f.wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += f.wild; } }
+    // THE LAZY SURPLUS. A paying set holding a multi-unit tap is also tried with one more one-unit tap (PayEnum's
+    // ExtendSurplus) -- the bulk of the work on a big board (FiveColour's Nicol Bolas over six taps: 830 sets,
+    // 3,267 supersets, and the 4,096-probe cap hit). A superset taps one more of the engine's own sources, so with
+    // every face REGULAR (it taps its own source and nothing else) it releases exactly |taps| - |set| - 1, and the
+    // choice below takes the most released first: a set whose supersets cannot reach the best release found is
+    // never extended. The rest are verified in their own place in the order, so the choice is the one the eager
+    // enumeration makes (an irregular face anywhere -- a sacrifice, an untap -- keeps the eager order).
+    std::unordered_set<std::uint64_t> seen;
+    std::vector<PayOption> opts;
+    const PayOption st0;
+    std::vector<PayEnum::Slot> slots;
+    PayEnum pe{ masked, cost, for_creature, srcs, suffix_max, st0, seen, opts };
+    pe.whole_float = true;
+    if (PayRefineLazyOn() && all_regular) { pe.defer = &slots; }
+    t_trc_v[0] = t_trc_v[1] = t_trc_v[2] = 0;
+    pe.Dfs(0, col, total);
+    static const bool s_trc = EnvOn("MTG_PAY_REFINE_TRACE");
+    std::size_t expanded = 0;
+    bool found = false;
+    int  best_rel = -1, best_life = 0, best_energy = 0;
+    // Order of the eager enumeration: option i of the first pass sits at (i, 1, 0); the j-th superset of the set
+    // parked at `pos` at (pos, 0, j) -- after the set and its fed extensions, before the next option.
+    std::tuple<std::size_t, int, std::size_t> best_at{ 0, 0, 0 };
+    std::string trc_taps;
+    if (s_trc)
+    {
+        for (const Permanent& p : pre.battlefield)
+        { if (taps.count(p.card.m_number) != 0) { trc_taps += (trc_taps.empty() ? "" : ", ") + p.card.m_name.str(); } }
+        trc_taps += " | float " + PoolText(pre.floating_mana, pre.floating_haste_c);
+    }
+    struct TrcOut { std::size_t T, nopt, nslot; const std::size_t& nexp; const ManaCost& c; int* rel; bool* f;
+        const std::string& taps; const PayOption& out;
+        ~TrcOut() { if (s_trc) { std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[refine-trc] T=%zu bill=%s v=%ld/%ld/%ld opts=%zu slots=%zu/%zu found=%d rel=%d taps=[%s] -> %s\n", T,
+                         c.ToString().c_str(), t_trc_v[0], t_trc_v[1], t_trc_v[2], nopt, nexp, nslot, *f ? 1 : 0, *rel,
+                         taps.c_str(), *f ? TapsText(out).c_str() : "-"); } } };
+    TrcOut _trc{ taps.size(), opts.size(), slots.size(), expanded, cost, &best_rel, &found, trc_taps, out };
+    auto consider = [&](const PayOption& o, std::tuple<std::size_t, int, std::size_t> at)
+    {
+        OracleScratch cscr(pre);
+        GameState& c = cscr.Board();
+        if (!PayOptionOn(c, o, cost, for_creature) || c.battlefield.size() != n) { return; }
+        int rel = 0;
+        bool subset = true;
+        for (std::size_t i = 0; i < n && subset; ++i)
+        {
+            if (c.battlefield[i].tapped && !post.battlefield[i].tapped) { subset = false; }
+            if (!c.battlefield[i].tapped && post.battlefield[i].tapped) { ++rel; }
+        }
+        if (!subset) { return; }
+        const int life = c.players[a].life, energy = c.players[a].energy_counters;
+        // Only a candidate the choice would take is worth proving: the acceptance below is the costly part (the
+        // resource tables, the re-tapping), and a candidate it would not take changes nothing either way.
+        const bool better = !found || rel > best_rel
+                         || (rel == best_rel && (life > best_life || (life == best_life
+                             && (energy > best_energy || (energy == best_energy && at < best_at)))));
+        if (!better) { return; }
+        // Covers(end) reads life and energy as they are: less of either is no cover.
+        if (life < post.players[a].life || energy < post.players[a].energy_counters) { return; }
+        // Strictly better somewhere: a source given back, or more of what the payment spends (life, energy;
+        // a haste-tagged {C} still floating is a mid-turn resource).
+        bool strict_end = false, strict_mid = false;
+        if (!CoversBoards(c, post, false, &strict_end)) { return; }
+        if (rel == 0 && !strict_end && !(CoversBoards(c, post, true, &strict_mid) && strict_mid)) { return; }
+        // NO FLOAT FOR A SOURCE WHERE A SAME-PHASE UNTAPPER LIVES (GameState::deck_has_mana_untapper). An
+        // untapped source is worth the mana it would float only while nothing can untap it again this phase:
+        // Cloud of Faeries' enter untaps two lands, so the engine's {1}{U} off Brushland AND Adarkar Wastes
+        // (one unit floating) comes back with both lands up AND the unit, where Adarkar alone leaves Brushland
+        // up and nothing floating -- one mana down, and the go-off turn short (EDF seed 1170039 gi38 and
+        // seed 2110 gi108, T3 -> T4 at d8 b0). There the candidate must keep the engine's float outright.
+        if (no_trade ? !CoversBoards(c, post, true, nullptr) : !ReachesByTapping(c, post)) { return; }
+        found = true; best_rel = rel; best_life = life; best_energy = energy; best_at = at; out = o;
+    };
+    const std::size_t first = opts.size();
+    for (std::size_t i = 0; i < first; ++i) { consider(opts[i], { i, 1, 0 }); }
+    for (const PayEnum::Slot& sl : slots)
+    {
+        const int reach = static_cast<int>(taps.size()) - static_cast<int>(sl.picks.size()) - 1;
+        if (found && reach < best_rel) { continue; }
+        ++expanded;
+        pe.cur = sl.picks;
+        const std::size_t from = opts.size();
+        pe.ExtendSurplusNow();
+        for (std::size_t j = from; j < opts.size(); ++j) { consider(opts[j], { sl.pos, 0, j - from }); }
+    }
+    return found;
+}
+
+// THE REFINE IS A FUNCTION OF ITS BOARDS, so it is memoised. The search pays the same bill from the same board
+// over and over (FiveColour seed 1110001: 432 of 903 refines were one Nicol Bolas payment, ~3,200 verified
+// candidates each). Keyed on the engine's own mid-turn identity of the board before, plus every field a
+// payment moves, read on BOTH boards -- the restricted pools, which that identity does not fold, among them --
+// and on the bill, its context, the payer's own context (PayContextDigest: the line it pays in decides which
+// floating units a float-only payment spends) and the useful-colour mask (BuildSources folds faces by it; the
+// identity reads a library by size and front only). A plan-source mask (the oracle's own Realize) is not keyed: not memoised.
+// MTG_PAY_REFINE_MEMO=0 turns it off; MTG_PAY_REFINE_MEMO_VERIFY=1 recomputes every hit and counts mismatches.
+namespace
+{
+std::uint64_t RefineMix(std::uint64_t h, std::uint64_t v)
+{
+    h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
+    return h * 0xBF58476D1CE4E5B9ULL;
+}
+std::uint64_t PoolWord(const ManaPool& f)
+{
+    return (static_cast<std::uint64_t>(f.white & 0xFF) << 56) ^ (static_cast<std::uint64_t>(f.blue & 0xFF) << 48)
+         ^ (static_cast<std::uint64_t>(f.black & 0xFF) << 40) ^ (static_cast<std::uint64_t>(f.red & 0xFF) << 32)
+         ^ (static_cast<std::uint64_t>(f.green & 0xFF) << 24) ^ (static_cast<std::uint64_t>(f.colorless & 0xFF) << 16)
+         ^ (static_cast<std::uint64_t>(f.wild & 0xFF) << 8) ^ static_cast<std::uint64_t>(f.snow_units & 0xFF);
+}
+std::uint64_t PayFieldsDigest(const GameState& s)
+{
+    std::uint64_t h = 0x51ED27A1ULL;
+    h = RefineMix(h, s.battlefield.size());
+    for (const Permanent& p : s.battlefield)
+    {
+        h = RefineMix(h, static_cast<std::uint32_t>(p.card.m_number));
+        h = RefineMix(h, (p.tapped ? 1u : 0u) | (p.temp_haste ? 2u : 0u)
+                         | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.controller_index)) << 2));
+        h = RefineMix(h, (static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.charge_counters)) << 32)
+                         | static_cast<std::uint32_t>(p.storage_counters));
+    }
+    const ManaPool* pools[3] = { &s.floating_mana, &s.floating_creature_mana, &s.floating_bigspell_mana };
+    for (const ManaPool* f : pools)
+    {
+        h = RefineMix(h, PoolWord(*f));
+        h = RefineMix(h, (static_cast<std::uint64_t>(f->wild_c & 0xFFFF) << 32) ^ (static_cast<std::uint64_t>(f->wild_phantom & 0xFFFF) << 16)
+                         ^ static_cast<std::uint64_t>(f->wild_conv & 0xFFFF));
+    }
+    h = RefineMix(h, static_cast<std::uint32_t>(s.floating_haste_c));
+    for (const Player& pl : s.players)
+    {
+        h = RefineMix(h, static_cast<std::uint32_t>(pl.life));
+        h = RefineMix(h, static_cast<std::uint32_t>(pl.energy_counters));
+        h = RefineMix(h, pl.graveyard.size());
+    }
+    h = RefineMix(h, s.opponent_lost_life_this_turn ? 1u : 0u);
+    h = RefineMix(h, static_cast<std::uint32_t>(s.active_player_index));
+    return h;
+}
+struct RefineKey
+{
+    std::uint64_t board = 0, pay_pre = 0, pay_post = 0, payer = 0;
+    std::uint64_t bill = 0;
+    int           ctx = 0;
+    bool operator==(const RefineKey& o) const
+    {
+        return board == o.board && pay_pre == o.pay_pre && pay_post == o.pay_post && payer == o.payer && ctx == o.ctx
+            && bill == o.bill;
+    }
+};
+struct RefineKeyHash
+{
+    std::size_t operator()(const RefineKey& k) const
+    {
+        return static_cast<std::size_t>(k.board ^ (k.pay_pre * 0x9E3779B97F4A7C15ULL) ^ (k.pay_post * 0xC2B2AE3D27D4EB4FULL)
+                                        ^ (k.payer * 0x165667B19E3779F9ULL) ^ (k.bill * 0x27D4EB2F165667C5ULL));
+    }
+};
+struct RefineMemoEntry { bool found = false; PayOption opt; };
+thread_local std::unordered_map<RefineKey, RefineMemoEntry, RefineKeyHash> t_refine_memo;
+std::atomic<long long> g_rmemo_hit{0}, g_rmemo_miss{0}, g_rmemo_bad{0};
+struct RefineMemoReport
+{
+    ~RefineMemoReport()
+    {
+        static const bool s_on = EnvOn("MTG_PAY_REFINE_STATS");
+        if (!s_on) { return; }
+        std::fprintf(stderr, "=== PAY REFINE MEMO: hits=%lld misses=%lld verify_mismatch=%lld wild_out=%lld ===\n",
+                     g_rmemo_hit.load(), g_rmemo_miss.load(), g_rmemo_bad.load(), g_refine_wild_out.load());
+    }
+} g_refine_memo_report;
+bool SameOption(bool fa, const PayOption& a, bool fb, const PayOption& b)
+{
+    if (fa != fb) { return false; }
+    if (!fa) { return true; }
+    return TapsText(a) == TapsText(b) && a.creature_route == b.creature_route && a.stash == b.stash
+        && a.stash_haste == b.stash_haste;
+}
+} // namespace
+
+bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
+                   bool creature_ability, PayOption& out)
+{
+    static const bool s_verify = EnvOn("MTG_PAY_REFINE_MEMO_VERIFY");
+    // (The masked board the refine builds its table on differs from `pre` only in tapped flags: one useful-colour mask.)
+    const int useful = UsefulColorMask(pre, cost);
+    const bool no_trade = pre.deck_has_mana_untapper;
+    if (!PayRefineMemoOn() || t_plan_srcs != nullptr)
+    { return RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, out); }
+    RefineKey k;
+    k.board    = TurnSolver::MidTurnStateKeyOf(pre);
+    k.pay_pre  = PayFieldsDigest(pre);
+    k.pay_post = PayFieldsDigest(post);
+    k.payer    = PayContextDigest();
+    k.bill     = ManaCostDigest(cost);
+    k.ctx      = (for_creature ? 1 : 0) | (creature_ability ? 2 : 0) | (PayingCreatureAbility() ? 4 : 0)
+               | (useful << 3) | (no_trade ? (1 << 12) : 0);
+    auto it = t_refine_memo.find(k);
+    if (it != t_refine_memo.end())
+    {
+        g_rmemo_hit.fetch_add(1, std::memory_order_relaxed);
+        if (s_verify)
+        {
+            PayOption o2;
+            const bool f2 = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, o2);
+            if (!SameOption(it->second.found, it->second.opt, f2, o2))
+            {
+                g_rmemo_bad.fetch_add(1, std::memory_order_relaxed);
+                std::lock_guard<std::mutex> lk(g_print_mu);
+                std::fprintf(stderr, "[pay-refine-memo] MISMATCH bill %s: memo %s, fresh %s\n", cost.ToString().c_str(),
+                             it->second.found ? TapsText(it->second.opt).c_str() : "-", f2 ? TapsText(o2).c_str() : "-");
+            }
+        }
+        if (it->second.found) { out = it->second.opt; }
+        return it->second.found;
+    }
+    g_rmemo_miss.fetch_add(1, std::memory_order_relaxed);
+    RefineMemoEntry e;
+    e.found = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, e.opt);
+    if (e.found) { out = e.opt; }
+    if (t_refine_memo.size() >= 8192) { t_refine_memo.clear(); }
+    const bool found = e.found;
+    t_refine_memo.emplace(std::move(k), std::move(e));
+    return found;
 }
 
 namespace
@@ -2062,6 +2604,134 @@ bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Pla
         if (Covers(Resources(o.st, /*with_float=*/false), eres, nullptr)) { return true; }
     }
     return false;
+}
+
+// ---- THE EXECUTOR'S PAYMENT SCRIPT (ManaOracle.h) -------------------------------------------------------
+namespace
+{
+std::atomic<long long> g_rps_asked{0}, g_rps_dom{0}, g_rps_served{0}, g_rps_abandoned{0}, g_rps_us{0};
+struct RpsReport
+{
+    ~RpsReport()
+    {
+        static const bool s_on = EnvOn("MTG_PAY_REFINE_STATS");
+        if (!s_on) { return; }
+        std::fprintf(stderr, "=== REAL PAY SCRIPT: asked=%lld dominating=%lld served-to-end=%lld abandoned=%lld ms=%lld ===\n",
+                     g_rps_asked.load(), g_rps_dom.load(), g_rps_served.load(), g_rps_abandoned.load(),
+                     g_rps_us.load() / 1000);
+    }
+} g_rps_report;
+}
+
+bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, bool pre,
+                       std::vector<PayOption>& script, std::string* what)
+{
+    if (t_hook != nullptr || state.dmg_events_armed || plan.actions.empty()) { return false; }
+    for (const Action& x : plan.actions) { if (x.kind == Action::Kind::ComboRoute) { return false; } }
+    g_rps_asked.fetch_add(1, std::memory_order_relaxed);
+    struct Clock
+    {
+        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        ~Clock()
+        {
+            g_rps_us.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(
+                                   std::chrono::steady_clock::now() - t0).count(), std::memory_order_relaxed);
+        }
+    } clock;
+    RevealLogPause quiet;
+    const int a = state.active_player_index;
+    const EngineReal er = EngineApply(state, pre, plan);
+    // A line that draws, reveals or casts what the plan did not name continues on cards nobody knew when it
+    // was paid for: its later payments are not the oracle's to fix (the real continuation is searched).
+    if (er.st.players[a].library.size() != state.players[a].library.size()) { return false; }
+    {
+        std::multiset<std::string> named = PlanHandCards(plan);
+        if (plan.land_decided && !plan.land_to_play.empty()) { named.insert(plan.land_to_play); }
+        if (!Includes(named, LeftHand(state, er.st))) { return false; }
+    }
+    const bool full = er.Full();
+    const bool spent = er.st.players[a].life < state.players[a].life
+                    || er.st.players[a].energy_counters < state.players[a].energy_counters;
+    if (full && !spent && AllFloat(er.st) == 0) { return false; }
+    struct CapScope
+    {
+        int saved;
+        explicit CapScope(int c) : saved(t_node_cap) { t_node_cap = c; }
+        ~CapScope() { t_node_cap = saved; }
+    };
+    static const int s_cap = std::max(1, EnvInt("MTG_REAL_PAY_NODES", 600));
+    // Run the script on the REAL (unmasked) board, one apply: what it reaches, if it reaches the end.
+    auto replay = [&](const std::vector<PayOption>& sc, Outcome& out) -> bool
+    {
+        CapScope one(1);
+        Realization rr = Realize(state, plan, pre, /*stop_at_full=*/false, sc);
+        if (rr.outcomes.size() != 1) { return false; }
+        out = std::move(rr.outcomes.front());
+        return out.Clean() && out.unscripted.empty();
+    };
+    // A DROPPED action is not this script's to pay. The search scored the plan by exactly this apply -- the cast it
+    // drops included -- so paying it plays a line nobody evaluated. The A/B said so plainly (seed 1130001, 39
+    // decks, 20,910 paired games): 17 slower, 0 faster, 15 of them this branch -- Preordain cast beside Izzet
+    // Signet (NivMizzetCombo gi214 T4 -> T5), Dragonlord Kolaghan after Pyretic Ritual (Dragonstorm gi234 T5 ->
+    // T7), Predatory Sliver's replicate traded for Aether Vial (slivers gi27 T4 -> T5). A drop is the search's
+    // apply to fix, where the evaluation sees it.
+    if (!full) { return false; }
+    // Every action paid: a realisation that DOMINATES the engine's, out of the sources the engine's line tapped
+    // (a dominating one can tap nothing else -- see RefinePayment). The table is narrowed by masking every source
+    // the line left untapped; each candidate is then replayed on the real board and compared there.
+    GameState masked = state;
+    for (std::size_t i = 0; i < masked.battlefield.size() && i < er.st.battlefield.size(); ++i)
+    {
+        Permanent& p = masked.battlefield[i];
+        if (p.controller_index != a || p.tapped || er.st.battlefield[i].card.m_number != p.card.m_number) { continue; }
+        if (!er.st.battlefield[i].tapped && IsManaSourceNow(state, p)) { p.tapped = true; }
+    }
+    Realization r;
+    {
+        CapScope cap(s_cap);
+        r = Realize(masked, plan, pre, /*stop_at_full=*/false);
+    }
+    const std::string   e_line = LineKey(state, er.st);
+    const std::uint64_t ek     = CoreKey(er.st);
+    const Res           eres   = Resources(er.st, /*with_float=*/false);
+    bool found = false;
+    int  best_untapped = -1, best_life = 0, best_energy = 0;
+    for (const Outcome& o : r.outcomes)
+    {
+        if (!o.Clean() || !o.unscripted.empty()) { continue; }
+        Outcome real;
+        if (!replay(o.script, real) || real.line != e_line || CoreKey(real.st) != ek) { continue; }
+        bool strict = false;
+        if (!Covers(Resources(real.st, /*with_float=*/false), eres, &strict) || !strict) { continue; }
+        int untapped = 0;
+        for (const Permanent& p : real.st.battlefield) { if (p.controller_index == a && !p.tapped) { ++untapped; } }
+        const int life = real.st.players[a].life, energy = real.st.players[a].energy_counters;
+        if (!found || untapped > best_untapped || (untapped == best_untapped
+            && (life > best_life || (life == best_life && energy > best_energy))))
+        {
+            found = true; best_untapped = untapped; best_life = life; best_energy = energy;
+            script = real.script;
+        }
+    }
+    if (found && what != nullptr) { *what = "dominates the engine's payment"; }
+    if (found) { g_rps_dom.fetch_add(1, std::memory_order_relaxed); }
+    return found;
+}
+
+RealPayScope::RealPayScope(GameState& s, std::vector<PayOption> script)
+{
+    h.target = &s;
+    h.script = std::move(script);
+    h.safe   = true;
+    saved    = t_hook;
+    t_hook   = &h;
+}
+
+RealPayScope::~RealPayScope()
+{
+    t_hook = saved;
+    if (h.abandoned) { g_rps_abandoned.fetch_add(1, std::memory_order_relaxed); }
+    else if (h.next >= h.script.size()) { g_rps_served.fetch_add(1, std::memory_order_relaxed); }
 }
 
 void AuditDecision(const GameState& state, bool is_pre_combat)

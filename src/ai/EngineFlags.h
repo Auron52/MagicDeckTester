@@ -481,6 +481,51 @@ inline bool AutoLineGenericOn()
     return heurarm::Flag(heurarm::AUTO_LINE_GENERIC, env_on);
 }
 
+// MTG_PAY_REFINE (2026-10-28; DEFAULT OFF pending the USER, =1 -> on): after an outermost payment that cost life,
+// energy or a haste-tagged {C} on a noncreature bill, or floated a surplus off two or more taps, the payer asks the
+// mana oracle for the cheapest payment of the same bill out of the same taps that dominates it (ManaOracle.h
+// RefinePayment) and makes that one instead. Shared payer: search, executor and human auto-tap alike.
+// OFF because one held-out slower game does not recover at d8 b0 (NivMizzetCombo seed 1180001 gi521: the refined
+// Ponder payment leaves the greedy payer a different next choice) -- the adoption call is the USER's
+// (docs/design/mana-completeness-oracle.md section 13).
+inline bool PayRefineOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE", false);
+    return heurarm::Flag(heurarm::PAY_REFINE, env_on);
+}
+
+// MTG_REAL_PAY_SCRIPT (2026-10-28; DEFAULT OFF pending its A/B, =1 -> on): real play pays the chosen plan with the
+// mana oracle's realisation when the engine's is dominated at the line level (ManaOracle.h PlanPaymentScript /
+// RealPayScope; AIEngine::TakeTurn). Its first form also paid DROPS and was 17 slower / 0 faster (seed 1130001).
+inline bool RealPayScriptOn()
+{
+    static const bool env_on = EnvOn("MTG_REAL_PAY_SCRIPT", false);
+    return heurarm::Flag(heurarm::REAL_PAY_SCRIPT, env_on);
+}
+
+// MTG_PAY_REFINE_LAZY / MTG_PAY_REFINE_MEMO (2026-10-28; DEFAULT ON): the refine's cost, not its choice -- the
+// supersets that cannot win are not verified, and a repeated refine is read back (ManaOracle.cpp RefinePayment).
+inline bool PayRefineLazyOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_LAZY", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_LAZY, env_on);
+}
+inline bool PayRefineMemoOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_MEMO", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_MEMO, env_on);
+}
+inline bool PayRefineWildOutOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_WILD_OUT", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_WILD_OUT, env_on);
+}
+inline bool OracleFaceFoldOn()
+{
+    static const bool env_on = EnvOn("MTG_ORACLE_FACE_FOLD", true);
+    return heurarm::Flag(heurarm::ORACLE_FACE_FOLD, env_on);
+}
+
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
 // Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's

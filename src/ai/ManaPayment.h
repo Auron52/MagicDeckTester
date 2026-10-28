@@ -438,6 +438,13 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state);
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco);
 
+// Every field of a ManaCost folded into one word (PayContextDigest's and the refine memo's bill).
+std::uint64_t ManaCostDigest(const ManaCost& c);
+// The payer's CONTEXT as one number: every thread-local a payment reads besides the board and its bill (the
+// line it is paying in, the holds and budgets around it, the heuristic arm). Two payments of one bill on one
+// board in equal contexts are the same payment -- the key manaoracle::RefinePayment's memo keeps.
+std::uint64_t PayContextDigest();
+
 // ---- COLOUR-EXACT SUBSET AFFORDABILITY (MTG_COLOR_EXACT) --------------------------------------
 //
 // The pool above is COLOUR-BLIND about its flexible sources: AddSourceToPool books every
@@ -931,6 +938,9 @@ struct HumanPreTapAura
 };
 std::vector<HumanPreTapAura>
 HumanPreTapAuraFaces(const GameState& state, const Permanent& p);
+// The same, for a caller already holding p's HumanPreTapOfferFor (it gates the list).
+std::vector<HumanPreTapAura>
+HumanPreTapAuraFaces(const GameState& state, const Permanent& p, const HumanPreTapOffer& offer);
 
 // ---- The viewer's QUEUED-CONTINUATION untap demand (docs/design/viewer-line-macros.md) --------
 // `need=<COLOURS>` -- e.g. `need=UC` -- declares the colours the human's REMAINING QUEUED LINE
