@@ -306,6 +306,23 @@ inline bool LineFloatUnseenGuardOn()
     return LineFloatTapFirstOn() && heurarm::Flag(heurarm::LINE_FLOAT_UNSEEN_GUARD, env_on);
 }
 
+// MTG_LINE_FLOAT_COVERED (DEFAULT ON since 2026-10-28; =0 -> the rung's colour test always applies) -- the
+// LINE_FLOAT_TAP_FIRST rung's colour test refuses a source that makes a colour the line still owes, because a
+// later pip may need it for that colour. When the reserve left after this payment's own pips already covers
+// every coloured pip the line owes, no later pip needs any source for its colour and the test refuses for
+// nothing: the source paying the generic leaves the named line exactly as payable with the owed float kept,
+// where the plain drain spends float the line owes. NivMizzetCombo seed 1180522 gi521 T2 (with
+// MTG_PAY_REFINE): Ponder off Saprazzan Skerry floats {U}; Sol Ring's {1} spent it with Cascade Bluffs
+// untapped -- Bluffs makes {U} only by filtering a {U}/{R}, and that {U} was the only feed -- so Tandem
+// Lookout's {U} had nothing and the T3 kill went (T4 at d8 b0). Held out (seed 1210001, 48,020 paired games):
+// 0 slower / 0 faster alone (decision streams move in Dragonstorm and EDF only); with MTG_PAY_REFINE its only
+// turn change is gi521 recovering. Inert unless LineFloatTapFirstOn().
+inline bool LineFloatCoveredOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_FLOAT_COVERED", true);
+    return LineFloatTapFirstOn() && heurarm::Flag(heurarm::LINE_FLOAT_COVERED, env_on);
+}
+
 // MTG_LINE_SPARE_GENERIC_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware generic tap
 // (produce_impl in TapForCostSharedOnce, ManaPayment.cpp): a colour-short line's generic pip taps a SPARE
 // source first. One payer for executor, rollout and the payability walks -> lockstep by construction.

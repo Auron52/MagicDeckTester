@@ -700,6 +700,7 @@ enum Slot : int
     PAY_REFINE_MEMO,          // MTG_PAY_REFINE_MEMO  the refine memoised on (board, both boards' payment fields, bill, payer context, useful colours). Exact by construction; MTG_PAY_REFINE_MEMO_VERIFY=1 recomputes every hit. =0 -> no memo
     ORACLE_FACE_FOLD,         // MTG_ORACLE_FACE_FOLD  the mana oracle's payment table (BuildSources: the refine, its re-tap check, the census) takes the colours of a source's two interchangeable any-colour land Auras as an unordered pair -- a pair and its swap credit one pool (Brushland under two Fertile Grounds: 75 faces -> 45). Exact: a set holding the swap pays as the set holding the pair, which the enumeration reaches first. =0 -> every ordered pair
     PAY_REFINE_WILD_OUT,      // MTG_PAY_REFINE_WILD_OUT  the refine answers "nothing" at once when the engine's payment floats more `wild` (an any-colour land Aura's bonus as the payer credits it) than the float before it plus every engine-tapped source's wildest face can make: every acceptance covers the engine's float key by key, and the table's faces take concrete colours (every face regular). EDF seed 1130464 gi463: 136,104 of 248,589 refines. Exact. =0 -> the full search
+    LINE_FLOAT_COVERED,       // MTG_LINE_FLOAT_COVERED  the line float rung (MTG_LINE_FLOAT_TAP_FIRST) lets a source that makes a colour the line owes pay this payment's generic when the reserve left after the payment's own pips already covers every coloured pip the line still owes (no later pip needs that source for its colour). NivMizzetCombo seed 1180522 gi521 T2: Sol Ring's {1} spent the floating {U} Tandem Lookout needed with Cascade Bluffs untapped (Bluffs makes {U} only by filtering a {U}/{R}, and that {U} was the only feed). Applies under the unseen guard too: that guard protects creature-only-colour lands, which this does not touch. =0 -> the colour test always applies
     COUNT
 };
 
@@ -1350,6 +1351,7 @@ inline const char* Name(int slot)
         "MTG_PAY_REFINE_MEMO",
         "MTG_ORACLE_FACE_FOLD",
         "MTG_PAY_REFINE_WILD_OUT",
+        "MTG_LINE_FLOAT_COVERED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

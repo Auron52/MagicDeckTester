@@ -7601,6 +7601,21 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         }
     }
     const bool unseen_guard = unseen && !known_short;
+    // THE RESERVE ALREADY COVERS THE LINE (MTG_LINE_FLOAT_COVERED). The colour test below keeps a source that
+    // makes an owed colour off the spare list because a later pip may need it for that colour. When the reserve
+    // left after this payment's own pips holds every coloured pip the line still owes (a wild unit covers any),
+    // no later pip needs a source for its colour and the test refuses for nothing: the source pays this
+    // generic, the owed float stays, and the named line is exactly as payable. NivMizzetCombo seed 1180522
+    // gi521 T2: Sol Ring's {1} spent the floating {U} with Cascade Bluffs untapped (Bluffs makes {U} only by
+    // filtering a {U}/{R}, and that {U} was the only feed), and Tandem Lookout's {U} had nothing. The unseen
+    // guard is untouched: it guards creature-only-colour lands, whose clause below still applies.
+    bool float_covers = false;
+    if (LineFloatCoveredOn())
+    {
+        int short_units = 0;
+        for (int ci = 0; ci < 5; ++ci) { short_units += std::max(0, later[ci] - rp[ci]); }
+        float_covers = short_units <= r_pips.wild;
+    }
     // Colours an unrestricted untapped source other than `self` can make (for a later creature pip).
     auto other_makes = [&](int self, int ci) -> bool
     {
@@ -7629,7 +7644,7 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
                && d->params.enters_tapped_with_depletion == 0 && !d->params.creature_mana_only
                && !PaySacSpendableNow(state, p, *d);
         if (ok) { for (const Counter& c : p.counters) { if (c.type == Counter::Type::Depletion) { ok = false; break; } } }
-        if (ok)
+        if (ok && !float_covers)
         {
             for (Color c : ProducesForPayment(state, active, *d, for_creature, &p))
             { const int ci = colour_idx(c); if (ci >= 0 && later[ci] > 0) { ok = false; break; } }

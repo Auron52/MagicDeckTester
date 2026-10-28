@@ -701,21 +701,22 @@ generic pip instead of its painful {G}). That makes "is this payment dominated?"
   Domination, Galvanic Alchemist, Seedcradle Witch; stamped in `StampDeckTraits`, default true) gets no trade: a
   candidate must cover the engine's float outright. Jorn's and Moraug's untaps come at a phase boundary, where the
   float is gone anyway, and keep the trade.
-* **What per-payment dominance cannot promise: the greedy payer after it.** A refined board is resource-for-resource
-  no worse, but the per-cast payer is greedy, and one more untapped source can change its next choice.
-  NivMizzetCombo seed 1180001 gi521 T2: the engine paid Ponder off Saprazzan Skerry AND Cascade Bluffs (a {U} and a
-  {C} floating); the refine gave Bluffs back and kept the {U}. From there the turn went Sol Ring + Generator Servant
-  instead of Sol Ring + Tandem Lookout, and the T3 Niv + Lookout kill became T4 -- at d8 b0 too. The {C} float had
-  protected the {U} (the payer drains colourless before colour for a generic pip); an untapped Bluffs does not. A
-  rule that let the line-float rung (`MTG_LINE_FLOAT_TAP_FIRST`) count Bluffs as spare when the float already covers
-  the line was tried and did NOT recover the game, so it was not kept. This is the residue of a greedy payer, not of
-  the refine's comparison; the lossless answer is a searched payment, not another per-payment rule.
-  Diagnosed further (2026-10-28, one-thread replays, nothing landed): that rung relaxation DOES recover gi521 (T3) once
-  the rung's unseen guard (`MTG_LINE_FLOAT_UNSEEN_GUARD`) is also off -- the search's applies of the post-Ponder
-  continuations that cast Preordain pay Sol Ring's {1} under `g_line_opens_unseen`, correctly by the guard's own
-  rule, and those are the lines the choice turns on. So two payer rules would have to move together (relax the
-  colour test when the float covers the line; narrow the unseen guard), each a play change with its own A/B; owed.
-* **Quality, six held-out seeds at every deck's play settings (base = `MTG_PAY_REFINE=0`):**
+* **What per-payment dominance cannot promise: the greedy payer after it -- and the payer rule that closes it
+  (`MTG_LINE_FLOAT_COVERED`, default ON).** A refined board is resource-for-resource no worse, but the per-cast payer
+  is greedy, and one more untapped source can change its next choice. NivMizzetCombo seed 1180001 gi521 T2: the
+  engine paid Ponder off Saprazzan Skerry AND Cascade Bluffs (a {U} and a {C} floating); the refine gave Bluffs back
+  and kept the {U}. Sol Ring's {1} then spent the {U} -- the payer drains float before it taps -- and Tandem Lookout's
+  {U} had nothing: the turn went Sol Ring + Generator Servant, and the T3 Niv + Lookout kill became T4, at d8 b0
+  too. The line rung `MTG_LINE_FLOAT_TAP_FIRST` exists for exactly this (pay the generic off a spare source, keep
+  the float the line owes) but refused Bluffs because Bluffs "makes {U}" -- by filtering a {U}/{R}, and the only one
+  on the board was that same float. When the reserve left after a payment's own pips already covers every coloured
+  pip the line still owes, the rung's colour test refuses for nothing: no later pip needs any source for its colour,
+  so a source paying the generic leaves the named line exactly as payable with the owed float kept. The rule
+  skips the test then, under the unseen guard too (that guard protects creature-only-colour lands, whose clause
+  is untouched; a first try that also exempted unseen lines is why it once looked like it did not work). Held out
+  (seed 1210001, 48,020 paired games): 0 slower / 0 faster alone, decision streams moving only in Dragonstorm and
+  EDF; with the refine its one turn change is gi521, T4 -> T3.
+* **Quality, seven held-out seeds at every deck's play settings (base = `MTG_PAY_REFINE=0`):**
 
   | seed | paired games | slower | faster | note |
   |---|---|---|---|---|
@@ -725,8 +726,9 @@ generic pip instead of its painful {G}). That makes "is this payment dominated?"
   | 1160001 | 17,747 | 0 | 5 | |
   | 1170001 | 49,330 | 3 | 13 | with the untapper rule; Bruna excluded (its keep table landed between the arms). Niv 1180001 gi390 / gi462 T4 -> T5 recover (T4 both at d8 b0); **gi521 T3 -> T4 does not** (below) |
   | 1190001 + Niv 1200001 | 49,570 | 1 | 6 | held out, the final build: Niv gi262 T6 -> T7 recovers (T5 both at d8 b0) |
+  | 1210001 | 48,020 | 2 | 3 | with `MTG_LINE_FLOAT_COVERED` (identical turns without it): FiveColour gi58 T6 -> T7 recovers (T5 both at d8 b0); gi774 T4 -> T5 is CLEAR CLAIRVOYANCE -- the non-clairvoyant search (`MTG_NC_SEARCH=1`) plays T5 in both arms at d8 b0 (the refine's one effect: a search T4 payment of {W}{U}{B}{R}{G} off Bloom Tender alone instead of Bloom Tender + three lands floating {W}{U}{B}, a genuinely dominating payment, which moved the T2 choice). Niv 1180001: gi521 T4 -> T3 |
 
-  The first four rows are the refine before the untapper rule (below); the last two are the build that lands. Before
+  The first four rows are the refine before the untapper rule (below); the last three are the build that lands. Before
   the rule seed 1170001 read 4 slower / 15 faster, two of the slower EDF games failing at d8 b0 -- the rule fixed both
   (and the regression tier's EDF s2002 gi108, the same shape). Per deck the Niv net is negative on every seed of the
   final build (-1 / -7 / 0 / -1).
@@ -816,15 +818,16 @@ damage board; node cap `MTG_REAL_PAY_NODES` (600).
 ### 13.3 The adoption call (USER)
 
 `MTG_PAY_REFINE` lands DEFAULT OFF, so default play is byte-identical (smoke 153/153, regression 246/246, 0
-reference drift). Whether to turn it on is the USER's call, because it fails one clause of the bar:
+reference drift). Whether to turn it on is the USER's call. With `MTG_LINE_FLOAT_COVERED` (2026-10-28) it meets the
+bar:
 
-* For: a lossless rule per payment (the untapper rule included); held out 1 slower / 6 faster with the slower game
-  recovering at d8 b0; every deck's net <= 0 on the final build; it removes the census's single-payment DOMINATED
-  flags (Remote Farm + Plains, painland faces) in real play, the viewer's auto-tap and the search alike.
-* Against: NivMizzetCombo 1180001 gi521 stays T3 -> T4 at d8 b0 (the greedy payer after a give-back, above), and the
-  wall cost is +6-10% (EDF 1.6x).
-* Recommendation: turn it on; the gi521 shape belongs to the greedy payer and is the argument for a searched payment
-  (program item C), not against a payment that is no worse on its own.
+* For: a lossless rule per payment (the untapper rule included); held out, every slower game either recovers at
+  d8 b0 or is clear clairvoyance (FiveColour 1210001 gi774); every deck's net <= 0 pooled over the final build's
+  seeds 1170001, 1190001 and 1210001 (FiveColour 2 slower / 3 faster); it removes the census's single-payment DOMINATED flags (Remote Farm + Plains,
+  painland faces) in real play, the viewer's auto-tap and the search alike. Niv gi521, the one game that failed the
+  bar, now recovers (T3).
+* Against: the wall cost is +6-10% (EDF 1.6x; 1.07x over the suite on seed 1210001).
+* Recommendation: turn it on.
 
 ### 13.4 What is left
 
