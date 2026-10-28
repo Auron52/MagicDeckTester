@@ -61040,11 +61040,29 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           WalkedNonHitNames(w.seen_nums, w.seen_names,
                                                                             w.hit.m_number)) == 0;
             fc = take ? kCycFcTake : kCycFcDecline;
+            // The Remand prompts below REUSE free_cast but are PAID casts: each carries its cost and what it
+            // does (FreeCastPaidInfo -- presentation only; the source strings, and so every recorded frame's
+            // identity, are unchanged). Worded off the cards' parameters: a counterable hit returns to hand, a
+            // cant_be_countered one still resolves; a Remand with a draw says so.
+            auto draws_tail = [](const CardDefinition& r) -> std::string
+            {
+                if (r.params.draw <= 0) { return std::string(); }
+                return "; " + r.card.m_name.str() + " draws " + (r.params.draw == 1 ? std::string("a card")
+                                                                   : std::to_string(r.params.draw) + " cards");
+            };
             if (take && rm != nullptr)
             {
                 std::vector<Card> rcands;
                 for (const Card& hc : ap.hand)
                 { if (!hc.m_is_staged && hc.m_name == rm->card.m_name) { rcands.push_back(hc); break; } }
+                FreeCastPaidInfo paid;
+                paid.cost    = EffectiveSpellCost(*rm, state, 1).ToString();
+                paid.target  = hd->card.m_name.str();
+                paid.outcome = (hd->params.cant_be_countered
+                                    ? hd->card.m_name.str() + " can't be countered, so it still resolves"
+                                    : hd->card.m_name.str() + " is countered and returns to your hand")
+                             + draws_tail(*rm);
+                const FreeCastPaidScope _paid(&paid);
                 if (!rcands.empty()
                     && (*g_play_free_cast_chooser)(state, me, rm->card.m_name.str() + " on the free-cast "
                                                    + hd->card.m_name.str() + " (pays its cost)",
@@ -61059,6 +61077,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::vector<Card> rcands;
                 for (const Card& hc : ap.hand)
                 { if (!hc.m_is_staged && hc.m_name == rm_b->card.m_name) { rcands.push_back(hc); break; } }
+                FreeCastPaidInfo paid;
+                if (fc == kCycFcTakeRemand)
+                {
+                    paid.cost   = EffectiveSpellCost(*rm_b, state, 1).ToString();
+                    paid.target = rm_a->card.m_name.str();
+                }
+                else
+                {
+                    ManaCost both = EffectiveSpellCost(*rm_a, state, 1);
+                    AddManaCost(both, EffectiveSpellCost(*rm_b, state, 1));
+                    paid.cost   = both.ToString();
+                    paid.target = hd->card.m_name.str() + ", then " + rm_a->card.m_name.str();
+                }
+                paid.outcome = rm_a->card.m_name.str() + " is countered and returns to your hand, "
+                             + hd->card.m_name.str() + " resolves" + draws_tail(*rm_b);
+                const FreeCastPaidScope _paid(&paid);
                 const std::string q = fc == kCycFcTakeRemand
                     ? rm_b->card.m_name.str() + " on that " + rm_a->card.m_name.str() + " (pays its cost; the "
                       + rm_a->card.m_name.str() + " returns to hand and " + hd->card.m_name.str() + " resolves)"
