@@ -3229,6 +3229,14 @@ public:
         // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy
         // matching (a Channel action matches by card name inside the ordinary cast multiset).
         std::vector<std::string> channels;
+        // "cycle=<card name>": cycle a card from hand (a DigDraw action, dig_sacrifice false) and
+        // "sacdraw=<land name>": sacrifice a land in play to draw (dig_sacrifice true). A DigDraw is
+        // ALWAYS matched against these (never by name inside the cast multiset): `cast=Curator of
+        // Mysteries` and "cycle Curator of Mysteries" play the same card two different ways, and a plan
+        // that cycles (a cycle seed, USER 2026-10-28: "Cycling should be a plan item like any other") must
+        // never match a line that does not.
+        std::vector<std::string> cycles;
+        std::vector<std::string> sac_draws;
         // "suspend=<card name>": Lotus Bloom's own Suspend (CR 702.61) -- exile it from hand with
         // time counters instead of casting it. Its own verb for the SAME reason `channel=` has one:
         // suspend is a from-hand ALTERNATIVE to casting the same card, so `cast=<name>` cannot say

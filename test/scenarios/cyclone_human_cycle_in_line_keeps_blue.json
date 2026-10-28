@@ -1,0 +1,66 @@
+{
+  "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Seething Song",
+    "Unpredictable Cyclone",
+    "Curator of Mysteries"
+  ],
+  "library_top": [
+    "Brainstorm",
+    "Emrakul, the Aeons Torn"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "_comment": [
+    "REFERENCE claude_s8_gi7 T4 through the play viewer's line path (USER 2026-10-28: 'Cycling should be a plan",
+    "item like any other.' and the manual tap it needed). The human queues cast Seething Song, cast Unpredictable Cyclone,",
+    "cycle Curator of Mysteries -- ONE line (cycle= verb, CheckLine matches the plan's cycle seed) whose auto-payment holds",
+    "the Island the cycle needs. The walk hits Emrakul (free cast at the engine's pick), the extra turn's attack kills."
+  ],
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "cast=Seething Song;cast=Unpredictable Cyclone;cycle=Curator of Mysteries"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "cast=Seething Song",
+      "cast=Unpredictable Cyclone",
+      "cycle=Curator of Mysteries"
+    ]
+  ],
+  "expect_human_summary_contains": "Seething Song, Unpredictable Cyclone, cycle Curator of Mysteries",
+  "expect_dropped": [],
+  "max_turns": 5,
+  "expect_win_turn": 4
+}
