@@ -151,3 +151,8 @@ reproduced). **640.8 s, win turn 6, only 374k units.** Almost all of it is ONE d
   vs untapped Feeder used as an outlet where tap state is irrelevant to a free activation. Also whether the derive
   should be charged in units, so a finite budget re-prices it (BUDGET MAY RE-PRICE rule). Repro: the
   `MTG_KEEP_REPLAY` command in `build/scratch/melira_replay/` (bt.err holds the full output).
+
+**RESTARTED 2026-10-28 10:59 UTC** (same recipe `fast`, frozen tree 99977194b, journal retained: 600,866 cell-sides
+re-admitted, refine resumed). Status 12:18 UTC: refine **36.3%** of 1,576,162 cell-sides frozen at 4,500 s, ~130
+cell-sides/s (roll7 ~180/s), idle 0.0%, load 32/32. At that rate the refine finishes in roughly 2 h, so ~14:30 UTC,
+then validation. The slow-rollout tail persists: a 176 s size-7 Reveillark/Redcap/Feeder hand in the current top-3.
