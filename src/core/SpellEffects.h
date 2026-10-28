@@ -43268,7 +43268,9 @@ inline void BottomInRandomOrder(GameState& state, int controller, std::vector<Ca
 // ---- The free cast: take / decline / take-and-Remand ---------------------------------------------------
 // The searched choice rides the DigDraw seed action (Action::ponder_keep, see TurnSolver) and, as REALISED,
 // the recorded DigDraw (the executor replays the record's value). -1 = the provider default (TakeFreeCast).
-enum : int { kCycFcDefault = -1, kCycFcDecline = 0, kCycFcTake = 1, kCycFcTakeRemand = 2 };
+// kCycFcTakeRemandChain = take, Remand A on the hit, Remand B on A (the hit resolves, A back to hand, B draws;
+// Remand-on-Remand, USER 2026-10-28; DecisionProvider::AdmitRemandOnRemand).
+enum : int { kCycFcDefault = -1, kCycFcDecline = 0, kCycFcTake = 1, kCycFcTakeRemand = 2, kCycFcTakeRemandChain = 3 };
 
 // THE TAKE-DOMINANCE FOLD (no decline variant, and a decline pin takes) is the PROVIDER's: a restriction
 // justified by a dominance argument about its own deck (DecisionProvider::FreeCastTakeDominated; base false
@@ -43296,11 +43298,43 @@ inline const CardDefinition* CycleFreeCastRemand(const GameState& s, int control
     return nullptr;
 }
 
+// REMAND-ON-REMAND on the free cast: two Remand-type copies in hand (A answers the hit, B answers A), BOTH
+// costs payable from `pool`, three casts left in a restrictor's budget (the hit, A, B), and the provider
+// admitting a Remand on A. Deliberately NO AdmitRemandOnFreeCast check: A is countered, so the hit resolves
+// normally whatever it is (USER 2026-10-28: "no ceiling on that target"). Returns A (B through `b_out`, the
+// next Remand-type copy in hand; the two may share a name); null = no chain option.
+inline const CardDefinition* CycleFreeCastRemandChain(const GameState& s, int controller, const ManaPool& pool,
+                                                      const CardDefinition** b_out)
+{
+    if (s.casts_remaining_this_turn >= 0 && s.casts_remaining_this_turn < 3) { return nullptr; }
+    const CardDefinition* a = nullptr;
+    const CardDefinition* b = nullptr;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.counters_target_spell_to_hand) { continue; }
+        if (a == nullptr) { a = d; continue; }
+        b = d;
+        break;
+    }
+    if (a == nullptr || b == nullptr) { return nullptr; }
+    if (!ResolveProvider(s).AdmitRemandOnRemand(s, controller, *a)) { return nullptr; }
+    ManaCost both = EffectiveSpellCost(*a, s, 1);
+    {
+        const ManaCost bc = EffectiveSpellCost(*b, s, 1);
+        both.generic += bc.generic; both.white += bc.white; both.blue += bc.blue; both.black += bc.black;
+        both.red += bc.red; both.green += bc.green; both.colorless += bc.colorless;
+    }
+    if (!pool.CanPay(both)) { return nullptr; }
+    if (b_out != nullptr) { *b_out = b; }
+    return a;
+}
+
 // The realised choice for one offer, shared by every world (the human chooser overrides it at the human-play
 // site). `castable` = the hit can be cast at all (a nonland card, FreeCastHasLegalTargets, a cast left).
 // `remand` = CycleFreeCastRemand's answer.
 inline int ResolveCycleFreeCastChoice(const GameState& s, int controller, const CardDefinition& hit, bool castable,
-                                      int pin, const CardDefinition* remand)
+                                      int pin, const CardDefinition* remand, const CardDefinition* chain = nullptr)
 {
     if (!castable) { return kCycFcDecline; }
     switch (pin)
@@ -43308,6 +43342,7 @@ inline int ResolveCycleFreeCastChoice(const GameState& s, int controller, const 
         case kCycFcDecline:    return CycleFreeCastTakeDominated(s, controller, hit) ? kCycFcTake : kCycFcDecline;
         case kCycFcTake:       return kCycFcTake;
         case kCycFcTakeRemand: return remand != nullptr ? kCycFcTakeRemand : kCycFcTake;
+        case kCycFcTakeRemandChain: return chain != nullptr ? kCycFcTakeRemandChain : kCycFcTake;
         default: break;
     }
     return ResolveProvider(s).TakeFreeCast(s, controller, hit) ? kCycFcTake : kCycFcDecline;

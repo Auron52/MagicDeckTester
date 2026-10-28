@@ -750,6 +750,15 @@ struct Action
                                        // odometer group key and the canonical-order key of the subset
                                        // guard; never read at apply, which takes the Remand BY NAME --
                                        // copies are interchangeable). -1 = not a remand variant.
+    InternedName remand_chain_by;      // REMAND-ON-REMAND (Cyclone remand ceiling >= 2, USER 2026-10-28).
+                                       // Non-empty only on a remand variant: a Remand of THIS name (A) is
+                                       // cast targeting X, then remand_by (B) is cast targeting A. B
+                                       // resolves first: A returns to its owner's hand, B draws a card;
+                                       // then X RESOLVES NORMALLY (nothing countered it). Cost = X + A + B
+                                       // in one bill; three casts (storm, cast triggers). Needs two Remand
+                                       // copies in hand at apply (else the rider is void: X cast plainly).
+                                       // Shared body: CastAndResolveRemandChain (ManaPayment.h), both
+                                       // worlds. Admitted per deck by DecisionProvider::AdmitRemandOnRemand.
     InternedName pitch_name;           // PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile
                                        // a red card from your hand"). Non-empty only on an evoke variant
                                        // of such a card: the NAME of the hand card exiled as the cost. One
@@ -933,6 +942,8 @@ struct CastRiders
                                         // ApplyCastLifegain in both worlds
     InternedName pitch_name;            // Action::pitch_name: the hand card a pitch evoke exiles as its
                                         // cost (Fury); empty for every other cast
+    InternedName remand_chain_by;       // Action::remand_chain_by: Remand-on-Remand (A targets X, remand_by
+                                        // targets A; X resolves, A back to hand)
     bool     free_remand     = false;   // the remand_by rider rides a FREE walk cast (Unpredictable
                                         // Cyclone's take-and-Remand): only the Remand is paid. Set by the
                                         // walk itself, never by CastRiders::Of (no plan Action carries it)
@@ -947,6 +958,7 @@ struct CastRiders
         r.land_put        = a.rock_mana;
         r.free_cast       = a.free_cast;
         r.remand_by       = a.remand_by;
+        r.remand_chain_by = a.remand_chain_by;
         r.player_target   = a.player_target;
         r.draw_target     = a.draw_target;
         r.pitch_name      = a.pitch_name;
@@ -2137,6 +2149,13 @@ public:
     // shifts every later bp_at index -- which is how the first cut of this rule cost Mirrorwing
     // +0.1266 at every budget.
     static bool ParamKeyedDrawClass(const GameState& state, const CardDefinition& def);
+    // A PLAIN CANTRIP by definition: the DrawSpell template, neither staging nor Expressive Iteration -- the
+    // casts whose resolution opens the plain cantrip breakpoint (apply_one's DrawSpell branch, plain_cantrip
+    // = true). The Remand-on-Remand rider admits exactly these among the draw classes (see BpNameOf).
+    static bool IsPlainCantripDef(const CardDefinition& d)
+    {
+        return d.tmpl == CardTemplate::DrawSpell && !d.params.stages_cards && !d.params.expressive_iteration;
+    }
 
     // Lands + mana rocks + mana dorks the active player controls. Snapshotted at a breakpoint so a
     // decline can be re-admitted once the mana base grows (BpTurnManaSettled).

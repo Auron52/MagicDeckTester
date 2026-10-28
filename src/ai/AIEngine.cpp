@@ -2844,8 +2844,17 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
 // apply_one arms for it (its CANTRIP breakpoint, site def = the Remand). Classifying by X instead would
 // open X's class in this world only (an Expressive Iteration's inline replay, a tutor's deferred
 // acquisition) and shift every later breakpoint ordinal. card_name for every other action.
+// REMAND-ON-REMAND (Action::remand_chain_by): X RESOLVES after the Remand's draw. When X is itself a plain
+// cantrip (IsPlainCantripDef) its own resolution opens the cantrip breakpoint -- after both draws -- and the
+// rollout opens no second one for the Remand, so the class / site is X's; otherwise the Remand's (the
+// can't-be-countered shape). The post-pass admits no other draw class as a chain target.
 static const std::string& BpNameOf(const Action& a)
 {
+    if (!a.remand_chain_by.empty())
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && TurnSolver::IsPlainCantripDef(*d)) { return a.card_name.str(); }
+    }
     return a.remand_by.empty() ? a.card_name.str() : a.remand_by.str();
 }
 
@@ -8738,7 +8747,10 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
             const bool castable = w.have && CycleHitCastable(state, me, hd);
             const CardDefinition* rm =
                 castable ? CycleFreeCastRemand(state, me, *hd, AvailableManaPool(state)) : nullptr;
-            const int fc = castable ? ResolveCycleFreeCastChoice(state, me, *hd, true, fc_pin, rm) : kCycFcDecline;
+            const CardDefinition* rm_b = nullptr;   // Remand-on-Remand: A = rm_a on the hit, B = rm_b on A
+            const CardDefinition* rm_a = castable && fc_pin == kCycFcTakeRemandChain
+                ? CycleFreeCastRemandChain(state, me, AvailableManaPool(state), &rm_b) : nullptr;
+            const int fc = castable ? ResolveCycleFreeCastChoice(state, me, *hd, true, fc_pin, rm, rm_a) : kCycFcDecline;
             EmitCycloneWalk(state, *rep, *sd, w, fc != kCycFcDecline);
             const Card hit = w.hit;   // the copy PushFreeCast puts on the stack (the Remand's target)
             bool cast = false;
@@ -8778,6 +8790,33 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
                         m_logger->LogCastSpell(remand_card.m_number, remand_card.m_name,
                                                rc.ToString() + " (target: " + hit.m_name.str()
                                                + (countered ? ", countered to hand)" : ", can't be countered)"));
+                        const Player& cp = state.players[me];
+                        for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
+                        { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
+                    }
+                }
+            }
+            // TAKE + REMAND-ON-REMAND: A is cast on the hit, B on A; B resolves (A to hand, B draws) and the
+            // hit -- never countered -- resolves normally below. Both Remands are paid now. Lockstep with
+            // apply_one's free_remand chain rider (CastAndResolveRemandChain is the shared resolution).
+            if (cast && fc == kCycFcTakeRemandChain && rm_a != nullptr && rm_b != nullptr)
+            {
+                ManaPool pool = AvailableManaPool(state);
+                ManaCost rc = EffectiveSpellCost(*rm_a, state, 1);
+                AddManaCost(rc, EffectiveSpellCost(*rm_b, state, 1));
+                if (TapForCost(state, rc, pool, /*for_creature=*/false))
+                {
+                    Card a_card, b_card;
+                    const std::size_t before_draw =
+                        CastAndResolveRemandChain(state, me, *rm_a, *rm_b, m_exec_post_combat, &a_card, &b_card);
+                    if (m_logger)
+                    {
+                        m_logger->LogCastSpell(a_card.m_number, a_card.m_name,
+                                               EffectiveSpellCost(*rm_a, state, 1).ToString() + " (target: "
+                                               + hit.m_name.str() + ")");
+                        m_logger->LogCastSpell(b_card.m_number, b_card.m_name,
+                                               EffectiveSpellCost(*rm_b, state, 1).ToString() + " (target: "
+                                               + a_card.m_name.str() + ", countered to hand)");
                         const Player& cp = state.players[me];
                         for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
                         { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
@@ -9007,6 +9046,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     const ManaPool land_put_credit = riders.land_put;
     const int      attach_equip_id = riders.attach_equip_id;
     const InternedName remand_name = riders.remand_by;   // the REMAND rider (Action::remand_by)
+    const InternedName remand_chain_name = riders.remand_chain_by;   // ...and Remand-on-Remand's A
     m_last_cast_remanded = false;
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
@@ -9083,7 +9123,18 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             { if (hc.m_name == remand_name && hc.m_number != hand_card.m_number) { remand_def = rd; break; } }
         }
     }
-    const bool remand_countered = remand_def != nullptr && !def->params.cant_be_countered;
+    // REMAND-ON-REMAND (Action::remand_chain_by): live only with two Remand copies besides X and three casts
+    // left (RemandChainLive, the rollout's own predicate); otherwise the WHOLE rider is void -- X is cast
+    // plainly, exactly as apply_one. X is never countered (B counters A), so it resolves normally.
+    const CardDefinition* remand_chain_def = nullptr;
+    if (remand_def != nullptr && !remand_chain_name.empty())
+    {
+        remand_chain_def = RemandChainLive(state, state.active_player_index, remand_chain_name, remand_name,
+                                           hand_card.m_number);
+        if (remand_chain_def == nullptr) { remand_def = nullptr; }
+    }
+    const bool remand_countered = remand_def != nullptr && remand_chain_def == nullptr
+                               && !def->params.cant_be_countered;
 
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
@@ -9381,6 +9432,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     {
         remand_cost = EffectiveCost(*remand_def, state);
         AddRemandRiderCost(effective, state, remand_name.str());
+        if (remand_chain_def != nullptr) { AddRemandRiderCost(effective, state, remand_chain_name.str()); }
     }
     // Maelstrom Archangel: spend a banked free cast (mirror of the rollout's prep_free +
     // cascade_free arm). Consumed here so exactly this cast skips payment; a stranded marker
@@ -9803,7 +9855,29 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // after), and the Remand draws. The shared CastAndResolveRemand is the rollout's own call. (The
     // remand-eligible X never pushes a cast trigger or a replicate copy above itself -- CollectActions
     // excludes cascade / demonstrate / replicate -- so the Remand is the only thing between X and the top.)
-    if (remand_def != nullptr)
+    if (remand_def != nullptr && remand_chain_def != nullptr)
+    {
+        // REMAND-ON-REMAND: A on X, B on A; B resolves (A to hand, B draws), X stays on the stack and
+        // resolve_now() resolves it -- the can't-be-countered shape. Shared body: CastAndResolveRemandChain.
+        Card a_card, b_card;
+        const std::size_t before_draw =
+            CastAndResolveRemandChain(state, state.active_player_index, *remand_chain_def, *remand_def,
+                                      m_exec_post_combat, &a_card, &b_card);
+        m_last_cast_remanded = true;
+        if (m_logger)
+        {
+            m_logger->LogCastSpell(a_card.m_number, a_card.m_name,
+                                   EffectiveCost(*remand_chain_def, state).ToString() + " (target: "
+                                   + def->card.m_name.str() + ")");
+            m_logger->LogCastSpell(b_card.m_number, b_card.m_name,
+                                   remand_cost.ToString() + " (target: " + a_card.m_name.str()
+                                   + ", countered to hand)");
+            const Player& cp = state.players[state.active_player_index];
+            for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
+            { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }
+        }
+    }
+    else if (remand_def != nullptr)
     {
         if (remand_countered)
         {

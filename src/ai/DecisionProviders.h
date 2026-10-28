@@ -3538,6 +3538,12 @@ public:
     // (valuearm::Arm::cyclone_remand_max_mv, manifest "cyclone_remand_max_mv") so the Stage 5 A/B arms
     // pool in one batch.
     bool AdmitRemandRider(const GameState& s, int controller, const CardDefinition& target) const override;
+    // Remand-on-Remand: admitted when the ceiling reaches the targeted Remand's own MV (2) -- USER 2026-10-28,
+    // "we should allow casting Remand to be Remanded if MV 2 is supported".
+    bool AdmitRemandOnRemand(const GameState& s, int controller, const CardDefinition& remand) const override;
+    // A goldfish_inert card (Toxic Deluge) as a Remand-ONLY target: the ceiling reaches its MV AND the
+    // per-job / env switch MTG_CYCLONE_REMAND_INERT is on (default off). Keyed on properties, never a name.
+    bool AdmitRemandOnlyCast(const GameState& s, int controller, const CardDefinition& inert) const override;
 
     // ---- Phase 5 (2026-10-27): the USER's search heuristics (ledger "Optimization plan") ---------------
     // Each is a RESTRICTION / ORDER behind its own default-ON lever (heurarm); human play and MTG_UNPRUNED
