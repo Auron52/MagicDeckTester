@@ -710,6 +710,11 @@ generic pip instead of its painful {G}). That makes "is this payment dominated?"
   rule that let the line-float rung (`MTG_LINE_FLOAT_TAP_FIRST`) count Bluffs as spare when the float already covers
   the line was tried and did NOT recover the game, so it was not kept. This is the residue of a greedy payer, not of
   the refine's comparison; the lossless answer is a searched payment, not another per-payment rule.
+  Diagnosed further (2026-10-28, one-thread replays, nothing landed): that rung relaxation DOES recover gi521 (T3) once
+  the rung's unseen guard (`MTG_LINE_FLOAT_UNSEEN_GUARD`) is also off -- the search's applies of the post-Ponder
+  continuations that cast Preordain pay Sol Ring's {1} under `g_line_opens_unseen`, correctly by the guard's own
+  rule, and those are the lines the choice turns on. So two payer rules would have to move together (relax the
+  colour test when the float covers the line; narrow the unseen guard), each a play change with its own A/B; owed.
 * **Quality, six held-out seeds at every deck's play settings (base = `MTG_PAY_REFINE=0`):**
 
   | seed | paired games | slower | faster | note |
