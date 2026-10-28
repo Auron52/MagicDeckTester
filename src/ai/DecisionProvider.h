@@ -1032,6 +1032,19 @@ public:
     // (CycloneProvider: a mana-value ceiling, MTG_CYCLONE_REMAND_MAX_MV).
     virtual bool AdmitRemandRider(const GameState& /*s*/, int /*controller*/,
                                   const CardDefinition& /*target*/) const { return true; }
+    // AdmitRemandOnRemand -- may a second Remand target a first Remand (Action::remand_chain_by: A on any
+    // spell X, B on A; X resolves, A back to hand, B draws)? Read wherever a Remand rider is offered (the
+    // hand-cast post-pass and the Cyclone free-cast pin). `remand` = the Remand being targeted (A).
+    // DEFAULT FALSE: the line is new (2026-10-28) and every other Remand deck (Hinata2, NivMizzetCombo) keeps
+    // its measured play until its own A/B; opting one in is a USER decision (Cyclone ledger, Remand ceiling).
+    virtual bool AdmitRemandOnRemand(const GameState& /*s*/, int /*controller*/,
+                                     const CardDefinition& /*remand*/) const { return false; }
+    // AdmitRemandOnlyCast -- may a goldfish_inert card (never cast on its own) be cast ONLY as the target of
+    // a Remand rider (it never resolves: Remand returns it to hand, so its effect and any additional cost
+    // that scales with an X chosen as 0 are never realised)? DEFAULT FALSE (every inert card stays a dead
+    // card); CycloneProvider admits it under its ceiling behind MTG_CYCLONE_REMAND_INERT.
+    virtual bool AdmitRemandOnlyCast(const GameState& /*s*/, int /*controller*/,
+                                     const CardDefinition& /*inert*/) const { return false; }
 
     // DemonstrateCopy -- Creative Technique's "you may copy this spell" (CR 702.145). Default
     // TRUE: the copy is a second free payload at zero cost and the opponent's copy is inert
