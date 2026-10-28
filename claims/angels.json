@@ -4,9 +4,12 @@
   "valueleaf": "em:2038500e481e3f714a03"
  },
  "deck": "angels",
+ "detail": "mulligan: ADOPTED (new-vs-old -0.000792 t, cost 0.999x (se 0.001, 96 seeds), recipe complete)",
+ "finished": "2026-10-28T20:09:39Z",
  "frozen": "1db4218a98b700dd919199b8a32142664e2470de",
  "heartbeat": "2026-10-28T20:03:52Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/angels-20261028-2009",
  "run_id": "angels-artifact-queue-tool-647f24-20261028T190602",
  "score": 0.0028,
  "stage": "mulligan",
@@ -14,6 +17,6 @@
   "mulligan"
  ],
  "started": "2026-10-28T19:06:02Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
