@@ -31445,7 +31445,9 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
             ++total;
             if (!q.tapped) { ++untapped; }
         }
-        if (d->card.IsLand() && d->params.land_search_activation_sacrifice_self && !q.tapped) { myriad_ready = true; }
+        // Read by COUNT only (untapped >= 3 below), never by WHICH land is tapped: the executor and the rollout
+        // may tap different lands for the same cost, and the score must sort identically in both worlds.
+        if (d->card.IsLand() && d->params.land_search_activation_sacrifice_self) { myriad_ready = true; }
     }
     const bool drop_open = pl.lands_played_this_turn < pl.LandDropsAvailable();
     int cyc_hand = 0, lands_u = 0, lands_t = 0, free_c = 0, mana_c = 0, eld = 0;
