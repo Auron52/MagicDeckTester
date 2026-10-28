@@ -533,10 +533,79 @@ ambiguous": every land-Aura bonus does), which hands the line to the per-cast pa
   TRADES: APPLY-DROP 695 (census4) -> 203 (colours alone) -> 309 (colours + hold), CONTINUATION-DIFFERS 365 ->
   442 -> 284; the two together 1,060 -> 645 -> 593. A batch the hold makes unpayable declines to the per-cast
   payer, and that walk drops named casts the unheld joint solve paid -- e.g. {Emiel the Blessed, Wild Growth}
-  (29 of the 122 hold-only drops), whose batch needs the host's mana but not the bonus. NEXT (owed): instead of
-  declining, a STAGED joint solve -- the held Auras' own bills without their hosts, then the rest with each
-  host carrying its new Aura (host + bonus) -- and only then the unheld joint solve; it would also prepay the
-  batches that need a mid-line Aura's bonus at all (root cause 4 of the probe).
+  (29 of the 122 hold-only drops), whose batch needs the host's mana but not the bonus.
+
+* **The staged Aura prepay (`MTG_PREPAY_AURA_STAGE`, default ON) and the unheld retry (`MTG_PREPAY_AURA_UNHELD`,
+  default OFF -- USER decision owed).** Instead of declining a batch the held hosts leave unpayable,
+  `BatchPrepayMainCasts` now solves it in two stages: (1) the held land Auras' own bills, off every source but
+  their hosts; (2) the rest of the batch from what stage 1 leaves, with each host untapped and carrying a
+  stand-in of its Aura, so it pays its own mana AND the bonus. Two facts shape what it may do with the answer.
+  A land Aura's bonus is a triggered mana ability (CR 605.1b): the mana exists only once the Aura has resolved
+  and its host is tapped. And the order the casts are REALISED in is fixed after the prepay (the enabler
+  hoist, `CastOrderLess`, the deck's cast arrangement, the range ladder, `ApplyPayableCastOrder`), so it is
+  not the order of `acts`. Seven versions, each failing on something the one before could not see:
+  - v1 pre-loaded both stages into the pool. Illegal: a cast realised BEFORE the Aura spent bonus mana that
+    did not exist yet. The AccomplishedAlchemist PROPOSED-order test caught it ({Wild Growth, Living Wish}
+    on two Forests, the Wish cast first).
+  - v2 split by `acts` order (stage 1 = every cast up to the last held Aura) and retried the unheld joint
+    solve before declining. Held-out A/B: EDF gi1958 T3 -> T4 and gi1867 T4 -> T5, at every budget and at
+    d8 b0. Both bisected to the unheld retry plus the acts-order split: the joint solve paid the batch with
+    Brushland as an ordinary source before Wild Growth went onto it, and lost the bonus the per-cast walk
+    would have kept.
+  - v3: stage 1 is ONLY the held Auras' bills, and only stage 1 is pre-loaded, once stage 2 is shown
+    payable; the rest is paid cast by cast. Only an APPLY (the executor, the rollout's two calls) takes the
+    partial pre-load; it returns false (`PP_AURA_PARTIAL`) and the per-cast payer finishes. A PROBE
+    (`SubsetPayableAsExecuted`, `OrderPrepaysWholeTurn`, the creature-tap key) still gets "false, state
+    untouched", and the oracle's step hook counts a partial pre-load as a step made. Searched play was clean
+    (seed 980001, 10,299 paired games: 0 slower, 1 faster), but the tiers' searched same-score changes held a
+    dropped cast (regression s2002 gi85 T4: Emiel the Blessed left in hand) and d0 was worse (EDF seed
+    990001, 4,000 games: net +21 turns).
+  - v4 fixed gi85's two causes. Stage 1's backtracker paid Trace of Abundance's {R/W}{G} off THREE lands
+    ({W}{G} and a spare {C}), and the leftover stage 2 read came from the backtracker's own `out_leftover`,
+    which spends hybrid-blind -- it kept the {W} Trace's pip took, so Emiel looked payable. Now the leftover
+    is the settled pool less the settled bill, and each source stage 1 tapped is offered back, kept up when
+    stage 2 still pays (at no more pain or energy) or newly pays -- judged by stage 2, since giving back the
+    Coast (no {W}) still pays Trace and strands Emiel. d0 improved to net +11 but was still worse.
+  - v5 closes the realised-order hole d0 found (EDF seed 991265 gi1264 T3: {Overgrowth onto Yavimaya Coast,
+    Fertile Ground onto a Mariposa}; the Coast held, the Mariposa not, because the rest of the board cannot
+    pay Fertile Ground without it; stage 1 paid Overgrowth off that Mariposa and the apply cast Fertile Ground
+    first, which drained Overgrowth's pre-load). Two guards: the split runs only when EVERY land Aura of the
+    batch with an untapped named host is held, and it is refused when the rest-first order (rest of the batch,
+    then the Auras, no bonus) pays on the untouched board but not under the pre-load -- the order the
+    decline's walk would have paid. Replayed, all eight v4 d0 slower games tie. Its A/B (seed 1030001
+    searched, 990001 d0) was clean on EDF, FungusV3 and Bruna d0, but AccomplishedAlchemist searched gi682 was
+    T5 -> T6 even at d8 b0.
+  - v6: stage 1 never spends an untap-target-land source (Arbor Elf) that can re-tap a held host. The
+    Arbor's tap is one more tap of a Forest, Aura bonuses included (`UntapLandSourceDef`), so the held host's
+    new Aura raises what it makes, and stage 1 runs before that Aura resolves. gi682 T5 (Forest + Utopia
+    Sprawl, a second Forest, Arbor Elf; Crab Umbra, two more Sprawls onto the enchanted Forest, Accomplished
+    Alchemist -- seven mana): stage 1 paid the Sprawls off the bare Forest and the Arbor at the old yield, the
+    turn made seven where the walk makes eight, and with no slack the per-cast payer dropped Crab Umbra.
+  - v7 (shipped): the stage-1 give-back runs on EVERY stage 1, not only an over-tap, and once stage 2 pays it
+    keeps a release only when the re-solve taps fewer sources or as many with fewer colours between them.
+    Bruna T6 (Remote Farm, Razorverge Thicket, a fresh Forest; two Open the Armory and Wild Growth onto the
+    Farm, five for five): stage 1 paid Wild Growth's {G} off the Thicket, and the apply's first Armory spent
+    the Farm's second {W} on its generic, so the second Armory had no {W}. Now stage 1 takes the Forest.
+  A diagnostic found both of these: `MTG_PREPAY_STAGE_SHADOW=1` replays every search-internal plan apply whose
+  prepay took the split with the split off and prints the plans whose realised casts differ (`[stage-shadow]
+  WORSE|BETTER`, with the board, hand, job and game index). On v6 (seed 1060001, play settings, 1,200 games)
+  Bruna showed 1,127 such applies, almost all WORSE; on v7 Bruna is 333 BETTER / 25 WORSE, EDF 491 / 51 and
+  AccomplishedAlchemist 19 / 138. AccomplishedAlchemist's are one T3 board of one game (gi25), whose result
+  is the same in both arms. Every remaining WORSE apply examined comes down to the per-cast payer's
+  generic-pip order (WUBRG in autonomous play: gi682's Alchemist spent both new {U} on its {3} and kept a
+  {B}; Bruna's Armory spent its second {W}). The line-aware order human play already has is the fix for
+  that, measured separately as `MTG_AUTO_LINE_GENERIC`.
+  The unheld retry stays OFF: on the v4 run it was 2 slower / 1 faster in searched EDF (seed 1010001) and
+  net +9 at d0, and gi2852 is T3 -> T4 even at d8 b0 -- the retry taps a host as an ordinary source, the
+  search's rollouts pay through it too, and the Conservatory line that wins reads worse on turn 1. What it
+  buys is real (the EDF census's APPLY-DROP 304 -> 225 over 142 games), so it is the USER's call.
+  `MTG_PREPAY_PROBE` on EDF (40 games, seed 940001, v3): of 251,879 multi-cast calls, 20,826 prepaid whole and
+  28,979 pre-loaded the Auras' share. v7 held-out A/B, staged split off vs on (83,104 games): searched at play
+  settings on seed 1030001 (AccomplishedAlchemist 854, EDF 3,844, FungusV3 4,000, Bruna 1,000) and 1070001
+  (AccomplishedAlchemist 854, Bruna 1,000, EDF 2,000): 0 slower / 0 faster on every deck, the same mean win
+  turns, work +0.03% (EDF +0.18% and +0.09%, the rest under 0.02%). d0 on seed 990001 (4,000 each) 0 slower / 0
+  faster on all four decks; EDF d0 seed 1020001 (12,000): 5 slower / 7 faster, net -6 turns, and all five
+  slower games tie between the arms at d8 b0.
 
 **Owed: EDF seed 3003 T5** (9 ORACLE-GAPs on the new payer, one board: Aether Hub #3 under Wild Growth,
 Aether Hub #4, Brushland, Adarkar Wastes; plans casting Trace of Abundance then Essence Depleter / a blink).

@@ -2654,8 +2654,13 @@ public:
     // hold, if the line can pay without them, the sources the REST of the hand needs for its
     // coloured pips (MTG_HUMAN_PREPAY_DEMAND; see HumanPrepayDemandHolds). Every other caller
     // (the executor, rollouts, the payability probes) passes false: byte-identical.
+    // `allow_partial`: the caller is an APPLY (the executor and ApplyPlanDirect, which ignore the
+    // result and cast from whatever floats). Only then may a land-Aura batch be prepaid for its held
+    // Auras alone and return false with that share pre-loaded (MTG_PREPAY_AURA_STAGE); every probe
+    // keeps "false = state untouched".
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
-                                     bool mint_prefix = false, bool hand_demand = false);
+                                     bool mint_prefix = false, bool hand_demand = false,
+                                     bool allow_partial = false);
     // The hold masks behind `hand_demand`, exposed for tests: one untapped source per coloured pip
     // the hand minus `acts`' casts still owes (scarcest colour first, narrowest source, tie lower
     // card number), written to `out` as PREFIX masks over battlefield indices, largest first --

@@ -7389,7 +7389,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
     // logical point (after the land drop; Vial puts now ride the cast sequence) -> identical prepay. Declined -> greedy.
-    TurnSolver::BatchPrepayMainCasts(state, plan.actions);
+    TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false, /*hand_demand=*/false,
+                                     /*allow_partial=*/true);
     // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
     // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
     // enabler is hoisted below.

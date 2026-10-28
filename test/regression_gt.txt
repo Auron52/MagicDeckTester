@@ -1,13 +1,13 @@
-# Regression ground truth -- commit 36cc50aa5  date 2026-10-28
+# Regression ground truth -- commit 42f47d83e  date 2026-10-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
-# accepted-with-regressions (smoke, 2026-10-28): LHC sweep fixes + LHC suite rows (new keys lhc/lhc2hg): main-1 opp-loss check (win turns unchanged everywhere, digests move: the empty post-kill COMBAT record is gone), {X}{X} display, MTG_LG_TARGET_COMBAT_POWER (held-out critter -0.0003t, lhc 0), MTG_LEGEND_SBA_FIRST (RULES fix, CR 704.3: the legend-rule loser is dead to triggers in the enter cascade). Smoke searched 3 slower / 0 faster, d0 27 slower / 0 faster -- ALL angels/angels2hg and ALL the legend fix (angels d0 with MTG_LEGEND_SBA_FIRST=0 reproduces 5.2440 exactly): a second Lyra, Archangel of Dawn entering beside Seraph Sanctuary used to let BOTH Lyras see the gain (2 counters per Angel instead of 1); gi164 T4 kill was exactly lethal off the extra 2. Held-out lhc +0.0018t/+0.0015t, critter +0.0002t, every slower game the bug coming out. CARRIED -- (smoke, 2026-10-27): MTG_PREPAY_COLOURS + MTG_PREPAY_AURA_HOST default ON (the whole-turn prepay settles hybrid pips and land-Aura any-colour units, and holds a land Aura's own host): held-out A/B seed 960001, all 38 decks at play settings, 21,001 paired games 0 slower / 2 faster (EDF). Smoke searched: 1 slower alchemist_smoke_d3_s1001 gi3 6->7 = budget churn (both arms T6, same digest, at b160 and b640), 1 faster; d0 10 slower / 10 faster (greedy runner, payment shift). Scenario edf_wish_first_keeps_trace pinned to MTG_PREPAY_COLOURS=0; new edf_wish_first_pays_trace_jointly || CARRIED -- (smoke, 2026-10-28): Bruna TUTOR FIT (MTG_BRUNA_TUTOR_FIT, default ON, USER 2026-10-11) landed onto 510167bf0+: only bruna/bruna2hg move (146 other configs unchanged). Searched 0 slower / 2 faster / 6 play-changed; d0 10 slower / 19 faster (6.144 -> 6.128).
-# accepted-with-regressions (regression, 2026-10-28): LHC sweep fixes + LHC suite rows (see the smoke note). Regression searched 10 slower / 0 faster, d0 17 slower / 0 faster -- ALL angels/angels2hg, ALL MTG_LEGEND_SBA_FIRST (second Lyra + Seraph Sanctuary double counters, a rules fix); refs 246 ok / 421 repaired / 1 beaten, 0 drift; REQUIRE-BEAT 2/2. CARRIED -- (regression, 2026-10-27): MTG_PREPAY_COLOURS + MTG_PREPAY_AURA_HOST default ON (see the smoke note; held-out A/B seed 960001 0 slower / 2 faster). Regression searched: 0 slower / 2 faster / 61 play-changed (alchemist, edf, fungusv3, bruna, melira, fivecolour, hinata, minotaur); d0 11 slower / 7 faster (greedy runner, payment shift); refs 0 drift (247 ok, 420 repaired, 1 beaten) || CARRIED -- (regression, 2026-10-28): Bruna TUTOR FIT (MTG_BRUNA_TUTOR_FIT, default ON, USER 2026-10-11): only bruna moves (236 other configs unchanged). Searched 1 slower / 3 faster / 25 play-changed; the slower bruna d5 s2002 gi95 7->8 = budget churn (7 at 4x and 16x); d0 12 slower / 19 faster (6.188 -> 6.173).
+# accepted-with-regressions (smoke, 2026-10-28): MTG_PREPAY_AURA_STAGE default ON (staged land-Aura prepay v7: the held Auras' bills pre-loaded, the rest per cast; MTG_PREPAY_AURA_UNHELD default OFF, USER decision owed). Held-out A/B off vs on, 83,104 games (seeds 1030001/1070001 searched AA/EDF/FungusV3/Bruna, d0 990001 x4 decks + EDF 1020001): searched 0 slower / 0 faster, work +0.03%; d0 EDF 1020001 5 slower / 7 faster (net -6), all 5 tie at d8 b0. Smoke: searched 0/0 + 4 same-score line changes (EDF gi8 x3: Cloud of Faeries T2 -> T3, no cast dropped per the mana oracle; EDF d5 gi80); d0 1 slower (edf gi849 5->6, T4 in both arms at d8 b0) / 2 faster. Carried from 2026-10-27 (MTG_PREPAY_COLOURS + AURA_HOST): alchemist_smoke_d3_s1001 gi3 6->7 = budget churn (both arms T6 at b160 and b640). 
+# accepted-with-regressions (regression, 2026-10-28): MTG_PREPAY_AURA_STAGE default ON (see the smoke note; held-out A/B 83,104 games searched 0 slower / 0 faster, d0 net -6). Regression searched: 0 slower / 0 faster / 7 play-changed (all FungusV3 gi26/45/59/216: the same casts every turn, opponent life +-1 -- a different body taps for the pre-load); d0 1 slower (edf_regression_d0_s2002 gi174 4->5: the d0 runner's two Living Wishes fetch Cloud of Faeries + Dimensional Infiltrator instead of Mariposa + Cloud, no cast dropped; T4 in both arms at d8 b0); refs 0 drift (245 ok, 422 repaired, 1 beaten). 
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-fungusv3_smoke_d0_s1001=5.2630/357d23896b70fc94
+fungusv3_smoke_d0_s1001=5.2610/22e64a8d89f83e08
 fungusv3_smoke_d3_s1001=4.4800/8b44510b383e2aa9
 fungusv3_smoke_d5_s1001=4.5257/1c63af3781e43227
 fungusv32hg_smoke_d5_s1001=4.8200/5fef40c803cbb458
@@ -128,10 +128,10 @@ bruna2hg_smoke_d5_s1001=5.3800/1ad546683fbd1cee
 bruna_smoke_d0_s1001=6.1280/d15a04daa8626e86
 bruna_smoke_d3_s1001=4.8200/ceddfd62b1e07d58
 bruna_smoke_d5_s1001=4.8333/1cfa1086cb054468
-edf2hg_smoke_d5_s1001=3.9600/20f9155e74c7ea58
-edf_smoke_d0_s1001=5.3110/af5343f1663c4370
-edf_smoke_d3_s1001=4.0000/152e57081048151b
-edf_smoke_d5_s1001=4.1300/ec8bfcef8ede8c4d
+edf2hg_smoke_d5_s1001=3.9600/33dbb7d813b5a938
+edf_smoke_d0_s1001=5.3120/58b014d2ebc25edc
+edf_smoke_d3_s1001=4.0000/0079a25db1afc32a
+edf_smoke_d5_s1001=4.1300/45751d3a666f4eb2
 snow_smoke_d0_s1001=6.1300/589bf86103368c03
 snow_smoke_d3_s1001=5.7600/8858c7d906f05bab
 snow_smoke_d5_s1001=5.7440/2314f2e10617aa33
@@ -153,7 +153,7 @@ vampires_smoke_d0_s1001=4.5540/bca003a9fd169f2e
 vampires_smoke_d3_s1001=4.2000/a4619f4de0b4fe6b
 vampires_smoke_d5_s1001=4.2400/622c2d66e7f69fd9
 vampires2hg_smoke_d5_s1001=4.9200/074da3a3766f0f3e
-alchemist_smoke_d0_s1001=6.3270/c5a85b700c85d21f
+alchemist_smoke_d0_s1001=6.3270/600d7582306b8971
 alchemist_smoke_d3_s1001=5.0200/b6fcbcc90672edcf
 alchemist_smoke_d5_s1001=4.9333/61ed4efba1646d0b
 alchemist2hg_smoke_d5_s1001=5.1600/6b6b113baadb0eb8
@@ -238,10 +238,10 @@ vampires_regression_d3_s30001=4.3000/092417a29e2ce8ce
 vampires_regression_d5_s30001=4.3000/092417a29e2ce8ce
 whiteknights_regression_d3_s30001=4.1500/7a077a89bdfc6a0d
 whiteknights_regression_d5_s30001=4.1500/7a077a89bdfc6a0d
-fungusv3_regression_d0_s2002=5.3170/d7b18626ff11d2bb
-fungusv3_regression_d3_s2002=4.5333/d0a1c04df9e6b57f
-fungusv3_regression_d5_s2002=4.5560/c17aeeccc52bdc19
-fungusv3_regression_d5_s3003=4.5720/92a530d71e169e20
+fungusv3_regression_d0_s2002=5.3170/381ace0e2039014c
+fungusv3_regression_d3_s2002=4.5333/b0466fe3bbff1dca
+fungusv3_regression_d5_s2002=4.5560/895bfa1569a5804c
+fungusv3_regression_d5_s3003=4.5720/dd156782c23fe434
 slivers_regression_d0_s2002=4.6880/93bd8838b85a7f42
 slivers_regression_d3_s2002=4.2160/bc205fc325ba907f
 slivers_regression_d5_s2002=4.2123/b3f33626cff808d8
@@ -369,7 +369,7 @@ bruna_regression_d0_s2002=6.1730/96dd5beb320b55aa
 bruna_regression_d3_s2002=5.0400/32b86ad7063a2641
 bruna_regression_d5_s2002=5.1267/fec79422578dcd96
 bruna_regression_d5_s3003=5.0133/a5565d8dce5f9d1e
-edf_regression_d0_s2002=5.3260/6df1d1e3e4eab2c2
+edf_regression_d0_s2002=5.3270/bbd70ec53a05e0a9
 edf_regression_d3_s2002=3.9600/7cfa0d9ab6e06265
 edf_regression_d5_s2002=4.0600/2d17d8b2b504a5e3
 edf_regression_d5_s3003=4.1267/0970cc4d266d8dd0
@@ -400,7 +400,7 @@ vampires_regression_d3_s2002=4.2600/95c57b690c904d68
 vampires_regression_d5_s2002=4.2150/f8cb0360c9bd79ea
 vampires_regression_d5_s3003=4.2900/5a924bbd85cc4eae
 vampires2hg_regression_d5_s2002=4.9200/39bccbacc03f212b
-alchemist_regression_d0_s2002=6.3480/a2cfa062f4897732
+alchemist_regression_d0_s2002=6.3480/4e827beb9a80479a
 alchemist_regression_d3_s2002=4.8600/70263043af0ec36b
 alchemist_regression_d5_s2002=4.9371/5e7640e2824c2c8d
 alchemist_regression_d5_s3003=5.0229/8321f872aabae2ca

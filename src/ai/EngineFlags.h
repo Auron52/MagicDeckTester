@@ -439,6 +439,27 @@ inline bool PrepayAuraHostOn()
     return heurarm::Flag(heurarm::PREPAY_AURA_HOST, env_on);
 }
 
+// MTG_PREPAY_AURA_STAGE (2026-10-27; DEFAULT ON, =0 -> the hold's decline): a prepay the held land-Aura hosts
+// leave unpayable is tried STAGED (an apply pre-loads the held Auras' bills, paid without the hosts, when the
+// rest is payable with host + bonus; the rest then pays per cast) before it declines -- see THE LAND AURA
+// STAGED SOLVE (TurnSolver.cpp).
+inline bool PrepayAuraStageOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_AURA_STAGE", true);
+    return heurarm::Flag(heurarm::PREPAY_AURA_STAGE, env_on);
+}
+
+// MTG_PREPAY_AURA_UNHELD (2026-10-27; with MTG_PREPAY_AURA_STAGE): a batch neither the hold nor the staged
+// split pays is retried with the hosts as ordinary sources before it declines. DEFAULT OFF (USER decision owed):
+// it pays batches the per-cast walk strands (EDF census: APPLY-DROP 304 -> 225 over 142 games), but the host it
+// taps loses its Aura's bonus, and EDF held-out seed 1010001 gi2852 is T3 -> T4 even at d8 b0 (the search's
+// rollouts pay through the same retry, so the Conservatory line it would win with reads worse on turn 1).
+inline bool PrepayAuraUnheldOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_AURA_UNHELD");
+    return heurarm::Flag(heurarm::PREPAY_AURA_UNHELD, env_on);
+}
+
 // MTG_PAY_NARROW_RESTRICTED_FIRST (Vampires sweep L, 2026-10-18; DEFAULT ON, =0 -> battlefield order) --
 // among colored_creature_only sources, spend one WITHOUT colored_creature_ability_ok (Unclaimed Territory,
 // Cavern of Souls, Sliver Hive, Voldaren Estate) before one WITH it (Secluded Courtyard): the Courtyard's

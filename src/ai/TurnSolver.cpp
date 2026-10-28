@@ -51539,7 +51539,8 @@ namespace
 {
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
-                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_SUBTYPE_MANA, PP_N };
+                     PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_SUBTYPE_MANA,
+                     PP_AURA_PARTIAL, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -51551,7 +51552,8 @@ const char* const kPrepayName[PP_N] = {
     "declined: big-spell-only mana + a non-qualifying cast (Troyan)",
     "declined: an earlier cast grows the pain chain (MTG_PD_BATCH_TIMING)",
     "declined: a life-scaled source the batch's lifegain grows (LifeScaledManaInOrderWalk)",
-    "declined: subtype-restricted mana live (Smokebraider)" };
+    "declined: subtype-restricted mana live (Smokebraider)",
+    "partial: the held land Auras' bills (MTG_PREPAY_AURA_STAGE)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -51672,6 +51674,13 @@ bool PrepayColoursFit(const ManaPool& produced, const ManaCost& cost, ManaCost* 
 // pool-level CanPay of the board with the host (and every host held before it) out. Only an UNTAPPED
 // host the action names is considered (an Aura whose host is picked at resolution, or a host already
 // tapped, has nothing to protect), so a batch without a land Aura is byte-identical.
+// Set for the span of the unheld retry (THE LAND AURA STAGED SOLVE's last rung): no host is held.
+thread_local bool t_prepay_aura_hold_off = false;
+// Set when a call returns false having pre-loaded the staged Auras' share (allow_partial): it DID decide the
+// taps, so the mana oracle's engine step is kept rather than handed back.
+thread_local bool t_prepay_partial_made = false;
+// DIAGNOSTIC (MTG_PREPAY_STAGE_SHADOW): staged pre-loads made on this thread, read by ApplyPlanDirect's shadow.
+thread_local unsigned t_prepay_staged_n = 0;
 struct PrepayAuraHostHold
 {
     GameState* s = nullptr;
@@ -51679,7 +51688,7 @@ struct PrepayAuraHostHold
     int        n = 0;
     PrepayAuraHostHold(GameState& state, const std::vector<Action>& acts)
     {
-        if (!PrepayAuraHostOn()) { return; }
+        if (!PrepayAuraHostOn() || t_prepay_aura_hold_off) { return; }
         const int active = state.active_player_index;
         for (const Action& a : acts)
         {
@@ -51698,14 +51707,42 @@ struct PrepayAuraHostHold
             }
         }
     }
-    ~PrepayAuraHostHold()
+    ~PrepayAuraHostHold() { Release(); }
+    bool Holds(int host) const
+    {
+        for (int k = 0; k < n; ++k) { if (held[k] == host) { return true; } }
+        return false;
+    }
+    // The hosts go back up (a retry without the hold); nothing is left for the destructor.
+    void Release()
     {
         for (int k = 0; k < n; ++k)
         { SetPermTapped(*s, s->active_player_index, held[k], false); }
+        n = 0;
     }
     PrepayAuraHostHold(const PrepayAuraHostHold&) = delete;
     PrepayAuraHostHold& operator=(const PrepayAuraHostHold&) = delete;
 };
+
+// `dst` minus `sub`, hybrid pairs included (each of sub's pairs takes one equal pair out of dst). False
+// when dst does not hold sub -- a field would go negative or a pair is missing -- and the caller skips.
+bool SubCostCarryingHybrids(ManaCost& dst, const ManaCost& sub)
+{
+    dst.white -= sub.white; dst.blue  -= sub.blue;  dst.black   -= sub.black;
+    dst.red   -= sub.red;   dst.green -= sub.green; dst.generic -= sub.generic;
+    dst.colorless -= sub.colorless;
+    if (dst.white < 0 || dst.blue < 0 || dst.black < 0 || dst.red < 0 || dst.green < 0 || dst.generic < 0
+        || dst.colorless < 0) { return false; }
+    for (int i = 0; i < sub.hybrid_count; ++i)
+    {
+        int k = 0;
+        while (k < dst.hybrid_count && dst.hybrid_pair[k] != sub.hybrid_pair[i]) { ++k; }
+        if (k == dst.hybrid_count) { return false; }
+        for (int m = k; m + 1 < dst.hybrid_count; ++m) { dst.hybrid_pair[m] = dst.hybrid_pair[m + 1]; }
+        dst.hybrid_pair[--dst.hybrid_count] = 0;
+    }
+    return true;
+}
 
 // PREVENT DAMAGE BATCH TIMING (dmgev::BatchTimingEnabled has the case and the rule). Is paying this
 // batch's casts ONE AT A TIME, each after the ones before it resolved, never worse than paying them all
@@ -52385,7 +52422,7 @@ int TurnSolver::HumanPrepayDemandHolds(const GameState& state, const std::vector
 }
 
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
-                                      bool mint_prefix, bool hand_demand)
+                                      bool mint_prefix, bool hand_demand, bool allow_partial)
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
     if (!s_enabled) { return false; }
@@ -52397,8 +52434,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     {
         if (!manaoracle::NextIsEngineStep(state)) { return false; }
         manaoracle::EngineStepSpan span(state, true);
-        const bool ok = BatchPrepayMainCasts(state, acts, mint_prefix, hand_demand);
-        span.End(true, /*made=*/ok);
+        t_prepay_partial_made = false;
+        const bool ok = BatchPrepayMainCasts(state, acts, mint_prefix, hand_demand, allow_partial);
+        span.End(true, /*made=*/ok || t_prepay_partial_made);
         return ok;
     }
     // Attribution (fivecolour-payment-query-fold.md step 0): count every invocation, and every one
@@ -52606,8 +52644,13 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     ManaCost c_bigq;
     bool hybrid_overflow = false;  // MTG_PREPAY_COLOURS: more hybrid pips than ManaCost carries
     bool any_reveal_act = false;   // a reveal_or_pay cast (Daring Buccaneer) -> order-aware debit below
+    // Each act's share of `combined`, as folded below (zero for an act that adds none): the LAND AURA
+    // STAGED SOLVE takes the held Auras' shares out of it.
+    thread_local std::vector<ManaCost> act_bill;
+    act_bill.assign(acts.size(), ManaCost{});
     for (const Action& a : acts)
     {
+        ManaCost& a_bill = act_bill[static_cast<std::size_t>(&a - acts.data())];
         // Ordered Garth tap (MTG_GARTH_ORDERED): the copy's cast pays INSIDE the ordered cast
         // sequence, so its cost must join the whole-turn joint solve -- leaving it out let the
         // tap strand the colours of the casts sorted after it (slow-game class A, 2026-08-20:
@@ -52622,6 +52665,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             combined.blue += a.cost.blue; combined.black += a.cost.black;
             combined.red += a.cost.red; combined.green += a.cost.green;
             combined.colorless += a.cost.colorless;
+            AddManaCost(a_bill, a.cost);
             c_nonc.generic += a.cost.generic; c_nonc.white += a.cost.white;
             c_nonc.blue += a.cost.blue; c_nonc.black += a.cost.black;
             c_nonc.red += a.cost.red; c_nonc.green += a.cost.green;
@@ -52723,7 +52767,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (combined.hybrid_count < 4) { combined.hybrid_pair[combined.hybrid_count++] = ec.hybrid_pair[h]; }
                 else { hybrid_overflow = true; }
             }
+            AddCostCarryingHybrids(a_bill, ec);
         }
+        else { AddManaCost(a_bill, ec); }
         ManaCost& part = d->card.IsCreature() ? c_crea : c_nonc;   // mixed two-stage split
         part.generic += ec.generic; part.white += ec.white; part.blue += ec.blue;
         part.black += ec.black; part.red += ec.red; part.green += ec.green;
@@ -52864,7 +52910,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 
     // The batch's land-Aura hosts sit out every solve below (PrepayAuraHostHold). Taken BEFORE the
     // snapshot, so each rollback keeps them held; the destructor frees them on every exit.
-    const PrepayAuraHostHold _aura_host_hold(state, acts);
+    PrepayAuraHostHold _aura_host_hold(state, acts);
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
     const ManaPool               fm_snap = state.floating_mana;
@@ -53478,6 +53524,316 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
         if (!mixed_ok) { restore(); }
     }
+    // ---- THE LAND AURA STAGED SOLVE (MTG_PREPAY_AURA_STAGE, default ON; =0 -> the hold's decline) ------
+    // The held hosts (PrepayAuraHostHold) can leave the batch unpayable, and declining hands it to the
+    // per-cast walk, which drops casts the joint solve pays (EDF census, the hold's own cost: {Emiel the
+    // Blessed, Wild Growth} -- the batch needs the host's mana, not its bonus). Two more rungs first:
+    //   * STAGED: stage 1 pays the held Auras' own bills off the board without their hosts; stage 2 must
+    //     then pay the rest of the batch with every host back up and carrying its new Aura -- a stand-in
+    //     copy attached for the one solve, so a host's tap credits its own mana AND the bonus exactly as
+    //     LandAuraAddToPool will once the Aura has resolved -- seeded with stage 1's surplus
+    //     (out_leftover). When both stages pay, ONLY STAGE 1 IS PRE-LOADED and the rest pays one cast at
+    //     a time. That is what keeps it legal in any order. The bonus is the Aura's own triggered mana
+    //     ability (CR 605.1b): only a tap made while the Aura is attached yields it, so bonus mana
+    //     pre-loaded now would pay a cast the apply realises before its Aura (AccomplishedAlchemist's
+    //     PROPOSED order casts Living Wish before Wild Growth), and the realised order is decided after
+    //     this call (ApplyPayableCastOrder and the passes before it) -- nor is it `acts`' order (EDF gi
+    //     1867: the batch arrives {Living Wish, Wild Growth} and the apply casts Wild Growth first).
+    //     Stage 1's units are real mana from real taps whatever the order; the hosts stay up, and the
+    //     per-cast payer taps one for the bonus only once its Aura is on the battlefield. Cast first,
+    //     the Auras drain stage 1 and the rest finds the hosts; cast later, the rest drains it and the
+    //     Auras pay per cast, as they would have after the decline. What the joint solve adds is stage
+    //     1's CHOICE: the Auras are paid from sources that leave the rest payable (the per-cast walk
+    //     paid the Aura first and stranded the cast after it). gi188 is the per-cast payer's own shape
+    //     (Fertile Ground off Mariposa, the Call off Conservatory + both bonuses), and so is the batch
+    //     that needs the bonus at all (the probe's 'combined UNPAYABLE': Fertile Ground onto a land,
+    //     then Living Wish off that land's two).
+    //     A partial pre-load breaks the probes' contract (false = the board untouched: the as-executed
+    //     subset test, OrderPrepaysWholeTurn, the creature-tap key), so it is made only for an APPLY
+    //     (`allow_partial`); a probe reads a payable split as the decline it always was.
+    //   * UNHELD (MTG_PREPAY_AURA_UNHELD): the historical joint solve, host included (a recursion with
+    //     the hold off). The bonus is lost -- see that lever for what it costs.
+    // Not with a counted float, a reveal surcharge or a flattened bill (more than four hybrid pairs):
+    // the stages split the bill, and those are the shapes whose split this does not know.
+    bool aura_staged = false;   // stage 1 is pre-loaded below; the casts after it pay one at a time
+    if (!ok && _aura_host_hold.n > 0 && PrepayAuraStageOn() && !float_in && !any_reveal_act
+        && !hybrid_overflow && n + _aura_host_hold.n <= 64)
+    {
+        thread_local std::vector<std::pair<const CardDefinition*, int>> st_auras;   // (Aura, host)
+        st_auras.clear();
+        ManaCost c_aura;   // stage 1: the held Auras' own bills (as folded into `combined`)
+        // EVERY land Aura the batch casts onto an untapped host must be a held one. An Aura whose host the
+        // hold could not take (the rest of the board cannot pay it without that host) leaves the host free
+        // for stage 1 to tap, and the realised order decides whether that Aura's bonus survives: EDF d0
+        // held-out gi1264 (seed 991265) T3, {Overgrowth onto Yavimaya Coast, Fertile Ground onto Mariposa}
+        // -- the Coast held, the Mariposa not; stage 1 paid Overgrowth off that Mariposa, stage 2 checked
+        // Fertile Ground off the Coast + Overgrowth's bonus, and the apply cast Fertile Ground FIRST: it drained
+        // Overgrowth's pre-load and Overgrowth was dropped (T4 -> T5). Such a batch declines, as before.
+        bool all_held = true;
+        for (std::size_t i = 0; i < acts.size(); ++i)
+        {
+            const Action& a = acts[i];
+            if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d == nullptr || !d->params.is_land_aura || d->params.land_aura_extra_mana <= 0) { continue; }
+            if (!_aura_host_hold.Holds(a.enchant_target))
+            {
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index == active && !p.tapped && p.card.m_number == a.enchant_target)
+                    { all_held = false; }
+                }
+                continue;
+            }
+            st_auras.emplace_back(d, a.enchant_target);
+            AddCostCarryingHybrids(c_aura, act_bill[i]);
+        }
+        ManaCost c_rest = combined;
+        if (all_held && !st_auras.empty() && SubCostCarryingHybrids(c_rest, c_aura) && c_rest.ManaValue() > 0)
+        {
+            auto restore_st = [&]()
+            {
+                state.battlefield                  = bf_snap;
+                state.floating_mana                = fm_snap;
+                state.players[active].life         = la;
+                state.players[1 - active].life     = lo;
+                state.opponent_lost_life_this_turn = oll;
+                if (energy_restore) { state.players[active].energy_counters = ea; }
+                produced = ManaPool{};
+            };
+            static const bool s_shrink_st = EnvOn("MTG_PREPAY_SHRINK", true);
+            ManaPool lo_unused;
+            // Stage 1 never spends an UNTAP-TARGET-LAND source (Arbor Elf) that can re-tap a held host. Its one
+            // tap is one more tap of a Forest, Aura bonuses included (UntapLandSourceDef), so the held host's new
+            // Aura raises what it makes, and stage 1 runs before that Aura resolves. AccomplishedAlchemist
+            // held-out gi682 (seed 1030683) T5: Forest + Utopia Sprawl, a second Forest, Arbor Elf; Crab Umbra,
+            // two more Sprawls onto the enchanted Forest, Accomplished Alchemist -- seven mana. Stage 1 paid the
+            // Sprawls off the bare Forest and the Arbor (two units, the old yield), stage 2 passed exactly, and
+            // the turn made seven where the per-cast walk makes eight (the Arbor after a Sprawl: three), so the
+            // payer had no slack and Crab Umbra was dropped (T5 -> T6 at d8 b0). Held, stage 2 has the Arbor at
+            // the host's new yield, and a stage 1 that needs it declines to the walk.
+            std::uint64_t st_untap = 0;
+            for (int i = 0; i < n && i < 64 && i < static_cast<int>(bf_snap.size()); ++i)
+            {
+                const Permanent& p = bf_snap[static_cast<std::size_t>(i)];
+                if (p.controller_index != active || p.tapped) { continue; }
+                const CardDefinition* ud = UntapLandSourceDef(state, p);
+                if (ud == nullptr) { continue; }
+                const std::string& sub = ud->params.mana_requires_land_subtype;
+                bool reaches = false;
+                for (const auto& [ad, host] : st_auras)
+                {
+                    for (const Permanent& h : bf_snap)
+                    {
+                        if (h.card.m_number != host || h.controller_index != active) { continue; }
+                        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
+                        const SubtypeSet& subs = hd ? hd->card.m_subtypes : h.card.m_subtypes;
+                        for (const std::string& st : subs) { if (st == sub) { reaches = true; break; } }
+                        break;
+                    }
+                    if (reaches) { break; }
+                }
+                if (reaches) { st_untap |= 1ull << i; }
+            }
+            // Stage 1 under a reserve mask, from the snapshot (hosts held: it was taken under the hold). The
+            // out_leftover is passed only to keep the produced colours exact -- the backtracker recolours units
+            // the bill does not need without it -- and is not read: stage2_ok derives the leftover itself.
+            auto solve1 = [&](std::uint64_t mask, ManaPool& p1) -> bool
+            {
+                restore_st();
+                return TapForCostBacktrack(state, c_aura, /*for_creature=*/false, ManaPool{},
+                                           /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/&lo_unused,
+                                           /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/mask | st_untap,
+                                           /*out_full_pool=*/&p1)
+                    && PrepayColoursFit(p1, c_aura, nullptr, nullptr);
+            };
+            // Stage 2 on the current stage-1 board: a feasibility test, rolled back to that board. What stage 1
+            // leaves is its pool less the bill with every hybrid pip SETTLED: the backtracker's own leftover
+            // spends hybrid-blind (Trace's {R/W} read as {R}), so it kept the {W} that pip took and stage 2
+            // counted it twice (EDF gi85, below).
+            auto stage2_ok = [&](const ManaPool& p1, std::uint64_t mask) -> bool
+            {
+                ManaCost s1;
+                ManaPool left1, p2;
+                if (!PrepayColoursFit(p1, c_aura, &s1, &left1)) { return false; }
+                SpendFloatingTowardCost(left1, s1, /*keep_flexible=*/true);
+                const std::vector<Permanent> bf1  = state.battlefield;
+                const int                    la1  = state.players[active].life;
+                const int                    lo1  = state.players[1 - active].life;
+                const bool                   oll1 = state.opponent_lost_life_this_turn;
+                const int                    ea1  = state.players[active].energy_counters;
+                for (int k = 0; k < _aura_host_hold.n; ++k)
+                { SetPermTapped(state, active, _aura_host_hold.held[k], false); }
+                int stand_in = 0;
+                for (const auto& [ad, host] : st_auras)
+                {
+                    Permanent sp;
+                    sp.card             = ad->card;
+                    sp.card.m_number    = 2000000000 + stand_in++;   // never a real card number
+                    sp.controller_index = active;
+                    sp.owner_index      = active;
+                    sp.aura_attached_to = host;
+                    state.battlefield.push_back(sp);
+                }
+                const bool o2 = TapForCostBacktrack(state, c_rest, /*for_creature=*/false, left1,
+                                                    /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
+                                                    /*out_leftover=*/nullptr, /*tapped_mask=*/0,
+                                                    /*untapped_max=*/-1, /*reserved_mask=*/mask,
+                                                    /*out_full_pool=*/&p2);
+                state.battlefield                     = bf1;
+                state.players[active].life            = la1;
+                state.players[1 - active].life        = lo1;
+                state.opponent_lost_life_this_turn    = oll1;
+                state.players[active].energy_counters = ea1;
+                return o2 && PrepayColoursFit(p2, c_rest, nullptr, nullptr);
+            };
+            // THE OTHER ORDER. Stage 2 is checked with the held Auras on, i.e. for the realisations that cast
+            // them first. The apply may cast the rest first (a deck's cast arrangement: AccomplishedAlchemist's
+            // PROPOSED order puts Living Wish before Wild Growth), and then the rest spends the pre-load and the
+            // Auras pay from whatever is left, hosts included. That order must not be one the pre-load BREAKS:
+            // when the untouched board pays the rest and then the Auras (the decline's walk in that order), the
+            // stage-1 board with the pre-load must too. On the current board, hosts up, no bonus (the Auras are
+            // not on yet); rolled back.
+            auto rest_first_ok = [&](const ManaPool& pre, std::uint64_t mask) -> bool
+            {
+                const std::vector<Permanent> bfr  = state.battlefield;
+                const int                    lar  = state.players[active].life;
+                const int                    lor  = state.players[1 - active].life;
+                const bool                   ollr = state.opponent_lost_life_this_turn;
+                const int                    ear  = state.players[active].energy_counters;
+                for (int k = 0; k < _aura_host_hold.n; ++k)
+                { SetPermTapped(state, active, _aura_host_hold.held[k], false); }
+                ManaPool pr, pa, left;
+                ManaCost sr;
+                const bool o = TapForCostBacktrack(state, c_rest, /*for_creature=*/false, pre, nullptr, nullptr,
+                                                   /*out_leftover=*/&lo_unused, 0, -1, mask, &pr)
+                    && PrepayColoursFit(pr, c_rest, &sr, &left)
+                    && (SpendFloatingTowardCost(left, sr, /*keep_flexible=*/true), true)
+                    && TapForCostBacktrack(state, c_aura, /*for_creature=*/false, left, nullptr, nullptr,
+                                           /*out_leftover=*/&lo_unused, 0, -1, mask, &pa)
+                    && PrepayColoursFit(pa, c_aura, nullptr, nullptr);
+                state.battlefield                     = bfr;
+                state.players[active].life            = lar;
+                state.players[1 - active].life        = lor;
+                state.opponent_lost_life_this_turn    = ollr;
+                state.players[active].energy_counters = ear;
+                return o;
+            };
+            for (int r = 0; r <= n_rungs && !aura_staged; ++r)
+            {
+                const std::uint64_t hold = (r < n_rungs) ? rungs[r] : 0;
+                ManaPool p1;
+                if (!solve1(hold, p1)) { continue; }
+                bool feas = stage2_ok(p1, hold);
+                // GIVE-BACK (MTG_PREPAY_SHRINK's rule, on stage 1, judged by stage 2). The solve finds *a* tap set,
+                // not the one the rest of the batch can live with. EDF regression s2002 gi85 T4: Trace of
+                // Abundance {R/W}{G} onto an Aether Hub carrying Wild Growth, then Emiel the Blessed {2}{W}{W}, off
+                // Yavimaya Coast, Brushland and a fresh Adarkar Wastes; stage 1 paid Trace off all three ({W}{G}
+                // and a spare {C}), and Emiel was one {W} short. Each source stage 1 tapped is offered back, most
+                // colours first: a re-solve holding it is kept when stage 2 still pays (at no more pain or energy)
+                // or newly pays. Judged by stage 2, not by stage 1 alone -- giving back the Coast (no {W}) still
+                // pays Trace and strands Emiel; giving back Brushland or the Wastes pays both.
+                // ...and it runs on EVERY stage 1, not only an over-tap: the solve's source is the DFS's first, not
+                // the least flexible, and stage 2 is a joint assignment the per-cast payer need not find. Bruna
+                // (shadow sweep seed 1060001) T6: Remote Farm, Razorverge Thicket, a fresh Forest; two Open the
+                // Armory and Wild Growth onto the Farm -- five for five. Stage 1 paid Wild Growth's {G} off the
+                // Thicket, stage 2 paid both Armories off the Farm's {W}{W}+{G} and the Forest, and the apply's first
+                // Armory spent the Farm's second {W} on its {1}: the second had no {W}. So once stage 2 pays, a
+                // release is kept only when the re-solve taps FEWER sources, or as many with fewer colours between
+                // them (the Forest for the Thicket) -- it can never trade a source for a more flexible one.
+                if (s_shrink_st)
+                {
+                    const int lim = std::min<int>(n, static_cast<int>(bf_snap.size()));
+                    std::vector<int> cand;
+                    for (int i = 0; i < lim; ++i)
+                    { if (state.battlefield[i].tapped && !bf_snap[i].tapped) { cand.push_back(i); } }
+                    if (!cand.empty())
+                    {
+                        auto flex = [&](int i) -> int
+                        {
+                            const CardDefinition* d = CardDatabase::Instance().LookupCached(bf_snap[i].card);
+                            return d ? static_cast<int>(d->params.produces.size()) : 0;
+                        };
+                        // The stage-1 tap set's size and summed colours, on the current board.
+                        auto tapped_shape = [&](int& tn, int& tf)
+                        {
+                            tn = 0; tf = 0;
+                            for (int i = 0; i < lim; ++i)
+                            { if (state.battlefield[i].tapped && !bf_snap[i].tapped) { ++tn; tf += flex(i); } }
+                        };
+                        std::stable_sort(cand.begin(), cand.end(), [&](int a, int b) { return flex(a) > flex(b); });
+                        const bool pain_guard = PayPainLastOn() && !state.dmg_events_armed;
+                        std::uint64_t          h1      = hold;
+                        std::vector<Permanent> best_bf = state.battlefield;
+                        int                    b_la    = state.players[active].life;
+                        int                    b_lo    = state.players[1 - active].life;
+                        bool                   b_oll   = state.opponent_lost_life_this_turn;
+                        int                    b_ea    = state.players[active].energy_counters;
+                        ManaPool               b_p1    = p1;
+                        int                    b_tn = 0, b_tf = 0;
+                        tapped_shape(b_tn, b_tf);
+                        for (int c : cand)
+                        {
+                            const std::uint64_t trial = h1 | (1ull << c);
+                            ManaPool pt;
+                            if (!solve1(trial, pt) || !stage2_ok(pt, hold)) { continue; }
+                            const bool no_worse = !(pain_guard && state.players[active].life < b_la)
+                                && !(pain_guard && PayEnergyLastOn() && state.players[active].energy_counters < b_ea);
+                            int tn = 0, tf = 0;
+                            tapped_shape(tn, tf);
+                            if (feas && !(no_worse && (tn < b_tn || (tn == b_tn && tf < b_tf)))) { continue; }
+                            b_tn = tn; b_tf = tf;
+                            h1 = trial; best_bf = state.battlefield; b_p1 = pt; feas = true;
+                            b_la = state.players[active].life; b_lo = state.players[1 - active].life;
+                            b_oll = state.opponent_lost_life_this_turn; b_ea = state.players[active].energy_counters;
+                        }
+                        restore_st();
+                        state.battlefield                     = best_bf;
+                        state.players[active].life            = b_la;
+                        state.players[1 - active].life        = b_lo;
+                        state.opponent_lost_life_this_turn    = b_oll;
+                        state.players[active].energy_counters = b_ea;
+                        p1 = b_p1;
+                    }
+                }
+                if (!feas) { continue; }
+                {
+                    // The pre-load as it will float: stage 1's units, the bill's generic as any colour.
+                    ManaCost sc;
+                    ManaPool pre;
+                    if (!PrepayColoursFit(p1, c_aura, &sc, &pre)) { continue; }
+                    ManaCost spent = sc;
+                    SpendFloatingTowardCost(pre, spent, /*keep_flexible=*/true);
+                    pre.white += sc.white; pre.blue += sc.blue; pre.black += sc.black;
+                    pre.red   += sc.red;   pre.green += sc.green; pre.colorless += sc.colorless;
+                    pre.wild  += sc.generic;
+                    if (!rest_first_ok(pre, hold))
+                    {
+                        const std::vector<Permanent> bf1  = state.battlefield;
+                        const int                    la1  = state.players[active].life;
+                        const int                    lo1  = state.players[1 - active].life;
+                        const bool                   oll1 = state.opponent_lost_life_this_turn;
+                        const int                    ea1  = state.players[active].energy_counters;
+                        restore_st();
+                        const bool dec = rest_first_ok(ManaPool{}, hold);
+                        state.battlefield                     = bf1;
+                        state.players[active].life            = la1;
+                        state.players[1 - active].life        = lo1;
+                        state.opponent_lost_life_this_turn    = oll1;
+                        state.players[active].energy_counters = ea1;
+                        if (dec) { continue; }   // the pre-load would break an order the decline pays
+                    }
+                }
+                combined = c_aura; produced = p1; ok = true; aura_staged = true; won_hold = hold;
+            }
+            if (!aura_staged) { restore_st(); }
+            else if (!allow_partial)
+            {
+                restore_st();   // a probe: the board untouched, and no unheld retry (the apply makes none)
+                return Pp(PP_AURA_PARTIAL);
+            }
+        }
+    }
     // Decline when the full batch is unaffordable (fall back to greedy, which casts what it can) or
     // when the tap set makes "any colour" (wild) mana -- pinning colours to pips is then ambiguous.
     if (!ok || !PrepayColoursFit(produced, combined, nullptr, nullptr))
@@ -53488,6 +53844,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         state.players[1 - active].life     = lo;
         state.opponent_lost_life_this_turn = oll;
         if (energy_restore) { state.players[active].energy_counters = ea; }
+        // ...the UNHELD rung (see the staged solve above): the same call with no host held.
+        if (_aura_host_hold.n > 0 && PrepayAuraStageOn() && PrepayAuraUnheldOn())
+        {
+            _aura_host_hold.Release();
+            t_prepay_aura_hold_off = true;
+            const bool unheld = BatchPrepayMainCasts(state, acts, mint_prefix, hand_demand, allow_partial);
+            t_prepay_aura_hold_off = false;
+            _decl.ok = true;   // the retry counts its own decline (tapstats sees it as a second call)
+            return unheld;
+        }
         return Pp(ok ? PP_WILD : PP_UNPAYABLE);
     }
 
@@ -53522,7 +53888,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // per-source max-yield over ALL non-held sources (the re-solve may recruit substitutes), and
     // the full-battlefield restore/best copies could shrink to tap-bit deltas.
     static const bool s_shrink = EnvOn("MTG_PREPAY_SHRINK", true);
-    if (s_shrink && n <= 64)
+    if (s_shrink && n <= 64 && !aura_staged)   // a re-solve may swap in a source stage 2 needs; the surplus floats on
     {
         std::uint64_t newly = 0;
         int newly_n = 0;
@@ -53885,6 +54251,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // PREVENT DAMAGE (armed only): the batch prepay is a payment that bypasses TapForCostShared, so
     // it resolves its own tap triggers here, once the whole-turn solve has committed.
     dmgev::FlushDamageEvents(state);
+    if (aura_staged) { t_prepay_partial_made = true; ++t_prepay_staged_n; return Pp(PP_AURA_PARTIAL); }   // the rest pays per cast
     Pp(mixed_ok ? PP_OK_MIXED : PP_OK);
     _decl.ok = true; return true;
 }
@@ -55100,6 +55467,63 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // apply (see ArmNewDupAll). A reset at every apply's entry let a nested apply wipe the outer
     // base plan's measurement mid-flight.
     PROF_INC(applyplan_calls);
+    // DIAGNOSTIC (MTG_PREPAY_STAGE_SHADOW, never on in play): a plain apply whose prepay took the staged
+    // land-Aura split is replayed on a copy with MTG_PREPAY_AURA_STAGE forced off, and any difference in
+    // what the turn cast is printed -- the staged split must never realise fewer casts than the walk.
+    {
+        static const bool s_shadow = EnvOn("MTG_PREPAY_STAGE_SHADOW");
+        static thread_local bool t_shadow_busy = false;
+        if (s_shadow && !t_shadow_busy && out_breakpoint == nullptr && bp_capture == nullptr && bp_resume == nullptr)
+        {
+            t_shadow_busy = true;
+            const unsigned before = t_prepay_staged_n;
+            GameState a = state;
+            ApplyPlanDirect(a, plan, is_pre_combat, nullptr, nullptr, nullptr, caller_line);
+            if (t_prepay_staged_n != before)
+            {
+                GameState b = state;
+                const int slot = static_cast<int>(heurarm::PREPAY_AURA_STAGE);
+                const std::int8_t sv = heurarm::t_arm[slot];
+                heurarm::t_arm[slot] = 0;
+                ApplyPlanDirect(b, plan, is_pre_combat, nullptr, nullptr, nullptr, caller_line);
+                heurarm::t_arm[slot] = sv;
+                const int ai = state.active_player_index;
+                if (a.spells_cast_this_turn != b.spells_cast_this_turn
+                    || a.players[ai].hand.size() != b.players[ai].hand.size())
+                {
+                    std::string line = "[stage-shadow] ";
+                    line += a.spells_cast_this_turn < b.spells_cast_this_turn ? "WORSE" : "BETTER";
+                    line += " t" + std::to_string(state.turn_number) + " cast st/off " + std::to_string(a.spells_cast_this_turn)
+                          + "/" + std::to_string(b.spells_cast_this_turn) + " from " + std::to_string(state.spells_cast_this_turn)
+                          + " hand st/off " + std::to_string(a.players[ai].hand.size()) + "/" + std::to_string(b.players[ai].hand.size())
+                          + " | plan:";
+                    for (const Action& x : plan.actions)
+                    {
+                        line += " " + x.card_name.str();
+                        if (x.enchant_target > 0) { line += "@" + std::to_string(x.enchant_target); }
+                    }
+                    line += " | board:";
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index != ai) { continue; }
+                        line += " " + p.card.m_name.str() + "#" + std::to_string(p.card.m_number) + (p.tapped ? "(T)" : "")
+                              + (p.entered_this_turn ? "(S)" : "");
+                        if (p.aura_attached_to > 0) { line += "@" + std::to_string(p.aura_attached_to); }
+                        if (p.chosen_color >= 0) { line += "/c" + std::to_string(p.chosen_color); }
+                    }
+                    line += " | hand:";
+                    for (const Card& c : state.players[ai].hand) { line += " " + c.m_name.str(); }
+                    line += " | float " + std::to_string(state.floating_mana.Total()) + " | lands "
+                          + std::to_string(state.players[ai].lands_played_this_turn) + " life " + std::to_string(state.players[ai].life)
+                          + " land_to_play " + plan.land_to_play;
+                    if (heurarm::t_job_name != nullptr) { line += std::string(" | job ") + heurarm::t_job_name; }
+                    line += " gi " + std::to_string(escstats::t_gi);
+                    std::fprintf(stderr, "%s\n", line.c_str());
+                }
+            }
+            t_shadow_busy = false;
+        }
+    }
     {
         static const bool s_lp = EnvOn("MTG_WINLESS_STATS");
         if (s_lp)
@@ -61424,14 +61848,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // capture and is untouched by construction.
     if (bp_capture != nullptr && BpPrefixPrepayEnabled())
     {
-        TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan));
+        TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan), /*mint_prefix=*/false,
+                                         /*hand_demand=*/false, /*allow_partial=*/true);
     }
     else if (!HumanLinePaysAsItGoes(plan, human_v2, !pre_taps.empty()))
     {
         // HUMAN PLAY: hold what the rest of the hand needs (MTG_HUMAN_PREPAY_DEMAND). HumanPlayActive()
         // is false in every rollout (HumanPlaySuppress) and every autonomous game -> byte-identical.
         TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false,
-                                         /*hand_demand=*/HumanPlayActive());
+                                         /*hand_demand=*/HumanPlayActive(), /*allow_partial=*/true);
     }
 
 
