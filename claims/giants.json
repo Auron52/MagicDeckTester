@@ -1,25 +1,19 @@
 {
  "blobs": {
-  "mulligan": "71cdfd84e4c96b48cb9d11b2c371bb5fab871e82",
+  "mulligan": "643142ec0850104f954f9b993a8cb9b6a803fe34",
   "valueleaf": "em:b8979a38ce5ac04339f6"
  },
  "deck": "giants",
- "detail": "mulligan: ADOPTED (new-vs-old -0.017125 t, recipe complete); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_giants/DECISIONS.txt)",
- "finished": "2026-10-25T16:32:41Z",
- "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
- "heartbeat": "2026-10-25T16:15:31Z",
- "host": "550a08fdc1f3",
- "landed": "f1a437bfd7597a20a3af22276ce8d35ca968c72a",
- "landed_at": "2026-10-26T23:15:14Z",
- "result_branch": "artifact-refresh/giants-20261025-1632",
- "run_id": "giants-artifact-queue-d7d6a5-20261025T145443",
- "score": 0.0793,
- "stage": "valueleaf",
+ "frozen": "6199dc396b7c6c304dad2e30005d7e64832e7eee",
+ "heartbeat": "2026-10-28T21:19:10Z",
+ "host": "58199181d02e",
+ "run_id": "giants-artifact-queue-tool-647f24-20261028T211910",
+ "score": 0.0,
+ "stage": "mulligan",
  "stages": [
-  "mulligan",
-  "valueleaf"
+  "mulligan"
  ],
- "started": "2026-10-25T14:54:43Z",
- "state": "done",
- "worker": "artifact-queue-d7d6a5"
+ "started": "2026-10-28T21:19:10Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
 }
