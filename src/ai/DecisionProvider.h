@@ -86,7 +86,7 @@ struct CantripReadiness
     bool shuffle_after = false;  // a library shuffle is available AFTER the cantrip this turn
     int  dead_in_hand  = 0;      // hand cards the provider rates as dead (keep need 0)
     std::vector<int> keep_need;  // per HAND index: the provider's cost of removing that card (its scale)
-    int  aux[12] = {};           // provider-private context computed with the readiness (read by its scorer)
+    int  aux[16] = {};           // provider-private context computed with the readiness (read by its scorer)
 };
 // ONE candidate of a put-back / reorder resolution, as its RESULT. The pointers live for the duration of the
 // ScoreTopDisposition call only.
