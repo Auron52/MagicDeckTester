@@ -24355,6 +24355,262 @@ static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, s
     return std::min(w, cc.Count(k));
 }
 
+// ---- F2: THE EXACT FAN WIDTH (MTG_PB_EXACT_WIDTH, SOUND, DEFAULT ON; =0 restores the upper bound) --------
+// docs/design/cantrip-search-optimization.md §2 F2. PutBackAxisWidth is an UPPER bound: one trigger-slack
+// card per action, every other cantrip's draws in the plan, and the whole library as soon as ANY action of
+// the plan could shuffle or tutor -- even one that runs AFTER the put-back. The ranks past the resolution's
+// real list clamp onto its last candidate, i.e. they are duplicates (measured on Cyclone: 98.8 fanned ranks
+// per plan against a mean resolution width of 55). When nothing that can change the hand or the library
+// runs BEFORE the put-back, the resolution's hand is known exactly at enumeration:
+//     the hand now - the put-back card - a land-first INERT land - the pure rituals cast before it
+//     + the top `draw` cards of the library,
+// and the fan is that multiset's candidate count (PutBackClassCounter: the resolver's own class key and
+// count), so every rank names a distinct candidate and no rank is clamped. AN IDENTITY: the same candidates,
+// the same order (the order is computed at resolution, as always), only the clamped duplicates are gone.
+//
+// "Nothing runs before it" is checked against the apply's canonical order (ApplyPlanDirect's opaque branch:
+// a set holding a cantrip is OrderingOpaque, so its hand casts run in PLAN order, after the land-first drop,
+// the pre-cast pass and the enabler-first hoist, and before every sacrifice-land / graveyard cast, trailing
+// activation, the deferred cantrip re-solve and the cycle seed):
+//   * the land: none, played after the casts (land_slot -1: still in hand at the resolution), or played
+//     FIRST and inert (no fetch / ETB scry / surveil / dig / reveal / tutor / bounce / search, not off the
+//     library top, no landfall payoff in the deck);
+//   * every action BEFORE the put-back cast in plan order is a pure RITUAL (an instant / sorcery whose only
+//     effect is mana). The apply may still DROP such a ritual (the order-free ritual affordability credit
+//     enumerates it before it is payable, ledger Q37), so its card is counted as still in hand: removing a
+//     card can only shrink the count, so the width is then a TIGHT UPPER BOUND (the larger of the two possible
+//     counts), not exact -- at worst one rank more than the real list;
+//   * every action AFTER it runs after it: a hand cast that no enabler-first / minter hoist moves forward, a
+//     graveyard cast, a trailing activation, a SacForMana (mana only), the cycle seed;
+//   * nothing draws on a cast (no cast-draw watcher -- Niv-Mizzet, Parun -- on the battlefield, no draw-ping
+//     loop in the deck); the put-back cast carries no Remand rider (it would not resolve);
+//   * every card removed by NAME (the casts take the first copy of a name) is one CLASS in the hand, so
+//     which copy leaves cannot change the classes.
+// Anything else keeps the upper bound -- the fallback is the old, safe size. MTG_PB_EXACT_WIDTH_VERIFY=1
+// checks the claim at the resolution: every apply of a fan sized here asserts its first put-back's real
+// candidate count equals the emitted width (a base plan is pinned to rank 0 for it, which is its default).
+static bool PbExactWidthOn()
+{
+    static const bool env = EnvOn("MTG_PB_EXACT_WIDTH", true);
+    return heurarm::Flag(heurarm::PB_EXACT_WIDTH, env);
+}
+static bool PbExactWidthVerifyOn()
+{
+    static const bool v = EnvOn("MTG_PB_EXACT_WIDTH_VERIFY");   // diagnostic: assert width == resolution count
+    return v;
+}
+namespace pbexact
+{
+// Verify mode: fan id -> the exact width the axis emitted (this thread's fans), and the expectation the
+// current apply carries into its first put-back resolution (-1 = none).
+inline thread_local std::unordered_map<int, int> t_expect;
+inline thread_local int t_expect_w = -1;
+// MTG_PB_EXACT_WIDTH_DEBUG (verify mode): the enumeration's description of each exact fan, printed on a mismatch.
+inline thread_local std::unordered_map<int, std::string> t_expect_desc;
+inline thread_local int t_expect_group = 0;
+inline std::atomic<long long> g_exact{0}, g_tight{0}, g_bound{0}, g_ranks_exact{0}, g_ranks_bound_would{0};
+inline std::atomic<long long> g_verified{0}, g_mismatch{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (g_exact.load() == 0 && g_bound.load() == 0 && g_verified.load() == 0) { return; }
+        std::fprintf(stderr, "[pb-exact-width] exact_fans=%lld (of them tight-bound %lld) bound_fans=%lld exact_ranks=%lld"
+                     " (upper bound would emit %lld) | verify resolutions=%lld MISMATCH=%lld\n",
+                     g_exact.load(), g_tight.load(), g_bound.load(), g_ranks_exact.load(), g_ranks_bound_would.load(),
+                     g_verified.load(), g_mismatch.load());
+    }
+};
+inline Dump g_dump;
+// Installed around an apply (main plan) / a continuation's pins: the expectation for the fan `group`.
+struct ExpectScope
+{
+    int saved_w, saved_pin;
+    bool pinned = false;
+    ExpectScope(int group, int putback_choice, bool pin_base)
+        : saved_w(t_expect_w), saved_pin(g_scripted_putback_choice)
+    {
+        t_expect_w = -1;
+        if (!PbExactWidthVerifyOn() || group == 0) { return; }
+        const auto it = t_expect.find(group);
+        if (it == t_expect.end()) { return; }
+        if (putback_choice < 0)
+        {
+            if (!pin_base) { return; }
+            g_scripted_putback_choice = 0;   // rank 0 IS the default pick; the pin makes the check fire
+            pinned = true;
+        }
+        t_expect_w = it->second;
+        t_expect_group = group;
+    }
+    ~ExpectScope()
+    {
+        t_expect_w = saved_w;
+        if (pinned) { g_scripted_putback_choice = saved_pin; }
+    }
+    ExpectScope(const ExpectScope&) = delete;
+    ExpectScope& operator=(const ExpectScope&) = delete;
+};
+// At a put-back resolution that CONSUMED a pin (pin_before >= 0): compare the real count with the expectation.
+inline void Check(int pin_before, int real_count, const GameState& st, const char* card)
+{
+    const int turn = st.turn_number;
+    if (pin_before < 0 || t_expect_w == -1) { return; }
+    const bool bound = t_expect_w <= -2;
+    const int want = bound ? -2 - t_expect_w : t_expect_w;
+    t_expect_w = -1;   // the pin is consumed: later put-backs in this apply are not the fan's
+    if (real_count < 0) { return; }
+    g_verified.fetch_add(1, std::memory_order_relaxed);
+    if (bound ? real_count > want : real_count != want)
+    {
+        const long long n = g_mismatch.fetch_add(1, std::memory_order_relaxed);
+        if (n < 20)
+        {
+            const auto d = t_expect_desc.find(t_expect_group);
+            std::string h;
+            for (const Card& c : st.ActivePlayer().hand) { h += c.m_name.str() + (PutBackEligible(c) ? "" : "*") + ","; }
+            for (std::size_t i = 0; i < 2 && i < st.ActivePlayer().library.size(); ++i)
+            { h += " top" + std::to_string(i) + "=" + st.ActivePlayer().library[i].m_name.str(); }
+            std::fprintf(stderr, "[pb-exact-width] VERIFY MISMATCH T%d %s emitted=%d resolution=%d :: %s || at resolution (after): %s\n",
+                         turn, card, want, real_count, d == t_expect_desc.end() ? "" : d->second.c_str(), h.c_str());
+        }
+    }
+}
+}   // namespace pbexact
+
+// Does this land play, made FIRST, leave the hand (minus itself) and the library untouched?
+static bool PbLandPlayInert(const GameState& state, const CardDefinition& ld)
+{
+    const CardParams& lp = ld.params;
+    if (state.deck_has_landfall) { return false; }
+    if (!ld.card.IsLand()) { return false; }
+    if (!lp.fetch_land_types.empty() || lp.etb_scry > 0 || lp.etb_surveil > 0 || lp.etb_bounce_land
+        || lp.etb_dig_count > 0 || lp.etb_reveal_count > 0 || lp.etb_tutor_hand_count > 0
+        || lp.land_search_on_resolve || lp.land_search_on_enter_or_attack || lp.etb_exile_until_nonland
+        || lp.etb_return_gy_to_hand || IsLibraryTutor(lp) || lp.draw > 0)
+    { return false; }
+    return true;
+}
+// A hand cast that, applied before the put-back, only removes itself from the hand: a pure ritual.
+static bool PbPreCastPure(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || !a.remand_by.empty() || !a.remand_chain_by.empty())
+    { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (d == nullptr || !(d->card.IsInstant() || d->card.IsSorcery())) { return false; }
+    const CardParams& pp = d->params;
+    if (a.ritual_float <= 0 && pp.ritual_floating_mana <= 0) { return false; }
+    if (pp.draw > 0 || pp.cast_scry > 0 || pp.cast_reorder > 0 || pp.put_back_from_hand > 0 || IsLibraryTutor(pp)
+        || pp.counters_target_spell_to_hand || d->tmpl == CardTemplate::DrawSpell || d->tmpl == CardTemplate::DrawX
+        || d->tmpl == CardTemplate::DrawUntilNonland)
+    { return false; }
+    return true;
+}
+// Is this action, placed AFTER the put-back cast in plan order, applied after it too?
+static bool PbRunsAfterPutBack(const GameState& state, const Action& a)
+{
+    switch (a.kind)
+    {
+        case Action::Kind::CastFromHand:
+        {
+            if (ResolveProvider(state).CastEnablerFirst(state, a.card_name.str())) { return false; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d == nullptr || d->params.creates_treasures > 0) { return false; }   // the mint hoist
+            return true;
+        }
+        case Action::Kind::CastFromGraveyard:
+        case Action::Kind::SacForMana:
+            return true;
+        case Action::Kind::DigDraw:
+            return IsCycleSeed(a);
+        default:
+            break;
+    }
+    return TurnSolver::IsTrailingActivation(a.kind) || TurnSolver::IsLandSearchActivation(a);
+}
+// The exact candidate count of plan `p`'s put-back cast `bs`, or -1 when it is not exactly predictable.
+static int PutBackExactWidth(const GameState& state, const TurnSolver::Plan& p, std::size_t bs,
+                             const CardDefinition& bd, bool* exact_out = nullptr)
+{
+    if (exact_out != nullptr) { *exact_out = false; }
+    const Player& ap = state.ActivePlayer();
+    const Action& cast = p.actions[bs];
+    const CardParams& bp = bd.params;
+    if (bd.tmpl != CardTemplate::DrawSpell || bp.cast_scry > 0 || bp.cast_reorder > 0 || bp.stages_cards
+        || bp.expressive_iteration || bp.draw < 0 || bp.put_back_from_hand <= 0)
+    { return -1; }
+    if (cast.kind != Action::Kind::CastFromHand || !cast.remand_by.empty() || !cast.remand_chain_by.empty()
+        || cast.sacrifice_land)
+    { return -1; }
+    if (state.deck_has_draw_ping) { return -1; }
+    // PutBackClassKey splits a class on the m1-hand snapshot, which a CONDEMNING provider re-stamps at the
+    // start of every pre-combat apply from that plan's own casts (TurnSolver::StampM1Hand) -- so the classes
+    // at the resolution would not be the ones counted here.
+    if (ResolveProvider(state).CondemnsPassedMainPhase()) { return -1; }
+    if (p.land_search_act_slot != TurnSolver::kLandSlotAfterCasts) { return -1; }
+    if (ResolveProvider(state).CastEnablerFirst(state, cast.card_name.str())) { return -1; }
+    for (const Permanent& pm : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d != nullptr && d->params.cast_trigger_instant_sorcery_draw > 0) { return -1; }
+    }
+    // The names leaving the hand before the resolution (one copy each).
+    std::vector<std::string> removed;
+    removed.push_back(cast.card_name.str());
+    int pre_rituals = 0;
+    for (std::size_t j = 0; j < p.actions.size(); ++j)
+    {
+        if (j == bs) { continue; }
+        const Action& a = p.actions[j];
+        if (j < bs)
+        {
+            // A ritual ahead of the put-back may still be DROPPED by the apply (its order-free affordability
+            // credit enumerates it before it is payable: ledger Q37), so whether its card has left the hand is
+            // not known here. Counted as STILL IN HAND: removing a card can only shrink the count, so this is
+            // the larger of the two possible counts -- a tight upper bound, flagged not-exact.
+            if (!PbPreCastPure(a)) { return -1; }
+            ++pre_rituals;
+        }
+        else if (!PbRunsAfterPutBack(state, a)) { return -1; }
+    }
+    if (!p.land_to_play.empty())
+    {
+        if (p.land_slot == TurnSolver::kLandSlotAfterCasts) { /* still in hand at the resolution */ }
+        else if (p.land_slot != 0 || p.land_from_top || !p.fetch_target.empty()) { return -1; }
+        else
+        {
+            const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
+            if (ld == nullptr || !PbLandPlayInert(state, *ld)) { return -1; }
+            removed.push_back(p.land_to_play);
+        }
+    }
+    // Each removed name: enough eligible copies, all of ONE class, and no ineligible copy a cast could take.
+    std::vector<int> take_out(ap.hand.size(), 0);
+    for (const std::string& nm : removed)
+    {
+        std::uint64_t cls = 0;
+        bool have_cls = false, done = false;
+        for (std::size_t i = 0; i < ap.hand.size(); ++i)
+        {
+            const Card& c = ap.hand[i];
+            if (c.m_name.str() != nm) { continue; }
+            if (!PutBackEligible(c)) { return -1; }
+            const std::uint64_t k = PutBackClassKey(state, c);
+            if (have_cls && k != cls) { return -1; }
+            cls = k; have_cls = true;
+            if (!done && take_out[i] == 0) { take_out[i] = 1; done = true; }
+        }
+        if (!done) { return -1; }
+    }
+    static thread_local PutBackClassCounter cc;
+    cc.Clear();
+    for (std::size_t i = 0; i < ap.hand.size(); ++i) { if (take_out[i] == 0) { cc.Add(state, ap.hand[i]); } }
+    const int lib_take = std::min(bp.draw, static_cast<int>(ap.library.size()));
+    for (int i = 0; i < lib_take; ++i) { cc.Add(state, ap.library[static_cast<std::size_t>(i)]); }
+    if (exact_out != nullptr) { *exact_out = pre_rituals == 0; }
+    return cc.Count(bp.put_back_from_hand);
+}
+
 // How many legal dig matches the top `pp.etb_dig_count` of the library holds RIGHT NOW. Used only to
 // SIZE the axis at enumeration time; the real candidate list is rebuilt at resolution (an earlier
 // cantrip in the same plan can shift the top N), and the pin clamps if this over-counts.
@@ -56503,7 +56759,12 @@ struct ContPinFrame
     std::size_t                 before;
     ContPinFrame(const TurnSolver::Plan& p, std::vector<Action>* s)
         : pins(ContPinsOf(p)), sink(s), before(s != nullptr ? s->size() : 0)
-    { if (pins.Any()) { scope.emplace(&pins); } }
+    {
+        if (pins.Any()) { scope.emplace(&pins); }
+        // MTG_PB_EXACT_WIDTH_VERIFY (F2): a continuation variant's fan width, checked where its pin is consumed.
+        if (PbExactWidthVerifyOn()) { pbx.emplace(p.putback_group, p.putback_choice, /*pin_base=*/false); }
+    }
+    std::optional<pbexact::ExpectScope> pbx;
     ~ContPinFrame()
     {
         if (sink == nullptr || sink->size() <= before) { return; }
@@ -56822,6 +57083,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedSagaCh1 _ssc1(plan.saga_ch1_choice);
     ScriptedReorder _sr(plan.ponder_choice);
     ScriptedPutBack _spb_pb(plan.putback_choice);   // searched Brainstorm put-back (own pin; see ScriptedPutBack)   // searched Ponder disposition (own pin; see ScriptedReorder)
+    // MTG_PB_EXACT_WIDTH_VERIFY (F2): this plan's fan width, checked at the put-back that consumes the pin. Not on a
+    // node RESUME (its put-back resolved in the snapshot's prefix).
+    pbexact::ExpectScope _pbx(bp_resume == nullptr ? plan.putback_group : 0, plan.putback_choice, /*pin_base=*/true);
     ScriptedEtbCounter _sec(plan.etbcounter_choice);   // searched optional ETB counter payment; -1 inert
     // Searched landfall-target POLICY (Plan::landfall_target_choice) for this turn: installed BEFORE
     // the land block below so the plan's own land drop's targeted triggers read it. -1 installs
@@ -60141,7 +60405,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     g_putback_resolved_w = -1;
                     const bool pb_pinned = g_scripted_putback_choice >= 0;   // MTG_CANTRIP_ATTRIB only
+                    const int  pb_pin_before = g_scripted_putback_choice;      // MTG_PB_EXACT_WIDTH_VERIFY
                     ResolvePutBackFromHand(state, state.active_player_index, def.params.put_back_from_hand, def.card.m_name.str());
+                    if (pbexact::t_expect_w != -1)
+                    { pbexact::Check(pb_pin_before, g_putback_resolved_w, state, def.card.m_name.str().c_str()); }
                     cantripattr::NoteResolution(cantripattr::kBrainstorm, g_putback_resolved_w, pb_pinned);
                     if (apd_pb_w < 0 && g_putback_resolved_w >= 0)
                     { apd_pb_w = g_putback_resolved_w; apd_pb_i = g_putback_resolved_i; }
@@ -67255,6 +67522,7 @@ static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<A
     if (fc != kCycFcDefault && fc != kCycFcTake && !c.replacer_out && !replacer_cast) { return true; }
     return false;
 }
+
 
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
@@ -77873,14 +78141,52 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
                 if (d == nullptr || d->params.put_back_from_hand <= 0) { continue; }
-                const int w = PutBackAxisWidth(state, p, ai, *d);
+                // F2 (MTG_PB_EXACT_WIDTH, see PutBackExactWidth): the resolution's exact count when it is
+                // predictable, else the upper bound.
+                bool w_is_exact = false;   // false: a tight upper bound (a ritual ahead of it may be dropped)
+                const int w_exact = PbExactWidthOn() ? PutBackExactWidth(state, p, ai, *d, &w_is_exact) : -1;
+                const int w = w_exact >= 0 ? w_exact : PutBackAxisWidth(state, p, ai, *d);
+                if (pb_materialize)   // diagnostic counters (one per real fan; read by the [pb-exact-width] line)
+                {
+                    if (w_exact >= 0)
+                    {
+                        pbexact::g_exact.fetch_add(1, std::memory_order_relaxed);
+                        if (!w_is_exact) { pbexact::g_tight.fetch_add(1, std::memory_order_relaxed); }
+                        pbexact::g_ranks_exact.fetch_add(std::max(0, w - 1), std::memory_order_relaxed);
+                        static const bool s_cmp = EnvOn("MTG_PB_EXACT_WIDTH_STATS");
+                        if (s_cmp)
+                        {
+                            pbexact::g_ranks_bound_would.fetch_add(std::max(0, PutBackAxisWidth(state, p, ai, *d) - 1),
+                                                                   std::memory_order_relaxed);
+                        }
+                    }
+                    else { pbexact::g_bound.fetch_add(1, std::memory_order_relaxed); }
+                }
                 // The fan's sibling identity for the put-back fold (PutBackFoldMemo): on the variants
-                // now, on the base after every axis has cloned (putback_based, below).
+                // now, on the base after every axis has cloned (putback_based, below). Verify mode stamps
+                // an exactly sized fan of width <= 1 too, so its base apply can check the claim.
                 int& s_putback_group = t_pb_group_counter;   // one counter per thread (MTG_PB_LAZY_CANDS_VERIFY rewinds it)
-                if (w > 1)
+                const bool pbx_verify = w_exact >= 0 && PbExactWidthVerifyOn();
+                if (w > 1 || pbx_verify)
                 {
                     if (++s_putback_group <= 0) { s_putback_group = 1; }
                     putback_based.emplace_back(pi, s_putback_group);
+                    if (pbx_verify)
+                    {
+                        pbexact::t_expect[s_putback_group] = w_is_exact ? w_exact : -2 - w_exact;   // <= -2: a bound
+                        static const bool s_dbg = EnvOn("MTG_PB_EXACT_WIDTH_DEBUG");
+                        if (s_dbg)
+                        {
+                            std::string ds = "land=" + p.land_to_play + "@" + std::to_string(p.land_slot) + " acts=";
+                            for (const Action& a2 : p.actions) { ds += std::to_string(static_cast<int>(a2.kind)) + ":" + a2.card_name.str() + (a2.remand_by.empty() ? "" : "[R]") + ","; }
+                            ds += " bs=" + std::to_string(ai) + " hand=";
+                            for (const Card& c : ap.hand) { ds += c.m_name.str() + ","; }
+                            ds += " lib=";
+                            for (std::size_t li = 0; li < 5 && li < ap.library.size(); ++li) { ds += ap.library[li].m_name.str() + ","; }
+                            ds += " bd=" + std::to_string(g_bp_enum_depth);
+                            pbexact::t_expect_desc[s_putback_group] = ds;
+                        }
+                    }
                 }
                 if (pb_materialize) { cantripattr::NoteFan(cantripattr::kPutBack, w - 1); }   // diagnostic
                 if (pb_lazy_here && w > 1)
