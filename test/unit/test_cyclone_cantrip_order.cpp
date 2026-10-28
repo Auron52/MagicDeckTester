@@ -435,3 +435,45 @@ TEST_CASE("Cyclone cantrip order: the generic provider never scores (every other
     CantripReadiness r;
     CHECK_FALSE(ResolveProvider(s).CantripReadinessOf(s, 0, r));
 }
+
+// THE PER-FAN RANKING CACHE (design item 8; a pure speedup): PutBackPickAt reads the scored order back from a
+// per-thread cache keyed on CycloneProvider::CantripOrderKey + the candidate list. A hit must equal a fresh
+// derivation, and every input the scorer reads must be in the key: after warming the cache on one state, each
+// one-input variation below is checked rank-for-rank against the reference enumeration (PutBackCandidates,
+// never cached).
+TEST_CASE("Cyclone cantrip order: the ranking cache -- a hit equals the reference, every scorer input is keyed")
+{
+    ArmCo arm;
+    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PUTBACK_RULE, 0);
+    auto check_ref = [](const GameState& s)
+    {
+        const std::vector<std::vector<int>> ref = PutBackCandidates(s, 0, 2);
+        REQUIRE(static_cast<int>(ref.size()) == PutBackPickAt(s, 0, 2, 0).count);
+        for (std::size_t r = 0; r < ref.size(); ++r)
+        {
+            const PutBackPick pk = PutBackPickAt(s, 0, 2, static_cast<int>(r));
+            CHECK(pk.idx[0] == ref[r][0]);
+            CHECK(pk.idx[1] == ref[r][1]);
+        }
+    };
+    const GameState base = StateCo({ kVentsC, "Island", "Island", "Mountain" }, { kCyc, kWra, kWra, kEmr, kHun, "Island", kDel });
+    check_ref(base);
+    check_ref(base);   // every rank now a hit
+    GameState tapped = base;      tapped.battlefield[1].tapped = true;            check_ref(tapped);
+    GameState drop = base;        drop.players[0].lands_played_this_turn = 0;      check_ref(drop);
+    GameState life = base;        life.players[0].life = 3;                        check_ref(life);
+    GameState bonus = base;       bonus.players[0].bonus_land_drops_this_turn = 1; check_ref(bonus);
+    GameState swapped = base;     std::swap(swapped.players[0].hand[0], swapped.players[0].hand[3]); check_ref(swapped);
+    GameState gone = base;        gone.battlefield.pop_back();                     check_ref(gone);
+    GameState more = base;        more.battlefield.push_back(more.battlefield[0]); check_ref(more);
+    GameState cyc_out = base;
+    {
+        Permanent p; p.card = CardCo(kCyc, 777); p.controller_index = 0; p.owner_index = 0;
+        cyc_out.battlefield.push_back(p);
+    }
+    check_ref(cyc_out);
+    check_ref(base);   // back to the warmed state
+    // The per-job flag is keyed: the rule alone scores the same fan, the order off does not score at all.
+    { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 0); check_ref(base); }
+    { ArmCo a; a.Set(heurarm::CYCLONE_CANTRIP_ORDER, 0).Set(heurarm::CYCLONE_PUTBACK_RULE, 1); check_ref(base); }
+}

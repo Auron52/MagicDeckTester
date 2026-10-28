@@ -701,6 +701,18 @@ public:
                                      const TopDispositionView& view, int& score_out) const
     { (void)s; (void)controller; (void)r; (void)view; (void)score_out; return false; }
 
+    // CantripOrderKey -- the PER-FAN RANKING CACHE's key (design item 8; a pure speedup, byte-identical): append
+    // to `key` EVERY input CantripReadinessOf and ScoreTopDisposition read off `s` for `controller` (and every
+    // per-job flag they consult), so that two states with equal keys provably score every candidate the same.
+    // The engine appends the candidate list itself (and, for a reorder, the looked cards and the library top
+    // the shuffle's score reads). Every searched fan member re-applies the same prefix and reaches the same
+    // resolution, so the scores are computed once per fan instead of once per member. FALSE (the default) =
+    // no cache: the scores are derived at every resolution, as before. A provider that changes what its scorer
+    // reads must change this key with it (MTG_CANTRIP_RANK_CACHE_VERIFY=1 re-derives every hit and aborts on
+    // a mismatch).
+    virtual bool CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const
+    { (void)s; (void)controller; (void)key; return false; }
+
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
     // order? When true (the default, and true of every bucket rule in the suite -- they choose which
