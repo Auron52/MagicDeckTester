@@ -172,3 +172,8 @@ to ~11 cell-sides/s (130 -> 28 -> 20 -> 11 over the day), so a linear ETA is no 
 ~5.5 h at today's rate and the rate is still falling. New worst rollout: **1,994 s** (33 min), size 7 draw r=8,
 `Orzhov Basilica, Kitchen Finks x2, Caves of Koilos x2, Carrion Feeder x2`, seed 10372713029942101962 -- another
 Feeder board, and no Bloodthrone this time, so the sac outlet in the loop is the Feeder itself.
+
+Status 20:18 UTC: refine **90.6%** frozen at 33,300 s, idle 0.0%, load 32/32, rollouts ~150/s. Freezing ~8 cell-sides/s
+(still falling); 147k left. If `cap=30` (R) bounds each cell-side's rollouts, the worst case is 147k x 30 / 150/s
+~ 8 h, so the refine should land by ~04:30 UTC 2026-10-29. Worst rollout still the 1,994 s Feeder hand; a new 405 s
+Recruiter/Chord/Feeder hand entered the top-3.
