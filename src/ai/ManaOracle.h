@@ -214,4 +214,9 @@ namespace manaoracle
     // `deep` = false: the engine and sibling checks only (`partial` says the oracle was not asked).
     LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& plan,
                         const std::vector<TurnSolver::Plan>* menu = nullptr, int node_cap = 400, bool deep = true);
+
+    // THE COMPLETENESS SELF-CHECK for one plan the engine realises in full (AuditPlan's I1, whose miss is an
+    // ORACLE-GAP): does the oracle's own payment search reach an outcome on the engine's line that covers the
+    // engine's end board? For the unit tests that pin the shapes the search once missed. Quiet; copies only.
+    bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan);
 }

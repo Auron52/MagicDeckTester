@@ -396,3 +396,43 @@ TEST_CASE("payment: MTG_PAY_SHRINK=0 keeps the backtracker's first covering tap 
     CHECK(s.battlefield[1].tapped);
     CHECK(s.floating_mana.Total() == 2);
 }
+
+// THE FRONTIER PRUNE KEYS A PERMANENT BY WHAT IS ATTACHED TO IT (EDF seed 3003 T5, nine ORACLE-GAPs). Aether Hub #1
+// carries Wild Growth; no energy, so both Hubs tap for {C} alone. Fertile Ground onto Hub #1, Trace of Abundance onto
+// Adarkar Wastes, then Eldrazi Displacer's {2}{C} blink: the engine pays Fertile Ground off Brushland {G} + Hub #7,
+// Trace off Hub #1 (its {C}, Wild Growth's {G}, Fertile Ground's {W}), and the blink off the floating {C} + the Wastes
+// carrying Trace's bonus -- seven mana from four lands. The prune read "Hub #1 untapped" (three mana) as covered by
+// "Hub #7 untapped" (one), so the board after Fertile Ground's payment off Hub #1 itself -- a Brushland more, a life
+// up -- discarded the engine's, and every line the oracle kept was a mana short of the blink.
+TEST_CASE("mana oracle: an enchanted land is not its bare twin's equal in the frontier prune (EDF seed 3003 T5)")
+{
+    EnsureOracleCards();
+    static const EldraziFlickerProvider prov;
+    GameState s = Board({ "Aether Hub", "Wild Growth", "Brushland", "Eldrazi Displacer", "Adarkar Wastes",
+                          "Emiel the Blessed", "Aether Hub", "Essence Depleter" });
+    s.battlefield[1].aura_attached_to = 1;
+    s.deck_has_land_aura = true;
+    s.m_provider = &prov;
+    s.turn_number = 5;
+    s.players[0].life = 16;
+    s.players[1].life = 20;
+    int n = 100;
+    for (const char* nm : { "Trace of Abundance", "Fertile Ground", "Brushland", "Trace of Abundance" })
+    { Card c = CardDatabase::Instance().Lookup(nm)->card; c.m_number = n++; s.players[0].hand.push_back(c); }
+    for (int i = 0; i < 20; ++i)
+    { Card c = CardDatabase::Instance().Lookup("Brushland")->card; c.m_number = 300 + i; s.players[0].library.push_back(c); }
+    Action fg = CastAction(s, "Fertile Ground");     fg.enchant_target = 1;
+    Action tr = CastAction(s, "Trace of Abundance"); tr.enchant_target = 5;
+    Action bl;
+    bl.kind          = Action::Kind::ActivateBlink;
+    bl.card_name     = CardDatabase::Instance().Lookup("Eldrazi Displacer")->card.m_name;
+    bl.sac_source_id = 4;
+    bl.sac_victim_id = 6;
+    bl.chosen_x      = 1;
+    bl.cost          = Cost(2);
+    bl.cost.colorless = 1;
+    TurnSolver::Plan plan;
+    plan.actions      = { fg, tr, bl };
+    plan.land_decided = true;
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}

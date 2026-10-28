@@ -301,6 +301,7 @@ std::string BoardText(const GameState& s)
         bf += p.card.m_name.str() + "#" + std::to_string(p.card.m_number);
         if (p.tapped)            { bf += "(T)"; }
         if (p.entered_this_turn) { bf += "(new)"; }
+        if (p.aura_attached_to > 0) { bf += "@" + std::to_string(p.aura_attached_to); }
     }
     for (const Card& c : s.players[a].hand) { if (!hand.empty()) { hand += ", "; } hand += c.m_name.str(); }
     std::string fl = "float=" + PoolText(s.floating_mana, s.floating_haste_c);
@@ -334,6 +335,7 @@ std::string PlanText(const TurnSolver::Plan& p)
         s += ":";
         s += a.card_name.str();
         if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
+        if (a.enchant_target > 0) { s += "@" + std::to_string(a.enchant_target); }
     }
     return s;
 }
@@ -486,6 +488,27 @@ std::uint64_t CoreKey(const GameState& s, bool canonical = true)
     return TurnSolver::MidTurnStateKeyOf(n);
 }
 
+// What is attached to `p` (Auras, Equipment), sorted -- the part of a permanent's resource value ClassKey
+// cannot see from the permanent alone. An enchanted land is not its bare twin's equal: EDF seed 3003 T5, Aether
+// Hub #3 carrying Wild Growth and the plan's new Fertile Ground taps for three, the bare Hub #4 for one, and the
+// prune below read "Hub #3 untapped" as covered by "Hub #4 untapped" (one more Brushland and a life up) -- so it
+// dropped the board the engine's line continues from and reported nine ORACLE-GAPs (BuildSources already keys
+// such a copy apart for the payment table).
+std::string AttachedKey(const GameState& s, const Permanent& p)
+{
+    std::vector<std::string> on;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number)
+        { on.push_back(q.card.m_name.str()); }
+    }
+    if (on.empty()) { return std::string(); }
+    std::sort(on.begin(), on.end());
+    std::string k = "|on:";
+    for (const std::string& x : on) { k += x + ";"; }
+    return k;
+}
+
 // The resources. `with_float`: mid-plan (a frontier) the floating pools are resources; at the END of
 // the apply they are not -- the plan is the whole main phase, and the pool empties when it ends.
 using Res = std::map<std::string, int>;
@@ -496,7 +519,7 @@ Res Resources(const GameState& s, bool with_float)
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != a) { continue; }
-        const std::string k = ClassKey(p);
+        const std::string k = ClassKey(p) + AttachedKey(s, p);
         if (!p.tapped)    { ++r["U:" + k]; }
         if (p.temp_haste) { ++r["H:" + k]; }
     }
@@ -2023,6 +2046,23 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     }
 }
 } // namespace
+
+bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan)
+{
+    RevealLogPause pause;
+    const EngineReal er = EngineApply(state, pre, plan);
+    if (!er.Full()) { return false; }
+    const Realization r = Realize(state, plan, pre, /*stop_at_full=*/false);
+    const std::string e_line = LineKey(state, er.st);
+    const std::uint64_t ek = CoreKey(er.st);
+    const Res eres = Resources(er.st, /*with_float=*/false);
+    for (const Outcome& o : r.outcomes)
+    {
+        if (!o.Full() || o.line != e_line || CoreKey(o.st) != ek) { continue; }
+        if (Covers(Resources(o.st, /*with_float=*/false), eres, nullptr)) { return true; }
+    }
+    return false;
+}
 
 void AuditDecision(const GameState& state, bool is_pre_combat)
 {

@@ -273,6 +273,22 @@ thread-local that only the oracle sets on its own state copy:
    the decks that played the same games it is EDF 122 -> 136, Fungus 0 -> 12, SelesnyaLifegain 14 -> 23,
    AccomplishedAlchemist 21 -> 24.
 
+16. *An enchanted land is not its bare twin's equal in the frontier prune* (2026-10-28). The Pareto prune between
+   frontier boards counts untapped permanents by `ClassKey`, which reads the permanent alone -- so "Aether Hub #3
+   untapped" (Wild Growth and the plan's new Fertile Ground on it: three mana) and "Aether Hub #4 untapped" (bare,
+   no energy: one) were the same resource. EDF seed 3003 T5, the plan Fertile Ground onto Hub #3, Trace of
+   Abundance onto Adarkar Wastes, then Eldrazi Displacer's {2}{C} blink: the engine pays Fertile Ground off
+   Brushland {G} + Hub #4, Trace off Hub #3 (its {C}, Wild Growth's {G}, Fertile Ground's {W}), and the blink off
+   the floating {C} plus the Wastes with Trace's bonus -- seven mana from four lands. The board after paying
+   Fertile Ground off Hub #3 itself (a Brushland more untapped, a life up) "covered" the engine's, so the prune
+   discarded the one frontier the engine's line continues from, and every line the oracle kept was a mana short
+   of the blink: nine ORACLE-GAPs on one board, the last unexplained gaps of the EDF census. `Resources` now adds
+   what is attached to each permanent (`AttachedKey`: Auras and Equipment, sorted), as `BuildSources` already did
+   for the payment table; seed 3003: ORACLE-GAP 9 -> 0. The first-payment options were complete all along -- the
+   "never offers Brushland {W} + Hub #4's energy {G}" reading was wrong (no energy was left; both Hubs make {C}
+   only). Pinned by `manaoracle::CoversEngineOutcome`, a test hook that runs AuditPlan's I1 check for one plan.
+   The oracle's plan and board text now print each Aura's host (`Fertile Ground@3`).
+
 ## 7. First results (16 decks x 6 games, seed 424200, 798 real decisions, 10,469 menu plans)
 
 **I1 holds: ORACLE-GAP = 0** -- wherever the oracle gives a verdict it reproduces the engine's own
@@ -607,9 +623,6 @@ ambiguous": every land-Aura bonus does), which hands the line to the per-cast pa
   faster on all four decks; EDF d0 seed 1020001 (12,000): 5 slower / 7 faster, net -6 turns, and all five
   slower games tie between the arms at d8 b0.
 
-**Owed: EDF seed 3003 T5** (9 ORACLE-GAPs on the new payer, one board: Aether Hub #3 under Wild Growth,
-Aether Hub #4, Brushland, Adarkar Wastes; plans casting Trace of Abundance then Essence Depleter / a blink).
-Every full oracle realisation taps Adarkar Wastes as well; the engine pays with the three others. The first
-payment's options never include Brushland {W} + Aether Hub #4's energy {G} (likely the engine's), and with
-Trace on Hub #3 the Depleter's {2}{B} would then come off Hub #3 alone. Not yet explained.
+**EDF seed 3003 T5** (9 ORACLE-GAPs on the new payer) was the oracle's own frontier prune, not the payer: see
+section 6 item 16.
 
