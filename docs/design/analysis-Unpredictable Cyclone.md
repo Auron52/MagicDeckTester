@@ -991,6 +991,95 @@ d3 -0.100 (se 0.053, t ~ -1.9), d5 -0.080 (se 0.081), kept-game units x0.93; it 
 direct. The rebuilt SINGLE adds -0.135 at d3 but only -0.020 at d5 on top of it. Two scorer gaps surfaced (amendments 1-2),
 both visible only under a binding budget (d5 gi5 recovers at d8 b0).
 
+### Remand ceiling (2026-10-28)
+
+USER 2026-10-28 (plan: `logs/cyclone/remand-plan.md`): test whether a higher hand-cast Remand ceiling (2 or 3) is worth
+anything (*"though I doubt we would want to Remand very expensive spells"*); *"we should allow casting Remand to be
+Remanded if MV 2 is supported ... the first one targeting anything and the second targeting Remand"*; Toxic Deluge cast
+only to be Remanded if MV 3 is tried (no "only if we run out of everything else" condition: the search decides);
+*"with clairvoyance I'm sure the search will choose to do this some of the time just to change what is on top ... the
+only question is whether we want to actually retain those lines"* -> raw delta, blind-replay delta and units, the
+decision the USER's. **The shipped default stays 1.**
+
+**Built** (commits 4369e1e2a code, 1f51a29c9 tests, f789f4182 DECISIONS.md):
+- REMAND-ON-REMAND. `Action::remand_chain_by` (TurnSolver.h:751; CastRiders twin :943): Remand A on X, Remand B
+  (`remand_by`) on A. B resolves first (A back to hand, B draws), then X resolves normally. One body for both worlds,
+  `CastAndResolveRemandChain` (ManaPayment.cpp:6158), one liveness predicate `RemandChainLive` (:6138: two copies besides
+  X, three casts left; else the whole rider is void and X is cast plainly). Executor AIEngine.cpp:9667, rollout
+  TurnSolver.cpp:57498. Offered by CollectActions' remand post-pass (TurnSolver.cpp:42702): A's target is the
+  STRUCTURAL rider set with NO deck ceiling (USER: "the first targeting anything"); one modelling restriction: X's own
+  resolution may open a breakpoint only as a PLAIN CANTRIP (Ponder / Brainstorm / Brainsurge: that one breakpoint, after
+  both draws, is the cast's -- AIEngine `BpNameOf` :2820 and apply_one skip the Remand's), never another draw class (a
+  tutor-to-hand, an impulse, a cascade), where two breakpoints in one cast are inexpressible (Q49). Free cast:
+  `kCycFcTakeRemandChain` (SpellEffects.h:40227) + `CycleFreeCastRemandChain` (:40260; no `AdmitRemandOnFreeCast` prune
+  -- A is countered, the hit resolves), the seed pin (TurnSolver.cpp:41636), the executor (AIEngine.cpp:8628). Human
+  play: the menu label "X + Remand on it + Remand on that Remand (X resolves; ...)", CheckLine absorbs both declared
+  Remands, and a further `free_cast` prompt on the walk (TurnSolver.cpp:59137).
+- `DecisionProvider::AdmitRemandOnRemand` / `AdmitRemandOnlyCast` (DecisionProvider.h:968/974), both DEFAULT FALSE, so
+  Hinata2 / NivMizzetCombo keep their play (Q48). CycloneProvider (DecisionProviders.cpp:30595/30614): the chain when
+  the ceiling reaches Remand's MV 2; a goldfish_inert card under the ceiling behind `MTG_CYCLONE_REMAND_INERT` (per-job
+  `valuearm::Arm::cyclone_remand_inert`, manifest "cyclone_remand_inert"; ValueArm.h:174).
+- TOXIC DELUGE as a REMAND-ONLY target (TurnSolver.cpp:42669): keyed on goldfish_inert + the rider, never the name; a
+  base cast built only to carry the rider (never pushed alone), never a chain target (it must not resolve). X = 0 life is
+  paid and the sweep is never realised. (A VOID rider -- the Remand gone before the cast -- would cast it plainly at X =
+  0, a legal do-nothing, identical in both worlds.)
+- Tests: test_cyclone_remand_chain.cpp (8 cases: gates, enumeration per ceiling, lockstep rollout == executor for the
+  chain on Seething Song and on Ponder, a void chain, Deluge -> Remand, the free-cast chain on a Curator AND an Ulamog
+  hit, the seed pin). Six scenarios: the chain on a hard-cast Cyclone draws the Wraith -> Emrakul round 5 at ceiling 2 vs
+  round 6 at ceiling 1; Deluge -> Remand round 5 (3 + switch) vs round 6 (3 without); the human line
+  `cast=Seething Song;cast=Remand;cast=Remand` matched at 2, `legal_not_enumerated` at 1. Unit 2095/2095, scenarios
+  330/330, **smoke 149/149, play-changed 0**. Ceilings -1 and 1 BYTE-IDENTICAL to 1061c1fb4: 120/120 sample games (d3 x40
+  and d5 x20 per arm) match in win turn AND per-game play digest.
+
+**Measured** (one pooled batch, frozen binary at 4369e1e2a, 18 threads; seeds 87000 d3 b10 `ignore_play_profile` x400
+and 88000 d5 b20 profile depth x200 -- the earlier totals-only run's seeds; scratch `build/scratch/cyclone/remand2/`:
+manifest.json, batch.out/.err, logs/*.wins, traces/, analyze.py). Delta = arm minus ceiling 1, paired, loss-penalized
+(unwon = 9); + = slower.
+
+| ceiling | d3 avg | d3 delta (se) | d3 slower/faster | d3 units | d5 avg | d5 delta (se) | d5 slower/faster | d5 units |
+|---|---|---|---|---|---|---|---|---|
+| -1 | 5.2850 | -0.0125 (0.0148) | 12 / 15 | x0.946 | 5.1650 | -0.0100 (0.0235) | 5 / 5 | x0.922 |
+| 1 (shipped) | 5.2975 | - | - | - | 5.1750 | - | - | - |
+| 2 (+Remand-on-Remand) | 5.3050 | +0.0075 (0.0139) | 7 / 8 | x1.028 | 5.1850 | +0.0100 (0.0158) | 6 / 4 | x1.018 |
+| 3 without Deluge | 5.3125 | +0.0150 (0.0158) | 11 / 10 | x1.050 | 5.2100 | +0.0350 (0.0148) | 8 / 1 | x1.038 |
+| 3 with Deluge | 5.3075 | +0.0100 (0.0150) | 12 / 10 | x1.055 | 5.1950 | +0.0200 (0.0187) | 9 / 5 | x1.037 |
+
+TAKE RATE (games with the line / lines, from the executor's game traces). Ceiling 1: hand-cast single Remand d3 24 games
+/ 25 (Ponder 18, Brainstorm 7), d5 6 / 6; free-cast single d3 38 / 43, d5 19 / 19 (every arm similar). Ceiling 2:
+**Remand-on-Remand on a hand cast d3 37 / 38** (Ponder 12, Brainstorm 10, Long-Term Plans 4, Seething Song 4,
+Brainsurge 4, Curator 4), **d5 17 / 18** (Brainstorm 6, Brainsurge 6, Ponder 3, LTP 2, Song 1); on a free-cast hit d3 1
+(Ulamog, the Infinite Gyre), d5 2 (Emrakul 1, Gyre 1). Ceiling 3: chains d3 34 + 1, d5 18 + 2; the new MV-3 singles are
+rare (d3 4 lines: Song 3, LTP 1; d5 3). 3 with Deluge: **Deluge -> Remand d3 26 games / 30 lines, d5 15 / 19**; chains
+d3 30 + 1, d5 16 + 1. Of the faster games, the new line was played in c2 d3 4/8, d5 0/4; c3 d3 5/10, d5 0/1; c3d d3 5/10,
+d5 2/5 -- the rest are butterflies (a different budget spend, the same line).
+
+**Blind replay of every FASTER game** (each arm's faster games AND ceiling 1 on them; salt 0 reproduction,
+`shuffle_salt_search` 1-4, and four real futures `shuffle_salt` k with search salt 1000 + k; 828 one-game jobs, one
+pooled batch; `resalt_manifest.json`, `resalt.out`, `resalt_report.py`). All 58 (arm, game) pairs reproduce at salt 0.
+Turns per game over N (400 / 200); + = the arm slower:
+
+| arm | depth | faster games | raw gain | surviving, search salts | surviving, real futures |
+|---|---|---|---|---|---|
+| 2 | d3 | 8 | -0.0200 | +0.0006 | +0.0013 |
+| 3 | d3 | 10 | -0.0250 | -0.0006 | +0.0006 |
+| 3 + Deluge | d3 | 10 | -0.0275 | -0.0031 | +0.0050 |
+| -1 | d3 | 15 | -0.0425 | -0.0006 | +0.0019 |
+| 2 | d5 | 4 | -0.0200 | +0.0037 | 0.0000 |
+| 3 | d5 | 1 | -0.0050 | 0.0000 | 0.0000 |
+| 3 + Deluge | d5 | 5 | -0.0250 | +0.0013 | -0.0013 |
+| -1 | d5 | 5 | -0.0400 | 0.0000 | +0.0037 |
+
+**Reading.** NONE of the faster games' gain survives blind replay: under the search salts (real future unchanged, the
+search's post-shuffle knowledge blinded) and under other real futures the two arms tie in almost every game, so the
+raw gains are the realised future, i.e. clairvoyance / shuffle luck (the USER's expectation). With the faster games
+replaced by their blind value, every wider arm is WORSE than ceiling 1 at both depths (raw delta minus the faster games' raw
+gain plus their blind value, search / real salts: 2: +0.028-0.029 d3 / +0.030-0.034 d5; 3: +0.039-0.041 / +0.040; 3 + Deluge:
++0.034-0.043 / +0.044-0.046 -- an upper bound: the slower games were not replayed, Q51) and costs
+2-5% more units; the -1 arm's 20 faster games likewise vanish (-1 blind: +0.029-0.032 / +0.030-0.034 vs ceiling 1, also
+un-replayed on its slower side). The lines ARE taken (chains in ~9% of games, Deluge -> Remand in 7-8%), mostly on the
+cheap cantrips, i.e. the search spends four mana to cycle a Remand when it sees the card it draws. Recommendation
+(the USER decides, Q47): keep the shipped ceiling 1 and leave the chain and the Deluge switch off.
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1205,6 +1294,22 @@ both visible only under a binding budget (d5 gi5 recovers at d8 b0).
   and play are unaffected. Plan item 8's per-fan ranking cache removes it. Default: left to item 8.
 - Q33 (updated, cantrip item 1): SINGLE under the REBUILT rule (rank 0 of the new score) vs the shipped order: d3 -0.135
   (se 0.055), d5 -0.020 (se 0.062), units x0.22; vs the order off -0.235 / -0.100. Still OFF: the USER's decision.
+- Q47. THE REMAND CEILING (2026-10-28 section). Raw paired deltas vs the shipped 1: ceiling 2 (+ Remand-on-Remand) d3
+  +0.0075 / d5 +0.010, ceiling 3 +0.015 / +0.035 (se 0.015), 3 + Deluge +0.010 / +0.020, -1 -0.0125 / -0.010; units
+  x1.02-1.06 (wider) and x0.92-0.95 (-1). Every faster game's gain vanishes under blind replay (search salts and real
+  futures), for the wider arms and for -1 alike. Retain the lines? Recommended: no -- keep 1, chain and Deluge switch off
+  (both stay in the code, gated, reachable as arms). Default: shipped 1 unchanged.
+- Q48. Remand-on-Remand and a Remand-only inert target are DEFAULT-OFF for every other Remand deck (Hinata2,
+  NivMizzetCombo) via the generic provider hooks, so their play is untouched; opting one in is its own A/B. Default: off.
+- Q49. The chain's modelling restriction: X may open a breakpoint of its own only as a plain cantrip (Ponder, Brainstorm,
+  Brainsurge); a chain on another draw class (tutor-to-hand, impulse, cascade, Expressive Iteration) is not offered (two
+  breakpoints in one cast). No Cyclone card is in that set. Default: disclosed gap.
+- Q50. A chain on a CAN'T-BE-COUNTERED X (a free-cast Emrakul; taken once per d5 arm) is the single Remand plus {1}{U} and
+  one more cast: dominated wherever nothing reads the cast count (Cyclone has no storm / prowess / cast-draw). A sound
+  deck-level fold candidate (CycloneProvider), not built. Default: not folded.
+- Q51. The blind replay re-ran only the FASTER games (as briefed), so the blind deltas in Q47 are an upper bound on harm,
+  and it blinds only POST-SHUFFLE knowledge (the search still sees the unshuffled library top in every arm). A symmetric
+  replay of the slower games would make the blind estimate two-sided. Default: not run (the decision does not hinge on it).
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
