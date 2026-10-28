@@ -30592,6 +30592,31 @@ bool CycloneProvider::AdmitRemandRider(const GameState& s, int controller, const
     return ceiling >= 0 && target.card.m_mana_cost.ManaValue() <= ceiling;
 }
 
+bool CycloneProvider::AdmitRemandOnRemand(const GameState& s, int controller, const CardDefinition& remand) const
+{
+    // The ceiling gates the TARGETED Remand (A, MV 2); A's own target is unrestricted (it is countered, so
+    // that spell resolves normally -- USER 2026-10-28).
+    return AdmitRemandRider(s, controller, remand);
+}
+
+// MTG_CYCLONE_REMAND_INERT: may a goldfish_inert card ride as a Remand-only target (Toxic Deluge, MV 3)? The
+// per-job numeric arm wins (valuearm::Arm::cyclone_remand_inert, manifest "cyclone_remand_inert"), then the
+// env, then the shipped default OFF (0). Separate from the ceiling so "3 without Deluge" and "3 with Deluge"
+// are distinct arms.
+static bool CycloneRemandInertOn()
+{
+    const int job = valuearm::t_arm.cyclone_remand_inert;
+    if (job >= 0) { return job != 0; }
+    static const bool env = EnvOn("MTG_CYCLONE_REMAND_INERT");   // DEFAULT OFF
+    return env;
+}
+
+bool CycloneProvider::AdmitRemandOnlyCast(const GameState& s, int controller, const CardDefinition& inert) const
+{
+    if (!inert.params.goldfish_inert || inert.card.IsLand() || !CycloneRemandInertOn()) { return false; }
+    return AdmitRemandRider(s, controller, inert);
+}
+
 // ---- CycloneProvider: the USER's search heuristics (phase 5, 2026-10-27) ------------------------------
 // USER 2026-10-27: "We'll have to optimize of course. We should have heuristics for searches (long term plans and
 // fetches) and likely prunes for cantrips as well. Fetches are easy You can just always take shock lands,

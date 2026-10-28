@@ -83,6 +83,27 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
                                  bool post_combat, bool countered, const Card& x_card,
                                  Card* remand_out);
 
+// REMAND-ON-REMAND (Action::remand_chain_by; the Cyclone remand ceiling >= 2, USER 2026-10-28), ONE body
+// for both worlds, called at the same point as CastAndResolveRemand (X's cast-time block done, X paid
+// with BOTH Remands in its bill): Remand A (`a_def`) is cast targeting X -- it leaves the hand (the
+// cast-copy rule), counts as a spell cast and fires its cast triggers -- then Remand B (`b_def`) is cast
+// targeting A, and B resolves first (CastAndResolveRemand with A as the countered spell): A returns to
+// its owner's hand, B draws and goes to the graveyard. A is gone from the stack, so X -- never countered
+// -- stays on the stack and resolves normally after this (the caller's normal resolution path, exactly
+// the can't-be-countered shape). Returns the hand size just before B's draw. The caller has verified two
+// copies in hand (A and B may share a name); `a_out` / `b_out` get the two cards.
+// Is a Remand-on-Remand rider LIVE for this cast? `a_name` = the Remand that targets X (Action::remand_chain_by),
+// `b_name` = the one that targets A (Action::remand_by); both must be Remand-type cards with a copy in hand other
+// than X's own card (`x_number`) -- two copies when they share a name -- and a cast restrictor must leave three
+// casts (X, A, B). Returns A's definition, or null (the whole rider is then void and X is cast plainly). The one
+// predicate both worlds read (the rollout's apply_one, the executor's CastSpellFromHand).
+const CardDefinition* RemandChainLive(const GameState& state, int controller, const InternedName& a_name,
+                                      const InternedName& b_name, int x_number);
+
+std::size_t CastAndResolveRemandChain(GameState& state, int controller, const CardDefinition& a_def,
+                                      const CardDefinition& b_def, bool post_combat,
+                                      Card* a_out, Card* b_out);
+
 // Apply a Ragemonger-style COLOURED pip reduction to `cost`: one plain pip of each of the
 // reduction's coloured pips comes off (floored at 0, generic untouched), consuming a PLAIN pip
 // before retiring a hybrid entry (see the hybrid note at the EffectiveSpellCost call site). Shared
