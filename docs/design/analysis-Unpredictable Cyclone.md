@@ -842,6 +842,155 @@ tool notes: play_invariants seeds every game-index of a seed with the SAME `--se
 seed), so its "4 games per seed" are one game four times (Q38); and the reference-reproducibility check run after the
 executor fix: 668 refs, 0 play-drift / 0 board-diverged / 0 enum-gap.
 
+### Cantrip item 1 (2026-10-27): the go-off estimate {k, c}, the scored put-back / Ponder ORDER, PUTBACK_RULE rebuilt
+Design: `docs/design/cantrip-search-optimization.md` §3.2-3.3, §6 item 1; the USER's put-back / go-off / shuffle-line /
+Ponder guidance above. Commits 496043cf0 (code), 966daefa3 (tests + scenarios), af6539dff (lockstep: Myriad read by
+count), on top of 7865fead2.
+
+**What was built.**
+- **The generic hook** (DecisionProvider.h `CantripReadiness`, `TopDispositionView`, `CantripReadinessOf`,
+  `ScoreTopDisposition`; defaults false, so every other deck is byte-identical). When the provider returns a readiness
+  for a resolution, the engine scores every candidate and STABLE-sorts by score with the existing order as the tie-break,
+  inside the shared functions: `PutBackPickAt` and its reference twin `PutBackCandidates` (Brainstorm / Brainsurge),
+  `ScoredReorderCandidates` behind `TopDispositionCandidates` (Ponder), and `HeuristicTopDisposition` (the unpinned
+  reorder default = the scored rank 0, so the base plan, the playout and human play's default are rank 0 of the same
+  list the pins index). Executor, rollout and human play read the same ranks off the same state. **ORDER ONLY**: the
+  candidate set and its size never change, so the lever is inert at an unlimited budget by construction (pinned:
+  the candidate multiset lever on / off is identical, the fast path equals the reference rank for rank).
+- **Ponder's shuffle** is always at index 0 or 1 of the scored fan (beside the best keep order; the future wave 0); its
+  score only decides which of the two goes first (first only when the look holds no Eldrazi, nothing needed, k >= 2).
+- **CycloneProvider** (`MTG_CYCLONE_CANTRIP_ORDER`, EnvOn default ON, per-job heurarm slot): `CycloneGoOff` -> {k, c},
+  keep-need tiers, the walk scorer; Ponder uses the SAME scorer (position terms plus the card drawn now; nothing removed).
+- **`MTG_CYCLONE_PUTBACK_RULE` rebuilt** as rank 0 of the new score (it turns the scorer on for the put-back even with
+  the order lever off, and arms SINGLE). The old tier ranking is deleted (it put Emrakul ON TOP of a Toxic Deluge and
+  preferred an Ulamog over Emrakul beside a dead card). Still DEFAULT OFF (Q33 is the USER's).
+- **The game log** (log only, NOT folded into the play digest, so every fingerprint stays byte-identical): a Brainstorm /
+  Brainsurge resolution now logs a DRAW for each card drawn and put straight back, then `REVEAL "<card> (put back)"`
+  with the cards top first (GameLogger `NotePutBack` / `FlushPutBack`, flushed by `GameEngine::ResolveStack`;
+  `render_game_log.py` and the replay viewer already render a REVEAL). Example, seed 81154 gi 154 T1: `CAST Brainstorm,
+  DRAW Unpredictable Cyclone, DRAW Brainstorm, DRAW Island, REVEAL Brainstorm (put back): Brainsurge, Island`, and T2's
+  draw step is the Brainsurge.
+- **Scenario harness**: `expect_log_sequence` (an ordered subsequence of the game log's action lines) and `show_log`;
+  the scenario now binds the reveal logger the way `RunGame` does.
+- `MTG_CANTRIP_ORDER_COST` (diagnostic, default off): the scored order's own cost.
+
+**The go-off estimate as implemented (`CycloneGoOff`).** Reads hand, battlefield, life and the land drop only.
+- Missing piece (k = 3, c = 0): no Unpredictable Cyclone in hand or play, no creature cycler in hand, or {3}{R}{R} not
+  reached by turn 3. (USER default taken: **a missing piece means k >= 2**.)
+- Mana on turn t: t = 0: untapped mana lands + 1 if the land drop is open and an untapped-entering land (a fetch
+  counts) is in hand; t >= 1: every mana land we control + one land per turn from hand (an enters-tapped land played
+  on turn t is counted that turn: an approximation). Seething Song in hand adds net +2 once 3 mana are available.
+  Red: the shared `CycloneShortOnRed`. Cyclone needs 5 when not out.
+- k = the first t in 0..3 with the Cyclone payable and a creature cycle payable after it; c = Street Wraith cycles
+  (life > 2 before each, 2 life each) + Curator cycles out of the mana left.
+- Keep needs per hand card (first copy keeps the high need; the resolver puts back a class's last copies): sole Cyclone
+  1000, the lands needed for {3}{R}{R} 300 (surplus 20), Seething Song 300 if needed (else 25), creature cyclers up
+  to three 250 (free) / 240 ({U}) and 15 beyond, cantrips / Long-Term Plans 60, other 50, Remand 30, Eldrazi 10,
+  Toxic Deluge (goldfish_inert) and a surplus Cyclone 0 (dead).
+- Shuffle after the cantrip: the land drop open with a fetchland in hand, Myriad Landscape out with 3+ untapped mana
+  lands, or Long-Term Plans in hand with 3+ untapped.
+
+**The score** (lower = earlier). Put-back: each removed card costs its need (a quarter of it when it sits at a position
+<= k, i.e. it is drawn back before go-off); both drawn: the more needed one on top; then the walks at go-off: from
+position k+1, each of min(c, cyclers left) creature cycles bottoms the noncreatures it passes and scores its first
+creature (Emrakul -400, an Ulamog -300, each later walk 10% less so Emrakul goes first; a non-Eldrazi creature +200);
+known cards still on top after the walks +2 each; removing a go-off piece at a position past k voids the walks. Shuffle
+line: a put-back of dead cards that keeps an Eldrazi in hand is -500 when the branch is admitted (k >= 2, 1-2 dead
+cards, a piece missing, a shuffle after) and +30 otherwise -- ORDER only, it stays in the fan either way. Ponder: minus
+the need of the card drawn now, minus a quarter of each card drawn before go-off, the same walk terms after them.
+- Knowledge: the engine tracks no "seen / placed since the last shuffle" record, so the score reads only the cards THIS
+  resolution places (the put-back's two) or reveals (Ponder's three) -- a Long-Term Plans card placed earlier is not
+  read. Pinned: different deeper libraries give the identical order.
+- USER default taken: **for k = 1 with two Eldrazi, only one is placed for the walk** (Emrakul at position 2); the other
+  stays in hand or rides position 1, i.e. is drawn back before go-off (the scorer prefers a dead card there when one is
+  held, else the second Eldrazi, since either way it is in hand at go-off).
+
+**Unit tests and gates.** `test_cyclone_cantrip_order.cpp` (8 cases): k / c on hand shapes; keep needs; rank 0 under the
+USER's rules (a dead noncreature above Emrakul; two Eldrazi with two cycles both back, Emrakul first; never a non-Eldrazi
+creature above the Eldrazi; k = 1 [next-turn card, Eldrazi]; k >= 2 the least needed back); the shuffle-line admission
+(dump first with Tarn + drop open, an Eldrazi first without); ORDER ONLY (identical candidate multiset and count lever on /
+off, fast path == reference rank for rank, Ponder's 7 dispositions); KNOWLEDGE (deeper library cards never move the order);
+Ponder by the same scorer with the shuffle at index 0 / 1; PUTBACK_RULE = rank 0; the generic provider never scores.
+Scenarios (expect_log_sequence on the game log, d5 b20): `cyclone_putback_dead_above_emrakul` (T3 win, put back
+[Toxic Deluge, Emrakul]), `cyclone_putback_two_eldrazi_emrakul_first` (both cycled, T3 win against 25 life),
+`cyclone_brainstorm_dump_then_fetch_shuffle` (Brainstorm draws the missing Cyclone, puts back both Deluges, THEN plays
+and cracks Scalding Tarn; T4 win). The last two FAIL with the order off (the fixtures discriminate). Unit 2087/2087,
+scenarios 324/324, smoke 149/149 ALL PASS with **play-changed 0 on every deck** (searched and d0). Lockstep: MTG_FD_ORACLE
+d5 b20 x80 (seed 103000) 0 `[fd-diverge]`; MTG_FLAG_NONCONV d3 b10 x80 (seed 104000) 0 `[nonconv]`.
+
+**MEASUREMENT (held-out, paired, ONE pooled batch, 20 threads, binary af6539dff; FRESH seeds 101000 (d3 b10 x200,
+`--ignore-play-profile`) and 102000 (d5 b20 x100, the play settings); profile attached; MTG_PLAN_CACHE_KB=12000000 -- the
+pool still bound (2,970 refused stores, the Q34 [determinism] warning), so the arms are paired but not byte-reproducible
+across interleavings).** Arms: A = shipped (order ON), B = order OFF (`MTG_CYCLONE_CANTRIP_ORDER=0`, the pre-item-1 play),
+C = order ON + `MTG_CYCLONE_PUTBACK_RULE=1` + `MTG_CYCLONE_PUTBACK_SINGLE=1` (SINGLE under the NEW rule). delta = arm - ref
+in avg win turn (unwon = 9; - = faster). Kept games = the first seven kept (mulligan count 0 from a d0 log run of the same
+seeds, `mulls.json`): 119 / 200 at d3, 59 / 100 at d5.
+| comparison | depth | n | delta (se) | arm slower / faster | units, all games | units, KEPT games | kept-game delta |
+|---|---|---|---|---|---|---|---|
+| A (order ON) vs B (OFF) | d3 b10 | 200 | **-0.100 (0.053)** | 23 / 36 | x0.937 | **x0.928** (442K vs 476K / game) | -0.176 |
+| A vs B | d5 b20 | 100 | **-0.080 (0.081)** | 19 / 24 | x0.957 | **x0.934** (599K vs 642K) | -0.153 |
+| C (SINGLE, new rule) vs A | d3 b10 | 200 | **-0.135 (0.055)** | 25 / 41 | x0.220 | x0.195 (86K vs 442K) | -0.101 |
+| C vs A | d5 b20 | 100 | **-0.020 (0.062)** | 15 / 17 | x0.220 | x0.199 (119K vs 599K) | 0.000 |
+| C vs B | d3 b10 | 200 | -0.235 (0.055) | 23 / 59 | x0.206 | x0.181 | -0.277 |
+| C vs B | d5 b20 | 100 | -0.100 (0.081) | 16 / 24 | x0.211 | x0.186 | -0.153 |
+Averages: d3 A 5.235 / B 5.335 / C 5.100; d5 A 5.260 / B 5.340 / C 5.240. The order's gain is in the KEPT games (d3 kept
+-0.176, mulligan games +0.012: the bottoming trials are butterflies). Wall (thread-ms in the batch, one process, so the
+same box load): A 6.70M / B 8.59M ms at d3 (x0.78), 5.95M / 4.82M at d5 (x1.23) -- the d5 wall is ABOVE B despite fewer
+units: the order's own scoring cost (below) and the pool binding; not a MTG_PGO=0 wall A/B, so read units, not ms.
+
+**The go-off estimate's own cost** (`MTG_CANTRIP_ORDER_COST=1`, single thread, 8 games seed 7600 d3 b10): 6.76M scored
+resolutions (put-back + Ponder), 194M candidates scored, **27.5 s of a 310 s process (8.9% of wall)**, 4.07 us per
+resolution / 0.141 us per candidate. Work UNITS are untouched (the scorer is not a search node), so budgeted play does not
+pay it; wall does. Every apply of every fan member re-derives the readiness and re-scores the whole fan off the same
+state: plan item 8's per-fan ranking cache (keyed on the resolution state) removes nearly all of it.
+
+**Q33 re-measured: SINGLE under the NEW rule** (C vs A, i.e. the prune on top of the shipped order): **d3 -0.135 (se 0.055),
+d5 -0.020 (se 0.062)**, units x0.22 at both depths. Against the pre-item-1 play (C vs B): -0.235 / -0.100. The old
+measurement (old rule's SINGLE vs the then-shipped set) was -0.105 / -0.110 at x0.27 / x0.25. So the rebuilt rule's
+single pick still beats the searched fan at d3 by more than before, but at d5 the ORDER alone now captures most of what
+SINGLE bought (A is -0.080 vs B; C adds only -0.020). SINGLE stays OFF (USER decision Q33).
+
+**The slower games, re-salted** (A slower than B: 23 at d3, 19 at d5; each replayed for both arms under
+`shuffle_salt_search` 1-4 AND under four REAL futures `shuffle_salt` = `shuffle_salt_search` = k, 1-4 -- the ensemble the
+root-cause section showed is the right one; 672 single-game jobs, one pooled batch). Mean (A - B) over the slower games:
+d3 +0.043 (search salts) / -0.098 (real salts); d5 +0.250 / +0.079. By the brief's test (search-salt mean > 0) 10 + 11
+are "unrecoverable"; only 5 + 5 stay slower under the real futures too, and those ten were replayed single-threaded with
+full logs (all reproduce the batch's salt-0 result exactly):
+| depth gi | mull | salt 0 A / B | first divergence | class | reading |
+|---|---|---|---|---|---|
+| d3 91, d5 3, d5 61 | 2 | 5/4, 6/4, 6/5 | the MULLIGAN BOTTOM (d5 61: A bottoms Street Wraith + Remand and keeps two Toxic Deluges; d5 3: A keeps both Deluges) | (c) bottomer | the lookahead bottomer's one clairvoyant trial game per candidate, played under the arm's order -- the known Q32 / root-cause defect 2, not the order's own decision |
+| d3 61 | 1 | 7/6 | T2: B cycles both Curators, A holds them (no cantrip in the real game yet) | (c) butterfly | the rollouts' cost / ranks moved the turn's choice |
+| d3 96 | 1 | 4/3 | T1: A plays Tarn and HOLDS Brainstorm; B Brainstorms (puts Emrakul back on top, drawn next turn) | (c) budget | both are reasonable at k = 2; d8 b0 below |
+| d3 78 | 1 | 5/4 | T2 Brainstorm (k = 3): A puts back [Ulamog Gyre, Deluge] and keeps the Cyclone; B puts back [Cyclone, Ulamog Gyre] | (c) | the same three cards come back either way and A holds the Cyclone a turn sooner (no hand overflow); the slower turn comes from the later search choices on a different future |
+| d5 75 | 1 | 6/5 | T2 Ponder [Deluge, Ponder, Watery Grave]: A draws the Grave now, B draws the Deluge | (a) clairvoyance | A's order is the non-clairvoyant one (the land now); B's gain rides the known order behind it |
+| d3 151 | 0 | 8/5 | T1 Brainstorm (k = 3): A puts back [Remand, a surplus Myriad Landscape], B [Curator, Brainstorm] | (a) | two non-dominated put-backs at a missing piece; both lines redraw the cards; the futures decide (salts: A 7,8,6,8 / 8,5,5,5 vs B 6,7,7,6 / 7,5,4,5) |
+| d5 13 | 0 | 7/5 | T1 Brainstorm (k = 3): A puts back [Remand, Remand] and keeps two Brainsurges; B puts back the Brainsurges | **(b) scorer gap** | at k >= 2 the scorer ranks by keep-need only (Remand 30 < Brainsurge 60) and cannot see that a Brainsurge is UNCASTABLE until the third land -- the USER's Niv rule "followed by the ones you can't use yet so you can draw them later" says put the Brainsurges back. Amendment below |
+| d5 5 | 0 | 5/4 (all 8 futures 5 vs 4) | T1 land (Vents vs Island, a butterfly), then decisively T3 Brainsurge (k = 3): A puts back [Ulamog, Deluge] and keeps 8 cards -- and the CLEANUP discard sheds the sole Unpredictable Cyclone; B puts the Cyclone on top (drawn next turn, safe) and sheds the Deluge | **(b) interaction** | the put-back is right only if the cleanup discard is sane: the deck's generic shed order ranks the Cyclone MOST expendable (the same order that is B's put-back order, which is why B "protected" it). Two amendments below |
+
+**Proposed amendments (not built; the USER's call):**
+1. **Usable-before-redraw term (from d5 13).** For a put-back card at a position p <= k (drawn back before go-off), charge its
+   need only if it is castable before turn p (mana value vs the mana projection the estimate already computes); a card
+   that cannot be cast before its redraw costs ~0 to put back. This is the Niv rule's "the ones you can't use yet".
+2. **Cleanup overflow (from d5 5).** When the hand left by the put-back is above seven at end of turn (after the casts this
+   turn can afford), charge each kept card the need of the card the cleanup would shed -- or, simpler and better,
+   give CycloneProvider a cleanup discard that never sheds the sole Cyclone (the Q42 derived order already ranks it among
+   the costliest to discard). The generic shed order discarding the deck's only payoff is the real defect.
+
+**d8 b0 (the recovery bar) on the bad-decision / budget games:** d5 gi5: A **recovers** (T4 = B; at d8 b0 the T3 Brainsurge
+puts back [Remand, Island] and the cleanup sheds the Ulamog instead -- the d5 b20 loss is rank 0 taken under a binding
+budget). d5 gi13 and d3 gi96 (both arms) were still running at d8 b0 when this was written:
+`build/scratch/cyclone/cantrip1/runs/d8{A,B}_{d5_13,d3_96}` (marker `runs/D8_DONE`).
+
+**The dominated T1 land skip** (root-cause defect 1: seed 81130 gi130, d3 b10, `--ignore-play-profile`, holding Watery
+Grave + Myriad Landscape, no land): under the new order it **does not recur** (T1 Watery Grave, win T4); with
+`MTG_CYCLONE_CANTRIP_ORDER=0` on the same binary it still skips the land (win T5). The T1 hand holds no cantrip, so the order
+changed it only through the rollouts' cost: still a budget-tie artifact that this seed no longer trips, not a fix.
+
+**Verdict.** The order is an ORDER (complete at unlimited budget, pinned) and measures better at both depths on fresh seeds:
+d3 -0.100 (se 0.053, t ~ -1.9), d5 -0.080 (se 0.081), kept-game units x0.93; it ships ON as the brief and the design
+direct. The rebuilt SINGLE adds -0.135 at d3 but only -0.020 at d5 on top of it. Two scorer gaps surfaced (amendments 1-2),
+both visible only under a binding budget (d5 gi5 recovers at d8 b0).
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1040,6 +1189,22 @@ executor fix: 668 refs, 0 play-drift / 0 board-diverged / 0 enum-gap.
   buckets are the USER's: the order is NOT adopted. Note that Steam Vents first reads oddly beside the USER's Tarn rule
   (Vents is the fetch's top pick); it was offered only 9 times. Default: not adopted; it would become
   CycloneProvider::CleanupDiscardCandidates on approval. Report: build/scratch/cyclone/stage4.json (discard_analysis).
+- Q43. CANTRIP ITEM 1 SHIPPED ON (an ORDER, as the design and brief direct): `MTG_CYCLONE_CANTRIP_ORDER` measures d3 -0.100
+  (se 0.053), d5 -0.080 (se 0.081), kept-game units x0.93 vs the order off, fresh seeds 101000 / 102000. Two defaults
+  were taken on the USER's open points: **a missing piece means k >= 2** (built as k = 3, which turns off the walk terms and
+  admits the shuffle line), and **for k = 1 with two Eldrazi only one is placed for the walk** (the other stays in hand or
+  rides position 1 and is drawn back). Confirm both. Default: as built.
+- Q44. Two scorer amendments from the root-causes (Cantrip item 1 section): (1) a put-back card that cannot be CAST before
+  its redraw costs ~0 to put back (the Niv "can't use yet" rule; d5 gi13 kept two uncastable Brainsurges and put back two
+  Remands); (2) the cleanup overflow -- the deck's generic shed order sheds the sole Unpredictable Cyclone (d5 gi5; recovers
+  at d8 b0), best fixed by a Cyclone cleanup discard that never sheds it (Q42's derived order). Default: neither built.
+- Q45. The put-back game-log record (a DRAW for each drawn-and-put-back card + a "<card> (put back)" REVEAL) is log only and
+  NOT folded into the play digest, so no GT moved (smoke play-changed 0). Folding it would make the digest see a put-back
+  change directly, at the price of a NivMizzetCombo GT rebaseline (its Brainstorm games). Default: not folded.
+- Q46. The scored order costs 8.9% of wall (4.07 us per resolution, re-derived at every apply of every fan member); units
+  and play are unaffected. Plan item 8's per-fan ranking cache removes it. Default: left to item 8.
+- Q33 (updated, cantrip item 1): SINGLE under the REBUILT rule (rank 0 of the new score) vs the shipped order: d3 -0.135
+  (se 0.055), d5 -0.020 (se 0.062), units x0.22; vs the order off -0.235 / -0.100. Still OFF: the USER's decision.
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
