@@ -141,6 +141,12 @@ public:
 
     void SetLogger(GameLogger* logger) { m_logger = logger; }
 
+    // Re-point a live engine at new search settings, exactly as the constructor sets them (including
+    // the run-level TurnSolver::SetSearchedPlay). For --choices-then-auto: the human's recorded prefix
+    // replays at the viewer's depth (the menus its plan indices point into are ordered by it), and the
+    // shipped settings take over only at the hand-back. Every reader takes the members fresh.
+    void SetSearchSettings(int lookahead_depth, int budget_ms);
+
     // Discard all lands from hand to each Land's Edge permanent the active player
     // controls, dealing 2 damage per land per Land's Edge.  Called by GameEngine
     // after ResolveStack so Treasure Hunt has already resolved and filled the hand.

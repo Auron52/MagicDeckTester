@@ -959,6 +959,13 @@ AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int budget_ms)
     TurnSolver::SetSearchedPlay(lookahead_depth > 0);
 }
 
+void AIEngine::SetSearchSettings(int lookahead_depth, int budget_ms)
+{
+    m_lookahead_depth = lookahead_depth;
+    m_budget_ms       = budget_ms;
+    TurnSolver::SetSearchedPlay(lookahead_depth > 0);
+}
+
 void AIEngine::OnGameEnd(const GameState& state, int win_turn)
 {
     if (!s_fd_oracle) { return; }

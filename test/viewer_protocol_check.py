@@ -44,7 +44,7 @@ test/regression.sh runs the full sweep --strict (threaded) in REGRESSION mode --
 three: this is a whole-corpus replay, so re-running it in smoke and overnight re-measured the same
 thing (VPC_ALWAYS=1 forces it in any mode, VPC_SKIP=1 skips it).
 """
-import json, os, re, subprocess, sys, glob
+import collections, json, os, re, subprocess, sys, glob
 
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 # The passive opponent's scheduled creatures ("1/1 Creature" spawns) carry card numbers from this
@@ -1293,6 +1293,32 @@ def target_intent(dec, kept, ri):
     return None
 
 
+def sacrifice_intent(dec, kept, ri):
+    """Answer an unaligned `sacrifice` frame from the RECORDED BOARD, not from a blind default.
+
+    A sacrifice-as-cost (Natural Order) used to be the engine's own pick, so references saved then
+    carry no `sacrifice` frame. The engine default has since changed, and answering from it put a
+    different elf in the graveyard: StompySurprise v1 s12_gi11 T3 recorded Arbor Elf sacrificed, the
+    default (option 0) is Elvish Mystic. The win turn happened to survive, so the drift gate passed
+    while every later board (and the review's hand-off rungs) sat on a game the user never played.
+    The next recorded frame of the SAME turn shows which permanent left: pick the option whose name
+    the recorded board has fewer of. Ambiguous or no later frame this turn -> None (caller falls back).
+    """
+    if ri >= len(kept):
+        return None
+    nxt = kept[ri].get("decision") or {}
+    if nxt.get("turn") != dec.get("turn"):
+        return None
+    now = collections.Counter(p.get("name") for p in (dec.get("me") or {}).get("battlefield") or [])
+    after = collections.Counter(p.get("name") for p in (nxt.get("me") or {}).get("battlefield") or [])
+    gone = {o.get("name") for o in (dec.get("options") or []) if now[o.get("name")] > after[o.get("name")]}
+    if len(gone) != 1:
+        return None
+    want = gone.pop()
+    pick = next(o.get("index") for o in dec["options"] if o.get("name") == want)
+    return pick, f"recorded-board({want})"
+
+
 def check_reference(path, collect=None):
     """walk_reference at the replay plan-space bound, with ONE retry that additionally PINS the
     recorded line by name if the first attempt died inside the engine rather than reaching a
@@ -1639,6 +1665,9 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                 # A trick target that used to ride the PLAN and is now asked at resolution: aim it
                 # where the reference's own plan aimed it (see target_intent).
                 intent = target_intent(dec, kept, ri)
+                pick, src = intent if intent else engine_default(dec)
+            elif dec.get("type") == "sacrifice":
+                intent = sacrifice_intent(dec, kept, ri)
                 pick, src = intent if intent else engine_default(dec)
             elif engine_flags(dec) is not None:
                 # A flags frame re-emits with the same decision_index until all its flags are in:

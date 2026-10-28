@@ -5418,10 +5418,18 @@ struct ClaudePlayHarness
     // diagnostic behind "can the search win from here, and at what budget?".
     bool        then_auto      = false;
     bool        handed_back    = false;
+    // The search's settings from the hand-back on (the deck's shipped play settings). The prefix
+    // runs at the VIEWER's depth instead: depth > 0 turns on TurnSolver::SetSearchedPlay, which
+    // reorders the plan menus, so at the shipped depth a recorded index can name a different plan
+    // (StompySurprise v1 s2_gi1 T3: index 851 of 980 was "Natural Order -> Worldspine Wurm" at depth 0
+    // and "-> Hornet Queen" at depth 6; the review's human line and hand-off rungs left the game).
+    int         auto_depth     = -1;
+    int         auto_budget_ms = -1;
     AIEngine*   engine         = nullptr;   // set by Install; needed to uninstall its own choosers
     int HandBackToSearch(const GameState& s)
     {
         handed_back = true;
+        if (engine && auto_depth >= 0) { engine->SetSearchSettings(auto_depth, auto_budget_ms); }
         // The rest of the game is AUTONOMOUS: HumanPlayActive() false and MTG_UNPRUNED suppressed
         // (DecisionUnpruned reads the same flag), exactly as inside the engine's own rollouts --
         // set permanently rather than scoped.
@@ -7882,7 +7890,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& tap_pref_spec = "",
                          bool interactive = false,
                          bool then_auto = false,
-                         const std::string& full_enum_spec = "")
+                         const std::string& full_enum_spec = "",
+                         int auto_depth = -1, int auto_budget_ms = -1)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
@@ -7965,6 +7974,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.tap_pref_by_phase    = ParseTapPrefSpec(tap_pref_spec);
     h.interactive          = interactive;
     h.then_auto            = then_auto;
+    h.auto_depth           = auto_depth;
+    h.auto_budget_ms       = auto_budget_ms;
     // Belt-and-braces (see g_play_hooks_installed): this process drives human choosers, so it must
     // never take the pause fast path even if a future chooser is installed outside Install().
     g_play_hooks_installed = true;
@@ -10109,6 +10120,9 @@ int main(int argc, char* argv[])
             // settings (value_play, else the built-in d5/20), exactly as the goldfish path below
             // resolves them -- the plain claude-play path passes the raw CLI values because its
             // main phases never search.
+            // The PREFIX keeps the raw CLI values (the viewer's: --depth 0 unless given): the engine
+            // applies these settings only at the hand-back (ClaudePlayHarness::auto_depth).
+            int auto_depth = -1, auto_budget_ms = -1;
             if (choices_then_auto)
             {
                 try
@@ -10117,10 +10131,10 @@ int main(int argc, char* argv[])
                         depth_provided  ? lookahead_depth : -1,
                         budget_provided ? timeout_ms      : -1,
                         ignore_play_profile);
-                    lookahead_depth = ps.depth;
-                    timeout_ms      = ps.budget_ms;
+                    auto_depth     = ps.depth;
+                    auto_budget_ms = ps.budget_ms;
                     std::cerr << "[play] depth=" << ps.depth << " budget=" << ps.budget_ms
-                              << "ms source=" << ps.source << " (then-auto)\n";
+                              << "ms source=" << ps.source << " (then-auto, from the hand-back)\n";
                 }
                 catch (const std::exception& e) { std::cerr << "Error: " << e.what() << "\n"; return 1; }
             }
@@ -10129,7 +10143,8 @@ int main(int argc, char* argv[])
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
                                  cast_order_str, storage_hold_str, storage_hold_prompt,
                                  jitte_str, jitte_prompt, force_attackers_str, tap_pref_str,
-                                 play_interactive, choices_then_auto, full_enum_str);
+                                 play_interactive, choices_then_auto, full_enum_str,
+                                 auto_depth, auto_budget_ms);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded
