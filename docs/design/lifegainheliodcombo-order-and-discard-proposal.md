@@ -4,7 +4,57 @@ USER 2026-10-28: *"We should have an order for this deck most likely even if we 
 the Discard rule. You should keep in mind that the combo does make them a bit different. Please create a potential set
 of rules for review."*
 
-Status: **PROPOSAL, nothing implemented.** Today the deck inherits CritterLifegain's USER-settled order
+## USER review (2026-10-28) -- these rulings SUPERSEDE the proposal below where they differ
+
+USER, verbatim: *"Abiding Grace low is correct in Goldfish. It is good with Martyr and not much else. It is much more
+of a menace in real play. A second Ballista is better than a second Heliod, but not particularly strong since its main
+usage is combo I would rank it lower for sure. Heliod on its own is pretty solid and I would keep it sometimes, though
+it may be discardable if there are better payoffs. Your discard rule is probably fine. Martyr's activation timing
+should be as early as possible to get maximum value, not searched. That means Martyr itself needs to go earlier in the
+order."*
+
+What that settles:
+- **Q2 (Abiding Grace low): CONFIRMED.**
+- **Q3 (second Ballista): ranked LOWER.** It stays above a second Heliod (which sheds as a duplicate legend), but drops
+  to the very bottom of the fill (the first fill card to go). Agent reading: a FIRST Ballista with no Heliod in hand or
+  play sits in the fill just above Abiding Grace ("its main usage is combo").
+- **Q4 (Heliod alone): CONFIRMED partner-gated.** Without a Ballista / Ranger-Captain, Heliod is a payoff in the USER's
+  payoff order and may be shed for better payoffs.
+- **Discard rule: accepted as proposed** with the Ballista change above.
+- **Martyr of Sands: activation AS EARLY AS POSSIBLE, NOT SEARCHED, and Martyr EARLIER in the order.** Agent reading of
+  "as early as possible": Martyr is the FIRST cast of the turn (after the land drop -- a Plains is not a white card, so
+  it costs no reveal), ahead even of Abiding Grace, and its activation runs right after it resolves (or before every
+  cast when it is already on the battlefield). Each white card cast before the reveal costs 3 life; a watcher cast
+  first would add only 1 (its trigger on Martyr's entry), and payoffs are only one counter per event either way.
+- **Q1** (Heliod ahead of Voice / Pridemate with a Ballista in the list) was not ruled on; the recommendation (no)
+  stands as the default.
+- Open (agent, surfaced): the USER notes Grace "is good with Martyr". Not built into the rule unless the USER asks: a
+  Martyr in hand / play / graveyard could lift Grace above Ranger-Captain in the fill.
+
+USER, same day, verbatim: *"Ballista's X should be maximum or less to ensure the combo can go off. Unless we have
+reason to believe we need more mana in the turn I would just max it. The activations may as well wait until they would
+make lethal or we are comboing."*
+- **Walking Ballista X: NOT a full 0..max fan any more.** Candidates = the MAXIMUM affordable X, plus the largest X that
+  still leaves the loop's mana (Heliod's {1}{W} grant, or the {4} counter) when that X makes the combo go off this turn.
+  A smaller X is otherwise offered only when the turn needs the mana for something else (agent reading: the plan's other
+  casts already come out of the pool before X is sized, so "max" is the max of what is left).
+- **Ballista activations wait:** the counter pings and the {4} "+1/+1 counter" only when they make lethal or are part of
+  the combo (the loop / the bump into a live loop). Today a LIFELINKED non-lethal ping whose gain something reads is
+  still offered (MTG_LHC_PING_PRUNE keeps it); under this ruling it goes too.
+
+Implementation plan (agreed shape, not built yet): `LifegainHeliodComboProvider` overrides for the order
+(CastOrderRank / CastOrderRankLatest / ArrangeCastOrder / CastOrderingCandidates, on CritterLifegain's helpers: Martyr
+slot 1, Grace slot 2, Ranger-Captain first body, Ballista right after Heliod and never before it -- Heliod's FIRST
+variant keeps Martyr and Grace ahead of it), Martyr pinned to its earliest reveal position (engine: a reveal-outlet
+cast counts as a position boundary in `RevealSlotCounts`; enumeration pins each outlet in place instead of the fan --
+position 0 when on the battlefield at turn start, right after its own cast otherwise; continuations keep the trailing
+pass), XCandidates for the Ballista, CounterPingCounts / {4} gated on lethal-or-combo, and CleanupDiscardCandidates
+(the discard rule above). One lever per rule (MTG_LHC_ORDER, MTG_LHC_MARTYR_EARLY, MTG_LHC_BALLISTA_X,
+MTG_LHC_BALLISTA_WAIT, MTG_LHC_BUCKET_DISCARD), unit tests, held-out A/B on lhc + lhc2hg, every slower game classified.
+
+Status: **USER-reviewed; implementation follows these rulings.** (Original proposal below, unchanged.)
+
+Original status line: **PROPOSAL, nothing implemented.** Today the deck inherits CritterLifegain's USER-settled order
 (`critterlifegain-cast-order-2026-10-14.md`) and discard rule (`critterlifegain-discard-policy-proposal.md`, "SETTLED")
 through `LifegainHeliodComboProvider : CritterLifegainProvider`. The new cards fall into that order's catch-all slots, and
 the discard rule has no notion of the combo. Each rule below is marked **SHARED** (kept from CritterLifegain as it is),
