@@ -38,6 +38,29 @@
     "",
     "=== 2026-10-25T17:26:22  PHASE E.6: no allowance for angels -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "angels-artifact-queue-tool-647f24-20261028T190602",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "43abe76ffe72cfca7816ed53b15137592e10cbb2",
+   "frozen": "1db4218a98b700dd919199b8a32142664e2470de",
+   "src_tree": "6f0ca7ae7b6fd9565a7b85d7fba5b6e84a88b6dc",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.000792,
+   "cost": [
+    0.998590803903881,
+    0.0014244993186229684,
+    96
+   ],
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.000792 t, cost 0.999x (se 0.001, 96 seeds), recipe complete)"
   }
  ]
 }
