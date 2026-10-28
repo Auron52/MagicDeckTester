@@ -1181,6 +1181,78 @@ Artifacts: `logs/cyclone/item8/` (identity batch outputs + per-game `.wins` / `.
 `logs/cyclone/q44/` (the A/B batch, `report.py` / `report.json`, `classify.py` and the per-depth first-divergence
 listings); single-game logs under `build/scratch/cyclone/q44/rep/`.
 
+## Reference games (2026-10-28)
+The USER hand-played the deck's first 10 reference games in the play viewer (primary checkout,
+`references/Unpredictable_Cyclone/claude_s{1..10}_gi{0..9}.json`, committed 3a1b348a4 and on origin/references-autosave;
+copied -- not moved -- onto branch `cyclone-refs` for the replay). USER: *"Many of them I'm sure the clairvoyant search can
+beat since this deck is much much easier to pilot with clairvoyance."* *"We should ensure that, at least, the references can
+be matched."*
+
+**Replay** (`viewer_protocol_check.py --only Unpredictable_Cyclone --strict`): all 10 replay to their recorded result, 0
+play-drift / 0 board-diverged / 0 enum-gap, before and after the changes below (after them the human menus hold the cycle
+seeds, so the recorded indices are re-anchored by content: "repaired"). The whole corpus (678 refs) stays 0 / 0 / 0.
+
+**Match** (`ref_bench.py --deck unpredictable_cyclone`, shipped policy d5 b20 from the profile, forced opening hand, every
+hand verified). Identical before and after the fixes:
+| ref | human | search | d8 b0 | verdict |
+|---|---|---|---|---|
+| s1 gi0 | 5 | 5 | n/a | match |
+| s2 gi1 | 7 | 4 | n/a | search faster (-3) |
+| s3 gi2 | 5 | 4 | n/a | search faster (-1) |
+| s4 gi3 | 7 | 6 | n/a | search faster (-1) |
+| s5 gi4 | 5 | 5 | n/a | match |
+| s6 gi5 | 8 | 5 | n/a | search faster (-3) |
+| s7 gi6 | no win | 4 | n/a | the human did not win; the search wins in round 4 |
+| s8 gi7 | 5 | 5 | n/a | match (the manual-tap game, below) |
+| s9 gi8 | 6 | 5 | n/a | search faster (-1) |
+| s10 gi9 | 5 | 5 | n/a | match |
+Human avg 6.20 (no win = 9), search 4.80: **0 / 10 shortfalls**, 6 faster, 4 equal. No game needed the large-budget
+findability check (the column is for shortfalls). (The search is clairvoyant; the human was not.)
+
+**The manual tap (s8 gi7, decision 15, T4) -- root cause and fix.** Board: Island, Island, Mountain, Mountain; hand Curator
+of Mysteries, Seething Song, Street Wraith, Ulamog, two Unpredictable Cyclone. The human's line: Seething Song (RRRRR) pays
+Cyclone, then cycle Curator ({U}) into the walk (Street Wraith, cycled again into Emrakul -> extra turn -> round-5 kill).
+Auto-payment (replayed without the `tap=` tokens) paid the Song with **Island, Island, Mountain** and left a Mountain, so the
+Curator cycle was not even offered at the next frame; the human tapped Mountain, Mountain, Island by hand. USER: *"My manual
+tap mattered because we left up red when I needed blue for the cycle."* The cycle was a separate, later plan in human play,
+so nothing the payment could see said blue was still owed -- and the SEARCH had the same hole: its plan "Song, Cyclone, cycle
+Curator" (a cycle seed, paid after the casts) silently no-oped on the stranded payment, in rollout and executor alike, at
+every budget (a missing-line defect, not a budget shortfall).
+- **Fix 1 -- the cycle seed holds its colour** (all worlds, lockstep). `PlanTraits::cycle_seed_pips` (from the card's
+  EffectiveCyclingCostFor, never Action::cost, so the executor's traits over its recorded DigDraw equal the rollout's over
+  the plan's seed) feeds `ActLineHoldMask` (MTG_ACT_LINE_HOLD, the trailing-activation hold): owed while the cycler is still
+  in hand; `CycleSeedPayScope` stops the seed's own payment being held against itself (rollout `cycle_chain_step`, human
+  DigDraw pass, executor `PerformDigFull`). Only a provider that searches its cycles carries seeds (CycloneProvider), so every
+  other deck is unchanged. Lossless (the hold is a held-first attempt with an unrestricted retry). Scenario
+  `cyclone_cycle_seed_holds_its_colour`: round-4 kill; with MTG_ACT_LINE_HOLD=0 round 5. Unit `test_cyclone_refs.cpp`
+  (traits lockstep plan vs record; the Song leaves an Island; the seed's own payment takes it; released once cycled; the
+  whole line applied in the rollout reaches Emrakul).
+- **Fix 2 -- cycling is a plan item in human play** (USER: *"Cycling should be a plan item like any other."*). Human play now
+  gets the SAME cycle seeds the search enumerates (one per distinct admitted cycler; the scry and the free cast stay
+  questions at resolution), so a cycle rides in one plan with the casts and land and the plan's payment covers it (Fix 1);
+  `AppendHumanPlayDigPlans` no longer adds standalone twins for those cyclers (a deck that does not search its cycles keeps
+  the standalone digs). CheckLine: new verbs `cycle=` / `sacdraw=` (a DigDraw is matched ONLY by them, never inside the cast
+  multiset); "**" step `cycle=`. Summary: "...cast: Seething Song, Unpredictable Cyclone, cycle Curator of Mysteries
+  (Unpredictable Cyclone: exile until a creature, may cast it free)". Viewer: the hand's cycle badge QUEUES the cycle into the
+  line; a queued cycle ends its segment (the plan cycles after its casts; "cast A, cycle B, cast C" commits as [A, cycle B],
+  [C]); on a standalone-dig deck it is a segment of its own. Scenario `cyclone_human_cycle_in_line_keeps_blue` (the human
+  line, auto-paid, round-4 kill).
+- **Fix 3 -- the Remand prompts say they are PAID** (USER: *"it isn't really a free cast ... It is just that we don't have to pay
+  more than 2 mana for it."*). The Remand / Remand-on-Remand prompts reuse `free_cast` (same `source`, encoding and frame
+  identity, so every reference replays); they now carry `paid_cost` / `paid_target` / `paid_outcome` (FreeCastPaidInfo,
+  worded from card parameters -- cant_be_countered, the Remand's draw), and `freeCastPanelHtml` renders "Cast Remand on
+  Emrakul, the Aeons Torn? (pay {1}{U})" with what happens, instead of the World War Hulk "cast for free" text.
+
+Validation: unit 2097/2097, scenarios 332/332, viewer_linebuild_check 0 FAIL, viewer_protocol_check --strict 678 refs 0
+play-drift / 0 board-diverged / 0 enum-gap, smoke 149/149 PASS with play-changed 0 (searched and d0) on every suite deck
+(THREADS=4, MTG_PGO=0; the hold and the human seeds are inert without a cycle-searching provider). No GT accept.
+
+Open (for the USER): QR1 -- plan-item cycling is wired for decks whose provider SEARCHES its cycles (Cyclone); on every other
+deck a cycle is still a standalone plan (the search there uses the generic dig gate, the USER's 2026-09-29 rule), but the
+viewer badge now QUEUES it (as its own segment) instead of firing at once -- extend plan-item cycling to every deck?
+Default: Cyclone-style decks only. QR2 -- the four tied games (s1, s5, s8, s10, all T5): worth a large-budget look for a T4
+line? Default: no, the USER's bar (match every reference) is met.
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1427,6 +1499,11 @@ listings); single-game logs under `build/scratch/cyclone/q44/rep/`.
   themselves -- the 0 charge made rank 0 the generic shed order's tie-break (it put the sole Cyclone / a Curator on top),
   which is where the held-out loss came from. Pairs naturally with Q44(2) / Q42 (a sane Cyclone shed order fixes the
   tie-break too). Measuring it is one more pooled A/B (~1 h at 14 threads). Default: not built.
+- QR1. (Reference games 2026-10-28) Plan-item cycling in the viewer is wired for decks whose provider SEARCHES its
+  cycles (Cyclone); elsewhere a cycle stays a standalone plan, but the viewer badge now QUEUES it as its own segment instead
+  of firing at once. Extend plan-item cycling to every deck? Default: Cyclone-style decks only.
+- QR2. The four tied reference games (s1, s5, s8, s10, T5): a large-budget hunt for a T4 line? Default: no (bar met).
+
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
