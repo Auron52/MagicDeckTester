@@ -837,6 +837,15 @@
     "toughness": "4",
     "type_line": "Creature — Badger Druid"
   },
+  "Brindle Boar": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Sacrifice this creature: You gain 4 life.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Boar"
+  },
   "Bruna, Light of Alabaster": {
     "cmc": 6.0,
     "keywords": [
@@ -1180,6 +1189,18 @@
     "power": "2",
     "toughness": "4",
     "type_line": "Enchantment Creature — Centaur"
+  },
+  "Crab Umbra": {
+    "cmc": 1.0,
+    "keywords": [
+      "Enchant",
+      "Umbra armor"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Enchant creature\n{2}{U}: Untap enchanted creature.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
   },
   "Crackle with Power": {
     "cmc": 2.0,
@@ -1771,6 +1792,17 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Ezuri, Renegade Leader": {
+    "cmc": 3.0,
+    "keywords": [
+      "Regenerate"
+    ],
+    "mana_cost": "{1}{G}{G}",
+    "oracle_text": "{G}: Regenerate another target Elf.\n{2}{G}{G}{G}: Elf creatures you control get +3/+3 and gain trample until end of turn.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Elf Warrior"
+  },
   "Faeburrow Elder": {
     "cmc": 3.0,
     "keywords": [
@@ -2115,6 +2147,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Sliver"
+  },
+  "Galvanic Alchemist": {
+    "cmc": 3.0,
+    "keywords": [
+      "Soulbond"
+    ],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Soulbond (You may pair this creature with another unpaired creature when either enters. They remain paired for as long as you control both of them.)\nAs long as this creature is paired with another creature, each of those creatures has \"{2}{U}: Untap this creature.\"",
+    "power": "1",
+    "toughness": "4",
+    "type_line": "Creature — Human Wizard"
   },
   "Gamble": {
     "cmc": 1.0,
@@ -4590,6 +4633,15 @@
     "toughness": "2",
     "type_line": "Creature — Ooze"
   },
+  "Scholar of Athreos": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "{2}{B}: Each opponent loses 1 life. You gain life equal to the life lost this way.",
+    "power": "1",
+    "toughness": "4",
+    "type_line": "Creature — Human Cleric"
+  },
   "Scourge of Valkas": {
     "cmc": 5.0,
     "keywords": [
@@ -5205,6 +5257,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Legendary Creature — Dwarf Advisor"
+  },
+  "Staff of Domination": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "{1}: Untap this artifact.\n{2}, {T}: You gain 1 life.\n{3}, {T}: Untap target creature.\n{4}, {T}: Tap target creature.\n{5}, {T}: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
   },
   "Staunch Crewmate": {
     "cmc": 2.0,
@@ -5909,6 +5970,17 @@
     "toughness": "2",
     "type_line": "Creature — Fungus"
   },
+  "Utopia Sprawl": {
+    "cmc": 1.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Enchant Forest\nAs this Aura enters, choose a color.\nWhenever enchanted Forest is tapped for mana, its controller adds an additional one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Utvara Hellkite": {
     "cmc": 8.0,
     "keywords": [
@@ -6083,6 +6155,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Weather the Storm": {
+    "cmc": 2.0,
+    "keywords": [
+      "Storm"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "You gain 3 life.\nStorm (When you cast this spell, copy it for each spell cast before it this turn.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Wellwisher": {
     "cmc": 2.0,
