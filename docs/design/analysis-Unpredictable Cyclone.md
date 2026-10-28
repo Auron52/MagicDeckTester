@@ -1253,6 +1253,104 @@ viewer badge now QUEUES it (as its own segment) instead of firing at once -- ext
 Default: Cyclone-style decks only. QR2 -- the four tied games (s1, s5, s8, s10, all T5): worth a large-budget look for a T4
 line? Default: no, the USER's bar (match every reference) is met.
 
+## Memory: M1/M3 lazy fans + M2 stored-size pricing (2026-10-28)
+Design: `docs/design/cantrip-search-optimization.md` §4 (M1, M2, M3) and §6 item 7. Branch `cyclone-mem` (LOCAL), off
+330cc85bf. Scratch `build/scratch/cyclone/mem/`; summaries `logs/cyclone/mem/`.
+
+**Where the pool's bytes were (measured first, before any change).** The 8-game single-thread probe (seed 7600, d3 b10,
+`--ignore-play-profile`, profile attached, pool BOUNDED at 8 GB so nothing is refused) with the new per-cache breakdown
+(`MTG_PLAN_POOL_STATS=1`): the whole pool peak (1,774,286 KB) is the BREAKPOINT CONTINUATION cache; the m1 enum memo peaked
+at 443 KB and the m2 memo at 0. Of the 8,942,286 plans that cache stored, 7,707,972 (86%; 89% of the bytes) were
+Brainstorm / Brainsurge put-back clones and 513,768 (5.7%) Ponder ORDER clones; tutor clones 6, look-top 0. So M1 (the bp
+cache) and the Ponder half of M3 are the whole of it on this deck.
+
+**What was built (0fce7726a).**
+- **M1** (`MTG_BP_LAZY_CANDS`, DEFAULT ON). `BpDeriveContinuationList` enumerates with a lazy layout and runs its three
+  post-steps on POSITIONS: the new-only filter (the verdict read off a synthesised entry's prototype -- `keep()` reads only
+  the actions and the land fields, which a clone shares), the `MTG_BP_CANDS_ORDER` ranking (MoveOrderLess on positions,
+  the `PbLazyOrderFs` argument) and the condemnation DEMOTE stable partition; the result is a SELECTION (`CandOrder.perm`,
+  possibly shorter than the full list), then COMPACTED (only the real entries and fans it names are kept; the selection
+  dropped when it is the identity). `BpEnumEntry` holds `plans` + `lazy` + `ord`; every reader goes through `View()` /
+  `Size()`: the node's `g_bp_cands_pb` channel (`PutBackClone` / `Shared`), the chain scan (`BpChainCandIndexView`),
+  `out = cands[k]` (`CopyTo`, one copy), the canon front, the EMPTY pre-skip (real entries only -- a synthesised entry
+  carries its fan's varied field, so it is never apply-empty), the verifiers (materialised). The executor's
+  `EnumerateBreakpointPlans` materialises (a copy, as before); `EnumerateBreakpointPlansRef` materialises a lazy entry into
+  a thread copy. The m2 memo's promotion store keeps the lazy form and hands the list back whole. The SKIP marking mode
+  (rewrites entries in place) and front-only derivations stay whole. A lazy bp entry is priced at its EXACT materialised
+  size (`BpLazyFullBytes`: the stored list is shrunk before pricing, so there is no slack to reproduce) -- admission,
+  residency and units unchanged.
+- **M3.** `PbLazyLayout` is now a list of BLOCKS of fans (each block right before a fixed real entry) instead of one block
+  plus one twin block; fan kinds put-back / look-top / Ponder ORDER (`MTG_PB_LAZY_PONDER`, DEFAULT ON); a soulbond twin is
+  a fan of its own (its prototype carries the twin's two edits) in a twin block at the twins' position. Look-top fans now
+  coexist with a put-back block (before, the look-top fan stayed whole behind one). NOT lazy, by construction (the
+  layout's note): the Ponder KEEP-vs-SHUFFLE pair (it varies `actions[ai].ponder_keep` and leaves `ponder_choice` at -1,
+  so later axes -- the put-back axis among them -- clone those clones: a cross product) and the TUTOR fan (it sits before
+  the Ponder and put-back axes, which clone tutor variants; 6 of 8.9M stored plans on the probe).
+- **Verify** (`MTG_PB_LAZY_CANDS_VERIFY`) now also re-runs the bp post-steps on the materialised derivation and compares
+  every position and the demoted list; its enumeration check compares the dig / bounce fold ids up to a consistent
+  relabelling (their counters -- `NextDigGroup`, the bounce axis's -- cannot be rewound by the second run: Hinata read 92
+  false MISMATCHes on 4 d5 games with the PRE-change binary too).
+
+**Verify: 0 mismatches.** Single thread: Cyclone d3 b10 x4 (seed 7700) + d5 b20 x2 (7900) -- enumeration 18.9M entries,
+bp pipeline 10.0M entries; Hinata2 d3 x8 / d5 x4 (`--ignore-play-profile`); NivMizzetCombo d3 x4 with
+`MTG_NIV_PONDER_KEEP_SHUFFLE=0 MTG_NIV_BRAINSTORM_SINGLE=0` (so its Ponder ORDER and put-back fans -- and the Tandem
+Lookout twins -- are lazy); LandfallElementals d3 x4 (look-top blocks).
+
+**Byte-identity (M1 + M3, M2 off).** Pre-change binary (330cc85bf) vs the change, the same manifest (d3 b10 x80 seed 101000
+`--ignore-play-profile`, d5 b20 x40 seed 102000 at the play settings), concurrently, 2 threads each, pool bounded at 20 GB
+(no refusal in either: base printed no [determinism] warning, the change `refused=0`; hiwater 17.8 / 17.7 GB -- the pool
+that does not bind on 2 threads is ~18 GB): **120 / 120 per-game digests, win turns and work units identical** (job digests
+d3 80fd5a152c977144, d5 28986e8bd1a3992d on both). The final build (canon-front view path, verifier) re-checked on the
+first 24 + 12 games: 36 / 36 identical. Smoke (THREADS=8): **149 / 149 PASS, play-changed 0** (searched and d0). Unit
+2099 / 2099, scenarios 333 / 333.
+
+| 8-game probe (seed 7600, 1 thread, pool 8 GB) | max RSS | pool hiwater | stored bp entries priced / resident |
+|---|---|---|---|
+| before (330cc85bf) | 2,081,396 KB | 1,774,286 KB | -- (all materialised: 15.1 GB cumulative) |
+| M1 + M3 | **250,424 KB** | 1,774,286 KB (priced as before) | 14.65 GB / 0.82 GB (39,599 lazy lists) |
+| M1 + M3 + M2 | **244,648 KB** | **162,514 KB** | 0.82 GB / 0.82 GB |
+The identity batch: max RSS 20,103,904 KB (base) -> 918,464 KB (the change), 2 threads each, same games.
+
+**M2: price lazy entries at their STORED size** (`MTG_PLAN_CACHE_STORED_PRICE`; the bp cache, the m1 enum memo and the m2
+memo all charge `PbLazyStoredBytes` -- real entries, one prototype per fan, the pin rows, the layout's index vectors and the
+selection). It changes pool ADMISSION wherever the pool binds, so it was measured as a play change. **ADOPTED, DEFAULT ON**
+(the brief's bar: not worse, and it removes the warning); `=0` restores the materialised price.
+
+(a) **Determinism (Q34).** The same manifest (d3 b10 x48 seed 101000 `--ignore-play-profile`, d5 b20 x24 seed 102000) at 6
+and at 12 threads, the SHIPPED pool (unset: 2,400 MB, 24 x 100 MB), M2 on and off:
+| run | refused stores | pool peak | [determinism] warning | vs the same arm at the other thread count |
+|---|---|---|---|---|
+| M2 off, 6 threads | 427 | 2,457,599 KB (full) | yes | -- |
+| M2 off, 12 threads | 1,121 | 2,457,599 KB (full) | yes | 72 / 72 digests + units identical |
+| M2 on, 6 threads | **0** | 528,845 KB | **no** | -- |
+| M2 on, 12 threads | **0** | 716,906 KB | **no** | 72 / 72 digests + units identical |
+All four runs are byte-identical to each other (digests, win turns, units) on this sample: the refusals were there, but on
+these 72 games none moved a unit. They do move one on a larger sample -- (b)'s d3 gi79 -- and that one is exactly the Q34
+mechanism: the M2-off batch read 6,315,715 units, while the same game ALONE (single thread, no refusal) reads 6,315,629 in
+BOTH arms, which is what the M2-on batch read. With M2 the pool no longer binds at 6 or 12 threads at the shipped size, so a
+pooled Cyclone result is reproducible across thread counts by construction (no refusal), not just on a lucky sample.
+
+(b) **Held-out paired A/B, M2 on vs off** (fresh seeds 107000 d3 b10 x200 `--ignore-play-profile` and 108000 d5 b20 x100
+at the play settings -- unused anywhere in the ledger or the Cyclone scratch; profile attached; the shipped pool; the two
+arms as two processes run CONCURRENTLY, 6 threads each -- the pool is process-global, so arms that price it differently
+cannot share one; Release binaries run directly, i.e. no PGO on either arm):
+| depth | n | off | on | delta (se) | on slower / faster | identical digests | units on/off |
+|---|---|---|---|---|---|---|---|
+| d3 b10 | 200 | 5.1400 | 5.1400 | **0.000 (0.000)** | 0 / 0 | 200 / 200 | x1.0000 (302,111,591 -> 302,111,505; gi79 -86) |
+| d5 b20 | 100 | 5.1200 | 5.1200 | **0.000 (0.000)** | 0 / 0 | 100 / 100 | x1.0000 (210,363,691 both) |
+| | refused stores | pool peak | max RSS | process wall | summed thread-ms d3 / d5 |
+| off | 4,458 (+ warning) | 2,457,599 KB | 1,135,012 KB | 2,597 s | 8,691,990 / 6,594,463 |
+| on | 0 | 1,254,460 KB | 1,967,404 KB | 2,582 s (-0.6%) | 8,616,419 (-0.9%) / 6,562,236 (-0.5%) |
+Peak RSS RISES (1.1 -> 2.0 GB at 6 threads) because the pool is now spent on what it really holds: entries the materialised
+price refused are resident. That is the point of the change and stays far under the old 3+ GB / worker. The wall reading is
+inside the noise of a box at load average ~30 (another agent's batches ran throughout) and is not claimed.
+
+**Verdict: M2 ships DEFAULT ON** -- quality identical (0 of 300 games changed a digest or a win turn), the [determinism]
+warning gone at the shipped pool at 6 and 12 threads, units identical except the one interleaving artifact it removes. Smoke
+with M2 on (THREADS=8): **149 / 149 PASS, play-changed 0** (searched and d0; no smoke deck's pool binds, so M2 cannot
+move one) -- no GT accept. Unit 2099 / 2099, scenarios 333 / 333. Artifacts: `logs/cyclone/mem/` (identity.txt,
+determinism.txt, m2_ab.txt, probe.txt, verify.txt, both smoke logs, the manifests, cmp.py).
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1412,7 +1510,12 @@ line? Default: no, the USER's bar (match every reference) is met.
 - Q34. The plan-cache pool BINDS on this deck even at 11.7 GB on 24 threads, so its pooled results are not byte-identical
   across thread counts / interleavings (the batch's [determinism] WARNING). Once in the suite its GT would not be
   reproducible at a different thread count. The put-back single pick removes it (123 MB per worker). Default: disclosed;
-  no pool change made.
+  no pool change made. **RESOLVED 2026-10-28 by M1 + M2** ("Memory: M1/M3 lazy fans + M2 stored-size pricing"): the bp
+  continuation cache now holds its put-back / Ponder fans lazily (the 8-game probe's max RSS 2.08 GB -> 0.25 GB) and the
+  pool charges what is stored (M2, default ON), so at the SHIPPED 2.4 GB pool a Cyclone batch refuses nothing at 6 or 12
+  threads (peak 0.5-1.3 GB; the warning is gone) and the same manifest is byte-identical at 6 and 12 threads. The one
+  measured artifact of the old binding (held-out d3 gi79, +86 units in the M2-off batch only) reproduces alone at the M2-on
+  value. Nothing to decide unless the USER wants the old pricing back (`MTG_PLAN_CACHE_STORED_PRICE=0`).
 - Q35. LTP measured neutral (+0.005, se 0.037) and 8% cheaper; its 11 losses are shuffle luck by the salt ensemble (still
   slower in 1 of 11 under four other search shuffles). The Tarn rule is the only USER rule with a clear gain (-0.06 turns);
   5 of its 18 losses persist across salts (gi 25, 61, 130, 154, 184 of seed 81000 d3) -- root-cause them if the rule is to
@@ -1499,6 +1602,13 @@ line? Default: no, the USER's bar (match every reference) is met.
   themselves -- the 0 charge made rank 0 the generic shed order's tie-break (it put the sole Cyclone / a Curator on top),
   which is where the held-out loss came from. Pairs naturally with Q44(2) / Q42 (a sane Cyclone shed order fixes the
   tie-break too). Measuring it is one more pooled A/B (~1 h at 14 threads). Default: not built.
+- Q53. M2 (stored-size pricing, `MTG_PLAN_CACHE_STORED_PRICE`) is ADOPTED DEFAULT ON (agent's call under the brief's bar:
+  0 of 300 held-out games changed, the [determinism] warning gone at the shipped pool). It applies to every deck, but it can
+  only change admission where a lazily held list sits in a pool that binds -- smoke (149 cases) is unchanged with it. Peak RSS
+  rises where the pool used to bind (Cyclone 6 threads 1.1 -> 2.0 GB): the pool is now spent on what it holds. Veto? Default:
+  ON. Also disclosed, not changed: the m1 / m2 enum memos price a lazy list under `=0` at PbLazyListBytes, which does not
+  reproduce the materialised vector's growth slack (pre-existing for the m1 memo; new for the m2 memo, which stored 0 lazy
+  lists on every deck checked).
 - QR1. (Reference games 2026-10-28) Plan-item cycling in the viewer is wired for decks whose provider SEARCHES its
   cycles (Cyclone); elsewhere a cycle stays a standalone plan, but the viewer badge now QUEUES it as its own segment instead
   of firing at once. Extend plan-item cycling to every deck? Default: Cyclone-style decks only.

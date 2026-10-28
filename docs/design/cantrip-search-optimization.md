@@ -552,6 +552,17 @@ clone for a 3-action plan. The pool (`plancache`, 78825-78918) prices entries wi
 - The ledger's numbers agree: unbounded pool demand 3.27 GB and max RSS 3.85 GB per worker. With
   the single pick it is 123 MB and 190 MB.
 
+**STATUS (2026-10-28, branch `cyclone-mem`; full record in the ledger's "Memory: M1/M3 lazy fans + M2 stored-size
+pricing").** M1 and M3 BUILT and byte-identical (0fce7726a): the bp cache holds its lists lazily (a selection over
+blocks of fans), the m2 memo's store too, and the layout holds several blocks and fan kinds (put-back, look-top, Ponder
+ORDER). Measured first: on the 8-game probe the bp cache was 100% of the pool's peak, 86% of its plans put-back clones and
+5.7% Ponder clones; the m1 / m2 memos held almost nothing. Probe max RSS 2.08 GB -> 0.25 GB; a 2-thread 120-game batch
+20.1 GB -> 0.92 GB. M2 BUILT and ADOPTED DEFAULT ON (`MTG_PLAN_CACHE_STORED_PRICE`; =0 restores the
+materialised price): on held-out Cyclone seeds (d3 x200 + d5 x100, the shipped 2.4 GB pool) 300 / 300 games identical,
+refusals 4,458 -> 0 and the `[determinism] WARNING` gone; the same manifest at 6 and 12 threads is byte-identical. The
+probe's pool peak 1.77 GB -> 0.16 GB.
+NOT lazy (and why): the Ponder keep-vs-shuffle pair and the tutor fan -- later axes clone those clones.
+
 **Fixes:**
 - **M1 (sound, byte-identical in content).** Carry `PbLazyLayout` through `BpDeriveContinuationList`
   into `BpEnumEntry`, and through the m2 memo.
@@ -606,7 +617,7 @@ five-fold.
 | 4 | **F4 stranded-cast pairs + F5 cross-base truncated-prefix decline** | sound (F5 identity; F4 degenerate-line) | F4 -25..-46% on fans with tails in nested solves; F5 (tails - 1) x w applies per node | Cyclone | Verify modes (apply both, compare the realised record or state key); held-out A/B; units |
 | 5 | **F3 shuffle mirror fold** (plan-level now; node-level for continuations) | sound identity (exact under `ShuffleByKey`) | halves the shuffle-branch fans | Cyclone | Verify (state equality); A/B read with the re-salt clairvoyance method |
 | 6 | **Prunes PB-KEEP, PB-ELDRAZI, PB-NOCREATURE-ABOVE, PB-SHUFFLE, PONDER-GOOFF, SINGLE**, each hard and staged | LOSSY when hard (USER's call); staged = re-price | fan ~56 -> ~4-8 hard; SINGLE x0.25 | Cyclone | One pooled batch, one per-job flag per lever plus the all-on arm, held-out paired d3/d5; slower games at d8 b0 and the re-salt reading; results to the USER |
-| 7 | **M1/M3 lazy fans in the bp cache and m2 memo; M2 stored-size pricing** | M1/M3 sound (byte-identical); M2 re-price | RSS 3.85 GB -> Hinata-level expected; determinism warning gone | Cyclone, Niv | Verify mode; RSS and pool hiwater on the 8-game single-thread probe (`MTG_PLAN_CACHE_KB=0`); smoke byte-identity for M1; A/B for M2 |
+| 7 | **M1/M3 lazy fans in the bp cache and m2 memo; M2 stored-size pricing** -- DONE 2026-10-28 (§4 STATUS) | M1/M3 sound (byte-identical); M2 re-price | measured: probe RSS 2.08 -> 0.25 GB, pool peak 1.77 -> 0.16 GB (M2); determinism warning gone at the shipped pool | Cyclone (Niv / Hinata / LandfallElementals lists lazy too, byte-identical) | Verify mode 0 mismatches; 120-game byte-identity vs the pre-change binary; smoke play-changed 0; M2 held-out A/B 300 / 300 identical (ledger) |
 | 8 | **Per-fan ranking cache + prefix snapshot** | sound, byte-identical | wall only (prefix apply x (w-1) per fan; the ranking per apply) | all three | Byte-identity on smoke + 100 Cyclone games; wall A/B with `MTG_PGO=0` on both arms |
 | 9 | **F1 Ponder identical-name fold; F7 tail fold; F6 inert-class merge** | sound | Ponder 6 -> 2-3 variants on duplicate looks; small elsewhere | Hinata, Cyclone | Verify mode; Hinata smoke/regression GT accept plus a held-out A/B |
 | 10 | Preordain as a searched scry (Niv Q14), using item 1's order + item 2's waves | completeness (adds width 5, F1-folded) | quality, not cost | Niv, Hinata | The USER's decision first; then held-out A/B |
