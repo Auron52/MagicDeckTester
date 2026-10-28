@@ -1080,6 +1080,107 @@ un-replayed on its slower side). The lines ARE taken (chains in ~9% of games, De
 cheap cantrips, i.e. the search spends four mana to cycle a Remand when it sees the card it draws. Recommendation
 (the USER decides, Q47): keep the shipped ceiling 1 and leave the chain and the Deluge switch off.
 
+### Cantrip scorer: item 8 cache + Q44(1) (2026-10-28)
+
+**Item 8, the per-fan ranking cache (a pure speedup; byte-identical).** Every searched member of a put-back / Ponder
+fan re-applies the same prefix, reaches the SAME resolution and used to re-derive the readiness and re-score the whole
+fan (Q46). Built (`core/SpellEffects.h` `cantriporder::RankCache`, `DecisionProvider::CantripOrderKey`,
+`CycloneProvider::CantripOrderKey`): a per-thread, direct-mapped (256 slots) cache of the scored order -- the put-back's
+sorted permutation, Ponder's per-candidate scores -- keyed WORD FOR WORD (the hash only picks the slot) on the
+provider's declared inputs (our permanents by interned name + tapped + def_absent, the hand in order with P/T and name
+hash, life, land drop played / available, the per-job flags) plus the candidate list (put-back: take, count and every
+(top, second) hand-index pair in the existing order; Ponder: the looked cards, draw_now, every base disposition and the
+library top three the shuffle's score reads). A provider without a key (every deck but Cyclone) never reaches it.
+`MTG_CANTRIP_RANK_CACHE=0` turns it off; `MTG_CANTRIP_RANK_CACHE_VERIFY=1` re-derives every hit and aborts on a
+mismatch. Not built: the design row's other half, the PREFIX SNAPSHOT (skipping the w-1 prefix re-applies), which is
+a search-side change.
+
+*Byte-identity.* Pre-change binary (HEAD f5fe48a8d, built from a clean `src/`) vs the cache build, the same manifest
+(d3 b10 x120 seed 101000 `--ignore-play-profile`, d5 b20 x120 seed 102000 at the play settings), run CONCURRENTLY (5
+threads each, the same box state), `MTG_PLAN_CACHE_KB=0` (= UNBOUNDED for the plan cache -- not "off", see the note below
+-- so no pool refusals and the runs are deterministic): **240 / 240 per-game digests, win turns and work units identical**
+(`d3.wins` / `d5.wins` / `.units` byte-equal; job digests d3 f023f43f1acfb34c, d5 e54967469a8fa241 on both). VERIFY
+(`MTG_CANTRIP_RANK_CACHE_VERIFY=1`, 6 games seed 7700 d5 b20, single thread): 8,524,841 hits each re-derived, 0
+mismatches. Unit: a new case warms the cache and checks nine one-input variations (a land tapped, the drop, life, a bonus
+drop, the hand order, a permanent removed / added, a Cyclone out, the per-job flags) rank-for-rank against the uncached
+reference enumeration.
+
+*Wall* (MTG_PGO=0 is a harness setting; both arms are Release binaries run directly). Pooled batch above: process wall
+1835.5 s -> 1782.6 s (**-2.9%**); summed per-game thread-ms d3 2.874M -> 2.929M (+1.9%), d5 5.895M -> 5.496M (-6.8%),
+total 8.768M -> 8.425M (**-3.9%**) -- a noisy reading: the other worktree's compiles and one of mine (4 jobs) ran during
+it. The scorer's own cost, `MTG_CANTRIP_ORDER_COST=1` on the Q46 probe (8 games seed 7600 d3 b10, single thread, both
+binaries concurrently): **14.57 s -> 8.52 s** (2.57 -> 1.51 us per resolution; 9.9% -> 6.1% of the process), **hit rate
+91.8%** (5,196,027 of 5,661,831 resolutions); process wall 146.7 s -> 139.0 s (**-5.2%**). The residual 1.5 us per
+resolution is the key itself (the walk that lists the fan, ~80 key words, one allocation) and, for Ponder (~20% of the
+resolutions), the base list (the provider's pick + the seven enumerated dispositions), which is still built before the
+lookup because the provider's pick may read any state; caching it would need the provider to key that read too.
+Note: `MTG_PLAN_CACHE_KB=0` means UNBOUNDED, not off (`plancache::Fits`: `b <= 0` admits every store; the comment above
+`plancache::BudgetBytes` reads "=0 = off"). A 10-thread Cyclone batch reached a 31.6 GB plan pool in under two minutes
+and the rss-cap watchdog killed it; the A/B below ran at `MTG_PLAN_CACHE_KB=10000000`. The item-7 probe in the design
+(`MTG_PLAN_CACHE_KB=0`) is therefore an unbounded-cache probe.
+
+**Q44(1), the usable-before-redraw amendment (`MTG_CYCLONE_PUTBACK_USABLE`, per-job heurarm slot; built DEFAULT OFF).**
+In the put-back score a card at a position p <= k (drawn back before go-off) is charged a quarter of its keep need; with
+the switch on it is charged 0 when it cannot be USED before it returns: a land when no land drop is open before turn p,
+anything else when its cheapest use (mana value, or its cycling cost's) is above the mana the go-off estimate projects
+for turn p - 1 (`CycloneGoOff` now records the projection for t = 0 and 1 and the open drop in `aux`; `aux` grew 12 ->
+16). Only when no shuffle is available after the cantrip (a shuffle would lose the card). An ORDER only. Unit
+(`test_cyclone_cantrip_order.cpp`, 1 case / 4 subcases): gi13's T1 state (k = 3, Vents tapped, drop used) puts back
+[x, Brainsurge] with no Remand when on and [Remand, Remand] when off; the candidate multiset is unchanged; a shuffle
+after the cantrip and a fully castable hand leave the old order in force. Scenario
+`cyclone_putback_unusable_before_redraw` (gi13's position, d5 b20, `env` turns the switch on): `REVEAL Brainstorm (put
+back): Brainsurge, Brainsurge`; it FAILS with the switch off. The motivating game itself (seed 102013 gi13, d5 b20,
+single game): off T7 (reproduces the ledger), **on T5** (it now puts back [Scalding Tarn, Xander's Lounge] -- two lands
+it cannot play before they return).
+
+*Held-out paired A/B* (ONE pooled batch, 14 threads, binary = the item-8 build + the amendment; FRESH outcome seeds
+103000 d3 b10 x400 `--ignore-play-profile` and 104000 d5 b20 x200 at the play settings -- used before only as the
+lockstep checks' seeds, whose outcomes were never read; profile attached; `MTG_PLAN_CACHE_KB=10000000`, which bound
+(4,576 refused stores: paired, not byte-reproducible across interleavings; every slower game below reproduced exactly as
+a single game)). delta = on - off in average win turn (unwon = 9; + = on slower):
+
+| depth | n | off | on | delta (se) | on slower / faster | identical games | units on/off |
+|---|---|---|---|---|---|---|---|
+| d3 b10 | 400 | 5.2175 | 5.2325 | **+0.015 (0.027)** | 41 / 38 | 101 | x1.000 |
+| d5 b20 | 200 | 5.2100 | 5.2550 | **+0.045 (0.039)** | 23 / 18 | 43 | x1.015 |
+
+*The 64 slower games, root-caused* (each replayed as a single game for both arms with full logs, `rep.sh`; all 64
+reproduce the batch's win turns; first divergence of the two action logs, `classify.py`; `classify_d3.txt` /
+`classify_d5.txt`):
+| first divergence | d3 | d5 | mechanism |
+|---|---|---|---|
+| a root decision BEFORE any put-back differs (a land, a cast, a cycle, Ponder's keep/shuffle) | 29 | 16 | (c) budget butterfly: the amended rank 0 changes every rollout's put-back, so the root's evaluations move and a different (near-equal) line is taken under the binding budget |
+| a draw order after identical visible actions (a fetch target / crack timing the log does not show) | 7 | 3 | (c) the same, through an unlogged decision |
+| the put-back itself | 5 | 4 | below |
+
+The nine direct put-back divergences show the amendment's mechanism. It puts back the cards it cannot use before the
+next draw step -- the SOLE Unpredictable Cyclone (d3 gi12, gi289, gi392: [Cyclone, Island] on top), a Curator of
+Mysteries whose {U} cycle is unaffordable this turn (d3 gi153, gi253; d5 gi64, gi101, gi103), two Ulamogs (d5 gi184).
+In the pure card-flow model these are EQUIVALENT to the old pick: both put-back cards are drawn again by turn p, so by
+then the hand is the same either way; only what is in hand during the gap differs, and the amendment is right that
+nothing in it could be used. The slower results come later: the following turns' search choices differ (gi64: off
+cycles Curator + Wraith on T2, on holds them), and in d5 gi103 the tie broke toward keeping Xander's Lounge (enters
+tapped) over Steam Vents, so T4 had one mana less and could not cast Ponder + Long-Term Plans -- a tapped-vs-untapped
+land tie the score does not see. The structural finding: **charging 0 flattens most of an early put-back fan to the
+same score, so rank 0 is decided by the existing order's tie-break, which is the generic shed order** (the order that
+ranks the sole Cyclone most expendable, Q42 / Q44(2)). The old score's need/4 kept a need ordering among those cards.
+
+*d8 b0 recovery:* not run. The adoption bar applies to an adoption, and the switch is not adopted; the amendment is an
+ORDER (the candidate set is unchanged), so at an unlimited budget it differs from the shipped order only through ties.
+(The cantrip-item-1 d8 b0 repros of d5 gi13 / d3 gi96 were killed by the main session after 5 h 06 m at 3.5-9.7 GB RSS
+each without finishing: **d8 b0 is not tractable on these Cyclone games**; a future check should cap each game at ~90 min
+and fall back to d7 / d6 b0, in one pooled batch.)
+
+**Verdict (the user may veto): Q44(1) is NOT adopted -- shipped DEFAULT OFF.** It fixes the motivating game (gi13 T7 ->
+T5) but is worse, not better, on the held-out sample at both depths (d3 +0.015, d5 +0.045; neither significant, t 0.55
+/ 1.15), at equal units. The proposed refinement (Q52) keeps the need ordering: charge an unusable early card a small
+residual (e.g. need / 16) instead of 0, so unusable cards still go back before usable ones but rank among themselves by
+need, and the Cyclone / a cycler no longer ties with a dead card. Not built or measured here.
+
+Artifacts: `logs/cyclone/item8/` (identity batch outputs + per-game `.wins` / `.units`, the cost probe, VERIFY) and
+`logs/cyclone/q44/` (the A/B batch, `report.py` / `report.json`, `classify.py` and the per-depth first-divergence
+listings); single-game logs under `build/scratch/cyclone/q44/rep/`.
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1287,11 +1388,22 @@ cheap cantrips, i.e. the search spends four mana to cycle a Remand when it sees 
   its redraw costs ~0 to put back (the Niv "can't use yet" rule; d5 gi13 kept two uncastable Brainsurges and put back two
   Remands); (2) the cleanup overflow -- the deck's generic shed order sheds the sole Unpredictable Cyclone (d5 gi5; recovers
   at d8 b0), best fixed by a Cyclone cleanup discard that never sheds it (Q42's derived order). Default: neither built.
+  **UPDATED 2026-10-28 (section "Cantrip scorer: item 8 cache + Q44(1)"):** (1) BUILT as `MTG_CYCLONE_PUTBACK_USABLE`
+  and measured on fresh held-out seeds (103000 d3 b10 x400, 104000 d5 b20 x200): on - off **d3 +0.015 (se 0.027), d5
+  +0.045 (se 0.039)**, units x1.000 / x1.015 -- not better, so it ships **DEFAULT OFF** (the agent's call on an
+  agent-proposed fix; veto if you want it on). It does fix gi13 (T7 -> T5). Mechanism: charging 0 flattens the early
+  put-back fan to ties broken by the generic shed order (it puts back the sole Cyclone or a Curator on top). Refinement
+  proposed in Q52. (2) not touched (USER-owned, tied to Q42).
 - Q45. The put-back game-log record (a DRAW for each drawn-and-put-back card + a "<card> (put back)" REVEAL) is log only and
   NOT folded into the play digest, so no GT moved (smoke play-changed 0). Folding it would make the digest see a put-back
   change directly, at the price of a NivMizzetCombo GT rebaseline (its Brainstorm games). Default: not folded.
 - Q46. The scored order costs 8.9% of wall (4.07 us per resolution, re-derived at every apply of every fan member); units
   and play are unaffected. Plan item 8's per-fan ranking cache removes it. Default: left to item 8.
+  **DONE 2026-10-28 (item 8 built, byte-identical: 240 / 240 games' digests and units equal vs the pre-change binary,
+  VERIFY 8.5M hits 0 mismatches).** Hit rate 91.8%; the scorer's own wall 14.57 s -> 8.52 s on the Q46 probe (9.9% ->
+  6.1% of the process; process -5.2%); pooled d3 + d5 batch thread-ms -3.9%, process wall -2.9% (noisy box). The
+  residual 1.5 us per resolution is the key build and, for Ponder, the base list built before the lookup. Not built:
+  the design row's prefix snapshot. Default: shipped (on; `MTG_CANTRIP_RANK_CACHE=0` turns it off).
 - Q33 (updated, cantrip item 1): SINGLE under the REBUILT rule (rank 0 of the new score) vs the shipped order: d3 -0.135
   (se 0.055), d5 -0.020 (se 0.062), units x0.22; vs the order off -0.235 / -0.100. Still OFF: the USER's decision.
 - Q47. THE REMAND CEILING (2026-10-28 section). Raw paired deltas vs the shipped 1: ceiling 2 (+ Remand-on-Remand) d3
@@ -1310,6 +1422,11 @@ cheap cantrips, i.e. the search spends four mana to cycle a Remand when it sees 
 - Q51. The blind replay re-ran only the FASTER games (as briefed), so the blind deltas in Q47 are an upper bound on harm,
   and it blinds only POST-SHUFFLE knowledge (the search still sees the unshuffled library top in every arm). A symmetric
   replay of the slower games would make the blind estimate two-sided. Default: not run (the decision does not hinge on it).
+- Q52. Q44(1) REFINEMENT (not built): charge a put-back card that cannot be used before its redraw a small residual
+  (e.g. need / 16) instead of 0, so unusable cards still go back before usable ones but keep the need ordering among
+  themselves -- the 0 charge made rank 0 the generic shed order's tie-break (it put the sole Cyclone / a Curator on top),
+  which is where the held-out loss came from. Pairs naturally with Q44(2) / Q42 (a sane Cyclone shed order fixes the
+  tie-break too). Measuring it is one more pooled A/B (~1 h at 14 threads). Default: not built.
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
 - Street Wraith swampwalk (and its Landwalk tag): inert vs the never-blocking goldfish opponent. USER-approved 2026-10-27 ("fine to treat as inert until 1v1 play").
