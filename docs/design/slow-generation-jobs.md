@@ -133,3 +133,21 @@ for the remainder: refine ~1-3 h, validation ~0.5-1 h, value leaf ~0.5-1 h (the 
 pessimistic; it said 79 h for Goblins, whose size-7 phase took 11.4 h). Journal copied to
 `.journal.prepause-20261028` (377 MB). Owed: the replay of the 994 s Bloodthrone hand
 (`build/scratch/melira_replay/bt.err`, `MTG_DECISION_PROGRESS` + `MTG_BP_DERIVE_SLOW_MS` output).
+
+**Bloodthrone replay DONE 2026-10-28** (the 994 s hand, `Llanowar Wastes x2; Voice of Resurgence; Kitchen Finks x3;
+Bloodthrone Vampire`, size 7 play r=1, via `MTG_KEEP_REPLAY` on the frozen binary, play digest 008e4fce2050a0cd
+reproduced). **640.8 s, win turn 6, only 374k units.** Almost all of it is ONE decision, rollout t6 pre-combat:
+640.5 s for 356k units, about 1.8 ms per unit against ~0.03 ms per unit for an ordinary decision. That makes it a
+**per-unit cost**, not branching inside the search, and the budget never binds because the work is not charged.
+- Where the time goes: **906 `bp-derive-slow` breakpoint derivations, ~295 ms each, 331 s in total**, each deriving
+  **86,016 plans** from `subsets_entered=65535` (2^16 subsets of breakpoint-relevant actions). The board at those
+  derivations is Celes, Rune Knight (a live loop-closer) + Bloodthrone + 2-3 Carrion Feeder (Chord fetched them) +
+  3 Kitchen Finks, with mixed tap states.
+- So the Feeder twin fold does not cover this. The outlets are not twins (different cards, or different tap
+  states), and the cost sits in the breakpoint subset enumeration over the free sacrifice / loop actions, which
+  `ChargeDecisionUnits` does not price.
+- **Next (owed, not started):** census of which 16 actions enter the subset set on this board, and whether any are
+  dominated or identical, e.g. a sacrifice of a Finks that already has a -1/-1 counter vs one without, or a tapped
+  vs untapped Feeder used as an outlet where tap state is irrelevant to a free activation. Also whether the derive
+  should be charged in units, so a finite budget re-prices it (BUDGET MAY RE-PRICE rule). Repro: the
+  `MTG_KEEP_REPLAY` command in `build/scratch/melira_replay/` (bt.err holds the full output).
