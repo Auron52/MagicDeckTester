@@ -110,6 +110,11 @@ Still open: that hand (`Kitchen Finks x3; Caves of Koilos x2; Carrion Feeder x1;
 play r=1, seed 4354685568366855579) still costs 35 min. It has two DIFFERENT free outlets (Feeder, Bloodthrone),
 which the twin fold does not merge. That is the next replay to profile.
 
+2026-10-28 02:43 UTC: the size-7 floor pass FINISHED (3,152,324 rollouts = 788,081 cells x 2 x play/draw) in
+~5.9 h; the sub-tables are rolling at ~142/s, RSS 5.8 GB. New entry in the top 3: **994 s, `Llanowar Wastes x2;
+Voice of Resurgence; Kitchen Finks x3; Bloodthrone Vampire`** (size 7 play r=1, seed 4354686331573145191), with NO
+Carrion Feeder. The residual tail is therefore Bloodthrone Vampire + several Kitchen Finks, not the Feeder twins.
+
 **Originally listed checks** (1 is answered above; 2-3 remain):
 1. Single-rollout repro of the 7,642 s hand (Basilica, Forest, Feeder ×4: the smallest hand, nearly pure
    Feeder), run under the per-decision census. Does the time go to sacrifice-activation enumeration, and
