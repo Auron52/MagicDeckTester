@@ -79892,6 +79892,10 @@ namespace enummemo
     // game (cap x threads of dead storage). Clear on epoch change: memory is bounded by one
     // decision's states and the cap becomes a same-decision backstop only.
     inline thread_local uint64_t t_epoch_seen = 0;
+    // Depth of memoized enumeration bodies running on this thread. A host holds its `it` across the
+    // body, so the breakpoint cache may evict this memo (BpEnumEntryFor) only at depth 0.
+    inline thread_local int t_body_depth = 0;
+    struct BodyScope { BodyScope() { ++t_body_depth; } ~BodyScope() { --t_body_depth; } };
     // Cap env-ized 2026-08-20: the 8192 default clear-on-full THRASHED on the heavy fivecolour
     // d6 game (today's census: ~130k distinct fs6 states/game, within-decision dup 71-88%) --
     // 51 clears -> 1% hit rate was the CAP's failure, not state diversity. MTG_ENUM_MEMO_CAP
@@ -80157,7 +80161,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     groupwave::g_state.max_dropped = 0;
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
-    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy);
+    std::vector<TurnSolver::Plan> plans;
+    { enummemo::BodyScope body; plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy); }
     plancache::ReportHiwater("m1", state, plans);
     const bool lazy_now = pb_lazy != nullptr && pb_lazy->active;
     // DIAGNOSTIC (MTG_ENUM_DUPCENSUS=<min plans>, default off): on the first m1 list at least that big,
@@ -80353,7 +80358,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     groupwave::g_state.max_dropped = 0;
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
-    std::vector<TurnSolver::Plan> plans = EnumerateM2PlansBody(state);
+    std::vector<TurnSolver::Plan> plans;
+    { enummemo::BodyScope body; plans = EnumerateM2PlansBody(state); }
     plancache::ReportHiwater("m2", state, plans);
     const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
@@ -93148,6 +93154,40 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
 
     const int turn = state.turn_number;
     std::vector<long long> sum(plans.size(), 0);
+    // MTG_NC_TRACE=1 (default off, an instrument): the menu size per decision, every (plan, sample)
+    // evaluation over 1 s, and the decision's total wall -- where an unbudgeted NC ladder spends.
+    static const bool s_nc_trace = EnvOn("MTG_NC_TRACE");
+    const auto nc_t0 = std::chrono::steady_clock::now();
+    std::vector<double> nc_plan_s(plans.size(), 0.0);
+    if (s_nc_trace)
+    {
+        std::fprintf(stderr, "[nc] T%d %s: %zu plans x K=%d depth=%d\n", turn,
+                     is_pre_combat ? "pre" : "post", plans.size(), K, depth);
+        // MTG_NC_TRACE=2: every candidate with its non-default sub-decision axes.
+        static const int s_nc_trace_lvl = EnvInt("MTG_NC_TRACE", 0);
+        if (s_nc_trace_lvl >= 2)
+        {
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                const Plan& q = plans[i];
+                std::string ax;
+                auto iv = [&](const char* n, int v, int dflt) { if (v != dflt) { ax += std::string(" ") + n + "=" + std::to_string(v); } };
+                auto vv = [&](const char* n, const std::vector<int>& v)
+                { if (!v.empty()) { ax += std::string(" ") + n + "=["; for (int x : v) { ax += std::to_string(x) + ","; } ax += "]"; } };
+                if (!q.fetch_target.empty()) { ax += " fetch=" + q.fetch_target; }
+                vv("land_search_pins", q.land_search_pins); vv("sac_pins", q.sac_pins); vv("look_top_pins", q.look_top_pins);
+                iv("atk_land_search", q.attack_land_search_choice, -1); iv("upk_land_search", q.upkeep_land_search_choice, -1);
+                iv("combat_crack", q.combat_crack_choice, -1); iv("landfall_target", q.landfall_target_choice, -1);
+                iv("vial_charge", q.vial_charge_choice, -1); iv("tapmode", q.tapmode_choice, 0); iv("freshmode", q.freshmode_choice, 0);
+                iv("atk_dork_release", q.atk_dork_release, -1); iv("atk_forfeit", q.atk_forfeit, 0);
+                iv("attack_attach", q.attack_attach_choice, -1); iv("etbdig", q.etbdig_choice, -1); iv("dig", q.dig_choice, -1);
+                iv("tutor", q.tutor_choice, -1); iv("bp", q.bp_choice, -1); iv("ponder", q.ponder_choice, -1);
+                iv("putback", q.putback_choice, -1); iv("discard", q.discard_choice, -1); iv("scry", q.scry_choice, -1);
+                iv("etbcounter", q.etbcounter_choice, -1); iv("le_fire", q.le_fire_choice, -1); iv("grace", q.grace_choice, -1);
+                std::fprintf(stderr, "[nc]   #%zu %s |%s\n", i, FsPlanText(q).c_str(), ax.c_str());
+            }
+        }
+    }
 
     for (int k = 0; k < K; ++k)
     {
@@ -93158,6 +93198,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                           + (is_pre_combat ? 0ULL : 7919ULL);   // distinct sample stream per phase
         for (size_t i = 0; i < plans.size(); ++i)
         {
+            const auto nc_e0 = std::chrono::steady_clock::now();
             GameState s = state;
             s.ActivePlayer().library.Shuffle(rs);
             s.shuffle_salt_search = rs;             // honest continuation folds this (varies per k)
@@ -93209,7 +93250,26 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 }
             }
             sum[i] += wt;
+            if (s_nc_trace)
+            {
+                const double es = std::chrono::duration<double>(std::chrono::steady_clock::now() - nc_e0).count();
+                nc_plan_s[i] += es;
+                if (es > 1.0)
+                {
+                    std::fprintf(stderr, "[nc]   T%d k=%d plan %zu: %.1fs wt=%d  %s\n", turn, k, i, es, wt,
+                                 PlanDesc(plans[i]).c_str());
+                }
+            }
         }
+    }
+    if (s_nc_trace)
+    {
+        size_t worst = 0;
+        for (size_t i = 1; i < plans.size(); ++i) { if (nc_plan_s[i] > nc_plan_s[worst]) { worst = i; } }
+        std::fprintf(stderr, "[nc] T%d %s done: %.1fs total; slowest plan %zu %.1fs  %s\n", turn,
+                     is_pre_combat ? "pre" : "post",
+                     std::chrono::duration<double>(std::chrono::steady_clock::now() - nc_t0).count(),
+                     worst, nc_plan_s[worst], PlanDesc(plans[worst]).c_str());
     }
 
     // Pick min average win turn. EnumeratePlansWithLand is value-sorted, so scanning in order and
@@ -98753,6 +98813,22 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
             cache.clear();
             plancache::Release(plancache::t_bp_bytes);
+        }
+        // Still no room once this cache is empty: the rest of the pool is this thread's ENUMERATION
+        // memo, whose entries live for the whole decision epoch and are never evicted inside it. Left
+        // alone it starves this cache for the rest of the decision -- every derivation clears the
+        // cache it has just stored into and is re-derived on the next visit. LandfallElementals s3_gi2
+        // T2 under ref_review's 1 GB budget (512 MB pool, MTG_NC_SEARCH): 25,081,309 refused stores
+        // and 4,515 s before this eviction, 66,439 and 2,094 s after (863 s at the default budget). A
+        // continuation list costs far more to re-derive than an enumeration, so the memo gives way.
+        // The memo's entries are byte-identical recomputations: evicting them changes work, never a
+        // list. Only this thread's own memo is evicted; the pool is global.
+        if (plancache::t_enum_bytes > 0 && enummemo::t_body_depth == 0
+            && plancache::BudgetBytes() > 0 && psz <= plancache::BudgetBytes()
+            && plancache::PoolUsed().load(std::memory_order_relaxed) + psz > plancache::BudgetBytes())
+        {
+            enummemo::t_cache.clear();
+            plancache::Release(plancache::t_enum_bytes);
         }
         if (plancache::Fits(psz))
         {
