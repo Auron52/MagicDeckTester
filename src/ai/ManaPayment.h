@@ -690,6 +690,23 @@ private:
     ManaCost m_prev, m_cost;
 };
 
+// CYCLE SEED PAYMENT (PlanTraits::cycle_seed_pips): set while the plan's cycle seed pays its OWN cycling
+// cost, so ActLineHoldMask does not hold a provider back for the very pip being paid (with an Island and
+// a Steam Vents up it would hold the Island and tap the dual). Set at all three cycle payment sites --
+// the rollout's cycle_chain_step, human play's DigDraw pass and the executor's PerformDigFull -- in
+// lockstep. It only zeroes the seed half of the hold, which is zero for every deck without seeds.
+extern thread_local bool g_cycle_seed_paying;
+class CycleSeedPayScope
+{
+public:
+    CycleSeedPayScope() : m_prev(g_cycle_seed_paying) { g_cycle_seed_paying = true; }
+    ~CycleSeedPayScope() { g_cycle_seed_paying = m_prev; }
+    CycleSeedPayScope(const CycleSeedPayScope&)            = delete;
+    CycleSeedPayScope& operator=(const CycleSeedPayScope&) = delete;
+private:
+    bool m_prev;
+};
+
 // RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous
 // value on scope exit (nested plan applications -- a rollout inside an apply -- restore correctly).
 // Release() drops the reservation early, which the unlock hoist calls the moment the dork is hasted:
