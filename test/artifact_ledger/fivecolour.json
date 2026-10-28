@@ -1,0 +1,48 @@
+{
+ "deck": "fivecolour",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "67517dad84ca8a698e8bf9affa12f5d35a78e167",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.001833,
+   "cost": [
+    0.977371837824193,
+    0.0041921053597974295,
+    96
+   ],
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.001833 t, cost 0.977x (se 0.004, 96 seeds), recipe fast)"
+  },
+  {
+   "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:15713f7430a43656572a",
+   "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
+   "src_tree": "aba41d81c1291fb08dd08c8c0f391491e2bfeac2",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fivecolour/DECISIONS.txt)",
+   "decisions": [
+    "",
+    "=== 2026-10-28T18:47:33  PHASE E.7b: fivecolour -- trust ACCEPTED at d6 -> value_trust_depth 6 (unchanged); play moved d6/20 -> d7/20 after phase E decided trust",
+    "      trust candidate d6: ON-OFF -0.00325 turns (se 0.00037, one-sided 95% upper -0.00263) over 8 seeds x 1000 games; cost 2717 vs 2534 core-s (1.07x); 0/8 seeds byte-identical; se 0.00037 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: ACCEPTED (bound -0.00263 <= tol 0.0020) -- the escalation skipped by trusting at d6 does not cost quality",
+    "",
+    "=== 2026-10-28T18:48:10  PHASE E.6: no allowance for fivecolour -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
