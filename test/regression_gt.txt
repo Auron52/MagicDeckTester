@@ -1,8 +1,11 @@
-# Regression ground truth -- commit 14058e3ec  date 2026-10-28
+# Regression ground truth -- commit b1e114df6  date 2026-10-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (smoke, 2026-10-28): MTG_AUTO_LINE_GENERIC default ON (a generic pip spends the colour the turn's line does not owe; off when the line casts a breakpoint opener) + MTG_SCARCE_COLOR_MASK reworked, default OFF. Held-out A/B seed 1080001, 39 decks, 20,910 games: 0 slower / 1 faster (Dragons gi214), work +0.024%. Smoke: searched 0 slower / 0 faster / 9 same-score line changes (all add casts, none dropped); d0 0 slower / 4 faster. Carried: edf_smoke d0 gi849 5->6 ties at d8 b0 (e4c8ee821, staged prepay); alchemist_smoke_d3_s1001 gi3 6->7 = budget churn (T6 both arms at b160/b640).
 # accepted-with-regressions (regression, 2026-10-28): MTG_AUTO_LINE_GENERIC default ON (see the smoke note; held-out A/B 0 slower / 1 faster). Regression searched: 0 slower / 3 faster / 47 same-score line changes (Dragons/FiveColour casts Urza's Incubator, Lathliss etc. a turn earlier; 10 games have a later turn with fewer casts, every one a cast moved earlier at the same win turn; edf_regression_d5_s2002 gi53 wins T4 without Peregrine Drake, mana oracle lost=0 both arms); d0 0 slower / 4 faster; refs 0 drift (245 ok, 422 repaired, 1 beaten). Carried: edf_regression_d0_s2002 gi174 4->5 (e4c8ee821: Living Wish targets, T4 both arms at d8 b0).
+# accepted-with-regressions (smoke, 2026-10-28): Bruna keep table ADOPTED (fast R=30, K=21, generated on d376d406, validated keep -0.333t / confounded bottoming -0.080t, both 4/4): aggregates d3 4.820->4.720, d5 4.833->4.713, 2hg d5 5.380->5.280, d0 6.128->5.938; searched 36 slower / 48 faster vs the table-off GT. keep_adoption_attribution: 0 unexplained (bruna 626 mull-count + 105 bottom; 2hg 21 + 3). Units/game 3.3-3.7x lower.
+# accepted-with-regressions (regression, 2026-10-28): Bruna keep table ADOPTED (see the smoke note): d3 s2002 5.040->4.740, d5 s2002 5.127->4.867, d5 s3003 5.013->4.720, d0 6.172->5.890; searched 43 slower / 92 faster vs the table-off GT. keep_adoption_attribution: 0 unexplained (733 mull-count + 119 bottom + 2 bottom-order). Units/game 5.9-7.2x lower on the play rows.
+# accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -124,10 +127,10 @@ soldiers_smoke_d5_s1001=4.2457/407a6c3763ff92fb
 pd_smoke_d0_s1001=7.3010/24086862cc53d9d6
 pd_smoke_d3_s1001=5.3600/3b653f23129083e8
 pd_smoke_d5_s1001=5.5100/2e09e01ab0178d63
-bruna2hg_smoke_d5_s1001=5.3800/1ad546683fbd1cee
-bruna_smoke_d0_s1001=6.1280/9e6b25dd4342bc56
-bruna_smoke_d3_s1001=4.8200/ceddfd62b1e07d58
-bruna_smoke_d5_s1001=4.8333/1cfa1086cb054468
+bruna2hg_smoke_d5_s1001=5.2800/ff4fbd1a43439bd9
+bruna_smoke_d0_s1001=5.9380/0e644c716ec7ae6b
+bruna_smoke_d3_s1001=4.7200/1ca50b0f7ba43611
+bruna_smoke_d5_s1001=4.7133/f45321d74b1298c3
 edf2hg_smoke_d5_s1001=3.9600/33dbb7d813b5a938
 edf_smoke_d0_s1001=5.3120/b96bb9abccffc6f7
 edf_smoke_d3_s1001=4.0000/0079a25db1afc32a
@@ -172,8 +175,8 @@ auras_regression_d3_s30001=4.0500/8120fca8fff5d773
 auras_regression_d5_s30001=4.0500/8120fca8fff5d773
 breaching_regression_d3_s30001=3.0000/361972f6d41ee2bb
 breaching_regression_d5_s30001=3.0000/361972f6d41ee2bb
-bruna_regression_d3_s30221=4.6667/453139c90e16a794
-bruna_regression_d5_s30221=4.6667/453139c90e16a794
+bruna_regression_d3_s30221=4.6667/bcf703feb17fbb67
+bruna_regression_d5_s30221=4.6667/bcf703feb17fbb67
 burn_regression_d3_s30001=4.3500/3edfe8e99b9bb117
 burn_regression_d5_s30001=4.3500/681cce675120947b
 colossus_regression_d3_s30001=3.2000/a9ee9ded1a7c7660
@@ -365,10 +368,10 @@ pd_regression_d0_s2002=7.3590/836c4b32c0b65a9e
 pd_regression_d3_s2002=5.7200/20761f7e2937c1f9
 pd_regression_d5_s2002=5.4600/2a39294a7eb539b7
 pd_regression_d5_s3003=5.5067/77e21e69b3344f63
-bruna_regression_d0_s2002=6.1720/7f12a8eff5965250
-bruna_regression_d3_s2002=5.0400/32b86ad7063a2641
-bruna_regression_d5_s2002=5.1267/fec79422578dcd96
-bruna_regression_d5_s3003=5.0133/4c360713b8627f0f
+bruna_regression_d0_s2002=5.8900/1562e1f3d03bffa1
+bruna_regression_d3_s2002=4.7400/8b8c79507a77d9ba
+bruna_regression_d5_s2002=4.8667/f91d21e31c3c521b
+bruna_regression_d5_s3003=4.7200/7c1f76b0e559a385
 edf_regression_d0_s2002=5.3270/acfb290894d84505
 edf_regression_d3_s2002=3.9600/7cfa0d9ab6e06265
 edf_regression_d5_s2002=4.0600/060f52be3c235a00
@@ -420,8 +423,8 @@ auras_overnight_d3_s30101=3.9500/a94370aab043b58a
 auras_overnight_d5_s30101=3.9500/a94370aab043b58a
 breaching_overnight_d3_s30101=3.0000/ee02b7ec93aa1059
 breaching_overnight_d5_s30101=3.0000/ee02b7ec93aa1059
-bruna_overnight_d3_s30231=3.6667/200f8d49de4cb33f
-bruna_overnight_d5_s30231=3.6667/200f8d49de4cb33f
+bruna_overnight_d3_s30231=4.3333/99d1c7b6c330a4be
+bruna_overnight_d5_s30231=4.3333/99d1c7b6c330a4be
 burn_overnight_d3_s30101=4.3500/25ba1af6948064fa
 burn_overnight_d5_s30101=4.3500/25ba1af6948064fa
 colossus_overnight_d3_s30301=3.2500/7807200fcba8d923
@@ -722,15 +725,15 @@ pd_overnight_d5_s4004=5.4659/38f0cbc6708b0e6e
 pd_overnight_d5_s5005=5.3812/2d245f74d680a039
 pd_overnight_d5_s6006=5.4188/e54dbbd2f3aae74e
 pd_overnight_d5_s7007=5.5059/88589ae0b64aaeda
-bruna_overnight_d0_s4004=6.1445/0fd0e96662f01c13
-bruna_overnight_d0_s6006=6.1545/eacbde138bc53465
-bruna_overnight_d0_s8008=6.1515/27eb86c1403a65d6
-bruna_overnight_d0_s10010=6.1445/13aacaef9dfc79df
-bruna_overnight_d3_s4004=5.1040/1e7ea813b6a7e599
-bruna_overnight_d5_s4004=4.9560/92cb2e478cb54fc3
-bruna_overnight_d5_s5005=5.0300/f22b96cc61a7040c
-bruna_overnight_d5_s6006=4.9360/1b20559f3c9d709f
-bruna_overnight_d5_s7007=5.1200/331d8a6684a87cea
+bruna_overnight_d0_s4004=5.8545/e46bf5d1b70f9faa
+bruna_overnight_d0_s6006=5.8990/bff9b35e991142d2
+bruna_overnight_d0_s8008=5.8840/02a63f89aed8cc48
+bruna_overnight_d0_s10010=5.8705/f5c330624c89e69e
+bruna_overnight_d3_s4004=4.6960/c5af25456006b6f1
+bruna_overnight_d5_s4004=4.8060/3e72b724cbab34c6
+bruna_overnight_d5_s5005=4.8520/9f827c4a38b43e70
+bruna_overnight_d5_s6006=4.7900/fe038c299b555030
+bruna_overnight_d5_s7007=4.8080/af6179e51d40f9f2
 edf_overnight_d0_s4004=5.3570/22323e1d3cac8a2a
 edf_overnight_d0_s6006=5.3260/0c630a80a87d5206
 edf_overnight_d0_s8008=5.3625/10c70b76400cd3a0

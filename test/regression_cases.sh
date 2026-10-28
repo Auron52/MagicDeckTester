@@ -1442,6 +1442,9 @@ OVERNIGHT_CASES=(
   # its most expensive. EXPAND when the keep table lands, BEFORE adopting it: size the full set by
   # measured per-game cost, run + accept Bruna's overnight rows with the profile ABSENT (--deck=bruna),
   # then adopt and measure the adoption on the full set.
+  # 2026-10-28: keep table ADOPTED. The rows above already met the keep-table floor (d5 4x500 b20 >= Hinata's
+  # 4x425; d3 125 = Hinata's), so they were accepted as they stand with the profile absent, then with it.
+  # Per-game units fell 3.8-5.3x on these rows (d5 ~87-106k -> ~20k), so a later expansion is cheap.
   "bruna 0 4004 2000 0"
   "bruna 0 6006 2000 0"
   "bruna 0 8008 2000 0"
