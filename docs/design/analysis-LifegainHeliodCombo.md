@@ -131,43 +131,27 @@ Kill-switch sanity (seed 94001, 400 g, d5 b20; single seed, not a held-out A/B):
 ping prune / bump target on/on 4.8075 (5.0 s) · off/on 4.8125 (6.4 s) · on/off 4.8300 (5.1 s) · off/off 4.8400 (6.3 s).
 Loop fired 12 (bump on) vs 6-7 (bump off); post-combat finish 44-47; Ballista cast 138x.
 
-## RESUME STATE (PARKED 2026-10-27 ~12:15 UTC -- USER: "park this and run the pipeline overnight")
+## RESUME STATE (RESUMED 2026-10-28)
 
-Committed + pushed: the feature commit (all 4 cards + provider + 26 lhc_* scenarios) and this ledger.
-Suite rows are PARKED on `origin/wip/lhc-suite-rows` (820fb1769: `test/regression_cases.sh` lhc/lhc2hg in all 3
-tiers + backstop rows, and `test/suite_cost.json`). They are NOT on the main branch because they land WITH the
-GT accept. To resume: `git cherry-pick 820fb1769` (resolve against any new rows), then the tier runs below.
+Done 2026-10-28:
+- All four claude-play sweep flags FIXED and measured (see `## Claude-play sweep`): `1da17ac61` (main-1 opp-loss
+  check, {X}{X} display) and `5b76a1eac` (MTG_LEGEND_SBA_FIRST, MTG_LG_TARGET_COMBAT_POWER).
+- Suite rows landed (lhc/lhc2hg in all 3 tiers + backstop rows, `test/suite_cost.json`) WITH the smoke + regression
+  GT accept. The rules fix moves angels too (a second Lyra beside Seraph Sanctuary double-countered the same way);
+  recorded in the accept notes. The OVERNIGHT lhc keys are still NEW: the periodic overnight run accepts them.
+- `audit_card_fields.py --update`: snapshot refreshed (629 cards); all hard fields match. The 4 new cards were
+  rate-limited on the first pass and re-fetched alone.
+- 5a (300 games, 0 nonconv / 0 fd-diverge) and 5c2 (48 blocks, NO SIGN) as recorded before parking; both ran on
+  `0d7dbaf52`, before the sweep fixes.
+- The USER is recording reference games in the viewer (requested before any generation stage).
 
-Done before parking:
-- 5d claude-play sweep: COMPLETE (see `## Claude-play sweep`).
-- 5a on the final binary (build/scratch/lhc/5a2/, 300 games x seeds 92001/93001, d3 b10): 0 nonconv, 0 fd-diverge.
-- 5c2 `leaf_tiebreak_check.py --blocks 48`: 48,000 paired games, net -12 turns, 14 better / 2 worse (half A -11 0/11, half B -1 2/3); only 16 changed (0.033%), below the 20-change bar -> NO SIGN at this sample. The tie-break barely binds here; the default (ON) stands. On resume either re-run at `--blocks 96` on the final binary or record it as unbindable.
-
-Sweep flags so far (verify + resolve before recording `## Claude-play sweep`):
-1. CONFIRMED (seed 95005, pre-existing, affects CritterLifegain too): legend rule enforced AFTER the enter-watcher
-   cascade (EffectHandler.cpp ~285, rollout same ordering) -> a redundant 2nd Heliod sees every enter-lifegain event
-   -> double counters (4 events -> 6 counters). CR 704.3/704.5j: SBA before triggers go on the stack. Fix moves
-   CritterLifegain GT; needs a held-out A/B on critter + lhc. Legend-rule keep choice is not surfaced to the human
-   (engine keeps the original; dominant here) -- uncertain.
-2. CONFIRMED (seeds 95004/95010/95013/95016/95017/95019): no opponent-loss check after the pre-combat main
-   (src/core/GameEngine.cpp turn body ~233 -- only own_death_live; CheckWinCondition runs after CombatPhase), so a
-   main-phase kill still plays combat and asks extra Heliod target prompts. Win turn unaffected; final life totals and
-   the human decision count are wrong. Fix: SBA opponent-loss check right after main 1 (check GT digests).
-4. CONFIRMED by code reading (seeds 95011 + 95008, pre-existing): DefaultLifegainCounterTarget
-   (SpellEffects.h ~6550) ranks by Permanent::EffectivePower() (base + temp + counters), which omits
-   ComputeLordBonus's conditional statics -- Serra Ascendant's +5/+5 at 30 life -- so it picks a 5/5 Heliod over a
-   9/9 Serra. Heuristic inaccuracy (affects CritterLifegain too); fix = rank by the lord-adjusted power. Moves GT.
-3. Decision JSON hand entry shows Walking Ballista cost "{X}" (cards.json "{X}{X}") -- display only; fix the emitter.
-
-Remaining steps after the sweep:
-- Resolve flags 1-3 (1 = engine fix + A/B, report to user; 2/3 = small fixes) and record `## Claude-play sweep`.
-- `python3 scripts/audit_card_fields.py --update` (network) for the 4 new cards, commit the snapshot.
-- `scripts/audit_card_costs.py` (2d-bis), `audit_viewer_decisions.py ... --verify-card` for Grace / Emeria /
-  Martyr X (5h), MTG_SHED_WORST discard bound (5i), optionally `mine_heuristics.sh` (5g).
-- Run each tier for `--deck=lhc,lhc2hg`, inspect, `--accept --deck=lhc,lhc2hg`, `test/check_gt_logs.py`, commit
-  rows + GT + suite_cost.json; then full `verify_deck.py` (with sweep) and `--write-ledger`.
-- Push; watch CI (Windows) in the background.
-- Closing report to the user: Stage 6 + 6a disclosure + the open questions above.
+Remaining:
+- `scripts/audit_card_costs.py` (2d-bis); `audit_viewer_decisions.py ... --verify-card` for Grace / Emeria / Martyr X
+  (5h); MTG_SHED_WORST discard bound (5i); optionally `mine_heuristics.sh` (5g); 5c2 at `--blocks 96` or record it
+  as unbindable.
+- `verify_deck.py` (with sweep) and `--write-ledger`.
+- References (USER, in progress), then the generation stages (mulligan profile first, then the value leaf).
+- Closing report: Stage 6 + 6a disclosure + the open questions.
 
 ## Claude-play sweep
 - commit: `0d7dbaf52`
@@ -175,8 +159,18 @@ Remaining steps after the sweep:
 - result: claude_win == ai_win in 20/20 (T4 x8, T5 x10, T6 x1, ...); Heliod+Ballista loop used in 7 (95004, 95010,
   95013, 95016, 95017, 95018 post-combat, 95019); decision types seen: mulligan, bottom, main_phase, target,
   x_value (Martyr reveal), gy_return_one (Abiding Grace). Ranger-Captain offered all 5 MV<=1 targets incl. Ballista.
-- flags: 4 unresolved
-  - legend rule after the enter-watcher cascade -> duplicate Heliod double counters (pre-existing, CR 704.3)
-  - no opponent-loss check after main 1 (combat + extra prompts after a main-phase kill)
-  - DefaultLifegainCounterTarget ranks by EffectivePower, omitting Serra's conditional +5/+5 (pre-existing)
-  - decision JSON shows Walking Ballista cost "{X}" instead of "{X}{X}" (display)
+- flags: 0 unresolved (4 found, all FIXED 2026-10-28; held-out A/B 4,000 paired games per arm, seeds
+  961001/963001, d3b10 + d5b20, critter + lhc)
+  - legend rule after the enter-watcher cascade -> duplicate Heliod double counters (pre-existing, CR 704.3).
+    FIXED `5b76a1eac`, MTG_LEGEND_SBA_FIRST (LegendRuleLoser: the copy the legend rule removes is dead to every
+    trigger's watcher/target list inside the cascade). A RULES fix that makes the deck slower: lhc +0.0018t
+    (d3b10, 7 chunks worse / 0 better) and +0.0015t (d5b20, 6 / 0), critter +0.0002t; the slower games are the
+    bug coming out (lhc seed 961538: T5 kill off 1 -> 5 Heliod counters that should be 1 -> 3; correct play T6).
+    The legend-rule KEEP choice is still not surfaced to the human (engine keeps the oldest; dominant here).
+  - no opponent-loss check after main 1 (combat + extra prompts after a main-phase kill). FIXED `1da17ac61`
+    (executor + rollout): win turns unchanged everywhere (smoke 0 slower / 0 faster), play digests move because
+    the empty post-kill COMBAT record is gone.
+  - DefaultLifegainCounterTarget ranks by EffectivePower, omitting Serra's conditional +5/+5 (pre-existing).
+    FIXED `5b76a1eac`, MTG_LG_TARGET_COMBAT_POWER (CombatPowerOf): critter -0.0003t at both shapes, lhc 0.
+  - decision JSON shows Walking Ballista cost "{X}" instead of "{X}{X}" (display). FIXED `1da17ac61`
+    (ManaCost::ToDisplayString renders every X pip).
