@@ -773,6 +773,7 @@ enum Slot : int
     CYCLONE_PUTBACK_SINGLE,   // MTG_CYCLONE_PUTBACK_SINGLE  Cyclone PROPOSAL (DEFAULT OFF pending the USER): prune the searched put-back fan to the rule's pick alone (PutBackSingleCandidate; the NivMizzet BRAINSTORM_SINGLE shape). LOSSY. Inert unless MTG_CYCLONE_PUTBACK_RULE is on. Human play is never pruned
     CYCLONE_PONDER_KEEPSHUFFLE,// MTG_CYCLONE_PONDER_KEEPSHUFFLE  Cyclone PROPOSAL (DEFAULT OFF pending the USER): Ponder's searched fan narrowed to keep-in-the-provider's-order vs shuffle (ReorderKeepShuffleOnly; the NivMizzet shape) instead of every order. LOSSY. Human play is never narrowed
     CYCLONE_CANTRIP_ORDER,    // MTG_CYCLONE_CANTRIP_ORDER  Cyclone: the GO-OFF SCORED cantrip order (cantrip item 1, 2026-10-28; docs/design/cantrip-search-optimization.md §3.2) -- CycloneGoOff {k, c} + the USER's put-back / Ponder rules score every Brainstorm / Brainsurge put-back and every Ponder order; the engine stable-sorts the fan by it (PutBackPickAt / TopDispositionCandidates), Ponder's shuffle always at index 0 or 1. AN ORDER ONLY: the candidate set is unchanged, so it is inert at an unlimited budget by construction. DEFAULT ON; =0 -> the existing order
+    CYCLONE_PUTBACK_USABLE,   // MTG_CYCLONE_PUTBACK_USABLE  Cyclone: amendment (1) to the scored put-back (ledger Q44, from d5 gi13; the Niv rule "followed by the ones you can't use yet so you can draw them later") -- a put-back card drawn back BEFORE go-off (position p <= k) that cannot be USED before its redraw (its mana value, or its cycling cost's, above the mana the go-off estimate projects for turn p - 1; a land with no drop open before then) costs 0 instead of a quarter of its keep need. Only when no shuffle is available after the cantrip (a shuffle would lose the card). An ORDER only (inert at unlimited budget); needs MTG_CYCLONE_CANTRIP_ORDER or MTG_CYCLONE_PUTBACK_RULE. DEFAULT OFF: measured worse 2026-10-28 (d3 +0.015 se 0.027, d5 +0.045 se 0.039, held-out seeds 103000 / 104000); =1 turns it on
     COUNT
 };
 
@@ -1490,6 +1491,7 @@ inline const char* Name(int slot)
         "MTG_CYCLONE_PUTBACK_SINGLE",
         "MTG_CYCLONE_PONDER_KEEPSHUFFLE",
         "MTG_CYCLONE_CANTRIP_ORDER",
+        "MTG_CYCLONE_PUTBACK_USABLE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
