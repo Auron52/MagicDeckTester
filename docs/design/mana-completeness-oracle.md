@@ -834,3 +834,17 @@ a plan's apply ends with mana floating, re-apply with a tapped source whose unit
 reserved, and keep it only if the line and its core key are unchanged and the end board strictly covers. The
 census's other classes stay on the program: C (a dropped action the board could pay -- the search-level
 fallback), D (exact menu gates for ENUM-GAP and PHANTOM), E (oracle coverage: UNMODELED, CAPPED, ORACLE-GAP).
+
+**The big census, by mechanism** (`big1`: 39 suite decks x 30 games, seed 1100001, the pre-refine engine; 37 decks
+finished -- KittyEquipment and LandfallElementals were stopped after five hours in oracle CAPPED work). ENUM-GAP 442:
+* AccomplishedAlchemist 163 -- "gain life, then Stroke of Genius for X off Accomplished Alchemist's life-gained
+  mana" is not ONE menu plan, but the search reaches it: a lifegain cast is a breakpoint (the LIFEGAIN route,
+  TurnSolver site 9) and the rest of the turn is re-planned with the grown yield. An oracle accounting gap (E: a
+  breakpoint continuation should count as reaching the line), not a lost line.
+* Mirrorwing 41 -- Gold Rush into Gold Rush off the first one's Treasure: the FRESH-HOLD doctrine (a Treasure minted
+  this turn is banked; `FreshHoldActive`, released only for a same-turn kill). A search doctrine measured worse when
+  released (73 slower / 31 faster), not a mana gap; the oracle should label it as such.
+* NivMizzetCombo 106, Slivers 34, KittyEquipment 22 -- Generator Servant's sacrifice mana and filter-land chains;
+  Sliver Hive's tap-for-token and Mutavault; Remote Farm's {W}{W} split across two casts. Untriaged.
+APPLY-DROP 339 (Niv 145, Melira 68, Alchemist 41, LandfallElementals 39): long lines (Melira's 32-step Felidar loop
+into Chord of Calling) where the first payment decides a cast forty actions later -- item C's territory.
