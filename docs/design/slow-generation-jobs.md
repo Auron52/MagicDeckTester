@@ -177,3 +177,7 @@ Status 20:18 UTC: refine **90.6%** frozen at 33,300 s, idle 0.0%, load 32/32, ro
 (still falling); 147k left. If `cap=30` (R) bounds each cell-side's rollouts, the worst case is 147k x 30 / 150/s
 ~ 8 h, so the refine should land by ~04:30 UTC 2026-10-29. Worst rollout still the 1,994 s Feeder hand; a new 405 s
 Recruiter/Chord/Feeder hand entered the top-3.
+
+Status 22:18 UTC: refine **93.8%** frozen at 40,500 s, idle 0.0%, load 32/32, rollouts ~155/s, freezing ~5.7
+cell-sides/s (~27 rollouts per freeze, i.e. the remaining cells mostly run to the R=30 cap). 97k left: worst case
+97k x 30 / 155/s ~ 5.2 h, so ~03:30 UTC 2026-10-29. Top-3 slow list unchanged.
