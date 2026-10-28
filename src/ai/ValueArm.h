@@ -169,6 +169,9 @@ struct Arm
     // kCycloneRemandUnset => env => 1.
     static constexpr int kCycloneRemandUnset = -99;
     int         cyclone_remand_max_mv = kCycloneRemandUnset;
+    // CYCLONE REMAND-ONLY INERT TARGET (MTG_CYCLONE_REMAND_INERT; CycloneProvider::AdmitRemandOnlyCast): 1 = a
+    // goldfish_inert card under the ceiling may be cast as a Remand's target, 0 = never, -1 unset => env => 0.
+    int         cyclone_remand_inert  = -1;
     // LEAF FIDELITY BY PASS DEPTH (manifest "leaf_greedy_from_depth"): a commit-the-line pass of nominal
     // depth >= this scores its horizon with a greedy playout instead of the 1-ply leaf. Set ONLY by the
     // value-leaf matrix on its unbudgeted H cells, from the per-deck leaf calibration stage

@@ -1205,7 +1205,14 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         if (!a.pitch_name.empty()) { tag += " (exile " + a.pitch_name.str() + " from hand)"; }
         // REMAND rider (Action::remand_by): "cast X, then Remand it" shares X's name with the plain
         // cast of X -- the same lesson once more. Say which card answers it and what it does.
-        if (!a.remand_by.empty())
+        if (!a.remand_by.empty() && !a.remand_chain_by.empty())
+        {
+            // REMAND-ON-REMAND: A on X, B on A -- X resolves, A returns to hand, B draws.
+            tag += " + " + a.remand_chain_by.str() + " on it + " + a.remand_by.str() + " on that "
+                 + a.remand_chain_by.str() + " (" + a.card_name.str() + " resolves; the first "
+                 + a.remand_chain_by.str() + " back to hand; draw a card)";
+        }
+        else if (!a.remand_by.empty())
         {
             const CardDefinition* xd = CardDatabase::Instance().Lookup(a.card_name);
             tag += (xd != nullptr && xd->params.cant_be_countered)
@@ -1975,6 +1982,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                      + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "")
                      + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str())
+                     + (a.remand_chain_by.empty() ? "" : "|rc:" + a.remand_chain_by.str())
                      + (a.pitch_name.empty() ? "" : "|px:" + a.pitch_name.str()) + ";";
             }
             if (has_collapse && !pod_reps.insert(key).second) { hide_bundle[i] = 1; }
@@ -2129,6 +2137,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                  + (a.attach_equip_id != 0 ? "|mt" + std::to_string(a.attach_equip_id) : std::string())
                  // REMAND rider: "cast X" and "cast X, Remand it" are different payloads.
                  + (a.remand_by.empty() ? std::string() : "|rm" + a.remand_by.str())
+                 + (a.remand_chain_by.empty() ? std::string() : "|rc" + a.remand_chain_by.str())
                  // "Target player gains N life" at the opponent: a different payload (set -> keyed).
                  + (a.player_target != 0 ? "|pt" + std::to_string(a.player_target) : std::string())
                  // A creature-spell convoke arm (Markov Baron; Vampires item D) is a payload too: two
@@ -2403,6 +2412,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // REMAND rider: the plan casts the Remand too (right after X) -- the same multiset
                 // CheckLine matches a declared "cast=X;cast=Remand" line against, and what keeps a
                 // remand variant from sharing the (land, casts) key of X's plain cast.
+                if (!p.actions[a].remand_chain_by.empty()) { os << ", "; JsonStr(os, p.actions[a].remand_chain_by); }
                 if (!p.actions[a].remand_by.empty()) { os << ", "; JsonStr(os, p.actions[a].remand_by); }
             }
         }
@@ -2856,6 +2866,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (!ac.remand_by.empty())
             {
                 os << ", \"remand_by\": "; JsonStr(os, ac.remand_by.str());
+                if (!ac.remand_chain_by.empty())
+                { os << ", \"remand_chain_by\": "; JsonStr(os, ac.remand_chain_by.str()); }
                 if (ac.remand_slot >= 0) { os << ", \"remand_slot\": " << ac.remand_slot; }
             }
             //  * ADVENTURE (Brightcap Badger // Fungus Frolic) is the bestow lesson again, and the

@@ -6647,6 +6647,53 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
     return before;
 }
 
+const CardDefinition* RemandChainLive(const GameState& state, int controller, const InternedName& a_name,
+                                      const InternedName& b_name, int x_number)
+{
+    if (a_name.empty() || b_name.empty()) { return nullptr; }
+    if (state.casts_remaining_this_turn >= 0 && state.casts_remaining_this_turn < 3) { return nullptr; }
+    const CardDefinition* ad = CardDatabase::Instance().Lookup(a_name.str());
+    const CardDefinition* bd = CardDatabase::Instance().Lookup(b_name.str());
+    if (ad == nullptr || bd == nullptr || !ad->params.counters_target_spell_to_hand
+        || !bd->params.counters_target_spell_to_hand) { return nullptr; }
+    int na = 0, nb = 0;
+    for (const Card& hc : state.players[controller].hand)
+    {
+        if (hc.m_number == x_number) { continue; }
+        if (hc.m_name == a_name) { ++na; }
+        if (hc.m_name == b_name && !(a_name == b_name)) { ++nb; }
+    }
+    const bool live = (a_name == b_name) ? na >= 2 : (na >= 1 && nb >= 1);
+    return live ? ad : nullptr;
+}
+
+std::size_t CastAndResolveRemandChain(GameState& state, int controller, const CardDefinition& a_def,
+                                      const CardDefinition& b_def, bool post_combat,
+                                      Card* a_out, Card* b_out)
+{
+    Player& p = state.players[controller];
+    auto rit = p.hand.end();
+    for (auto c = p.hand.begin(); c != p.hand.end(); ++c)
+    {
+        if (c->m_name != a_def.card.m_name) { continue; }
+        if (rit == p.hand.end()) { rit = c; continue; }
+        if (c->m_is_staged && (!rit->m_is_staged || c->m_staged_expiry < rit->m_staged_expiry)) { rit = c; }
+    }
+    if (rit == p.hand.end()) { return p.hand.size(); }   // both callers verified two copies before paying
+    const Card a_card = *rit;
+    p.hand.erase(rit);
+    if (a_out != nullptr) { *a_out = a_card; }
+    // A's per-cast block (CastAndResolveRemand's, same order): A is cast targeting X.
+    ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += a_def.card.m_mana_cost.ManaValue();
+    if (post_combat) { NoteMain2StagerCast(state, a_def); }
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    FireOnCastTriggers(state, a_def);
+    FireProwess(state, a_def);
+    // B targets A and resolves first: A to hand, B draws.
+    return CastAndResolveRemand(state, controller, b_def, post_combat, /*countered=*/true, a_card, b_out);
+}
+
 void SubManaCost(ManaCost& dst, const ManaCost& paid)
 {
     auto s = [](int& d, int p) { d = std::max(0, d - p); };
