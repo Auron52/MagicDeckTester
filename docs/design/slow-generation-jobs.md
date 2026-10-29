@@ -218,3 +218,4 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   s10010 gi=308, running 1.6-1.7 h in 7 cells (H4, H5, V4-V8) -> 7/32 cores busy. The matrix's wall-clock backstop
   (predictive cut 120 min ~10:57, hard cap 210 min ~12:27) is the designed bound; left to it. Same Carrion Feeder
   sac-loop tail family as the mulligan's refine (worst rollout 1,994 s).
+- 2026-10-29 11:11 UTC: Melira value leaf -- phase C finished 11:09 (no backstop cut; ~2 h 12 min). C.5 risk gate CLEAN (<=0.19% abandoned per cell; no verdict moved). Phase D: crossover 1->2 ... 5->6, trust d5 NOT trusted (V4 gap +0.0013, 95% upper 0.0027 > tol). Phase E (56 A/B jobs) started 11:10.
