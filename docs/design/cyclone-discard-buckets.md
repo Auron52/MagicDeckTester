@@ -393,7 +393,7 @@ not with significance.
   - 12 are budget butterflies: a root decision among unchanged candidates, moved by the rollout's cleanup model or the
     put-back tie-break.
   - 0 are lost lines, and 0 are rule defects.
-- EL2's slower games are a strict subset of BKT's (21 of the 24). EL2 is never slower than BKT.
+- EL2's slower games are a strict subset of BKT's (22 of the 24: not d3 70 or d5 111). EL2 is never slower than BKT.
 - The caveats:
   - The blind ensemble is 2 salts.
   - The 6 extension games have no blind run.
