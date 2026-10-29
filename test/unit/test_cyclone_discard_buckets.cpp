@@ -234,15 +234,37 @@ TEST_CASE("Cyclone bucket discard: the global shed order, bucket by bucket")
         const Names o = ShedNames(s);
         CHECK(PosOf(o, kGyrD) < PosOf(o, kHunD));
     }
-    SUBCASE("Seething Song: quota before Cyclone, with the extra lands after it")
+    SUBCASE("Seething Song: quota before Cyclone; once Cyclone is out EVERY Song is dead (USER 2026-10-29)")
     {
         const GameState before = StateD({ kIslD, kMtnD }, { kCycD, kSongD, kIslD, kWraD, kBstD, kPonD, kRemD, kEmrD });
         CHECK(PosOf(ShedNames(before), kSongD) > PosOf(ShedNames(before), kEmrD));
         const GameState after = StateD({ kCycD, kIslD, kMtnD, kIslD, kMtnD }, { kSongD, kIslD, kWraD, kBstD, kPonD, kRemD, kEmrD, kCurD });
-        const Names o = ShedNames(after);
-        CHECK(PosOf(o, kSongD) > PosOf(o, kRemD));
-        CHECK(PosOf(o, kSongD) < PosOf(o, kIslD));   // the Song sheds first among the extra lands
-        CHECK(PosOf(o, kSongD) < PosOf(o, kEmrD));
+        CHECK(FirstShed(after) == kSongD);
+        // ...right after Toxic Deluge.
+        const GameState both = StateD({ kCycD, kIslD, kMtnD, kIslD, kMtnD }, { kSongD, kIslD, kDelD, kBstD, kPonD, kRemD, kEmrD, kCurD });
+        const Names o = ShedNames(both);
+        CHECK(o[0] == kDelD);
+        CHECK(o[1] == kSongD);
+    }
+    SUBCASE("MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY: a shuffling second Eldrazi, no put-back, 2+ cyclers")
+    {
+        // Emrakul kept first; the Gyre (shuffles) second. Default: the Gyre sheds after the far land; with the
+        // sub-lever, before it (with the Eldrazi beyond two).
+        const Names hand = { kCycD, kEmrD, kGyrD, kWraD, kCurD, kPonD, kIslD, kIslD, kIslD, kIslD, kIslD };
+        const GameState s = StateD({ kIslD, kIslD, kMtnD }, hand);
+        CHECK(FirstShed(s) == kIslD);
+        ArmD v;
+        v.Set(heurarm::CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY, 1);
+        CHECK(FirstShed(s) == kGyrD);
+        // A put-back spell in hand: no change.
+        const Names hb = { kCycD, kEmrD, kGyrD, kWraD, kCurD, kBstD, kIslD, kIslD, kIslD, kIslD, kIslD };
+        CHECK(FirstShed(StateD({ kIslD, kIslD, kMtnD }, hb)) == kIslD);
+        // One cycler only: no change.
+        const Names h1 = { kCycD, kEmrD, kGyrD, kWraD, kPonD, kPonD, kIslD, kIslD, kIslD, kIslD, kIslD };
+        CHECK(FirstShed(StateD({ kIslD, kIslD, kMtnD }, h1)) == kIslD);
+        // A second Eldrazi that does NOT shuffle (the Hunger): no change.
+        const Names hh = { kCycD, kEmrD, kHunD, kWraD, kCurD, kPonD, kIslD, kIslD, kIslD, kIslD, kIslD };
+        CHECK(FirstShed(StateD({ kIslD, kIslD, kMtnD }, hh)) == kIslD);
     }
     SUBCASE("Street Wraith that cannot pay its life is dead")
     {
