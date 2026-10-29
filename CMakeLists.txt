@@ -502,6 +502,7 @@ add_executable(mtg-test
     test/unit/test_cyclone_cantrip_plans.cpp
     test/unit/test_spell_copy_id.cpp
     test/unit/test_cyclone_discard_buckets.cpp
+    test/unit/test_cyclone_cast_order.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism
