@@ -1,0 +1,25 @@
+{
+ "deck": "treasure_hunt",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "treasure_hunt-artifact-queue-d7d6a5-20261029T165858",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:22c2f0ca0230d32b1c26",
+   "frozen": "5b88c1a04b95f442eb678d87c3381cb99ffb7a47",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_treasure_hunt/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b30 adopt=0 delta=-0.00238 t=-5.66 cost=1.126x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.13x) with quality better (-0.00238) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.00400 t=-5.13 cost=1.212x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.21x) with quality better (-0.00400) -- a TRADE, the user's call",
+    "    PICK arm=d6b20 why=the cheapest of 1 passing arm(s) (1.00x vs live, delta -0.00038)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T17:17:09  PHASE E.6: no allowance for treasure_hunt -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
