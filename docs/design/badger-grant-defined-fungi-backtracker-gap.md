@@ -91,5 +91,6 @@ runner taking the newly visible line -- fungusv3 d0 seed 1506091 gi90 T5: Wild G
 Doubling Season off four Saprolings' granted {G}, where the base attacked with them (5 -> 6); the searched
 tiers weigh the same option and come out ahead.
 
-Unit suite 2087 / 2087. Owed: smoke + regression GT for the moved decks (fungusv3, fungusv32hg,
-mirrorwing, bruna) through the normal accept flow; the overnight GT is left to the periodic run.
+Unit suite 2149 / 2149. Smoke + regression GT accepted for the moved decks (smoke 7 keys, regression
+14; searched 1 slower in smoke -- fungusv3 d5 gi54 4 -> 5, budget churn, T4 at b100 and d8 b0 -- and 0
+slower / 7 faster in regression). Every other deck byte-identical. The overnight GT is left to the periodic run.
