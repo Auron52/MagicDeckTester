@@ -8395,18 +8395,26 @@ static bool SubsetSacColorOn()
     static const bool on = EnvOn("MTG_SUBSET_SAC_COLOR", true);
     return heurarm::Flag(heurarm::SUBSET_SAC_COLOR, on);
 }
-// The sac floats it credits: a sacrificed mana ARTIFACT/LAND/TOKEN (sac_for_mana_amount: Lotus Bloom, Black
-// Lotus, Dwarven Ruins, an Eldrazi Spawn) and Garth's conjure-and-crack. NOT YET the creature sac OUTLETS
-// (Skirk Prospector's {R}, Utopia Mycon's any colour), whose same credit is just as valid but measured
-// Goblins games a turn slower that do not recover at d8 b0. The first was an executor/rollout echo
-// divergence over staged impulse cards (fixed, MTG_ECHO_STAGED_GAS), the second a breakpoint base canon
-// left unchallengeable by a cascade (gi691, fixed, MTG_BP_CANON_WAVE); the third, a lost T3 line (seed
-// 1330145 gi144), is open in docs/design/mana-completeness-oracle.md 13.5.
+// The sac floats it credits: every same-subset SacForMana -- a sacrificed mana ARTIFACT/LAND/TOKEN
+// (sac_for_mana_amount: Lotus Bloom, Black Lotus, Dwarven Ruins, an Eldrazi Spawn), a creature sac
+// OUTLET (Skirk Prospector's {R}, Utopia Mycon's any colour; MTG_SUBSET_SAC_OUTLETS) -- and Garth's
+// conjure-and-crack. The outlets were held out while three Goblins games measured a turn slower at d8 b0.
+// Each was a pre-existing defect the outlets' admissions exposed, fixed at its root: an executor/rollout
+// echo divergence over staged impulse cards (MTG_ECHO_STAGED_GAS, gi3401), an unchallengeable base-canon
+// continuation at a cascade-opened breakpoint (MTG_BP_CANON_WAVE, gi691), and a line needing two non-front
+// continuations at a site-9 occurrence and its re-open (MTG_BP_DEV_SEQ, seed 1330145 gi144).
+// MTG_SUBSET_SAC_OUTLETS (DEFAULT ON; =0 -> sac_for_mana_amount sources and Garth's crack only).
+static bool SubsetSacOutletsOn()
+{
+    static const bool on = EnvOn("MTG_SUBSET_SAC_OUTLETS", true);
+    return heurarm::Flag(heurarm::SUBSET_SAC_OUTLETS, on);
+}
 static bool SubsetSacColorSource(const Action& a)
 {
     if (a.ritual_float <= 0) { return false; }
     if (TurnSolver::IsGarthLotusCrack(a)) { return true; }
-    return a.kind == Action::Kind::SacForMana && a.def != nullptr && a.def->params.sac_for_mana_amount > 0;
+    if (a.kind != Action::Kind::SacForMana) { return false; }
+    return (a.def != nullptr && a.def->params.sac_for_mana_amount > 0) || SubsetSacOutletsOn();
 }
 // Returns the table to test with: `have` itself when nothing widens, else `scratch` filled with
 // `have` plus the selected rocks' colours (a wild credit is every colour).
