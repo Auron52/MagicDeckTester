@@ -202,3 +202,10 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   every key faster; references 0 drift). Overnight lhc rows were resized to 500 b20 first (aba9d4340).
 - 2026-10-29 08:26 UTC: **value leaf started** -- `bash scripts/valueleaf.sh run decks/LifegainHeliodCombo`
   in lhc-gen at b8b87b27a, alone on the box; queue `logs/vlq_lifegainheliodcombo`. Melira's value leaf stays paused.
+- 2026-10-29 08:41 UTC: **value leaf DONE in 15 min** (phase A 2,500 games -> 11,577 rows; every phase one pool, no
+  slow games). The trained model LOST to the leafless shapes and stays staged (`logs/eval/...STAGED.json`, -0.00075 t
+  at 0.46x vs no sidecar). E.5 installed `nlesc` (escalation, leaf none: -0.00287 t at 0.555x); E.7's grid then
+  replaced it with `nlfit_d6b20` (single ladder, leaf none, relaxed alpha, target_depth 6, budget 20: +0.00025 t =
+  one game in 8,000, at 0.773x). Net vs before: ~-0.0026 t at ~0.43x search units. Trust d5 REJECTED (never engaged:
+  byte-identical on 8/8 seeds); E.6 not applicable (no ladder escalations). Two recorded TRADES not taken (live
+  nlesc at d5b30 / d5b40: -0.00013 t at 1.08x / 1.15x -- one game). Landing = sidecar + lhc smoke/regression GT.
