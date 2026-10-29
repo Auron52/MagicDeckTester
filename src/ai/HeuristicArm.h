@@ -723,6 +723,7 @@ enum Slot : int
     LHC_HELIOD_UNSICK_LIFELINK, // MTG_LHC_HELIOD_UNSICK_LIFELINK  USER 2026-10-29 ('For Heliod Targets we should prioritize things without summoning sickness followed by ones with Lifelink like Serra Ascendant'; 'Serra Ascendant can quickly make itself larger if it has counters put on it'): with no Ballista target, Heliod's counter goes to a creature without summoning sickness first, then a lifelinker, then combat power. ADOPTED DEFAULT ON (held-out 4,000 paired games per format, seeds 993001/995001, d5 b20: std 4.7555 -> 4.7555 (0/0), 2HG 4.9737 -> 4.9735 (1 better / 0 worse); play changed in 37 of 160 jobs; units x1.004 / x0.998); =0 -> the generic DefaultLifegainCounterTarget
     LHC_BUCKET_DISCARD,       // MTG_LHC_BUCKET_DISCARD  LifegainHeliodCombo's USER-reviewed cleanup-discard rule (CritterLifegain's ladder + the partner-gated COMBO bucket, Abiding Grace in the fill, a second Ballista at the bottom of it). Default ON; =0 -> the inherited CritterLifegain rule exactly
     ECHO_STAGED_GAS,          // MTG_ECHO_STAGED_GAS  GoblinsProvider::PayEchoToKeep's "no gas" clause reads the castable-exile zone too (unexpired staged cards: a Rundvelt impulse), from BOTH representations -- the executor holds them out of hand in Player::staged_cards at upkeep, the rollout in hand flagged m_is_staged -- so the search and the real game decide echo on the same cards. Goblins seed 1233402 gi3401 T3: the search declined Mogg War Marshal's echo, the executor paid it and could not cast the committed Muxus. =0 -> the hand-only scan
+    BP_CANON_WAVE,            // MTG_BP_CANON_WAVE  a base plan whose own apply in a walker host's loop took MTG_BP_BASE_CANON's one-option default (the front of a non-empty continuation list) becomes a wave-walker base, so its other ranks and its EMPTY arm are scored after everything the node scored before: a breakpoint opened by a CASCADE (Muxus's reveal -> Goblin Matron's ETB tutor -> site 10) is invisible to the pre-apply PlanOpensBreakpoint and its alternatives were unreachable at any budget. Goblins seed 1230692 gi691. Its slots come after the walker's others, and under a finite budget each of its variants is billed one unit per MTG_BP_CANON_WAVE_W (default 1) enumeration visits (continuation derivations charge no unit; EDF seed 1330259 gi258 ran for hours at b20 unbilled). Inert at an unlimited budget. =0 -> walker bases by PlanOpensBreakpoint alone
     COUNT
 };
 
@@ -1396,6 +1397,7 @@ inline const char* Name(int slot)
         "MTG_LHC_HELIOD_UNSICK_LIFELINK",
         "MTG_LHC_BUCKET_DISCARD",
         "MTG_ECHO_STAGED_GAS",
+        "MTG_BP_CANON_WAVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

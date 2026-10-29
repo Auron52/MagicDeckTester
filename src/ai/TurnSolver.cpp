@@ -8370,9 +8370,9 @@ static bool SubsetSacColorOn()
 // Lotus, Dwarven Ruins, an Eldrazi Spawn) and Garth's conjure-and-crack. NOT YET the creature sac OUTLETS
 // (Skirk Prospector's {R}, Utopia Mycon's any colour), whose same credit is just as valid but measured
 // Goblins games a turn slower that do not recover at d8 b0. The first was an executor/rollout echo
-// divergence over staged impulse cards (fixed, MTG_ECHO_STAGED_GAS); the others -- a breakpoint base
-// canon left unchallengeable by a cascade (gi691) and a lost T3 line (seed 1330145 gi144) -- are open in
-// docs/design/mana-completeness-oracle.md 13.5.
+// divergence over staged impulse cards (fixed, MTG_ECHO_STAGED_GAS), the second a breakpoint base canon
+// left unchallengeable by a cascade (gi691, fixed, MTG_BP_CANON_WAVE); the third, a lost T3 line (seed
+// 1330145 gi144), is open in docs/design/mana-completeness-oracle.md 13.5.
 static bool SubsetSacColorSource(const Action& a)
 {
     if (a.ritual_float <= 0) { return false; }
@@ -27590,6 +27590,42 @@ static void SlotPrefixProbeNoteDrop(bool land_pending, int watchers_seen)
 // delta of <= 1 here is exactly the condition under which the two arms are the same candidate,
 // whereas a delta of <= 1 on g_bp_any_last would be neither necessary nor sufficient.
 static thread_local std::uint64_t g_bp_classon_last = 0;
+// ...and the BASE CANON's own record (MTG_BP_CANON_WAVE): every time a BASE plan (bp_choice < 0) took
+// BpUnbranchedCanon's one-option default -- cands.front() of a NON-empty continuation list -- at a
+// class-on breakpoint of a searched apply. Monotonic, delta-read around a base plan's apply by the
+// hosts that own a wave walker, which then open that plan's slots by this RECORD OF FACT even when the
+// pre-apply PlanOpensBreakpoint could not see the breakpoint coming (see BpCanonWaveOn).
+static thread_local std::uint64_t g_bp_base_canon_last = 0;
+// ...and THE CANON WAVE's PRICE (MTG_BP_CANON_WAVE_W; see CanonWaveBillScope). A slot the walker opened
+// ONLY on that record is new work, and its cost lives where no unit is charged: a continuation
+// DERIVATION is an enumeration, not a search node (BpDeriveContinuationList never reaches ConsumeAt --
+// docs/design/edf-slow-rollout-tail-2026-10-17.md), and every base plan in the variant's scored subtree
+// derives its canon front at each breakpoint it reaches. EldraziDisplacerFlicker seed 1330259 gi258,
+// d5 b20: three canon-only bases in the T1 decision's turn-4 nodes, each over a ~13,000-entry
+// continuation list (50-card hands), every rank variant's subtree deriving 1-2 s of continuation lists
+// while charging ~1 unit -- 234 of 18,000 units after 45 s, so the walker's anytime test never fired and
+// the 20 ms decision would have run for hours. While such a variant is applied and scored, every plan
+// enumeration is billed to the HOST's budget at one unit per W visits, W = 1 by default: the greedy
+// walk's calibrated exchange rate (GreedyChargeWeight: a visit ~1-2 us, a unit ~1.1 us), scoped to this
+// work only. At an unlimited budget the scope never arms: nothing is billed, every line stays findable.
+// MTG_BP_CANON_WAVE_W=<W> (default 1; 0 -> unbilled, the hang).
+static thread_local SearchBudget* g_cw_bill_budget = nullptr;
+static int CanonWaveBillWeight()
+{
+    static const int w = std::max(0, static_cast<int>(EnvInt("MTG_BP_CANON_WAVE_W", 1)));
+    return w;
+}
+struct CanonWaveBillScope
+{
+    SearchBudget* const prev;
+    // Arms only for a canon-only variant under a FINITE budget; an inner non-canon variant inside an
+    // armed subtree keeps the outer arming (all of that subtree is canon-wave work).
+    CanonWaveBillScope(bool canon_only, SearchBudget* b) : prev(g_cw_bill_budget)
+    {
+        if (canon_only && b != nullptr && !b->Unlimited() && CanonWaveBillWeight() > 0) { g_cw_bill_budget = b; }
+    }
+    ~CanonWaveBillScope() { g_cw_bill_budget = prev; }
+};
 // ...and the one breakpoint a BASE plan cannot see itself reach: site 9 (post-entry activation)
 // opens ONLY for a plan carrying a bp_choice (see its gate in ApplyPlanDirect), so a base plan's
 // apply counts nothing there while every one of its variants applies a continuation. Bumped by a
@@ -57156,6 +57192,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // The playout fold's premise, checked rather than assumed: the measured base resolved this
         // occurrence by the unconditional EMPTY fallback below and nothing else (pofold).
         if (resolved && pofold::t_base.plan == &plan) { ++pofold::t_base.asym; }
+        if (canon_used && plan.bp_choice < 0) { ++g_bp_base_canon_last; }   // MTG_BP_CANON_WAVE's record
         // THE ENFORCEMENT (MTG_BP_CANON_AUDIT; see the canonaudit namespace). A canon default is
         // only legitimate while the ALTERNATIVES are reachable.
         //
@@ -65300,10 +65337,19 @@ struct EnumChargeScope
     ~EnumChargeScope()
     {
         if (visits <= 0) { return; }
+        const int w = EnumChargeWeight();
+        if (w <= 0)
+        {
+            // MTG_ENUM_CHARGE off: only the canon wave's own subtree is billed (see CanonWaveBillScope).
+            if (g_cw_bill_budget != nullptr)
+            {
+                const long long cw = CanonWaveBillWeight();
+                ConsumeAtN(g_cw_bill_budget, unitsite::kEnumCharge, (visits + cw - 1) / cw);
+            }
+            return;
+        }
         SearchBudget* const b = TurnSolver::DecisionBudget();
         if (b == nullptr) { return; }   // unlimited root / no decision: never charged
-        const int w = EnumChargeWeight();
-        if (w <= 0) { return; }
         ConsumeAtN(b, unitsite::kEnumCharge, (visits + w - 1) / w);
     }
 };
@@ -71906,6 +71952,26 @@ static int BpWaveMode()
     return m;
 }
 
+// MTG_BP_CANON_WAVE (DEFAULT ON; =0 -> the walker selects base plans by PlanOpensBreakpoint alone): a
+// base plan whose own apply in a walker host's loop took MTG_BP_BASE_CANON's one-option default (the
+// front of a non-empty continuation list) becomes a walker base, so its other ranks and its EMPTY arm
+// (MTG_BP_WAVE_EMPTY) are scored after everything the node scored before. The canon is legitimate
+// only as FIRST-IN-ORDER (docs/design/bp-empty-arm-deferred-site.md), i.e. while every alternative is
+// reachable; a breakpoint opened by a cascade the pre-apply predicate cannot see (Muxus's reveal ->
+// Goblin Matron's ETB tutor -> site 10) left it the ONLY option at any budget. Goblins seed 1230692
+// gi691 (MTG_SUBSET_SAC_COLOR): T3 main 2 {Muxus + Skirk}, the site-10 list's front a phantom
+// {Muxus + Skirk x5} that sacrifices the Warchief its cost relied on -> the T4 kill ("Muxus, then
+// stop") was unfindable at --depth 8 --budget-ms 0. A LATER WAVE, PRICED BY ITS REAL COST: a canon-only
+// base's slots are handed out only after every other slot of the walker (BpWaveWalker::Next), and while
+// one of its variants is applied and scored every plan enumeration is billed to the host's budget
+// (CanonWaveBillScope, MTG_BP_CANON_WAVE_W) -- without the bill a 20 ms EDF decision ran for hours
+// (seed 1330259 gi258) because continuation derivations charge no unit. Inert at an unlimited budget.
+static bool BpCanonWaveOn()
+{
+    static const bool v = EnvOn("MTG_BP_CANON_WAVE", true);
+    return heurarm::Flag(heurarm::BP_CANON_WAVE, v);
+}
+
 // May this node run a wave phase at all? Only the budget decides: an unlimited budget always may, a
 // budgeted one may while it has anything left (re-checked per candidate inside the loop, so the
 // phase stops the moment the budget does -- that is the anytime contract).
@@ -72904,11 +72970,15 @@ public:
     // `host_pends` -- can THIS host pend a base plan at the breakpoint node (does it pass the node a
     // capture)? Only FSLineWin's and FSLineTail's plan loops ever do, and only when node_host_here.
     // See BpWaveUnhostedSitesOn for why the mask has to know.
+    // `canon_bases` (MTG_BP_CANON_WAVE; nullptr = off): indices of base plans whose OWN apply in this
+    // host's loop took MTG_BP_BASE_CANON's one-option default at a class-on breakpoint -- a slot by
+    // record of fact, whatever the pre-apply predicate says (see BpCanonWaveOn).
     BpWaveWalker(const GameState& state, const CandSeq& plans,
                  std::size_t limit, const KnownLens* known_n,
                  const TranspositionTable::Key* node_key,
                  const std::unordered_set<std::size_t>* no_bp,
-                 bool host_pends)
+                 bool host_pends,
+                 const std::unordered_set<std::size_t>* canon_bases = nullptr)
         : m_known_n(known_n), m_node_key(node_key)
     {
         // A SEARCHED apply: outside a playout and outside a continuation-list derivation, the two
@@ -72926,8 +72996,22 @@ public:
         {
             const TurnSolver::Plan& p = plans[i];
             if (p.bp_choice >= 0) { continue; }                                  // a wave-0 variant
-            if (!dig_bp && !BpDigFanoutForPlan(state, sites, p)
-                && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
+            // THE APPLY SAID YES AND THE PREDICATE SAID NO -- the converse of the NOBP gate below.
+            // PlanOpensBreakpoint is a PRE-apply over-approximation, and it is blind to a breakpoint a
+            // CASCADE opens: Muxus's reveal puts a Goblin Matron, whose ETB tutor puts a card into hand
+            // (site 10) -- nothing in the plan's action list names Matron. The base plan's apply in this
+            // host's loop then took the canon's cands.front() with nothing scored against it, at any
+            // budget (MTG_BP_CANON_AUDIT: UNCHALLENGEABLE site 10 [NOHOST], armed by Muxus). That apply
+            // is a record of fact; open the slot on it.
+            const bool canon_hit = canon_bases != nullptr && canon_bases->count(i) != 0;
+            const bool predicted = dig_bp || BpDigFanoutForPlan(state, sites, p)
+                                || (PlanOpensBreakpoint(state, p) & sites) != 0;
+            if (!canon_hit && !predicted) { continue; }
+            // A base opened ONLY on the canon record is the canon wave's own work: its slots are handed
+            // out after every other slot of this walker (Next), and its variants are billed by their real
+            // enumeration cost (CanonWaveBillScope). Recorded by base_slot, so the nested slots its
+            // applies discover inherit it.
+            const bool canon_only_base = !predicted;
             // ---- THE PREDICATE SAID YES AND THE APPLY SAID NO (MTG_BP_WAVE_NOBP) --------------
             // PlanOpensBreakpoint is an OVER-APPROXIMATION: it asks whether a plan LOOKS like it
             // opens a breakpoint, from the plan and the pre-apply board. The apply is what settles
@@ -72951,6 +73035,7 @@ public:
                 g_bp_wave_probe.nobp_slots.fetch_add(1, std::memory_order_relaxed);
                 continue;
             }
+            if (canon_only_base) { m_canon_only.insert(m_bases.size()); }
             m_bases.push_back(i);
             AddSlots(plans, m_bases.size() - 1, BpSearchDepth());
         }
@@ -72987,15 +73072,24 @@ public:
     std::size_t LastSlot() const { return m_last; }   // MTG_BP_WAVE_PROBE slot attribution
 
     // Fills `out` with the next variant to score. False once every slot is retired.
+    // Did the variant Next() last handed out come from a base opened only on the canon record?
+    bool LastIsCanonOnly() const
+    { return !m_canon_only.empty() && m_last < m_slots.size() && m_canon_only.count(m_slots[m_last].base_slot) != 0; }
+
     bool Next(const CandSeq& plans, TurnSolver::Plan& out)
     {
         const std::size_t n = m_slots.size();
+        // Two phases: every ordinary slot first, the canon-only ones (MTG_BP_CANON_WAVE) only once no
+        // ordinary slot has anything left -- a later wave, so a finite budget reaches them only with
+        // what the walker's pre-existing work left over. One phase when there are none.
+        for (int phase = 0; phase < (m_canon_only.empty() ? 1 : 2); ++phase)
         for (std::size_t tried = 0; tried < n; ++tried)
         {
             const std::size_t here = m_cursor;
             m_cursor = (m_cursor + 1) % n;
             Slot& sl = m_slots[here];
             if (sl.done) { continue; }
+            if (!m_canon_only.empty() && (m_canon_only.count(sl.base_slot) != 0) != (phase == 1)) { continue; }
             if (sl.n >= 0 && sl.k_next >= sl.n)
             {
                 // THE SLOT'S "CAST NOTHING MORE" (MTG_BP_WAVE_EMPTY). Every in-list rank has been
@@ -73322,6 +73416,7 @@ private:
     const TranspositionTable::Key* m_node_key = nullptr;   // MTG_BP_NSKIP_GLOBAL; nullptr = off
     std::vector<Slot>        m_slots;
     std::vector<std::size_t> m_bases;      // node-plan index of each base plan, in slot-creation order
+    std::unordered_set<std::size_t> m_canon_only;   // base_slot indices opened only on the canon record
     std::vector<int>         m_at_count;   // how many bp_at slots each base already has
     std::size_t              m_cursor = 0;
     std::size_t              m_last   = 0;
@@ -86177,6 +86272,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             return kM2FixNone;
         };
         PrePlanShare m2_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
+        std::unordered_set<std::size_t> m2_canon_bases;   // MTG_BP_CANON_WAVE: base plans that took the canon
         vampaxis::List vax_list_m2;   // MTG_VAMP_AXIS_CENSUS
         for (const TurnSolver::Plan& q : post)
         {
@@ -86262,7 +86358,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             const std::uint64_t latent9_before = g_bp_latent9_last;
             const std::uint64_t truncasym_before = g_bp_truncasym_last;
             PrePlanShareArm(m2_pps, s2);
+            const std::uint64_t m2_canon_before = g_bp_base_canon_last;
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
+            if (q.bp_choice < 0 && g_bp_base_canon_last != m2_canon_before && BpCanonWaveOn())
+            { m2_canon_bases.insert(static_cast<std::size_t>(&q - post.data())); }
             m2_dig_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
             m2_pb_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
             if (m2_plain_rank) { m2_known_n.emplace(m2_nkey, g_bp_cands_last); }
@@ -86622,7 +86721,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         if (BpWavesHere(budget))
         {
             BpWaveWalker walker(state, post, m2_scanned, nullptr, nullptr, nullptr,
-                                /*host_pends=*/node_host_here);
+                                /*host_pends=*/node_host_here,
+                                m2_canon_bases.empty() ? nullptr : &m2_canon_bases);
             // The node's nested breakpoints and demoted waves (see the FSLineWin host's twin).
             NodeNestedToWalker(walker, post, node_nested);
             // MTG_BP_M2_WAVE_FIXPOINT: give the walker's lines this loop's fixpoint step (m2_fixpoint).
@@ -86639,6 +86739,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     // stopping here keeps `best` exactly as the loop left it.
                     if (AnytimeStop(budget))
                     { ++g_fs_trunc_events; break; }
+                    CanonWaveBillScope _cwb(walker.LastIsCanonOnly(), budget);   // MTG_BP_CANON_WAVE's price
                     ConsumeAt(budget, unitsite::kFsM2Wave);   // one interior node (plan applied)
                     if (s_rollout_stats)
                     { g_interior_nodes.fetch_add(1, std::memory_order_relaxed); }
@@ -88224,6 +88325,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool idh_pending = false;         // the hinted plan ended the node early; the lower-index plans are still owed
     bool idh_pending_break = false;   // ...and that end was the COMPLETE-NODES break, not a return
     PrePlanShare fsw_pps;   // every plan below is applied to a fresh copy of `state` (LoadPlanState)
+    std::unordered_set<std::size_t> m1_canon_bases;   // MTG_BP_CANON_WAVE: base plans that took the canon
     vampaxis::List vax_list_pre;   // MTG_VAMP_AXIS_CENSUS
     // MTG_PB_LAZY_CANDS: positions through the view; a synthesised plan lives in pre_syn for its iteration
     // (nothing below keeps a reference to `p` past it -- picks are copies, positions are p_pos).
@@ -88575,7 +88677,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         etb_fold.ArmApply(pre_i, &s);
         const EtbcFold::Witness ec_w0 = etbc_fold.on ? EtbcFold::Witness::Take(pf_units0) : EtbcFold::Witness{};
         PrePlanShareArm(fsw_pps, s);
+        const std::uint64_t m1_canon_before = g_bp_base_canon_last;
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        if (p.bp_choice < 0 && g_bp_base_canon_last != m1_canon_before && BpCanonWaveOn())
+        { m1_canon_bases.insert(static_cast<std::size_t>(p_pos)); }
         etbc_fold.Record(pre_i, ec_w0,
                          budget != nullptr ? budget->Used() : 0, node_snap.pending,
                          [&] { return BuildDedupKey(s); });
@@ -89338,7 +89443,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     {
         BpWaveWalker walker(state, pre_view, scanned, bp_known_n.empty() ? nullptr : &bp_known_n,
                             nskip_global_here ? &node_dedup_key : nullptr, nullptr,
-                            /*host_pends=*/node_host_here);
+                            /*host_pends=*/node_host_here,
+                            m1_canon_bases.empty() ? nullptr : &m1_canon_bases);
         // The node's nested breakpoints and demoted waves (MTG_BP_NODE_NESTED_SLOTS /
         // MTG_BP_NEW_ONLY_DEMOTE; see BpWaveWalker::AddHostedNested / AddHostedDemoted).
         NodeNestedToWalker(walker, pre_view, node_nested);
@@ -89368,6 +89474,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 if (AnytimeStop(budget))
                 { ++g_fs_trunc_events;
                   if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
+                CanonWaveBillScope _cwb(walker.LastIsCanonOnly(), budget);   // MTG_BP_CANON_WAVE's price
                 if (BpWaveProbeOn()) { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
 
                 ConsumeAt(budget, unitsite::kFsBpWave);   // one interior node (plan applied)
@@ -94791,6 +94898,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         std::uint64_t any_before = 0;
         std::uint64_t classon_before = 0;
         std::uint64_t latent9_before = 0;
+        // MTG_BP_CANON_WAVE: base plans whose own apply took the base canon (see BpCanonWaveOn). Set
+        // beside every `any_before`; a FOLDED apply (no ApplyPlanDirect ran) records no delta, so it
+        // opens no slot -- exactly today's behaviour for it.
+        std::uint64_t canon_before = 0;
+        std::unordered_set<std::size_t> bp_canon;
         // THE PLAYOUT WAVE-0 IDENTITY (MTG_BP_PO_W0_FOLD; see the pofold namespace for the identity and
         // its three measured asymmetries). PLAYOUTS ONLY -- that is where both canon defaults stand down,
         // so a base plan's line is EMPTY at every breakpoint. The order premise is the NOBP skip's:
@@ -94859,6 +94971,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         };
         auto w0len_record = [&](const Plan& pl)
         {
+            if (pl.bp_choice < 0 && g_bp_base_canon_last != canon_before && BpCanonWaveOn())
+            { bp_canon.insert(cand_index); }
             if (w0chain_here)
             {
                 w0collapse::Record(w0_chain, pl, static_cast<int>(cand_index),
@@ -95165,6 +95279,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
                     cand_index = pf_i;
                     any_before = g_bp_any_last;
+                    canon_before = g_bp_base_canon_last;
                     classon_before = g_bp_classon_last;
                     if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = false; }
                     latent9_before = g_bp_latent9_last;
@@ -95194,6 +95309,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
                     cand_index = ef_i;
                     any_before     = g_bp_any_last - ef_tr->any;
+                    canon_before = g_bp_base_canon_last;
                     classon_before = g_bp_classon_last - ef_tr->classon;
                     latent9_before = g_bp_latent9_last - ef_tr->latent9;
                     if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = ef_tr->sup; }
@@ -95244,6 +95360,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (w0chain_here) { for (int& ci0 : g_bp_chain_ci0) { ci0 = -2; } }
                     cand_index = ec_i;
                     any_before = g_bp_any_last;
+                    canon_before = g_bp_base_canon_last;
                     classon_before = g_bp_classon_last;
                     if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = false; }
                     latent9_before = g_bp_latent9_last;
@@ -95281,6 +95398,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // ...and the same one-apply-measures-it convention for the no-breakpoint gate.
             cand_index = ci;
             any_before = g_bp_any_last;   // DELTA, not a reset -- see g_bp_any_last
+            canon_before = g_bp_base_canon_last;
             classon_before = g_bp_classon_last;   // ...and its enabled-class twin
             // Per-apply, exactly as FSLineWin resets it: "did THIS apply suppress a searched-only
             // site". The flag is thread_local and set-only at the gate, so without a reset here the
@@ -95972,7 +96090,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                 bp_w0_lens.empty() ? nullptr : &bp_w0_lens,
                                 nullptr,
                                 bp_nobp.empty() ? nullptr : &bp_nobp,
-                                /*host_pends=*/false);   // this loop never passes the node a capture
+                                /*host_pends=*/false,   // this loop never passes the node a capture
+                                bp_canon.empty() ? nullptr : &bp_canon);
             if (walker.Empty())
             {
                 if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
@@ -96003,6 +96122,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (AnytimeStop(budget))
                     { ++g_fs_trunc_events;
                       if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
+                    CanonWaveBillScope _cwb(walker.LastIsCanonOnly(), budget);   // MTG_BP_CANON_WAVE's price
                     if (BpWaveProbeOn())
                     { g_bp_wave_probe.scored.fetch_add(1); g_bp_wave_probe.la_scored.fetch_add(1);
                       BpWaveRank(walker.LastRank()); }

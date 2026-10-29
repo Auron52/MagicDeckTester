@@ -956,12 +956,20 @@ and both win on the base turn under the non-clairvoyant search, so neither is cl
   neither); `test/unit/test_echo_staged_gas.cpp` pins the agreement and the lever-off split.
 * gi691: no divergence -- the unlimited search over the larger menu simply commits a T5 line where the base finds
   T4 (Piledriver held for turn 4). The mechanism is a breakpoint base plan that took the unbranched canon and is
-  never re-opened as a wave walker, so the larger menu's cascade cannot challenge it (`MTG_BP_CANON_WAVE`, in
-  progress: 80 faster / 2 slower over every suite deck with both slower recovering, but it hangs
-  EldraziDisplacerFlicker seed 1330259 gi258 at T1 and is not landed).
+  never re-opened as a wave walker, so the larger menu's cascade cannot challenge it. **Fixed (`MTG_BP_CANON_WAVE`,
+  DEFAULT ON):** a base plan that took the canon default becomes a walker base too. Its slots are handed out LAST
+  (after every other slot), and under a finite budget the enumerations its variants run are billed to the host's
+  budget (`MTG_BP_CANON_WAVE_W` visits per unit, default 1). The first, unbilled version hung
+  EldraziDisplacerFlicker seed 1330259 gi258 at T1: three turn-4 bases with ~50-card hands each opened ~13,000
+  rank variants, and a continuation derivation is an enumeration, not a node, so the walker's budget check never
+  fired (234 of 18,000 units used after 45 s). Billed, gi258 wins T4 with the off arm's moves (21 s vs 15 s wall:
+  the billed T1 line is honestly marked truncated, so T2/T3 search again). At `--budget-ms 0` nothing is billed and
+  every slot is reached. gi691 at d8 b0: T5 -> T4. Held-out (seed 1390001, every suite deck, 34,154 games,
+  `MTG_PAY_REFINE` on): 15 faster / 0 slower, units +0.41% (EDF -9.2%, Goblins +29.8%, Minotaur +10.9% with an
+  identical digest).
 * A third, found on the re-measure (seed 1330145 gi144, T3 -> T4 at d8 b0, T3 on both arms under the non-clairvoyant
   search): with the outlets credited the T1 search only finds a turn-4 win. Open.
-`SubsetSacColorSource` leaves the outlets out until gi691 and gi144 are fixed.
+`SubsetSacColorSource` leaves the outlets out until gi144 is fixed.
 
 **Also found: the sac-colour fold is a guess.** `MTG_SAC_COLOR_FOLD` (on-board Lotus / Lotus Bloom) resolves the
 colour at apply from a scarcity score over the accounting pool, which counts a dual land toward both its colours; the
