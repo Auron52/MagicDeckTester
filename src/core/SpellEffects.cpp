@@ -3567,6 +3567,18 @@ static bool AcfInteriorEnabled()
     return v;
 }
 
+// MTG_GRANT_DEFINED_PAY (DEFAULT ON; =0 -> tokens + equip hosts only). Brightcap Badger's grant reaches
+// Fungus / Saproling CARDS with no mana ability (Thallid, Sporecrown Thallid, Shroofus Sproutsire,
+// Utopia Mycon) as well as definition-less tokens. The greedy payer and the bounds always tapped them;
+// the tap backtracker's source list and ManaCacheKey admitted only the tokens (and, since Paradise
+// Mantle, equip hosts), so a payment that needed a Thallid's granted {G} failed in the backtracker
+// while the greedy found it. docs/design/badger-grant-defined-fungi-backtracker-gap.md.
+static bool GrantDefinedPayOn()
+{
+    static const bool on = EnvOn("MTG_GRANT_DEFINED_PAY", true);
+    return on;
+}
+
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors,
@@ -3704,12 +3716,17 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
                 || d->params.mana_rock || IsPaySacSource(*d))   // §2a
             { s_src_cands_buf.push_back({ i, d }); }
-            else if (EquipGrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield))
+            else if (GrantDefinedPayOn()
+                     ? (GrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield))
+                     : (EquipGrantReaches(grant, p) && GrantedBodyCanTap(grant, p, state.battlefield)))
             {
-                // PARADISE MANTLE's host: a real creature card with no mana ability of its own,
-                // tapping as the any-colour face. Uncapped -- hosts are distinct cards (at most
-                // one per Mantle), not interchangeable tokens. Lockstep with ManaCacheKey below.
-                s_src_cands_buf.push_back({ i, &AnyColorGrantFace() });
+                // A REAL creature card with no mana ability of its own that a grant reaches: Paradise
+                // Mantle's host (the any-colour face), or a Fungus / Saproling CARD under Brightcap
+                // Badger (Thallid, Sporecrown Thallid, Shroofus Sproutsire, Utopia Mycon -- the grant's
+                // second population, see ManaDefOf). Uncapped -- these are distinct cards, not
+                // interchangeable tokens. Lockstep with ManaCacheKey below and with the greedy payer
+                // (ManaPayment.cpp), which has always tapped them.
+                s_src_cands_buf.push_back({ i, &GrantFaceFor(grant, p) });
             }
         }
         src_cands = &s_src_cands_buf;
@@ -5490,11 +5507,13 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
             d = &GrantFaceFor(grant, p);
         }
-        else if (!IsBaselineManaSource(*d) && !IsPaySacSource(*d) && EquipGrantReaches(grant, p)
+        else if (!IsBaselineManaSource(*d) && !IsPaySacSource(*d)
+                 && (GrantDefinedPayOn() ? GrantReaches(grant, p) : EquipGrantReaches(grant, p))
                  && GrantedBodyCanTap(grant, p, state.battlefield))
         {
-            // PARADISE MANTLE's host -- lockstep with the backtracker's source list above.
-            d = &AnyColorGrantFace();
+            // A granted real card (Paradise Mantle's host, a Badger-granted Fungus card) --
+            // lockstep with the backtracker's source list above.
+            d = &GrantFaceFor(grant, p);
         }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
               || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
