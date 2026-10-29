@@ -578,7 +578,8 @@ private:
     // nothing, so a caller must not read "no draw" as "no dig").
     DigOutcome PerformDigFull(GameState& state, const std::string& source, bool is_sacrifice,
                               int scry_pin, int fc_pin,
-                              const std::function<void(GameState&)>& resolve_stack);
+                              const std::function<void(GameState&)>& resolve_stack,
+                              std::int32_t pay_split = 0);   // a seed's payment split (ManaPayment.h, Q61)
     // MTG_LANDDRAW_CENSUS's per-dig half (diagnostic only; see LandDrawCensusEndTurn).
     static void LandDrawCensusAfterDig(const GameState& state, bool drew_land, int drawn_num);
 
