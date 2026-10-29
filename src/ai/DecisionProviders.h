@@ -3483,7 +3483,72 @@ public:
     // prunes the put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.
     bool PutBackSingleCandidate(const GameState& s) const override;
     bool ReorderKeepShuffleOnly(const GameState& s) const override;
+    // THE BUCKETED CLEANUP DISCARD (MTG_CYCLONE_BUCKET_DISCARD, DEFAULT OFF until the USER adopts it;
+    // docs/design/cyclone-discard-buckets.md). The shed is the last card of the bucket keep order
+    // (CycloneExpendabilityRank below), routed through CleanupDiscardRankingWithOrder so the staged-card and
+    // required-piece protections stay engine-enforced, returned as ONE index (two under
+    // MTG_CYCLONE_DISCARD_SHUFFLE_PLAN with a known top). The quotas move after every shed, so the rule is
+    // asked again per shed (ShedStable false). The SHED ORDER is the whole ranking, which is what the put-back
+    // tie-break (PutBackRanking) reads. Lever off -> the generic rule, byte-identical.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
+    std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
 };
+
+// ---- THE CYCLONE EXPENDABILITY MODEL (shared by the cleanup discard and, under MTG_CYCLONE_BUCKET_KEEPNEED, the
+// scored put-back's keep needs: "one model, two consumers", docs/design/cyclone-discard-buckets.md). A pure
+// function of the hand, our battlefield, life and the LEGITIMATELY known top (never the library order). Exposed
+// (not file-static) so the cantrip scorer and the unit tests read the same ranking.
+//
+// Bucket TIERS, in shed order (lower = shed first). The overflow tiers come first; the quota ("crucial") tiers
+// follow, shed only when the hand holds nothing else, and the engine (the last Cyclone, or Long-Term Plans
+// standing in for it) is shed last of all.
+enum CycShedTier : int
+{
+    kCycTierDead           = 10,    // Toxic Deluge (goldfish_inert), a surplus Cyclone, a second Song, an uncyclable Wraith
+    kCycTierEldraziBeyond  = 20,    // the third Eldrazi and beyond
+    kCycTierLandFar        = 30,    // lands beyond the quota + 2
+    kCycTierEldrazi2       = 40,    // the second Eldrazi (default: below Remand in keep priority)
+    kCycTierShuffleSetup   = 45,    // known SETUP top: a shuffling Eldrazi from the tiers above, after every non-shuffle card in them
+    kCycTierRemand         = 50,    // Remand (and any card the model does not name)
+    kCycTierEldrazi2Over   = 55,    // the second Eldrazi under MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND
+    kCycTierExtraLand      = 60,    // the 2 extra lands; the one Song once Cyclone is out
+    kCycTierCyclerSurplus  = 70,    // creature cyclers beyond three (Curator before Wraith)
+    kCycTierDigSurplus     = 80,    // dig beyond its quota of 2 (the reverse of the fill order)
+    kCycTierEldrazi1       = 90,    // the first Eldrazi (Emrakul when held): the last non-crucial card
+    kCycTierDigSlot2       = 100,   // ---- quota from here on ----
+    kCycTierLandQuota      = 110,   // lands within the go-off need, beyond the minimum
+    kCycTierSong           = 120,   // the one Seething Song before Cyclone is out
+    kCycTierCycler         = 130,   // creature cyclers within three
+    kCycTierDigSlot1       = 140,   // the put-back slot
+    kCycTierLandMin        = 150,   // the minimum land (the next drop)
+    kCycTierEngine         = 200,   // the last Cyclone, or Long-Term Plans standing in while none is found
+};
+enum class CycloneKnownTop : std::uint8_t { Unknown, Setup, Junk };
+struct CycloneExpendabilityOpts
+{
+    bool dig_putback_first_after_cyclone = false;   // MTG_CYCLONE_DISCARD_DIG_PUTBACK_FIRST
+    bool eldrazi2_over_remand            = false;   // MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND
+    CycloneKnownTop top                  = CycloneKnownTop::Unknown;
+};
+struct CycloneExpendability
+{
+    std::vector<int>  shed_order;   // every hand index, most expendable first
+    std::vector<int>  tier;         // per hand index: its CycShedTier
+    std::vector<char> shuffles;     // per hand index: discarding it shuffles the graveyard into the library
+};
+CycloneExpendability CycloneExpendabilityRank(const GameState& s, int me, const CycloneExpendabilityOpts& o);
+// What we LEGITIMATELY know about the top. Today's proxy (until the known-top tracking lands): a deliberate top
+// stack THIS turn (top_stacked_turn == TurnSeq) whose card is still on top -- a creature there is a SETUP, any
+// other card JUNK. Unknown otherwise.
+CycloneKnownTop CycloneKnownTopOf(const GameState& s, int me);
+// The bucket model's options as the per-job flags set them (the discard's and the scorer's shared reading).
+CycloneExpendabilityOpts CycloneExpendabilityOptsNow(const GameState& s, int me);
+bool CycloneBucketDiscardOn();
+bool CycloneBucketKeepNeedOn();
 
 class LandfallProvider : public DeckProvider
 {
