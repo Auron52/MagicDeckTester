@@ -6337,22 +6337,27 @@ async function step() {
     // A frame that reports a drop is never advanced to: the rollback owns it.
     const dropped=(res.decision||{}).dropped_casts||[];
     const note=S.pendingSearchNote; S.pendingSearchNote=null;
-    if (dropped.length) return rollbackLine(dropped);
+    if (dropped.length) return rollbackLine(dropped, (res.decision||{}).dropped_reasons||[]);
     advanceTo(res.decision);
     if (note) showSearchNote(note);
   } else if (res.kind==='result') {
     const dropped=(res.result||{}).dropped_casts||[];
     S.pendingSearchNote=null;
-    if (dropped.length) return rollbackLine(dropped);
+    if (dropped.length) return rollbackLine(dropped, (res.result||{}).dropped_reasons||[]);
     showResult(res.result);
   } else showError(res.error||'unknown error', res.raw);
 }
 // (detectDropped removed: dropped-cast detection is now server-truth via decision.dropped_casts,
 // read directly in step(). The old board-diff inference false-positived on working lines — issue #3a.)
-function notifyDropped(names){
+// `reasons` (engine decision.dropped_reasons, parallel to dropped_casts; Q37, USER 2026-10-29: "Seething
+// Song plans should error properly if cast with 1 mana"): what each drop was short of, read off the board
+// at the failed payment ("Seething Song costs {2}{R}; only 1 mana available"). Absent on an older binary.
+function notifyDropped(names, reasons){
+  const why=(reasons||[]).filter(r=>r);
   const ve=$('verdict'); ve.className='unsupported';
   ve.innerHTML=`<span class="vtag">line rejected</span>`+
     `<h4>${names.map(esc).join(', ')} — not paid</h4>`+
+    (why.length ? `<div class="dropwhy">${why.map(r=>esc(r)+'.').join('<br>')}</div>` : '')+
     `<div>When the line was played, the engine’s automatic tapping couldn’t pay for `+
     `${names.length>1?'these spells':'this spell'} in the order queued, so the whole line was <b>rolled back</b> — `+
     `nothing was cast, tapped, or drawn. That is not always the board running out of mana: queuing your own `+
@@ -6431,7 +6436,7 @@ async function undo() {
 // Roll the whole line back to the previous phase — as if it was never committed (nothing cast/tapped/
 // drawn, history entries removed) — then re-fetch that decision and tell the user why. Stateless replay
 // makes the rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
-async function rollbackLine(names) {
+async function rollbackLine(names, reasons) {
   // A rolled-back line voids any pending "Commit turn" skip (mirror handleVerdict's reject branch):
   // otherwise the post-rollback advanceTo re-fires the commit-turn auto-pass and BURNS the turn --
   // the user reported "Commit turn played nothing and went to turn N+1" after a rejected line.
@@ -6439,7 +6444,7 @@ async function rollbackLine(names) {
   rollbackStep();
   S.undoing = true;                // land ON the restored pre-commit decision, don't auto-advance it (mirror undo())
   renderHistory(); await step();   // re-fetch the pre-commit decision (board fully restored)
-  notifyDropped(names);            // then surface why the line was rejected
+  notifyDropped(names, reasons);   // then surface why the line was rejected
 }
 async function saveRef(suboptimal) {
   $('saveinfo').textContent='saving…';

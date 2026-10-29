@@ -1770,7 +1770,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               const std::vector<std::string>& dropped_casts = {},
                               int main_ordinal = -1,
                               const std::vector<PlayReveal>& reveals = {},
-                              int chosen_index = -1)
+                              int chosen_index = -1,
+                              const std::vector<std::string>& dropped_reasons = {})
 {
     const Player& me  = s.ActivePlayer();
     DecisionJson d(os, decision_index);
@@ -1853,6 +1854,22 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             JsonStr(os, dropped_casts[di]);
         }
         os << "],\n";
+        // ...and WHY each one dropped (Q37), index-aligned: read off the board at the failed payment ("Seething
+        // Song costs {2}{R}; only 1 mana available"); "" where the drop site gives none. Emitted only beside
+        // dropped_casts and only when some reason is known, so every other frame serialises byte-identically.
+        bool any_reason = false;
+        for (size_t di = 0; di < dropped_casts.size() && di < dropped_reasons.size(); ++di)
+        { if (!dropped_reasons[di].empty()) { any_reason = true; break; } }
+        if (any_reason)
+        {
+            os << "  \"dropped_reasons\": [";
+            for (size_t di = 0; di < dropped_casts.size(); ++di)
+            {
+                if (di) { os << ", "; }
+                JsonStr(os, di < dropped_reasons.size() ? dropped_reasons[di] : std::string());
+            }
+            os << "],\n";
+        }
     }
     WriteBoardContext(os, s, reveal_count);
     // Land's Edge availability: when the active player controls a Land's Edge (or any
@@ -5112,6 +5129,71 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
 // Land's Edge discard of a land not in hand, a land that cannot be played) makes the line ILLEGAL here,
 // with every reason -- the commit would otherwise drop it. Human play only; a line
 // without `seq=` (every line written before 2026-10-22, and every one-step line) is untouched.
+// THE ONE-STEP LINE IS PREVIEWED TOO (Q37, USER 2026-10-29: "Seething Song plans should error properly if cast
+// with 1 mana"). A line of a single step carries no `seq=` (there is no order to keep), so it skipped the preview
+// below -- and TurnSolver's order-free ritual affordability credit (a ritual's float counts toward its OWN cost:
+// load-bearing as a PROPOSAL in the autonomous search, whose re-sim verifies it) enumerates "cast: Seething Song"
+// off one Mountain. CheckLine matched that plan, the viewer committed it, and the commit dropped the cast and
+// rolled the line back with a generic "not enough mana". Now such a line previews the commit exactly as the
+// commit will run it (PrepareHumanCommit with the empty pin an unpinned segment commits under, one trial apply)
+// and a cast or activation the apply drops makes it ILLEGAL here, with the board's own reason ("Seething Song
+// costs {2}{R}; only 1 mana available"). The menu is untouched -- the plan stays offered at the same index, so
+// every saved reference replays as recorded -- and the autonomous search never reaches this (human play only).
+// SCOPE: exactly the gap -- a line with no land step whose plan is ONE action. The viewer pins every line of two
+// or more steps (`seq=`, previewed below in the human's order), and an unpinned multi-step line (a scenario, an
+// old client) is not previewed: its trial, with the choosers nulled and no human cast order, under-reports what a
+// commit realises (the untapper-hoisted Reality Spasm line of hinata_spasm_hoisted_before_sol_ring, the Karoo
+// float of bruna_human_karoo_float_legacy), and a false "cannot be paid" would block a line the board can play.
+static void ValidateUnpinnedHumanLine(const GameState& s, bool is_pre, const TurnSolver::LineSpec& spec,
+                                      const std::vector<TurnSolver::Plan>& plans, TurnSolver::LineCheck& chk)
+{
+    using Vd = TurnSolver::LineCheck::Verdict;
+    if (spec.has_land) { return; }
+    auto problems = [&](int idx, std::string& first_drop) -> std::vector<std::string>
+    {
+        std::vector<std::string> out;
+        if (idx < 0 || idx >= static_cast<int>(plans.size())) { return out; }
+        if (plans[static_cast<std::size_t>(idx)].actions.size() != 1) { return out; }   // one-step plans only
+        const HumanCommitPreview pv =
+            PrepareHumanCommit(s, plans[static_cast<std::size_t>(idx)], std::vector<std::string>{}, is_pre, true);
+        for (std::size_t k = 0; k < pv.dropped.size(); ++k)
+        {
+            const std::string& why = k < pv.dropped_reasons.size() ? pv.dropped_reasons[k] : std::string();
+            out.push_back(why.empty() ? pv.dropped[k] + " cannot be paid" : why);
+            if (first_drop.empty()) { first_drop = pv.dropped[k]; }
+        }
+        return out;
+    };
+    auto reject = [&](const std::vector<std::string>& why, const std::string& first_drop) {
+        std::string r;
+        for (const std::string& x : why) { r += (r.empty() ? "" : "; ") + x; }
+        chk.verdict       = Vd::Illegal;
+        chk.failed_action = first_drop.find(" (activation)") != std::string::npos ? first_drop : "cast " + first_drop;
+        chk.reason        = "this line cannot be paid: " + r;
+        chk.variants.clear();
+        chk.plan_index    = -1;
+    };
+    if (chk.verdict == Vd::Accept)
+    {
+        std::string first_drop;
+        const std::vector<std::string> why = problems(chk.plan_index, first_drop);
+        if (!why.empty()) { reject(why, first_drop); }
+        return;
+    }
+    std::vector<TurnSolver::LineVariant> keep;
+    std::vector<std::string> first_why;
+    std::string first_drop;
+    for (const TurnSolver::LineVariant& v : chk.variants)
+    {
+        std::string fd;
+        const std::vector<std::string> why = problems(v.plan_index, fd);
+        if (why.empty()) { keep.push_back(v); }
+        else if (first_why.empty()) { first_why = why; first_drop = fd; }
+    }
+    if (keep.empty()) { reject(first_why, first_drop); return; }
+    chk.variants = std::move(keep);   // (the "**" preview below keeps a Choose the same way)
+}
+
 // `unpaid_order` (optional): when the line is rejected because the queued order cannot PAY (a cast
 // unpayable at its position, or one the trial commit drops), the plan that commit would have applied --
 // the human's order -- so the validation can ask the mana oracle whether ANY taps pay it.
@@ -5120,8 +5202,9 @@ static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSol
                                   std::optional<TurnSolver::Plan>* unpaid_order = nullptr)
 {
     using Vd = TurnSolver::LineCheck::Verdict;
-    if (spec.sequence.empty() || !HumanPlayActive()) { return; }
+    if (!HumanPlayActive()) { return; }
     if (chk.verdict != Vd::Accept && chk.verdict != Vd::Choose) { return; }
+    if (spec.sequence.empty()) { ValidateUnpinnedHumanLine(s, is_pre, spec, plans, chk); return; }
     std::vector<std::string> ord{ "**" };
     ord.insert(ord.end(), spec.sequence.begin(), spec.sequence.end());
     std::optional<TurnSolver::Plan> first_unpaid;
@@ -5386,6 +5469,8 @@ if (!keep_sinks)   // --choices-then-auto keeps them: the search's turns still n
     g_play_reveal_sink = nullptr;
     g_play_event_sink = nullptr;
     g_play_dropped_cast_sink = nullptr;
+    g_play_dropped_reason_sink = nullptr;
+    g_play_dropped_reason_pair = nullptr;
 }
 // Was MISSING: installed at RunClaudePlay (the only g_play_* hook set outside Install), so the
 // global outlived the harness it pointed into. Harmless only because the process returns from main
@@ -5475,7 +5560,8 @@ if (!log_dir.empty())
 // the goldfish perspective for the board dump and restores it -- the original did the same inline.
 void WriteClaudePlayResult(GameState& state, const std::vector<PlayEvent>& event_log,
                            const std::vector<std::string>& dropped_log, bool won, int win_turn,
-                           int decisions_made, const std::string& mulligan_json)
+                           int decisions_made, const std::string& mulligan_json,
+                           const std::vector<std::string>& dropped_reason_log)
 {
 // Final life totals (player 0 = goldfish, player 1 = opponent) so the GUI can show the
 // opponent at 0/negative on a win, making the lethal blow visible rather than freezing the
@@ -5518,6 +5604,20 @@ if (!dropped_log.empty())
         JsonStr(std::cout, dropped_log[di]);
     }
     std::cout << "],\n";
+    // ...and why (Q37; see WriteDecisionJson's dropped_reasons).
+    bool any_reason = false;
+    for (size_t di = 0; di < dropped_log.size() && di < dropped_reason_log.size(); ++di)
+    { if (!dropped_reason_log[di].empty()) { any_reason = true; break; } }
+    if (any_reason)
+    {
+        std::cout << "  \"dropped_reasons\": [";
+        for (size_t di = 0; di < dropped_log.size(); ++di)
+        {
+            if (di) { std::cout << ", "; }
+            JsonStr(std::cout, di < dropped_reason_log.size() ? dropped_reason_log[di] : std::string());
+        }
+        std::cout << "],\n";
+    }
 }
 std::cout << "  \"win_turn\": " << (won ? win_turn : -1)
           << ", \"won\": " << (won ? "true" : "false")
@@ -5638,6 +5738,8 @@ struct ClaudePlayHarness
     // it is cleared when a decision is consumed, so the next emitted decision carries exactly the
     // just-committed plan's dropped casts. The browser reads this instead of guessing via detectDropped.
     std::vector<std::string> dropped_log;
+    // ...and why each one dropped, index-aligned (Q37; g_play_dropped_reason_sink). Same lifecycle.
+    std::vector<std::string> dropped_reason_log;
     // ---- parsed side channels (keyed args, not the positional --choices stream) ----
     std::map<int, int>                      firebreathe_by_turn;
     std::map<int, std::vector<std::string>> cast_order_by_main;
@@ -6061,7 +6163,7 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
     os << ",\n";
     os << "  \"decision\": ";
     WriteDecisionJson(os, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log,
-                      this_main_ordinal, reveal_log);
+                      this_main_ordinal, reveal_log, -1, dropped_reason_log);
     os << "}\n<<<END_VALIDATION>>>\n";
     os.flush();
 }
@@ -6077,6 +6179,8 @@ void ClaudePlayHarness::Install(AIEngine& ai)
     g_play_reveal_sink       = &reveal_log;
     g_play_event_sink        = &event_log;
     g_play_dropped_cast_sink = &dropped_log;
+    g_play_dropped_reason_sink = &dropped_reason_log;   // paired with dropped_log (GameLogger.h)
+    g_play_dropped_reason_pair = &dropped_log;
 
     InstallEngineChoosers(ai);
     InstallResolutionChoosers(ai);
@@ -6168,7 +6272,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                         }
                     }
                     ss << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log, chosen);
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log, chosen, dropped_reason_log);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
@@ -6179,6 +6283,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                 reveal_log.clear();
                 event_log.clear();
                 dropped_log.clear();
+                dropped_reason_log.clear();
                 return chosen;
             }
             // --choices-then-auto: the scripted prefix ends HERE; the search plays the rest.
@@ -6194,7 +6299,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log, -1, dropped_reason_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             // --interactive: the wait can be broken by PICKS (resume the game) or by a
@@ -8206,7 +8311,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          h.event_log);
 
     WriteClaudePlayResult(state, h.event_log, h.dropped_log, won, win_turn, h.decisions_made,
-                          mulligan_json);
+                          mulligan_json, h.dropped_reason_log);
     return 0;
 }
 
@@ -8535,6 +8640,7 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // of that name ends attached to a permanent of that name
 //                                    // ("attached": false asserts it is NOT)
 //     "expect_exile_contains": ["X"],  // optional: X in the exile zone (and not on the battlefield)
+//     "expect_graveyard_contains": ["X"], // optional: X in OUR graveyard at the end (e.g. a cycled card)
 //     "expect_exile_counts": {"X": 2}, // optional: EXACTLY 2 copies of X in exile (copies may remain in play)
 //                                    // at the end -- removal a passive opponent never notices
 //     "expect_active_life": 20,      // optional: pin OUR life (incidental lifegain / pain taps) --
@@ -8948,12 +9054,15 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         TurnSolver::LineSpec  spec = ParseLineSpec(j.at("validate_line").get<std::string>());
         // A `seq=` line is previewed against ONE enumerated menu (its plan indices must name the plans
         // the preview applies); every other line keeps CheckLine's own enumeration, as always.
+        // Under human play EVERY line is previewed (ValidateHumanSequence: a one-step line too, Q37), against that
+        // same menu -- CheckLine's own enumeration is this same EnumerateMainPlans call.
+        const bool preview = !spec.sequence.empty() || HumanPlayActive();
         std::vector<TurnSolver::Plan> vmenu;
-        if (!spec.sequence.empty()) { vmenu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true); }
-        TurnSolver::LineCheck chk  = spec.sequence.empty()
+        if (preview) { vmenu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true); }
+        TurnSolver::LineCheck chk  = !preview
             ? TurnSolver::CheckLine(s, /*is_pre_combat=*/true, spec)
             : TurnSolver::CheckLine(s, /*is_pre_combat=*/true, spec, &vmenu);
-        if (!spec.sequence.empty()) { ValidateHumanSequence(s, /*is_pre=*/true, spec, vmenu, chk); }
+        if (preview) { ValidateHumanSequence(s, /*is_pre=*/true, spec, vmenu, chk); }
         using Vd = TurnSolver::LineCheck::Verdict;
         const char* got =
             chk.verdict == Vd::Accept             ? "accept" :
@@ -9540,6 +9649,23 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // none of them on the battlefield. Pins a removal effect against a goldfish opponent whose
     // creatures never act -- exiling one changes neither life total nor win turn, so no assertion
     // above can see whether Brutal Cathar's "exile target creature an opponent controls" fired.
+    // "expect_graveyard_contains": ["X"] -- X in OUR graveyard at the end (QR1: a cycled card; the human DigDraw
+    // pass skips a cycle it cannot pay without reporting a drop, so the graveyard is what proves it happened).
+    if (j.contains("expect_graveyard_contains"))
+    {
+        for (const auto& v : j.at("expect_graveyard_contains"))
+        {
+            const std::string want = v.get<std::string>();
+            bool in_gy = false;
+            for (const Card& c : state.players[0].graveyard) { if (c.m_name.str() == want) { in_gy = true; break; } }
+            if (!in_gy)
+            {
+                std::cout << "scenario: FAIL expected " << want << " in our graveyard\n";
+                return 1;
+            }
+            std::cout << "scenario: PASS (" << want << " in the graveyard)\n";
+        }
+    }
     if (j.contains("expect_exile_contains"))
     {
         for (const auto& v : j.at("expect_exile_contains"))
