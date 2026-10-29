@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 32653d1da  date 2026-10-29
+# Regression ground truth -- commit 2c421078f  date 2026-10-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
@@ -60,7 +60,7 @@ kittyv3_smoke_d3_s1001=3.8400/4fac35dad45d7926
 kittyv3_smoke_d5_s1001=3.8240/41dc14b963c418de
 dragons_smoke_d0_s1001=5.8770/dd236879b767c067
 dragons_smoke_d3_s1001=5.6667/c0ee72eb64148473
-dragons_smoke_d5_s1001=5.6277/2b47dde3ca05b9a1
+dragons_smoke_d5_s1001=5.6277/dd3394129301c569
 breaching_smoke_d0_s1001=4.8460/d7152eee2ef2f433
 breaching_smoke_d3_s1001=3.0800/f7ff527dd38a2821
 breaching_smoke_d5_s1001=3.0971/4c4debfd5590bdff
@@ -94,7 +94,7 @@ creature_giving2hg_smoke_d5_s1001=4.9600/424e17b358bc1a67
 mirrorwing2hg_smoke_d5_s1001=4.6800/76c1e18ed592e4b1
 stompy2hg_smoke_d5_s1001=4.3200/18469c4192a9c5e1
 kittyv32hg_smoke_d5_s1001=4.3800/8fe9c4a14bdc44de
-dragons2hg_smoke_d5_s1001=6.1800/e07b39154e2ffe8b
+dragons2hg_smoke_d5_s1001=6.1800/7f72b7d689ed512a
 breaching2hg_smoke_d5_s1001=3.0800/67fcbad4be2fdae5
 critter2hg_smoke_d5_s1001=4.6800/c744ea5465e31c13
 lhc2hg_smoke_d5_s1001=5.0800/2035184c6f779f54
@@ -109,7 +109,7 @@ fluctuator_smoke_d3_s1001=3.4400/6829317419f20f11
 fluctuator_smoke_d5_s1001=3.5371/35cd309bdedda5be
 giants_smoke_d0_s1001=6.0240/d46a7ae3c00a356e
 giants_smoke_d3_s1001=5.8800/4122f3d507ce4190
-giants_smoke_d5_s1001=5.7800/76d3f8b0985c558c
+giants_smoke_d5_s1001=5.7800/c762c15e745a9d80
 pirates_smoke_d0_s1001=4.7370/4353f87cae93d4e6
 pirates_smoke_d3_s1001=4.3400/14b43dab30e70ed3
 pirates_smoke_d5_s1001=4.3600/ec0e06ddc6f25ce0
@@ -308,7 +308,7 @@ kittyv3_regression_d5_s3003=3.6867/08cd8c25b3ff04ba
 dragons_regression_d0_s2002=5.8680/0c0a91bcd129b333
 dragons_regression_d3_s2002=5.5200/f0df74131496a82f
 dragons_regression_d5_s2002=5.5560/cf0964b37283d4de
-dragons_regression_d5_s3003=5.5300/d01e5a763b372ee0
+dragons_regression_d5_s3003=5.5300/910174bb0613e04c
 breaching_regression_d0_s2002=4.8260/6a698b1862790630
 breaching_regression_d3_s2002=3.1200/abcd838f1b9f0f3b
 breaching_regression_d5_s2002=3.1020/59d591bfb06f270c
@@ -344,9 +344,9 @@ fluctuator_regression_d3_s2002=3.7000/93ca4e8c0c6148c2
 fluctuator_regression_d5_s2002=3.5500/2f588064b8fd5fc7
 fluctuator_regression_d5_s3003=3.5200/78a0d6b6d76ba6a2
 giants_regression_d0_s2002=5.9740/2afa7c08ec2270cc
-giants_regression_d3_s2002=5.5600/023fbfc362bfa310
-giants_regression_d5_s2002=5.6150/f8137ec436ec32a9
-giants_regression_d5_s3003=5.5450/b42a96480cb16561
+giants_regression_d3_s2002=5.5600/5a85e358d463e3d3
+giants_regression_d5_s2002=5.6150/2c63a6d7658e5f05
+giants_regression_d5_s3003=5.5450/1752cc960be81f9e
 pirates_regression_d0_s2002=4.7350/e6239ba958259d71
 pirates_regression_d3_s2002=4.4000/c8c3132b24c4cdb8
 pirates_regression_d5_s2002=4.3350/a9be8db249e688d1

@@ -875,7 +875,7 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | FiveColour | 1 | `HasteUnlockedManaOf` misses a hasted domain dork's own colours | the haste-unlock credit | add them | open |
 | Fungus | 3 | a same-plan mana GRANT (Brightcap Badger) is not credited | the rock/grant credit | credit the granted bodies | open |
 | Fungus, FiveColour | 8 | Concordant Crossroads' blanket haste does not unlock the plan's own dorks | the rock-credit stamp | credit them | open |
-| Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | open |
+| Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | **fixed below** |
 | Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |
 | NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | **fixed below** |
 | NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | open |
@@ -928,6 +928,17 @@ the board pays every rock the result is the old one. NivMizzetCombo seed 1100014
 scores those by what their apply really does. Held out (seed 1260001, every suite deck, 48,020 paired games): 37
 decision streams move (Dragons 10, Landfall 2, Niv 25), no win turn; Niv seed 1270001 (1,500 games): 2 faster / 2
 slower, both slower recovering at d8 b0 (gi1373, gi1465: T5 both arms); units flat.
+
+**Fix 4: a free attach no longer blocks the sequential walk (`MTG_SEQ_FREE_ATTACH`, DEFAULT ON).** The rescue that
+admits a subset payable only in sequence (a cost reducer before the spell it discounts) refused any subset holding an
+action other than a hand cast or a Vial put. Lightning Greaves' Equip {0} taps nothing and spends nothing, so the
+three walk sites (`SubsetHasUnmodelledSeqKind`, `SubsetPayableSequentialImpl`, `OrderPaysSequentiallyImpl`, in
+lockstep) now skip it as they skip a Vial put, and the human's attach-every-free-Equipment bundle with it. Skipping
+can only hide mana from the walk (Greaves' haste on a fresh dork), never invent it -- except by moving Greaves off a
+summoning-sick host whose {T} it enables, which stays refused. Giants seed 1100023 T6: ENUM-GAP 2 -> 0
+({Stinkdrinker Daredevil, Tectonic Giant / Sunrise Sovereign, equip Greaves}), the game's win turn unchanged. Held
+out (seed 1310001 every suite deck, plus Giants seed 1320001 4,000 games; `MTG_PAY_REFINE` on in both arms):
+52,020 paired games, 0 slower / 0 faster; Giants 87 and Dragons decision streams move; units +0.3%.
 
 **The outlet half is blocked.** The same credit for a creature sac OUTLET (Skirk Prospector's {R}, Utopia Mycon's any
 colour) is just as valid, and measured Goblins 32 faster / 3 slower and Fungus 2 / 1 (seed 1230001, 4,000 games

@@ -10192,16 +10192,47 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     return true;
 }
 
+// MTG_SEQ_FREE_ATTACH (DEFAULT ON; =0 -> refused as an unmodelled kind, as before). A FREE attach --
+// Lightning Greaves' Equip {0}, or the human's attach-every-free-Equipment bundle (cost {0} by construction,
+// unattached pieces only) -- taps nothing and spends nothing, so the cast walks skip it as they skip a Vial
+// put. Giants seed 1100023 T6: {Stinkdrinker Daredevil, Sunrise Sovereign, equip Greaves} pays in that order
+// (the Daredevil's {2} off the Giant) and was refused outright, mana-oracle ENUM-GAP. Skipping it can only
+// HIDE mana from the walk (Greaves' haste on a fresh dork), never invent it -- except by moving Greaves off a
+// summoning-sick host whose {T} it enables, which stays refused. The three walk sites below
+// (SubsetHasUnmodelledSeqKind, SubsetPayableSequentialImpl, OrderPaysSequentiallyImpl) move in lockstep.
+static bool SeqFreeAttachOn()
+{
+    static const bool on = EnvOn("MTG_SEQ_FREE_ATTACH", true);
+    return heurarm::Flag(heurarm::SEQ_FREE_ATTACH, on);
+}
+static bool SeqWalkSkipsFreeAttach(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::Equip && a.kind != Action::Kind::AttachAllFreeEquipment) { return false; }
+    if (a.cost.ManaValue() != 0 || a.cost.has_x || !SeqFreeAttachOn()) { return false; }
+    if (a.kind == Action::Kind::AttachAllFreeEquipment) { return true; }
+    for (const Permanent& eq : state.battlefield)
+    {
+        if (eq.card.m_number != a.sac_source_id) { continue; }
+        if (eq.equipped_to == 0) { return true; }
+        for (const Permanent& h : state.battlefield)
+        { if (h.card.m_number == eq.equipped_to) { return h.CanTap(); } }
+        return true;   // the host has left: the Equipment is unattached in all but name
+    }
+    return false;
+}
+
 // True when SubsetPayableSequential refuses `sel` outright -- the "unmodelled kind -> no rescue" exit at
-// the top of its order build (anything but a Vial put or a hand cast carrying its def). Must stay in
+// the top of its order build (anything but a Vial put, a free attach or a hand cast carrying its def). Must stay in
 // LOCKSTEP with that loop: it is what lets the range rescue skip an arrangement whose walk could never
 // run (MTG_RANGE_RESCUE_KINDGATE).
-static bool SubsetHasUnmodelledSeqKind(const std::vector<Action>& cands, const std::vector<int>& sel)
+static bool SubsetHasUnmodelledSeqKind(const GameState& state, const std::vector<Action>& cands,
+                                       const std::vector<int>& sel)
 {
     for (int j : sel)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind == Action::Kind::ActivateVial) { continue; }
+        if (SeqWalkSkipsFreeAttach(state, a)) { continue; }
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return true; }
     }
     return false;
@@ -10250,6 +10281,7 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
     {
         const Action& a = cands[j];
         if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
+        if (SeqWalkSkipsFreeAttach(state, a)) { continue; }           // nor does a free attach
         // NOTE a SacForMana/Suspend-holding subset lands here and is refused ("unmodelled kind").
         // A rescue-only SacForMana extension was built for the dragonstorm m2 retirement
         // (MTG_EF_SAC, 2026-09-04) and DELETED the same week: it measured inert on both probe
@@ -10497,6 +10529,7 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
     {
         const Action& a = (*use)[static_cast<std::size_t>(j)];
         if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
+        if (SeqWalkSkipsFreeAttach(state, a)) { continue; }           // nor does a free attach
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }   // unmodelled
         ord.push_back(j);
     }
@@ -10506,7 +10539,7 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
     int walk_fail = -1;
     const bool ok = SeqWalkFixedOrder(state, *use, order, ord, charged, &walk_fail);
     // The prefix rule's exclusions (see OrderPaysSequentially): `ord` == `order` exactly when no Vial put
-    // was skipped, so a walk index is then an `order` position.
+    // or free attach was skipped, so a walk index is then an `order` position.
     if (!ok && walk_fail >= 0 && charged.empty() && ord.size() == order.size()) { *fail_pos = walk_fail; }
     return ok;
 }
@@ -49335,7 +49368,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // such an activation, which is why the census saw 70% of the range's order walks repeat.
             // MTG_RANGE_RESCUE_KINDGATE_VERIFY=1 computes the old verdict anyway and counts a true one
             // (must be 0; printed at exit).
-            if (RangeRescueKindGateOn() && SubsetHasUnmodelledSeqKind(cands, sel))
+            if (RangeRescueKindGateOn() && SubsetHasUnmodelledSeqKind(state, cands, sel))
             {
                 if (RangeRescueKindGateVerifyOn())
                 {

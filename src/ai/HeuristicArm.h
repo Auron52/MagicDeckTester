@@ -704,6 +704,7 @@ enum Slot : int
     GARTH_LOTUS_CRACK,        // MTG_GARTH_LOTUS_CRACK  Garth One-Eye's Black Lotus can be conjured AND cracked in the same plan: a conjure-and-crack GarthActivate (ritual_float = 3, one variant per colour, credited in its colour) beside the conjure-and-keep one (USER 2026-10-28). FiveColour seed 1100028 gi27 T6: two Hellkites off eleven mana + the Lotus's three were inexpressible. Autonomous play only. =0 -> conjure-and-keep only
     SUBSET_SAC_COLOR,         // MTG_SUBSET_SAC_COLOR  the colour-presence gate credits a same-subset sac float's colour (a sac_for_mana_amount source's SacForMana -- Lotus Bloom, Black Lotus -- and Garth's conjure-and-crack; the creature sac outlets not yet): its pinned colour, every colour when it is resolved at apply. The MTG_SUBSET_ROCK_COLOR shape: the flat gate already credits the float, the presence gate saw only board colours. =0 -> board colours only
     ROCK_SEQ_CREDIT,          // MTG_ROCK_SEQ_CREDIT  the same-subset mana-rock credit is SEQUENCED: a rock is credited once the board plus the rocks credited before it can pay for it (Sol Ring funds an Izzet Signet). It was all-or-nothing -- no rock credited unless the board alone paid every rock -- so a subset whose rocks fund each other read unpayable (NivMizzetCombo seed 1100014 gi13 T3 {Signet, Signet, Sol Ring}, ENUM-GAP). =0 -> the all-or-nothing guard
+    SEQ_FREE_ATTACH,          // MTG_SEQ_FREE_ATTACH  the subset cast walks (SubsetPayableSequential, OrderPaysSequentially, the range rescue's kind gate) skip a FREE attach -- an Equip costing {0} (Lightning Greaves) or the human's attach-every-free-Equipment bundle -- as they skip a Vial put, instead of refusing the subset as an unmodelled kind. Not when it moves Greaves off a summoning-sick host whose {T} it enables. Giants seed 1100023 T6 {Stinkdrinker Daredevil, Sunrise Sovereign, equip Greaves}: ENUM-GAP. =0 -> refused, as before
     COUNT
 };
 
@@ -1358,6 +1359,7 @@ inline const char* Name(int slot)
         "MTG_GARTH_LOTUS_CRACK",
         "MTG_SUBSET_SAC_COLOR",
         "MTG_ROCK_SEQ_CREDIT",
+        "MTG_SEQ_FREE_ATTACH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
