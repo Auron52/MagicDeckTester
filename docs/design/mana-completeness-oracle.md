@@ -947,10 +947,21 @@ and both win on the base turn under the non-clairvoyant search, so neither is cl
 * gi3401: the committed T3 plan {Muxus, a Skirk cast, a Skirk sacrifice burst} -- the second Skirk is the card
   Rundvelt Hordemaster exiles when a sacrificed Goblin dies -- casts Muxus in the search's rollout and not in the
   executor (three sacrifices, four mana, Muxus costs five with Goblin Warchief): a rollout/executor lockstep break in
-  the burst + impulse path.
+  the burst + impulse path. **Root-caused and fixed (`MTG_ECHO_STAGED_GAS`, DEFAULT ON):** the break is Mogg War
+  Marshal's ECHO at the next upkeep, not the burst. Between the executor's TakeTurn passes the impulse card sits OUT
+  of hand in `Player::staged_cards`, while the rollout keeps it IN hand flagged `m_is_staged`; the provider's
+  `PayEchoToKeep` clause (b) ("nothing else to cast -> pay") scanned the hand only. So the search saw gas and declined
+  the echo, the real game saw none and paid it, two of three Mountains went, and the committed Muxus was no longer
+  castable. Both representations are now read (an unexpired staged card is gas in both worlds, an expired one in
+  neither); `test/unit/test_echo_staged_gas.cpp` pins the agreement and the lever-off split.
 * gi691: no divergence -- the unlimited search over the larger menu simply commits a T5 line where the base finds
-  T4 (Piledriver held for turn 4).
-`SubsetSacColorSource` leaves the outlets out until both are root-caused and fixed.
+  T4 (Piledriver held for turn 4). The mechanism is a breakpoint base plan that took the unbranched canon and is
+  never re-opened as a wave walker, so the larger menu's cascade cannot challenge it (`MTG_BP_CANON_WAVE`, in
+  progress: 80 faster / 2 slower over every suite deck with both slower recovering, but it hangs
+  EldraziDisplacerFlicker seed 1330259 gi258 at T1 and is not landed).
+* A third, found on the re-measure (seed 1330145 gi144, T3 -> T4 at d8 b0, T3 on both arms under the non-clairvoyant
+  search): with the outlets credited the T1 search only finds a turn-4 win. Open.
+`SubsetSacColorSource` leaves the outlets out until gi691 and gi144 are fixed.
 
 **Also found: the sac-colour fold is a guess.** `MTG_SAC_COLOR_FOLD` (on-board Lotus / Lotus Bloom) resolves the
 colour at apply from a scarcity score over the accounting pool, which counts a dual land toward both its colours; the

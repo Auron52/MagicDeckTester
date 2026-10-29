@@ -15986,13 +15986,42 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     }
     if (atk >= opp_life) { return true; }                   // keeping the body wins this turn -> PAY
 
-    // (b) No gas: any non-land hand card castable from the currently-available mana?
+    // (b) No gas: any non-land card castable THIS TURN from the currently-available mana? That is the
+    // hand AND the castable-exile zone (a Rundvelt impulse, a Light Up the Stage card): an unplayed
+    // staged card is as much "something else to cast" as a hand card. AND IT HAS TO BE READ FROM BOTH
+    // REPRESENTATIONS, or this decision is not lockstep: echo resolves at UPKEEP, between the executor's
+    // TakeTurn passes, where the executor holds staged cards OUT of hand in Player::staged_cards
+    // (ReturnStagedFromHand / MergeStagedIntoHand) while the rollout keeps them IN hand flagged
+    // m_is_staged (MergeStagedToHandEnd). A hand-only scan therefore saw the impulse cards in the search
+    // and not in the real game: Goblins seed 1233402 gi3401 T3 (MTG_SUBSET_SAC_COLOR), hand = Mountain +
+    // staged {Goblin Chainwhirler, Skirk Prospector} -- the search declined Mogg War Marshal's echo, the
+    // executor paid it (its hand held no spell), tapping two of its three Mountains, and the committed
+    // Muxus could no longer be paid (T3 -> T4). Expiry is applied to both representations alike: the
+    // executor drops an expired card only at the main-phase merge and the rollout only after the upkeep
+    // (ExpireStagedCards), so at upkeep either may still hold one. MTG_ECHO_STAGED_GAS=0 -> the
+    // historical hand-only scan.
+    static const bool s_staged_gas_env = EnvOn("MTG_ECHO_STAGED_GAS", true);
+    const bool s_staged_gas = heurarm::Flag(heurarm::ECHO_STAGED_GAS, s_staged_gas_env);
     const ManaPool pool = AvailableManaPool(s);
-    for (const Card& h : s.players[active].hand)
+    auto castable_spell = [&](const Card& h) -> bool
     {
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
-        if (!hd || hd->card.IsLand()) { continue; }
-        if (pool.CanPay(h.m_mana_cost)) { return false; }   // a real alternative play exists -> DECLINE
+        if (!hd || hd->card.IsLand()) { return false; }
+        return pool.CanPay(h.m_mana_cost);
+    };
+    const Player& ap = s.players[active];
+    for (const Card& h : ap.hand)
+    {
+        if (s_staged_gas && h.m_is_staged && h.m_staged_expiry < s.turn_number) { continue; }   // expired
+        if (castable_spell(h)) { return false; }   // a real alternative play exists -> DECLINE
+    }
+    if (s_staged_gas)
+    {
+        for (const StagedCard& sc : ap.staged_cards)
+        {
+            if (sc.expiry_turn < s.turn_number) { continue; }   // expired (its window closed)
+            if (castable_spell(sc.card)) { return false; }
+        }
     }
     return true;                                             // nothing else to cast -> keep the attacker (PAY)
 }

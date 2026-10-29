@@ -722,6 +722,7 @@ enum Slot : int
     LHC_MARTYR_AFTER_PINGER,  // MTG_LHC_MARTYR_AFTER_PINGER  A/B arm (2026-10-29, 2HG s971001 gi231): a Walking Ballista cast is a Martyr of Sands position boundary (TurnSolver::RevealSlotCounts), so the pinned late slot can follow it -- a one-counter Ballista dies to its own lifelinked ping unless a gain AFTER it lands bumps it with Heliod's counter. USER 2026-10-29 ('The Martyr lifegain should always happen before' the ping, after the Ballista enters): Default ON; =0 -> a Ballista is not a boundary
     LHC_HELIOD_UNSICK_LIFELINK, // MTG_LHC_HELIOD_UNSICK_LIFELINK  USER 2026-10-29 ('For Heliod Targets we should prioritize things without summoning sickness followed by ones with Lifelink like Serra Ascendant'; 'Serra Ascendant can quickly make itself larger if it has counters put on it'): with no Ballista target, Heliod's counter goes to a creature without summoning sickness first, then a lifelinker, then combat power. ADOPTED DEFAULT ON (held-out 4,000 paired games per format, seeds 993001/995001, d5 b20: std 4.7555 -> 4.7555 (0/0), 2HG 4.9737 -> 4.9735 (1 better / 0 worse); play changed in 37 of 160 jobs; units x1.004 / x0.998); =0 -> the generic DefaultLifegainCounterTarget
     LHC_BUCKET_DISCARD,       // MTG_LHC_BUCKET_DISCARD  LifegainHeliodCombo's USER-reviewed cleanup-discard rule (CritterLifegain's ladder + the partner-gated COMBO bucket, Abiding Grace in the fill, a second Ballista at the bottom of it). Default ON; =0 -> the inherited CritterLifegain rule exactly
+    ECHO_STAGED_GAS,          // MTG_ECHO_STAGED_GAS  GoblinsProvider::PayEchoToKeep's "no gas" clause reads the castable-exile zone too (unexpired staged cards: a Rundvelt impulse), from BOTH representations -- the executor holds them out of hand in Player::staged_cards at upkeep, the rollout in hand flagged m_is_staged -- so the search and the real game decide echo on the same cards. Goblins seed 1233402 gi3401 T3: the search declined Mogg War Marshal's echo, the executor paid it and could not cast the committed Muxus. =0 -> the hand-only scan
     COUNT
 };
 
@@ -1394,6 +1395,7 @@ inline const char* Name(int slot)
         "MTG_LHC_MARTYR_AFTER_PINGER",
         "MTG_LHC_HELIOD_UNSICK_LIFELINK",
         "MTG_LHC_BUCKET_DISCARD",
+        "MTG_ECHO_STAGED_GAS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

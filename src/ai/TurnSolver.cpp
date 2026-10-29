@@ -8368,10 +8368,11 @@ static bool SubsetSacColorOn()
 }
 // The sac floats it credits: a sacrificed mana ARTIFACT/LAND/TOKEN (sac_for_mana_amount: Lotus Bloom, Black
 // Lotus, Dwarven Ruins, an Eldrazi Spawn) and Garth's conjure-and-crack. NOT YET the creature sac OUTLETS
-// (Skirk Prospector's {R}, Utopia Mycon's any colour), whose same credit is just as valid but measured two
-// Goblins games a turn slower that do not recover at d8 b0 -- an executor/rollout divergence in the Skirk
-// burst + Rundvelt impulse path, and an unlimited-budget search that loses a T4 line -- both open in
-// docs/design/mana-completeness-oracle.md 13.5 and to be fixed before the outlets join.
+// (Skirk Prospector's {R}, Utopia Mycon's any colour), whose same credit is just as valid but measured
+// Goblins games a turn slower that do not recover at d8 b0. The first was an executor/rollout echo
+// divergence over staged impulse cards (fixed, MTG_ECHO_STAGED_GAS); the others -- a breakpoint base
+// canon left unchallengeable by a cascade (gi691) and a lost T3 line (seed 1330145 gi144) -- are open in
+// docs/design/mana-completeness-oracle.md 13.5.
 static bool SubsetSacColorSource(const Action& a)
 {
     if (a.ritual_float <= 0) { return false; }
