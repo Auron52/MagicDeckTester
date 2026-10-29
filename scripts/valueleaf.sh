@@ -1529,7 +1529,7 @@ phase_skipcal() {
 # manual recommend -> accept exercise that nothing performed any more, so most leaves shipped with none and played
 # the built-in d5 / 20 undecided. All of it is in scripts/play_setting_stage.py: ONE pooled batch per run, the live
 # sidecar against an enabled depth {d-1,d,d+1} x budget {b,1.5b,2b} grid (never below the current budget, USER
-# 2026-10-22) -- and the same grid for every phase-E
+# 2026-10-22; never below depth 5, USER 2026-10-29) -- and the same grid for every phase-E
 # shape still in the running (passed E.5 but not installed, or dearer but notably better: a budget is part of a
 # shape) -- 8 held-out seeds x 1000 paired games;
 # adopted by the E.5 rule (vlq_adopt_pick.py: the cheapest arm not notably worse; a dearer-but-better arm is a

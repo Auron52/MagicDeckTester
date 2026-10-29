@@ -353,7 +353,8 @@ d, d+1, all at budget 20) only printed a table and is gone; on Vampires every de
 so depth alone was the wrong axis. `scripts/play_setting_stage.py` does it in ONE pooled batch, right after E.5
 (it measures the leaf that ships) and before E.7b and E.6, which are measurements AT a play setting.
 * **Arms:** the live sidecar as it stands (`live`: its enabled block, or the built-in d5 / 20) against enabled
-  blocks over depth {d-1, d, d+1} x budget {b, 1.5b, 2b}, each on the sidecar route (exactly the file that would be
+  blocks over depth {d-1, d, d+1} x budget {b, 1.5b, 2b} -- **never below depth 5** (USER 2026-10-29: *"It should be
+  depth 5 minimum for play settings"*; lower depths clamp to 5) -- each on the sidecar route (exactly the file that would be
   installed) in a symlinked variant folder, so all arms share the keep table's cache entry. 8 held-out seeds x 1000
   paired games per arm, the leaf A/B's size.
 * **The other phase-E shapes get the same grid** (USER 2026-10-22: *"My biggest concern is actually that it didn't
