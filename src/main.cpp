@@ -720,7 +720,14 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // a bare name reads as a CAST of a card that is not in hand (it confused the
             // play_invariants hand check and any human reading the plan list).
             case Action::Kind::GarthActivate:
-                tag = a.card_name + ": conjure " + a.tutor_target; break;
+                tag = a.card_name + ": conjure " + a.tutor_target;
+                if (TurnSolver::IsGarthLotusCrack(a))   // conjure-and-crack (autonomous menus only)
+                {
+                    tag += a.chosen_float_color.empty() ? std::string(" and crack it")
+                                                        : " and crack it for " + a.chosen_float_color.str() + "x"
+                                                          + std::to_string(a.ritual_float);
+                }
+                break;
             // "loyalty#1" is a raw index into cards.json -- meaningless to a player, and identical
             // in shape for every walker. Print the ability the way the CARD does, and name the
             // preselected target when the ability has one (the human re-picks it on the board at

@@ -8359,6 +8359,25 @@ static bool SubsetRockColorEnabled()
     static const bool on = EnvOn("MTG_SUBSET_ROCK_COLOR", true);
     return heurarm::Flag(heurarm::SUBSET_ROCK_COLOR, on);
 }
+// MTG_SUBSET_SAC_COLOR (DEFAULT ON; =0 -> board colours only): the same widening for a same-subset sac
+// float (see WidenHaveWithSubsetRocks).
+static bool SubsetSacColorOn()
+{
+    static const bool on = EnvOn("MTG_SUBSET_SAC_COLOR", true);
+    return heurarm::Flag(heurarm::SUBSET_SAC_COLOR, on);
+}
+// The sac floats it credits: a sacrificed mana ARTIFACT/LAND/TOKEN (sac_for_mana_amount: Lotus Bloom, Black
+// Lotus, Dwarven Ruins, an Eldrazi Spawn) and Garth's conjure-and-crack. NOT YET the creature sac OUTLETS
+// (Skirk Prospector's {R}, Utopia Mycon's any colour), whose same credit is just as valid but measured two
+// Goblins games a turn slower that do not recover at d8 b0 -- an executor/rollout divergence in the Skirk
+// burst + Rundvelt impulse path, and an unlimited-budget search that loses a T4 line -- both open in
+// docs/design/mana-completeness-oracle.md 13.5 and to be fixed before the outlets join.
+static bool SubsetSacColorSource(const Action& a)
+{
+    if (a.ritual_float <= 0) { return false; }
+    if (TurnSolver::IsGarthLotusCrack(a)) { return true; }
+    return a.kind == Action::Kind::SacForMana && a.def != nullptr && a.def->params.sac_for_mana_amount > 0;
+}
 // Returns the table to test with: `have` itself when nothing widens, else `scratch` filled with
 // `have` plus the selected rocks' colours (a wild credit is every colour).
 // `any_rock_cand` is the callers' own per-enumeration "does ANY candidate carry rock mana" scan (the
@@ -8368,7 +8387,8 @@ static bool SubsetRockColorEnabled()
 // caller that does not pass it keeps the unconditional walk.
 static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
                                             const std::vector<Action>& cands, const std::vector<int>& sel,
-                                            bool credited_mint = false, bool any_rock_cand = true)
+                                            bool credited_mint = false, bool any_rock_cand = true,
+                                            bool any_sac_cand = false)
 {
     // MTG_MINT_CREDIT_EXACT: a CREDITED same-subset mint is wild -- every colour is present. (Gold
     // Rush "fixes colours": that is a base-plan fact once the mint is credited, and the exact
@@ -8378,8 +8398,34 @@ static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
         for (int ci = 0; ci < 5; ++ci) { scratch[ci] = true; }
         return scratch;
     }
-    if (!any_rock_cand || !SubsetRockColorEnabled()) { return have; }
     bool widened = false;
+    // MTG_SUBSET_SAC_COLOR: a same-subset SAC FLOAT supplies its colour the same way -- an on-board
+    // Lotus's SacForMana and Garth's conjure-and-crack (IsGarthLotusCrack) are actions, not sources,
+    // so ComputeAvailableColors never sees them, while the flat gate credits their float. A pinned
+    // colour is that colour ({C} none); a folded one is resolved at apply from the plan's own
+    // demand, so every colour is present. A NECESSARY-condition widening: the exact count gate
+    // still runs on the credited pool, and the apply pays for real.
+    if (any_sac_cand && SubsetSacColorOn())
+    {
+        for (int j : sel)
+        {
+            const Action& a = cands[static_cast<std::size_t>(j)];
+            if (!SubsetSacColorSource(a)) { continue; }
+            if (!widened) { for (int ci = 0; ci < 5; ++ci) { scratch[ci] = have[ci]; } widened = true; }
+            const std::string& col = a.chosen_float_color.str();
+            if (col.empty()) { for (int ci = 0; ci < 5; ++ci) { scratch[ci] = true; } continue; }
+            switch (col[0])
+            {
+                case 'W': scratch[0] = true; break;
+                case 'U': scratch[1] = true; break;
+                case 'B': scratch[2] = true; break;
+                case 'R': scratch[3] = true; break;
+                case 'G': scratch[4] = true; break;
+                default: break;
+            }
+        }
+    }
+    if (!any_rock_cand || !SubsetRockColorEnabled()) { return widened ? scratch : have; }
     for (int j : sel)
     {
         const ManaPool& rm = cands[j].rock_mana;
@@ -28627,6 +28673,14 @@ bool SacColorFoldEnabled()
     return v;
 }
 
+// MTG_GARTH_LOTUS_CRACK (DEFAULT ON; =0 -> conjure-and-keep only): Garth's conjured Black Lotus may be
+// cracked in the plan that conjures it -- see the conjure-and-crack variant at the Garth emission.
+static bool GarthLotusCrackOn()
+{
+    static const bool on = EnvOn("MTG_GARTH_LOTUS_CRACK", true);
+    return heurarm::Flag(heurarm::GARTH_LOTUS_CRACK, on);
+}
+
 // Resolve a folded (colour-agnostic) SacForMana action's float colour from the plan's own demand.
 // Full rationale + the byte-identity contract live at the declaration in TurnSolver.h.
 std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vector<Action>& acts,
@@ -28709,7 +28763,8 @@ std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vect
     }
     for (const Action& a : acts)
     {
-        if (a.kind != Action::Kind::SacForMana) { continue; }
+        // Garth's conjure-and-crack Lotus is a sac source of the plan like any other (IsGarthLotusCrack).
+        if (a.kind != Action::Kind::SacForMana && !TurnSolver::IsGarthLotusCrack(a)) { continue; }
         // An unfolded sibling still carries its enumerated colour: charge THAT against the demand so a
         // mixed plan (some folded, some not) still sees what its siblings consumed.
         const int amt = std::max(1, a.ritual_float);
@@ -37816,7 +37871,46 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 else if (name == "Shivan Dragon") { a.eval = 5 * DMG; }
                 else if (name == "Black Lotus")   { a.eval = DMG / 2; }
+                // CONJURE-AND-CRACK (USER 2026-10-28: "We should be allowing garth to produce black
+                // lotus for mana for sure"). The variant above conjures the Lotus and KEEPS it; nothing
+                // could crack it inside the same plan, because a SacForMana is only ever emitted for a
+                // Lotus already on the battlefield. So {Garth -> Lotus, crack, the casts it pays for}
+                // was inexpressible at any budget (mana oracle ENUM-GAP, FiveColour seed 1100028 gi27
+                // T6: two Two-Headed Hellkites off eleven mana plus the cracked Lotus's three). This
+                // variant cracks the copy as it lands: ritual_float credited by the subset math, the
+                // colour searched (below). One Garth activation per plan (kDupGarth), so hold and crack are
+                // alternatives in the Garth group. Only under MTG_GARTH_ORDERED: there the activation
+                // applies at the copy's rank (the rock tier, ahead of the casts it funds); the
+                // trailing dispatch of the lever-off route runs after every cast and could fund none.
+                // Autonomous play only: a HUMAN already cracks a conjured Lotus at payment time (the
+                // pre-tap sac route), and a second "conjure Black Lotus" row would make a typed or
+                // saved line ambiguous between keeping and cracking it.
+                const bool lotus_crack = name == "Black Lotus" && GarthLotusCrackOn() && GarthOrderedEnabled()
+                                      && !HumanPlayActive() && cd->params.sac_for_mana_amount > 0;
+                Action crack;
+                if (lotus_crack)
+                {
+                    crack = a;
+                    crack.ritual_float = cd->params.sac_for_mana_amount;
+                    crack.eval         = 0;   // the on-board crack's eval: its value is what it pays for
+                }
                 actions.push_back(std::move(a));
+                if (lotus_crack)
+                {
+                    // ONE VARIANT PER COLOUR, never the sac-colour fold. The fold resolves an on-board
+                    // Lotus's colour at apply by a scarcity guess off the accounting pool, and on this
+                    // card the guess strands the line the crack exists for: FiveColour seed 1100028 gi27
+                    // T6, {Mana Cannons, Progenitus, Garth -> Lotus} (demand W2 U2 B2 R3 G2) folded to
+                    // R, W, U or B by board and the apply dropped Progenitus (mana oracle APPLY-DROP)
+                    // where a searched colour pays. Each variant is credited in its own colour
+                    // (CreditFixedColorSac), so a colour the plan cannot use is rejected at the gate.
+                    for (const std::string& col : ChosenFloatColorCandidates(state))
+                    {
+                        Action c = crack;
+                        c.chosen_float_color = col;
+                        actions.push_back(std::move(c));
+                    }
+                }
             }
         }
 
@@ -44427,11 +44521,14 @@ static int SeqRitualCreditMode()
 // their apply-time colour is picked to fit the line, so wild IS the exact model for them.
 static bool CreditFixedColorSac(ManaPool& eff, const Action& a)
 {
-    if (a.kind != Action::Kind::SacForMana || a.ritual_float <= 0 || !a.def) { return false; }
-    const std::string& col = a.def->params.sac_for_mana_color;
+    // Garth's conjure-and-crack carries its SEARCHED colour (one variant per colour), so its float is
+    // that colour exactly -- and the Lotus does not exist yet, so none of it is in the pool already.
+    const bool garth = TurnSolver::IsGarthLotusCrack(a) && !a.chosen_float_color.empty();
+    if (!garth && (a.kind != Action::Kind::SacForMana || a.ritual_float <= 0 || !a.def)) { return false; }
+    const std::string& col = garth ? a.chosen_float_color.str() : a.def->params.sac_for_mana_color;
     if (col.empty()) { return false; }
     int amt = a.ritual_float;
-    if (!a.def->params.produces.empty())
+    if (!garth && !a.def->params.produces.empty())
     { amt -= a.def->params.produces_amount; }        // its tap mana is already in the pool
     if (amt < 0) { amt = 0; }
     switch (col[0])
@@ -48134,6 +48231,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Cheap scan -> the credit below is inert for every deck without such a rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // A same-subset sac float (an on-board Lotus's crack, Garth's conjure-and-crack) for the colour-
+    // presence widening (MTG_SUBSET_SAC_COLOR). Inert for every deck without one.
+    bool any_sac_float = false;
+    for (const Action& ra : cands) { if (SubsetSacColorSource(ra)) { any_sac_float = true; break; } }
     // Which of the subset rejection filters can fire AT ALL for this candidate list (see
     // SubsetFilterPre): one pass now, in exchange for not re-deriving "this deck has no Aura" once
     // per enumerated subset. Lockstep twin in EnumeratePlans.
@@ -49247,7 +49348,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             bool have_rock_c[5];
             const bool* have_eff_c = WidenHaveWithSubsetRocks(have_colors, have_rock_c, cands, sel,
                                                               /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
-                                                              /*any_rock_cand=*/any_rock);
+                                                              /*any_rock_cand=*/any_rock, /*any_sac_cand=*/any_sac_float);
             if (!SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
         }
         if (es_on_c) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
@@ -49275,7 +49376,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             bool have_rock_b[5];
             const bool* have_b = WidenHaveWithSubsetRocks(have_colors_board, have_rock_b, cands, sel,
                                                           /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
-                                                          /*any_rock_cand=*/any_rock);
+                                                          /*any_rock_cand=*/any_rock, /*any_sac_cand=*/any_sac_float);
             const bool board_ok =
                 SubsetPayable(have_b, cands, sel, &colour_demand)
                 && !(colour_feas_board.usable
@@ -60235,7 +60336,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         // (its acquisition re-solve is autonomous-only, !s_human_play), at its step.
                         line_order_trace("garth", a);
                         if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-                        { ApplyGarthActivate(state, me, a.sac_source_id, a.tutor_target, a.chosen_x); }
+                        { ApplyGarthActivate(state, me, a.sac_source_id, a.tutor_target, a.chosen_x,
+                                              TurnSolver::GarthLotusCrackColor(state, acts, a)); }
                     }
                     else if (TurnSolver::IsTrailingActivation(a.kind))
                     {
@@ -60363,7 +60465,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const std::vector<int> hand_before = TurnSolver::HandCardNumbers(state);
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
                 {
-                    ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                    ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
+                                       TurnSolver::GarthLotusCrackColor(state, acts, a));
                     // ACQUISITION RE-SOLVE (USER 2026-08-19: "we want to encode a way to take
                     // advantage of the cards in hand ... Regrowth is a very similar story"):
                     // Braingeyser's draws and Regrowth's returned card compete for this turn's
@@ -61733,7 +61836,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // sequence at the copy's rank (see apply_plan_actions) -- skip the trailing slot.
             if (!GarthOrderedEnabled()
                 && TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
+                                 TurnSolver::GarthLotusCrackColor(state, trailing_acts, a)); }
         }
     }
     };
@@ -64917,6 +65021,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.Put('t'); w.Int(act.enchant_target); w.End(); break;
             case Action::Kind::GarthActivate:
                 w.Begin(kSigM); w.Put("GARTH#"); w.Int(act.sac_source_id); w.Put('#'); w.Put(act.tutor_target);
+                // Conjure-and-crack vs conjure-and-keep are different plans (and a fanned crack's colour).
+                if (TurnSolver::IsGarthLotusCrack(act)) { w.Put('!'); w.Put(act.chosen_float_color); }
                 w.End(); break;
             case Action::Kind::AttachAllEquipment:
                 w.Begin(kSigM); w.Put("BALAN#"); w.Int(act.sac_source_id); w.End(); break;
@@ -65434,6 +65540,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // A same-subset sac float (an on-board Lotus's crack, Garth's conjure-and-crack) for the colour-
+    // presence widening (MTG_SUBSET_SAC_COLOR). Inert for every deck without one.
+    bool any_sac_float = false;
+    for (const Action& ra : cands) { if (SubsetSacColorSource(ra)) { any_sac_float = true; break; } }
     // Which subset rejection filters can fire at all (see SubsetFilterPre). Lockstep twin of the
     // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
     // because the summary's whole claim is that it saw every member of `cands`.
@@ -67200,7 +67310,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         bool have_rock[5];
         const bool* have_eff = WidenHaveWithSubsetRocks(have_colors, have_rock, cands, sel,
                                                         /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
-                                                        /*any_rock_cand=*/any_rock);
+                                                        /*any_rock_cand=*/any_rock, /*any_sac_cand=*/any_sac_float);
         bool have_haste[5];
         if (haste_cols != 0)
         {
@@ -69092,7 +69202,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Garth: which name is a distinct decision (once-per-game each -- core invariant).
                 case Action::Kind::GarthActivate:
                     msf.push_back("GARTH#" + std::to_string(act.sac_source_id)
-                                  + "#" + act.tutor_target); break;
+                                  + "#" + act.tutor_target
+                                  // conjure-and-crack (and a fanned crack's colour) is its own plan
+                                  + (TurnSolver::IsGarthLotusCrack(act)
+                                     ? "!" + act.chosen_float_color.str() : std::string())); break;
                 // Balan attach-all: which Balan (legend rule -> effectively one).
                 case Action::Kind::AttachAllEquipment:
                     msf.push_back("BALAN#" + std::to_string(act.sac_source_id)); break;

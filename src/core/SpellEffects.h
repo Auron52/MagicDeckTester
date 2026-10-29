@@ -11337,8 +11337,17 @@ inline int GarthNameBit(const std::string& name)
     return -1;
 }
 
+inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
+                            const std::string& color, int amount, int victim_id);
+
+// `lotus_crack_color` (Black Lotus only; empty = keep the Lotus): the CONJURE-AND-CRACK variant.
+// Black Lotus is a noncreature artifact, so the copy can pay its own {T} the moment it lands, and
+// "{T}, Sacrifice: add three mana of any one colour" is a mana ability -- a player who conjures it
+// mid-turn cracks it into the very casts it was conjured for. The colour is the caller's (the plan's
+// own float colour, TurnSolver::GarthLotusCrackColor), so every apply world cracks the same way.
 inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
-                               const std::string& name, int braingeyser_x)
+                               const std::string& name, int braingeyser_x,
+                               const std::string& lotus_crack_color = std::string())
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     const int bit = GarthNameBit(name);
@@ -11378,8 +11387,11 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         perm.owner_index       = controller;
         perm.entered_this_turn = true;
         perm.is_token          = true;   // a conjured copy ceases to exist in other zones anyway
+        const int copy_id      = perm.card.m_number;
         state.battlefield.push_back(perm);
         FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+        if (name == "Black Lotus" && !lotus_crack_color.empty())
+        { ApplySacForMana(state, controller, copy_id, lotus_crack_color, cd->params.sac_for_mana_amount, 0); }
     }
     else if (name == "Braingeyser")
     {

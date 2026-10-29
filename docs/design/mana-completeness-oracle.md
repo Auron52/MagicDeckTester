@@ -851,3 +851,79 @@ finished -- KittyEquipment and LandfallElementals were stopped after five hours 
   Sliver Hive's tap-for-token and Mutavault; Remote Farm's {W}{W} split across two casts. Untriaged.
 APPLY-DROP 339 (Niv 145, Melira 68, Alchemist 41, LandfallElementals 39): long lines (Melira's 32-step Felidar loop
 into Chord of Calling) where the first payment decides a cast forty actions later -- item C's territory.
+
+### 13.5 The ENUM-GAP triage (2026-10-29), and the first two fixes
+
+Census `eg1` (11 decks x 30 games, seed 1100001, the refine-era engine): 210 ENUM-GAP. Four triage passes sorted
+every flag by mechanism, each one reproduced on a single-game repro (`MTG_DBG_MULTI=<turn>` names the rejecting
+gate). One trap when reading it: the oracle's observe pass also switches the odometer's mana bound off, so a subset
+the bound cut from the real menu prints no line before `DECISION` but an `early-gate` line in the observe pass.
+
+**Real gaps** (a payable plan the engine's gates keep off the menu):
+
+| deck | flags | mechanism | where | fix | status |
+|---|---|---|---|---|---|
+| FiveColour | 6 | Garth's conjured Black Lotus cannot be cracked in the plan that conjures it | Garth emission (CollectActions) | conjure-and-crack variant | **fixed below** |
+| FiveColour | 8 | `SubsetWidensDomainBy` is all-or-nothing: a subset holding several domain wideners gets no widen when not all of them are payable | the domain widen credit | try the payable widener subsets when the flat gate fails | open |
+| FiveColour | 1 | `HasteUnlockedManaOf` misses a hasted domain dork's own colours | the haste-unlock credit | add them | open |
+| Fungus | 3 | a same-plan mana GRANT (Brightcap Badger) is not credited | the rock/grant credit | credit the granted bodies | open |
+| Fungus, FiveColour | 8 | Concordant Crossroads' blanket haste does not unlock the plan's own dorks | the rock-credit stamp | credit them | open |
+| Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | open |
+| Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |
+| NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | open |
+| NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | open |
+| EDF | 6 | the rescue's scalar ceiling omits the ETB-untap refund (Cloud of Faeries, Peregrine Drake) | `ef-scalar` pre-filter | add the refund | open |
+| EDF | 4 | the odometer gate prices the untap refund off the pre-plan board, missing a same-selection land Aura on the refunded land | `BuildManaGateIndex`, `ManaPruneBound` | scale the Aura bonus by the untappers | open (verified by `MTG_SEL_MANA_GATE=0`) |
+| EDF | 12 | the rescue walk is ONE greedy payment: Aether Hub's energy colour counted as cover, a painland's painless {C} never banked ahead of an untap, a coloured unit that must be banked before the untap, the tap-ahead's host and colour choice | the EDF sequential rescue | "Proposal X": when the greedy walk fails on an untapper subset, the oracle's bounded every-order payment search as the last rescue, its script stored on the plan and replayed by all three apply paths (`RealPayScope`) | open (one mechanism for all five classes) |
+
+**Oracle false positives** (the plan is not lost; the oracle must learn the rule): Slivers 34 (an apply that silently
+skips a TapForTokenPay / AnimateLand whose source is tapped -- `Clean()` checks casts only); NivMizzetCombo 97
+(Generator Servant offered as a payment-time source while the engine cracks it only as a plan action -- the `+sac`
+twin is on the menu -- plus dominated plans and continuation artefacts); Selesnya 5 + Landfall 6 (Genesis Wave's
+follow-up paid by lands it reveals from the library: hidden information); Hammer 4 (an equip skipped after Sigarda's
+Aid; `ClassKey` keys on the entered-this-turn marker); Angels 2 (Giada's Angel-only mana restriction ignored); EDF 2
+(Wild Growth on Brushland, payable only Cloud-first, where the menu already holds the dominating sibling with Wild
+Growth on Adarkar Wastes -- the USER's catch: *"With Adarkar Wastes and Brushland you would play Wild Growth first
+... I see no need to change the order for that case"*. The oracle should compare against siblings that differ only
+in an Aura's host).
+
+**Fix 1: Garth's conjure-and-crack (`MTG_GARTH_LOTUS_CRACK`, DEFAULT ON).** USER: *"We should be allowing garth to
+produce black lotus for mana for sure."* The conjured Lotus is a noncreature artifact, so it can pay its own {T} the
+moment it lands, but a SacForMana is only ever emitted for a Lotus already on the battlefield, so {Garth -> Lotus,
+crack, the casts it pays for} was inexpressible (seed 1100028 gi27 T6: two Two-Headed Hellkites off eleven mana plus
+the Lotus's three). Now a conjure-and-crack GarthActivate (`ritual_float` 3) is emitted beside conjure-and-keep, ONE
+VARIANT PER COLOUR and credited in that colour (`CreditFixedColorSac`); `ApplyGarthActivate` cracks the copy as it
+lands, from every apply site (`TurnSolver::GarthLotusCrackColor`), so the search, the executor and the oracle agree.
+Autonomous play only: a human already cracks a conjured Lotus at payment time, and a second "conjure Black Lotus"
+row would make a typed or saved line ambiguous. The colour is searched, not folded: the sac-colour fold's scarcity
+guess (`SacFloatColorFor`) picked R, W, U or B for the same {Cannons, Progenitus} demand depending on the board, and
+the apply dropped Progenitus. gi27 T6: 0 ENUM-GAP after (6 before). Its remaining APPLY-DROPs there are ONE plan,
+{Cannons, Progenitus, the crack} (20 flags: each colour variant, both land choices) -- Cannons paid out of Bloom
+Tender's five without keeping the {U}{B} Progenitus needs -- the line-level payer class (13.4, C).
+Held out (seed 1240001, 5,000 FiveColour games): 2 faster / 2 slower, both slower recovering at d8 b0 (gi1385,
+gi2083: T5 both arms); wall 1.017x interleaved (units 1.033x).
+
+**Fix 2: same-subset sac colours (`MTG_SUBSET_SAC_COLOR`, DEFAULT ON).** The colour-presence gate
+(`WidenHaveWithSubsetRocks`) saw only board colours, while the flat gate credits a same-subset sac float: an on-board
+Lotus Bloom's {B} for a Dragon was "no source makes black" whenever no land made it. The `MTG_SUBSET_ROCK_COLOR` shape,
+now for `sac_for_mana_amount` sources and Garth's crack: a pinned colour, or every colour when it is resolved at
+apply. Held out: Dragonstorm 53 faster / 0 slower (seed 1240001, 5,000 games; no-wins 61 -> 53, avg 4.3912 -> 4.3732)
+and 56 / 0 (seed 1220001; 59 -> 52, 4.3996 -> 4.3838); wall 0.95x. Every other suite deck byte-identical.
+
+**The outlet half is blocked.** The same credit for a creature sac OUTLET (Skirk Prospector's {R}, Utopia Mycon's any
+colour) is just as valid, and measured Goblins 32 faster / 3 slower and Fungus 2 / 1 (seed 1230001, 4,000 games
+each). Fungus gi1040 and Goblins gi1914 recover at d8 b0; Goblins gi3401 (T3 -> T4) and gi691 (T4 -> T5) do not,
+and both win on the base turn under the non-clairvoyant search, so neither is clairvoyance:
+* gi3401: the committed T3 plan {Muxus, a Skirk cast, a Skirk sacrifice burst} -- the second Skirk is the card
+  Rundvelt Hordemaster exiles when a sacrificed Goblin dies -- casts Muxus in the search's rollout and not in the
+  executor (three sacrifices, four mana, Muxus costs five with Goblin Warchief): a rollout/executor lockstep break in
+  the burst + impulse path.
+* gi691: no divergence -- the unlimited search over the larger menu simply commits a T5 line where the base finds
+  T4 (Piledriver held for turn 4).
+`SubsetSacColorSource` leaves the outlets out until both are root-caused and fixed.
+
+**Also found: the sac-colour fold is a guess.** `MTG_SAC_COLOR_FOLD` (on-board Lotus / Lotus Bloom) resolves the
+colour at apply from a scarcity score over the accounting pool, which counts a dual land toward both its colours; the
+gi27 trace shows one demand folding to four different colours. Where it guesses wrong the plan drops a cast the
+fanned colour pays -- an APPLY-DROP the oracle can see. The lossless shape is the one the Garth crack now uses (one
+variant per colour, credited exactly so a useless colour dies at the gate).

@@ -7059,7 +7059,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 ManaPool avail = AvailableManaPool(state);
                 if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
                 {
-                    ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                    ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
+                                       TurnSolver::GarthLotusCrackColor(state, trailing_acts, a));
                     // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
                     // script): Braingeyser's draws / Regrowth's return are same-turn castable.
                     if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
@@ -7627,7 +7628,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             {
-                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
+                                   TurnSolver::GarthLotusCrackColor(state, plan.actions, a));
                 // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
                 // script): Braingeyser's draws / Regrowth's return are same-turn castable.
                 if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
@@ -7739,7 +7741,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             {
-                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
+                                   TurnSolver::GarthLotusCrackColor(state, plan.actions, a));
                 // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
                 // script): Braingeyser's draws / Regrowth's return are same-turn castable.
                 if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")

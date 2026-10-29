@@ -2757,6 +2757,17 @@ public:
     static std::string SacFloatColorFor(const GameState& state, const std::vector<Action>& acts,
                                         const Action& self);
 
+    // GARTH CONJURE-AND-CRACK: a GarthActivate naming Black Lotus that cracks the copy as it lands
+    // (ritual_float = the Lotus's amount; chosen_float_color = its SEARCHED colour, one variant per
+    // colour). A sac source of the plan like an on-board Lotus's SacForMana, so SacFloatColorFor charges
+    // it in the same sequential walk (and returns its pinned colour). GarthLotusCrackColor is the colour
+    // every apply site hands ApplyGarthActivate: "" for every other Garth action (keep the copy).
+    static bool IsGarthLotusCrack(const Action& a)
+    { return a.kind == Action::Kind::GarthActivate && a.ritual_float > 0; }
+    static std::string GarthLotusCrackColor(const GameState& state, const std::vector<Action>& acts,
+                                            const Action& self)
+    { return IsGarthLotusCrack(self) ? SacFloatColorFor(state, acts, self) : std::string(); }
+
     // "We are resolving a BREAKPOINT CONTINUATION" marker, for MTG_CONDEMN_M1_BP.
     // g_bp_enum_depth is NOT the right signal: it only covers EnumerateBreakpointPlans, i.e. the
     // SEARCHED continuation (Plan::bp_choice >= 0). A deck whose breakpoints all resolve greedily
