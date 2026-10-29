@@ -1,24 +1,19 @@
 {
  "blobs": {
-  "mulligan": "5c492c39ea86e87c2de1bc88bfce33ee6b1c5ffc",
+  "mulligan": "1172355372849beaf94082bc0aff2f1faaeabccb",
   "valueleaf": "em:0e526f28aba1418057fe"
  },
  "deck": "melira_pod",
- "detail": "mulligan: ADOPTED (new-vs-old -0.012594 t, cost not measured, recipe fast); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_melira_pod/DECISIONS.txt)",
- "finished": "2026-10-29T11:54:38Z",
- "frozen": "99977194beb541fd50db5bd30b5a2d8f5fc150ee",
- "heartbeat": "2026-10-29T11:37:06Z",
- "host": "550a08fdc1f3",
- "land_note": "cherry-pick onto phase-1-2-deck-analyzer conflicts (error: could not apply 592b897b8... artifact-refresh(melira_pod): done\nhint: After resolving the conflicts, mark them with\nhint: \"git add/rm <pathspec>\", then run\nhint: \"git cherry-pick --continue\".\nh) -- left for an agent",
- "result_branch": "artifact-refresh/melira_pod-20261029-1154",
- "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
- "score": 0.4147,
+ "frozen": "87e57645b09e5d843f02fed504086cc06c953351",
+ "heartbeat": "2026-10-29T14:50:19Z",
+ "host": "58199181d02e",
+ "run_id": "melira_pod-artifact-queue-tool-647f24-20261029T145019",
+ "score": 0.3237,
  "stage": "valueleaf",
  "stages": [
-  "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-29T08:55:56Z",
- "state": "done",
- "worker": "artifact-queue-d7d6a5"
+ "started": "2026-10-29T14:50:19Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
 }
