@@ -544,6 +544,11 @@ static_assert(sizeof(Player) == 200,
 // measured 1160). Classification: a DECK CONSTANT stamped once in StampDeckTraits that only skips the Tectonic
 // axis's provably-empty cast-route scan -- nothing to fold. (The same change PACKS scripted_tectonic_mode /
 // _keep per trigger ordinal -- SpellEffects.h TectonicModePinAt; same ints, still FOLDED raw in Build().)
+// +0 bytes (2026-10-29, the searched echo): `deck_has_echo` (a bool) and `scripted_echo` (an int16_t), both in
+// the 3-byte hole after scripted_fb_hold (measured with gdb ptype /o: 941 / 942, total 1152 unchanged).
+// Classification: the bool is a DECK CONSTANT stamped once in StampDeckTraits that only skips the echo axis's
+// provably-empty plan walk -- nothing to fold; the pin is FUTURE-DETERMINING (set by the turn's plan apply,
+// consumed at the NEXT upkeep), FOLDED in Build() value-gated (and in BuildDedupKey's pending pins).
 static_assert(sizeof(GameState) == 1152,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -912,6 +917,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Bloodline Keeper's in-combat transform mask (Vampires B): the same class, its own domain tag.
     if (s.scripted_combat_transform >= 0)
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
+    // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
+    // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
+    // its own domain tag so every deck without an echo card keeps its exact key.
+    if (s.scripted_echo >= 0)
+    { fold(0xEC40000000ull + static_cast<std::uint64_t>(s.scripted_echo)); }
     // Moraug's queued additional combats (GameState::pending_extra_combats): future-determining, value-gated.
     if (s.pending_extra_combats != 0)
     { fold(0xE7C0000ull + static_cast<std::uint64_t>(s.pending_extra_combats)); }

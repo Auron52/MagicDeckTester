@@ -664,7 +664,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0 || p.fb_hold_choice >= 0
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
-        || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0
+        || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.echo_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.combat_transform_choice >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
@@ -709,6 +709,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.upkeep_gy_reanimate_choice >= 0
         && s.scripted_upkeep_gy_reanimate != p.upkeep_gy_reanimate_choice)                       { ok = false; }
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
+    if (p.echo_choice >= 0             && s.scripted_echo != p.echo_choice)                        { ok = false; }
     if (p.discard_choice >= 0          && discard_pin != p.discard_choice)                         { ok = false; }
     if (p.vial_charge_choice >= 0      && vial_pin != p.vial_charge_choice)                        { ok = false; }
     if (p.atk_dork_release >= 0        && dork_pin != p.atk_dork_release)                          { ok = false; }
@@ -1664,6 +1665,14 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
 void AIEngine::ResolveEchoUpkeep(GameState& state)
 {
     bool echo_processed = false;   // did an echo obligation actually come due THIS pass?
+    // The SEARCHED echo pin (Plan::echo_choice, written by the previous turn's committed plan through
+    // WritePostApplyStatePins): it inverts the provider's answer per obligation ordinal, exactly as the
+    // rollout's echo block reads it (EchoUpkeepWantsPay), so the real upkeep plays what the line scored.
+    // Consumed below only when an obligation came due IN THIS PASS: the TakeTurn backstop call runs after
+    // this turn's own plan may already have written the pin for the NEXT upkeep. The real upkeep's
+    // unconditional clear is GameEngine::UpkeepTail's, the rollout's twin.
+    const int echo_pin = state.scripted_echo;
+    int echo_ord = 0;
     for (std::size_t i = 0; i < state.battlefield.size(); )
     {
         Permanent& p = state.battlefield[i];
@@ -1680,10 +1689,17 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
         // is behaviourally identical to the old non-self_token-only path.
         ManaPool avail = AvailableManaPool(state);
         const bool affordable = avail.CanPay(*ep.echo_cost);
-        // Pay-vs-decline JUDGEMENT is provider-owned (PayEchoToKeep) so the executor and the rollout
-        // (TurnSolver) share one decision -> lockstep. Default reproduces the old fixed heuristic
-        // (self-replacing body declines, else pays); GoblinsProvider adds the Mogg lethal/no-gas keep.
-        bool pay = affordable && ResolveProvider(state).PayEchoToKeep(state, p);
+        // Pay-vs-decline: the provider's judgement (PayEchoToKeep) inverted where the searched pin says so
+        // -- ONE function shared with the rollout (EchoUpkeepWantsPay, the same ordinal) -> lockstep. The
+        // ordinal advances for every obligation, affordable or not, as the rollout's does.
+        // Census (MTG_ECHO_AXIS_STATS): a real upkeep of a searched game whose obligation no plan covered.
+        if (!m_in_rollout && m_lookahead_depth > 0 && !HumanPlayActive())
+        {
+            g_echo_real_obligations.fetch_add(1, std::memory_order_relaxed);
+            if (echo_ord >= EchoPinCount(echo_pin)) { g_echo_real_uncovered.fetch_add(1, std::memory_order_relaxed); }
+        }
+        const bool wants = EchoUpkeepWantsPay(state, p, echo_ord++, echo_pin);
+        bool pay = affordable && wants;
         // Human play (--claude-play/viewer): let the player decide pay-vs-sacrifice when affordable.
         // Guarded to the REAL executor (never a clairvoyant rollout, which must play autonomously so
         // the kept hand reproduces the search) -> autonomous play + ground truth are byte-identical.
@@ -1717,6 +1733,7 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
     // keying on "an obligation actually came due in THIS pass" inherits that once-per-turn
     // latch. Nothing else floats mana during upkeep, so this is exactly the echo leftover.
     if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; state.floating_haste_c = 0; }
+    if (echo_processed) { state.scripted_echo = -1; }   // the pin this upkeep consumed
 }
 
 // UPKEEP Call of the Wild (MTG_UPKEEP_CALL, default OFF) -- the executor half. Runs from

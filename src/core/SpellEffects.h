@@ -20513,6 +20513,76 @@ inline void PerformUpkeepFading(GameState& state)
     }
 }
 
+// ---- THE SEARCHED ECHO PIN (Plan::echo_choice -> GameState::scripted_echo; MTG_ECHO_AXIS) -------------
+// Echo (CR 702.29): "At the beginning of your upkeep, if this came under your control since your last
+// upkeep, sacrifice it unless you pay its echo cost." Pay vs decline is a real decision (Mogg War Marshal:
+// a live attacker vs a summoning-sick token and the mana; Stingscourger: a 2/1 vs four mana), and the right
+// answer depends on the turn the upkeep opens -- its draw, its land drop -- which the provider's upkeep-time
+// judgement cannot see. So the SEARCH decides it: the plan of the turn before carries the pin, and the
+// provider's PayEchoToKeep only ORDERS the two answers (the unpinned / "follow" plan is the provider's
+// choice and comes first; its clone inverts it).
+//
+// Encoding: -1 = no pin. Else bits 0..7 = INVERT mask by obligation ordinal (the order the upkeep meets
+// them: battlefield order among the active player's permanents with an unresolved echo), bits 8..11 = how
+// many ordinals the pin COVERS (a main-2 plan extends main 1's cover with the obligations that arose
+// since -- a Goblin Lackey put, a main-2 cast -- instead of re-branching the ones main 1 decided).
+// An ordinal past the cover follows the provider: that is the playout policy beyond the horizon (a plan
+// the greedy playout made carries no pin), and never in the window, where every plan that can leave an
+// obligation gets the axis. The cap (kEchoPinMaxOrd) is far above any list (the suite's echo decks hold
+// two echo cards); an obligation past it would follow the provider.
+constexpr int kEchoPinMaxOrd     = 8;
+constexpr int kEchoPinCountShift = 8;
+inline int  EchoPinCount(int pin) { return pin < 0 ? 0 : (pin >> kEchoPinCountShift) & 0xF; }
+inline int  EchoPinMask(int pin)  { return pin < 0 ? 0 : pin & 0xFF; }
+inline int  EchoPinPack(int count, int mask) { return (count << kEchoPinCountShift) | (mask & 0xFF); }
+inline bool EchoPinInverts(int pin, int ordinal)
+{ return ordinal >= 0 && ordinal < EchoPinCount(pin) && ((EchoPinMask(pin) >> ordinal) & 1) != 0; }
+// The active player's echo obligations still to come due: permanents with an echo cost whose first upkeep
+// has not resolved it yet. The same predicate both upkeep loops walk, in the same order.
+inline bool IsPendingEchoObligation(const GameState& s, const Permanent& p)
+{
+    if (p.controller_index != s.active_player_index || p.echo_resolved) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    return d != nullptr && d->params.echo_cost.has_value();
+}
+inline int PendingEchoObligations(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (IsPendingEchoObligation(s, p)) { ++n; } }
+    return n;
+}
+// THE COVER CENSUS (never read by play; printed under MTG_ECHO_AXIS_STATS=1). Every obligation either rides
+// the pin's cover (searched) or takes the provider's answer. UNCOVERED_IN_WINDOW: the provider answered
+// while the innermost search frame still had depth (greedywindow::InWindow) -- a host whose enumeration
+// missed the axis; the no-greedy invariant's instrument, the madness counter's twin, MUST read 0 outside
+// the disclosed residual (docs/design/searched-echo.md). REAL_*: the executor's own upkeeps in a searched
+// game (the executor's frame is closed there, so the window test cannot see them): an uncovered one means
+// the previous turn's last plan came from a path that carries no pin.
+inline std::atomic<long long> g_echo_obligations{0}, g_echo_covered{0}, g_echo_inverted{0};
+inline std::atomic<long long> g_echo_uncovered_in_window{0}, g_echo_uncovered_beyond{0};
+inline std::atomic<long long> g_echo_real_obligations{0}, g_echo_real_uncovered{0};
+inline void NoteEchoCover(int pin, int ordinal)
+{
+    g_echo_obligations.fetch_add(1, std::memory_order_relaxed);
+    if (ordinal < EchoPinCount(pin))
+    {
+        g_echo_covered.fetch_add(1, std::memory_order_relaxed);
+        if (EchoPinInverts(pin, ordinal)) { g_echo_inverted.fetch_add(1, std::memory_order_relaxed); }
+    }
+    else if (!HumanPlayActive() && greedywindow::InWindow(0))
+    { g_echo_uncovered_in_window.fetch_add(1, std::memory_order_relaxed); }
+    else { g_echo_uncovered_beyond.fetch_add(1, std::memory_order_relaxed); }
+}
+// THE ONE pay-vs-decline both upkeep loops (AIEngine::ResolveEchoUpkeep, the rollout's echo block) use for
+// the obligation at `ordinal`: the provider's answer, inverted where the pin says so. Affordability stays
+// each world's own gate (both sacrifice when the cost cannot be paid), exactly as before.
+inline bool EchoUpkeepWantsPay(const GameState& s, const Permanent& p, int ordinal, int pin)
+{
+    NoteEchoCover(pin, ordinal);
+    const bool provider = ResolveProvider(s).PayEchoToKeep(s, p);
+    return provider != EchoPinInverts(pin, ordinal);
+}
+
 // Varchild's War-Riders cumulative upkeep (CR 702.24a): +1 age counter, then EITHER the opponent
 // creates age_counters tokens (upkeep_token_* spec; 1/1 red Survivor) OR we sacrifice it. WHICH is
 // the provider's call (DecisionProvider::PaysCumulativeUpkeep; default pay -- weakly dominant vs the

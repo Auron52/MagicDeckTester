@@ -115,6 +115,17 @@ shape: `DecisionProvider::PaysCumulativeUpkeep` (Varchild's War-Riders, `Perform
 same two sites); Mirri's Guile's upkeep reorder (`PerformUpkeepReorder`, a fixed heuristic order); and
 Defense of the Heart's put list (`SacTutorPutList`).
 
+**Update 2026-10-29: echo is now SEARCHED** (`MTG_ECHO_AXIS`, default ON; docs/design/searched-echo.md).
+`PayEchoToKeep` only orders pay vs decline. On a held-out sample (seeds 1540001 / 1550001, 8,000 Goblins
+games; 1560001, 4,000 goblins2hg), `MTG_PLACEHOLDER_ECHO=1` measured **0 better / 0 worse** against
+`MTG_PLACEHOLDER_ECHO=0` with the axis on. Without the axis the same lever lost 1 / 7 and 0 / 5. The
+witness games s1350001 gi640 and s1360001 gi405 / gi3725 recover at d8 b0 and at play settings. The
+block on that lever is lifted. Turning it on is the USER's call.
+
+Cumulative upkeep stays a one-option prune: paying is weakly dominant for Creature Giving's card pool
+against the passive opponent. The proof, and the conditions under which it breaks, are in that doc.
+Mirri's Guile (no current deck) and Defense of the Heart's put list are listed there as next items.
+
 ## Re-measurement of the split (base 67e4d62e6 = MTG_ECHO_STAGED_GAS on f145caee2)
 
 Fresh held-out seed 1370001, every suite deck (39), one pooled batch (`--threads 12`, MTG_PGO=0 both arms):

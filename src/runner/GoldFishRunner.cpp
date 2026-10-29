@@ -1396,6 +1396,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool attack_modal = false;
         // Emeria, the Sky Ruin's upkeep return (GameState::deck_has_upkeep_reanimate).
         bool upkeep_reanimate = false;
+        // An echo card (GameState::deck_has_echo): the searched-echo axis's plan walk.
+        bool echo = false;
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
         // shared hooks (ResolveDrawTriggers, OnCreatureDealtDamageToOpponent) test.
         bool draw_ping = false;
@@ -1469,6 +1471,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.endstep_modal_reanimate_mv >= 0) { endstep_reanimate = true; }
                 if (d->params.attack_trigger_modal)            { attack_modal = true; }
                 if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
+                if (d->params.echo_cost.has_value())          { echo = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
                     || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
                 { draw_ping = true; }
@@ -1549,6 +1552,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no upkeep graveyard reanimator (Emeria) can exist,
         // so the upkeep walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
         state.deck_has_upkeep_reanimate    = garth || upkeep_reanimate;
+        // Same reasoning, no lever: a clear bit proves no echo permanent can exist, so the echo axis's
+        // per-plan walk (AppendSubdecisionAxes) finds no obligation and is dead code for that deck.
+        state.deck_has_echo                = garth || echo;
         // Same reasoning, no lever: a clear bit proves no permanent can carry a draw trigger or a
         // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
         state.deck_has_draw_ping           = garth || draw_ping;

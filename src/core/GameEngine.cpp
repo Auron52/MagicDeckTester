@@ -561,6 +561,10 @@ void GameEngine::UpkeepTail(GameState& state)
     // death-trigger impulse exile must eat the pre-draw library top, exactly as the search
     // modelled it). Param-gated on echo_cost -> byte-identical for every non-echo deck.
     m_ai.ResolveEchoUpkeep(state);
+    // ...and the searched echo pin (Plan::echo_choice) is CONSUMED by this upkeep whatever it found -- the
+    // rollout's echo block clears it the same way -- so a pin whose obligation left the battlefield before
+    // the upkeep (a Mogg War Marshal sacrificed in main 2) cannot leak into this turn's plans as a cover.
+    state.scripted_echo = -1;
 
     // Upkeep Call of the Wild (MTG_UPKEEP_CALL, default OFF -> byte-identical): put a fatty stacked
     // by LAST turn's tutor into play before the draw step pulls it into hand. After echo so the

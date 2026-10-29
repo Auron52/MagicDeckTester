@@ -954,6 +954,24 @@ struct GameState
     // with the combat pins at both turn starts, folded value-gated into the dominance key and the post-apply
     // dedup key.
     std::int8_t              scripted_fb_hold = -1;
+    // Does the deck hold an ECHO card (CardParams::echo_cost: Mogg War Marshal, Stingscourger)? DECK
+    // CONSTANT, stamped by StampDeckTraits; gates the searched-echo axis (AppendSubdecisionAxes) so a deck
+    // without one never walks its plans for echo casts. Defaults TRUE (an unstamped state keeps the walk).
+    // In the 3-byte hole after scripted_fb_hold, with the pin below (sizeof(GameState) unchanged).
+    bool                     deck_has_echo = true;
+    // THE SEARCHED ECHO PIN (Plan::echo_choice, MTG_ECHO_AXIS, 2026-10-29). Echo's pay-vs-decline is decided
+    // at the NEXT upkeep, after this turn's plan apply and the turn boundary, so it rides the STATE (the
+    // scripted_upkeep_gy_reanimate shape): -1 = unpinned (every obligation takes the provider's
+    // PayEchoToKeep); else bits 0..7 are an INVERT mask over that upkeep's echo obligations by ordinal
+    // (battlefield order) and bits 8..11 how many ordinals the pin COVERS -- an ordinal it covers whose bit is
+    // set does the opposite of the provider, every other one follows it (EchoPinInverts, SpellEffects.h).
+    // Written by the plan apply (TurnSolver::WritePostApplyStatePins, both worlds, write-when-set: a main-2
+    // plan with nothing new to decide leaves main 1's pin standing) and consumed + cleared by the NEXT upkeep
+    // in both worlds (AIEngine::ResolveEchoUpkeep via GameEngine::UpkeepTail; the rollout's echo block) -- so
+    // it must SURVIVE the turn boundary and is never cleared with the per-turn pins. FUTURE-DETERMINING:
+    // folded value-gated in dominance::Build(), BuildDedupKey's pending pins and BuildBreakpointKey (the axis
+    // reads the inherited coverage).
+    std::int16_t             scripted_echo = -1;
     // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
     // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
     // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole

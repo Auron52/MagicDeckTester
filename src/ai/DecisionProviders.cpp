@@ -35694,6 +35694,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.scripted_saga_target); v.push_back(s.scripted_attack_land_search); v.push_back(s.scripted_upkeep_land_search);
     v.push_back(s.scripted_combat_land_search_crack); v.push_back(s.scripted_grace_choice);
     v.push_back(s.scripted_upkeep_gy_reanimate);
+    v.push_back(s.scripted_echo);
     v.push_back(static_cast<long long>(s.battlefield.size()));
     for (const Permanent& p : s.battlefield)
     {

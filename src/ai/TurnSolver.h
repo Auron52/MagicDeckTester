@@ -1116,6 +1116,15 @@ public:
         // turn" and move-order committed the forfeit). MTG_ATK_FORFEIT_GATE, default OFF
         // pending measurement + user review.
         bool atk_forfeit    = false;
+        // SEARCHED ECHO (MTG_ECHO_AXIS, 2026-10-29): the NEXT upkeep's echo pay-vs-decline, packed exactly as
+        // GameState::scripted_echo (an invert mask over the obligations by ordinal + the count of ordinals it
+        // covers); -1 = write nothing. Written write-when-set by WritePostApplyStatePins and consumed at that
+        // upkeep in both worlds. The axis (AppendSubdecisionAxes) stamps a plan that leaves an obligation the
+        // state's pin does not cover with the provider's answer ("follow", mask 0) and emits one clone per
+        // non-empty subset of those new ordinals with the answer inverted, so pay AND decline are both
+        // searched and the provider only orders them. An int16_t in the 2-byte hole after atk_forfeit
+        // (gdb ptype /o: 74; sizeof(Plan) unchanged).
+        std::int16_t echo_choice = -1;
 
         // Searched dork attack/hold choice (MTG_DORK_ATK_SEARCH): -1 = not contested at this
         // node (natural heuristic combat, the default); 0 = contested, search chose the
@@ -2506,6 +2515,13 @@ public:
     // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
     // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
     static int ProjectedAttackDamageForTest(const GameState& state);
+    // Test hook (searched echo, MTG_ECHO_AXIS): the rollout's turn boundary itself (end step, cleanup,
+    // untap, upkeep -- echo included -- and the draw), exactly as every search host runs it. False = the
+    // game ended on the boundary (an empty-library draw).
+    static bool SimulateEndAndStartNextTurnForTest(GameState& state);
+    // ...and the boundary fan's pins for a state about to cross it (EchoBoundaryPins): one per inverted
+    // subset of the obligations its echo pin does not cover, "follow" first; empty when all are covered.
+    static std::vector<int> EchoBoundaryPinsForTest(const GameState& state);
     // MTG_LEAF_KILL_ONLY test hook: one horizon rollout exactly as FSLineWin's leaf runs it (SimulateToEnd
     // at `depth` under `cutoff`, a fresh leaf table, no budget), and how many kill-only turns it armed /
     // candidate rollouts it skipped on this thread (counted in every build, thread-local).

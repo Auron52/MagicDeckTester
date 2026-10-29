@@ -1593,6 +1593,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
                   || first.land_search_act_slot != dup.land_search_act_slot);
     pl("looktop", first.look_top_pins != dup.look_top_pins);
     pl("upkreanim", first.upkeep_gy_reanimate_choice != dup.upkeep_gy_reanimate_choice);
+    pl("echo", first.echo_choice != dup.echo_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     pl("etbc", first.etbcounter_choice != dup.etbcounter_choice);
@@ -6144,11 +6145,16 @@ static bool M2SkipEmptyApplyOn()
 // choosing -- it scores its opposite. The rollout's second main must stay a second main; only its
 // PRICE is negotiable. See docs/design/fungus-second-main-and-devour.md §8.
 
+static bool EchoUncoveredPending(const GameState& state);   // fwd (the searched echo axis, with the axes)
 static bool SecondMainUnproductive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
     static const bool s_force = EnvOn("MTG_M2_PRODUCTIVE");
     if (s_kill || HumanPlayActive()) { return false; }
+    // An echo obligation no plan covers is a decision this phase still has to make (MTG_ECHO_AXIS: the
+    // second main is the last plan of the turn), so the phase is never skipped while one is pending.
+    // False for every deck without an echo card.
+    if (EchoUncoveredPending(state)) { return false; }
     // Moraug: any landfall main 2 can make (a held land, a ramp spell main 1 could have cast, a fetch to crack)
     // buys an additional combat, so the phase is never skipped as a re-run of main 1 while the source is ours.
     if (ExtraCombatSecondMainLive(state)) { return false; }
@@ -24915,6 +24921,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // Emeria's packed next-upkeep ranks: the same must-fold, value-gated rule.
     if (p.upkeep_gy_reanimate_choice >= 0)
     { fold(0x454D45524941ull); fold(static_cast<uint64_t>(p.upkeep_gy_reanimate_choice)); }   // "EMERIA"
+    // The searched echo pin (next upkeep's pay/decline): the same must-fold, value-gated rule.
+    if (p.echo_choice >= 0) { fold(0x4543484Full); fold(static_cast<uint64_t>(p.echo_choice)); }   // "ECHO"
     // Searched land-drop TIMING and the landfall-target policy (2026-10-15). MUST-FOLD, the fling /
     // Tectonic rule below: "land before the casts" and "land after the casts" are different plans
     // (and so are two target ranks), and a fingerprint that cannot tell them apart re-steals the
@@ -25285,7 +25293,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1 && p.grace_choice == -1
-        && p.upkeep_gy_reanimate_choice == -1
+        && p.upkeep_gy_reanimate_choice == -1 && p.echo_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
         && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
@@ -26104,6 +26112,7 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     if (p.grace_choice >= 0) { h = Mix(h, 0x4752ull + static_cast<std::uint64_t>(p.grace_choice)); }   // value-gated
     if (p.upkeep_gy_reanimate_choice >= 0)
     { h = Mix(h, 0x454Dull + static_cast<std::uint64_t>(p.upkeep_gy_reanimate_choice)); }   // value-gated
+    if (p.echo_choice >= 0) { h = Mix(h, 0xEC40ull + static_cast<std::uint64_t>(p.echo_choice)); }   // value-gated
     for (int x : p.sac_pins) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
     h = Mix(h, p.atk_forfeit ? 1u : 0u);
     h = Mix(h, p.soulbond_decline ? 1u : 0u);
@@ -47224,6 +47233,7 @@ namespace solvememo
             || a.saga_target_choice != b.saga_target_choice
             || a.grace_choice != b.grace_choice
             || a.upkeep_gy_reanimate_choice != b.upkeep_gy_reanimate_choice
+            || a.echo_choice != b.echo_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.land_slot != b.land_slot
             || a.land_from_top != b.land_from_top
@@ -63304,6 +63314,52 @@ bool RolloutRunPostMain2ExtraCombats(GameState& state) { return RunPostMain2Extr
 
 // End-of-turn cleanup + start of next turn (untap, draw).
 // Returns false if the player lost on draw (empty library).
+// MTG_ROLLOUT_FAN_NARROW's flag (see RolloutNarrowScope, with the axes): defined up here because the echo
+// block below classifies its cover census by it.
+static thread_local bool t_rollout_narrow = false;
+// THE EDGE FOLD (searched echo; defined with the leaf modes): true when this enumeration / boundary belongs to
+// a full-line node whose NEXT turn is a CONSTANT leaf (the no-leaf stand-in, a forced constant leaf). That leaf
+// answers max_turns+1 for every state, so the next upkeep's echo answer cannot move any value the node
+// computes: both pins score alike and "follow" is what ordering picks anyway. Branching there is pure
+// duplicate work -- an identity fold, so the axis skips it. Never at a deeper pass's interior, where the
+// next turn is searched and the echo IS branched, so no line is unfindable at any budget.
+static bool FsNextLeafConstant(const GameState& s);
+static bool EchoEdgeFoldHere(const GameState& s)
+{
+    return g_fsline_nest > 0 && g_cs_solver_nest == 0 && g_rollout_nest == 0 && greedywindow::t_depth == 1
+        && FsNextLeafConstant(s);
+}
+// The echo cover census's search-side split (MTG_ECHO_AXIS_STATS; SpellEffects.h NoteEchoCover counts the
+// totals). An obligation past the pin's cover, resolved while the innermost search frame still had depth:
+// in a SEARCHED frame (the no-greedy invariant: must read 0 outside the disclosed residual), or inside the
+// narrowed tail rollout (the playout beyond the horizon: its SolveWithLookahead plies open frames but carry
+// no axes, the permitted playout policy). MTG_ECHO_AXIS_STATS=2 prints the first searched ones.
+static std::atomic<long long> g_echo_unc_searched{0}, g_echo_unc_narrow{0}, g_echo_unc_edgefold{0};
+// The per-turn plan depth of the innermost rollout turn being played (SimulateToEndImpl writes it before each
+// turn's plans are chosen). A rollout turn at depth <= 0 is played by the greedy playout (Solve, the
+// HorizonLeaf permit) -- beyond its searcher's horizon -- but no frame records that: the innermost frame is
+// still the searcher whose candidate launched the rollout. So the census asks this instead.
+static thread_local int t_echo_rollout_turn_depth = 1;
+static void NoteEchoUncoveredSearch(const GameState& s, const Permanent& p, int ordinal, int pin)
+{
+    if (ordinal < EchoPinCount(pin) || HumanPlayActive() || !greedywindow::InWindow(0)) { return; }
+    if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
+    { g_echo_unc_narrow.fetch_add(1, std::memory_order_relaxed); return; }
+    if (EchoEdgeFoldHere(s)) { g_echo_unc_edgefold.fetch_add(1, std::memory_order_relaxed); return; }
+    const long long n = g_echo_unc_searched.fetch_add(1, std::memory_order_relaxed);
+    static const int s_lvl = EnvInt("MTG_ECHO_AXIS_STATS", 0);
+    if (s_lvl >= 2 && n < 40)
+    {
+        std::string bf;
+        for (const Permanent& q : s.battlefield)
+        { if (q.controller_index == s.active_player_index) { bf += " " + q.card.m_name.str() + (q.entered_this_turn ? "(new)" : ""); } }
+        std::fprintf(stderr, "[echo-axis] UNCOVERED in window: T%d ord=%d pin=%d frame_depth=%d nest(rollout=%d fsline=%d"
+                             " cs_solver=%d m2solve=%d greedy=%d bp_enum=%d m2fix=%d) %s | bf:%s\n",
+                     s.turn_number, ordinal, pin, greedywindow::t_depth, g_rollout_nest, g_fsline_nest,
+                     g_cs_solver_nest, g_cs_m2solve_nest, g_greedy_solve_nest, g_bp_enum_depth, g_m2fix_nest,
+                     p.card.m_name.str().c_str(), bf.c_str());
+    }
+}
 static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
@@ -63744,14 +63800,20 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // came under your control since your last upkeep, sacrifice it unless you pay its echo cost."
     // (CR 702.29). The FIRST upkeep an echo permanent's controller takes after it entered resolves the
     // obligation (Permanent::echo_resolved flips true here regardless of outcome, so no later upkeep
-    // re-charges it). Deterministic heuristic (the search need not branch echo): a creature whose OWN
-    // death makes a replacement token (Mogg War Marshal -- dies_watch_includes_self + a death token)
-    // DECLINES -- sacrificing it fires OnCreatureDies for a fresh 1/1, net the same body while saving
-    // the mana; any other echo creature (Stingscourger) PAYS if it can afford the cost, else is
-    // sacrificed. This is the rollout/search world; it mirrors the executor block at the top of
-    // AIEngine::TakeTurn using TapForCostDirect (the byte-identical mirror of AIEngine::TapForCost)
+    // re-charges it). PAY VS DECLINE IS SEARCHED (MTG_ECHO_AXIS; see EchoUpkeepWantsPay): the previous
+    // turn's plan left GameState::scripted_echo, which inverts the provider's PayEchoToKeep per obligation
+    // ordinal; an obligation it does not cover (a plan made beyond the horizon) takes the provider's answer
+    // -- the permitted playout policy. The provider's default: a creature whose OWN death makes a
+    // replacement token (Mogg War Marshal -- dies_watch_includes_self + a death token) declines, any
+    // other echo creature (Stingscourger) pays. This is the rollout/search world; it mirrors the executor's
+    // AIEngine::ResolveEchoUpkeep using TapForCostDirect (the byte-identical mirror of AIEngine::TapForCost)
     // and OnCreatureDies -> lockstep. Gated on echo_cost, so it is a no-op for every non-echo deck.
     bool echo_processed = false;   // did an echo obligation actually come due this upkeep?
+    // The pin is CONSUMED by this upkeep whatever it finds (the executor's twin: GameEngine::UpkeepTail),
+    // so an over-claimed cover can never leak into the turn it opens.
+    const int echo_pin = state.scripted_echo;
+    state.scripted_echo = -1;
+    int echo_ord = 0;
     for (std::size_t i = 0; i < state.battlefield.size(); )
     {
         Permanent& p = state.battlefield[i];
@@ -63762,12 +63824,13 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
         echo_processed  = true;
         const CardParams& ep = edef->params;
-        // Pay-vs-decline JUDGEMENT is provider-owned (PayEchoToKeep) -- the SAME decision the executor
-        // (AIEngine) uses, so autonomous play and this rollout stay in lockstep. Default reproduces the
-        // old fixed heuristic; GoblinsProvider adds the Mogg lethal/no-gas keep. TapForCostDirect still
-        // gates on real affordability (returns false if it cannot pay), so an unaffordable keep sacrifices.
+        // Pay-vs-decline: the provider's judgement (PayEchoToKeep) inverted where the searched pin says so
+        // -- the SAME function the executor (AIEngine::ResolveEchoUpkeep) uses on the same ordinal, so
+        // autonomous play and this rollout stay in lockstep. TapForCostDirect still gates on real
+        // affordability (returns false if it cannot pay), so an unaffordable keep sacrifices.
         bool kept = false;
-        if (ResolveProvider(state).PayEchoToKeep(state, p))
+        NoteEchoUncoveredSearch(state, p, echo_ord, echo_pin);
+        if (EchoUpkeepWantsPay(state, p, echo_ord++, echo_pin))
         {
             // Pay the echo to keep the body (taps real lands -> unavailable for this turn's plays).
             kept = TapForCostDirect(state, *ep.echo_cost, /*for_creature=*/false);
@@ -63844,6 +63907,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.StampMain1Hand(PlayableTopLandNumber(state));   // main-2 land drop: newly arrived lands only (lockstep w/ GameEngine::MainPhase)
     return true;
 }
+bool TurnSolver::SimulateEndAndStartNextTurnForTest(GameState& state) { return SimulateEndAndStartNextTurn(state); }
 
 // Play a specific named land from hand onto the battlefield, resolving its
 // enters-tapped / depletion / scry effects. Returns false if the land drop is
@@ -74170,7 +74234,7 @@ static bool LookTopFlipFoldOn() { static const bool on = EnvOn("MTG_LOOKTOP_FLIP
 // computed under it folds the flag into its key (enum memo m2 host, searched-m2 memo, rollout-m1 memo,
 // breakpoint enum cache, the leaf TT); the m1 enum host bypasses its memo. (MTG_BP_NSKIP_GLOBAL, opt-in and
 // unbudgeted-only, does not fold it.) Measured: docs/design/lfe-plan-fan-explosion.md option 5.
-static thread_local bool t_rollout_narrow = false;
+// (t_rollout_narrow is defined above SimulateEndAndStartNextTurn, whose echo census reads it.)
 static bool RolloutFanNarrowOn() { static const bool on = EnvOn("MTG_ROLLOUT_FAN_NARROW", true); return on; }
 struct RolloutNarrowScope
 {
@@ -74181,6 +74245,143 @@ struct RolloutNarrowScope
     RolloutNarrowScope& operator=(const RolloutNarrowScope&) = delete;
 };
 static constexpr uint64_t kRolloutNarrowTag = 0x7A11;
+
+// ---- THE SEARCHED ECHO AXIS (MTG_ECHO_AXIS, DEFAULT ON; =0 -> the provider's pick everywhere, an A/B arm) --
+// Echo's pay-vs-decline resolves at the NEXT upkeep (CR 702.29), and both worlds used to take it from the
+// provider (PayEchoToKeep) there: at the executor's real upkeep, before that turn's search, and at every
+// simulated turn boundary -- including the ones FSLineTail crosses with depth remaining. That is an in-window
+// greedy pick (USER HARD RULE 2026-09-30), and a costly one: the right answer depends on the turn the upkeep
+// opens (its draw, its land drop), which the upkeep-time judgement never sees. Goblins seed 1350001 gi640
+// (MTG_PLACEHOLDER_ECHO on): the T3 draw was the Mountain that would have cast Goblin Chieftain, but the echo
+// had already tapped two of the three lands -- a turn slower at d8 b0, as were seed 1360001 gi405 / gi3725.
+// The obligations an apply itself creates are fanned where the boundary is crossed (EchoBoundaryPins).
+//
+// THE SHAPE is the Emeria / Search-for-Tomorrow next-upkeep state pin (SpellEffects.h, kEchoPin*): the plan
+// of the turn before carries the answer, WritePostApplyStatePins writes it, both upkeep loops read it through
+// one function (EchoUpkeepWantsPay). Relative to the provider -- "follow" or "invert" per obligation ordinal
+// -- because the provider's answer is a function of the UPKEEP state, which no plan can see when it is
+// enumerated: so the base plan IS the provider's answer (it is ordered first and wins every tie) and its
+// clone the other one, and the two never coincide (no duplicate costs a rollout to find).
+//
+// WHERE IT FANS. Every searched enumeration, multiplicatively, BEFORE the other axes (so each echo world gets
+// every other axis's variants, with its own fold identities -- the axes below treat a clone as a base): a
+// plan whose own casts / Vial puts plus the obligations already pending reach past the cover the state's pin
+// holds gets the cover extended -- the base stamped "follow" on the new ordinals, one clone per non-empty
+// inverted subset of them. So main 1 decides what main 1 brings and main 2 only what arrived since (a Goblin
+// Lackey put, a main-2 cast, a Muxus reveal), and nothing is decided twice. A wave-0 breakpoint variant is
+// stamped "follow" and not cloned: its inverted world's continuations come from the walker over the clone,
+// whose bp_wave0 is cleared like every axis clone's. The hosts that append an idle plan AFTER the axes ran
+// (the do-nothing second main) fan it through AppendIdleEchoVariants.
+//
+// NOT here: inside a breakpoint continuation derivation (the pin is the OUTER plan's, consumed after its
+// apply), in human play (the person answers the upkeep prompt), and in a narrowed tail rollout -- beyond the
+// horizon the provider's pick IS the permitted playout policy, and a greedy playout's plans carry no pin.
+static bool EchoAxisOn()
+{
+    static const bool env = EnvOn("MTG_ECHO_AXIS", true);   // DEFAULT ON; =0 -> the provider's pick
+    return heurarm::Flag(heurarm::ECHO_AXIS, env);
+}
+static bool EchoAxisLiveHere(const GameState& state)
+{
+    return state.deck_has_echo && g_bp_enum_depth == 0 && !t_rollout_narrow && !HumanPlayActive()
+        && EchoAxisOn() && !EchoEdgeFoldHere(state);
+}
+// Most NEW ordinals one plan fans (2^k - 1 clones). The suite's echo decks hold two echo cards, so the cap is
+// never reached; an obligation past it is left uncovered for a later enumeration (main 2) to fan.
+constexpr int kEchoAxisMaxNewPerPlan = 4;
+// Echo permanents this plan's own actions put onto the battlefield: a hand cast (an impulse card included)
+// or an Aether Vial put. A put the plan does not name -- Goblin Lackey's combat put, a Muxus reveal -- is
+// pending by the next enumeration (main 2), which fans it then.
+static int EchoEntriesOfPlan(const TurnSolver::Plan& p)
+{
+    int n = 0;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && d->params.echo_cost.has_value()) { ++n; }
+    }
+    return n;
+}
+// The fan over list[from, end) (see above). Returns the clones appended.
+static std::size_t AppendEchoAxisRange(const GameState& state, std::vector<TurnSolver::Plan>& list,
+                                       std::size_t from)
+{
+    const int inherited = state.scripted_echo;
+    const int cov       = EchoPinCount(inherited);
+    const int mask_inh  = EchoPinMask(inherited);
+    const int pending   = PendingEchoObligations(state);
+    // A plan casts / Vial-puts only HAND cards (staged impulse cards sit in hand in the search), so with no
+    // echo card there no plan brings an obligation and the per-plan action walk is skipped: an exact
+    // shortcut (every plan's count is `pending`).
+    bool echo_in_hand = false;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.echo_cost.has_value()) { echo_in_hand = true; break; }
+    }
+    if (!echo_in_hand && pending <= cov) { return 0; }
+    std::vector<TurnSolver::Plan> extra;
+    const std::size_t end = list.size();
+    for (std::size_t i = from; i < end; ++i)
+    {
+        TurnSolver::Plan& p = list[i];
+        if (p.echo_choice >= 0) { continue; }
+        const int n = std::min(kEchoPinMaxOrd, pending + (echo_in_hand ? EchoEntriesOfPlan(p) : 0));
+        if (n <= cov) { continue; }   // nothing new: the plan inherits the state's pin (write-when-set)
+        const int fresh = std::min(n - cov, kEchoAxisMaxNewPerPlan);
+        const int total = cov + fresh;
+        p.echo_choice = static_cast<std::int16_t>(EchoPinPack(total, mask_inh));   // "follow" = the provider
+        if (p.bp_choice >= 0) { continue; }
+        for (int sub = 1; sub < (1 << fresh); ++sub)
+        {
+            TurnSolver::Plan v = list[i];
+            v.echo_choice = static_cast<std::int16_t>(EchoPinPack(total, mask_inh | (sub << cov)));
+            extra.push_back(std::move(v));
+        }
+    }
+    TRACE("echoaxis", "T%d %s plans[%zu..%zu) -> %zu echo variant(s) (pending=%d cover=%d)",
+          state.turn_number, from == 0 ? "list" : "idle", from, end, extra.size(), pending, cov);
+    list.insert(list.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+    return extra.size();
+}
+// The idle-plan hosts (the do-nothing second main, the NC instrument's bare post-combat list): the plans they
+// append after the axes ran get the echo fan too -- a Goblin Lackey's combat put is pending there and nothing
+// else would decide it.
+static void AppendIdleEchoVariants(const GameState& state, std::vector<TurnSolver::Plan>& list, std::size_t from)
+{
+    if (from >= list.size() || !EchoAxisLiveHere(state)) { return; }
+    AppendEchoAxisRange(state, list, from);
+}
+// MTG_ECHO_AXIS_STATS=1: the cover census (SpellEffects.h, NoteEchoCover) at exit.
+namespace echostats
+{
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            static const bool on = EnvOn("MTG_ECHO_AXIS_STATS");
+            if (!on) { return; }
+            std::fprintf(stderr, "[echo-axis] obligations=%lld covered=%lld inverted=%lld uncovered_in_window=%lld"
+                                 " uncovered_beyond=%lld | real: obligations=%lld uncovered=%lld\n",
+                         (long long)g_echo_obligations.load(), (long long)g_echo_covered.load(),
+                         (long long)g_echo_inverted.load(), (long long)g_echo_uncovered_in_window.load(),
+                         (long long)g_echo_uncovered_beyond.load(), (long long)g_echo_real_obligations.load(),
+                         (long long)g_echo_real_uncovered.load());
+            std::fprintf(stderr, "[echo-axis] uncovered in a frame with depth: searched=%lld playout=%lld"
+                                 " constant_leaf_edge_fold=%lld\n",
+                         (long long)g_echo_unc_searched.load(), (long long)g_echo_unc_narrow.load(),
+                         (long long)g_echo_unc_edgefold.load());
+        }
+    };
+    static Dumper g_dumper;
+}
+// An obligation pending that the state's pin does not cover -- the second main has an echo decision to make,
+// so its 0-cost empty path (which never enumerates) must not be taken.
+static bool EchoUncoveredPending(const GameState& state)
+{
+    return EchoAxisLiveHere(state) && PendingEchoObligations(state) > EchoPinCount(state.scripted_echo);
+}
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all, bool idle_pass = false,
                                   PbLazyLayout* pb_lazy = nullptr)
@@ -74277,6 +74478,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             return;
         }
     };
+    // ---- SEARCHED ECHO (MTG_ECHO_AXIS; see AppendEchoAxisRange) -- FIRST, so every axis below fans each echo
+    // world. A lazy layout cannot be live yet (the put-back axis below builds it); materialise defensively.
+    if (EchoAxisLiveHere(state))
+    {
+        if (pb_lazy != nullptr && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); plan_tr.clear(); }
+        AppendEchoAxisRange(state, all, 0);
+    }
     // ---- THE REVEAL OUTLET'S POSITION AMONG THE CASTS (Martyr of Sands, 2026-10-27) ----------------
     // "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life."
     // The activation is a trailing one, so on the base plan it runs after every cast: X counts only the
@@ -78893,6 +79101,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
             add(pl.grace_choice);
             add(pl.upkeep_gy_reanimate_choice);   // Emeria: in padding, so the size pin cannot catch it
+            add(pl.echo_choice);   // the searched echo pin: in padding, so the size pin cannot catch it
             add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
             add(pl.fb_hold_choice);  // the searched banked hold: in padding, so the size pin cannot catch it
             add(pl.land_from_top);   // Courser: in padding, so the size pin below cannot catch it
@@ -82830,6 +83039,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // (outermost rollout only), else the leaf depth. -1 override => `depth` => byte-identical.
         const int turn_depth = (first_turn_depth >= 0 && state.turn_number == roll_start)
                              ? first_turn_depth : depth;
+        t_echo_rollout_turn_depth = turn_depth;   // the echo census's playout test (NoteEchoUncoveredSearch)
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens.
         TurnSolver::Plan pre_plan;
         if (g_honest_teacher && depth > 0)
@@ -83633,7 +83843,9 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          // Abiding Grace's packed end-step pin (appended: value-gated, own slot).
                          static_cast<int>(state.scripted_grace_choice),
                          // Emeria's packed next-upkeep pin (appended: value-gated, own slot).
-                         static_cast<int>(state.scripted_upkeep_gy_reanimate) };
+                         static_cast<int>(state.scripted_upkeep_gy_reanimate),
+                         // The searched echo pin, read at the next upkeep (appended: value-gated, own slot).
+                         static_cast<int>(state.scripted_echo) };
     for (int i = 0; i < static_cast<int>(sizeof(pins) / sizeof(pins[0])); ++i)
     {
         if (pins[i] != -1)
@@ -85066,6 +85278,15 @@ struct ForceValueLeafGuard
 // MidGameEvaluator::Constant() does -- no rollout, no feature extraction -- so a warm-up pass costs its
 // tree and nothing else. The committing pass clears it and the attached model scores as usual.
 inline thread_local bool g_force_constant_leaf = false;
+// The leaf FSLineWin's depth-0 node uses for `s` is CONSTANT (the rule at its leaf site, in one place for the
+// searched echo's edge fold -- see EchoEdgeFoldHere): a forced constant leaf, or the attached model is the
+// no-leaf stand-in and nothing forces the heuristic leaf over it.
+static bool FsNextLeafConstant(const GameState& s)
+{
+    if (g_force_constant_leaf) { return true; }
+    return !g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
+        && s.m_value_model != nullptr && !s.m_value_model->empty() && s.m_value_model->constant;
+}
 // RESERVE for the value pass at the last depth (the no-leaf escalation ladder, below): while set, the
 // ladder's start gate admits a pass only if the SAME cost again would still fit after it -- the value
 // pass at that depth costs the pass's tree once more (its leaf is unmetered) and must be affordable.
@@ -86115,6 +86336,29 @@ struct EotStateSet
         return fresh || !collapse;
     }
 };
+// THE BOUNDARY FAN (searched echo, the fallback half). An obligation the APPLY itself created -- a breakpoint
+// continuation's cast, the cast a Goblin Matron's tutor feeds, a Muxus reveal -- did not exist when any plan was
+// listed, so no enumeration could fan it; measured on Goblins (MTG_ECHO_AXIS_STATS), 3.2% of the obligations
+// the search resolved inside the window were of this kind, every one in the last main of the turn. FSLineTail
+// decides them where it crosses the boundary: one crossing per inverted subset of the uncovered ordinals, the
+// "follow" pin (the provider's answer) first so it wins ties, and the winner recorded on the line's plan
+// (Plan::echo_choice) so the executor writes the same pin. Empty when nothing is uncovered -- every deck without
+// an echo card, and every boundary the enumeration-time fan already covered.
+static std::vector<int> EchoBoundaryPins(const GameState& s)
+{
+    std::vector<int> pins;
+    if (!EchoAxisLiveHere(s)) { return pins; }
+    const int pending = PendingEchoObligations(s);
+    const int cov     = EchoPinCount(s.scripted_echo);
+    if (pending <= cov) { return pins; }
+    const int fresh = std::min(std::min(pending - cov, kEchoAxisMaxNewPerPlan), kEchoPinMaxOrd - cov);
+    if (fresh <= 0) { return pins; }
+    const int total    = cov + fresh;
+    const int mask_inh = EchoPinMask(s.scripted_echo);
+    for (int sub = 0; sub < (1 << fresh); ++sub) { pins.push_back(EchoPinPack(total, mask_inh | (sub << cov))); }
+    return pins;
+}
+std::vector<int> TurnSolver::EchoBoundaryPinsForTest(const GameState& state) { return EchoBoundaryPins(state); }
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
@@ -86163,8 +86407,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // 2026-10-02) does NOT need the loop here: SecondMainUnproductive proves the phase can do
         // nothing, so no plan opens a breakpoint and the walker would be empty.
         const bool m2_deferred_only = ResolveProvider(state).SecondMainNeedsDeferredCast();
+        // (Not with an uncovered echo obligation pending: the second main must decide it, so it runs the loop.)
         if (m2_deferred_only && M2EmptyFastOn() && M2FixModeFor(state) == 0
-            && SecondMainUnproductive(state))
+            && SecondMainUnproductive(state) && !EchoUncoveredPending(state))
         {
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
             ConsumeAt(budget, unitsite::kFsMain2);   // the one interior node this decision is worth
@@ -86269,9 +86514,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // land-execution path never greedy-plays a land the enumeration did not choose.
         post.push_back(TurnSolver::Plan{});
         post.back().land_decided = M2DropLive(state);
+        const std::size_t idle_at = post.size() - 1;
         // The do-nothing second main runs the dig loop too (D7): offer its no-dig twin
         // (MTG_DIG_SEARCHED_CHOICE; see AppendIdleDigSiblings).
         AppendIdleDigSiblings(state, post);
+        // ...and it is the last plan of the turn, so an echo obligation that arrived since main 1 (a Goblin
+        // Lackey's combat put) is decided here when nothing is castable (MTG_ECHO_AXIS).
+        AppendIdleEchoVariants(state, post, idle_at);
         if (s_rollout_stats)
         {
             m2stats::g_decisions.fetch_add(1, std::memory_order_relaxed);
@@ -86816,54 +87065,66 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         q_rec.breakpoint_actions = std::move(bp3);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
                     }
-                    if (!SimulateEndAndStartNextTurn(s3)) { continue; }
-                    ExpireStagedCards(s3);
-                    TurnSolver::SearchLine sub =
-                        FSLineWin(s3, depth, max_turns, FsChildCut(s3, cutoff, best.win_turn, max_turns, budget),
-                                  second_main, tt, lc, budget);
-                    if (m2t_here)
+                    // SEARCHED ECHO, the boundary fan (see the base loop below): a breakpoint child's continuation.
+                    const std::vector<int> echo_pins = EchoBoundaryPins(s3);
+                    const std::size_t echo_n = echo_pins.empty() ? 1 : echo_pins.size();
+                    std::optional<GameState> s3_fan;
+                    for (std::size_t ei = 0; ei < echo_n; ++ei)
                     {
-                        std::string cont;
-                        for (const Action& ca : bp3) { cont += ca.card_name.str(); cont += ","; }
-                        std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d cont=[%s] sub=%d cutoff=%d\n",
-                                     state.turn_number, depth, m2t_sum(q).c_str(), k, cont.c_str(),
-                                     sub.win_turn, FsChildCut(s3, cutoff, best.win_turn, max_turns, budget));
-                        // Level 2: the child's NEXT-TURN start state (s3 is post-EOT here), so a
-                        // sub that "should" have won can be diffed against the fixture/control state
-                        // -- hand, library top (the next turn's dig window), and untapped sources.
-                        static const int s_m2t_lvl = EnvInt("MTG_M2T_TRACE", 0);
-                        if (s_m2t_lvl >= 2)
+                        const int echo_pin = echo_pins.empty() ? -2 : echo_pins[ei];
+                        GameState* sxp = &s3;
+                        if (echo_n > 1) { s3_fan = s3; s3_fan->scripted_echo = static_cast<std::int16_t>(echo_pin); sxp = &*s3_fan; }
+                        GameState& sx = *sxp;
+                        if (!SimulateEndAndStartNextTurn(sx)) { continue; }
+                        ExpireStagedCards(sx);
+                        TurnSolver::SearchLine sub =
+                            FSLineWin(sx, depth, max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
+                                      second_main, tt, lc, budget);
+                        if (m2t_here)
                         {
-                            std::string hs, ls;
-                            for (const Card& hc : s3.ActivePlayer().hand)
-                            { hs += hc.m_name.str(); hs += ","; }
-                            const Library& lib = s3.ActivePlayer().library;
-                            for (std::size_t li = 0; li < 6 && li < lib.size(); ++li)
-                            { ls += lib[li].m_name.str(); ls += ","; }
-                            std::fprintf(stderr, "[m2t]   child-state hand=[%s] libtop=[%s]\n",
-                                         hs.c_str(), ls.c_str());
+                            std::string cont;
+                            for (const Action& ca : bp3) { cont += ca.card_name.str(); cont += ","; }
+                            std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d cont=[%s] sub=%d cutoff=%d\n",
+                                         state.turn_number, depth, m2t_sum(q).c_str(), k, cont.c_str(),
+                                         sub.win_turn, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget));
+                            // Level 2: the child's NEXT-TURN start state (s3 is post-EOT here), so a
+                            // sub that "should" have won can be diffed against the fixture/control state
+                            // -- hand, library top (the next turn's dig window), and untapped sources.
+                            static const int s_m2t_lvl = EnvInt("MTG_M2T_TRACE", 0);
+                            if (s_m2t_lvl >= 2)
+                            {
+                                std::string hs, ls;
+                                for (const Card& hc : sx.ActivePlayer().hand)
+                                { hs += hc.m_name.str(); hs += ","; }
+                                const Library& lib = sx.ActivePlayer().library;
+                                for (std::size_t li = 0; li < 6 && li < lib.size(); ++li)
+                                { ls += lib[li].m_name.str(); ls += ","; }
+                                std::fprintf(stderr, "[m2t]   child-state hand=[%s] libtop=[%s]\n",
+                                             hs.c_str(), ls.c_str());
+                            }
                         }
-                    }
-                    if (sub.win_turn < best.win_turn)
-                    {
-                        if (s_rollout_stats)
+                        if (sub.win_turn < best.win_turn)
                         {
-                            bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
-                            bpnode::g_adopted_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
-                            bpnode::g_adopted_ahead[BpAheadBucket(state)].fetch_add(1, std::memory_order_relaxed);
-                            (g_rollout_nest > 0 ? bpnode::g_adopted_rollout
-                                                : bpnode::g_adopted_search).fetch_add(1, std::memory_order_relaxed);
-                            if (v.bp_choice == kBpEmptyChoice)
-                            { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
+                            if (s_rollout_stats)
+                            {
+                                bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
+                                bpnode::g_adopted_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                                bpnode::g_adopted_ahead[BpAheadBucket(state)].fetch_add(1, std::memory_order_relaxed);
+                                (g_rollout_nest > 0 ? bpnode::g_adopted_rollout
+                                                    : bpnode::g_adopted_search).fetch_add(1, std::memory_order_relaxed);
+                                if (v.bp_choice == kBpEmptyChoice)
+                                { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
+                            }
+                            best.win_turn = sub.win_turn;
+                            best.phases.clear();
+                            TurnSolver::Plan q_rec = (echo_n > 1) ? v : std::move(v);
+                            if (echo_pin != -2) { q_rec.echo_choice = static_cast<std::int16_t>(echo_pin); }
+                            q_rec.breakpoint_actions = (echo_n > 1) ? bp3 : std::move(bp3);
+                            best.phases.push_back({ false, std::move(q_rec) });
+                            best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
+                            // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
+                            if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                         }
-                        best.win_turn = sub.win_turn;
-                        best.phases.clear();
-                        TurnSolver::Plan q_rec = std::move(v);
-                        q_rec.breakpoint_actions = std::move(bp3);
-                        best.phases.push_back({ false, std::move(q_rec) });
-                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
-                        // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
-                        if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                     }
                 }
                 continue;   // the pending base plan itself is never scored -- its children were
@@ -86909,59 +87170,72 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 return { state.turn_number, { { false, std::move(q_rec) } } };
             }
             const bool m2t_skip3 = m2t_here && EnvInt("MTG_M2T_TRACE", 0) >= 3;
-            if (!SimulateEndAndStartNextTurn(s2))
+            // SEARCHED ECHO, the boundary fan (EchoBoundaryPins): an obligation this apply created that no
+            // enumeration could see is decided here, one crossing per pin; no pin = the historical single crossing.
+            const std::vector<int> echo_pins = EchoBoundaryPins(s2);
+            const std::size_t echo_n = echo_pins.empty() ? 1 : echo_pins.size();
+            std::optional<GameState> s2_fan;   // a per-pin copy, only when fanning (s2 stays the pre-boundary state)
+            for (std::size_t ei = 0; ei < echo_n; ++ei)
             {
-                if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT sim failed\n", m2t_sum(q).c_str()); }
-                continue;
-            }
-            ExpireStagedCards(s2);
-            // STATE CLOSURE (WinlessDevelopActive / fswdedup): a sibling already searched this
-            // exact end-of-turn state, so this line's future IS that line's future.
-            if (eot_seen != nullptr
-                && !eot_seen->Visit(BuildDedupKey(s2), s2, FsChildCut(s2, cutoff, best.win_turn, max_turns, budget),
-                                    depth, max_turns))
-            {
-                if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT closure\n", m2t_sum(q).c_str()); }
-                continue;
-            }
-            // EOT dominance on the caller's frontier. Every (pre-combat x second-main) combination
-            // reaching here came from the SAME node with the SAME draws consumed, so they are all
-            // siblings in the sense the comparability argument needs.
-            domin::Probe dprobe;
-            if (DomActive() && dom_arch)
-            {
-                dprobe = domin::Check(*dom_arch, s2);
-                if (dprobe.prune)
+                const int echo_pin = echo_pins.empty() ? -2 : echo_pins[ei];
+                GameState* sxp = &s2;
+                if (echo_n > 1) { s2_fan = s2; s2_fan->scripted_echo = static_cast<std::int16_t>(echo_pin); sxp = &*s2_fan; }
+                GameState& sx = *sxp;
+                if (!SimulateEndAndStartNextTurn(sx))
                 {
-                    if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT dominance\n", m2t_sum(q).c_str()); }
+                    if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT sim failed\n", m2t_sum(q).c_str()); }
                     continue;
                 }
-            }
-            TurnSolver::SearchLine sub =
-                FSLineWin(s2, depth, max_turns, FsChildCut(s2, cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
-            if (m2t_here)
-            {
-                std::fprintf(stderr, "[m2t] %s T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
-                             g_fsw_path.c_str(), state.turn_number, depth, m2t_sum(q).c_str(), sub.win_turn,
-                             best.win_turn, cutoff);
-            }
-            if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, sub.win_turn); }
-            if (sub.win_turn < best.win_turn)
-            {
-                best.win_turn = sub.win_turn;
-                best.phases.clear();
-                TurnSolver::Plan q_rec = q;
-                q_rec.breakpoint_actions = std::move(bp);
-                best.phases.push_back({ false, std::move(q_rec) });
-                best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
-
-                // Stop at the first VERIFIED win (within horizon) -- the pass minimum.
-                // Same reasoning as FSLineWin; the second-main FSLineWin runs at turn+1
-                // with `depth` more turns, so its horizon edge is state.turn_number+depth.
-                if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth)
+                ExpireStagedCards(sx);
+                // STATE CLOSURE (WinlessDevelopActive / fswdedup): a sibling already searched this
+                // exact end-of-turn state, so this line's future IS that line's future.
+                if (eot_seen != nullptr
+                    && !eot_seen->Visit(BuildDedupKey(sx), sx, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
+                                        depth, max_turns))
                 {
-                    ++g_fs_hexits;
-                    return best;
+                    if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT closure\n", m2t_sum(q).c_str()); }
+                    continue;
+                }
+                // EOT dominance on the caller's frontier. Every (pre-combat x second-main) combination
+                // reaching here came from the SAME node with the SAME draws consumed, so they are all
+                // siblings in the sense the comparability argument needs.
+                domin::Probe dprobe;
+                if (DomActive() && dom_arch)
+                {
+                    dprobe = domin::Check(*dom_arch, sx);
+                    if (dprobe.prune)
+                    {
+                        if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT dominance\n", m2t_sum(q).c_str()); }
+                        continue;
+                    }
+                }
+                TurnSolver::SearchLine sub =
+                    FSLineWin(sx, depth, max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
+                if (m2t_here)
+                {
+                    std::fprintf(stderr, "[m2t] %s T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
+                                 g_fsw_path.c_str(), state.turn_number, depth, m2t_sum(q).c_str(), sub.win_turn,
+                                 best.win_turn, cutoff);
+                }
+                if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, sub.win_turn); }
+                if (sub.win_turn < best.win_turn)
+                {
+                    best.win_turn = sub.win_turn;
+                    best.phases.clear();
+                    TurnSolver::Plan q_rec = q;
+                    if (echo_pin != -2) { q_rec.echo_choice = static_cast<std::int16_t>(echo_pin); }
+                    q_rec.breakpoint_actions = (echo_n > 1) ? bp : std::move(bp);
+                    best.phases.push_back({ false, std::move(q_rec) });
+                    best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
+
+                    // Stop at the first VERIFIED win (within horizon) -- the pass minimum.
+                    // Same reasoning as FSLineWin; the second-main FSLineWin runs at turn+1
+                    // with `depth` more turns, so its horizon edge is state.turn_number+depth.
+                    if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth)
+                    {
+                        ++g_fs_hexits;
+                        return best;
+                    }
                 }
             }
         }
@@ -87040,21 +87314,34 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         q_rec.breakpoint_actions = std::move(bp);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
                     }
-                    if (!SimulateEndAndStartNextTurn(s)) { continue; }
-                    ExpireStagedCards(s);
-                    TurnSolver::SearchLine sub =
-                        FSLineWin(s, depth, max_turns, FsChildCut(s, cutoff, best.win_turn, max_turns, budget),
-                                  second_main, tt, lc, budget);
-                    if (sub.win_turn < best.win_turn)
+                    // SEARCHED ECHO, the boundary fan (see the base loop above): a wave variant's continuation is
+                    // exactly where an uncovered obligation comes from (its cast, or the cast a tutor fed).
+                    const std::vector<int> echo_pins = EchoBoundaryPins(s);
+                    const std::size_t echo_n = echo_pins.empty() ? 1 : echo_pins.size();
+                    std::optional<GameState> s_fan;
+                    for (std::size_t ei = 0; ei < echo_n; ++ei)
                     {
-                        best.win_turn = sub.win_turn;
-                        best.phases.clear();
-                        TurnSolver::Plan q_rec = v;
-                        q_rec.breakpoint_actions = std::move(bp);
-                        best.phases.push_back({ false, std::move(q_rec) });
-                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
-                        // Same horizon edge as the base loop's first-verified-win shortcut.
-                        if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
+                        const int echo_pin = echo_pins.empty() ? -2 : echo_pins[ei];
+                        GameState* sxp = &s;
+                        if (echo_n > 1) { s_fan = s; s_fan->scripted_echo = static_cast<std::int16_t>(echo_pin); sxp = &*s_fan; }
+                        GameState& sx = *sxp;
+                        if (!SimulateEndAndStartNextTurn(sx)) { continue; }
+                        ExpireStagedCards(sx);
+                        TurnSolver::SearchLine sub =
+                            FSLineWin(sx, depth, max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
+                                      second_main, tt, lc, budget);
+                        if (sub.win_turn < best.win_turn)
+                        {
+                            best.win_turn = sub.win_turn;
+                            best.phases.clear();
+                            TurnSolver::Plan q_rec = v;
+                            if (echo_pin != -2) { q_rec.echo_choice = static_cast<std::int16_t>(echo_pin); }
+                            q_rec.breakpoint_actions = (echo_n > 1) ? bp : std::move(bp);
+                            best.phases.push_back({ false, std::move(q_rec) });
+                            best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
+                            // Same horizon edge as the base loop's first-verified-win shortcut.
+                            if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
+                        }
                     }
                 }
             }
@@ -93907,6 +94194,9 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         plans = EnumeratePlans(state, false);
         plans.push_back(TurnSolver::Plan{});
         AppendIdleDigSiblings(state, plans);
+        // The bare post-combat list runs no axes; the echo obligations that arrived since main 1 are
+        // decided here (MTG_ECHO_AXIS), over every plan of it.
+        AppendIdleEchoVariants(state, plans, 0);
     }
     if (plans.empty())     { return TurnSolver::Plan{}; }
     if (plans.size() == 1) { return plans[0]; }
@@ -93944,6 +94234,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 iv("tutor", q.tutor_choice, -1); iv("bp", q.bp_choice, -1); iv("ponder", q.ponder_choice, -1);
                 iv("putback", q.putback_choice, -1); iv("discard", q.discard_choice, -1); iv("scry", q.scry_choice, -1);
                 iv("etbcounter", q.etbcounter_choice, -1); iv("le_fire", q.le_fire_choice, -1); iv("grace", q.grace_choice, -1);
+                iv("echo", q.echo_choice, -1);
                 std::fprintf(stderr, "[nc]   #%zu %s |%s\n", i, FsPlanText(q).c_str(), ax.c_str());
             }
         }
@@ -94253,6 +94544,32 @@ static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
     vampcand::g_n[m].fetch_add(1, std::memory_order_relaxed);
 }
 
+// THE BOUNDARY FAN's one-rollout form (SolveWithLookahead's candidate loop and its deferred waves, where a
+// candidate is scored by a single rollout rather than a recursion; see EchoBoundaryPins). When the
+// candidate's apply left an uncovered echo obligation -- a continuation's cast, a Muxus reveal -- each pin is
+// crossed and rolled out at this pass's fidelity and the best is left on `copy` ("follow" first, so it wins
+// ties); the caller records the returned pin (-2 = none) on the plan it adopts, and its own rollout of the
+// winner repeats the one already played (the leaf table answers it).
+static int EchoBoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
+                                       int cutoff, bool second_main, TranspositionTable* tt)
+{
+    const std::vector<int> pins = EchoBoundaryPins(copy);
+    if (pins.size() <= 1) { return -2; }
+    int best_pin = pins.front();
+    int best_wt  = max_turns + 2;
+    for (const int ep : pins)
+    {
+        GameState ce = copy;
+        ce.scripted_echo = static_cast<std::int16_t>(ep);
+        int wt = max_turns + 1;
+        if (SimulateEndAndStartNextTurn(ce))
+        { wt = SimulateToEnd(std::move(ce), sub_depth, max_turns, budget, cutoff, second_main, tt); }
+        if (wt < best_wt) { best_wt = wt; best_pin = ep; }
+    }
+    copy.scripted_echo = static_cast<std::int16_t>(best_pin);
+    return best_pin;
+}
+
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
                                                   SearchBudget* budget, bool enforce_budget,
@@ -94421,7 +94738,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // every pin it carries into this turn's combat and beyond -- AppendIdlePassAxes); a post-combat
         // one only its no-dig twin (its combat is over).
         if (is_pre_combat) { AppendIdlePassAxes(state, candidates, 1); }
-        else               { AppendIdleDigSiblings(state, candidates); }
+        else
+        {
+            AppendIdleDigSiblings(state, candidates);
+            AppendIdleEchoVariants(state, candidates, 0);   // an echo obligation since main 1 (MTG_ECHO_AXIS)
+        }
         if (candidates.size() == 1) { report(max_turns + 1, 0); return Plan{}; }
     }
 
@@ -96165,6 +96486,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 ++candidates_done;
                 continue;
             }
+            // SEARCHED ECHO, the boundary fan (EchoBoundaryChooseByRollout): an obligation this candidate's
+            // apply created is decided here, and the chosen pin rides the plan if it is adopted.
+            const int sla_echo_pin = EchoBoundaryChooseByRollout(copy, sub_depth, max_turns, budget,
+                                                                 pass_has_best ? pass_best_win : max_turns + 1,
+                                                                 second_main, tt);
             if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
             // EOT dominance. Placed AFTER this turn's win checks above, so a candidate that WINS
             // has already returned and can never be pruned here -- only its (losing-this-turn)
@@ -96282,6 +96608,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             {
                 pass_best_win = win_turn;
                 pass_best     = plan;
+                if (sla_echo_pin != -2) { pass_best.echo_choice = static_cast<std::int16_t>(sla_echo_pin); }
                 pass_best_tb   = leaf_tb;
                 pass_best_life = leaf_life;
                 pass_best_inf  = leaf_inf;
@@ -96457,6 +96784,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                         continue;
                     }
+                    const int wave_echo_pin = EchoBoundaryChooseByRollout(copy, sub_depth, max_turns, budget,
+                                                                          pass_has_best ? pass_best_win : max_turns + 1,
+                                                                          second_main, tt);
                     if (!SimulateEndAndStartNextTurn(copy)) { continue; }
                     // EXACT TIE PRUNE, wave form: only a STRICTLY earlier win is taken below, and
                     // this rollout cannot return earlier than copy.turn_number.
@@ -96477,6 +96807,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
                     pass_best_win = win_turn;
                     pass_best     = v;
+                    if (wave_echo_pin != -2) { pass_best.echo_choice = static_cast<std::int16_t>(wave_echo_pin); }
                     pass_has_best = true;
                 }
             }
@@ -96687,8 +97018,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             TranspositionTable esc_tt;        // honest table, never shared with the filtered pass
             CondemnSuppressGuard _esc_sup;    // the whole re-evaluation is unfiltered
             int esc_best_win = max_turns + 1;
+            int esc_echo_pin = -2;   // the boundary fan's pick for the plan esc_eval just scored (-2 = none)
             auto esc_eval = [&](const Plan& plan) -> int
             {
+                esc_echo_pin = -2;
                 ConsumeAt(budget, unitsite::kEscEval);
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
@@ -96712,6 +97045,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                     if (OpponentHasLost(copy)) { return state.turn_number; }
                 }
+                // SEARCHED ECHO, the boundary fan (EchoBoundaryChooseByRollout): a finalist that takes over
+                // carries the pin its re-score chose; the committed winner already carries its own.
+                esc_echo_pin = EchoBoundaryChooseByRollout(copy, committed_sub_depth, max_turns, budget,
+                                                           esc_best_win, second_main,
+                                                           tt == nullptr ? nullptr : &esc_tt);
                 if (!SimulateEndAndStartNextTurn(copy)) { return max_turns + 1; }
                 return SimulateToEnd(std::move(copy), committed_sub_depth, max_turns, budget,
                                      esc_best_win, second_main, tt == nullptr ? nullptr : &esc_tt);
@@ -96740,7 +97078,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                               << " honest=" << w
                               << (w < esc_best_win ? "  TAKES OVER" : "") << "\n";
                 }
-                if (w < esc_best_win) { esc_best_win = w; best_plan = p; }
+                if (w < esc_best_win)
+                {
+                    esc_best_win = w;
+                    best_plan = p;
+                    if (esc_echo_pin != -2) { best_plan.echo_choice = static_cast<std::int16_t>(esc_echo_pin); }
+                }
             }
             committed_win = esc_best_win;
         }
@@ -97448,6 +97791,12 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // bank-less state keeps the exact prior key.
     if (state.free_casts_available > 0)
     { Fold(k, 0xF5EE); Fold(k, static_cast<uint64_t>(state.free_casts_available)); }
+    // The searched ECHO pin (GameState::scripted_echo): the echo axis reads the cover a state's pin already
+    // holds (a main-1 pin standing when main 2 enumerates) and fans only the obligations past it, so two
+    // same-board states with different pins enumerate DIFFERENT lists. Folded only when set, so every
+    // pin-free key -- every deck without an echo card -- is byte-identical.
+    if (state.scripted_echo >= 0)
+    { Fold(k, 0xEC40); Fold(k, static_cast<uint64_t>(state.scripted_echo)); }
     // LIVE ORDER-CONDEMNATION stamp (added 2026-08-20, when the m2-facing enum memo gained
     // coverage): a live stamp FILTERS the post-combat harvest, so two same-board states with
     // different stamp lists enumerate differently -- exactly the "same-turn m2 memo must fold
@@ -104162,6 +104511,9 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // Emeria's packed upkeep ranks, read at the NEXT turn's upkeep (PerformUpkeepGyReanimate, both
     // worlds) -- write-when-set, so a main-2 plan without the axis leaves main 1's pin standing.
     if (p.upkeep_gy_reanimate_choice >= 0) { s.scripted_upkeep_gy_reanimate = p.upkeep_gy_reanimate_choice; }
+    // The searched echo pin, read at the NEXT turn's upkeep (both worlds' echo loops) -- write-when-set, so a
+    // main-2 plan with nothing new to decide leaves main 1's pin (and its cover) standing.
+    if (p.echo_choice >= 0) { s.scripted_echo = p.echo_choice; }
     // Land-search picks: Primeval Titan's attack trigger and the in-combat Khalni crack (this turn's
     // declare-attackers), Search for Tomorrow off suspend (the NEXT upkeep).
     if (p.attack_land_search_choice >= 0) { s.scripted_attack_land_search = p.attack_land_search_choice; }

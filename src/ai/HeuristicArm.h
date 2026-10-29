@@ -746,6 +746,7 @@ enum Slot : int
     TECTONIC_CAST_AXIS,       // MTG_TECTONIC_CAST_AXIS  the Tectonic mode / keep axis fans for a modal Giant the PLAN brings into combat (cast from hand or staged, a Vial put, a breakpoint continuation's cast) with a haste source reachable -- not only one already on the battlefield. Without it a Giant cast and attacking the same turn (Lightning Greaves) resolved by ResolveAttackModalMode / the ranked keep, an in-window greedy (the NO-GREEDY rule). DEFAULT ON; =0 -> the battlefield-only gate
     FLING_PIN_FOLD,           // MTG_FLING_PIN_FOLD  Surtland Flinger's victim pin is a COMBAT pin (the MTG_TECTONIC_PIN_FOLD shape): spent at declare-attackers whether or not a fling fired, joined to PlanHasCombatPin so MTG_COMBAT_PIN_FOLD folds a variant whose post-combat state a sibling reached, charged its node unit only when not folded, and not emitted on a post-combat list. IDENTITY folds; DEFAULT ON; =0 restores the pre-fold behaviour byte-identically
     FLING_CAST_AXIS,          // MTG_FLING_CAST_AXIS  the Flinger victim axis fans for a Flinger the PLAN casts with a haste source reachable (not only one on the battlefield), and every route's victim list adds the creatures the plan itself casts. Without it a Flinger cast and attacking the same turn (Lightning Greaves) took FlingVictimCandidates' front -- which never declines -- an in-window greedy. DEFAULT ON; =0 -> the battlefield-only gate and battlefield-only victims
+    ECHO_AXIS,                // MTG_ECHO_AXIS  echo's pay-vs-decline is SEARCHED (Plan::echo_choice -> GameState::scripted_echo, consumed at the next upkeep in both worlds): every searched plan that leaves an echo obligation the state's pin does not cover gets a clone per inverted subset, and the provider's PayEchoToKeep only orders the two answers. Obligations an apply itself created (a continuation's cast, a Muxus reveal) are fanned where the boundary is crossed. It was an in-window greedy pick at the executor's upkeep and at every simulated turn boundary (Goblins s1350001 gi640, s1360001 gi405 / gi3725: a turn slower at d8 b0 with the definition cost read, because the answer depends on the turn's draw and land drop). Held-out d7 b60: Goblins 5 faster / 0 slower in 8,000, goblins2hg 4 / 0 in 4,000, units 1.022x / 1.014x (docs/design/searched-echo.md). DEFAULT ON; =0 -> the provider's pick everywhere (an A/B arm only)
     COUNT
 };
 
@@ -1436,6 +1437,7 @@ inline const char* Name(int slot)
         "MTG_TECTONIC_CAST_AXIS",
         "MTG_FLING_PIN_FOLD",
         "MTG_FLING_CAST_AXIS",
+        "MTG_ECHO_AXIS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
