@@ -2346,6 +2346,10 @@ public:
     // Charge `n` units of such sub-search work to `budget` (no-op on nullptr), attributed to the
     // census's `equip_route` bucket.
     static void              ChargeDecisionUnits(SearchBudget* budget, int n);
+    // MTG_CACHE_HIT_CHARGE: a provider sub-search that charges the decision budget and memoises per DECISION
+    // (the equip-route DFS's SeenForThisDecision, the AA route walk) ran inside the cacheable computation in
+    // flight -- its cost depends on that memo's warmth, so the computation is not stored (mode 1).
+    static void              NoteChargingSubsearch();
     // The same for the AccomplishedAlchemist untap-loop route walk (MTG_AA_ROUTE_NODE_UNITS), attributed
     // to the census's own `aa_route` bucket. No-op on nullptr or n <= 0.
     static void              ChargeAaRouteUnits(SearchBudget* budget, int n);
