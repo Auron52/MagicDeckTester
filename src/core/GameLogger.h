@@ -1506,6 +1506,23 @@ inline bool GszShuffleCopyIdOn()
     return heurarm::Flag(heurarm::GSZ_SHUFFLE_COPY_ID, s_env) && !g_play_legacy_gsz_shuffle;
 }
 
+// RESOLVED-SPELL COPY ID (Cyclone ledger Q53, 2026-10-29) -- GszShuffleCopyIdOn's general case. The APPLY path
+// (search lookahead AND human play) files a resolved instant / sorcery into the graveyard -- or a self-exiling one
+// into exile -- as its CAST COPY (its m_number), as the executor always did, not the definition's template (m_number
+// 0). Every card in a zone then carries its own deck number, which three readers rely on: Library::ShuffleByKey
+// (a total order only over DISTINCT numbers), apply_one's re-find of the cast copy by number after its payment, and
+// every by-number identity (aura hosts, the m1 snapshot). With the template, an Eldrazi's graveyard shuffle
+// (put_into_graveyard_shuffles_graveyard) dealt several number-0 cards back: casting a number-0 Brainstorm erased a
+// number-0 Ponder and the shuffled order was not the CRN order. The recording stamp `spell_copy_id` reads this;
+// `--legacy-spell-copy` restores the template for REPLAY of a reference recorded before (its replayer,
+// test/viewer_protocol_check.py, passes it). MTG_SPELL_COPY_ID (heurarm slot SPELL_COPY_ID), DEFAULT ON.
+inline bool g_play_legacy_spell_copy = false;
+inline bool SpellCopyIdOn()
+{
+    static const bool s_env = EnvOn("MTG_SPELL_COPY_ID", true);
+    return heurarm::Flag(heurarm::SPELL_COPY_ID, s_env) && !g_play_legacy_spell_copy;
+}
+
 // CR 510.4 TWO-STEP COMBAT DAMAGE (2026-10-18, Combat.cpp ResolveCombatDamageTwoStep): with a first or
 // double striker attacking, damage is dealt in a first-strike step and then a regular step, so first-step
 // lifelink reaches a life watcher (Archangel of Thune, Ajani's Pridemate, Serra Ascendant's 30-life
