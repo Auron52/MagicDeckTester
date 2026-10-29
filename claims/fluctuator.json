@@ -4,21 +4,16 @@
   "valueleaf": "em:2550e4f625f80f336c21"
  },
  "deck": "fluctuator",
- "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.010969 t, cost 1.009x (se 0.009, 32 seeds)); incumbent restored",
- "finished": "2026-10-29T20:05:09Z",
- "frozen": "bd017c90ce626e441253430db10cdaef21f44005",
- "heartbeat": "2026-10-29T19:45:15Z",
+ "frozen": "9ec1ce63b16958776b219447edf343a58059057b",
+ "heartbeat": "2026-10-29T20:06:55Z",
  "host": "58199181d02e",
- "landed": "9ec1ce63b16958776b219447edf343a58059057b",
- "landed_at": "2026-10-29T20:05:41Z",
- "result_branch": "artifact-refresh/fluctuator-20261029-2005",
- "run_id": "fluctuator-artifact-queue-tool-647f24-20261029T190457",
+ "run_id": "fluctuator-artifact-queue-tool-647f24-20261029T200655",
  "score": 0.1,
  "stage": "mulligan",
  "stages": [
   "mulligan"
  ],
- "started": "2026-10-29T19:04:57Z",
- "state": "rejected",
+ "started": "2026-10-29T20:06:55Z",
+ "state": "running",
  "worker": "artifact-queue-tool-647f24"
 }
