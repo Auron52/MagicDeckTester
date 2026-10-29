@@ -1725,6 +1725,14 @@ smoke covers every deck).
   stored exactly, for the rest of its decision, while the memo generation stands. Built as a patch, NOT built-tested or
   measured (the box was over the thread cap): `logs/cyclone/mem/route_decision_scoped.UNTESTED.patch`
   (TurnSolver::TrialRouteBegin/End, Cost::decision_only + route memo generation). Default: mode 1 as shipped.
+  **MEASURED 2026-10-29 (v2: + the trials' own side counters left out of a decision-scoped entry's replay; patch
+  `logs/cyclone/mem/route_decision_scoped.v2.NOT_EXACT.patch`).** Kitty d3 b10 x300 (seed 144000) + d5 b20 x300 (145000),
+  three binaries concurrently at 1 thread each (thread-ms): the pre-determinism tree 223,487 / 686,805; the shipped
+  hit-equals-miss (ab4fbc6a2) 258,023 (+15.5%) / 769,378 (+12.0%); v2 238,065 (+6.5%) / 605,657 (-11.8%) -- total
+  910k / 1,027k (+12.9%) / 844k (-7.3%). Play identical in all three (600 / 600 digests). But v2 is NOT EXACT against
+  ab4fbc6a2: 599 / 600 games byte-identical in units, d5 gi105 +2 units (4,819 -> 4,821), one extra cold route trial in a
+  later decision (a board whose verdict the shipped tree's run never re-walked). Root cause open; NOT committed (the
+  USER's rule is exact hit = miss). Q54 stays open: the Kitty wall is +12-16% at 1 thread.
   Budget factor: 1.0 (no deck lost quality; a factor cannot buy back wall without changing play).
 - QR1. (Reference games 2026-10-28) Plan-item cycling in the viewer is wired for decks whose provider SEARCHES its
   cycles (Cyclone); elsewhere a cycle stays a standalone plan, but the viewer badge now QUEUES it as its own segment instead
