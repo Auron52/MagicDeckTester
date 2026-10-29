@@ -145,7 +145,8 @@ TEST_CASE("Lackey cast axis: a Lackey the plan casts beside Goblin Warchief gets
     bool casts = false;
     for (const TurnSolver::Plan& p : plans) { if (CastsLk(p, kLk)) { casts = true; } }
     REQUIRE(casts);
-    CHECK(LackeyPins(plans, kLk) == std::set<int>{ 1 });   // width 2: the front is the base plan, rank 1 the variant
+    // width 2: the front is the base plan, rank 1 a variant, and the DECLINE (MTG_LACKEY_DECLINE) last.
+    CHECK(LackeyPins(plans, kLk) == std::set<int>{ 1, kLackeyDeclineRank });
     // A plan that does not cast the Lackey cannot read the pin.
     for (const TurnSolver::Plan& p : plans) { if (!CastsLk(p, kLk)) { CHECK(p.lackey_choice == -1); } }
     // =0 hatches: the battlefield-only gate.
@@ -161,14 +162,17 @@ TEST_CASE("Lackey cast axis: no haste source, no variant")
 
 TEST_CASE("Lackey cast axis: the put width is the hand LEFT at combat damage")
 {
-    // The plan that casts the Lackey leaves one Goblin permanent in hand: a forced put, no variant. (The hand as
-    // it stands counts the Lackey itself.)
+    // The plan that casts the Lackey leaves one Goblin permanent in hand: no second put rank, only the DECLINE
+    // (MTG_LACKEY_DECLINE). (The hand as it stands counts the Lackey itself.)
     GameState s = FreshLk(1, { kLk, "Goblin King", "Lightning Bolt" }, { "Goblin Warchief" });
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
     bool casts = false;
     for (const TurnSolver::Plan& p : plans) { if (CastsLk(p, kLk)) { casts = true; } }
     REQUIRE(casts);
-    CHECK(LackeyPins(plans, kLk).empty());
+    CHECK(LackeyPins(plans, kLk) == std::set<int>{ kLackeyDeclineRank });
+    ArmLk arm;
+    arm.Set(heurarm::LACKEY_DECLINE, 0);   // puts only: a forced put, no variant
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), kLk).empty());
 }
 
 TEST_CASE("Lackey ordinals: two Lackeys able to attack get the PRODUCT of ranks, minus the base")
@@ -178,7 +182,18 @@ TEST_CASE("Lackey ordinals: two Lackeys able to attack get the PRODUCT of ranks,
     const std::set<int> pins = LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), "");
     std::set<std::pair<int, int>> tuples;
     for (int v : pins) { tuples.emplace(LackeyRankAt(v, 0), LackeyRankAt(v, 1)); }
-    CHECK(tuples == std::set<std::pair<int, int>>{ { 1, 0 }, { 0, 1 }, { 1, 1 } });
+    const int D = kLackeyDeclineRank;   // MTG_LACKEY_DECLINE: each ordinal's last option
+    CHECK(tuples == std::set<std::pair<int, int>>{ { 1, 0 }, { D, 0 }, { 0, 1 }, { 1, 1 }, { D, 1 },
+                                                   { 0, D }, { 1, D }, { D, D } });
+    // Puts only: the product of the put ranks.
+    {
+        ArmLk puts_only;
+        puts_only.Set(heurarm::LACKEY_DECLINE, 0);
+        std::set<std::pair<int, int>> t2;
+        for (int v : LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), ""))
+        { t2.emplace(LackeyRankAt(v, 0), LackeyRankAt(v, 1)); }
+        CHECK(t2 == std::set<std::pair<int, int>>{ { 1, 0 }, { 0, 1 }, { 1, 1 } });
+    }
     // =0 hatch: one rank, read by every trigger.
     arm.Set(heurarm::LACKEY_ORDINALS, 0);
     arm.Set(heurarm::LACKEY_CAST_AXIS, 0);

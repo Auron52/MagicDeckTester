@@ -76433,11 +76433,32 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // Over-counting only adds a rank or an ordinal no trigger reads: it clamps, or is spent unread at the end of
     // combat damage, and lands on a sibling's post-combat state, which MTG_LACKEY_PIN_FOLD folds.
     // NOT covered (disclosed): a Lackey that enters attacking without being declared (none in this pool).
+    //
+    // THE DECLINE (MTG_LACKEY_DECLINE, DEFAULT ON; =0 puts only). The trigger is a "may", and the put does NOT
+    // dominate declining it, so each ordinal also carries the decline (rank kLackeyDeclineRank), ordered after every
+    // put rank -- the provider's ranking (CombatCheatCandidates) orders the puts, and the decline comes last. A put is
+    // free and its body arrives at once (a later cast of the same card costs mana and arrives later, so for most
+    // Goblins the put weakly dominates holding the card), but the card leaves the hand for good, and that is not
+    // always better:
+    //   * the legend rule (CR 704.5j): the list holds three Muxus, Goblin Grandee -- a second one put bins a copy that
+    //     a held card would have replaced after the first one died;
+    //   * the put's timing is forced: Muxus's ETB reveals the top six NOW and bottoms the rest, Goblin Matron's tutor
+    //     shuffles NOW -- a later cast reads a different library;
+    //   * echo (Mogg War Marshal, Stingscourger): the put starts the echo clock this turn.
+    // Declining is dominated whenever SOME candidate's put dominates holding it; restricting the decline to the
+    // other case is a provider prune that needs that per-card proof, and is not done here. The decline was never
+    // reachable as a searched choice: the 2026-10-29 no-win investigation (docs/design/canonical-nowin-order-
+    // dependence.md, Goblins seed 1330145 gi144) only reached a "put one, keep the other" line when a stale
+    // battlefield position silently dropped the second Lackey's trigger (fixed: MTG_COMBAT_STABLE_SOURCES).
+    // Width 1 (one matching card) therefore fans too: put it, or decline. A decline with nothing to put reaches its
+    // base plan's state and MTG_LACKEY_PIN_FOLD folds it.
     if (!cont_axes_only && LackeyAxisEnabled() && LackeyAxisWidth() > 1 && !HumanPlayActive() && is_pre_combat)
     {
         const std::size_t cands_now = LackeyCandidateCountNow(state);
         const bool lackey_cast   = LackeyCastAxisEnabled();
         const bool lackey_ord    = LackeyOrdinalsOn();
+        const bool lackey_dec    = lackey_ord && LackeyDeclineOn();   // the decline packs only per ordinal
+        const int  min_width     = lackey_dec ? 1 : 2;                // the fewest put ranks that make a choice
         if (!lackey_cast && !lackey_ord)
         {
             // Exactly the pre-2026-10-29 shape (both levers =0).
@@ -76571,7 +76592,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
                     int n_ord = 0, width = 0;
                     plan_shape(p, n_ord, width);
-                    if (n_ord > 0 && width > 1) { will_fan = true; break; }
+                    if (n_ord > 0 && width >= min_width) { will_fan = true; break; }
                 }
             }
             if (will_fan)
@@ -76592,7 +76613,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
                     int n_ord = 0, width = 0;
                     plan_shape(p, n_ord, width);
-                    if (n_ord <= 0 || width <= 1) { continue; }
+                    if (n_ord <= 0 || width < min_width) { continue; }
                     ++n_fanned;
                     if (n_ord == 1)
                     {
@@ -76605,19 +76626,37 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                             v.lackey_choice = c;
                             extra.push_back(std::move(v));
                         }
+                        if (lackey_dec && inh0 != kLackeyDeclineRank)   // the decline, last (an inherited one IS the base)
+                        {
+                            TurnSolver::Plan v = p;
+                            v.lackey_choice = kLackeyDeclineRank;
+                            extra.push_back(std::move(v));
+                        }
                         continue;
                     }
-                    // Several: the product over the ordinals that fit the cap.
+                    // Several: the product over the ordinals that fit the cap. Each ordinal's options are its put
+                    // ranks 0 .. width-1 and, under the decline, digit `width` = kLackeyDeclineRank (last).
                     n_ord = std::min(n_ord, kLackeyMaxOrdinals);
+                    const int opts = width + (lackey_dec ? 1 : 0);
                     int combos = 1, fit = 0;
-                    while (fit < n_ord && combos * width <= kLackeyProductCap) { combos *= width; ++fit; }
+                    while (fit < n_ord && combos * opts <= kLackeyProductCap) { combos *= opts; ++fit; }
                     int base[kLackeyMaxOrdinals], r[kLackeyMaxOrdinals];
-                    for (int k = 0; k < fit; ++k) { base[k] = std::max(0, LackeyRankAt(inherited, k)); }
+                    for (int k = 0; k < fit; ++k)
+                    {
+                        const int ir = LackeyRankAt(inherited, k);
+                        base[k] = (lackey_dec && ir == kLackeyDeclineRank) ? width : std::max(0, ir);
+                    }
                     for (int code = 0; code < combos; ++code)
                     {
                         int c = code;
                         bool is_base = true;
-                        for (int k = 0; k < fit; ++k) { r[k] = c % width; c /= width; if (r[k] != base[k]) { is_base = false; } }
+                        for (int k = 0; k < fit; ++k)
+                        {
+                            const int digit = c % opts;
+                            c /= opts;
+                            if (digit != base[k]) { is_base = false; }
+                            r[k] = digit == width ? kLackeyDeclineRank : digit;   // digit == width only under the decline
+                        }
                         if (is_base) { continue; }
                         TurnSolver::Plan v = p;
                         v.lackey_choice = LackeyPackRanks(r, fit);

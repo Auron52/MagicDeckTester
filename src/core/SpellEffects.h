@@ -154,6 +154,44 @@ inline bool LackeyOrdinalsOn()
     static const bool e = EnvOn("MTG_LACKEY_ORDINALS", true);
     return heurarm::Flag(heurarm::LACKEY_ORDINALS, e);
 }
+// MTG_LACKEY_DECLINE (HeuristicArm.h LACKEY_DECLINE; DEFAULT ON): the rank that DECLINES the put ("you MAY put a
+// Goblin permanent card"). The axis caps its put ranks at kLackeyMaxRank - 1 (it sizes at most kLackeyMaxRank
+// candidates), so kLackeyMaxRank is never a put rank and packs like any other (ordinal 0: 14; ordinal k: 15). Read by
+// FireCombatDamageCheatIntoPlay under MTG_LACKEY_ORDINALS only -- the axis emits it only there.
+constexpr int kLackeyDeclineRank = kLackeyMaxRank;
+inline bool LackeyDeclineOn()
+{
+    static const bool e = EnvOn("MTG_LACKEY_DECLINE", true);
+    return heurarm::Flag(heurarm::LACKEY_DECLINE, e);
+}
+// MTG_COMBAT_STABLE_SOURCES (HeuristicArm.h COMBAT_STABLE_SOURCES; DEFAULT ON -- a rules fix, the slot exists for the
+// paired A/B only): the combat-damage triggers resolve each damaging source by IDENTITY rather than by a battlefield
+// position captured before an earlier trigger could REMOVE a permanent. Read by FireCombatDamageCheatIntoPlay and by
+// Combat.cpp's two damage-step shapes (both worlds). =0 -> the stale positions, byte-identical to before.
+inline bool CombatStableSourcesOn()
+{
+    static const bool e = EnvOn("MTG_COMBAT_STABLE_SOURCES", true);
+    return heurarm::Flag(heurarm::COMBAT_STABLE_SOURCES, e);
+}
+// The battlefield position of the permanent `controller` controls with card number `num`, trying `hint` first; -1 if
+// it is gone. An UNNUMBERED permanent (num 0 -- a hand-built test board) cannot be re-found, so it keeps `hint` while
+// that is in range: the pre-identity behaviour, and the only one available.
+inline int RefindPermanentByNumber(const GameState& state, int controller, int num, int hint)
+{
+    const int n = static_cast<int>(state.battlefield.size());
+    if (num == 0) { return (hint >= 0 && hint < n) ? hint : -1; }
+    if (hint >= 0 && hint < n)
+    {
+        const Permanent& h = state.battlefield[static_cast<std::size_t>(hint)];
+        if (h.card.m_number == num && h.controller_index == controller) { return hint; }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.m_number == num && q.controller_index == controller) { return i; }
+    }
+    return -1;
+}
 // The pinned rank of ordinal `k`, or -1 = unpinned (CombatCheatCandidates' front).
 inline int LackeyRankAt(int packed, int k)
 {
@@ -19145,13 +19183,12 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
 {
     if (damaging_attacker_indices.empty()) { return; }
     Player& ap = state.players[controller];
-    for (int idx : damaging_attacker_indices)
+    const bool stable = CombatStableSourcesOn();
+    // ONE trigger's resolution. `sd` is its source's definition and `src_name` the source's name, both taken when the
+    // trigger is identified -- the trigger does not need its source afterwards (CR 113.7a: once triggered, an ability
+    // exists independently of its source), so nothing below reads the source permanent.
+    auto resolve_one = [&](const CardDefinition* sd, InternedName src_name)
     {
-        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
-        const Permanent& src = state.battlefield[idx];
-        if (src.controller_index != controller) { continue; }
-        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
-        if (!sd || sd->params.combat_damage_puts_subtype_from_hand.empty()) { continue; }
         const std::vector<std::string>& want = sd->params.combat_damage_puts_subtype_from_hand;
 
         // A "permanent card" = anything that is not an instant/sorcery. Must carry a matching subtype.
@@ -19204,7 +19241,19 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
             ord_rank = LackeyRankAt(state.scripted_cheat_choice, 0);
             state.scripted_cheat_choice = LackeyPinShift(state.scripted_cheat_choice);
         }
-        if (ranked.empty()) { continue; }   // "may": nothing matching to put -> decline
+        if (ranked.empty()) { return; }   // "may": nothing matching to put -> decline
+        // MTG_LACKEY_DECLINE: the searched DECLINE of this trigger's "may" (the axis orders it after every put rank).
+        if (lackey_ordinals && ord_rank == kLackeyDeclineRank)
+        {
+            // MTG_LACKEY_PREF (DIAGNOSTIC, no play change): a REAL resolution that declined with candidates in hand.
+            static const bool s_pref_decline = EnvOn("MTG_LACKEY_PREF");
+            if (s_pref_decline && g_real_resolution)
+            {
+                std::fprintf(stderr, "[lackey-decline] turn=%d cands=%d front=%s\n", state.turn_number,
+                             static_cast<int>(cand_hand.size()), ap.hand[ranked.front()].m_name.str().c_str());
+            }
+            return;
+        }
         int best = ranked.front();
         // SEARCHED pick: the main-phase plan may have pinned an index into `ranked`
         // (Plan::lackey_choice -> GameState::scripted_cheat_choice). Clamped rather than dropped --
@@ -19310,9 +19359,9 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                 candidates.push_back(ap.hand[cand_hand[ci]]);
                 if (cand_hand[ci] == best) { heur_ci = ci; }
             }
-            int picked = (*g_play_lackey_chooser)(state, controller, src.card.m_name.str(),
+            int picked = (*g_play_lackey_chooser)(state, controller, src_name.str(),
                                                   candidates, heur_ci);
-            if (picked == -1) { continue; }                                   // human declined the put
+            if (picked == -1) { return; }                                     // human declined the put
             if (picked >= 0 && picked < static_cast<int>(cand_hand.size()))
             { best = cand_hand[picked]; }                                     // else out-of-range -> heuristic
         }
@@ -19326,18 +19375,11 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         perm.controller_index  = controller;
         perm.owner_index       = controller;
         perm.entered_this_turn = true;
-        // `src` is a REFERENCE INTO state.battlefield, and the push_back below can REALLOCATE that
-        // vector -- after which any later read of `src` is a use-after-free. InternedName holds a
-        // const std::string* into the global registry, so the stale read yields a WILD pointer that
-        // is then dereferenced: usually the freed block still holds the old pointer and the game
-        // plays correctly (which is why ground truth is stable), but under a different allocator
-        // state it is garbage or a crash. Caught by ASAN 2026-08-25 at the EmitReveal below, on
-        // Goblin Lackey (the only card with combat_damage_puts_subtype_from_hand). Copy the name out
-        // BEFORE the vector is touched -- InternedName is trivially copyable (a pointer), so this is
-        // free and byte-identical. Do NOT use `src` past this point.
-        const InternedName src_name = src.card.m_name;
+        // The source's name was copied out when the trigger was identified (`src_name`): a reference into
+        // state.battlefield would dangle across the push_back below, which can REALLOCATE the vector (caught by
+        // ASAN 2026-08-25 at the EmitReveal below, when this loop still held one).
         state.battlefield.push_back(perm);
-        const int slot = static_cast<int>(state.battlefield.size()) - 1;
+        int slot = static_cast<int>(state.battlefield.size()) - 1;
         // Report WHAT was cheated in. A Lackey put moves a card from a HIDDEN zone (hand) to a public
         // one, exactly like a tutor fetch, so it rides the same reveal channel -- otherwise the only
         // record is the viewer's own click label, which means an AI-resolved game, a rendered log and
@@ -19356,16 +19398,68 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                        /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
         }
         FireEtbWatchers(state, controller, slot);   // in case a put permanent is ever a Dragon
-        FireOwnEtbTriggers(state, controller, slot);   // fire the put permanent's own ETB triggers
+        // MTG_COMBAT_STABLE_SOURCES: an enter watcher can remove an EARLIER permanent (a ping that kills an opposing
+        // creature), shifting the put permanent off `slot` -- re-find it by its card number before each read.
+        if (stable) { slot = RefindPermanentByNumber(state, controller, raw.m_number, slot); }
+        if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot); }   // the put permanent's own ETB triggers
+        // ...and again after its own ETB: Goblin Chainwhirler's "1 damage to each creature your opponents control"
+        // kills an earlier opposing 1/1, so `slot` named the permanent AFTER it (or ran off the end).
+        if (stable) { slot = RefindPermanentByNumber(state, controller, raw.m_number, slot); }
         // Legend rule (CR 704.5j) -- a STATE-BASED action, checked continuously, so it must run the
         // moment the duplicate enters. It was missing here: the other put path (a Vial deploy) does
         // enforce it, but this put resolves in the COMBAT-DAMAGE step, i.e. AFTER the combat-start
         // enforcement in GameEngine::CombatPhase / SimulateCombat. A second Muxus or Krenko cheated
         // in by Lackey therefore survived until the NEXT turn's combat start, giving a free extra
         // body and double-counting any static buff for a full turn cycle.
-        if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
+        if (slot >= 0 && slot < static_cast<int>(state.battlefield.size())
+            && state.battlefield[static_cast<std::size_t>(slot)].card.HasSupertype(Supertype::Legendary))
         { EnforceLegendRule(state, controller); }
+    };
+
+    if (!stable)
+    {
+        // =0: the historical loop over POSITIONS captured before any put (byte-identical) -- a put whose enter
+        // cascade removes an earlier permanent shifts every later position, so a later Lackey's trigger is dropped
+        // (its position names a non-Lackey) or fires for whatever now sits there.
+        for (int idx : damaging_attacker_indices)
+        {
+            if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+            const Permanent& src = state.battlefield[idx];
+            if (src.controller_index != controller) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.combat_damage_puts_subtype_from_hand.empty()) { continue; }
+            resolve_one(sd, src.card.m_name);
+        }
+        return;
     }
+    // MTG_COMBAT_STABLE_SOURCES (default): every Lackey trigger is identified FIRST, while the positions are still the
+    // ones the damage step recorded -- they all trigger on the same combat-damage event (CR 603.2, 510.2) -- and only
+    // then do they resolve, one at a time. A put's enter cascade (Goblin Chainwhirler's ETB killing the opponent's 1/1
+    // at position 0, a legend-rule removal) then cannot shift a later trigger onto a different permanent: the witness
+    // is Goblins seed 1330145 gi144, where Lackey#10's stale position named Siege-Gang Commander and its trigger was
+    // silently dropped in one zone order and fired in the other. The counting pass keeps every deck without a put
+    // source allocation-free.
+    int n_trig = 0;
+    for (int idx : damaging_attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(idx)];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (sd && !sd->params.combat_damage_puts_subtype_from_hand.empty()) { ++n_trig; }
+    }
+    if (n_trig == 0) { return; }
+    std::vector<std::pair<const CardDefinition*, InternedName>> trig;
+    trig.reserve(static_cast<std::size_t>(n_trig));
+    for (int idx : damaging_attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(idx)];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (sd && !sd->params.combat_damage_puts_subtype_from_hand.empty()) { trig.emplace_back(sd, src.card.m_name); }
+    }
+    for (const auto& t : trig) { resolve_one(t.first, t.second); }
 }
 
 // Consume `cost` from a flat ManaPool (assumes pool.CanPay(cost) is true). Colored pips are paid

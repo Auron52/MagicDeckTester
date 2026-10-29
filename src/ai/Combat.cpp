@@ -156,11 +156,28 @@ static void FireCombatDamageDrawGrants(GameState& state, const std::vector<int>&
     for (std::size_t k = 0; k < damaging_events.size(); ++k)
     {
         int src = -1;
-        if (damaging_num[k] == 0) { src = damaging_idx[k]; }
+        if (damaging_num[k] == 0)
+        {
+            src = damaging_idx[k];
+            if (src < 0) { continue; }   // MTG_COMBAT_STABLE_SOURCES: an unnumbered source that left (never under =0)
+        }
         for (int i = 0; src < 0 && i < static_cast<int>(state.battlefield.size()); ++i)
         { if (state.battlefield[i].card.m_number == damaging_num[k]) { src = i; } }
         if (src >= 0) { OnCreatureDealtDamageToOpponent(state, src, damaging_events[k]); }
     }
+}
+
+// MTG_COMBAT_STABLE_SOURCES (SpellEffects.h CombatStableSourcesOn): re-find each recorded battlefield position by the
+// permanent's card number (`ids`, aligned with `idx`) after a hook that can REMOVE a permanent. A Goblin Lackey put
+// fires its permanent's enter cascade -- Goblin Chainwhirler's ETB kills an opposing creature, the legend rule bins a
+// copy -- and every later position shifts down, so a hook reading the old position reads a different permanent. A
+// source that has left becomes -1, which every hook skips (the hooks' bounds checks already did so for an index past
+// the end). One cheap check per entry when nothing moved.
+static void RefindCombatSources(const GameState& state, int controller, std::vector<int>& idx,
+                                const std::vector<int>& ids)
+{
+    const std::size_t n = std::min(idx.size(), ids.size());
+    for (std::size_t k = 0; k < n; ++k) { idx[k] = RefindPermanentByNumber(state, controller, ids[k], idx[k]); }
 }
 
 // ---- CR 510.4: the TWO combat damage steps -----------------------------------------------------------
@@ -216,6 +233,26 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
     const std::size_t n = atk_idx.size();
     std::vector<int>  dealt(n, 0);
     std::vector<char> jitte_done(n, 0);
+    // MTG_COMBAT_STABLE_SOURCES: the attackers' positions are re-found by identity for the regular step (`atk`, a
+    // copy of atk_idx), since a first-step combat-damage hook can remove a permanent (a Lackey put's enter cascade);
+    // their names are kept for the viewer line, which reads an attacker that may since have left.
+    const bool stable = CombatStableSourcesOn();
+    std::vector<int> atk(atk_idx);
+    std::vector<int> atk_id;
+    std::vector<InternedName> atk_name;
+    std::vector<int> bf_ids_at_gather;   // the battlefield's identity sequence when the board sources were gathered
+    if (stable)
+    {
+        atk_id.reserve(n);
+        for (int i : atk_idx) { atk_id.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+        if (collect_descs)
+        {
+            atk_name.reserve(n);
+            for (int i : atk_idx) { atk_name.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_name); }
+        }
+        bf_ids_at_gather.reserve(state.battlefield.size());
+        for (const Permanent& q : state.battlefield) { bf_ids_at_gather.push_back(q.card.m_number); }
+    }
 
     // Attackers are TAPPED as they are declared (CR 508.1f), i.e. before ANY damage step -- so
     // vigilance is read on the pre-damage board. Reading it lazily at a creature's first damage step
@@ -232,14 +269,25 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
     // The board-source lists are battlefield INDICES gathered before the first step. A first-step
     // combat-damage hook can APPEND a permanent (a Lackey put, a Shroofus token) -- which may itself be
     // a lord or an attachment the regular step must read -- so the lists are re-gathered for the second
-    // step whenever the battlefield grew. Appends never shift existing indices, so atk_idx stays valid.
+    // step whenever the battlefield grew. Appends never shift existing indices; a REMOVAL does (a put's
+    // enter cascade killing an earlier opposing creature), and a put plus a removal leaves the size unchanged,
+    // so under MTG_COMBAT_STABLE_SOURCES the lists are also re-gathered when the identity sequence moved, and the
+    // attackers are re-found (`atk`, below the first step).
     BoardSources bs_re;
     const BoardSources* bsp = &bs_in;
     std::size_t bf_at_gather = state.battlefield.size();
+    auto bf_shifted = [&]() -> bool
+    {
+        if (!stable) { return false; }
+        const std::size_t m = std::min(bf_ids_at_gather.size(), state.battlefield.size());
+        for (std::size_t i = 0; i < m; ++i)
+        { if (state.battlefield[i].card.m_number != bf_ids_at_gather[i]) { return true; } }
+        return state.battlefield.size() < bf_ids_at_gather.size();
+    };
 
     auto deal_step = [&](bool first_step)
     {
-        if (!first_step && state.battlefield.size() != bf_at_gather)
+        if (!first_step && (state.battlefield.size() != bf_at_gather || bf_shifted()))
         {
             bs_re = GatherBoardSources(state.battlefield, active);
             bsp = &bs_re;
@@ -251,11 +299,13 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         std::vector<int> step_lifelink;
         std::vector<int> step_events; // Curiosity / Tandem Lookout: ONE event per connector per step,
         std::vector<int> step_num;    // ... keyed by m_number (filled only under deck_has_draw_ping)
+        std::vector<int> step_id;     // MTG_COMBAT_STABLE_SOURCES: each connector's card number (re-found after Lackey)
         for (std::size_t k = 0; k < n; ++k)
         {
             const bool in_step = first_step ? (fs_of[k] || ds_of[k]) : (!fs_of[k] || ds_of[k]);
             if (!in_step) { continue; }
-            const int idx = atk_idx[k];
+            const int idx = atk[k];
+            if (idx < 0) { continue; }   // left the battlefield after the first step: deals no damage (CR 510.4)
             Permanent& p = state.battlefield[idx];
             const bool animated = p.is_animated;
             // The SAME power assembly as the single-step loop (keep the two in lockstep), multiplier 1.
@@ -283,7 +333,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
                     int req = ResolveProvider(state).JitteSpendCount(state, je.charge_counters);
                     if (g_play_jitte_chooser)
                     {
-                        int r = (*g_play_jitte_chooser)(state, active, atk_idx, je.charge_counters);
+                        int r = (*g_play_jitte_chooser)(state, active, atk, je.charge_counters);
                         if (r >= 0) { req = r; }
                     }
                     else if (HumanPlayActive()) { req = 0; }
@@ -302,6 +352,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
                 state.opponent_lost_life_this_turn = true;
                 step_idx.push_back(idx);
                 step_pw.push_back(power);
+                if (stable) { step_id.push_back(p.card.m_number); }
                 if (state.deck_has_draw_ping)
                 {
                     step_events.push_back(1);
@@ -323,7 +374,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
             // the last damage, in the same order relative to lifelink and the combat-damage hooks.
             std::vector<const Permanent*> attackers;
             attackers.reserve(n);
-            for (int idx : atk_idx) { attackers.push_back(&state.battlefield[idx]); }
+            for (int idx : atk) { if (idx >= 0) { attackers.push_back(&state.battlefield[idx]); } }
             out.trigger_life_loss = CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
             if (out.trigger_life_loss > 0)
             {
@@ -336,16 +387,19 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         // This step's combat-damage triggers (CR 603.2), in the single-step path's order. Drana first:
         // her counters commute with every hook below (none of them reads power), and they must be on
         // the attackers before the regular step.
-        FireCombatDamageTeamCounters(state, active, atk_idx, step_idx);
+        FireCombatDamageTeamCounters(state, active, atk, step_idx);
         FireCombatDamageCheatIntoPlay(state, active, step_idx);
+        if (stable) { RefindCombatSources(state, active, step_idx, step_id); }   // the put's cascade can remove
         FireCombatDamageTokens(state, active, step_idx, step_pw);
         FireNehebCombatDamageDiscards(state, active, step_idx);
+        if (stable) { RefindCombatSources(state, active, step_idx, step_id); }   // a madness cast can remove
         // A double striker connects in BOTH steps, so it draws once per step -- the two events the
         // single-step loop used to count as `ds ? 2 : 1` -- and a first step's draws (and the pings
         // they start) resolve before the regular step.
         FireCombatDamageDrawGrants(state, step_idx, step_num, step_events);
     };
     deal_step(/*first_step=*/true);
+    if (stable) { RefindCombatSources(state, active, atk, atk_id); }   // the first step's hooks can remove
     deal_step(/*first_step=*/false);
 
     if (collect_descs)
@@ -353,8 +407,8 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         for (std::size_t k = 0; k < n; ++k)
         {
             if (dealt[k] <= 0) { continue; }
-            out.attacker_descs.push_back(state.battlefield[atk_idx[k]].card.m_name.str()
-                                         + " (" + std::to_string(dealt[k]) + ")");
+            const InternedName nm = stable ? atk_name[k] : state.battlefield[atk_idx[k]].card.m_name;
+            out.attacker_descs.push_back(nm.str() + " (" + std::to_string(dealt[k]) + ")");
         }
     }
     return out;
@@ -390,6 +444,10 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // runs the Niv loop (GameState::deck_has_draw_ping), so every other deck allocates nothing.
     std::vector<int> damaging_events;
     std::vector<int> damaging_num;   // ...keyed by per-copy m_number, re-found at the hook (see there)
+    // MTG_COMBAT_STABLE_SOURCES: each connector's card number, aligned with damaging_idx, so the hooks after the Lackey
+    // put re-find their sources by identity (RefindCombatSources) -- a put's enter cascade can remove a permanent.
+    const bool stable = CombatStableSourcesOn();
+    std::vector<int> damaging_id;
     // Lifelink gains, ONE ENTRY PER LIFELINKING ATTACKER, applied AFTER the damage loop. Combat
     // damage is simultaneous (CR 510.2) and lifelink's gain is part of that damage event
     // (CR 702.15b), so nothing it causes -- Serra Ascendant's 30-life +5/+5 switching on, an
@@ -483,6 +541,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             state.opponent_lost_life_this_turn = true;
             damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
             damaging_pw.push_back(power);  // Shroofus Sproutsire: "create THAT MANY" tokens
+            if (stable) { damaging_id.push_back(p.card.m_number); }
             if (state.deck_has_draw_ping)
             {
                 damaging_events.push_back(ds ? 2 : 1);
@@ -537,12 +596,15 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // permanent from hand onto the battlefield (shared enter cascade). Fired AFTER Utvara so the
     // pre-token attacker pointers above are already consumed.
     FireCombatDamageCheatIntoPlay(state, active, damaging_idx);
+    // The Lackey put is NOT append-only: its enter cascade can remove a permanent (Goblin Chainwhirler's ETB kills an
+    // earlier opposing 1/1; the legend rule bins a copy), shifting every later position. Re-find the connectors.
+    if (stable) { RefindCombatSources(state, active, damaging_idx, damaging_id); }
 
     // Shroofus Sproutsire: per connecting Saproling, create that many 1/1 green Saprolings. Fired
     // after Utvara and Lackey for the same reason they are ordered as they are -- the pre-token
     // attacker pointers above are already consumed, and this helper re-reads the battlefield by
-    // INDEX (bounds-checked) rather than holding references across CreateToken. Every preceding
-    // hook only appends, so damaging_idx stays valid.
+    // INDEX (bounds-checked) rather than holding references across CreateToken. The Lackey put
+    // can remove a permanent (re-found just above); token creation only appends.
     FireCombatDamageTokens(state, active, damaging_idx, damaging_pw);
 
     // Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a
@@ -553,6 +615,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // discard is what can switch Neheb's own hand-size anthem ON -- but only for a LATER turn's
     // combat, since this fires after damage has already been dealt.
     FireNehebCombatDamageDiscards(state, active, damaging_idx);
+    if (stable) { RefindCombatSources(state, active, damaging_idx, damaging_id); }   // a madness cast can remove
     // Curiosity / Tandem Lookout's damage->draw grants and the Niv ping loop (see the helper). In this
     // single-step path every connector dealt ONE combat-damage event: a double striker takes the
     // two-step path, which fires the grants once per step.

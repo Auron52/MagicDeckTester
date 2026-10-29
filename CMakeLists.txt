@@ -408,6 +408,7 @@ add_executable(mtg-test
     test/unit/test_giants_discard.cpp
     test/unit/test_tectonic_axis.cpp
     test/unit/test_lackey_axis.cpp
+    test/unit/test_combat_stable_sources.cpp
     test/unit/test_antilife_tutor.cpp
     test/unit/test_fluctuator_discard.cpp
     test/unit/test_fluctuator_order.cpp

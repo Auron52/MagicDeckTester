@@ -750,6 +750,8 @@ enum Slot : int
     LACKEY_PIN_FOLD,          // MTG_LACKEY_PIN_FOLD  Goblin Lackey's put pin is a COMBAT pin (the MTG_TECTONIC_PIN_FOLD shape): spent at the end of combat damage whether or not a put fired (ResolveCombatDamage, both worlds), joined to PlanHasCombatPin so MTG_COMBAT_PIN_FOLD folds a variant whose post-combat state a sibling reached (an unread pin, a clamped rank, the rank equal to the front), and charged its node unit only when not folded. IDENTITY folds; DEFAULT ON; =0 restores the pre-fold behaviour byte-identically
     LACKEY_ORDINALS,          // MTG_LACKEY_ORDINALS  Goblin Lackey's put pin is PACKED per damaging-Lackey trigger (SpellEffects.h LackeyRankAt), and the axis fans the PRODUCT of ranks over every Lackey that can deal damage this combat, so a SECOND damaging Lackey's put is searched instead of taking CombatCheatCandidates' front. DEFAULT ON; =0 -> each trigger reads (and the first one with a candidate consumes) the one pin
     LACKEY_CAST_AXIS,         // MTG_LACKEY_CAST_AXIS  the Lackey put axis fans for a Lackey the PLAN brings in (a hand cast, a Vial put, a breakpoint continuation) with a haste source reachable (Goblin Warchief / Chieftain), not only one already able to attack; the put width counts the candidates the plan's own tutors-to-hand add (Goblin Matron). DEFAULT ON; =0 -> the battlefield-only gate and the hand-as-it-stands width
+    COMBAT_STABLE_SOURCES,    // MTG_COMBAT_STABLE_SOURCES  the combat-damage triggers resolve each damaging source by IDENTITY (m_number), not by a battlefield position captured before an earlier trigger could remove a permanent: Goblin Lackey's triggers are snapshotted before the first put (a Goblin Chainwhirler put killing an earlier opposing 1/1 no longer drops or misattributes a later Lackey's trigger), the put permanent is re-found for its own ETB and the legend rule, the later hooks (Shroofus tokens, Neheb) re-find their sources, and the two-step path re-finds its attackers and board sources for the regular step. A RULES fix; DEFAULT ON, the slot exists only for the paired A/B; =0 -> the stale positions, byte-identical to before
+    LACKEY_DECLINE,           // MTG_LACKEY_DECLINE  the Lackey put axis also searches DECLINING the put ("you MAY put"), ordered after every put rank (rank kLackeyDeclineRank), per damaging-Lackey ordinal. DEFAULT ON; =0 -> puts only, byte-identical to before
     COUNT
 };
 
@@ -1444,6 +1446,8 @@ inline const char* Name(int slot)
         "MTG_LACKEY_PIN_FOLD",
         "MTG_LACKEY_ORDINALS",
         "MTG_LACKEY_CAST_AXIS",
+        "MTG_COMBAT_STABLE_SOURCES",
+        "MTG_LACKEY_DECLINE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
