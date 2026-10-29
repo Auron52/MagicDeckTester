@@ -209,3 +209,7 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   one game in 8,000, at 0.773x). Net vs before: ~-0.0026 t at ~0.43x search units. Trust d5 REJECTED (never engaged:
   byte-identical on 8/8 seeds); E.6 not applicable (no ladder escalations). Two recorded TRADES not taken (live
   nlesc at d5b30 / d5b40: -0.00013 t at 1.08x / 1.15x -- one game). Landing = sidecar + lhc smoke/regression GT.
+- 2026-10-29 08:52 UTC: **LHC landed**: sidecar + lhc smoke/regression GT pushed c67260501. LifegainHeliodCombo
+  generation is DONE (keep table + leafless d6/b20 sidecar); the lhc overnight GT waits for the next full overnight run.
+- 2026-10-29 08:55 UTC: **Melira Pod value leaf RESUMED** (artifact-queue worker artifact-queue-d7d6a5, pid 493949,
+  in-flight job at 99977194b; its table already landed 9af42771d). The worker continues the fleet queue afterwards.
