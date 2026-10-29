@@ -1,7 +1,7 @@
 # Per-job work UNITS per game, from the last accepted run of each key (test/lib/job_cost.py).
 # Scheduling only (regression.sh turns it into the job's LPT weight) -- never a result.
 alchemist2hg_smoke_d3_s1001	26439
-alchemist2hg_smoke_d5_s1001	36541
+alchemist2hg_smoke_d5_s1001	35076
 alchemist_overnight_d0_s10010	1
 alchemist_overnight_d0_s4004	1
 alchemist_overnight_d0_s6006	1
@@ -20,12 +20,12 @@ alchemist_regression_d0_s2002	1
 alchemist_regression_d3_s2002	12826
 alchemist_regression_d3_s3003	14060
 alchemist_regression_d3_s30211	72917
-alchemist_regression_d5_s2002	23589
-alchemist_regression_d5_s3003	18328
-alchemist_regression_d5_s30211	73303
+alchemist_regression_d5_s2002	21465
+alchemist_regression_d5_s3003	18053
+alchemist_regression_d5_s30211	32873
 alchemist_smoke_d0_s1001	1
 alchemist_smoke_d3_s1001	21773
-alchemist_smoke_d5_s1001	17878
+alchemist_smoke_d5_s1001	17067
 angels2hg_overnight_d5_s4004	4939
 angels2hg_overnight_d5_s5005	3970
 angels2hg_overnight_d5_s6006	3923
@@ -516,12 +516,12 @@ giants_regression_d0_s2002	1
 giants_regression_d3_s2002	3991
 giants_regression_d3_s30001	7094
 giants_regression_d3_s3003	6315
-giants_regression_d5_s2002	4540
-giants_regression_d5_s30001	8436
-giants_regression_d5_s3003	4912
+giants_regression_d5_s2002	4013
+giants_regression_d5_s30001	7027
+giants_regression_d5_s3003	4388
 giants_smoke_d0_s1001	1
 giants_smoke_d3_s1001	4939
-giants_smoke_d5_s1001	5852
+giants_smoke_d5_s1001	5518
 goblins2hg_overnight_d5_s4004	10150
 goblins2hg_overnight_d5_s5005	6744
 goblins2hg_overnight_d5_s6006	6631
