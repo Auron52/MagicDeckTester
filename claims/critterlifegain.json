@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "361043d4872fdfbbe6e0819561cc8a6d50b58186",
+  "valueleaf": "em:cd4ea61210c92d881361"
+ },
+ "deck": "critterlifegain",
+ "frozen": "eb63129d7da558acec5d222c6bbfbfc2bf3d1e31",
+ "heartbeat": "2026-10-29T21:09:50Z",
+ "host": "58199181d02e",
+ "run_id": "critterlifegain-artifact-queue-tool-647f24-20261029T210950",
+ "score": 0.0811,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-29T21:09:50Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
