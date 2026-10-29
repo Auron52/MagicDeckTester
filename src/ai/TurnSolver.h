@@ -2550,6 +2550,17 @@ public:
     static long long FslEdgeNoReachCountForTest();
     static SpentTwice SimulateToEndSpentTwiceForTest(const GameState& state, int depth, int max_turns,
                                                       int cutoff, bool second_main, long long limit);
+    // MTG_NOWIN_ORDER_EXACT test hook: the full-line search node (FSLineWin) on `first` with a fresh per-decision
+    // FSLineCache and an empty game line cache, then on `second` with the SAME caches -- both one FSLineWin
+    // nesting level deep, so the game line cache reads and stores as it does in a real search -- at `depth`,
+    // `max_turns`, an unbounded cutoff and an unlimited budget each. Reports both win turns, the work units each
+    // search metered, and whether the second one's ROOT was answered from a cache (no work, one no-win memo hit).
+    struct TwinCacheProbe { int first_win = 0; int second_win = 0; long long first_units = 0; long long second_units = 0;
+                            int second_root_hit = 0; };
+    // `second_budget_units` > 0 runs the SECOND search under a finite budget that large instead (MTG_NOWIN_TWIN_WAVE's
+    // budget-starvation gate reads it).
+    static TwinCacheProbe TwinNoWinCacheForTest(const GameState& first, const GameState& second, int depth,
+                                                int max_turns, bool second_main, long long second_budget_units = 0);
     // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
     // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
     static int ProjectedAttackDamage(const GameState& state);

@@ -762,6 +762,8 @@ enum Slot : int
     DOMAIN_SELF_COLORS,       // MTG_DOMAIN_SELF_COLORS  a domain mana source (Faeburrow Elder / Bloom Tender) projected from HAND (AddSourceToPool with no permanent: a hasted cast, a same-plan rock credit) counts its OWN colours among "colours among permanents you control" -- it will be one of them when it taps (mana-oracle ENUM-GAP fivecolour: a hasted domain dork's own colours). =0 -> the board's colours only
     DOMAIN_WIDEN_PARTIAL,     // MTG_DOMAIN_WIDEN_PARTIAL  when EnumeratePlans' all-or-nothing domain widen credit is refused (the subset's wideners, PAYOFF included, are not payable from the un-widened pool), try every payable widener SUBSET: only the wideners cast before the scaling source taps need prepaying (mana-oracle ENUM-GAP fivecolour: "SubsetWidensDomainBy is all-or-nothing"). =0 -> the all-widener credit only
     DOMAIN_WIDEN_ORDER,       // MTG_DOMAIN_WIDEN_ORDER  the executor's payable-order walk (apply site) treats a coloured permanent that widens a live domain source's colours (Faeburrow Elder / Bloom Tender) as a PRODUCER: the domain sources are held back until a cast needs them, so an order that casts the widener first is found when the given order does not pay (mana-oracle APPLY-DROP-ORDER fivecolour: Deathrite before the payoff). =0 -> wideners are not producers
+    NOWIN_ORDER_EXACT,        // MTG_NOWIN_ORDER_EXACT  both no-win caches (the per-decision FSLineCache and the game line cache) store and read a NO-WIN under the ORDER-EXACT key (FsOrderSig folded, the key WINs already use) instead of the canonical multiset key: the search that produced a refutation reads zone order (enumeration order, vector-position tie-breaks, breakpoint continuation ranks), so a permuted twin's no-win could prune a line this position finds at every budget (Goblins seed 1330145 gi144 d8 b0, T3 -> T4). Sound by construction; gives up no-win permutation sharing. A winless certificate's refutation stays canonical (a proof about the position). docs/design/canonical-nowin-order-dependence.md. Default ON; =0 restores the canonical no-win key
+    NOWIN_TWIN_WAVE,          // MTG_NOWIN_TWIN_WAVE  on top of MTG_NOWIN_ORDER_EXACT: a node that misses its own order's refutation takes a zone-permuted twin's (a canonical-key hint holding the twin's bound and search units) ONLY when re-searching would cost more than MTG_NOWIN_TWIN_SHARE (default 0.0005) of the budget still left -- the MTG_FSL_OF_WAVE pattern for no-wins. Booked as a truncation, never stored as a proof; the gate never opens at an unlimited budget, so the order-exact search is exactly what --budget-ms 0 runs. docs/design/canonical-nowin-order-dependence.md. Default ON; =0 -> every twin is searched at every budget (order-exact only)
     COUNT
 };
 
@@ -1468,6 +1470,8 @@ inline const char* Name(int slot)
         "MTG_DOMAIN_SELF_COLORS",
         "MTG_DOMAIN_WIDEN_PARTIAL",
         "MTG_DOMAIN_WIDEN_ORDER",
+        "MTG_NOWIN_ORDER_EXACT",
+        "MTG_NOWIN_TWIN_WAVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
