@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e076b5cb7  date 2026-10-29
+# Regression ground truth -- commit 065b4cc8a  date 2026-10-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
@@ -18,8 +18,8 @@ burn_smoke_d0_s1001=4.4480/4c31fbad042995b7
 burn_smoke_d3_s1001=4.4600/2622a67617d988e3
 burn_smoke_d5_s1001=4.2889/cd2b3b52f2ce026d
 th_smoke_d0_s1001=5.5480/fcd4a65c2390915b
-th_smoke_d3_s1001=3.9000/06b72f5c8cc55f6f
-th_smoke_d5_s1001=4.0629/24874bf88576badd
+th_smoke_d3_s1001=3.9000/d8382f0467991a78
+th_smoke_d5_s1001=4.0686/ba88bcd52ecd4504
 knights_smoke_d0_s1001=4.5400/ab04bf59077abf86
 knights_smoke_d3_s1001=4.4933/c3a3a913facbf65b
 knights_smoke_d5_s1001=4.3846/3eac45778696cd40
@@ -88,7 +88,7 @@ fluctuator2hg_smoke_d5_s1001=3.4933/3bd4310840aace75
 angels2hg_smoke_d5_s1001=5.1700/131c373abc1a6d78
 slivers2hg_smoke_d5_s1001=4.8000/5d16a6abc5e68576
 burn2hg_smoke_d5_s1001=5.8000/ed65acbb9efb428b
-th2hg_smoke_d5_s1001=4.4400/7c99e60c32e0dd9a
+th2hg_smoke_d5_s1001=4.4400/e85a56df7d7e7d03
 dragonstorm2hg_smoke_d5_s1001=4.7000/4f32c93c3c75b643
 auras2hg_smoke_d5_s1001=4.5200/c2ea0caf22eb0603
 creature_giving2hg_smoke_d5_s1001=4.9400/f23852c6d3abb684
@@ -251,9 +251,9 @@ burn_regression_d3_s2002=4.3371/d378f1ea6b581bd0
 burn_regression_d5_s2002=4.2956/6a8421d9828c785c
 burn_regression_d5_s3003=4.2522/f28fe0f6c5a455c1
 th_regression_d0_s2002=5.5140/4543523306948a4c
-th_regression_d3_s2002=4.0800/e9ec165576e84140
-th_regression_d5_s2002=4.1383/b744e37c577fb084
-th_regression_d5_s3003=3.9767/66a40dcc1979b763
+th_regression_d3_s2002=4.0686/a83eebc1a68767d5
+th_regression_d5_s2002=4.1400/747f2532ff312bb1
+th_regression_d5_s3003=3.9800/437b846b5078ba7e
 knights_regression_d0_s2002=4.5610/d71421c58495ca0a
 knights_regression_d3_s2002=4.2800/2d0134810fce8b08
 knights_regression_d5_s2002=4.3180/1cadf9100c46c412
