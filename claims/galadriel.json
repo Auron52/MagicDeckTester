@@ -1,0 +1,18 @@
+{
+ "blobs": {
+  "mulligan": "c869d047be6d6a92fcaf7d6f0cba27c9ff3c4f99"
+ },
+ "deck": "galadriel",
+ "frozen": "dc35363d4841f70a7b4e649f9132b65ef82fce15",
+ "heartbeat": "2026-10-29T15:14:48Z",
+ "host": "550a08fdc1f3",
+ "run_id": "galadriel-artifact-queue-d7d6a5-20261029T151448",
+ "score": 0.2808,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan"
+ ],
+ "started": "2026-10-29T15:14:48Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
