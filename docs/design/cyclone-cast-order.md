@@ -83,6 +83,52 @@ E. **Blind cycling as a draw.** Cycling is structurally LAST today. A Street Wra
    a free draw, and principle 1 would want it before the land and the casts. But it spends a combo piece (you want
    1-3 cyclers kept). Leave it last?
 
+## USER review 2026-10-29
+
+*"The order looks reasonable, though we should also specify the cycle order. Maybe from cheapest to most
+expensive? Arguably Cyclone cycling should go earlier, but I suppose it doesn't matter all that much because of
+breakpoints and re-solves."* And: *"Unless we decide that we need to use condemnation for cost reasons, but I'm
+not sure this deck would respond well to that."*
+
+So the cast order above (A, B, C at the drafted defaults) goes to build and measurement. D (the draw-turn
+opt-in) is measured as its own arm. E is replaced by the cycle order below.
+
+## Cycle order (draft 2, for the USER)
+
+Today: the SEARCHED cycle sources are ordered creatures, other nonlands, lands, cheaper first. The CYCLER rule
+(when ON) puts Curator before Wraith. The PLAYOUT (`CycloneProvider::SelectDigSource`, where most of the units
+go) picks the CHEAPEST payable creature cycler, i.e. Street Wraith first.
+
+**Cheapest-first conflicts with the USER's own 2026-10-28 cycler rule:** *"You want to use whichever you have
+spare mana for ... I like to keep Street Wraith for Cyclone when that is an option, but when cyclone is out the
+order only matters in terms of mana utilization."* The CYCLER rule builds exactly that: with Cyclone out, Curator
+first while a {U} is spare (it keeps the free Wraith for a turn when the mana is short), Wraith when it is not.
+The playout's Wraith-first pick disagrees with it.
+
+Proposed, with Cyclone OUT (creature cycles are walks):
+1. Curator ({U}) while a {U} is spare after the turn's casts; otherwise skip to 2 (the USER rule).
+2. Street Wraith (free).
+3. Xander's Lounge ({3}): a land, so a PLAIN draw even with Cyclone out. AFTER the walks, because before them it
+   would draw the Eldrazi set up on top.
+4. A surplus Cyclone ({2}): with one out it walks to the next ENCHANTMENT (another Cyclone). It draws nothing, a
+   whole-library whiff is a shuffle, and it bottoms a set-up Eldrazi on the way. Last.
+
+With Cyclone NOT out (every cycle is a plain draw):
+1. **A surplus Cyclone (2 in hand): cycle it BEFORE the other one is cast.** This is the case where "Cyclone
+   cycling earlier" is a real interaction rather than a preference: after the first Cyclone resolves, cycling the
+   second draws nothing (above).
+2. Xander's Lounge, when it is not this turn's land drop.
+3. Curator.
+4. Street Wraith last: kept for the Cyclone (the USER rule) when one is in hand or at a known library position.
+
+Measured against the USER's cheapest-first as a second arm.
+
+**On condemnation:** agreed that it is a poor fit. Each walk can free-cast a Curator or bottom what it passed,
+and the re-solve after every cycle is what uses that. Condemnation's earlier measurement (FiveColour,
+`cast-order-ideal-with-ranges.md`) showed its savings were incomplete refutations. And the cost agent's census
+puts under 2% of Cyclone's units in the search window, with 98% in the horizon playout, so a window-side cut buys
+little anyway.
+
 ## If approved: build and measurement
 
 `CycloneProvider::CastOrderRank` / `CastOrderTierName` / `CastOrderTotalByName` behind `MTG_CYCLONE_CAST_ORDER`
