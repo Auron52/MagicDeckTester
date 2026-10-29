@@ -459,6 +459,11 @@ def recording_rule_args(ref):
     carries no key and replays with --legacy-gsz-shuffle -- the draws it was actually played with.
     Inert on every deck without Green Sun's Zenith.
 
+    `spell_copy_id` (2026-10-29, Cyclone ledger Q53): from then on the apply path human play uses files a
+    resolved instant / sorcery into the graveyard (or a self-exiler into exile) as its CAST COPY, as the executor
+    always did, not the template (m_number 0) -- which an Eldrazi's graveyard shuffle dealt back as tied,
+    duplicate-number cards. A recording made before carries no key and replays with --legacy-spell-copy.
+
     `combat_damage_steps` (2026-10-18, CR 510.4): from then on a combat with a first or double striker
     deals damage in two steps, so first-step lifelink reaches Thune / Pridemate / Serra Ascendant's
     30-life threshold before the regular step. A recording made before carries no key and replays with
@@ -471,6 +476,8 @@ def recording_rule_args(ref):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):
         args.append("--legacy-gsz-shuffle")
+    if not ref.get("spell_copy_id"):
+        args.append("--legacy-spell-copy")
     if not ref.get("combat_damage_steps"):
         args.append("--legacy-single-damage-step")
     return args
