@@ -3576,7 +3576,7 @@ static bool AcfInteriorEnabled()
 static bool GrantDefinedPayOn()
 {
     static const bool on = EnvOn("MTG_GRANT_DEFINED_PAY", true);
-    return on;
+    return heurarm::Flag(heurarm::GRANT_DEFINED_PAY, on);
 }
 
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,

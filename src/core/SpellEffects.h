@@ -31025,6 +31025,49 @@ inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& 
     return d;
 }
 
+// THE SAME-PLAN GRANT CREDIT (MTG_GRANT_CAST_CREDIT; TurnSolver's CollectActions stamps it on
+// Action::rock_mana). What casting `granter` (Brightcap Badger) THIS turn adds to the casts after it:
+// one unit of the grant's colour per body already on the battlefield that the grant would reach and
+// that can use a {T} ability now -- untapped, not summoning-sick (or hasted), and not already a mana
+// source of its own (a ManaDork Fungus taps for its printed mana either way; it is in the pool already).
+// Zero when a grant is ALREADY live: a second Badger grants the same single ability, so it adds nothing.
+// Bodies the plan itself creates are not credited (sick unless hasted, and their count is a plan fact
+// this pre-plan board cannot see) -- the under-credit is the safe direction for a menu gate.
+inline ManaPool SamePlanGrantCredit(const GameState& state, int controller, const CardDefinition& granter)
+{
+    ManaPool out;
+    if (granter.params.granted_tap_mana_subtypes.empty()) { return out; }
+    ManaGrant g = LiveManaGrant(state, controller);
+    if (g.live) { return out; }
+    g.live  = true;
+    g.color = GrantedManaColorOf(granter.params.granted_tap_mana_color);
+    for (const std::string& sub : granter.params.granted_tap_mana_subtypes)
+    {
+        if (g.n_subs >= 4) { break; }
+        g.subs[g.n_subs++] = SubtypeRegistry::Instance().Id(sub);
+    }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        if (EquipGrantReaches(g, p)) { continue; }   // already a source (Paradise Mantle's host)
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && IsBaselineManaSource(*d)) { continue; }
+        if (!GrantReaches(g, p) || !GrantedBodyCanTap(g, p, state.battlefield)) { continue; }
+        ++n;
+    }
+    switch (g.color)
+    {
+        case Color::White:     out.white     += n; break;
+        case Color::Blue:      out.blue      += n; break;
+        case Color::Black:     out.black     += n; break;
+        case Color::Red:       out.red       += n; break;
+        case Color::Colorless: out.colorless += n; break;
+        default:               out.green     += n; break;
+    }
+    return out;
+}
+
 inline int LooseManaCeiling(const GameState& state, int controller)
 {
     int total = state.floating_mana.Total();

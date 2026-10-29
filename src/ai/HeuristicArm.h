@@ -754,6 +754,10 @@ enum Slot : int
     LACKEY_DECLINE,           // MTG_LACKEY_DECLINE  the Lackey put axis also searches DECLINING the put ("you MAY put"), ordered after every put rank (rank kLackeyDeclineRank), per damaging-Lackey ordinal. DEFAULT ON; =0 -> puts only, byte-identical to before
     DOTH_AXIS,                // MTG_DOTH_AXIS  Defense of the Heart's upkeep put list (which creatures, and their enter order) is SEARCHED: where the search crosses a turn boundary with an uncovered trigger at the next upkeep it crosses once per entry of the provider's menu (DecisionProvider::SacTutorPutOptions: its own SacTutorPutList pick FIRST, so it wins ties) and records the winning rank on the plan of the turn that crossed (Plan::doth_put_choice -> GameState::scripted_doth_put, consumed at that upkeep in both worlds through DothUpkeepPutList). It was the provider's closed-form immediate-drain pick at the executor's upkeep and at every simulated boundary -- an in-window greedy pick (docs/design/searched-doth-put.md). Beyond the horizon (narrowed playout, d0 runner) the provider's pick stays. DEFAULT ON; =0 -> the provider's pick everywhere, play-identical to the pre-axis tree (an A/B arm only)
     DOTH_FOLDS,               // MTG_DOTH_FOLDS  the searched Defense of the Heart menu's two provider-proven SOUND folds (SacTutorPutsCommute: two puts whose resolution order reaches the same state up to battlefield order; SacTutorFreeGainPut: a list with a free slot loses to itself plus a spare free-gain card). Creature Giving's proofs are card by card for its pool. DEFAULT ON; =0 searches the unfolded menu -- the same answers at unlimited budget for more work (a measurement arm)
+    GRANT_DEFINED_PAY,        // MTG_GRANT_DEFINED_PAY  the tap backtracker's source list and ManaCacheKey grant Brightcap Badger's {G} to Fungus / Saproling CARDS with no mana ability (Thallid, Sporecrown Thallid, Shroofus Sproutsire, Utopia Mycon), as the greedy payer and the bounds always did. =0 -> tokens + equip hosts only
+    RESERVE_GRANTED_BODIES,   // MTG_RESERVE_GRANTED_BODIES  the whole-turn prepay's creature hold class (BatchPrepayMainCasts' DorkReserve) includes an attack-capable body that taps for mana only through a GRANT (Badger's Saprolings and Fungus cards), exactly like a mana dork. =0 -> granted bodies are never held
+    HOLD_PARTIAL_DEPL,        // MTG_HOLD_PARTIAL_DEPL  the prepay's partial creature rungs come AHEAD of the [depletion] last resort, each as a pair (remaining creatures + depletion held, then released); they sat after it, which a depletion land on the board made unreachable (each holds a superset of [depletion]). =0 -> the old order
+    GRANT_CAST_CREDIT,        // MTG_GRANT_CAST_CREDIT  a same-plan Brightcap Badger cast carries Action::rock_mana = one {G} per body already on board its grant would unlock, so the plan's later casts may be funded by them (mana-oracle ENUM-GAP fungusv3 s1100024 gi23 T3). =0 -> no credit
     COUNT
 };
 
@@ -1452,6 +1456,10 @@ inline const char* Name(int slot)
         "MTG_LACKEY_DECLINE",
         "MTG_DOTH_AXIS",
         "MTG_DOTH_FOLDS",
+        "MTG_GRANT_DEFINED_PAY",
+        "MTG_RESERVE_GRANTED_BODIES",
+        "MTG_HOLD_PARTIAL_DEPL",
+        "MTG_GRANT_CAST_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -8763,6 +8763,35 @@ struct Dump
 };
 inline Dump g_dump;
 }   // namespace spwfgate
+// MTG_GRANT_CAST_CREDIT (DEFAULT ON; =0 -> no credit). See the SAME-PLAN MANA GRANT stamp in
+// CollectActions and SamePlanGrantCredit (SpellEffects.h).
+static bool GrantCastCreditOn()
+{
+    static const bool on = EnvOn("MTG_GRANT_CAST_CREDIT", true);
+    return heurarm::Flag(heurarm::GRANT_CAST_CREDIT, on);
+}
+// MTG_RESERVE_GRANTED_BODIES (DEFAULT ON; =0 -> granted bodies are never held). See the DorkReserve
+// class in BatchPrepayMainCasts: a body that taps for mana only through a grant is held like a dork.
+static bool ReserveGrantedBodiesOn()
+{
+    static const bool on = EnvOn("MTG_RESERVE_GRANTED_BODIES", true);
+    return heurarm::Flag(heurarm::RESERVE_GRANTED_BODIES, on);
+}
+// MTG_HOLD_PARTIAL_DEPL (DEFAULT ON; =0 -> the partial creature rungs after [depletion], which a
+// depletion land on the board makes unreachable). See BatchPrepayMainCasts' last-resort rungs.
+static bool HoldPartialDeplOn()
+{
+    static const bool on = EnvOn("MTG_HOLD_PARTIAL_DEPL", true);
+    return heurarm::Flag(heurarm::HOLD_PARTIAL_DEPL, on);
+}
+// Is `a` a same-plan grant cast carrying the credit? (A grant cast whose stamp came out zero is an
+// ordinary creature cast: nothing on board for it to unlock.)
+static bool IsGrantCreditCast(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0 && a.def != nullptr
+        && !a.def->params.granted_tap_mana_subtypes.empty();
+}
+
 // True = the subset provably cannot be paid (see above); false = not provable, run the walk.
 static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
@@ -8785,7 +8814,8 @@ static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Ac
         demand += a.cost.ManaValue();
         if (def == nullptr) { continue; }
         if (a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0
-            && (def->params.etb_creates_treasures > 0 || LandSearchPutsUntapped(*def))) { return false; }
+            && (def->params.etb_creates_treasures > 0 || LandSearchPutsUntapped(*def)
+                || !def->params.granted_tap_mana_subtypes.empty())) { return false; }
         if (def->params.mana_rock && !def->card.IsCreature() && !def->params.enters_tapped) { return false; }
         if (def->params.is_land_aura && def->params.land_aura_extra_mana > 0)
         { aura_extra += def->params.land_aura_extra_mana; }
@@ -9356,9 +9386,14 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             // joins the board untapped (PutLandPutCreditOnScratch).
             const bool is_land_put = a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0
                                   && def && LandSearchPutsUntapped(*def);
+            // A credited same-plan GRANT cast (Brightcap Badger; MTG_GRANT_CAST_CREDIT) is a producer
+            // too: it pays first, and once it is on the scratch board the grant is live for every
+            // later payment of the walk (LiveManaGrant reads the board) -- so the bodies it unlocks pay
+            // exactly as the executor will tap them, and never the Badger's own cost.
+            const bool is_grant = IsGrantCreditCast(a);
             const bool is_rock = (def && def->params.mana_rock && !def->card.IsCreature()
                                   && !def->params.enters_tapped)
-                              || is_etb_treasure || is_land_put;
+                              || is_etb_treasure || is_land_put || is_grant;
             // A land AURA ("enchanted land taps for an additional {G}") is a same-turn mana PRODUCER
             // as well: it resolves before the casts it funds, so its bonus is genuine supply for the
             // rest of the subset -- but ONLY if a land survives the Aura's own cost still untapped to
@@ -35878,6 +35913,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // creature's summoning sickness is irrelevant: it is the TREASURE that taps, not the body.
         if (def.params.etb_creates_treasures > 0 && EtbTreasureSpendOn())
         { a.rock_mana.wild += def.params.etb_creates_treasures; }
+        // SAME-PLAN MANA GRANT (Brightcap Badger; MTG_GRANT_CAST_CREDIT -- see GrantCastCreditOn): once
+        // the Badger resolves, every Fungus / Saproling already on the board taps for {G}, so the casts
+        // after it in the same plan are funded by those bodies. Without this the menu's mana gates
+        // priced "Badger, then Saproling Burst off four Saprolings" as if the Saprolings made nothing
+        // and kept it off the menu (mana-oracle ENUM-GAP, fungusv3 seed 1100024 gi23 T3). Riding
+        // rock_mana gives it the rock's discipline everywhere ("a rock never funds its own cost": the
+        // board must pay the Badger first), the payable-order walk's producer credit (CreditCastOutput
+        // hoists the Badger ahead of what it funds), and the scratch walks lay the Badger on their board
+        // so the grant goes live for the later payments (SubsetPayableWithFiltersImpl's producer pass;
+        // SubsetPayableSequential already places every cast permanent). Zero when a grant is already
+        // live -> no stamp.
+        if (!def.params.granted_tap_mana_subtypes.empty() && GrantCastCreditOn())
+        { a.rock_mana.AddPool(SamePlanGrantCredit(state, state.active_player_index, def)); }
         // PATH TO EXILE (land_search_for_removal_controller): WHICH creature is exiled is a SEARCHED
         // axis on enchant_target (the solo-trick / Aura target channel): > 0 = that own creature, whose
         // controller -- us -- then searches for a tapped basic (the pick rides Plan::land_search_pins);
@@ -53443,19 +53491,32 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // the hold entirely and let the solve spend them like any other source (UnprunedGate::TapReserve).
     if (DorkReserveEnabled() && g_scripted_tapmode != 1 && n <= 64)
     {
+        const bool      hold_granted = ReserveGrantedBodiesOn() && state.deck_has_mana_grant;
+        const ManaGrant hold_grant   = hold_granted ? LiveManaGrant(state, active) : ManaGrant{};
         for (int i = 0; i < n; ++i)
         {
             const Permanent& p = state.battlefield[i];
             if (p.controller_index != active || p.tapped || !p.card.IsCreature()) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (!(d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)))
+            const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+            // MTG_RESERVE_GRANTED_BODIES: a body that taps for mana only through a GRANT (Brightcap
+            // Badger's Saprolings and Fungus cards) is a mana creature for this rule exactly as a dork
+            // is -- an attacker first, mana second. Keyed on CardTemplate::ManaDork alone, the hold
+            // never saw one: fungusv3 d0 seed 988063 gi62 T5, the [all] rung held the Myconid and
+            // Hickory Woodlot and paid Beastmaster Ascension + Doubling Season with Sporecrown Thallid
+            // and both Saprolings (kill T5 -> T6). The any-colour Paradise Mantle host stays unheld,
+            // like a flexible dork (see ReservableSpecialMask on why flexible sources are not held).
+            const bool granted_body = hold_granted && (d == nullptr || !IsBaselineManaSource(*d))
+                                   && GrantReaches(hold_grant, p) && !EquipGrantReaches(hold_grant, p)
+                                   && GrantedBodyCanTap(hold_grant, p, state.battlefield);
+            if (!granted_body && !(d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)))
             { continue; }
             // MAIN-2 RELEASE frees only bodies whose tap costs nothing beyond this turn. A
             // gy_land_exile_mana dork's tap EXILES a graveyard land -- one-shot fuel, and wasting
             // it is phase-blind (the lever's own depletion/one-shot principle). fc341 (FiveColour
             // s4345 gi341): releasing Deathrite Shaman in the T2 post-combat main burned the only
             // graveyard fetch, stranding T3's five-pip Cosmic Spider-Man -- win 5 -> 6.
-            if (m2_release && !d->params.gy_land_exile_mana) { continue; }
+            // A granted body's tap costs nothing beyond this turn either.
+            if (m2_release && (granted_body || !d->params.gy_land_exile_mana)) { continue; }
             // MTG_HOLD_RELEASE_YIELD (c): the line's own sacrifice victim is spent by a cost, so
             // holding it protects no attack -- leave it payable (the sac-fodder pin taps it first).
             if (hold_yield_on && _sac_victim != 0 && p.card.m_number == _sac_victim) { continue; }
@@ -53496,6 +53557,45 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // does NOT fix it, precisely because of that ordering.
     const std::uint64_t reserved_a = ActLineHoldMask(state, ManaCost{});
 
+    // The PARTIAL CREATURE HOLD's release order (MTG_DORK_HOLD_PARTIAL, below): the held creatures,
+    // the first to be released first. Shared by the depletion-released pairs (MTG_HOLD_PARTIAL_DEPL).
+    auto partial_release_order = [&]() -> std::vector<int>
+    {
+        std::vector<int> crea;
+        for (int i = 0; i < n; ++i) { if (reserved_crea & (1ull << i)) { crea.push_back(i); } }
+        // Release order: weakest EffectivePower first (tie: lower battlefield index). Under
+        // MTG_PUMP_TARGET_HOLD the projected pump target releases LAST regardless of power -- it
+        // is the body the trick lands on, so it outranks a bigger idle body this turn.
+        const int keep_last = (PumpTargetHoldEnabled() && pt) ? pt->pump_target_card : 0;
+        std::stable_sort(crea.begin(), crea.end(), [&](int a, int b)
+        {
+            if (keep_last != 0)
+            {
+                const bool ka = state.battlefield[a].card.m_number == keep_last;
+                const bool kb = state.battlefield[b].card.m_number == keep_last;
+                if (ka != kb) { return kb; }   // the kept target sorts to the back
+            }
+            const int pwa = state.battlefield[a].EffectivePower();
+            const int pwb = state.battlefield[b].EffectivePower();
+            if (producer_first)
+            {
+                // MTG_HOLD_PRODUCER_FIRST (e): the biggest producer releases first, at any power.
+                const int ya = hold_yield(a), yb = hold_yield(b);
+                if (ya != yb) { return ya > yb; }
+                if (pwa != pwb) { return pwa < pwb; }
+                return hold_tie_less(a, b);
+            }
+            if (pwa != pwb || !hold_yield_on) { return pwa < pwb; }
+            // MTG_HOLD_RELEASE_YIELD (a): equal power -> the bigger producer releases first (one
+            // tap of it covers what several flat bodies would, each costing one attacker), then the
+            // position-free key. Off: equal power keeps battlefield order (stable sort).
+            const int ya = hold_yield(a), yb = hold_yield(b);
+            if (ya != yb) { return ya > yb; }
+            return hold_tie_less(a, b);
+        });
+        return crea;
+    };
+    static const bool s_partial_hold_ladder = EnvOn("MTG_DORK_HOLD_PARTIAL", true);
     // Solve the combined cost, HOLDING as much as the turn can spare. First try with everything
     // reservable held: if it pays wild-free, those sources are preserved for free. If holding them
     // makes the turn unaffordable (or forces a wild/ambiguous tap) fall down a short LADDER before
@@ -53513,7 +53613,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // so the joint solve may spend the ONE body the turn needs (the attacker / pump target) on a pip
     // a SPARE dork covers identically. The attacker-only rung (MTG_TAP_ATTACKER_RUNG, default on)
     // is that missing step; see TapAttackerRungEnabled for the AL gi8 case and its verification.
-    std::uint64_t rungs[18];
+    std::uint64_t rungs[32];
     int n_rungs = 0;
     // Dedup push: a rung is emitted only when non-empty, novel, and there is room. With the
     // overhaul levers off (reserved_shot == 0, no provider narrowing) this reproduces the shipped
@@ -53521,7 +53621,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // classes are non-empty (dedup collapses them otherwise) -- byte-identical by construction.
     auto push = [&](std::uint64_t m)
     {
-        if (!m || n_rungs >= 18) { return; }
+        if (!m || n_rungs >= 32) { return; }
         for (int i = 0; i < n_rungs; ++i) { if (rungs[i] == m) { return; } }
         rungs[n_rungs++] = m;
     };
@@ -53576,6 +53676,30 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 push(narrow);
             }
         }
+        // PARTIAL CREATURE HOLD AHEAD OF THE LAST RESORTS (MTG_HOLD_PARTIAL_DEPL, default ON). The
+        // partial rungs below hold every depletion land, and they sat AFTER the [depletion] rung --
+        // whose hold is a SUBSET of each of theirs -- so on any board with a depletion land they could
+        // never pay where [depletion] had failed: dead code, and "creatures outrank a depletion
+        // counter" was inverted the moment the full creature hold failed ([depletion] keeps the
+        // counter and spends EVERY creature). fungusv3 d0 seed 988063 gi62 T5 with the granted bodies
+        // held: 8 to pay off Tomb + 3 Forests + Hickory Woodlot ({G}{G}) + four mana creatures --
+        // [all], [creatures] fail, [depletion] taps all four. Here each partial step comes in a PAIR:
+        // the remaining creatures with the depletion lands still held (a strict superset: same bodies
+        // spent, the counter kept), then the same creatures with them released. The first that pays
+        // spends the fewest attackers, and the counter only when they cannot be saved otherwise.
+        // Capped at six steps (twelve solves, only after every earlier rung has failed).
+        if (HoldPartialDeplOn() && reserved_depl && s_partial_hold_ladder && reserved_crea
+            && g_scripted_tapmode != 1)
+        {
+            const std::vector<int> crea = partial_release_order();
+            std::uint64_t hold = reserved_crea;
+            for (std::size_t k = 0; k + 1 < crea.size() && k < 6; ++k)
+            {
+                hold &= ~(1ull << crea[k]);
+                push(hold | reserved_shot | reserved_depl);
+                push(hold | reserved_shot);
+            }
+        }
         push(reserved_shot);                           // last resorts: hold SOMETHING
         push(reserved_depl);
     }
@@ -53594,40 +53718,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // rung keeping the remaining stronger attackers (and every depletion land) held; the first
     // payable subset wins. Costs extra solve attempts only after the full holds already failed.
     static const bool s_partial_hold = EnvOn("MTG_DORK_HOLD_PARTIAL", true);
-    if (s_partial_hold && reserved_crea && DorkReserveEnabled() && g_scripted_tapmode != 1)
+    if (s_partial_hold && reserved_crea && DorkReserveEnabled() && g_scripted_tapmode != 1
+        && !(HoldPartialDeplOn() && reserved_depl))
     {
-        std::vector<int> crea;
-        for (int i = 0; i < n; ++i) { if (reserved_crea & (1ull << i)) { crea.push_back(i); } }
-        // Release order: weakest EffectivePower first (tie: lower battlefield index). Under
-        // MTG_PUMP_TARGET_HOLD the projected pump target releases LAST regardless of power -- it
-        // is the body the trick lands on, so it outranks a bigger idle body this turn.
-        const int keep_last = (PumpTargetHoldEnabled() && pt) ? pt->pump_target_card : 0;
-        std::stable_sort(crea.begin(), crea.end(), [&](int a, int b)
-        {
-            if (keep_last != 0)
-            {
-                const bool ka = state.battlefield[a].card.m_number == keep_last;
-                const bool kb = state.battlefield[b].card.m_number == keep_last;
-                if (ka != kb) { return kb; }   // the kept target sorts to the back
-            }
-            const int pwa = state.battlefield[a].EffectivePower();
-            const int pwb = state.battlefield[b].EffectivePower();
-            if (producer_first)
-            {
-                // MTG_HOLD_PRODUCER_FIRST (e): the biggest producer releases first, at any power.
-                const int ya = hold_yield(a), yb = hold_yield(b);
-                if (ya != yb) { return ya > yb; }
-                if (pwa != pwb) { return pwa < pwb; }
-                return hold_tie_less(a, b);
-            }
-            if (pwa != pwb || !hold_yield_on) { return pwa < pwb; }
-            // MTG_HOLD_RELEASE_YIELD (a): equal power -> the bigger producer releases first (one
-            // tap of it covers what several flat bodies would, each costing one attacker), then the
-            // position-free key. Off: equal power keeps battlefield order (stable sort).
-            const int ya = hold_yield(a), yb = hold_yield(b);
-            if (ya != yb) { return ya > yb; }
-            return hold_tie_less(a, b);
-        });
+        const std::vector<int> crea = partial_release_order();
         std::uint64_t hold = reserved_crea;
         for (std::size_t k = 0; k + 1 < crea.size() && n_rungs < 13; ++k)
         {

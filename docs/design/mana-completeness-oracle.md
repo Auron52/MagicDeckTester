@@ -873,7 +873,7 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | FiveColour | 6 | Garth's conjured Black Lotus cannot be cracked in the plan that conjures it | Garth emission (CollectActions) | conjure-and-crack variant | **fixed below** |
 | FiveColour | 8 | `SubsetWidensDomainBy` is all-or-nothing: a subset holding several domain wideners gets no widen when not all of them are payable | the domain widen credit | try the payable widener subsets when the flat gate fails | open |
 | FiveColour | 1 | `HasteUnlockedManaOf` misses a hasted domain dork's own colours | the haste-unlock credit | add them | open |
-| Fungus | 3 | a same-plan mana GRANT (Brightcap Badger) is not credited | the rock/grant credit | credit the granted bodies | open |
+| Fungus | 3 | a same-plan mana GRANT (Brightcap Badger) is not credited | the rock/grant credit | credit the granted bodies | **fixed** (`MTG_GRANT_CAST_CREDIT`; `badger-grant-defined-fungi-backtracker-gap.md`) |
 | Fungus, FiveColour | 8 | Concordant Crossroads' blanket haste does not unlock the plan's own dorks | the rock-credit stamp | credit them | open |
 | Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | **fixed below** |
 | Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |

@@ -93,3 +93,54 @@ TEST_CASE("Brightcap Badger: a granted Fungus CARD pays through every payer")
         }
     }
 }
+
+namespace
+{
+
+// A 1/1 green Saproling TOKEN (no CardDefinition), as CreateTokenOnce makes it.
+int PutSaproling(GameState& s, int number, bool sick = false)
+{
+    Permanent p;
+    p.card.m_name       = "1/1 Saproling Token";
+    p.card.RehashName();
+    p.card.AddColor(Color::Green);
+    p.card.AddType(CardType::Creature);
+    p.card.m_subtypes   = { "Saproling" };
+    p.card.m_power      = 1;
+    p.card.m_toughness  = 1;
+    p.card.m_number     = number;
+    p.is_token          = true;
+    p.def_absent        = true;
+    p.controller_index  = 0;
+    p.owner_index       = 0;
+    p.entered_this_turn = sick;
+    s.battlefield.push_back(p);
+    return static_cast<int>(s.battlefield.size()) - 1;
+}
+
+}   // namespace
+
+TEST_CASE("Brightcap Badger: the same-plan grant credit counts the bodies a Badger cast unlocks")
+{
+    EnsureCardsLoaded();
+    const CardDefinition& badger = Def("Brightcap Badger");
+    GameState s = Board("Thallid", false);   // Forest, Thallid
+    PutSaproling(s, 1000);
+    PutSaproling(s, 1001, /*sick=*/true);   // summoning-sick: cannot use the granted {T}
+    Put(s, "Undercellar Myconid", 30);       // a Fungus that is a mana dork already: in the pool
+    s.battlefield.back().tapped = false;
+    const ManaPool c = SamePlanGrantCredit(s, 0, badger);
+    CHECK(c.green == 2);                      // the Thallid + the unsick Saproling
+    CHECK(c.Total() == 2);
+
+    // A tapped body adds nothing.
+    s.battlefield[1].tapped = true;
+    CHECK(SamePlanGrantCredit(s, 0, badger).Total() == 1);
+
+    // A grant ALREADY live: a second Badger grants the same single ability.
+    Put(s, "Brightcap Badger", 20);
+    CHECK(SamePlanGrantCredit(s, 0, badger).Total() == 0);
+
+    // A card that grants nothing earns nothing.
+    CHECK(SamePlanGrantCredit(s, 0, Def("Forest")).Total() == 0);
+}
