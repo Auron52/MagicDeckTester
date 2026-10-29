@@ -1,0 +1,44 @@
+{
+ "deck": "melira_pod",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "1172355372849beaf94082bc0aff2f1faaeabccb",
+   "frozen": "99977194beb541fd50db5bd30b5a2d8f5fc150ee",
+   "src_tree": "fa79016e8b371054e9a0b60b7eae5f01a5e5a78c",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.012594,
+   "cost": null,
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.012594 t, cost not measured, recipe fast)"
+  },
+  {
+   "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:0e526f28aba1418057fe",
+   "frozen": "99977194beb541fd50db5bd30b5a2d8f5fc150ee",
+   "src_tree": "fa79016e8b371054e9a0b60b7eae5f01a5e5a78c",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_melira_pod/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b90 adopt=0 delta=-0.00188 t=-4.25 cost=1.136x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.14x) with quality better (-0.00188) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b120 adopt=0 delta=-0.00300 t=-5.29 cost=1.219x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.22x) with quality better (-0.00300) -- a TRADE, the user's call",
+    "    PICK arm=d4b60 why=the cheapest of 1 passing arm(s) (0.97x vs live, delta +0.00112)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T11:54:27  PHASE E.6: no allowance for melira_pod -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
