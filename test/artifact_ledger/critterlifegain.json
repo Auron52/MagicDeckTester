@@ -1,0 +1,48 @@
+{
+ "deck": "critterlifegain",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "critterlifegain-artifact-queue-tool-647f24-20261029T210950",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "0a470f57c0d4f0a5bd8cb29d1fc7f67bf8867897",
+   "frozen": "eb63129d7da558acec5d222c6bbfbfc2bf3d1e31",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.00224,
+   "cost": [
+    0.9851736612490956,
+    0.004795413078158437,
+    96
+   ],
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.00224 t, cost 0.985x (se 0.005, 96 seeds), recipe complete)"
+  },
+  {
+   "run_id": "critterlifegain-artifact-queue-tool-647f24-20261029T210950",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:cd4ea61210c92d881361",
+   "frozen": "eb63129d7da558acec5d222c6bbfbfc2bf3d1e31",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_critterlifegain/DECISIONS.txt)",
+   "decisions": [
+    "      trust candidate d5: ON-OFF +0.00000 turns (se 0.00000, one-sided 95% upper +0.00062) over 8 seeds x 1000 games; cost 110 vs 108 core-s (1.02x); 8/8 seeds byte-identical; se 0.00000 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: REJECTED -- the lever NEVER ENGAGED: play is byte-identical on every seed AND cost is 1.02x (>= 0.98), so trusting at d5 changed nothing at all. A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence of safety. Usual cause: a staged sidecar carrying value_play leaf:none, which swaps the model for a Constant() so it can never be consulted. Shipping UNSET (always eligible to escalate).",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T21:36:32  PHASE E.6: no allowance for critterlifegain -- headroom 0.0% < 4%; fleet default R = 0",
+    "    probe 1200 g (seed 7100000): 5 ladder escalations, headroom 0.0% of all work, fitted vector [0.0, 0.0, 0.0, 0.0, 0.0] (n/depth 5/5/3/0/0) projects -0.0%"
+   ]
+  }
+ ]
+}
