@@ -39995,6 +39995,7 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
                 // PLAN-LEVEL ADMISSION (PutBackPickAt's twin).
                 std::vector<int> plan(out.size(), DecisionProvider::kCantripPlanKeep);
                 bool planned = ResolveProvider(state).CantripPlansActive(state, true);
+                cantripbatch::Scope _cpb;   // one resolution: same state, same readiness (see cantripbatch)
                 for (std::size_t q = 0; q < out.size() && planned; ++q)
                 { planned = PlanOfPutBackCandidate(state, controller, rd, out[q].data(), take, plan[q]); }
                 if (planned) { CantripPlanFilter(perm, plan); }
@@ -40207,6 +40208,7 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
             {
                 std::vector<int> plan(n_seq, DecisionProvider::kCantripPlanKeep);
                 bool planned = prov.CantripPlansActive(state, true);
+                cantripbatch::Scope _cpb;   // one resolution: same state, same readiness (see cantripbatch)
                 for (std::size_t q = 0; q < n_seq && planned; ++q)
                 { planned = PlanOfPutBackCandidate(state, controller, rd, sc.seq[q].data(), take, plan[q]); }
                 if (planned) { CantripPlanFilter(sc.perm, plan); }
