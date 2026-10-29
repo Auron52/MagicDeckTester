@@ -227,8 +227,8 @@ TEST_CASE("Placeholder: shipped lever defaults (ON where the bar was met, OFF wh
     CHECK(PlaceholderProviderOn());
     CHECK(PlaceholderSearchOn());
     CHECK(PlaceholderSnowOn());
+    CHECK(PlaceholderTectonicOn());         // unblocked by the keep axis for a Giant the plan casts
     CHECK_FALSE(PlaceholderEchoOn());       // blocked on a searched echo
-    CHECK_FALSE(PlaceholderTectonicOn());   // blocked on the keep axis for a Giant the plan casts
     CHECK_FALSE(PlaceholderManaOn());       // blocked on a sequence-aware float commit
     CHECK_FALSE(PlaceholderFeaturesOn());   // the USER's call: the shipped models were fitted on the placeholder read
 }

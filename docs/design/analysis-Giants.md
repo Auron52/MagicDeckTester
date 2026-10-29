@@ -2066,8 +2066,8 @@ Interleaved wall (old base, 10 alternating blocks x 150 games per arm): ON / OFF
 | OFF + PT (unrecovered before this change) | 6 | 6 | 8 | 6 |
 
 Same with `MTG_PLACEHOLDER_PROVIDER=0` on the old base. So the keep default no longer decides anything
-inside the window, and `MTG_PLACEHOLDER_TECTONIC` can turn on (a decision for the USER / the placeholder
-owner). No other deck can move: with the five levers OFF, Giants and Giants 2HG are byte-identical to the
+inside the window, and `MTG_PLACEHOLDER_TECTONIC` turned DEFAULT ON in the commit after this one (the
+coordinator's call on these numbers; `MTG_TECTONIC_KEEP_LAND` stays OFF -- no measurable effect). No other deck can move: with the five levers OFF, Giants and Giants 2HG are byte-identical to the
 base binary, and at defaults so are the 38 other suite decks (a 10-60 game sample each, both bases).
 
 ### Open: the same gate shape elsewhere (survey, not fixed here)

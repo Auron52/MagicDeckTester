@@ -82,17 +82,20 @@ inline bool PlaceholderSnowOn()       // Snow winless certificate's gain bound s
     static const bool e = EnvOn("MTG_PLACEHOLDER_SNOW", true);
     return heurarm::Flag(heurarm::PLACEHOLDER_SNOW, e);
 }
+// Tectonic Giant's default-keep MV. ON since the keep / mode axis covers a Giant the plan casts and every
+// attacking copy (MTG_TECTONIC_CAST_AXIS / MTG_TECTONIC_ORDINALS): with the axis in, ON vs OFF measured 0 / 0
+// over 6,000 held-out Giants games and 0 slower / 1 faster over 3,000 2HG (docs/design/analysis-Giants.md).
+inline bool PlaceholderTectonicOn()
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_TECTONIC", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_TECTONIC, e);
+}
 // DEFAULT OFF -- each corrects a read, but the heuristic the correct read switches on loses games in an
 // UNSEARCHED decision, so the slower games do not recover at d8 b0. Each read site says what unblocks it.
 inline bool PlaceholderEchoOn()       // Goblins echo "no gas" cost read (blocked on a SEARCHED echo)
 {
     static const bool e = EnvOn("MTG_PLACEHOLDER_ECHO", false);
     return heurarm::Flag(heurarm::PLACEHOLDER_ECHO, e);
-}
-inline bool PlaceholderTectonicOn()   // Tectonic Giant default-keep MV (blocked on the keep axis for a cast Giant)
-{
-    static const bool e = EnvOn("MTG_PLACEHOLDER_TECTONIC", false);
-    return heurarm::Flag(heurarm::PLACEHOLDER_TECTONIC, e);
 }
 inline bool PlaceholderManaOn()       // float-colour commit weighs the hand's real pips (blocked on a sequence-aware commit)
 {
@@ -18753,16 +18756,17 @@ inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
         // on the battlefield or cast by the plan (MTG_TECTONIC_CAST_AXIS), so this binds the playout beyond
         // the horizon, the base plan's own resolution, and an unpinned later ordinal; the human path
         // surfaces it (the `dig` chooser below).
-        // THE MV READ (MTG_PLACEHOLDER_TECTONIC, DEFAULT OFF). An exiled library card is a name-only
-        // placeholder whose own m_mana_cost is {0}, so the historical read ties every card at 0 and keeps the
-        // lower card number. The definition MV makes "highest MV" real -- and on held-out seed 1350001 it
-        // lost 4 Giants games / won none, NONE recovering at d8 b0: the searched keep (TECTONIC_KEEP_AXIS)
-        // is only fanned out when a Tectonic Giant is on the battlefield at the plan's root, so a Giant CAST
-        // this turn (hasted by Lightning Greaves) attacks under this default alone, and highest-MV keeps a
-        // Stinkdrinker Daredevil over the Mountain the turn needs (seed 1350104 gi103, T5 -> T6). OFF until
-        // the keep/mode axis also covers a modal Giant the plan casts; then this is just the branch default.
-        // docs/design/placeholder-card-reads.md. (2026-10-29: the axis now does -- MTG_TECTONIC_CAST_AXIS /
-        // MTG_TECTONIC_ORDINALS, measured with this lever both ways in docs/design/analysis-Giants.md.)
+        // THE MV READ (MTG_PLACEHOLDER_TECTONIC, DEFAULT ON). An exiled library card is a name-only
+        // placeholder whose own m_mana_cost is {0}, so the historical read (=0) ties every card at 0 and keeps
+        // the lower card number. The definition MV makes "highest MV" real. It shipped OFF first: on held-out
+        // seed 1350001 it lost 4 Giants games / won none, NONE recovering at d8 b0, because the searched keep
+        // was only fanned out for a Giant on the battlefield at the plan's root -- a Giant CAST this turn
+        // (hasted by Lightning Greaves) attacked under this default alone, and highest-MV kept a Stinkdrinker
+        // Daredevil over the Mountain the turn needed (seed 1350104 gi103, T5 -> T6). The axis now covers a
+        // Giant the plan casts and every attacking copy (MTG_TECTONIC_CAST_AXIS / MTG_TECTONIC_ORDINALS), so
+        // this is only the branch default: with the axis in, ON vs OFF was 0 / 0 over 6,000 held-out Giants
+        // games, 0 slower / 1 faster over 3,000 2HG, and gi103 / 118 / 421 / 976 play 5 / 5 / 7 / 5 at d8 b0
+        // either way (docs/design/analysis-Giants.md, docs/design/placeholder-card-reads.md).
         const bool def_cost = PlaceholderTectonicOn();
         std::size_t best = 0;
         for (std::size_t k = 1; k < examined.size(); ++k)
@@ -18773,11 +18777,12 @@ inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
                 || (mv_k == mv_b && examined[k].m_number < examined[best].m_number))
             { best = k; }
         }
-        // MTG_TECTONIC_KEEP_LAND (DEFAULT OFF; a measured amendment for the USER; reads nothing unless
+        // MTG_TECTONIC_KEEP_LAND (DEFAULT OFF; a measured amendment; reads nothing unless
         // MTG_PLACEHOLDER_TECTONIC is on): with NO land in hand, the default keeps an exiled LAND instead --
-        // a guaranteed land drop this turn's second main or next turn. Recovers gi103; over seed 1350001
-        // it measured 3 slower / 2 faster (one no-win became a T7 win), two of the three not recovering at
-        // d8 b0 -- an interim default, not a substitute for searching the keep.
+        // a guaranteed land drop this turn's second main or next turn. Before the cast axis it recovered
+        // gi103 but measured 3 slower / 2 faster over seed 1350001 (one no-win became a T7 win), two of the
+        // three not recovering at d8 b0; with the axis in it measured 0 / 0 (Giants) and 0 slower / 1 faster
+        // (2HG) on top of the MV read -- no measurable effect, so it stays OFF.
         static const bool s_keep_land = EnvOn("MTG_TECTONIC_KEEP_LAND", false);
         if (def_cost && heurarm::Flag(heurarm::TECTONIC_KEEP_LAND, s_keep_land))
         {

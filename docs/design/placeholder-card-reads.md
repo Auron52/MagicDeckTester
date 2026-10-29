@@ -31,7 +31,7 @@ a field off it, and all 402 call sites of those helpers; then each candidate rea
 | `MTG_PLACEHOLDER_SNOW` (ON) | `DecisionProviders.cpp:41553-56` | SnowCertGainBound found no snow permanent: an UNDER-stated gain bound, i.e. an unsound winless certificate |
 | | `DecisionProviders.cpp:41876-79` | the certificate's rescue census (diagnostic counters only) |
 | `MTG_PLACEHOLDER_ECHO` (OFF) | `DecisionProviders.cpp:15995` | Goblins echo "no gas": every hand cost `{0}`, so the clause fired only on a spell-less hand |
-| `MTG_PLACEHOLDER_TECTONIC` (OFF) | `SpellEffects.h:18566-67` | Tectonic Giant's default kept card (highest MV) tied every card at 0 -> lowest card number |
+| `MTG_PLACEHOLDER_TECTONIC` (ON since 3b93a11f2's axis) | `SpellEffects.h:18566-67` | Tectonic Giant's default kept card (highest MV) tied every card at 0 -> lowest card number |
 | `MTG_PLACEHOLDER_MANA` (OFF) | `SpellEffects.h:23903, 31338` | the float-colour commit weighed hand pips that were all 0 -> the first-listed colour always |
 | `MTG_PLACEHOLDER_FEATURES` (OFF) | `KeepModel.cpp:407-410, 516-517` | ExtractMidGameFeatures: lands_in_hand / hand_creatures / lib_lands / lib_creatures counted only def-built cards; hand_castable_now counted a placeholder land as a castable MV-0 spell |
 | | `KeepModel.cpp:71`, `KeepModelTrainer.cpp:189-190` | keep-model subtype_density always 0; the trainer never constructed the feature |
@@ -81,13 +81,21 @@ Hinata gi148 / gi203 RECOVER. TWELVE DO NOT, and each is in a decision the searc
 ## The split (what ships, what waits)
 
 * DEFAULT ON: `MTG_PLACEHOLDER_PROVIDER` (Mirrorwing / Landfall / Stompy / Prevent Damage),
-  `MTG_PLACEHOLDER_SEARCH`, `MTG_PLACEHOLDER_SNOW`, and the four non-play reads (no lever).
+  `MTG_PLACEHOLDER_SEARCH`, `MTG_PLACEHOLDER_SNOW`, the four non-play reads (no lever), and -- since the
+  keep / mode axis covers a Giant the plan casts (below) -- `MTG_PLACEHOLDER_TECTONIC`.
 * DEFAULT OFF, each with what unblocks it:
   * `MTG_PLACEHOLDER_ECHO` (+ `MTG_GOBLIN_ECHO_LAND_DROP`, own default ON but inert while the parent is off,
     and `MTG_GOBLIN_ECHO_DRAW_LAND`, OFF): unblocked when echo is a SEARCHED decision -- then the
     definition cost and the land-drop credit make PayEchoToKeep a sound branch default.
-  * `MTG_PLACEHOLDER_TECTONIC` (+ `MTG_TECTONIC_KEEP_LAND`): unblocked when the keep/mode axis also fans
-    out for a modal Giant the plan casts that can attack this turn.
+  * ~~`MTG_PLACEHOLDER_TECTONIC`~~: UNBLOCKED and ON (2026-10-29). The keep/mode axis now fans out for a
+    modal Giant the plan casts that can attack this turn (`MTG_TECTONIC_CAST_AXIS`) and for every attacking
+    copy (`MTG_TECTONIC_ORDINALS`), commit 3b93a11f2. With the axis in (base 513e27555, held-out s2910001
+    x 6,000 Giants and s2920001 x 3,000 Giants 2HG, per-game paired): PT ON vs OFF is **0 slower / 0
+    faster** (Giants) and **0 slower / 1 faster** (2HG, -1 turn); units x0.999 / x0.990. d8 b0 of
+    gi103 / 118 / 421 / 976: 5 / 5 / 7 / 5 with PT ON or OFF (PT ON without the axis: 6 / 6 / 8 / 6). The
+    same seeds reproduce the original finding without the axis: PT ON vs OFF 9 slower / 4 faster.
+    `MTG_TECTONIC_KEEP_LAND` stays OFF: on top of PT ON with the axis, 0 / 0 (Giants), 0 slower / 1 faster
+    (2HG) -- no measurable effect.
   * `MTG_PLACEHOLDER_MANA` (+ `MTG_FLOAT_COMMIT_NET`): unblocked by a SEQUENCE-aware commit (the colours the
     rest of the applying line spends, in order), not a pip total.
   * `MTG_PLACEHOLDER_FEATURES`: a USER decision. The shipped value leaves and keep models were fitted on
