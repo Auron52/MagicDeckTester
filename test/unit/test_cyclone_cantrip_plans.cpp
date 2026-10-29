@@ -431,6 +431,16 @@ TEST_CASE("Cyclone cycler rule: which creature cycler a cycle seed uses (USER 20
         CHECK(has(n, kWraP));
         CHECK(has(n, kCurP));
     }
+    SUBCASE("per plan with the Cyclone out: the {U} is judged after the plan's own casts (d5 gi141)")
+    {
+        const GameState s = StateP({ "Island", "Island", "Blood Crypt" }, { kCycP, kWraP, kCurP, "Seething Song" });
+        // A plan casting Seething Song and the Cyclone (net 8 - 5 = 3 of its own mana) leaves no {U}: the Wraith.
+        CHECK(ProvP().CycleSeedAdmitOut(s, kWraP, 3, 0, nullptr));
+        CHECK_FALSE(ProvP().CycleSeedAdmitOut(s, kCurP, 3, 0, nullptr));
+        // A plan that spends nothing first keeps the {U}: the Curator.
+        CHECK(ProvP().CycleSeedAdmitOut(s, kCurP, 0, 0, nullptr));
+        CHECK_FALSE(ProvP().CycleSeedAdmitOut(s, kWraP, 0, 0, nullptr));
+    }
     SUBCASE("lever off: no admission filter")
     {
         ArmP off;
