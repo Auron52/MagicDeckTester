@@ -711,6 +711,11 @@ enum Slot : int
     CYCLONE_CYCLE_ORDER,      // MTG_CYCLONE_CYCLE_ORDER=1  Cyclone: the draft-2 CYCLE ORDER (USER accepted 2026-10-29). Cyclone out: Curator while a {U} is spare, Street Wraith, Curator (no spare {U}), Xander's Lounge, a surplus Cyclone. Not out: a surplus Cyclone (2+ held), Xander's Lounge (not this turn's land drop), Curator, Street Wraith (kept for the Cyclone), a Lounge that is the land drop. Applied to the SEARCHED cycle sources' ORDER (no prune) and to the PLAYOUT pick (SelectDigSource, beyond the horizon). DEFAULT OFF (=0: today's order)
     CYCLONE_CYCLE_CHEAP,      // MTG_CYCLONE_CYCLE_ORDER=2  Cyclone: the USER's cheapest-first cycle order (effective cycling cost's mana value, then the existing order), same two places. DEFAULT OFF; mode 1 wins when both are set
     CYCLE_SEED_PAY_SPLIT,     // MTG_CYCLE_SEED_PAY_SPLIT  a searched cycle seed's all-generic cycling cost gets a SEARCHED payment split (Action::seed_pay_split; ManaPayment.h SeedPaySplits): one variant per distinct multiset of source colour signatures, dominated splits dropped, split 0 = the hand-demand rule's. A COMPLETENESS fix (ledger Q61: the seed paid before its continuation existed and could spend the continuation's colours, unfindable at any budget). Only decks whose provider SEARCHES its cycles (Cyclone) have seeds. DEFAULT OFF (a play change, measured first)
+    CYCLONE_CO_REV_CYCLERS,   // MTG_CYCLONE_CO_REV_CYCLERS  MEASUREMENT HANDLE for MTG_CYCLONE_CAST_ORDER's tier attribution (2026-10-29): the creature cyclers (Curator, Street Wraith) back to the generic position -- FIRST, before every noncreature (rank 5). Inert without the order. DEFAULT OFF
+    CYCLONE_CO_REV_ELDRAZI,   // MTG_CYCLONE_CO_REV_ELDRAZI  ...the Eldrazi back to the generic creature position (rank 5, first). DEFAULT OFF
+    CYCLONE_CO_REV_SONG,      // MTG_CYCLONE_CO_REV_SONG     ...Seething Song back before every noncreature (rank 5; generic: ritual 15 < other 20). DEFAULT OFF
+    CYCLONE_CO_REV_FLAT,      // MTG_CYCLONE_CO_REV_FLAT     ...Long-Term Plans, the cantrips, Remand and Cyclone back to ONE tier after Song (rank 65), and no name tie-break (the generic 20 tier keeps plan order). DEFAULT OFF
+    CYCLONE_CO_REV_TOTAL,     // MTG_CYCLONE_CO_REV_TOTAL    ...the order's by-name tie-break off (CastOrderTotalByName false), ranks unchanged. DEFAULT OFF
     COUNT
 };
 
@@ -1372,6 +1377,11 @@ inline const char* Name(int slot)
         "MTG_CYCLONE_CYCLE_ORDER",
         "MTG_CYCLONE_CYCLE_CHEAP",
         "MTG_CYCLE_SEED_PAY_SPLIT",
+        "MTG_CYCLONE_CO_REV_CYCLERS",
+        "MTG_CYCLONE_CO_REV_ELDRAZI",
+        "MTG_CYCLONE_CO_REV_SONG",
+        "MTG_CYCLONE_CO_REV_FLAT",
+        "MTG_CYCLONE_CO_REV_TOTAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
