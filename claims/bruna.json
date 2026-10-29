@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "276d1969e48f545604d0e0a0574d9fe421be51b9",
+  "valueleaf": "em:8da6bbd94cc2f05973c8"
+ },
+ "deck": "bruna",
+ "frozen": "edc8f5e9f67d60ae56d3344e5a7030730e13eedc",
+ "heartbeat": "2026-10-29T11:57:52Z",
+ "host": "550a08fdc1f3",
+ "run_id": "bruna-artifact-queue-d7d6a5-20261029T115752",
+ "score": 1.3187,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-10-29T11:57:52Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
