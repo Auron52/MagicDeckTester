@@ -1436,6 +1436,7 @@ enum Site
     // meter's delta) on any armed run.
     kMeterRolloutStep,     // SimulateToEnd step with budget == nullptr, billed to the meter
     kMeterGreedyWalk,      // EnumeratePlans' subset walk with no budget, billed to the meter
+    kCacheHit,             // a plan-cache HIT replaying the units its computation charged (MTG_CACHE_HIT_CHARGE)
     kSiteCount
 };
 static constexpr int kFirstMeterOnly = kMeterRolloutStep;
@@ -1443,7 +1444,7 @@ static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
     "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge", "aa_route",
-    "meter_rollout_step", "meter_greedy_walk"
+    "meter_rollout_step", "meter_greedy_walk", "cache_hit"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -1912,6 +1913,10 @@ void TurnSolver::RecordCommittedDepth(int committed_sub_depth)
 // pass the start gate admitted and that ran on past its budget (the overrun ceiling is 25x). Counted only
 // under MTG_ROLLOUT_STATS; read-only.
 static std::atomic<long long> g_units_after_spent{0};
+// HIT-EQUALS-MISS PRICING (MTG_CACHE_HIT_CHARGE; see cachecharge below): while a cacheable computation
+// runs, every unit charged is also attributed to it (and to every computation enclosing it).
+namespace cachecharge { struct Rec; inline thread_local Rec* t_rec = nullptr; }
+static void CacheChargeNote(SearchBudget* budget, long long n);   // defined with cachecharge
 static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
 {
     if (budget == nullptr) { return; }
@@ -1919,12 +1924,14 @@ static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
     { g_units_after_spent.fetch_add(1, std::memory_order_relaxed); }
     budget->Consume(1);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(1, std::memory_order_relaxed); }
+    if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, 1); }
 }
 static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long long n)
 {
     if (budget == nullptr || n <= 0) { return; }
     budget->Consume(n);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(n, std::memory_order_relaxed); }
+    if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, n); }
 }
 
 namespace
@@ -2715,13 +2722,15 @@ namespace
                 std::cerr << "\n";
             }
             long long site_tot = 0;
-            for (int i = 0; i < unitsite::kFirstMeterOnly; ++i) { site_tot += unitsite::g_units[i].load(); }
+            for (int i = 0; i < unitsite::kSiteCount; ++i)
+            { if (i != unitsite::kMeterRolloutStep && i != unitsite::kMeterGreedyWalk) { site_tot += unitsite::g_units[i].load(); } }
             std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
             std::cerr << "[rollout-stats] units_after_budget_spent=" << g_units_after_spent.load()
                       << " share=" << (site_tot ? static_cast<double>(g_units_after_spent.load()) / site_tot : 0.0) << "\n";
             {
                 long long meter_tot = 0;
-                for (int i = unitsite::kFirstMeterOnly; i < unitsite::kSiteCount; ++i) { meter_tot += unitsite::g_units[i].load(); }
+                for (int i : { unitsite::kMeterRolloutStep, unitsite::kMeterGreedyWalk })
+                { meter_tot += unitsite::g_units[i].load(); }
                 if (meter_tot > 0) { std::cerr << "[rollout-stats] meter_only_units=" << meter_tot << " (unbudgeted work billed to MTG_DECISION_WORK_X's meter)\n"; }
             }
             if (g_mch_frames.load() > 0 || g_mch_groups.load() > 0)
@@ -3979,14 +3988,158 @@ struct DecisionBudgetScope
 };
 // Charge `n` units of provider-side sub-search work to the decision's budget. Attributed to its own
 // census bucket so the u_* columns still sum to `units` (turn_census.py refuses a row otherwise).
+// ---- HIT-EQUALS-MISS PRICING (MTG_CACHE_HIT_CHARGE, DEFAULT ON; USER 2026-10-29) ----------------------
+//
+// THE DEFECT. The plan caches (the breakpoint continuation cache, the m1 / m2 enumeration memos) share ONE
+// process-wide byte pool. Whether a store is admitted -- and so whether a later lookup HITS or RECOMPUTES --
+// depends on what the OTHER worker threads hold, and a hit skipped the work units its computation charges
+// (a provider sub-search inside the enumeration: the equip-route DFS, the AA route walk, the enumeration
+// charge -- each billed to the decision's budget). So a game's units, and through the start gate its play,
+// depended on thread count and interleaving whenever the pool bound. USER: *"We don't want any
+// non-determinism regarding thread-count"*, *"it would be better to make cache hits and misses cost the
+// same in budgeting."*
+//
+// THE RULE. A stored computation records the units it charged, by WHICH budget: the decision's finite
+// budget (TurnSolver::DecisionBudget), the greedy-walk host's (MTG_SOLVE_CHARGE), or any other. A hit
+// charges exactly those units again, to the same budgets as they stand at the hit site -- what a recompute
+// there would charge. That is exact only where the recompute would run the same way, so a hit is SERVED
+// only when:
+//   * the computation charged no "other" budget (one it could not name -- such an entry is not stored);
+//   * it was not cut: the charged budget was not exhausted when it finished (else it is not stored);
+//   * a recompute here would not be cut either: Used + recorded < Limit on each charged budget;
+//   * a budget absent when it ran is absent here too, unless it never reached a charging site
+//     (no null-budget charge attempt recorded).
+// Otherwise the lookup is treated as a MISS and recomputes (its result then follows the miss path).
+// Inert at an unlimited budget by construction (nothing is charged, nothing replayed). It re-prices work,
+// it never makes a line unfindable.
+namespace cachecharge
+{
+// MODES. 1 (DEFAULT): a computation that charged ANY unit is NOT STORED -- every lookup of it recomputes,
+// so it costs exactly what a recompute costs, with whatever its own inner memos make of it. 2: it is stored
+// and a hit replays the units it charged when it ran (the literal "store the units, charge them again"):
+// MEASURED to OVERCHARGE -- a recompute is warm where the first run was cold (the equip-route DFS memoises
+// its boards per decision, SeenForThisDecision), so KittyEquipment seed 1015 gi14 d3 b10 read 20,443
+// units under mode 2 against 4,424 when every lookup recomputed (bp cache off), and lost a turn; mode 1 IS
+// the recompute. 0: hits are free again (the pre-2026-10-29 pricing). Every mode keeps the other half of
+// the rule: a computation that charged nothing is stored and served free, which is what a recompute costs.
+inline int Mode() { static const int v = EnvOn("MTG_CACHE_HIT_CHARGE", true) ? std::max(1, EnvInt("MTG_CACHE_HIT_CHARGE", 1)) : 0; return v; }
+inline bool On() { return Mode() != 0; }
+struct Rec
+{
+    long long dec = 0, greedy = 0, other = 0;
+    long long null_attempts = 0;   // a charging site reached with no budget to charge
+    long long subsearch = 0;       // a decision-memoising charging sub-search ran (TurnSolver::NoteChargingSubsearch)
+    bool had_dec = false, had_greedy = false;
+    Rec* outer = nullptr;
+};
+// What an entry stores.
+struct Cost
+{
+    long long dec = 0, greedy = 0, other = 0, null_attempts = 0;
+    bool had_dec = false, had_greedy = false;
+    bool storable = true;
+    // The computation's SIDE COUNTERS, replayed on a hit exactly as the enum memo replays its own (audit
+    // §6.1): the group-cap drop it contributed (groupwave max_dropped), condemnation drops, truncation
+    // events and budget binds -- read downstream by the truncation watermark and the no-win store gates,
+    // so a hit that skipped them made the game depend on whether the lookup hit (BpSideBegin / End / Replay).
+    int md = 0;
+    unsigned long long condemn = 0, trunc = 0, binds = 0;
+};
+inline std::atomic<long long> g_hits_replayed{0}, g_units_replayed{0}, g_hits_refused{0}, g_unstorable{0},
+                              g_computations{0}, g_charging{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!EnvOn("MTG_PLAN_POOL_STATS")) { return; }
+        std::fprintf(stderr, "[cache-hit-charge] on=%d computations=%lld charging=%lld unstorable=%lld"
+                     " hits_replayed=%lld units_replayed=%lld hits_served_as_misses=%lld\n",
+                     On() ? 1 : 0, g_computations.load(), g_charging.load(), g_unstorable.load(),
+                     g_hits_replayed.load(), g_units_replayed.load(), g_hits_refused.load());
+    }
+};
+inline Dump g_dump;
+// RAII over ONE cacheable computation. Nested computations each record their own charges, and every
+// charge is also attributed to every enclosing one (so an outer entry's cost includes what its inner
+// computations -- or their replayed hits -- charged: exactly what the outer recompute would charge).
+struct Scope
+{
+    Rec rec;
+    bool live = false;
+    Scope()
+    {
+        if (!On()) { return; }
+        live = true;
+        rec.outer = t_rec;
+        rec.had_dec = g_decision_budget != nullptr;
+        rec.had_greedy = g_greedy_charge_budget != nullptr;
+        t_rec = &rec;
+    }
+    ~Scope() { if (live && t_rec == &rec) { t_rec = rec.outer; } }
+    Cost Done()
+    {
+        Cost c;
+        if (!live) { return c; }
+        if (t_rec == &rec) { t_rec = rec.outer; }
+        live = false;
+        c.dec = rec.dec; c.greedy = rec.greedy; c.other = rec.other; c.null_attempts = rec.null_attempts;
+        c.had_dec = rec.had_dec; c.had_greedy = rec.had_greedy;
+        const bool dec_cut = c.dec > 0 && g_decision_budget != nullptr && g_decision_budget->Exhausted();
+        const bool gr_cut  = c.greedy > 0 && g_greedy_charge_budget != nullptr && g_greedy_charge_budget->Exhausted();
+        c.storable = c.other == 0 && !dec_cut && !gr_cut
+                  && (Mode() != 1 || (c.dec == 0 && c.greedy == 0 && rec.subsearch == 0));
+        g_computations.fetch_add(1, std::memory_order_relaxed);
+        if (c.dec + c.greedy + c.other > 0) { g_charging.fetch_add(1, std::memory_order_relaxed); }
+        if (!c.storable) { g_unstorable.fetch_add(1, std::memory_order_relaxed); }
+        return c;
+    }
+};
+inline bool Affordable(SearchBudget* b, long long n)
+{ return n <= 0 || b == nullptr || b->Unlimited() || b->Used() + n < b->Limit(); }
+}   // namespace cachecharge
+static void CacheChargeNote(SearchBudget* budget, long long n)
+{
+    for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer)
+    {
+        if (budget == g_decision_budget)          { r->dec += n; }
+        else if (budget == g_greedy_charge_budget) { r->greedy += n; }
+        else                                       { r->other += n; }
+    }
+}
+static void CacheChargeNoteNull()
+{ for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->null_attempts; } }
+void TurnSolver::NoteChargingSubsearch()
+{ for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { ++r->subsearch; } }
+// A cache HIT on an entry costing `c`: true = serve it (its units charged here, as a recompute would);
+// false = a recompute here could run differently, so the caller treats the lookup as a miss.
+static bool CacheHitCharge(const cachecharge::Cost& c)
+{
+    if (!cachecharge::On()) { return true; }
+    SearchBudget* const d = g_decision_budget;
+    SearchBudget* const g = g_greedy_charge_budget;
+    bool ok = c.storable && c.other == 0;
+    if (ok && d != nullptr && !c.had_dec && c.null_attempts > 0) { ok = false; }
+    if (ok && g != nullptr && !c.had_greedy && c.null_attempts > 0) { ok = false; }
+    if (ok && !cachecharge::Affordable(d, c.dec)) { ok = false; }
+    if (ok && !cachecharge::Affordable(g, c.greedy)) { ok = false; }
+    if (!ok) { cachecharge::g_hits_refused.fetch_add(1, std::memory_order_relaxed); return false; }
+    cachecharge::g_hits_replayed.fetch_add(1, std::memory_order_relaxed);
+    if (c.dec > 0 && d != nullptr)
+    { ConsumeAtN(d, unitsite::kCacheHit, c.dec); cachecharge::g_units_replayed.fetch_add(c.dec, std::memory_order_relaxed); }
+    if (c.greedy > 0 && g != nullptr)
+    { ConsumeAtN(g, unitsite::kCacheHit, c.greedy); cachecharge::g_units_replayed.fetch_add(c.greedy, std::memory_order_relaxed); }
+    return true;
+}
+
 void TurnSolver::ChargeDecisionUnits(SearchBudget* budget, int n)
 {
-    if (budget == nullptr) { return; }
+    if (budget == nullptr) { if (n > 0 && cachecharge::t_rec != nullptr) { CacheChargeNoteNull(); } return; }
     for (int i = 0; i < n; ++i) { ConsumeAt(budget, unitsite::kEquipRoute); }
 }
 void TurnSolver::ChargeAaRouteUnits(SearchBudget* budget, int n)
 {
-    if (budget == nullptr || n <= 0) { return; }
+    if (budget == nullptr || n <= 0)
+    { if (budget == nullptr && n > 0 && cachecharge::t_rec != nullptr) { CacheChargeNoteNull(); } return; }
     ConsumeAtN(budget, unitsite::kAaRoute, n);
 }
 // True inside a horizon playout (SimulateToEnd's RolloutNestGuard), i.e. BEYOND the search window,
@@ -5096,6 +5249,7 @@ struct BpEnumEntry
     std::vector<TurnSolver::Plan> plans;
     PbLazyLayout lazy;
     CandOrder    ord;
+    cachecharge::Cost cost;   // MTG_CACHE_HIT_CHARGE: the units its derivation charged (a hit charges them again)
     CandSeq View() const { return CandSeq(plans, &lazy, &ord); }
     std::size_t Size() const { return View().size(); }
     // MTG_BP_NEW_ONLY_DEMOTE: the continuations MTG_BP_NEW_ONLY filtered OUT of `plans` (old cards
@@ -5265,6 +5419,7 @@ struct Entry
     bool             has = false;   // false = the list was EMPTY
     TurnSolver::Plan front;
     std::uint64_t    epoch = 0;
+    cachecharge::Cost cost;         // MTG_CACHE_HIT_CHARGE
 };
 using Map = std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash>;
 inline thread_local Map t_fronts;
@@ -68346,7 +68501,7 @@ struct EnumChargeScope
             return;
         }
         SearchBudget* const b = TurnSolver::DecisionBudget();
-        if (b == nullptr) { return; }   // unlimited root / no decision: never charged
+        if (b == nullptr) { if (cachecharge::t_rec != nullptr) { CacheChargeNoteNull(); } return; }   // unlimited root / no decision: never charged
         ConsumeAtN(b, unitsite::kEnumCharge, (visits + w - 1) / w);
     }
 };
@@ -84447,6 +84602,16 @@ namespace plancache
     // destroyed BEFORE the caches it accounts for -- we zero the accounting, the memory frees moments
     // later. Destructor defined out-of-line below because it calls Release.
     struct ThreadReleaser { ~ThreadReleaser(); };
+    // MTG_PLAN_POOL_STATS: each GAME's peak holding on its thread (what a per-thread quota must cover),
+    // recorded at the next game start and at thread exit.
+    inline thread_local long long t_game_peak = 0;
+    inline std::mutex g_peaks_mu;
+    inline std::vector<long long>& GamePeaks() { static auto* v = new std::vector<long long>(); return *v; }   // leaked: read by the exit dumper
+    inline void RecordGamePeak()
+    {
+        if (t_game_peak > 0) { std::lock_guard<std::mutex> lk(g_peaks_mu); GamePeaks().push_back(t_game_peak); }
+        t_game_peak = 0;
+    }
     inline thread_local ThreadReleaser t_releaser;
     // Times the pool said NO. "Result-neutral" above is not true of WORK: a refused store is
     // recomputed, and a recompute can cost units (the bp cache's derivations do), which the
@@ -84465,8 +84630,44 @@ namespace plancache
     inline bool StatsOn() { static const bool v = EnvOn("MTG_PLAN_POOL_STATS"); return v; }
     inline std::atomic<long long> g_cat_used[kCats], g_cat_hi[kCats], g_cat_at_hi[kCats];
     inline thread_local long long t_cat[kCats] = { 0, 0, 0 };
+    // PER-THREAD ADMISSION (MTG_PLAN_CACHE_PER_THREAD, DEFAULT ON; 2026-10-29). The caches this pool bounds
+    // are thread_local and emptied at every game start (ClearPerGameCaches), so a thread's holdings are a
+    // function of the game it is playing -- but a GLOBAL bound made each admission depend on what the
+    // OTHER threads held, and a refused store changed what a later lookup did (served vs recomputed), so a
+    // game's units and play depended on thread count and interleaving. USER 2026-10-29: "We don't want any
+    // non-determinism regarding thread-count." Admitting against a FIXED per-thread quota makes every
+    // admission a function of the game's own history: thread-count invariant by construction, whatever the
+    // caches' content or side effects. The quota: MTG_PLAN_CACHE_THREAD_KB if set; else, when
+    // MTG_PLAN_CACHE_KB is set explicitly (the generation drivers' memory budgets, a test's tiny pool),
+    // that budget's share per machine worker (membudget::Workers, the affinity CPU count -- a machine
+    // constant, not --threads; =0 still means unbounded); else kDefaultThreadQuotaKb. The process bound is
+    // workers x quota; the global counter stays as the gauge (heartbeat, MTG_PLAN_POOL_STATS).
+    inline bool PerThreadOn() { static const bool v = EnvOn("MTG_PLAN_CACHE_PER_THREAD", true); return v; }
+    constexpr long long kDefaultThreadQuotaKb = 512LL * 1024;   // 512 MB per worker thread (measured, ledger)
+    inline long long ThreadQuotaBytes()
+    {
+        static const long long v = [] {
+            if (std::getenv("MTG_PLAN_CACHE_THREAD_KB") != nullptr)
+            { return static_cast<long long>(EnvInt("MTG_PLAN_CACHE_THREAD_KB", 0)) * 1024LL; }
+            if (std::getenv("MTG_PLAN_CACHE_KB") != nullptr)
+            {
+                const long long kb = static_cast<long long>(EnvInt("MTG_PLAN_CACHE_KB", 0));
+                if (kb <= 0) { return 0LL; }
+                return std::max<long long>(1, kb * 1024LL / std::max(1, membudget::Workers()));
+            }
+            return kDefaultThreadQuotaKb * 1024LL; }();
+        return v;
+    }
     inline bool Fits(long long add)
     {
+        if (PerThreadOn())
+        {
+            const long long q = ThreadQuotaBytes();
+            if (q <= 0) { return true; }   // unbounded
+            if (t_enum_bytes + t_bp_bytes + add <= q) { return true; }
+            Refused().fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
         const long long b = BudgetBytes();
         if (b <= 0) { return true; }                 // 0/unset = unbounded = byte-identical, unchanged
         if (PoolUsed().load(std::memory_order_relaxed) + add <= b) { return true; }
@@ -84479,6 +84680,7 @@ namespace plancache
     {
         (void)&t_releaser;   // odr-use: guarantees this thread's exit-releaser is constructed
         local += n;
+        if (t_enum_bytes + t_bp_bytes > t_game_peak) { t_game_peak = t_enum_bytes + t_bp_bytes; }
         const long long now = PoolUsed().fetch_add(n, std::memory_order_relaxed) + n;
         long long hi = PoolHiwater().load(std::memory_order_relaxed);
         bool new_hi = false;
@@ -84517,7 +84719,12 @@ namespace plancache
     inline std::atomic<long long> g_bp_lists{0}, g_bp_plans{0}, g_bp_pb{0}, g_bp_pond{0}, g_bp_look{0}, g_bp_tut{0};
     inline std::atomic<long long> g_bp_bytes{0}, g_bp_pb_bytes{0}, g_bp_pond_bytes{0};
     inline std::atomic<long long> g_bp_lazy_lists{0}, g_bp_priced{0}, g_bp_resident{0};
-    inline ThreadReleaser::~ThreadReleaser() { Release(t_enum_bytes); Release(t_bp_bytes); }
+    // UNITS CHARGED INSIDE A COMPUTATION a cache can skip (diagnostic): per cache, how many computations
+    // (misses) ran, how many of them charged work units, and the units -- read off the game's work meter
+    // around the computation. A hit skips exactly these units, so a refusal (a forced recompute) can move a
+    // game's units by them.
+    inline std::atomic<long long> g_cu_n[kCats], g_cu_nz[kCats], g_cu_units[kCats], g_cu_hits[kCats];
+    inline ThreadReleaser::~ThreadReleaser() { RecordGamePeak(); Release(t_enum_bytes); Release(t_bp_bytes); }
     struct PoolDumper
     {
         ~PoolDumper()
@@ -84527,11 +84734,27 @@ namespace plancache
                          BudgetBytes() >> 10, PoolHiwater().load() >> 10, PoolUsed().load() >> 10,
                          Refused().load(),
                          (PoolUsed().load() >> 20) > 1 ? "   <-- LEAK: a release site was missed" : "");
+            {
+                std::vector<long long> pk;
+                { std::lock_guard<std::mutex> lk(g_peaks_mu); pk = GamePeaks(); }
+                std::sort(pk.begin(), pk.end());
+                auto q = [&](double f) -> long long
+                { return pk.empty() ? 0 : pk[std::min(pk.size() - 1, static_cast<std::size_t>(f * static_cast<double>(pk.size())))] >> 10; };
+                std::fprintf(stderr, "[plan-pool] per-game peak (KB, %zu games): max %lld p99 %lld p95 %lld p50 %lld | per-thread %s quota %lld KB\n",
+                             pk.size(), pk.empty() ? 0LL : pk.back() >> 10, q(0.99), q(0.95), q(0.50),
+                             PerThreadOn() ? "ON" : "off", ThreadQuotaBytes() >> 10);
+            }
             std::fprintf(stderr, "[plan-pool] by cache (own peak / at the pool's peak, KB): m1-enum %lld / %lld"
                          "  m2-enum %lld / %lld  bp-cont %lld / %lld\n",
                          g_cat_hi[kCatM1].load() >> 10, g_cat_at_hi[kCatM1].load() >> 10,
                          g_cat_hi[kCatM2].load() >> 10, g_cat_at_hi[kCatM2].load() >> 10,
                          g_cat_hi[kCatBp].load() >> 10, g_cat_at_hi[kCatBp].load() >> 10);
+            for (int c = 0; c < kCats; ++c)
+            {
+                static const char* nm[kCats] = { "m1-enum", "m2-enum", "bp-cont" };
+                std::fprintf(stderr, "[plan-pool] %s computations=%lld charging-units=%lld units=%lld hits=%lld\n",
+                             nm[c], g_cu_n[c].load(), g_cu_nz[c].load(), g_cu_units[c].load(), g_cu_hits[c].load());
+            }
             std::fprintf(stderr, "[plan-pool] bp stored: lists=%lld plans=%lld (%lld KB) put-back clones=%lld (%lld KB)"
                          " ponder clones=%lld (%lld KB) look-top=%lld tutor=%lld | lazy lists=%lld priced=%lld KB"
                          " resident=%lld KB\n",
@@ -84619,6 +84842,7 @@ namespace enummemo
         // MTG_PB_LAZY_CANDS: `plans` is the list WITHOUT its lazily held put-back clone block when this
         // is active. A lazy caller gets both back; any other caller gets the materialised full list.
         PbLazyLayout lazy;
+        cachecharge::Cost cost;   // MTG_CACHE_HIT_CHARGE: the units the enumeration charged
     };
 
     // Fingerprint of the enumeration inputs the key does NOT (or conditionally does not) fold --
@@ -84714,6 +84938,24 @@ namespace enummemo
 std::string enummemo::Fingerprint(const GameState& state)
 {
     std::string s;
+    // 2026-10-29 (key-hole hunt, VERIFY builds only): the land-drop and hand-card facts a land
+    // enumeration reads, and the board's tapped state.
+    {
+        const Player& ap = state.ActivePlayer();
+        s += "lp=" + std::to_string(ap.lands_played_this_turn) + "/" + std::to_string(ap.LandDropsAvailable());
+        s += ";turn=" + std::to_string(state.turn_number) + ";hand=";
+        for (const Card& c : ap.hand)
+        {
+            s += c.m_name.str();
+            if (c.m_is_staged) { s += "(st" + std::to_string(c.m_staged_expiry) + ")"; }
+            if (c.m_impulse_no_land) { s += "(nl)"; }
+            s += ',';
+        }
+        s += ";bf=";
+        for (const Permanent& pm : state.battlefield)
+        { s += pm.card.m_name.str(); if (pm.tapped) { s += "(T)"; } s += ','; }
+        s += ';';
+    }
     // 96 -> 128 (2026-09-22): headroom, not necessity. The pool line is ~90 bytes at full width
     // and the `tkeep` pin is appended through this same buffer in a second pass below. snprintf
     // TRUNCATES silently, and a truncated sim key would drop exactly the pin it carries -- i.e.
@@ -84776,6 +85018,75 @@ std::size_t PbLazyLayout::EntryHeapBytes(std::size_t f) const
     return ApproxPlanBytes(protos[f]) - sizeof(TurnSolver::Plan)
          + (LookTopFan(f) ? static_cast<std::size_t>(fan_pin_w[f]) * sizeof(int) : 0);
 }
+// ---- THE PLAN CACHES KEY ON PHYSICAL CARDS TOO (MTG_PLAN_CACHE_EXACT_KEY, DEFAULT ON; 2026-10-29) ----------
+// ROOT CAUSE of the thread-count dependence measured on Unpredictable Cyclone (ledger, "Memory: M1/M3 ...":
+// held-out d3 gi79, +86 units in a binding 6-thread batch only). BuildBreakpointKey folds the libraries,
+// hands and graveyards by card NAME, but a derivation can read PHYSICAL identity: the search shuffle
+// (Library::ShuffleByKey) orders the library by splitmix(seed, card NUMBER), so two states whose zones hold
+// the same names but different copies shuffle -- and so draw, put back and fan -- differently. Cyclone
+// shuffles all the time (Scalding Tarn, Myriad Landscape, Long-Term Plans). MTG_BP_ENUM_LIBCHECK on gi79
+// read hits served under a library that differed BY COPY ONLY with CONTENT different from a fresh
+// derivation, within one decision; and the same game with the bp cache OFF (MTG_NO_BP_ENUM_CACHE) read
+// 6,316,101 units against 6,315,629 with it on -- while every derivation charged ZERO units. So whether a
+// lookup hit (a sibling's list) or recomputed (this state's list) changed the CONTENT served, and the pool
+// -- global, so filled by other threads -- decided which. Folding the physical card numbers makes a hit
+// serve exactly what a recompute would; with MTG_CACHE_HIT_CHARGE charging what a recompute would, the
+// caches move wall only. Applied to the three caches the global plan pool bounds (the bp continuation
+// cache and its canon-front memo, the m1 and m2 enumeration memos); the per-game, per-thread memos are
+// deterministic per game and keep their keys.
+static bool PlanCacheExactKeyOn()
+{
+    static const bool v = EnvOn("MTG_PLAN_CACHE_EXACT_KEY", true);
+    return v;
+}
+static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state)
+{
+    if (!PlanCacheExactKeyOn()) { return; }
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&h](std::uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+    for (const Player& p : state.players)
+    {
+        mix(0x11B0);
+        for (std::size_t i = 0, n = p.library.size(); i < n; ++i) { mix(static_cast<std::uint64_t>(p.library.RawAt(i).m_number)); }
+        mix(0x11B1);
+        for (const Card& c : p.hand) { mix(static_cast<std::uint64_t>(c.m_number)); }
+        mix(0x11B2);
+        for (const Card& c : p.graveyard) { mix(static_cast<std::uint64_t>(c.m_number)); }
+    }
+    mix(0x11B3);
+    for (const Permanent& pm : state.battlefield) { mix(static_cast<std::uint64_t>(pm.card.m_number)); }
+    mix(0x11B4);
+    for (const Card& c : state.exile) { mix(static_cast<std::uint64_t>(c.m_number)); }
+    // ...and WHICH copies were in hand as main 1 began (GameState::HeldSinceMain1, a per-card-NUMBER mask):
+    // a land held since main 1 is barred from the main-2 drop (HeldLandBarredFromMain2), so two states
+    // holding the same names -- one Forbidden Orchard held, one drawn since -- enumerate different m2 land
+    // plans. Found by MTG_ENUM_MEMO_VERIFY on Hinata2 seed 123024 gi24 (a served m2 list without its
+    // land-drop half, FP-equal state), present at 330cc85bf too. BuildSimKey never folded the mask.
+    if (state.m1start_hand_turn == state.TurnSeq())
+    { mix(0x11B5); mix(state.m1start_hand_mask[0]); mix(state.m1start_hand_mask[1]); }
+    // ...and the SEARCH CONTEXT a provider sub-search reads to decide whether (and how) it runs: beyond the
+    // horizon or in the depth-0 runner (the capped regimes), a decision root open, a finite budget to
+    // charge (the equip-route DFS's RunSearch regime ladder). Found on KittyEquipment seed 1015 gi14 d5: a
+    // list derived where the route did not run, served where a recompute runs (and charges) it.
+    mix(0x11B6);
+    mix((TurnSolver::InRolloutPlayout() ? 1u : 0u) | (TurnSolver::InD0Runner() ? 2u : 0u)
+        | (TurnSolver::DecisionRootOpen() ? 4u : 0u) | (TurnSolver::DecisionBudget() != nullptr ? 8u : 0u));
+    Fold(k, 0x9417C0);
+    Fold(k, h);
+}
+// The plan-pool unit census (MTG_PLAN_POOL_STATS): one computation a cache could have served.
+static inline void PlanCacheNoteComputation(int cat, long long units)
+{
+    if (!plancache::StatsOn()) { return; }
+    plancache::g_cu_n[cat].fetch_add(1, std::memory_order_relaxed);
+    if (units != 0)
+    {
+        plancache::g_cu_nz[cat].fetch_add(1, std::memory_order_relaxed);
+        plancache::g_cu_units[cat].fetch_add(units, std::memory_order_relaxed);
+    }
+}
+static inline void PlanCacheNoteHit(int cat)
+{ if (plancache::StatsOn()) { plancache::g_cu_hits[cat].fetch_add(1, std::memory_order_relaxed); } }
 static long long PbLazyListBytes(const std::vector<TurnSolver::Plan>& real, const PbLazyLayout& lz)
 {
     std::size_t b = plancache::ApproxPlansBytes(real) + lz.P * sizeof(TurnSolver::Plan);
@@ -84890,10 +85201,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         if (g_fresh_axis_enum)  { Fold(k, 0x0F5A); }
         if (g_condemn_suppress) { Fold(k, 0xC5B9); }
     }
+    FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
-    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
+    // MTG_CACHE_HIT_CHARGE: a hit is served at the units its enumeration charged, or not at all.
+    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
+        && CacheHitCharge(it->second.cost))
     {
-        enummemo::g_hits.fetch_add(1, std::memory_order_relaxed);
+        enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM1);
         if (enummemo::VerifyOn())
         {
             const int saved_md = groupwave::g_state.max_dropped;
@@ -84910,10 +85224,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 if (n < 5)
                 {
                     std::fprintf(stderr,
-                                 "[enum-memo] MISMATCH t%d %s: cached %zu plans md=%d vs fresh %zu md=%d\n",
+                                 "[enum-memo] MISMATCH t%d %s: cached %zu plans md=%d vs fresh %zu md=%d"
+                                 " (rollout_nest=%d fsline_nest=%d solver_nest=%d fresh_axis=%d suppress=%d"
+                                 " root_enum=%d cand_enum=%d)\n",
                                  state.turn_number, is_pre_combat ? "m1" : "m2",
                                  it->second.plans.size(), it->second.max_dropped,
-                                 fresh.size(), fresh_md);
+                                 fresh.size(), fresh_md, g_rollout_nest, g_fsline_nest, g_cs_solver_nest,
+                                 g_fresh_axis_enum ? 1 : 0, g_condemn_suppress ? 1 : 0, g_bp_root_enum ? 1 : 0,
+                                 g_search_candidate_enum ? 1 : 0);
+                    for (std::size_t q = 0; q < fresh.size() && q < 12; ++q)
+                    {
+                        std::fprintf(stderr, "    fresh  #%zu %s | pc=%d tut=%d disc=%d sweep=%d le=%d etbc=%d tap=%d fm=%d bp=%d/%d slot=%d\n", q,
+                                     FsPlanText(fresh[q]).c_str(), fresh[q].ponder_choice, fresh[q].tutor_choice,
+                                     fresh[q].discard_choice, fresh[q].sweep_choice, fresh[q].le_fire_choice,
+                                     fresh[q].etbcounter_choice, fresh[q].tapmode_choice, fresh[q].freshmode_choice,
+                                     fresh[q].bp_choice, fresh[q].bp_at, static_cast<int>(fresh[q].land_slot));
+                    }
+                    for (std::size_t q = 0; q < it->second.plans.size() && q < 12; ++q)
+                    {
+                        const TurnSolver::Plan& cp = it->second.plans[q];
+                        std::fprintf(stderr, "    cached #%zu %s | pc=%d tut=%d disc=%d sweep=%d le=%d etbc=%d tap=%d fm=%d bp=%d/%d slot=%d\n", q,
+                                     FsPlanText(cp).c_str(), cp.ponder_choice, cp.tutor_choice, cp.discard_choice,
+                                     cp.sweep_choice, cp.le_fire_choice, cp.etbcounter_choice, cp.tapmode_choice,
+                                     cp.freshmode_choice, cp.bp_choice, cp.bp_at, static_cast<int>(cp.land_slot));
+                    }
                     const std::string now = enummemo::Fingerprint(state);
                     std::fprintf(stderr, "    stored: %s\n    fresh : %s\n    %s\n",
                                  it->second.dbg.c_str(), now.c_str(),
@@ -84950,8 +85284,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     groupwave::g_state.max_dropped = 0;
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
+    const long long m1_u0 = gamework::t_used;
+    cachecharge::Scope m1_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumeratePlansWithLandUncached(state, is_pre_combat, pb_lazy); }
+    const cachecharge::Cost m1_cost = m1_ccs.Done();
+    PlanCacheNoteComputation(plancache::kCatM1, gamework::t_used - m1_u0);
     plancache::ReportHiwater("m1", state, plans);
     const bool lazy_now = pb_lazy != nullptr && pb_lazy->active;
     // DIAGNOSTIC (MTG_ENUM_DUPCENSUS=<min plans>, default off): on the first m1 list at least that big,
@@ -85039,9 +85377,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         const long long psz = lazy_now ? (PlanCacheStoredPriceOn() ? PbLazyStoredBytes(plans, *pb_lazy, nullptr)
                                                                    : PbLazyListBytes(plans, *pb_lazy))
                                        : static_cast<long long>(plancache::ApproxPlansBytes(plans));
-        if (plancache::Fits(psz))
+        if (m1_cost.storable && plancache::Fits(psz))
         {
             plancache::Acquire(psz, plancache::t_enum_bytes, plancache::kCatM1);
+            it->second.cost          = m1_cost;
             it->second.has_plans     = true;
             it->second.max_dropped   = own_md;
             it->second.plans         = plans;
@@ -85101,10 +85440,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         if (g_condemn_suppress) { Fold(k, 0xC5B9); }
     }
     if (t_rollout_narrow) { Fold(k, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
+    FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
-    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
+    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
+        && CacheHitCharge(it->second.cost))   // MTG_CACHE_HIT_CHARGE
     {
-        enummemo::g_hits.fetch_add(1, std::memory_order_relaxed);
+        enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM2);
         if (enummemo::VerifyOn())
         {
             const int saved_md = groupwave::g_state.max_dropped;
@@ -85121,9 +85462,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
                 if (n < 5)
                 {
                     std::fprintf(stderr,
-                                 "[enum-memo] MISMATCH t%d m2: cached %zu plans md=%d vs fresh %zu md=%d\n",
+                                 "[enum-memo] MISMATCH t%d m2: cached %zu plans md=%d vs fresh %zu md=%d"
+                                 " (rollout_nest=%d fsline_nest=%d solver_nest=%d narrow=%d)\n",
                                  state.turn_number, it->second.plans.size(),
-                                 it->second.max_dropped, fresh.size(), fresh_md);
+                                 it->second.max_dropped, fresh.size(), fresh_md,
+                                 g_rollout_nest, g_fsline_nest, g_cs_solver_nest, t_rollout_narrow ? 1 : 0);
+                    const std::vector<TurnSolver::Plan> cached_full = it->second.lazy.active
+                        ? CandSeq(it->second.plans, &it->second.lazy).Materialised() : it->second.plans;
+                    for (std::size_t q = 0; q < fresh.size(); ++q)
+                    {
+                        std::fprintf(stderr, "    fresh  #%zu %s pc=%d pb=%d tut=%d disc=%d sweep=%d le=%d etbc=%d tap=%d fresh=%d\n", q,
+                                     FsPlanText(fresh[q]).c_str(), fresh[q].ponder_choice, fresh[q].putback_choice,
+                                     fresh[q].tutor_choice, fresh[q].discard_choice, fresh[q].sweep_choice,
+                                     fresh[q].le_fire_choice, fresh[q].etbcounter_choice, fresh[q].tapmode_choice,
+                                     fresh[q].freshmode_choice);
+                    }
+                    for (std::size_t q = 0; q < cached_full.size(); ++q)
+                    { std::fprintf(stderr, "    cached #%zu %s pc=%d\n", q, FsPlanText(cached_full[q]).c_str(), cached_full[q].ponder_choice); }
                     const std::string now = enummemo::Fingerprint(state);
                     std::fprintf(stderr, "    stored: %s\n    fresh : %s\n    %s\n",
                                  it->second.dbg.c_str(), now.c_str(),
@@ -85155,8 +85510,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     // caller still gets the whole list. Other visits enumerate whole, as before.
     PbLazyLayout m2_lz;
     const bool m2_lazy = second_visit && BpLazyCandsOn();
+    const long long m2_u0 = gamework::t_used;
+    cachecharge::Scope m2_ccs;
     std::vector<TurnSolver::Plan> plans;
     { enummemo::BodyScope body; plans = EnumerateM2PlansBody(state, m2_lazy ? &m2_lz : nullptr); }
+    const cachecharge::Cost m2_cost = m2_ccs.Done();
+    PlanCacheNoteComputation(plancache::kCatM2, gamework::t_used - m2_u0);
     plancache::ReportHiwater("m2", state, plans);
     const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
@@ -85170,9 +85529,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         const long long psz = m2_lz.active ? (PlanCacheStoredPriceOn() ? PbLazyStoredBytes(plans, m2_lz, nullptr)
                                                                        : PbLazyListBytes(plans, m2_lz))
                                            : static_cast<long long>(plancache::ApproxPlansBytes(plans));
-        if (plancache::Fits(psz))
+        if (m2_cost.storable && plancache::Fits(psz))
         {
             plancache::Acquire(psz, plancache::t_enum_bytes, plancache::kCatM2);
+            it->second.cost          = m2_cost;
             it->second.has_plans     = true;
             it->second.max_dropped   = own_md;
             it->second.plans         = plans;
@@ -85348,6 +85708,7 @@ void TurnSolver::ClearBreakpointCachesForDiagnostic()
 
 void TurnSolver::ClearPerGameCaches()
 {
+    plancache::RecordGamePeak();   // MTG_PLAN_POOL_STATS: the finished game's peak holding
     solvememo::t_cache.clear();
     solvememo::t_m2cache.clear();
     M1MemoClear();
@@ -88121,10 +88482,44 @@ inline std::size_t ApproxFslBytes(const TurnSolver::SearchLine& line)
     { b += ApproxPlanBytes(pp.plan) - sizeof(TurnSolver::Plan); }
     return b;
 }
+// PER-THREAD SHARES OF THE FSL POOL (MTG_FSL_PER_THREAD, DEFAULT ON; 2026-10-29). The pool was one GLOBAL
+// counter, so whether a line-cache store was admitted -- and a refused store is searched again, at full
+// units (EDF seed 900411 gi161: 7.7M units at the default pool, 30.1M at 50 MB) -- depended on what the
+// OTHER worker threads held: a game's units, and through the budget its play, depended on thread count
+// whenever the pool bound (USER 2026-10-29: "We don't want any non-determinism regarding thread-count").
+// The line caches are per-DECISION and live on one thread, so a FIXED per-thread share makes every
+// admission a function of the decision's own history alone. The share is MTG_FSL_POOL / the machine's
+// worker count (membudget::Workers, the affinity CPU count -- a machine constant, NOT --threads), so the
+// process-wide bound is unchanged and can never bind. Unlike the plan caches this one cannot take
+// hit-equals-miss pricing: an entry is reused across iterative-deepening passes under other bounds, as a
+// truncated line or a no-win bound, so what a recompute at the hit site would charge (or return) is not a
+// recorded quantity. =0 restores the global admission.
+inline bool FslPerThreadOn() { static const bool v = EnvOn("MTG_FSL_PER_THREAD", true); return v; }
+inline long long FslThreadShare()
+{
+    static const long long v = [] {
+        const long long pool = FslPool();
+        if (pool <= 0) { return pool; }
+        const long long w = std::max<long long>(1, membudget::Workers());
+        return std::max<long long>(1, pool / w); }();
+    return v;
+}
+inline thread_local long long t_fsl_used = 0;   // this thread's live line-cache bytes (per-thread admission)
 inline bool FslPoolAcquire(long long kb)
 {
     const long long pool = FslPool();
     if (pool <= 0) { return true; }   // pool off: only the per-cache cap applies
+    if (FslPerThreadOn())
+    {
+        if (t_fsl_used + kb > FslThreadShare())
+        { FslPoolRefused().fetch_add(1, std::memory_order_relaxed); return false; }
+        t_fsl_used += kb;
+        const long long now = FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb;   // the gauge
+        long long hi = FslPoolHiwater().load(std::memory_order_relaxed);
+        while (now > hi
+               && !FslPoolHiwater().compare_exchange_weak(hi, now, std::memory_order_relaxed)) {}
+        return true;
+    }
     const long long now = FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb;
     if (now <= pool)
     {
@@ -88151,6 +88546,19 @@ struct DeterminismReport
         const long long p = plancache::Refused().load();
         const long long f = FslPoolRefused().load();
         if (p == 0 && f == 0) { return; }
+        // 2026-10-29: with hit-equals-miss pricing and the physical-card key the plan caches' refusals no
+        // longer move a result (a hit serves and charges what a recompute would), and the FSL pool admits
+        // per thread -- so a refusal is a fact about THIS game only. The warning stands only for a pool
+        // still run in its old mode.
+        const bool plan_legacy = !cachecharge::On() || !PlanCacheExactKeyOn();
+        const bool fsl_legacy  = !FslPerThreadOn();
+        if ((p == 0 || !plan_legacy) && (f == 0 || !fsl_legacy))
+        {
+            std::fprintf(stderr, "[determinism] pools refused stores (plan cache %lld, FSL line cache %lld) --"
+                         " thread-count invariant (hit-equals-miss pricing, exact plan-cache key, per-thread"
+                         " FSL shares).\n", p, f);
+            return;
+        }
         std::fprintf(stderr,
             "[determinism] WARNING: the shared memory pools refused stores (plan cache %lld, FSL "
             "line cache %lld). Per-game work units -- and so budgeted play at the start gate's edge "
@@ -88181,7 +88589,18 @@ inline DeterminismReport g_determinism_report;
 inline void FslPoolAdjust(long long delta_kb)
 {
     if (FslPool() > 0 && delta_kb != 0)
-    { FslPoolUsed().fetch_add(delta_kb, std::memory_order_relaxed); }
+    {
+        FslPoolUsed().fetch_add(delta_kb, std::memory_order_relaxed);
+        if (FslPerThreadOn()) { t_fsl_used += delta_kb; }
+    }
+}
+inline void FslPoolRelease(long long kb)
+{
+    if (FslPool() > 0 && kb != 0)
+    {
+        FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
+        if (FslPerThreadOn()) { t_fsl_used -= kb; }
+    }
 }
 struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                         TranspositionTable::KeyHash>
@@ -88202,8 +88621,7 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
     {
         if (this != &o)
         {
-            if (FslPool() > 0 && charged_kb != 0)
-            { FslPoolUsed().fetch_sub(charged_kb, std::memory_order_relaxed); }
+            FslPoolRelease(charged_kb);
             std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                TranspositionTable::KeyHash>::operator=(std::move(o));
             charged_kb = o.charged_kb;
@@ -88211,11 +88629,7 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
         }
         return *this;
     }
-    ~FSLineCache()
-    {
-        if (FslPool() > 0 && charged_kb != 0)
-        { FslPoolUsed().fetch_sub(charged_kb, std::memory_order_relaxed); }
-    }
+    ~FSLineCache() { FslPoolRelease(charged_kb); }
 };
 
 // MTG_FS_NOWIN_CACHE: DEFAULT ON; =0 restores the win-only memo.
@@ -103234,6 +103648,7 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
         }
     }
     if (t_rollout_narrow) { Fold(key, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
+    FoldPhysicalCards(key, state);   // MTG_PLAN_CACHE_EXACT_KEY
     *out = key;
     return true;
 }
@@ -104050,6 +104465,74 @@ void BpDeriveGlobalCounters(int ctx, std::uint64_t* n, std::uint64_t* plans, std
     *n = bpderive::g_n[ctx].load(); *plans = bpderive::g_plans[ctx].load(); *us = bpderive::g_us[ctx].load();
 }
 
+// MTG_CACHE_HIT_CHARGE: a cached continuation derivation's SIDE COUNTERS (see cachecharge::Cost). Measured
+// on Hinata2 seed 123024 gi24 (d3 b10): with every list content-verified identical (MTG_BP_ENUM_VERIFY 0
+// CONTENT-DIFF), the bp cache OFF still read 379,907 units against 379,700 on -- the derivations' group-cap
+// drops, truncations and budget binds reached the watermark and the no-win store gates only when the
+// lookup missed.
+// THE DERIVATION'S APPLY CHANNELS (MTG_BP_DERIVE_ISOLATE, DEFAULT ON; 2026-10-29). A continuation derivation
+// enumerates, and the enumeration APPLIES plans on copies (the land-position prefix probe, ...); those
+// applies reach breakpoints and bump the thread-local channels the CALLER reads as before/after deltas or
+// last-values around its own apply -- g_bp_any_last / g_bp_classon_last / g_bp_latent9_last /
+// g_bp_truncasym_last / g_look_top_resolved (the stillborn decline, the NOBP skip, the uniform collapse, the
+// slot-prefix probe) and g_bp_seen_last / g_bp_fired_last / g_bp_cands_last / g_bp_demoted_last /
+// g_bp_chain_ci_last. Whether the caller saw those nested events therefore depended on whether its lookup
+// HIT (nothing ran) or MISSED (the derivation ran) -- i.e. on cache residency. MEASURED: Hinata2 seed
+// 123024 gi24 d3 b10, every served list exactly equal to a fresh derivation (MTG_BP_ENUM_VERIFY=3), read
+// 379,907 units with the bp cache off and 379,700 on. The derivation now leaves every such channel as it
+// found it, so a miss is observably a hit: the caller's deltas count its OWN apply's events, as their
+// readers assume. =0 restores the leak.
+static bool BpDeriveIsolateOn()
+{
+    static const bool v = EnvOn("MTG_BP_DERIVE_ISOLATE", true);
+    return v;
+}
+struct BpChannels
+{
+    bool live = false;
+    std::uint64_t any = 0, classon = 0, latent9 = 0, truncasym = 0;
+    int look = 0, seen = 0, fired = 0, cands = 0, demoted = 0, chain_ci = -2;
+    void Save()
+    {
+        if (!BpDeriveIsolateOn()) { return; }
+        live = true;
+        any = g_bp_any_last; classon = g_bp_classon_last; latent9 = g_bp_latent9_last; truncasym = g_bp_truncasym_last;
+        look = g_look_top_resolved; seen = g_bp_seen_last; fired = g_bp_fired_last; cands = g_bp_cands_last;
+        demoted = g_bp_demoted_last; chain_ci = g_bp_chain_ci_last;
+    }
+    void Restore() const
+    {
+        if (!live) { return; }
+        g_bp_any_last = any; g_bp_classon_last = classon; g_bp_latent9_last = latent9; g_bp_truncasym_last = truncasym;
+        g_look_top_resolved = look; g_bp_seen_last = seen; g_bp_fired_last = fired; g_bp_cands_last = cands;
+        g_bp_demoted_last = demoted; g_bp_chain_ci_last = chain_ci;
+    }
+};
+struct BpSide { int saved_md = 0; unsigned long long d0 = 0, t0 = 0, b0 = 0; };
+static BpSide BpSideBegin()
+{
+    BpSide b;
+    b.saved_md = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = 0;
+    b.d0 = g_condemn_drops; b.t0 = g_fs_trunc_events; b.b0 = budgetbind::t_binds;
+    return b;
+}
+static void BpSideEnd(const BpSide& b, cachecharge::Cost& c)
+{
+    c.md      = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = std::max(b.saved_md, c.md);
+    c.condemn = g_condemn_drops - b.d0;
+    c.trunc   = g_fs_trunc_events - b.t0;
+    c.binds   = budgetbind::t_binds - b.b0;
+}
+static void BpSideReplay(const cachecharge::Cost& c)
+{
+    if (!cachecharge::On()) { return; }
+    groupwave::g_state.max_dropped = std::max(groupwave::g_state.max_dropped, c.md);
+    g_condemn_drops   += c.condemn;
+    g_fs_trunc_events += c.trunc;
+    budgetbind::t_binds += c.binds;
+}
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key)
 {
@@ -104122,6 +104605,50 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 for (const TurnSolver::Plan& p : fresh)  { fa.push_back(BpCandFingerprint(p)); }
                 for (const TurnSolver::Plan& p : served) { sa.push_back(BpCandFingerprint(p)); }
                 bool same_seq = (fa == sa);
+                // MTG_BP_ENUM_VERIFY=3 (2026-10-29): EXACT comparison, field by field (Plan::operator==), with
+                // the fold ids (put-back / dig / bounce groups: counters, labels only) compared up to a
+                // consistent relabelling -- the fingerprint above skips fields, so "CONTENT-DIFF 0" cannot
+                // rule out a served list that differs in one of them.
+                static const int s_lvl3 = EnvInt("MTG_BP_ENUM_VERIFY", 0);
+                if (s_lvl3 >= 3)
+                {
+                    static std::atomic<long long> s_exact_bad{0}, s_exact_n{0};
+                    s_exact_n.fetch_add(1, std::memory_order_relaxed);
+                    std::unordered_map<int, int> rm[3];
+                    bool ok = fresh.size() == served.size();
+                    std::size_t bad_i = SIZE_MAX;
+                    for (std::size_t i = 0; ok && i < fresh.size(); ++i)
+                    {
+                        TurnSolver::Plan a = served[i];
+                        const TurnSolver::Plan& b = fresh[i];
+                        int* fa_[3] = { &a.putback_group, &a.dig_group, &a.bounce_group };
+                        const int fb_[3] = { b.putback_group, b.dig_group, b.bounce_group };
+                        for (int f = 0; f < 3; ++f)
+                        {
+                            if ((*fa_[f] == 0) != (fb_[f] == 0)) { ok = false; break; }
+                            if (*fa_[f] == 0) { continue; }
+                            const auto ins = rm[f].emplace(*fa_[f], fb_[f]);
+                            if (ins.first->second != fb_[f]) { ok = false; break; }
+                            *fa_[f] = fb_[f];
+                        }
+                        if (ok && !(a == b)) { ok = false; }
+                        if (!ok) { bad_i = i; }
+                    }
+                    if (!ok)
+                    {
+                        const long long nb = s_exact_bad.fetch_add(1, std::memory_order_relaxed);
+                        if (nb < 12)
+                        {
+                            std::string d = (bad_i != SIZE_MAX && bad_i < fresh.size() && bad_i < served.size())
+                                          ? PbVerifyFieldDiff(served[bad_i], fresh[bad_i]) : std::string(" (size)");
+                            std::fprintf(stderr, "[bp-enum-verify] EXACT-DIFF #%lld turn=%d served=%zu fresh=%zu at %zd:%s\n",
+                                         nb, state.turn_number, served.size(), fresh.size(),
+                                         bad_i == SIZE_MAX ? -1 : static_cast<std::ptrdiff_t>(bad_i), d.c_str());
+                        }
+                    }
+                    if ((s_exact_n.load() % 20000) == 0)
+                    { std::fprintf(stderr, "[bp-enum-verify] exact checked=%lld bad=%lld\n", s_exact_n.load(), s_exact_bad.load()); }
+                }
                 std::sort(fa.begin(), fa.end());
                 std::sort(sa.begin(), sa.end());
                 bool same_set = (fa == sa);   // multiset: what soundness actually requires
@@ -104271,7 +104798,14 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                     bpuse::g_stats.branched[it->second.use_born].fetch_add(1, std::memory_order_relaxed);
                 }
             }
-            return &it->second;
+            // MTG_CACHE_HIT_CHARGE: served only where a recompute would run the same way, and then at the
+            // units a recompute would charge; otherwise this lookup derives afresh (below), like a miss.
+            if (CacheHitCharge(it->second.cost))
+            {
+                BpSideReplay(it->second.cost);
+                PlanCacheNoteHit(plancache::kCatBp);
+                return &it->second;
+            }
         }
     }
 
@@ -104316,10 +104850,19 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     }
     PbLazyLayout plans_lz;   // M1: the list's lazy blocks and its selection (BpEnumEntry)
     CandOrder    plans_ord;
+    const long long bp_u0 = gamework::t_used;
+    cachecharge::Scope bp_ccs;   // MTG_CACHE_HIT_CHARGE: what this derivation charges, by budget
+    const BpSide bp_side = BpSideBegin();
+    BpChannels bp_chan;   // MTG_BP_DERIVE_ISOLATE
+    bp_chan.Save();
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted,
                                                                   &plans_lz, &plans_ord);
+    bp_chan.Restore();
+    cachecharge::Cost bp_cost = bp_ccs.Done();
+    BpSideEnd(bp_side, bp_cost);
+    PlanCacheNoteComputation(plancache::kCatBp, gamework::t_used - bp_u0);
     if (bpderive::On()) { --bpderive::t_depth; }
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (bpuse::On())
@@ -104376,7 +104919,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
-    if (keyed && !bp_interrupted && !aa_cut_inside)
+    if (keyed && !bp_interrupted && !aa_cut_inside && bp_cost.storable)
     {
         if (BpEnumProbeOn())
         {
@@ -104419,6 +104962,16 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         if (cache.size() >= s_bp_enum_cap || !plancache::Fits(psz))
         {
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
+            // DIAGNOSTIC (MTG_BP_SCRATCH_KEEP=1): evicted entries are moved aside, not destroyed, so a caller
+            // still holding one (outer frame) reads what it was handed.
+            static const bool s_keep_ev = EnvOn("MTG_BP_SCRATCH_KEEP");
+            if (s_keep_ev)
+            {
+                static thread_local std::deque<BpEnumEntry> s_evicted;
+                static thread_local std::uint64_t s_ev_game = 0;
+                if (s_ev_game != bplibcheck::t_game) { s_evicted.clear(); s_ev_game = bplibcheck::t_game; }
+                for (auto& kv : cache) { s_evicted.push_back(std::move(kv.second)); }
+            }
             cache.clear();
             plancache::Release(plancache::t_bp_bytes);
         }
@@ -104474,6 +105027,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 }
             }
             BpEnumEntry ent;
+            ent.cost    = bp_cost;
             ent.lazy    = std::move(plans_lz);
             ent.ord     = std::move(plans_ord);
             ent.plans   = std::move(plans);
@@ -104507,6 +105061,20 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // nothing is reused across calls -- the no-cache world stays a true re-probe-every-time A/B).
     // Declared, and already emptied, above the derivation.
     if (bpderive::On()) { bpderive::g_uncached[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
+    // DIAGNOSTIC (MTG_BP_SCRATCH_KEEP=1): every uncached entry gets storage of its own for the rest of the
+    // game, so no later derivation can overwrite one a caller still reads (the scratch lifetime test).
+    static const bool s_keep = EnvOn("MTG_BP_SCRATCH_KEEP");
+    if (s_keep)
+    {
+        static thread_local std::deque<BpEnumEntry> s_kept;
+        static thread_local std::uint64_t s_kept_game = 0;
+        if (s_kept_game != bplibcheck::t_game) { s_kept.clear(); s_kept_game = bplibcheck::t_game; }
+        s_kept.emplace_back();
+        BpEnumEntry& e = s_kept.back();
+        e.lazy = std::move(plans_lz); e.ord = std::move(plans_ord);
+        e.plans = std::move(plans); e.demoted = std::move(demoted);
+        return &e;
+    }
     scratch = BpEnumEntry{};
     scratch.lazy    = std::move(plans_lz);
     scratch.ord     = std::move(plans_ord);
@@ -104575,9 +105143,14 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     if (keyed)
     {
         const auto it = bpcache::t_plans.find(key);
+        // MTG_CACHE_HIT_CHARGE: a full entry's derivation and the front-only one charge the same units
+        // (they differ only in the put-back / Ponder / look-top clones, which no charging site builds),
+        // so the full entry's cost is what the front-only recompute here would charge.
         if (it != bpcache::t_plans.end()
-            && !(BpEnumEpochScoped() && it->second.epoch != g_decision_epoch))
+            && !(BpEnumEpochScoped() && it->second.epoch != g_decision_epoch)
+            && CacheHitCharge(it->second.cost))
         {
+            BpSideReplay(it->second.cost);
             if (s_rollout_stats) { bpcanon::g_full_hits.fetch_add(1, std::memory_order_relaxed); }
             const CandSeq v = it->second.View();   // M1: the entry may be lazy
             if (v.empty()) { return false; }
@@ -104586,8 +105159,10 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         }
         const auto jt = bpcanon::t_fronts.find(key);
         if (jt != bpcanon::t_fronts.end()
-            && !(BpEnumEpochScoped() && jt->second.epoch != g_decision_epoch))
+            && !(BpEnumEpochScoped() && jt->second.epoch != g_decision_epoch)
+            && CacheHitCharge(jt->second.cost))
         {
+            BpSideReplay(jt->second.cost);
             if (s_rollout_stats) { bpcanon::g_hits.fetch_add(1, std::memory_order_relaxed); }
             if (!jt->second.has) { return false; }
             out = jt->second.front;
@@ -104598,9 +105173,16 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
     // An INTERRUPTED derivation (the per-game backstop, or MTG_BP_DERIVE_METER=2) returns EMPTY: served, never
     // stored -- BpEnumEntryFor's rule, which this twin did not apply until the backstop could interrupt here.
     bool bp_interrupted = false;
+    cachecharge::Scope fr_ccs;   // MTG_CACHE_HIT_CHARGE
+    const BpSide fr_side = BpSideBegin();
+    BpChannels fr_chan;   // MTG_BP_DERIVE_ISOLATE
+    fr_chan.Save();
     std::vector<TurnSolver::Plan> plans =
         BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/true, /*demoted_out=*/nullptr,
                                  /*front_only=*/true, &bp_interrupted);
+    fr_chan.Restore();
+    cachecharge::Cost fr_cost = fr_ccs.Done();
+    BpSideEnd(fr_side, fr_cost);
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (s_rollout_stats) { bpcanon::g_derives.fetch_add(1, std::memory_order_relaxed); }
     static const bool s_verify = EnvOn("MTG_BP_CANON_FRONT_VERIFY");
@@ -104617,7 +105199,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
                          state.turn_number, is_pre_combat ? "m1" : "m2", full.size(), plans.size());
         }
     }
-    if (keyed && !aa_cut_inside && !bp_interrupted)
+    if (keyed && !aa_cut_inside && !bp_interrupted && fr_cost.storable)
     {
         static const std::size_t s_cap = static_cast<std::size_t>(
             std::max(1, EnvInt("MTG_BP_CANON_FRONT_CAP", 16384)));
@@ -104630,6 +105212,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         e.has   = !plans.empty();
         e.front = e.has ? plans.front() : TurnSolver::Plan{};
         e.epoch = g_decision_epoch;
+        e.cost  = fr_cost;
     }
     if (plans.empty()) { return false; }
     out = std::move(plans.front());
@@ -108505,6 +109088,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_aa_route,         MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kAaRoute]))              \
     X(u_meter_rollout_step, MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterRolloutStep]))   \
     X(u_meter_greedy_walk,  MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterGreedyWalk]))    \
+    X(u_cache_hit,        MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kCacheHit]))             \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
