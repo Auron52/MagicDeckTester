@@ -149,6 +149,9 @@ TEST_CASE("Cyclone phase 5: the cycle-seed pin fold drops only unreadable pins, 
 {
     EnsureCards5();
     heurarm::Clear();
+    // The fold, not the cycler rule, is under test: the rule (default ON since 2026-10-29) would keep the Street Wraith
+    // for the Cyclone in hand and remove the Wraith seeds this fixture counts.
+    ArmScope5 _cyc(heurarm::CYCLONE_CYCLER_RULE, 0);
     // Cyclone in HAND (not castable: no red), a Curator in hand (castable: four Islands), Street Wraith; no watcher
     // out. CollectActions emits Wraith seeds j in {0,1} x {take, decline (an Ulamog), take-and-Remand}.
     GameState s = Base5(4, { kHunger, kEmrakul });
