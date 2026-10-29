@@ -5602,7 +5602,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // The record carries the step's REALISED pins (a searched cycle seed: Curator's scry j in
                 // devour_count, Cyclone's free cast in ponder_keep; -1 / -1 for every legacy dig), and a
                 // replaced draw's free cast is resolved before the nested records replay.
-                PerformDigFull(state, a.card_name, a.dig_sacrifice, a.devour_count, a.ponder_keep, resolve_stack);
+                PerformDigFull(state, a.card_name, a.dig_sacrifice, a.devour_count, a.ponder_keep, resolve_stack,
+                               a.seed_pay_split);
             }
             // A GO-OFF ROUTE recorded as the continuation. This branch was MISSING, and a missing
             // branch here is silent: the search's own continuation apply (apply_continuation_plan ->
@@ -8778,7 +8779,7 @@ bool AIEngine::UseSurplusLandAbilities(GameState& state,
     if (cycle_seed != nullptr)
     {
         const DigOutcome o = PerformDigFull(state, cycle_seed->card_name, false, cycle_seed->devour_count,
-                                            cycle_seed->ponder_keep, resolve_stack);
+                                            cycle_seed->ponder_keep, resolve_stack, cycle_seed->seed_pay_split);
         if (o != DigOutcome::Failed && ResolveProvider(state).CyclesAreSearched()) { return true; }
         if (o == DigOutcome::DrewLand) { dug_a_land = true; }
     }
@@ -8889,7 +8890,8 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
 
 AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::string& source, bool is_sacrifice,
                                               int scry_pin, int fc_pin,
-                                              const std::function<void(GameState&)>& resolve_stack)
+                                              const std::function<void(GameState&)>& resolve_stack,
+                                              std::int32_t pay_split)
 {
     Player& ap = state.ActivePlayer();
     const CardDefinition* sd = CardDatabase::Instance().Lookup(source);
@@ -8936,6 +8938,8 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         if (it == ap.hand.end()) { return DigOutcome::Failed; }
         {
             const CycleSeedPayScope _csp;   // lockstep with the rollout's cycle_chain_step (PlanTraits::cycle_seed_pips)
+            // THE PAYMENT SPLIT (ledger Q61): the seed's searched split, lockstep with cycle_chain_step. 0 -> no hold.
+            const SeedPaySplitScope _sps(SeedPaySplitHoldMask(state, state.active_player_index, pay_split));
             if (!TapForCost(state, cyc_cost, avail, false)) { return DigOutcome::Failed; }
         }
         // TapForCost may have moved the hand (a payment that mutates zones): re-find the copy.
