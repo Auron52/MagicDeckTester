@@ -1438,6 +1438,18 @@ public:
         // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key,
         // the dominance Xaxes key and (live) the breakpoint key.
         std::vector<int> look_top_pins;
+        // bp_pre -- the FOURTH breakpoint axis beside bp_choice / bp_at / bp_all: the earlier entries
+        // of a deviation SEQUENCE (MTG_BP_DEV_SEQ; docs/design/bp-empty-arm-deferred-site.md 6.1).
+        // bp_pre[i] is the continuation choice at
+        // class-on occurrence i < bp_at -- a rank or a sentinel, exactly what bp_choice holds -- or -1:
+        // untargeted, so that occurrence plays as every untargeted one does (the nested canon). The
+        // pair (bp_pre, bp_choice@bp_at) therefore carries several simultaneous deviations, which is
+        // what the bp_at axis alone (one deviation per apply) cannot express. Only the wave walker
+        // ever sets it, on a compound variant built off an already-scored variant, so it is empty on
+        // every other plan and every reader below sees exactly the old single deviation. Ignored when
+        // bp_choice < 0 or bp_all. Read through TurnSolver::BpChoiceAt, by the rollout and all three
+        // executor twins alike.
+        std::vector<int> bp_pre;
         //   combat_crack_choice -- crack Khalni Heart Expedition(s) IN COMBAT, after Primeval Titan's
         //     attack trigger filled them and before damage (a bitmask over the Expeditions eligible at
         //     that point, battlefield order; -1 = no crack). Rides GameState::
@@ -1783,6 +1795,9 @@ public:
         // the search scored a turn in which candidate k was taken at every breakpoint, so the
         // executor must realise that same turn or the committed line diverges from the scored one.
         bool bp_all = false;
+
+        // ...and Plan::bp_pre (MTG_BP_DEV_SEQ, declared beside look_top_pins to keep the layout packed)
+        // is the FOURTH: a deviation SEQUENCE's earlier entries. See there.
 
         // Did WAVE 0 (AppendBreakpointVariants) fan this BASE plan out? Set on the base plan, never
         // on a variant. MTG_BP_MAXBASE caps how many breakpoint-opening plans get variants at all,
@@ -2158,6 +2173,13 @@ public:
     //  * Untargeted -- a later one; None -- the plan targets nothing.
     enum class BpOccurrence : std::int8_t { None, Target, PreTarget, Untargeted };
     static BpOccurrence ClassifyBpOccurrence(const Plan& p, int idx);
+    // THE ONE READER of a plan's searched continuation at class-on occurrence `idx` (the ordinal above):
+    // the choice the plan carries there -- bp_choice at bp_at (or at every occurrence under bp_all),
+    // a bp_pre entry before it (MTG_BP_DEV_SEQ) -- or -1 when the plan does not target `idx`. A rank or
+    // a sentinel (kBpEmptyChoice, kBpChainChoice + j, kBpDemotedChoice + j); every one is >= 0, so
+    // ">= 0" is "targeted". The rollout's bp_searched_plan and the executor's three twins (the main
+    // site, the pod chain, site 9) all resolve through it, so they cannot disagree about a sequence.
+    static int BpChoiceAt(const Plan& p, int idx);
     // At an occurrence the executor does not replay, does it MIRROR the rollout's canon (true) or re-solve
     // (false)? A verified committed line mirrors every one; an unverified (estimate) commit mirrors only up
     // to the plan's own target -- after it, the estimate re-solve is the designed behaviour (the search
@@ -2582,6 +2604,16 @@ public:
                                                           int hosted = -1, int hosted_at = -1,
                                                           int hosted_want = -1, int demoted_len = 0,
                                                           int hosted_demoted = 0);
+    // MTG_BP_DEV_SEQ's walk, for the unit test: one hand-out per step with its whole deviation
+    // sequence. `reach_of(v)` plays the apply: how many class-on occurrences that variant's apply
+    // reached, counting one it could reach only by targeting it (the site-9 re-open's latent count).
+    // Every list is `list_len` long. `seed_*` seeds one host-applied (wave-0) variant, as the hosts do (a
+    // negative reach, there as from reach_of, is a LATENT reach of -reach).
+    struct DevSeqStep { std::vector<int> pre; int bp_choice; int bp_at; };
+    static std::vector<DevSeqStep> WaveWalkerDevSeqForTest(const GameState& state,
+                                                           const std::vector<Plan>& plans, int list_len,
+                                                           const std::function<int(const Plan&)>& reach_of,
+                                                           int seed_pos = -1, int seed_reach = 0);
 
     // BREAKPOINT SITE 7 -- the Birthing Pod CHAIN (bit 7 of MTG_BP_SITES, default ON). A Pod
     // activation's fetch is a mid-phase event that creates a NEW actionable object: the fetched
