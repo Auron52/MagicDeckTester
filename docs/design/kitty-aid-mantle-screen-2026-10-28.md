@@ -1,7 +1,7 @@
 # KittyEquipment screen: a 2nd Sigarda's Aid, and Paradise Mantle as a 21st/22nd {0}-drop (2026-10-28)
 
-Status: SCREENED. Held-out confirmation of the only improving arm (`m1_spear`) pending at the time
-of writing -- see the bottom section.
+Status: CLOSED 2026-10-29. USER: "It looks like Paradise Mantle probably does not earn a spot for real
+play." No list change. The held-out `--confirm m1_spear` was NOT run (stopped as moot at close).
 
 ## The questions (USER 2026-10-28)
 
@@ -86,6 +86,7 @@ conservative, while the small positive deltas (aid2_den, m1_plains, m1_den) coul
 
 ## Open
 
-* Held-out confirmation of `m1_spear` (`--confirm m1_spear`, disjoint seeds).
+* `--confirm m1_spear` (disjoint seeds) was never run; the -0.015 is the selection-biased screen
+  number. Only worth running if Shadowspear 2 -> 1 is ever reconsidered.
 * Remote Farm's measured weight (cutting one costs ~0.08-0.11t) says the mana base has no spare land
   at all; worth remembering before any future land cut on this list.
