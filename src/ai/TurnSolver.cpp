@@ -76404,7 +76404,16 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // F2 (MTG_PB_EXACT_WIDTH, see PutBackExactWidth): the resolution's exact count when it is
                 // predictable, else the upper bound.
                 bool w_is_exact = false;   // false: a tight upper bound (a ritual ahead of it may be dropped)
-                const int w_exact = PbExactWidthOn() ? PutBackExactWidth(state, p, ai, *d, &w_is_exact) : -1;
+                int w_exact = PbExactWidthOn() ? PutBackExactWidth(state, p, ai, *d, &w_is_exact) : -1;
+                // The provider's PLAN-LEVEL admission (CantripPlansActive / CantripFanCap, a hard prune, default
+                // off) shortens the resolution's list below the class count: the exact count is then an upper
+                // bound, capped like PutBackAxisWidth's (integration of F2 with the plan-level prunes).
+                if (w_exact >= 0 && ResolveProvider(state).CantripPlansActive(state, /*putback=*/true))
+                {
+                    w_is_exact = false;
+                    const int cap = ResolveProvider(state).CantripFanCap(state, /*putback=*/true);
+                    if (cap > 0) { w_exact = std::min(w_exact, cap); }
+                }
                 const int w = w_exact >= 0 ? w_exact : PutBackAxisWidth(state, p, ai, *d);
                 if (pb_materialize)   // diagnostic counters (one per real fan; read by the [pb-exact-width] line)
                 {
@@ -81447,6 +81456,12 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         for (const Card& c : p.hand) { mix(static_cast<std::uint64_t>(c.m_number)); }
         mix(0x11B2);
         for (const Card& c : p.graveyard) { mix(static_cast<std::uint64_t>(c.m_number)); }
+        // ...and WHAT THE OWNER KNOWS of the library (Library::KnownTopMask, the known-library tracker): the
+        // plan-level prunes read it inside cached derivations (CycloneProvider's CycleSeedAdmissionSets and
+        // CycAvailableKnown: a Cyclone KNOWN on top), so two states with the same physical library but different
+        // known positions can derive different lists. Integration of the exact key with the prunes commit.
+        mix(0x11B7);
+        mix(static_cast<std::uint64_t>(p.library.KnownTopMask()));
     }
     mix(0x11B3);
     for (const Permanent& pm : state.battlefield) { mix(static_cast<std::uint64_t>(pm.card.m_number)); }
