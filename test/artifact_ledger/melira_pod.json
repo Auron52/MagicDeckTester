@@ -1,0 +1,29 @@
+{
+ "deck": "melira_pod",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
+   "kind": "mulligan",
+   "verdict": "adopted-trade",
+   "ident": "1172355372849beaf94082bc0aff2f1faaeabccb",
+   "frozen": "99977194beb541fd50db5bd30b5a2d8f5fc150ee",
+   "src_tree": "fa79016e8b371054e9a0b60b7eae5f01a5e5a78c",
+   "date": "2026-10-28",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.012594,
+   "cost": [
+    1.019,
+    0.008,
+    32
+   ],
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED by USER direction 2026-10-29 (new-vs-old -0.012594 t, 25/32 seeds; cost 1.019x work units, se 0.008, 32 seeds -- a TRADE by the better-overall rule, computed by hand because versus_cost globbed the stem with its space; recipe fast)"
+  }
+ ]
+}
