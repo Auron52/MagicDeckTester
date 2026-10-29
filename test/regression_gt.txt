@@ -1,7 +1,9 @@
-# Regression ground truth -- commit 2c421078f  date 2026-10-29
+# Regression ground truth -- commit 94e2f6a02  date 2026-10-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
+# accepted-with-regressions (smoke, 2026-10-29): LifegainHeliodCombo USER rules + measured amendments ADOPTED (USER 2026-10-29; docs/design/lifegainheliodcombo-order-and-discard-proposal.md): only lhc rows move; 1 searched slower (lhc_smoke_d3_s1001 gi28 4->5) is budget churn, recovers at 4x/16x and at d8 b0; d0 10 faster / 0 slower. Held-out confirm (seeds 989001/991001, 4000 games/format): std 4.7665->4.7627, 2HG 4.9970->4.9940, every slower game recovers at d8 b0.
+# accepted-with-regressions (regression, 2026-10-29): LifegainHeliodCombo USER rules + measured amendments ADOPTED (USER 2026-10-29; docs/design/lifegainheliodcombo-order-and-discard-proposal.md): only lhc rows move; 1 searched slower (lhc_regression_d5_s2002 gi307 4->5) is budget churn, recovers at 4x/16x and at d8 b0; d0 10 faster / 0 slower. Held-out confirm (seeds 989001/991001, 4000 games/format): std 4.7665->4.7627, 2HG 4.9970->4.9940, every slower game recovers at d8 b0.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -67,9 +69,9 @@ breaching_smoke_d5_s1001=3.0971/4c4debfd5590bdff
 critter_smoke_d0_s1001=4.5540/3286554916a4e1e5
 critter_smoke_d3_s1001=4.3800/92440bbc40191c8c
 critter_smoke_d5_s1001=4.3257/7ed9d50f5cc73379
-lhc_smoke_d0_s1001=5.2110/44bf51291d47a3f1
-lhc_smoke_d3_s1001=4.8600/e299e9bcd2527289
-lhc_smoke_d5_s1001=4.8057/5aed28568582e79f
+lhc_smoke_d0_s1001=5.2010/ba5345e77f9cd353
+lhc_smoke_d3_s1001=4.8800/d92eb6b2434ddcb8
+lhc_smoke_d5_s1001=4.8000/05b8d5a443eb5ee9
 melira_smoke_d0_s1001=6.2610/68e2ba865d10ad9f
 melira_smoke_d3_s1001=4.7600/703357d4300d1657
 melira_smoke_d5_s1001=4.6300/e6536d5d4ff9414d
@@ -97,7 +99,7 @@ kittyv32hg_smoke_d5_s1001=4.3800/8fe9c4a14bdc44de
 dragons2hg_smoke_d5_s1001=6.1800/7f72b7d689ed512a
 breaching2hg_smoke_d5_s1001=3.0800/67fcbad4be2fdae5
 critter2hg_smoke_d5_s1001=4.6800/c744ea5465e31c13
-lhc2hg_smoke_d5_s1001=5.0800/2035184c6f779f54
+lhc2hg_smoke_d5_s1001=5.0800/9ce1e010a5c5a993
 melira2hg_smoke_d5_s1001=4.8000/ea75714af4467a80
 pirates2hg_smoke_d5_s1001=4.9000/c61d3e4cd78aeae7
 soldiers2hg_smoke_d5_s1001=4.9800/665bdae63e61943d
@@ -181,8 +183,8 @@ creature_giving_regression_d3_s30001=4.7000/7baac9b052c74d71
 creature_giving_regression_d5_s30001=4.7000/c874ab3087f6396a
 critter_regression_d3_s30001=4.3000/e84b14b6b1e267e8
 critter_regression_d5_s30001=4.3000/e84b14b6b1e267e8
-lhc_regression_d3_s30001=4.9000/f0f91b450cc439a2
-lhc_regression_d5_s30001=4.9000/dce1e963af6732f0
+lhc_regression_d3_s30001=4.9000/ec166a16c0593d4b
+lhc_regression_d5_s30001=4.9000/4c97096d64241cc1
 dragons_regression_d3_s30001=5.7000/60632b777f5dafe9
 dragons_regression_d5_s30001=5.7000/60632b777f5dafe9
 dragonstorm_regression_d3_s30201=4.6667/9e6254f78e142f87
@@ -317,10 +319,10 @@ critter_regression_d0_s2002=4.5180/7882bc1ad21cd0aa
 critter_regression_d3_s2002=4.3400/c28183947e289a9f
 critter_regression_d5_s2002=4.3240/b43788fa2c7c936e
 critter_regression_d5_s3003=4.2960/bb070d1ea429743c
-lhc_regression_d0_s2002=5.1960/ecc6f5f544122b53
-lhc_regression_d3_s2002=4.7300/7a030e3ed13616db
-lhc_regression_d5_s2002=4.7700/6c02c09c31e0164d
-lhc_regression_d5_s3003=4.7560/d164e026d4026186
+lhc_regression_d0_s2002=5.1860/5bc5bf4cc25d3f5c
+lhc_regression_d3_s2002=4.7200/207546043d47f458
+lhc_regression_d5_s2002=4.7600/6d068b237a4c3063
+lhc_regression_d5_s3003=4.7560/fd0436841baab139
 melira_regression_d0_s2002=6.2380/dde822df8019b82b
 melira_regression_d3_s2002=4.8000/cca38e9b6f2eccde
 melira_regression_d5_s2002=4.6733/0c99918876ec3f66
