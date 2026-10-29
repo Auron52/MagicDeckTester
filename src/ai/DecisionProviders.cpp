@@ -30920,6 +30920,106 @@ static bool CycloneCyclerRuleOn()
     return heurarm::Flag(heurarm::CYCLONE_CYCLER_RULE, on);
 }
 static void CycloneCyclerRuleApply(const GameState& s, int me, std::vector<std::string>& names, int cyc_out_mode);   // defined below
+
+// THE SPARE-{U} TEST (the CYCLER rule's, shared with the cycle order below so the two cannot drift): a {U} is spare
+// for a Curator cycle when an untapped blue land is up and the untapped lands beyond that one still pay the cheapest
+// put-back cantrip in hand (Brainstorm / Brainsurge: "if you need the mana to set things up with a Brainsurge/Brainstorm
+// you would prefer to use the Wraith", USER 2026-10-28). Fetch lands are not mana sources here.
+static bool CycloneCuratorSpare(const GameState& s, int me)
+{
+    int untapped = 0, blue = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand() && !q.tapped && !d->params.produces.empty() && d->params.fetch_land_types.empty())
+        {
+            ++untapped;
+            if (std::find(d->params.produces.begin(), d->params.produces.end(), Color::Blue) != d->params.produces.end()) { ++blue; }
+        }
+    }
+    int setup_need = 0;
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->params.put_back_from_hand <= 0) { continue; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        setup_need = setup_need == 0 ? mv : std::min(setup_need, mv);
+    }
+    return blue >= 1 && untapped - 1 >= setup_need;
+}
+
+// ---- THE CYCLE ORDER (MTG_CYCLONE_CYCLE_ORDER; 0 = today's order, DEFAULT) ----------------------------------------
+// Mode 1 = the draft-2 order (docs/design/cyclone-cast-order.md "Cycle order", accepted by the USER 2026-10-29: "Okay,
+// then the other order is probably also fine"); mode 2 = the USER's literal "from cheapest to most expensive". Per job
+// through two arm slots (CYCLONE_CYCLE_ORDER = mode 1, CYCLONE_CYCLE_CHEAP = mode 2; mode 1 wins when both are on).
+// Read in TWO places, the same key in both: the SEARCHED cycle sources' ORDER (SearchedCycleSources -- an order only,
+// the candidate set is unchanged, so it is inert at an unlimited budget) and the PLAYOUT pick (SelectDigSource, beyond
+// the horizon, where a greedy pick is the permitted policy).
+int CycloneCycleOrderMode()
+{
+    static const int env = EnvInt("MTG_CYCLONE_CYCLE_ORDER", 0);   // DEFAULT 0 (today's order); 1 = draft 2; 2 = cheapest first
+    if (heurarm::Flag(heurarm::CYCLONE_CYCLE_ORDER, env == 1)) { return 1; }
+    if (heurarm::Flag(heurarm::CYCLONE_CYCLE_CHEAP, env == 2)) { return 2; }
+    return 0;
+}
+
+// The key (lower = cycled first) of hand cycler `d`. Mode 2: the effective cycling cost's mana value (Street Wraith 0 <
+// Curator 1 < a Cyclone 2 < Xander's Lounge 3; the caller's stable sort keeps the existing order on a tie). Mode 1:
+//   Cyclone OUT (a creature cycle is a WALK):
+//     0 Curator while a {U} is spare (CycloneCuratorSpare; the USER rule: it keeps the free Wraith cycle)
+//     1 Street Wraith (free)
+//     2 Curator with no spare {U}
+//     3 Xander's Lounge: a land, so a PLAIN draw even with Cyclone out -- after the walks, which would otherwise find the
+//       Eldrazi it draws off the top
+//     4 a surplus Cyclone: it walks to the next ENCHANTMENT, draws nothing, and bottoms a set-up Eldrazi on the way
+//   Cyclone NOT out (every cycle is a plain draw):
+//     0 a SURPLUS Cyclone (two or more held): cycle it before the other one is cast (after, it would draw nothing)
+//     1 Xander's Lounge when it is not this turn's land drop
+//     2 Curator
+//     3 Street Wraith, kept for the Cyclone (the USER rule)
+//     5 Xander's Lounge when it IS the land drop (open drop, no other land in hand)
+//     6 the only Cyclone (cycling it gives the combo away)
+//   4 anything else (a cycler the order does not name).
+int CycloneCycleOrderKey(const GameState& s, int me, const CardDefinition& d, int mode)
+{
+    if (mode == 2) { return static_cast<int>(EffectiveCyclingCostFor(s, d).ManaValue()); }
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const bool creature = d.card.IsCreature() && d.params.cycling_cost.has_value();
+    const bool free_cyc = creature && d.params.cycling_cost->ManaValue() == 0;
+    const bool replacer = d.params.cycle_draw_exile_shared_type_freecast;
+    const bool land     = d.card.IsLand();
+    if (CycloneReplacerOut(s, me))
+    {
+        if (creature) { return free_cyc ? 1 : (CycloneCuratorSpare(s, me) ? 0 : 2); }
+        if (land)     { return 3; }
+        if (replacer) { return 4; }
+        return 4;
+    }
+    if (replacer)
+    {
+        int held = 0;
+        for (const Card& c : pl.hand) { if (c.m_name == d.card.m_name) { ++held; } }
+        return held >= 2 ? 0 : 6;
+    }
+    if (land)
+    {
+        const bool drop_open = pl.lands_played_this_turn < pl.LandDropsAvailable();
+        int lands = 0, copies = 0;
+        for (const Card& c : pl.hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+            if (hd == nullptr || !hd->card.IsLand()) { continue; }
+            ++lands;
+            if (c.m_name == d.card.m_name) { ++copies; }
+        }
+        return (drop_open && lands == copies) ? 5 : 1;
+    }
+    if (creature) { return free_cyc ? 3 : 2; }
+    return 4;
+}
+
 std::vector<std::string> CycloneProvider::SearchedCycleSources(const GameState& s) const
 {
     const int me = s.active_player_index;
@@ -30947,6 +31047,23 @@ std::vector<std::string> CycloneProvider::SearchedCycleSources(const GameState& 
     // THE CYCLER RULE's ORDER (Curator before Wraith where both stay searched); its PRUNES are plan-level
     // (CycleSeedAdmissionSets): the seed cycles after the plan's casts, so a plan that casts the Cyclone first cycles
     // with it out.
+    // THE CYCLE ORDER (MTG_CYCLONE_CYCLE_ORDER, DEFAULT 0): when on it IS the order (the CYCLER rule's order-only mode is
+    // superseded; its plan-level prunes in CycleSeedAdmissionSets are untouched). ORDER only: the same names, re-sorted.
+    const int cyc_mode = HumanPlayActive() ? 0 : CycloneCycleOrderMode();
+    if (cyc_mode != 0)
+    {
+        std::vector<std::pair<int, std::string>> keyed;
+        keyed.reserve(out.size());
+        for (std::string& nm : out)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            keyed.emplace_back(d != nullptr ? CycloneCycleOrderKey(s, me, *d, cyc_mode) : 99, std::move(nm));
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        out.clear();
+        for (auto& k : keyed) { out.push_back(std::move(k.second)); }
+        return out;
+    }
     if (CycloneCyclerRuleOn() && !HumanPlayActive()) { CycloneCyclerRuleApply(s, me, out, /*cyc_out_mode=*/2); }
     return out;
 }
@@ -30972,6 +31089,24 @@ std::string CycloneProvider::SelectDigSource(const GameState& s, const ManaPool&
 {
     out_is_sac = false;
     const int me = s.active_player_index;
+    // THE CYCLE ORDER (MTG_CYCLONE_CYCLE_ORDER, DEFAULT 0): the playout takes the first PAYABLE hand cycler in the cycle
+    // order's key (hand order on a tie). Beyond the horizon, so a greedy pick is the permitted policy. Off -> below.
+    if (const int cyc_mode = CycloneCycleOrderMode(); cyc_mode != 0)
+    {
+        std::string best;
+        int best_key = 1 << 20;
+        for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->params.cycling_cost.has_value()) { continue; }
+            if (!CyclingPayable(s, me, *d, pool)) { continue; }
+            const int key = CycloneCycleOrderKey(s, me, *d, cyc_mode);
+            if (key < best_key) { best_key = key; best = c.m_name.str(); }
+        }
+        if (!best.empty()) { return best; }
+        return GenericProvider::SelectDigSource(s, pool, out_is_sac);
+    }
     if (CycloneReplacerOut(s, me))
     {
         // The cheapest payable CREATURE cycler (a creature walk is the combo); hand order breaks ties.
@@ -31875,30 +32010,19 @@ static void CycloneCyclerRuleApply(const GameState& s, int me, std::vector<std::
     auto is_mana = [](const CardDefinition* d)
     { return d != nullptr && d->card.IsCreature() && d->params.cycling_cost.has_value() && d->params.cycling_cost->ManaValue() > 0; };
     bool cyc_out = false, cyc_hand = false, cyc_known_top = false;
-    int untapped = 0, blue = 0;
     for (const Permanent& q : s.battlefield)
     {
         if (q.controller_index != me || q.def_absent) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
         if (d == nullptr) { continue; }
         if (d->params.cycle_draw_exile_shared_type_freecast) { cyc_out = true; }
-        if (d->card.IsLand() && !q.tapped && !d->params.produces.empty() && d->params.fetch_land_types.empty())
-        {
-            ++untapped;
-            if (std::find(d->params.produces.begin(), d->params.produces.end(), Color::Blue) != d->params.produces.end()) { ++blue; }
-        }
     }
-    int setup_need = 0, creature_cyclers = 0;
+    int creature_cyclers = 0;
     for (const Card& c : pl.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr) { continue; }
         if (d->params.cycle_draw_exile_shared_type_freecast) { cyc_hand = true; }
-        if (d->params.put_back_from_hand > 0)
-        {
-            const int mv = d->card.m_mana_cost.ManaValue();
-            setup_need = setup_need == 0 ? mv : std::min(setup_need, mv);
-        }
         if (is_free(d) || is_mana(d)) { ++creature_cyclers; }
     }
     // KNOWN on top: a library position the player knows (Library::KnownAt) -- never the engine's library order.
@@ -31932,7 +32056,7 @@ static void CycloneCyclerRuleApply(const GameState& s, int me, std::vector<std::
         // Wraith. Otherwise I would probably spend the Curator first in order to ensure you retain the free cycle".
         if (has_free && has_mana)
         {
-            const bool curator_spare = blue >= 1 && untapped - 1 >= setup_need;
+            const bool curator_spare = CycloneCuratorSpare(s, me);
             if (curator_spare) { drop_if(is_free); } else { drop_if(is_mana); }
         }
         return;
@@ -32164,6 +32288,100 @@ bool CycloneProvider::ReorderKeepShuffleOnly(const GameState& s) const
 {
     (void)s;
     return CyclonePonderKeepShuffleOn();
+}
+
+// ---- THE DRAFTED CAST ORDER (MTG_CYCLONE_CAST_ORDER, DEFAULT OFF) -------------------------------------------------
+// docs/design/cyclone-cast-order.md; USER review 2026-10-29: "The order looks reasonable" (judgement calls A, B, C at
+// the drafted defaults). Measured and reported; the USER adopts. MTG_CYCLONE_ORDER_DRAW_TURNS (the draft's item D, a
+// RESTRICTION of the search-owned order of draw turns) is a second lever, inert without the first.
+static bool CycloneCastOrderOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_CAST_ORDER");   // DEFAULT OFF; =1 -> the drafted order
+    return heurarm::Flag(heurarm::CYCLONE_CAST_ORDER, on);
+}
+static bool CycloneOrderDrawTurnsOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_ORDER_DRAW_TURNS");   // DEFAULT OFF; needs MTG_CYCLONE_CAST_ORDER
+    return CycloneCastOrderOn() && heurarm::Flag(heurarm::CYCLONE_ORDER_DRAW_TURNS, on);
+}
+
+// The rank from PARAMS (lower = earlier; -1 = not named). Checked in this order, so each card lands in its own tier:
+//   10        Long-Term Plans (tutor_library_position): first -- its shuffle would erase a cantrip's setup, and its
+//             target lands where Ponder sees it and Brainstorm draws it.
+//   20        Ponder (cast_reorder, no put-back): look before you put back, so a put-back draws seen cards.
+//   30 + mv   the put-back cantrips (put_back_from_hand) by mana value: Brainstorm 31 < Brainsurge 33 -- the cheap one
+//             spends {U} first and the 3 mana stays uncommitted (judgement call A).
+//   50        Remand (counters_target_spell_to_hand): the most expensive draw per card, last among the draws.
+//   60        Seething Song (ritual_floating_mana): after the draws, before everything it pays for.
+//   70        Unpredictable Cyclone (cycle_draw_exile_shared_type_freecast): after Song, before the cycles and payoffs.
+//   80 + mv   a creature cycler, hard cast, by mana value: Curator 84 < Street Wraith 85.
+//   100 + mv  a big creature (mana value 7+), the payoffs, by mana value: Ulamog CH 110 < Ulamog IG 111 < Emrakul 115.
+//             Ulamog CH's cast trigger is forced onto our own permanents in a goldfish, so everything else goes first.
+//   200       goldfish-inert (Toxic Deluge): never cast; listed for totality.
+int CycloneCastOrderRankOf(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    const int mv = static_cast<int>(def.card.m_mana_cost.ManaValue());
+    if (p.goldfish_inert)                                       { return 200; }
+    if (p.tutor_library_position > 0)                           { return 10; }
+    if (p.put_back_from_hand > 0)                               { return 30 + std::min(9, mv); }
+    if (p.cast_reorder > 0)                                     { return 20; }
+    if (p.counters_target_spell_to_hand)                        { return 50; }
+    if (p.ritual_floating_mana > 0)                             { return 60; }
+    if (p.cycle_draw_exile_shared_type_freecast)                { return 70; }
+    if (def.card.IsCreature() && p.cycling_cost.has_value())    { return 80 + std::min(9, mv); }
+    if (def.card.IsCreature() && mv >= 7)                       { return 100 + std::min(99, mv); }
+    return -1;
+}
+
+int CycloneProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!CycloneCastOrderOn()) { return DeckProvider::CastOrderRank(s, def); }
+    const int r = CycloneCastOrderRankOf(def);
+    return r >= 0 ? r : 300 + DeckProvider::CastOrderRank(s, def);
+}
+
+const char* CycloneProvider::CastOrderTierName(int rank) const
+{
+    if (!CycloneCastOrderOn()) { return DeckProvider::CastOrderTierName(rank); }
+    if (rank == 10)                  { return "1 LONG-TERM PLANS: first -- its shuffle would erase a cantrip's setup"; }
+    if (rank == 20)                  { return "2 PONDER: look before you put back (Brainstorm then draws seen cards)"; }
+    if (rank > 30 && rank < 40)      { return "3-4 PUT-BACK CANTRIP by mana value (Brainstorm, then Brainsurge): draws first"; }
+    if (rank == 50)                  { return "5 REMAND (+ a 1-drop): the dearest draw, last among the draws"; }
+    if (rank == 60)                  { return "6 RITUAL (Seething Song): after the draws, before what it pays for"; }
+    if (rank == 70)                  { return "7 UNPREDICTABLE CYCLONE: after Song, before every cycle and the payoffs"; }
+    if (rank > 80 && rank < 90)      { return "8-9 CREATURE CYCLER, hard cast, by mana value (Curator, then Street Wraith)"; }
+    if (rank >= 100 && rank < 200)   { return "10-12 ELDRAZI PAYOFF by mana value (Ulamog CH, Ulamog IG, Emrakul): payoffs last"; }
+    if (rank == 200)                 { return "never: GOLDFISH-INERT (Toxic Deluge)"; }
+    if (rank >= 300)                 { return "UNNAMED CARD: generic rank + 300"; }
+    return nullptr;
+}
+
+// TOTAL (the USER's cross-deck ruling 2026-10-14): a tie between two different cards breaks by NAME. The ranks above
+// already separate every card in the list, so this decides only a card the order does not name.
+bool CycloneProvider::CastOrderTotalByName() const { return CycloneCastOrderOn(); }
+
+// The draft's item D: rank-sort sets that hold a draw spell too, and run the range ladder for every set.
+bool CycloneProvider::OrderOpaqueCastsByRank() const { return CycloneOrderDrawTurnsOn(); }
+
+// THE DRAFT'S RANGES, where the existing ladder can carry them. The ladder (ApplyCastOrderRangeLadder) walks a rung only
+// while the line CANNOT BE PAID, so it expresses the FUNDING ranges:
+//   Brainstorm  31 -> 71  to after Song / Cyclone when its {U} cannot otherwise be paid
+//   Brainsurge  33 -> 65  to after Song when Song's red float pays its {2}
+//   Remand      50 -> 72  to after Cyclone (its cost-efficient end)
+//   Song        60 -> 32 -> 5  to before Brainsurge, then before Long-Term Plans, when its float pays their {2}
+// It does NOT carry the INFORMATION ranges (Long-Term Plans after the put-backs, Ponder after Brainstorm: the shuffle
+// line). Those are not payability questions, so a payability walk never reaches them; they would need a SEARCHED second
+// position (the CastOrderingCandidates dual-slot shape Landfall uses). Not built (ledger Q60).
+// The ladder runs only with MTG_ORDER_RANGE or OrderOpaqueCastsByRank, so with the order alone these are inert.
+std::vector<int> CycloneProvider::CastOrderFallbackRanks(const GameState& s, const CardDefinition& def) const
+{
+    if (!CycloneCastOrderOn()) { return DeckProvider::CastOrderFallbackRanks(s, def); }
+    const int r = CycloneCastOrderRankOf(def);
+    if (r > 30 && r < 40) { return { r, def.card.m_mana_cost.ManaValue() <= 1 ? 71 : 65 }; }   // Brainstorm / Brainsurge
+    if (r == 50)          { return { 50, 72 }; }                                                 // Remand
+    if (r == 60)          { return { 60, 32, 5 }; }                                              // Seething Song
+    return {};
 }
 
 // ---- THE PLAN-LEVEL HARD PRUNES (USER 2026-10-28) ----------------------------------------------------------------
