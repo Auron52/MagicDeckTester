@@ -6592,6 +6592,173 @@ thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
 thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
 thread_local bool g_cycle_seed_paying = false;   // see ManaPayment.h (CycleSeedPayScope)
+thread_local std::uint64_t g_seed_pay_hold = 0;   // see ManaPayment.h (SeedPaySplitScope)
+
+// ---- THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT; ManaPayment.h for the shape, ledger Q61) ----------------
+bool SeedPaySplitOn()
+{
+    static const bool on = EnvOn("MTG_CYCLE_SEED_PAY_SPLIT");   // DEFAULT OFF (measured first); =1 -> the searched split
+    return heurarm::Flag(heurarm::CYCLE_SEED_PAY_SPLIT, on);
+}
+
+namespace
+{
+constexpr int kSigSpecial = 1 << 6;   // a source whose tap is not a plain mana tap (see SeedPaySourceSig)
+constexpr int kSplitMaxGeneric = 3;   // the packed multiset holds up to 3 units (Xander's Lounge's {3})
+
+// A source's colour SIGNATURE: bit c for each colour it produces (White..Green = 0..4, Colorless = 5), plus
+// kSigSpecial for a source that also does something else when tapped (a filter, a land-search activation, a
+// sac-draw land) or is not a land (a creature or artifact source: summoning sickness and abilities ride on it).
+// -1 = not an untapped mana source of `me` (or a fetch land, which the payer never taps for mana).
+int SeedPaySourceSig(const Permanent& p, int me)
+{
+    if (p.controller_index != me || p.tapped || p.def_absent) { return -1; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || d->params.produces.empty() || !d->params.fetch_land_types.empty()) { return -1; }
+    int sig = 0;
+    for (Color c : d->params.produces) { sig |= 1 << static_cast<int>(c); }
+    if (!d->card.IsLand() || d->params.is_filter || d->params.ramp_filter || d->params.any_color_filter
+        || d->params.land_search_activation_cost.has_value() || d->params.sacrifice_draw_cost.has_value())
+    { sig |= kSigSpecial; }
+    return sig;
+}
+
+// The coloured pips the cards still in hand need, per colour (the max over cards, mana cost and cycling cost),
+// with the seed's own copy excluded (it is the card being cycled; a second copy still counts).
+void SeedHandDemand(const GameState& state, int me, const CardDefinition& seed_def, int demand[5])
+{
+    for (int c = 0; c < 5; ++c) { demand[c] = 0; }
+    bool skipped_seed = false;
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        if (!skipped_seed && c.m_name == seed_def.card.m_name) { skipped_seed = true; continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->params.goldfish_inert) { continue; }
+        auto take = [&](const ManaCost& m)
+        {
+            const int pip[5] = { m.white, m.blue, m.black, m.red, m.green };
+            for (int k = 0; k < 5; ++k) { demand[k] = std::max(demand[k], pip[k]); }
+        };
+        if (!d->card.IsLand()) { take(d->card.m_mana_cost); }
+        if (d->params.cycling_cost.has_value()) { take(*d->params.cycling_cost); }
+    }
+}
+}   // namespace
+
+std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
+                                        const CardDefinition& seed_def)
+{
+    std::vector<std::int32_t> out;
+    if (!SeedPaySplitOn()) { return out; }
+    const int g = cost.generic;
+    if (g <= 0 || g > kSplitMaxGeneric || cost.white + cost.blue + cost.black + cost.red + cost.green != 0
+        || cost.hybrid_count != 0) { return out; }
+    if (state.floating_mana.Total() > 0) { return out; }   // the float pays first; the split would not bind
+    // Source classes: signature -> untapped count.
+    std::vector<std::pair<int, int>> cls;
+    for (const Permanent& p : state.battlefield)
+    {
+        const int sig = SeedPaySourceSig(p, me);
+        if (sig < 0) { continue; }
+        bool found = false;
+        for (auto& k : cls) { if (k.first == sig) { ++k.second; found = true; break; } }
+        if (!found) { cls.emplace_back(sig, 1); }
+    }
+    std::sort(cls.begin(), cls.end());
+    if (cls.size() < 2) { return out; }   // one class: every split leaves the same board
+    // Every multiset of g units over the classes (counts respected), as per-class use counts.
+    const int K = static_cast<int>(cls.size());
+    std::vector<std::vector<int>> splits;
+    std::vector<int> use(K, 0);
+    std::function<void(int, int)> rec = [&](int k, int left)
+    {
+        if (k == K) { if (left == 0) { splits.push_back(use); } return; }
+        for (int u = 0; u <= std::min(left, cls[k].second); ++u) { use[k] = u; rec(k + 1, left - u); }
+        use[k] = 0;
+    };
+    rec(0, g);
+    // DOMINANCE (sound): a split that taps a PLAIN source of signature B while a PLAIN source of signature A, a
+    // strict subset of B's colours, is left untapped is dominated by the swap -- its leftover pool can pay
+    // everything the other's can. Specials are never swapped (their tap is not only mana).
+    auto subset = [](int a, int b) { return a != b && (a & b) == a; };
+    std::vector<std::vector<int>> kept;
+    for (const std::vector<int>& sp : splits)
+    {
+        bool dominated = false;
+        for (int b = 0; b < K && !dominated; ++b)
+        {
+            if (sp[b] == 0 || (cls[b].first & kSigSpecial)) { continue; }
+            for (int a = 0; a < K; ++a)
+            {
+                if ((cls[a].first & kSigSpecial) || !subset(cls[a].first, cls[b].first)) { continue; }
+                if (cls[a].second - sp[a] >= 1) { dominated = true; break; }
+            }
+        }
+        if (!dominated) { kept.push_back(sp); }
+    }
+    if (kept.size() < 2) { return out; }   // one undominated split: nothing to search
+    // THE HAND-DEMAND ORDER: the colour shortfall the leftover leaves against the hand's needs (a source counts for
+    // every colour it makes -- optimistic, an ORDER only), then fewer special taps, then the enumeration order.
+    int demand[5];
+    SeedHandDemand(state, me, seed_def, demand);
+    auto shortfall = [&](const std::vector<int>& sp)
+    {
+        int left[5] = { 0, 0, 0, 0, 0 };
+        for (int k = 0; k < K; ++k)
+        { for (int c = 0; c < 5; ++c) { if (cls[k].first & (1 << c)) { left[c] += cls[k].second - sp[k]; } } }
+        int s = 0;
+        for (int c = 0; c < 5; ++c) { s += std::max(0, demand[c] - left[c]); }
+        return s;
+    };
+    auto specials = [&](const std::vector<int>& sp)
+    { int n = 0; for (int k = 0; k < K; ++k) { if (cls[k].first & kSigSpecial) { n += sp[k]; } } return n; };
+    std::vector<int> idx(kept.size());
+    for (std::size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
+    std::stable_sort(idx.begin(), idx.end(), [&](int x, int y)
+    {
+        const int sx = shortfall(kept[x]), sy = shortfall(kept[y]);
+        if (sx != sy) { return sx < sy; }
+        return specials(kept[x]) < specials(kept[y]);
+    });
+    // Pack: each unit is (signature + 1) in its own byte, ascending, so 0 never encodes a split.
+    for (int i : idx)
+    {
+        std::int32_t v = 0;
+        int byte = 0;
+        for (int k = 0; k < K; ++k)
+        { for (int u = 0; u < kept[i][k]; ++u) { v |= static_cast<std::int32_t>(cls[k].first + 1) << (8 * byte++); } }
+        out.push_back(v);
+    }
+    return out;
+}
+
+std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t split)
+{
+    if (split == 0) { return 0; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }   // bitmask limit, matching ReservableSpecialMask
+    std::uint64_t chosen = 0;
+    for (int byte = 0; byte < 4; ++byte)
+    {
+        const int want = ((split >> (8 * byte)) & 0xFF) - 1;
+        if (want < 0) { break; }
+        int pick = -1;
+        for (int i = 0; i < n; ++i)
+        {
+            if (chosen & (1ull << i)) { continue; }
+            if (SeedPaySourceSig(state.battlefield[static_cast<std::size_t>(i)], me) == want) { pick = i; break; }
+        }
+        if (pick < 0) { return 0; }   // not realisable on this board: the payer decides
+        chosen |= 1ull << pick;
+    }
+    std::uint64_t hold = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index == me && !p.tapped && !(chosen & (1ull << i))) { hold |= 1ull << i; }
+    }
+    return hold;
+}
 thread_local ManaCost g_act_line_current;
 
 void AddManaCost(ManaCost& dst, const ManaCost& add)
@@ -8201,7 +8368,8 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
                               | OneShotHoldMask(state) | PayloadReserveMask(state)
                               | scarce
                               | LineColorlessHoldMask(state, cost_in)
-                              | act_hold;
+                              | act_hold
+                              | g_seed_pay_hold;   // THE SEED PAYMENT SPLIT (SeedPaySplitScope; 0 unless a seed pins one)
     if (ActDropAuditOn())
     {
         g_act_pay_calls.fetch_add(1, std::memory_order_relaxed);
