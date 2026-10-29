@@ -1462,7 +1462,199 @@ with M2 on (THREADS=8): **149 / 149 PASS, play-changed 0** (searched and d0; no 
 move one) -- no GT accept. Unit 2099 / 2099, scenarios 333 / 333. Artifacts: `logs/cyclone/mem/` (identity.txt,
 determinism.txt, m2_ab.txt, probe.txt, verify.txt, both smoke logs, the manifests, cmp.py).
 
+## Cost agent: per-game slowness beyond bottoming (2026-10-29)
+USER 2026-10-29: *"What is preventing us from getting under 3x Hinata beyond bottoming? Bottoming is only as expensive as it is
+because we already have major slowness in our handling of the deck. The purpose of 3x is typically to end up with a deck that is
+faster than hinata once bottoming is active."* Branch `cyclone-cost` (worktree `.claude/worktrees/cyclone-cost`, cut from
+`cyclone-int` b991ec733 = the sound folds + mem/determinism + the plan-level prunes). Every measurement here runs the LIKELY
+ADOPTION SET, `MTG_CYCLONE_PB_PLANS=1` + `MTG_CYCLONE_CYCLER_RULE=1` (per-job flags), with bottoming ON (no keep table). Scratch:
+`build/scratch/cyclone/cost/`. The box was loaded throughout (load 36-91 from other agents), so ms per unit is inflated 2-4x and
+drifts; every comparison is read in UNITS first, and ms only within one run.
+
+### The census (adoption set, fresh seeds 120000 d3 b10 x40 / 121000 d5 b20 x24; MTG_NODE_KIND_ATTRIB + MTG_ROLLOUT_STATS)
+| | d3 b10 | d5 b20 |
+|---|---|---|
+| units / game | 289K | 457K |
+| share of units in bottoming TRIAL games | 72% | 75% |
+| games that mulligan (bottoming decisions) | 15 / 40 | 9 / 24 |
+| trial games per mulligan (after name dedupe and the turn cut) | 9.8 | 14.2 |
+| kept-game real units / game; a mulligan game vs a kept game | 82K; 7.7x | 114K; 9.0x |
+| decisions that run ONE iterative-deepening pass | 93% (752 / 811) | 80% (522 / 653) |
+| units spent beyond 1x the decision budget | 44% | 24% |
+| aborted-pass waste (the old 35.7% lead) | 2.0% | 0% |
+| units by site: la_cand / la_bp_wave / greedy_fallback / rollout_step / fs_* | 33 / 37 / 14 / 14 / <2% | 22 / 54 / 11 / 11 / <2% |
+**What the numbers say.**
+- The FIRST pass is never cut (it must leave a complete ranking) and it overruns its budget at most decisions. So every unit
+  saved inside it is a per-game unit saved, until the pass gets cheap enough for the start gate to admit pass 2 (about 1.4K
+  units at d3 b10, 2.8K at d5 b20). Every saving below is therefore a direct per-game saving, not budget re-spent.
+- Nearly all of that work is the HORIZON LEAF, not the search window: the 1-ply lookahead (MTG_FD_LEAF_DEPTH default 1) at
+  every simulated turn of every leaf. Wall by where the node was opened: window 9%, leaf (rollout nest 1) 78%, deeper 13%.
+- Per decision kind (wall, real + trial pooled): Ponder ORDER variants ~25% (Ponder is still width 7 in this set), cycle-seed
+  default pins (which cycler) ~28-33%, cycle-seed PINS (Curator j > 0 / decline / Remand) 13-16%, put-back cast / variants
+  ~13%. The pins and order variants cost 40-150 us each at 0.1-0.6 units: applied, then deduped or tie-pruned.
+- The leads from the pre-prune pass, re-measured: lead 1 (83.8% after exhaustion) is now 24-47% and is the never-cut first
+  pass, not runaway nested solves; lead 2 (35.7% aborted passes) is gone (0-2%); lead 3 (the put-back under-pricing) no longer
+  matters much, since PB_PLANS cut the put-back fan to width 2 (put-back nodes are now ~5% of wall), and pricing does not bind
+  inside the never-cut first pass anyway.
+**perf** (one heavy d5 game, seed 121021 gi 21, the whole game, flat): the cantrip PLAN machinery (CycJunkPick, PutBackPickAt,
+ScoreTopDisposition, CantripPlanOf, the go-off estimate) **16%** -- CycJunkPick alone ~7% with its sorts; mana payment 10.6%;
+allocation 9.9%; plan apply 9.6%; keys / dedup / TT 9.6%; enumeration 8.3%; a long flat tail.
+**Slack-0 rollout turns** (a rollout's turn equal to its cutoff, before the horizon -- the kill-only identity's domain): **35% of
+all units**, and the identity was OFF for every one of them on this deck (extra-turn deck, ledger Q13; and no searched m2).
+
+### Fixes built
+**1. THE JUNK PICK ONCE PER RESOLUTION (`MTG_CYC_JUNK_MEMO`, exact, DEFAULT ON).** Under MTG_CYCLONE_PB_PLANS, CycloneProvider::
+CantripPlanOf classified every candidate of a put-back fan by recomputing CycJunkPick -- the SAME pair each time, since it reads
+only the hand, the readiness and `take`, and the engine's plan loop passes one state and one readiness for the whole fan. A
+generic `cantripbatch::Scope` (DecisionProvider.h) now marks the two engine plan loops (PutBackPickAt's derivation,
+PutBackCandidates) as one batch; CycloneProvider memoises the pick for the batch. Verify: `MTG_CYC_JUNK_MEMO_VERIFY=1`
+recomputes every hit and aborts on a difference -- 24 games (d3 b10 x16 seed 122000, d5 b20 x8 seed 123000) 0 aborts.
+Byte-identity memo off vs on: 24 / 24 games identical (win turn, units, job digests). Wall (the two arms as concurrent
+processes, 2 threads each): thread-ms x0.866, user CPU x0.89.
+**2. THE KILL-ONLY TURN FOR THIS DECK (ledger Q13's "sound refinement later").** The rollout kill-only identity
+(MTG_LEAF_KILL_ONLY, Vampires round 2) was OFF on every slack-0 turn of this deck for two independent reasons, each now lifted by
+its own per-job lever:
+- `MTG_LEAF_KILL_ONLY_EXTRA` (extra-turn decks; DEFAULT ON). The break is per candidate, not per deck: a candidate whose turn
+  ends with NO extra turn pending hands the rollout to round + 1, past the cutoff, exactly the case the identity covers, and is
+  skipped; a candidate that leaves `pending_extra_turns > 0` is scored as the full solve scores it. The extra turn's loop head
+  re-arms the scope (keyed by TurnSeq), so the recursion is the same rule one turn later. The pass-0-only break holds only when
+  pass 0 scored no extra-turn candidate. Only extra-turn decks are affected (Cyclone; nothing in the suite).
+- `MTG_LEAF_KILL_ONLY_NOM2` (decks that never play a second main). The identity's parity requirement -- a candidate's
+  evaluation and the rollout's replay run the same turn -- was met by requiring a SEARCHED second main. A deck on which no
+  post-combat main can ever open meets it trivially: deck constants only (no searched m2, no Jorn untap, no Omnitool dig, no
+  extra-combat source, and a provider without a restricted m2 -- new hook DecisionProvider::MayOpenRestrictedSecondMain, true
+  for Angels and ColossusHammer).
+Verify (MTG_LEAF_KILL_ONLY_VERIFY recomputes every armed rollout with the scope suppressed): UNLIMITED budget d1 b0 x6 (seed
+126000, cheap bottoming): 572 armed turns, 44,091 candidate rollouts skipped, 538 verified, **0 mismatches**; d3 b10 x8 (seed
+126100): 1,054 armed, 1,008 verified, **0 mismatches**. Unit: test_leaf_kill_only.cpp +2 cases (an extra-turn Emrakul whose
+extra turn kills is still found at the cutoff; a no-m2 deck arms and agrees); 2123 / 2123. Scenarios 339 / 339.
+Held-out A/B on Cyclone (EXTRA + NOM2 together vs both off; adoption set; fresh seeds 124000 d3 b10 x200, 125000 d5 b20 x100):
+| depth | n | avg off / on | delta (se) | slower / faster | identical digests | units | ms |
+|---|---|---|---|---|---|---|---|
+| d3 b10 | 200 | 5.1850 / 5.1800 | -0.0050 (0.0050) | 0 / 1 | 199 | x0.920 (297K -> 273K) | x0.76 |
+| d5 b20 | 100 | 5.2200 / 5.2300 | +0.0100 (0.0100) | 1 / 0 | 98 | x0.954 (534K -> 510K) | x0.81 |
+(ms: the arms ran one after the other on a drifting box -- direction only.) The slower game, d5 gi 2 (seed 125002): OFF T4,
+ON T5 at b20. The divergence is T3: the cheaper first pass let the start gate admit a depth-2 pass, which preferred Tarn +
+Brainsurge (predicted T5) over the depth-1 pass's Island + Myriad crack (predicted and realised T4). At b100 BOTH arms play T4,
+and ON at b400 too: a budget butterfly, recovered with budget; not the identity.
+**NOM2 is generic -- the fleet A/B (coordinator 2026-10-29: sound folds default ON, tested as a play change on the decks that
+move).** Smoke with NOM2 ON moved 21 of 149 configs (searched: 1 slower -- elementals d3 gi120 4 -> 5 --, 4 faster, 39 same-score
+digest changes; d0 untouched). Held-out A/B on the 13 moving decks (seeds 140000 d3 b10 / 141000 d5 play settings / 142000 2HG
+d3; 12,200 games; per-job arms): every config's units fall (most d3 rows x0.74-0.89; elementals d5 x0.68, kittyv3 x0.80; d5 rows
+elsewhere x0.93-1.00), 93-100% identical digests. Per deck, net turns: auras 0 / 700, creature_giving 0 / 400, dragonstorm 0 /
+300, elementals -3 / 200, kittyv3 0 / 400, knights 0 / 700, minotaur 0 / 700, pd -1 / 400, pirates 0 / 500, slivers 0 / 500,
+soldiers 0 / 500, th -1 / 300, **fluctuator +1 / 500** (one slower game, d3 gi222). Fluctuator extended on fresh seeds (143000
+d3 x1500, 144000 d5 x1000): net 0 (2 slower / 2 faster); pooled **+1 over 3,000** (+0.0003 / game). Every slower game recovers
+at --depth 8 --budget-ms 0: fluctuator gi222 (OFF's T4 at b10 is budget luck -- both arms play T5 at b50, b200 and d3 b0, and T4
+at d8 b0), gi979, gi1464, and elementals smoke gi120 (both arms T4 at d8 b0). By the letter of the bar fluctuator is net > 0, so
+NOM2 stays DEFAULT OFF pending the coordinator / USER (QC2).
+**3. `MTG_NESTED_EXH_AXIS` (per-job, DEFAULT OFF; the design's B2 in Ponder form).** Past an exhausted finite decision budget,
+a nested non-enforcing solve admits Ponder ORDER variants only below rank `MTG_NESTED_EXH_AXIS_W` (default 2, floor 2). This
+targets the leaf's Ponder order variants (~20% of wall). It is a budget-staged admission and inert at an unlimited budget.
+Built and smoke-inert, NOT MEASURED: its A/B was stopped (the coordinator put the NOM2 fleet A/B first). Resume command below.
+
+### Reconciling with the integrator's cost_iv run (84K units / game on the same row)
+cost_iv ran with bottoming rollouts OFF. Evidence:
+- Same binary (cyclone-int 06:32), same manifest shape, and identical per-game digests on 19 / 20 d5 s2002 games.
+- The exception, gi0, is T5 there and T4 here. Single-game probe: default T4 at 314K units with 7 trial games;
+  `MTG_BOTTOM_ROLLOUTS=0` T5 at 77K units with 0 trials.
+- regression.sh / suite_gate.py never set MTG_BOTTOM_ROLLOUTS.
+So the gate's numbers are the bottoming-on ones in this section; 84K is the kept-game + blind-bottomer cost.
+
+### The gate estimate (same-run, bottoming ON, `suite_gate.py --cost` shape: cyclone's provisional regression rows vs Hinata's d5 rows)
+Two concurrent processes on one binary (479bb66b6), 2 threads each, 11:58-12:36 UTC, host load 42 -> 32:
+- BASE = `MTG_CYC_JUNK_MEMO=0`, kill-only levers off (= cyclone-int b991ec733's behaviour).
+- FIX = defaults plus EXTRA + NOM2 per job.
+Cyclone rows use CYCLER_RULE plus PB_PLANS on / off. Each arm is compared with its own Hinata jobs. ms = core-ms / game.
+| row | BASE ms (x Hinata) | BASE units (x) | FIX ms (x Hinata) | FIX units (x) |
+|---|---|---|---|---|
+| Hinata worst (d5 s3003) | 3,812 | 62.8K | 3,656 | 62.8K |
+| cyclone d5 s2002, PB | 10,861 (2.85x) | 455K (7.24x) | 9,701 (2.65x) | 436K (6.93x) |
+| cyclone d5 s3003, PB | 8,697 (2.28x) | 379K (6.03x) | 7,682 (2.10x) | 360K (5.72x) |
+| cyclone d3 s2002, PB | 10,192 (2.67x) | 307K (4.88x) | 9,347 (2.56x) | 283K (4.50x) |
+| cyclone d3 s3003, PB | 10,567 (2.77x) | 265K (4.21x) | 7,734 (2.12x) | 246K (3.91x) |
+| cyclone 2HG d3 s2002, PB | 10,896 (2.86x) | 342K (5.44x) | 10,879 (2.98x) | 317K (5.05x) |
+| **worst, PB on** | **2.86x** (2HG) | | **2.98x** (2HG) | |
+| cyclone d5 s2002, NO PB | 55,536 (14.57x) | 2.24M (35.6x) | 46,640 (12.76x) | 2.05M (32.7x) |
+| cyclone d5 s3003, NO PB | 49,796 (13.06x) | 1.75M (27.8x) | 45,943 (12.57x) | 1.60M (25.5x) |
+**Reading it.**
+- In UNITS every row falls 5-8%.
+- In ms the per-row ratios are within the load noise. The jobs ran at different moments: BASE's 2HG row ran last, after FIX had
+  finished, on a quieter box.
+- So by ms the gate sits at about 2.6-3.0x Hinata on a loaded host WITH PB_PLANS, before and after these fixes alike. That is a
+  marginal pass, too close to trust off a loaded host (Q41).
+- Without PB_PLANS it fails by 4x (12.8-14.6x).
+- The earlier sequential runs read 3.34x (base, 08:20) and 2.71x (fixes, 10:20). Hinata's own ms per unit was 151, 123 and
+  61 us in the three runs, so only same-run pairs are comparable. The integrator's same-run gate read 2.98x for PB + CYCLER.
+- The ms ratio is about half the units ratio throughout: a Hinata unit costs about twice a Cyclone unit (deeper rollouts per
+  node).
+
+### What is preventing < 3x beyond bottoming (the answer)
+- **Bottoming is still most of it: 72-75% of all units are trial games.**
+  - 38% of games mulligan, with 9.8-14.2 trial games per mulligan.
+  - A mulligan game costs 7.7-9.0x a kept game.
+  - Kept-game cost is 82-114K units against Hinata's 55-63K (1.5-1.8x in units, about 0.8-0.9x in ms). So once a keep table
+    replaces the trials, the deck is roughly Hinata's cost, which is the USER's stated purpose of the 3x gate.
+- **The per-game search itself is the never-cut first iterative-deepening pass.**
+  - 80-93% of decisions run only that pass, and 24-44% of all units are spent past the decision budget.
+  - Inside that pass, 98% of the work is the horizon leaf's 1-ply lookahead: every simulated turn of every leaf enumerates and
+    greedily rolls out its whole candidate list.
+  - The node mass in that leaf:
+    - Ponder ORDER variants: Ponder is still width 7 in the adoption set; the USER's MTG_CYCLONE_PONDER_PLANS would take it to 2.
+    - Cycle-seed which-cycler choices and pins: 40%+ of leaf wall.
+    - Slack-0 turns: 35% of units, now covered by EXTRA + NOM2, which must be ON.
+- **Per-node overhead:** the cantrip plan machinery was 16% of CPU (CycJunkPick now fixed). After that the profile is flat:
+  mana payment 11%, allocation 10%, apply 10%, keys / dedup 10%.
+- **PB_PLANS is load-bearing.** Without it every row is 12.6-14.6x.
+
+### Not run (stopped for the Hinata2 generation at 13:30 UTC, 2026-10-29) -- resume commands
+All from the worktree, `D=build/scratch/cyclone/cost` (the build volume), binary `$D/mtg.c5` (= 479bb66b6). Run each as one
+pooled batch at <= 4 threads, with a PID waiter.
+1. **The curve-check keep evidence (QC1).** 97 opening 7s that fail ONLY TwoDrop's "no nonland of MV <= 2" clause (from 600 d0
+   games, seeds 109000 / 110000). Each is played kept vs mulliganed at d3 b10 under the adoption set. Arm B keeps the 7 via a
+   profile copy with `curve_check: none`, identical otherwise.
+   `env MTG_PGO=0 MTG_SLOW_GAME_MS=1 $D/mtg.c5 --batch $D/q4/m.json --threads 4 --game-log-dir $D/q4/g`
+   Job name `<A|B>_<seed>_<gi>_c<cyclers in hand>`. Read the pairs per job (A = mulligan, B = keep), split by c0 vs c >= 1.
+2. **The leaf-fidelity what-if (QC3, a SETTING -- the USER's).** search_leaf_depth 1 (today) vs search_leaf_first_turn_depth 1 +
+   search_leaf_depth 0 vs search_leaf_depth 0, d3 b10 x100 seed 127000 + d5 b20 x60 seed 128000:
+   `env MTG_PGO=0 MTG_SLOW_GAME_MS=1 $D/mtg.c5 --batch $D/leaf/m.json --threads 4 --game-log-dir $D/leaf/g`
+3. **MTG_NESTED_EXH_AXIS A/B.** d3 b10 x200 seed 129000 + d5 b20 x100 seed 130000, chunks interleaved, base vs nex, both with
+   EXTRA + NOM2 per job:
+   `env MTG_PGO=0 MTG_SLOW_GAME_MS=1 MTG_ROLLOUT_STATS=1 $D/mtg.c5 --batch $D/ab2/m.json --threads 4 --game-log-dir $D/ab2/g`
+   Pair by (depth, gi) from the SLOW-GAME lines: `python3 $D/pair.py`-style, or adapt `$D/fleetpair.py`.
+4. If NOM2 is adopted: flip `EnvOn("MTG_LEAF_KILL_ONLY_NOM2", false)` to true (TurnSolver.cpp, LeafKillOnlyNoM2On) and its
+   HeuristicArm.h comment. Re-run smoke, accept GT: the 21 configs listed above move, plus the same 13 decks' regression and
+   overnight rows.
+
+### Questions for the USER (QC*, collected here; never blocking)
+- QC1. THE KEEP POLICY'S CURVE CHECK IS BLIND TO CYCLERS. Evidence:
+  - The default TwoDrop check counts neither Street Wraith's free cycle nor Curator's {U} cycle as a play.
+  - Over 600 first hands (seeds 109000 / 110000, d0, the engine's own keep decisions): 37.2% mulligan. Of those:
+    - 102 one-land hands;
+    - 22 no-land hands;
+    - 2 with six or more lands;
+    - **97 (16% of all hands) fail ONLY "no nonland of MV <= 2"**.
+  - 70 of those 97 hold a creature cycler, 36 hold two, and 35 hold a cycler AND an Unpredictable Cyclone.
+  - So about 12% of all games (31% of mulligans) are mulliganed although the hand has a turn-1/2 play the deck is built around.
+    Each such mulligan then plays ~10-14 trial games.
+  - My reading: a modelling gap in the GENERIC curve check (cycling is a play), not a deck heuristic. The keep policy is yours.
+  - The paired keep-vs-mulligan measurement that would show whether keeping them is better is built but UN-RUN (resume 1).
+- QC2. NOM2 (the kill-only turn for decks with no second main). Sound: 0 mismatches at unlimited budget. Effects:
+  - Units: most d3 rows x0.74-0.89; Cyclone x0.92 / x0.954.
+  - Play: 12 of 13 moving decks net <= 0. Fluctuator +1 over 3,000 games; every slower game recovers at d8 b0.
+  - Cyclone needs it ON to get the kill-only saving. DEFAULT OFF until you decide; I recommend ON.
+- QC3. The horizon leaf's 1-ply lookahead is 98% of the search's work. Its fidelity is a per-deck setting (search_leaf_depth /
+  search_leaf_first_turn_depth), so it is yours. The what-if is built but UN-RUN (resume 2).
+- QC4. Ponder is still width 7 in the adoption set: its order variants are ~25% of wall. MTG_CYCLONE_PONDER_PLANS (yours;
+  measured neutral earlier, units x0.90-0.92) and MTG_NESTED_EXH_AXIS (agent's budget-staged form, unmeasured) are the two
+  levers.
+- QC5. The ms gate reads about 2.6-3.0x on a loaded host with PB_PLANS and fails without it; units read 3.9-7.2x. Re-time on a
+  quiet host before a verdict (Q41).
+
 ## Open questions for the user (collected, never blocking)
+- QC1-QC5 (cost agent, 2026-10-29): see "Cost agent: per-game slowness beyond bottoming" above -- the curve check's
+  blindness to cyclers (QC1), NOM2 adoption (QC2), the leaf-fidelity setting (QC3), Ponder width (QC4), the gate verdict's host
+  load (QC5).
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
   (USER: *"I don't think life matters in the deck all that much"*). Toxic Deluge pruned (goldfish_inert).
