@@ -32331,10 +32331,24 @@ int CycloneCastOrderRankOf(const CardDefinition& def)
     return -1;
 }
 
+// THE TIER-ATTRIBUTION HANDLES (measurement only, DEFAULT OFF; HeuristicArm.h CYCLONE_CO_REV_*): each moves ONE group of the
+// drafted order back to where the generic order puts it, the rest unchanged, so a slower game can be pinned on a tier.
+#define CYCLONE_CO_REV(fn, slot, envname) \
+    static bool fn() { static const bool on = EnvOn(envname); return heurarm::Flag(heurarm::slot, on); }
+CYCLONE_CO_REV(CycloneCoRevCyclers, CYCLONE_CO_REV_CYCLERS, "MTG_CYCLONE_CO_REV_CYCLERS")   // DEFAULT OFF
+CYCLONE_CO_REV(CycloneCoRevEldrazi, CYCLONE_CO_REV_ELDRAZI, "MTG_CYCLONE_CO_REV_ELDRAZI")   // DEFAULT OFF
+CYCLONE_CO_REV(CycloneCoRevSong,    CYCLONE_CO_REV_SONG,    "MTG_CYCLONE_CO_REV_SONG")      // DEFAULT OFF
+CYCLONE_CO_REV(CycloneCoRevFlat,    CYCLONE_CO_REV_FLAT,    "MTG_CYCLONE_CO_REV_FLAT")      // DEFAULT OFF
+CYCLONE_CO_REV(CycloneCoRevTotal,   CYCLONE_CO_REV_TOTAL,   "MTG_CYCLONE_CO_REV_TOTAL")     // DEFAULT OFF
+#undef CYCLONE_CO_REV
 int CycloneProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!CycloneCastOrderOn()) { return DeckProvider::CastOrderRank(s, def); }
-    const int r = CycloneCastOrderRankOf(def);
+    int r = CycloneCastOrderRankOf(def);
+    if (r > 80 && r < 90 && CycloneCoRevCyclers()) { r = 5; }
+    else if (r >= 100 && r < 200 && CycloneCoRevEldrazi()) { r = 5; }
+    else if (r == 60 && CycloneCoRevSong()) { r = 5; }
+    else if (r >= 10 && r <= 70 && r != 60 && CycloneCoRevFlat()) { r = 65; }
     return r >= 0 ? r : 300 + DeckProvider::CastOrderRank(s, def);
 }
 
@@ -32356,7 +32370,10 @@ const char* CycloneProvider::CastOrderTierName(int rank) const
 
 // TOTAL (the USER's cross-deck ruling 2026-10-14): a tie between two different cards breaks by NAME. The ranks above
 // already separate every card in the list, so this decides only a card the order does not name.
-bool CycloneProvider::CastOrderTotalByName() const { return CycloneCastOrderOn(); }
+bool CycloneProvider::CastOrderTotalByName() const
+{
+    return CycloneCastOrderOn() && !CycloneCoRevTotal() && !CycloneCoRevFlat();
+}
 
 // The draft's item D: rank-sort sets that hold a draw spell too, and run the range ladder for every set.
 bool CycloneProvider::OrderOpaqueCastsByRank() const { return CycloneOrderDrawTurnsOn(); }
