@@ -107,6 +107,26 @@ inline bool PlaceholderFeaturesOn()   // learned-model featurizers -- a USER dec
 // ZoneCard when the group's lever is on, else the card itself (the historical placeholder read).
 inline const Card& ZoneCardIf(bool on, const Card& c) { return on ? ZoneCard(c) : c; }
 
+// MTG_TECTONIC_PIN_FOLD (HeuristicArm.h TECTONIC_PIN_FOLD; DEFAULT ON, =0 restores the pre-fold behaviour
+// byte-identically): Tectonic Giant's two state pins (scripted_tectonic_mode / _keep) are COMBAT pins. The ONE
+// reader: ApplyAttackModalTriggers (both worlds) consumes them whether or not a trigger fired, and the search's
+// fan-out / combat-pin fold (TurnSolver.cpp) read the same switch, so the executor and the rollout cannot
+// disagree about when a pin dies.
+inline bool TectonicPinFoldOn()
+{
+    static const bool e = EnvOn("MTG_TECTONIC_PIN_FOLD", true);
+    return heurarm::Flag(heurarm::TECTONIC_PIN_FOLD, e);
+}
+// MTG_FLING_PIN_FOLD (HeuristicArm.h FLING_PIN_FOLD; DEFAULT ON, =0 restores the pre-fold behaviour byte-identically):
+// Surtland Flinger's victim pin (scripted_fling_victim) is a COMBAT pin, the Tectonic shape. The ONE reader:
+// FireAttackSacFling (both worlds) spends it whether or not a fling fired, and the search's fan-out / combat-pin
+// fold read the same switch.
+inline bool FlingPinFoldOn()
+{
+    static const bool e = EnvOn("MTG_FLING_PIN_FOLD", true);
+    return heurarm::Flag(heurarm::FLING_PIN_FOLD, e);
+}
+
 // A/B opt-out (default ON): retain leftover / over-produced mana (depletion + filter
 // lands forced to over-tap) into the turn-scoped reserve state.floating_mana, so a later
 // same-(main-)phase cast can spend it (CR 500.4). MTG_NO_FLOAT_LEFTOVER=1 disables the
@@ -14573,8 +14593,19 @@ inline std::vector<int> FlingVictimCandidates(const GameState& state, int contro
 // find_by_id): snapshot card numbers, re-derive indices by id. It also gives the
 // "a sacrificed attacker stops dealing combat damage" rule for free -- the dead id is simply not
 // found and drops out of the vector.
+inline void FireAttackSacFlingImpl(GameState& state, int controller, std::vector<int>& attacker_indices);
 inline void FireAttackSacFling(GameState& state, int controller,
                                std::vector<int>& attacker_indices)
+{
+    FireAttackSacFlingImpl(state, controller, attacker_indices);
+    // THIS combat's pin, spent whether or not a fling fired (no Flinger attacked, nothing to sacrifice): a
+    // pinned variant whose fling never fired then leaves combat in its base plan's state, which is what
+    // MTG_COMBAT_PIN_FOLD compares (TurnSolver.cpp PlanHasCombatPin). MTG_FLING_PIN_FOLD=0: it rides on to the
+    // turn start, as before.
+    if (FlingPinFoldOn()) { state.scripted_fling_victim = -1; }
+}
+inline void FireAttackSacFlingImpl(GameState& state, int controller,
+                                   std::vector<int>& attacker_indices)
 {
     if (attacker_indices.empty()) { return; }
     const int bf0 = static_cast<int>(state.battlefield.size());
@@ -18497,13 +18528,87 @@ inline void ApplyAttackTriggerDamage(GameState& state, int controller,
 // branch's DEFAULT. That default is "take the damage if it alone is lethal, otherwise take the
 // cards" -- deliberately simple, because the axis is what makes the real decision; a cleverer
 // static rule would just be a narrowing wearing a heuristic's clothes.
+//
+// PER-TRIGGER ORDINALS (MTG_TECTONIC_ORDINALS, DEFAULT ON; 2026-10-29). Both pins are PACKED by the ORDINAL of
+// the modal trigger within this combat (the k-th attacking modal creature, in declare order), so a second
+// attacking copy's mode and keep are searched too instead of taking the default -- Giants s1350001 gi103 T5,
+// one Giant on the battlefield and a second cast with Lightning Greaves: 3 + 3 + 7 combat was exactly lethal
+// at 12, and only the first trigger could be pinned to the damage. Which copy holds which ordinal does not
+// matter (every copy's trigger is the same), only the ordered sequence of choices. The encoding keeps every
+// value the single-trigger axis ever wrote:
+//   MODE: ordinal 0 in bits 0-1 as 0 = damage, 1 = impulse, 2 = unpinned (the historical 0 / 1); ordinal
+//         k >= 1 in bits 2k..2k+1 as 0 = unpinned, 1 = damage, 2 = impulse.
+//   KEEP: ordinal 0 in bits 0-2 as the exiled index (the historical value), 7 = unpinned; ordinal k >= 1 in
+//         bits 3k..3k+2 as 0 = unpinned, j + 1 = index j.
+// -1 = nothing pinned, as before. MTG_TECTONIC_ORDINALS=0: the historical "first trigger consumes the mode,
+// first mode-B trigger consumes the keep" convention, every later copy on the default.
+constexpr int kTectonicMaxOrdinals = 4;
+inline bool TectonicOrdinalsOn()
+{
+    static const bool e = EnvOn("MTG_TECTONIC_ORDINALS", true);
+    return heurarm::Flag(heurarm::TECTONIC_ORDINALS, e);
+}
+// The pinned mode of ordinal `k` (0 damage / 1 impulse), or -1 = unpinned.
+inline int TectonicModePinAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kTectonicMaxOrdinals) { return -1; }
+    const int f = (packed >> (2 * k)) & 3;
+    if (k == 0) { return f <= 1 ? f : -1; }
+    return f == 0 ? -1 : f - 1;
+}
+// The pinned exiled index of ordinal `k`, or -1 = unpinned (the ranked default).
+inline int TectonicKeepPinAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kTectonicMaxOrdinals) { return -1; }
+    const int f = (packed >> (3 * k)) & 7;
+    if (k == 0) { return f == 7 ? -1 : f; }
+    return f - 1;
+}
+// Pack per-ordinal choices (each -1 = unpinned) into the two ints above; all-unpinned packs to -1.
+inline int TectonicPackModes(const int* modes, int n)
+{
+    int v = 0; bool any = false;
+    for (int k = 0; k < n && k < kTectonicMaxOrdinals; ++k)
+    {
+        const int m = modes[k];
+        if (m >= 0) { any = true; }
+        const int f = (k == 0) ? (m >= 0 ? m : 2) : (m >= 0 ? m + 1 : 0);
+        v |= f << (2 * k);
+    }
+    return any ? v : -1;
+}
+inline int TectonicPackKeeps(const int* keeps, int n)
+{
+    int v = 0; bool any = false;
+    for (int k = 0; k < n && k < kTectonicMaxOrdinals; ++k)
+    {
+        const int j = keeps[k];
+        if (j >= 0) { any = true; }
+        const int f = (k == 0) ? (j >= 0 ? j : 7) : (j >= 0 ? j + 1 : 0);
+        v |= f << (3 * k);
+    }
+    return any ? v : -1;
+}
+
+inline int ResolveAttackModalModeDefault(const CardDefinition& d, int opp_life)
+{
+    const int dmg = d.params.attack_trigger_damage_each_opponent;
+    if (dmg > 0 && opp_life <= dmg) { return 0; }
+    return (d.params.attack_trigger_impulse_exile > 0) ? 1 : 0;
+}
 inline int ResolveAttackModalMode(const GameState& state, int controller,
                                   const CardDefinition& d)
 {
     if (state.scripted_tectonic_mode >= 0) { return state.scripted_tectonic_mode; }
-    const int dmg = d.params.attack_trigger_damage_each_opponent;
-    if (dmg > 0 && state.players[1 - controller].life <= dmg) { return 0; }
-    return (d.params.attack_trigger_impulse_exile > 0) ? 1 : 0;
+    return ResolveAttackModalModeDefault(d, state.players[1 - controller].life);
+}
+// ...the ordinal form (MTG_TECTONIC_ORDINALS): the pin of the k-th modal trigger of this combat, else the
+// default against `opp_life` (the life that trigger will see).
+inline int ResolveAttackModalModeAt(const GameState& state, const CardDefinition& d, int k, int opp_life)
+{
+    const int pin = TectonicModePinAt(state.scripted_tectonic_mode, k);
+    if (pin >= 0) { return pin; }
+    return ResolveAttackModalModeDefault(d, opp_life);
 }
 
 // Projection twin of ApplyAttackTriggerDamage for PendingAttackDamage's const fast path. Must
@@ -18552,12 +18657,39 @@ inline int CountAttackTriggerDamageAny(
 // Fire the modal attack trigger for every attacking Tectonic Giant, in BOTH worlds, at
 // declare-attackers (before the damage loop, so a lethal mode-A trigger ends the game before
 // combat damage and a mode-B land reaches hand in time for the post-combat main).
+inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
+                                         const std::vector<int>& attacker_indices);
 inline void ApplyAttackModalTriggers(GameState& state, int controller,
                                      const std::vector<int>& attacker_indices)
+{
+    ApplyAttackModalTriggersImpl(state, controller, attacker_indices);
+    // THIS combat's pins, consumed whether or not a trigger fired (the Bruna / Raubahn convention): no Giant
+    // attacked (never cast, no haste, attack declined). No trigger resolves off them before the next turn start
+    // clears them; what this changes is that a pinned variant whose trigger never fired now leaves combat in its
+    // base plan's state, by construction -- which is what MTG_COMBAT_PIN_FOLD compares (TurnSolver.cpp,
+    // PlanHasCombatPin) -- and that a later attack projection from this turn (the next turn's lethal reads)
+    // resolves the DEFAULT mode instead of a spent pin. MTG_TECTONIC_PIN_FOLD=0: the pins ride on to the turn
+    // start, as before.
+    if (TectonicPinFoldOn()) { state.scripted_tectonic_mode = -1; state.scripted_tectonic_keep = -1; }
+}
+inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
+                                         const std::vector<int>& attacker_indices)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
     Player& ap = state.players[controller];
+    // MTG_TECTONIC_ORDINALS: the k-th modal trigger reads ordinal k of both pins; they are spent once the loop
+    // is over (below), not by the first trigger.
+    const bool ordinals = TectonicOrdinalsOn();
+    const int  mode_pins = state.scripted_tectonic_mode;
+    const int  keep_pins = state.scripted_tectonic_keep;
+    int ordinal = 0;
+    bool fired = false;
+    struct SpendPins
+    {
+        GameState& s; const bool& on; const bool& fired;
+        ~SpendPins() { if (on && fired) { s.scripted_tectonic_mode = -1; s.scripted_tectonic_keep = -1; } }
+    } spend_pins{ state, ordinals, fired };
     for (int idx : attacker_indices)
     {
         if (idx < 0 || idx >= bf_size) { continue; }
@@ -18566,8 +18698,19 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
         if (!d || !d->params.attack_trigger_modal) { continue; }
 
-        int mode = ResolveAttackModalMode(state, controller, *d);
-        if (state.scripted_tectonic_mode >= 0) { state.scripted_tectonic_mode = -1; }  // consumed
+        const int k = ordinal++;
+        fired = true;
+        int mode = 0;
+        if (ordinals)
+        {
+            const int pin = TectonicModePinAt(mode_pins, k);
+            mode = pin >= 0 ? pin : ResolveAttackModalModeDefault(*d, state.players[1 - controller].life);
+        }
+        else
+        {
+            mode = ResolveAttackModalMode(state, controller, *d);
+            if (state.scripted_tectonic_mode >= 0) { state.scripted_tectonic_mode = -1; }  // consumed
+        }
         if (g_play_attack_mode_chooser != nullptr)   // real human resolution only
         {
             const int pick = (*g_play_attack_mode_chooser)(
@@ -18604,10 +18747,12 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
         { examined.push_back(ap.library.DrawTop()); }
         if (examined.empty()) { continue; }
 
-        // Default pick: the highest mana value, tie-break lower card number (deterministic).
-        // DISCLOSED NARROWING: unlike the MODE, which card to keep is not yet a searched axis --
-        // see docs/design/analysis-Giants.md. The human path DOES surface it (the `dig` chooser
-        // below), so this default binds only the autonomous search.
+        // Default pick: the highest mana value, tie-break lower card number (deterministic). Only a
+        // DEFAULT: inside the search window the keep is SEARCHED (Plan::tectonic_keep_choice, one per
+        // trigger ordinal -- MTG_TECTONIC_ORDINALS) for every modal creature that can attack this combat,
+        // on the battlefield or cast by the plan (MTG_TECTONIC_CAST_AXIS), so this binds the playout beyond
+        // the horizon, the base plan's own resolution, and an unpinned later ordinal; the human path
+        // surfaces it (the `dig` chooser below).
         // THE MV READ (MTG_PLACEHOLDER_TECTONIC, DEFAULT OFF). An exiled library card is a name-only
         // placeholder whose own m_mana_cost is {0}, so the historical read ties every card at 0 and keeps the
         // lower card number. The definition MV makes "highest MV" real -- and on held-out seed 1350001 it
@@ -18616,7 +18761,8 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
         // this turn (hasted by Lightning Greaves) attacks under this default alone, and highest-MV keeps a
         // Stinkdrinker Daredevil over the Mountain the turn needs (seed 1350104 gi103, T5 -> T6). OFF until
         // the keep/mode axis also covers a modal Giant the plan casts; then this is just the branch default.
-        // docs/design/placeholder-card-reads.md.
+        // docs/design/placeholder-card-reads.md. (2026-10-29: the axis now does -- MTG_TECTONIC_CAST_AXIS /
+        // MTG_TECTONIC_ORDINALS, measured with this lever both ways in docs/design/analysis-Giants.md.)
         const bool def_cost = PlaceholderTectonicOn();
         std::size_t best = 0;
         for (std::size_t k = 1; k < examined.size(); ++k)
@@ -18647,9 +18793,16 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
         // SEARCHED KEEP (Plan::tectonic_keep_choice): overrules the ranked default above. Range
         // is checked against `examined`, not against attack_trigger_impulse_exile: a library with
         // one card left exiles one, and an out-of-range pin must fall back to the default rather
-        // than index off the end. Consumed and cleared by the FIRST modal trigger of a combat, so
-        // a second attacking copy takes the default -- the same convention the mode pin uses.
-        if (state.scripted_tectonic_keep >= 0)
+        // than index off the end. MTG_TECTONIC_ORDINALS: the k-th modal trigger reads ordinal k.
+        // Off: consumed and cleared by the FIRST mode-B trigger of a combat, so a second attacking
+        // copy takes the default -- the historical convention.
+        if (ordinals)
+        {
+            // Ordinal k's keep (MTG_TECTONIC_ORDINALS); the pins are spent after the loop.
+            const int pin = TectonicKeepPinAt(keep_pins, k);
+            if (pin >= 0 && pin < static_cast<int>(examined.size())) { best = static_cast<std::size_t>(pin); }
+        }
+        else if (state.scripted_tectonic_keep >= 0)
         {
             if (state.scripted_tectonic_keep < static_cast<int>(examined.size()))
             { best = static_cast<std::size_t>(state.scripted_tectonic_keep); }
@@ -18693,11 +18846,20 @@ inline int CountAttackTriggerModalDamage(const GameState& state, int controller,
                                          const std::vector<const Permanent*>& attackers)
 {
     int total = 0;
+    // MTG_TECTONIC_ORDINALS: the k-th modal attacker resolves ordinal k (the combat's order -- the attacker
+    // lists are both built in battlefield order), and an unpinned one defaults against the life the earlier
+    // triggers left, as it does in combat. Off: every copy read the FIRST trigger's pin.
+    const bool ordinals = TectonicOrdinalsOn();
+    int k = 0;
     for (const Permanent* atk : attackers)
     {
+        if (ordinals && atk->controller_index != controller) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(atk->card);
         if (!d || !d->params.attack_trigger_modal) { continue; }
-        if (ResolveAttackModalMode(state, controller, *d) != 0) { continue; }
+        const int mode = ordinals
+            ? ResolveAttackModalModeAt(state, *d, k++, state.players[1 - controller].life - total)
+            : ResolveAttackModalMode(state, controller, *d);
+        if (mode != 0) { continue; }
         total += d->params.attack_trigger_damage_each_opponent * gamesetup::OpponentHeads();
     }
     return total;

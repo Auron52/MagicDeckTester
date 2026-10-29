@@ -979,6 +979,13 @@ struct GameState
     // ladder, for any state not built through StampDeckTraits. Sits in the padding after
     // m1_hand_n, so sizeof(GameState) does not move.
     std::uint8_t                  deck_creature_pip_colors = 0x1F;
+    // A MODAL ATTACK TRIGGER in the deck (CardParams::attack_trigger_modal, Tectonic Giant; StampDeckTraits): the
+    // deck_has_* presence gate of the Tectonic axis's CAST route (AppendSubdecisionAxes: the hand / library
+    // scan for a modal creature a plan could bring into combat), so a clear bit PROVES that scan finds
+    // nothing. DEFAULT TRUE == scan (an unstamped GameState keeps it), the only-err-true rule. In the two bytes
+    // of padding before m1_hand_turn (a bool beside the deck_has_* run before m_provider cost
+    // sizeof(GameState) +8, measured). A deck constant: never folded into any key.
+    bool                          deck_has_attack_modal = true;
     int                           m1_hand_turn = -1;
     // COMBAT HAND ARRIVALS -- card numbers that entered the active player's hand DURING COMBAT this
     // turn (today: Adaptive Omnitool's attack_dig_hand_count, fired at declare-attackers). These are
@@ -1077,13 +1084,18 @@ struct GameState
     // Searched TECTONIC GIANT attack-trigger MODE (Plan::tectonic_mode_choice): 0 = "3 damage to
     // each opponent", 1 = "exile the top two, play one", -1 = the provider default. Same
     // state-pin shape and lifetime as scripted_fling_victim -- decided in the main phase,
-    // consumed at declare-attackers. Consumed and cleared by the FIRST modal trigger of a
-    // combat; a second attacking copy takes the default (the lackey_choice convention).
+    // consumed at declare-attackers. PACKED PER TRIGGER ORDINAL (MTG_TECTONIC_ORDINALS, 2026-10-29; the
+    // encoding is SpellEffects.h TectonicModePinAt -- ordinal 0 keeps the historical 0 / 1, so a
+    // single-trigger value reads exactly as before): the k-th modal trigger of the combat reads ordinal k,
+    // and the combat spends the whole pin (MTG_TECTONIC_PIN_FOLD: whether or not a trigger fired). With
+    // MTG_TECTONIC_ORDINALS=0, the historical convention: consumed and cleared by the FIRST modal trigger,
+    // a second attacking copy on the default.
     int                      scripted_tectonic_mode = -1;
     // Searched TECTONIC GIANT mode-B KEEP (Plan::tectonic_keep_choice): the index into the two
     // exiled cards that gets staged into hand. -1 = the ranked default (highest mana value).
-    // Same state-pin shape, lifetime and first-trigger-consumes convention as the mode above;
-    // out of range for the cards actually exiled (a short library) falls back to the default.
+    // Same state-pin shape, lifetime and per-ordinal packing as the mode above (TectonicKeepPinAt;
+    // ordinal 0 keeps the historical index); out of range for the cards actually exiled (a short
+    // library) falls back to the default.
     int                      scripted_tectonic_keep = -1;
     // Searched BRUNA, LIGHT OF ALABASTER gather subset (Plan::bruna_gather_choice): which entry of
     // the provider's ranked BrunaGatherCandidates subset list the attack trigger takes. -1 = the

@@ -741,6 +741,11 @@ enum Slot : int
     FLOAT_COMMIT_NET,         // MTG_FLOAT_COMMIT_NET  sub-lever of MTG_PLACEHOLDER_MANA (reads nothing while it is off): FloatSourceTapCommitted's colour demand is net of what already floats, so a tap-ahead spreads its commits across the hand's colours. A measured variant; DEFAULT OFF
     PLACEHOLDER_ECHO,         // MTG_PLACEHOLDER_ECHO  DEFAULT OFF. GoblinsProvider::PayEchoToKeep's "no gas" clause reads hand / staged costs off the definition (the placeholder {0} made every spell "castable", so the clause fired only on a spell-less hand). Live, it lost 10 / won 1 on 5,500 held-out Goblins games (4 / 1 with the land-drop credit, 1 / 0 with the draw-land variant), none recovering at d8 b0: the echo is never searched. Blocked on making echo a SEARCHED decision
     PLACEHOLDER_TECTONIC,     // MTG_PLACEHOLDER_TECTONIC  DEFAULT OFF. Tectonic Giant's mode-B DEFAULT keep (highest MV) reads the exiled cards' MV off the definition (the placeholder tied them all at 0 -> lowest card number). Live, Giants lost 4 / won 0 on seed 1350001, none recovering at d8 b0: the keep axis is only fanned out for a Giant on the battlefield at the plan root, so a Giant cast this turn attacks under the default alone. Blocked on extending the keep/mode axis to a Giant the plan casts
+    TECTONIC_PIN_FOLD,        // MTG_TECTONIC_PIN_FOLD  Tectonic Giant's mode / keep pins are COMBAT pins: consumed at declare-attackers whether or not a trigger fired (the Bruna convention), joined to PlanHasCombatPin so MTG_COMBAT_PIN_FOLD folds a variant whose post-combat state a sibling already reached (an inert pin, two identical exiled cards, the variant equal to the default), charged its node unit only when not folded, and not emitted on a post-combat list (MTG_COMBAT_PIN_PRECOMBAT's rule). IDENTITY folds; DEFAULT ON; =0 restores the pre-fold behaviour byte-identically
+    TECTONIC_ORDINALS,        // MTG_TECTONIC_ORDINALS  Tectonic Giant's mode / keep pins are PACKED per trigger ordinal (SpellEffects.h TectonicModePinAt), and the axis fans the PRODUCT over every modal creature that can attack this combat (on the battlefield + the plan's casts), so a SECOND attacking copy is searched instead of taking ResolveAttackModalMode / the ranked keep (Giants s1350001 gi103 T5: the two triggers' 3 + 3 were lethal and only the first could be pinned). The projection reads the same ordinals. DEFAULT ON; =0 -> the first trigger consumes the pins, every later copy on the default
+    TECTONIC_CAST_AXIS,       // MTG_TECTONIC_CAST_AXIS  the Tectonic mode / keep axis fans for a modal Giant the PLAN brings into combat (cast from hand or staged, a Vial put, a breakpoint continuation's cast) with a haste source reachable -- not only one already on the battlefield. Without it a Giant cast and attacking the same turn (Lightning Greaves) resolved by ResolveAttackModalMode / the ranked keep, an in-window greedy (the NO-GREEDY rule). DEFAULT ON; =0 -> the battlefield-only gate
+    FLING_PIN_FOLD,           // MTG_FLING_PIN_FOLD  Surtland Flinger's victim pin is a COMBAT pin (the MTG_TECTONIC_PIN_FOLD shape): spent at declare-attackers whether or not a fling fired, joined to PlanHasCombatPin so MTG_COMBAT_PIN_FOLD folds a variant whose post-combat state a sibling reached, charged its node unit only when not folded, and not emitted on a post-combat list. IDENTITY folds; DEFAULT ON; =0 restores the pre-fold behaviour byte-identically
+    FLING_CAST_AXIS,          // MTG_FLING_CAST_AXIS  the Flinger victim axis fans for a Flinger the PLAN casts with a haste source reachable (not only one on the battlefield), and every route's victim list adds the creatures the plan itself casts. Without it a Flinger cast and attacking the same turn (Lightning Greaves) took FlingVictimCandidates' front -- which never declines -- an in-window greedy. DEFAULT ON; =0 -> the battlefield-only gate and battlefield-only victims
     COUNT
 };
 
@@ -1426,6 +1431,11 @@ inline const char* Name(int slot)
         "MTG_FLOAT_COMMIT_NET",
         "MTG_PLACEHOLDER_ECHO",
         "MTG_PLACEHOLDER_TECTONIC",
+        "MTG_TECTONIC_PIN_FOLD",
+        "MTG_TECTONIC_ORDINALS",
+        "MTG_TECTONIC_CAST_AXIS",
+        "MTG_FLING_PIN_FOLD",
+        "MTG_FLING_CAST_AXIS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

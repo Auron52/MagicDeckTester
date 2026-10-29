@@ -1392,6 +1392,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool counter_ping = false;
         // Abiding Grace's end-step mode/return (GameState::deck_has_endstep_reanimate).
         bool endstep_reanimate = false;
+        // Tectonic Giant's modal attack trigger: the Tectonic axis's cast route (GameState::deck_has_attack_modal).
+        bool attack_modal = false;
         // Emeria, the Sky Ruin's upkeep return (GameState::deck_has_upkeep_reanimate).
         bool upkeep_reanimate = false;
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
@@ -1465,6 +1467,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.attack_attach_equipment)        { attack_attach = true; }
                 if (d->params.remove_counter_ping_damage > 0) { counter_ping = true; }
                 if (d->params.endstep_modal_reanimate_mv >= 0) { endstep_reanimate = true; }
+                if (d->params.attack_trigger_modal)            { attack_modal = true; }
                 if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
                     || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
@@ -1540,6 +1543,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no end-step reanimator can exist, so the end-step
         // Grace walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
         state.deck_has_endstep_reanimate   = garth || endstep_reanimate;
+        // Same reasoning, no lever: a clear bit proves no modal attack trigger can exist, so the Tectonic
+        // axis's cast-route scan is dead code for that deck.
+        state.deck_has_attack_modal        = garth || attack_modal;
         // Same reasoning, no lever: a clear bit proves no upkeep graveyard reanimator (Emeria) can exist,
         // so the upkeep walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
         state.deck_has_upkeep_reanimate    = garth || upkeep_reanimate;

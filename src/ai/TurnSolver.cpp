@@ -912,6 +912,18 @@ static bool CombatPinFoldOn()
     static const bool env = EnvOn("MTG_COMBAT_PIN_FOLD", true);        // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::COMBAT_PIN_FOLD, env);
 }
+// Tectonic Giant's mode / keep pins (MTG_TECTONIC_PIN_FOLD) and Surtland Flinger's victim pin (MTG_FLING_PIN_FOLD), as
+// COMBAT pins (SpellEffects.h TectonicPinFoldOn / FlingPinFoldOn):
+// both are consumed at THIS turn's declare-attackers whether or not a trigger fired (ApplyAttackModalTriggers),
+// so a variant whose post-combat state an earlier sibling already reached has that sibling's future -- an
+// inert pin (no Giant / Flinger attacked), the variant equal to the default the base plan resolved, two exiled
+// cards of one name (the hand is keyed by name), or two victims of one name. Its node unit is charged only once it is NOT folded (the
+// MTG_FB_HOLD_FOLD_FREE shape: re-pricing, inert at an unlimited budget).
+static bool PlanHasAttackTriggerPin(const TurnSolver::Plan& p)
+{
+    return ((p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0) && TectonicPinFoldOn())
+        || (p.fling_victim_choice != -1 && FlingPinFoldOn());   // ...and Surtland Flinger's victim (same shape)
+}
 static bool PlanHasCombatPin(const TurnSolver::Plan& p)
 {
     return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
@@ -919,7 +931,8 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
         || p.combat_crack_choice >= 0          // ...and the in-combat Khalni crack
         || p.combat_transform_choice >= 0      // ...and Bloodline Keeper's in-combat transform (Vampires B)
         || p.attack_attach_choice >= 0         // Raubahn's attack attach: read in THIS combat only
-        || p.fb_hold_choice >= 0;              // the searched banked hold: read at THIS combat's pump only
+        || p.fb_hold_choice >= 0               // the searched banked hold: read at THIS combat's pump only
+        || PlanHasAttackTriggerPin(p);        // Tectonic mode / keep, Flinger victim (the *_PIN_FOLD levers)
 }
 // Firing counters (printed with the rollout stats): pin variants NOT emitted for a post-combat list,
 // and pinned candidates folded after combat (la_cand loop / FSLineWin).
@@ -24240,6 +24253,14 @@ static bool FlingAxisEnabled()
     static const bool on = EnvOn("MTG_FLING_AXIS", true);
     return heurarm::Flag(heurarm::FLING_AXIS, on);
 }
+// ...and WHERE the Flinger and its victims come from (MTG_FLING_CAST_AXIS, DEFAULT ON; =0 -> the battlefield-only
+// gate and victims). See the SEARCHED SURTLAND FLINGER VICTIM block in AppendSubdecisionAxes. A search-shape gate
+// (the executor enumerates nothing), so its one reader lives here.
+static bool FlingCastAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_FLING_CAST_AXIS", true);
+    return heurarm::Flag(heurarm::FLING_CAST_AXIS, on);
+}
 // Tectonic Giant's modal attack trigger ("3 damage to each opponent" vs "exile two, play one").
 // Default ON: both modes are live every turn and the crossover moves with board and life, so a
 // static rule would be a narrowing wearing a heuristic's clothes. =0 falls back to
@@ -24257,6 +24278,15 @@ static bool TectonicKeepAxisEnabled()
 {
     static const bool on = EnvOn("MTG_TECTONIC_KEEP_AXIS", true);
     return heurarm::Flag(heurarm::TECTONIC_KEEP_AXIS, on);
+}
+// ...and WHERE the Giant comes from (MTG_TECTONIC_CAST_AXIS, DEFAULT ON; =0 -> the battlefield-only gate):
+// the fan covers a modal creature the PLAN brings into this combat, not only one on the battlefield at the
+// plan's start. See the SEARCHED TECTONIC GIANT MODE block in AppendSubdecisionAxes. A search-shape gate
+// (the executor enumerates nothing), so its one reader lives here.
+static bool TectonicCastAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_TECTONIC_CAST_AXIS", true);
+    return heurarm::Flag(heurarm::TECTONIC_CAST_AXIS, on);
 }
 // Width 2 -- the ranked top two. Measured identical to W=3 and W=4 on every held-out seed, which
 // says the search's whole contribution is "occasionally the provider's #2 is better than its #1",
@@ -75151,9 +75181,25 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // is precisely what the search evaluates. So the base plan carries the ranked default and
     // this emits DECLINE plus one variant per legal victim. Skipped in human play, where the
     // viewer surfaces the choice through the `sacrifice` decision instead.
-    if (!cont_axes_only && FlingAxisEnabled() && !HumanPlayActive())
+    //
+    // A FLINGER THE PLAN CASTS, AND VICTIMS THE PLAN CASTS (MTG_FLING_CAST_AXIS, DEFAULT ON; 2026-10-29) -- the
+    // Tectonic cast route's twin (same deck, same Lightning Greaves). The gate scanned only the battlefield, so a
+    // Flinger cast and attacking the same turn resolved FlingVictimCandidates' front, which never declines: the
+    // default sacrificed the best-ranked body every time, with search depth remaining (the NO-GREEDY rule). Now
+    // a base plan that casts a Flinger while a haste source is reachable fans too (the source = that cast's
+    // card number, which rides from hand to battlefield), and every route's victim list adds the creatures the
+    // plan itself casts -- "sacrifice the Giant this plan just cast" was unrepresentable on either route. A
+    // victim that is not on the battlefield at resolution resolves as a decline (FireAttackSacFling), a
+    // duplicate the combat-pin fold collapses (MTG_FLING_PIN_FOLD), which also keeps a post-combat list from
+    // fanning at all (the pin is read at THIS turn's declare-attackers).
+    // NOT covered (disclosed): a Flinger only a breakpoint continuation casts, and a SECOND attacking Flinger
+    // (the pin is consumed by the first fling; Giants holds two copies).
+    const bool fling_list_dead = !is_pre_combat && FlingPinFoldOn() && CombatPinPrecombatOn()
+                              && !state.deck_has_extra_combat;
+    if (!cont_axes_only && FlingAxisEnabled() && !HumanPlayActive() && !fling_list_dead)
     {
         const int me = state.active_player_index;
+        const Player& fp = state.players[me];
         int  fling_src_id = -1;
         for (const Permanent& p : state.battlefield)
         {
@@ -75161,39 +75207,111 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (d && d->params.attack_sac_fling) { fling_src_id = p.card.m_number; break; }
         }
-        if (fling_src_id >= 0)
+        // The cast route's state facts: a Flinger in hand (staged included), and a haste source in play.
+        const bool cast_axis = FlingCastAxisEnabled() && is_pre_combat;
+        auto fling_haste_def = [](const CardDefinition* d)   // the Tectonic cast route's haste list
+        {
+            if (d == nullptr) { return false; }
+            const CardParams& q = d->params;
+            return d->tmpl == CardTemplate::Haste || q.grants_haste || q.equip_grants_haste || q.grants_temp_haste
+                || q.haste_on_flying_enter || q.sac_outlet_grants_haste || q.team_pump_grants_haste
+                || q.sac_for_mana_grants_haste || q.tap_put_grants_haste;
+        };
+        bool fling_hand = false, fling_haste_bf = false;
+        if (cast_axis)
+        {
+            for (const Card& c : fp.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->params.attack_sac_fling && d->card.IsCreature()) { fling_hand = true; break; }
+            }
+            if (fling_hand && fling_src_id < 0)
+            {
+                fling_haste_bf = state.floating_haste_c > 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != me || p.def_absent) { continue; }
+                    if (fling_haste_def(CardDatabase::Instance().LookupCached(p.card))) { fling_haste_bf = true; break; }
+                }
+            }
+        }
+        if (fling_src_id >= 0 || fling_hand)
         {
             const CardDefinition* sd = CardDatabase::Instance().Lookup("Surtland Flinger");
             const std::string dsub =
                 (sd != nullptr) ? sd->params.attack_sac_fling_double_subtype : std::string();
             // No attacker set is known yet at plan time, so rank as if nothing is attacking --
             // the pin is a CARD NUMBER, so a shifted ranking cannot mis-resolve it.
-            const std::vector<int> cands =
-                FlingVictimCandidates(state, me, fling_src_id, dsub, std::vector<int>{});
-            if (!cands.empty())
+            const std::vector<int> bf_cands = fling_src_id >= 0
+                ? FlingVictimCandidates(state, me, fling_src_id, dsub, std::vector<int>{}) : std::vector<int>{};
+            std::vector<TurnSolver::Plan> extra;
+            std::vector<int> cands;
+            std::size_t n_fanned = 0;
+            for (const TurnSolver::Plan& p : all)
             {
-                std::vector<TurnSolver::Plan> extra;
-                for (const TurnSolver::Plan& p : all)
+                // Base plans only -- one axis at a time, so cost stays additive.
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
+                    || p.discard_choice >= 0 || p.vial_charge_choice >= 0)
+                { continue; }
+                int src = fling_src_id;
+                cands.clear();
+                if (cast_axis)
                 {
-                    // Base plans only -- one axis at a time, so cost stays additive.
-                    if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
-                        || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
-                        || p.discard_choice >= 0 || p.vial_charge_choice >= 0)
-                    { continue; }
-                    {   // DECLINE -- keep the body.
-                        TurnSolver::Plan v = p;
-                        v.fling_victim_choice = -2;
-                        extra.push_back(std::move(v));
-                    }
-                    for (int id : cands)
+                    // This plan's casts: a Flinger (the source when none is in play) and every creature (a victim).
+                    int  c_src = -1;
+                    bool c_haste = false;
+                    std::vector<int> casts;
+                    for (const Action& a : p.actions)
                     {
-                        TurnSolver::Plan v = p;
-                        v.fling_victim_choice = id;
-                        extra.push_back(std::move(v));
+                        if (a.kind != Action::Kind::CastFromHand) { continue; }
+                        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                        if (d == nullptr) { continue; }
+                        if (fling_haste_def(d) || (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste)))
+                        { c_haste = true; }
+                        if (!d->card.IsCreature()) { continue; }
+                        if (a.hand_index < 0 || a.hand_index >= static_cast<int>(fp.hand.size())
+                            || fp.hand[static_cast<std::size_t>(a.hand_index)].m_name != a.card_name)
+                        { continue; }
+                        const int num = fp.hand[static_cast<std::size_t>(a.hand_index)].m_number;
+                        if (d->params.attack_sac_fling && c_src < 0) { c_src = num; }
+                        casts.push_back(num);
+                    }
+                    if (src < 0)
+                    {
+                        if (c_src < 0 || !(fling_haste_bf || c_haste)) { continue; }
+                        src = c_src;
+                    }
+                    cands = src == fling_src_id ? bf_cands
+                                                : FlingVictimCandidates(state, me, src, dsub, std::vector<int>{});
+                    for (const int num : casts)
+                    {
+                        if (num != src && std::find(cands.begin(), cands.end(), num) == cands.end())
+                        { cands.push_back(num); }
                     }
                 }
-                TRACE("flingaxis", "T%d %zu plan(s) x %zu victim(s)+decline -> %zu variant(s)",
-                      state.turn_number, all.size(), cands.size(), extra.size());
+                else
+                {
+                    cands = bf_cands;
+                }
+                if (cands.empty()) { continue; }
+                ++n_fanned;
+                {   // DECLINE -- keep the body.
+                    TurnSolver::Plan v = p;
+                    v.fling_victim_choice = -2;
+                    extra.push_back(std::move(v));
+                }
+                for (int id : cands)
+                {
+                    TurnSolver::Plan v = p;
+                    v.fling_victim_choice = id;
+                    extra.push_back(std::move(v));
+                }
+            }
+            if (n_fanned > 0)
+            {
+                TRACE("flingaxis", "T%d %zu plan(s) (%zu fanned) -> %zu variant(s)",
+                      state.turn_number, all.size(), n_fanned, extra.size());
                 all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                       std::make_move_iterator(extra.end()));
             }
@@ -75205,15 +75323,37 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // is resolving expensive Giants and whose only other card selection is Giant Harbinger. Which
     // is better depends on whether the game ends soon, so the base plan carries
     // ResolveAttackModalMode's default and these two variants let the search overrule it.
-    if (!cont_axes_only && TectonicAxisEnabled() && !HumanPlayActive())
+    //
+    // A MODAL CREATURE THE PLAN BRINGS INTO COMBAT (MTG_TECTONIC_CAST_AXIS, DEFAULT ON; 2026-10-29). The gate
+    // used to scan only the battlefield at the plan's start, so a Giant CAST this turn and attacking at once
+    // (Lightning Greaves' haste) took ResolveAttackModalMode's mode and the ranked keep -- a single-answer pick
+    // with search depth remaining, the in-window greedy the NO-GREEDY rule forbids. With the placeholder read
+    // fixed (the keep's MV off the definition) that default kept a Stinkdrinker Daredevil over the Mountain the
+    // turn needed: Giants held-out s1350001 gi103 / gi118 / gi421 / gi976, a turn slower at d8 b0. Now, with no
+    // modal creature on the battlefield, a base plan fans when it can bring one into THIS combat: its own
+    // actions hold one (any action kind -- a hand or staged cast, a Vial put; or a put-with-haste source such as
+    // Incandescent Soulstoke beside one in hand) AND a haste source is reachable (on the battlefield, among the
+    // plan's own casts, the creature's own Haste, a haste-tagged {C} floating) -- or it opens a breakpoint
+    // whose continuation could cast one (a continuation derivation never fans combat pins; the outer plan
+    // carries them). A plan that can do neither cannot read the pin, so it gets no variant. Whatever is still
+    // inert at combat (no equip, the attack declined) folds there: MTG_TECTONIC_PIN_FOLD.
+    //
+    // A POST-COMBAT LIST (MTG_TECTONIC_PIN_FOLD with MTG_COMBAT_PIN_PRECOMBAT, the Bruna / Wings rule): the pins
+    // are read at THIS turn's declare-attackers, so on the m2 decision or an interior second main every variant
+    // was its base plan scored again. A deck with additional combats after main 2 (Moraug) still fans there.
+    const bool tec_list_dead = !is_pre_combat && TectonicPinFoldOn() && CombatPinPrecombatOn()
+                            && !state.deck_has_extra_combat;
+    if (!cont_axes_only && TectonicAxisEnabled() && !HumanPlayActive() && !tec_list_dead)
     {
         const int me = state.active_player_index;
+        const Player& tp = state.players[me];
         bool modal_present = false;
         // Mode-B keep width: how many cards the trigger exiles to choose among. Taken from the
         // card actually on the battlefield rather than hardcoded at 2, and capped by the library
         // -- a library with one card left exiles one, so a keep=1 variant would be a duplicate of
         // keep=0 (the consumption site falls back to the default when the pin is out of range).
         int n_keep = 0;
+        int n_bf   = 0;   // modal creatures on the battlefield: each one a trigger ordinal of every plan
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != me || !p.card.IsCreature()) { continue; }
@@ -75221,12 +75361,92 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (d && d->params.attack_trigger_modal)
             {
                 modal_present = true;
+                ++n_bf;
                 n_keep = std::max(n_keep, d->params.attack_trigger_impulse_exile);
             }
         }
-        n_keep = std::min(n_keep, static_cast<int>(state.players[me].library.size()));
+        // The cast route's state facts (see above). Without MTG_TECTONIC_ORDINALS a battlefield Giant makes
+        // them moot (every plan fans, and only the first trigger can be pinned); with it, a copy the plan
+        // casts beside one is its own ordinal.
+        auto modal_def = [](const CardDefinition* d)
+        { return d != nullptr && d->params.attack_trigger_modal && d->card.IsCreature(); };
+        // Every param that grants haste to ANOTHER creature (cards.json's *haste* family) and the Haste
+        // template. Over-inclusion costs a variant that folds after combat; a miss would cost the line.
+        auto haste_def = [](const CardDefinition* d)
+        {
+            if (d == nullptr) { return false; }
+            const CardParams& q = d->params;
+            return d->tmpl == CardTemplate::Haste || q.grants_haste || q.equip_grants_haste || q.grants_temp_haste
+                || q.haste_on_flying_enter || q.sac_outlet_grants_haste || q.team_pump_grants_haste
+                || q.sac_for_mana_grants_haste || q.tap_put_grants_haste;
+        };
+        bool cast_route = false;         // some plan from this state could bring a modal creature in
+        bool haste_bf = false;           // a haste source already in play (or a haste-tagged {C} floating)
+        bool modal_hand = false;         // a modal creature in hand (staged included)
+        bool modal_lib = false;          // ...or in the library (a breakpoint continuation could draw it)
+        bool put_bf = false;             // a put-from-hand-with-haste source in play (Soulstoke)
+        const bool ordinals = TectonicOrdinalsOn();
+        if ((!modal_present || ordinals) && TectonicCastAxisEnabled() && is_pre_combat && state.deck_has_attack_modal)
+        {
+            haste_bf = state.floating_haste_c > 0;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != me || p.def_absent) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (haste_def(d)) { haste_bf = true; }
+                if (d != nullptr && d->params.tap_put_grants_haste) { put_bf = true; }
+            }
+            for (const Card& c : tp.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!modal_def(d)) { continue; }
+                modal_hand = true;
+                n_keep = std::max(n_keep, d->params.attack_trigger_impulse_exile);
+            }
+            for (std::size_t li = 0, ln = tp.library.size(); li < ln && !modal_hand && !modal_lib; ++li)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(tp.library.RawAt(li));
+                if (!modal_def(d)) { continue; }
+                modal_lib = true;
+                n_keep = std::max(n_keep, d->params.attack_trigger_impulse_exile);
+            }
+            cast_route = modal_hand || modal_lib;
+        }
+        // How many modal creatures THIS plan brings into this combat (the cast route; see above): its own
+        // modal casts while a haste source is reachable, one more for a put-with-haste source beside a modal
+        // creature in hand, one more for a breakpoint continuation. An over-count only adds an ordinal no
+        // trigger reads (its variants fold after combat); an under-count would leave a copy on the default.
+        auto plan_brings = [&](const TurnSolver::Plan& p) -> int
+        {
+            if (!cast_route) { return 0; }
+            int c_modal = 0;
+            bool c_haste = false, c_put = false;
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (d == nullptr) { continue; }
+                if (modal_def(d))
+                {
+                    ++c_modal;
+                    if (d->card.HasKeyword(Keyword::Haste)) { c_haste = true; }
+                }
+                if (haste_def(d)) { c_haste = true; }
+                if (d->params.tap_put_grants_haste) { c_put = true; }
+            }
+            int n = (c_modal > 0 && (haste_bf || c_haste)) ? c_modal : 0;
+            if (modal_hand && (put_bf || c_put)) { ++n; }
+            if (PlanOpensBreakpoint(state, p) != 0) { ++n; }
+            return n;
+        };
+        n_keep = std::min(n_keep, static_cast<int>(tp.library.size()));
         const bool keep_axis = TectonicKeepAxisEnabled() && n_keep > 1;
-        if (modal_present)
+        // Per-ordinal options: A, then B with each keep (or B on the ranked keep when the keep axis is off).
+        const int n_opts = keep_axis ? 1 + n_keep : 2;
+        // The PRODUCT over ordinals is capped at kTectonicProductCap variants per base plan; past it the
+        // latest ordinals stay on the default -- a disclosed representation limit no current list reaches
+        // (Giants holds two copies: 3 x 3 = 9).
+        constexpr int kTectonicProductCap = 27;
+        if (modal_present || cast_route)
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
@@ -75237,6 +75457,32 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1)
                 { continue; }
+                int n_ord = n_bf + plan_brings(p);
+                if (n_ord <= 0) { continue; }
+                if (ordinals && n_ord > 1)
+                {
+                    n_ord = std::min(n_ord, kTectonicMaxOrdinals);
+                    int width = 1, fit = 0;
+                    while (fit < n_ord && width * n_opts <= kTectonicProductCap) { width *= n_opts; ++fit; }
+                    n_ord = std::max(fit, 1);
+                    int modes[kTectonicMaxOrdinals], keeps[kTectonicMaxOrdinals];
+                    for (int code = 0; code < width; ++code)
+                    {
+                        int c = code;
+                        for (int k = 0; k < n_ord; ++k)
+                        {
+                            const int o = c % n_opts;
+                            c /= n_opts;
+                            modes[k] = (o == 0) ? 0 : 1;
+                            keeps[k] = (o >= 1 && keep_axis) ? o - 1 : -1;
+                        }
+                        TurnSolver::Plan v = p;
+                        v.tectonic_mode_choice = TectonicPackModes(modes, n_ord);
+                        v.tectonic_keep_choice = TectonicPackKeeps(keeps, n_ord);
+                        extra.push_back(std::move(v));
+                    }
+                    continue;
+                }
                 // Mode A carries no keep choice (nothing is exiled). Mode B fans out once per
                 // exiled card, because WHICH card is staged is a real decision the ranked default
                 // (highest mana value) gets wrong -- sweep GI=7 took Fire Diamond over the
@@ -88601,7 +88847,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // MTG_FB_HOLD_FOLD_FREE: a searched banked-hold variant is charged its node unit only once the
         // combat-pin fold below has NOT folded it -- an uncontested or dominated flip is its base plan's
         // combat, so it re-prices to nothing (see FbHoldFoldFreeOn).
-        const bool fb_fold_free = p.fb_hold_choice >= 0 && pin_fold_here && FbHoldFoldFreeOn();
+        const bool fb_fold_free = pin_fold_here && ((p.fb_hold_choice >= 0 && FbHoldFoldFreeOn())
+                                                    || PlanHasAttackTriggerPin(p));   // ...and a Tectonic / Flinger pin
         if (!fb_fold_free) { ConsumeAt(budget, unitsite::kFsPre); }   // one interior node (plan applied)
         pbsite::Note(pbsite::kFsPre, p, budget);
         cantripattr::Scope _cas(cantripattr::AxisOf(p));   // MTG_CANTRIP_ATTRIB (diagnostic)
@@ -95333,8 +95580,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // main); the remaining turns are counted inside SimulateToEnd.
             // MTG_FB_HOLD_FOLD_FREE: a searched banked-hold variant pays this unit only once the combat-pin
             // fold below has not folded it (FSLineWin's twin; see FbHoldFoldFreeOn).
-            const bool fb_fold_free = is_pre_combat && plan.fb_hold_choice >= 0 && pin_fold_here
-                                   && FbHoldFoldFreeOn();
+            const bool fb_fold_free = is_pre_combat && pin_fold_here
+                                   && ((plan.fb_hold_choice >= 0 && FbHoldFoldFreeOn())
+                                       || PlanHasAttackTriggerPin(plan));   // ...and a Tectonic / Flinger pin
             if (!fb_fold_free) { ConsumeAt(budget, unitsite::kLookaheadCand); }
             if (m2yield::Enabled()) { ++m2yield::t_lacand; }
             if (ko && s_rollout_stats)

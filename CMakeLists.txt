@@ -406,6 +406,7 @@ add_executable(mtg-test
     test/unit/test_tutor_fail_to_find.cpp
     test/unit/test_colossus_cast_order.cpp
     test/unit/test_giants_discard.cpp
+    test/unit/test_tectonic_axis.cpp
     test/unit/test_antilife_tutor.cpp
     test/unit/test_fluctuator_discard.cpp
     test/unit/test_fluctuator_order.cpp

@@ -1529,7 +1529,9 @@ public:
 
         // TECTONIC GIANT modal attack trigger: 0 = "3 damage to each opponent", 1 = "exile the
         // top two, play one", -1 (default) == ResolveAttackModalMode, byte-identical to no
-        // branch. Same state-pin route and reason as fling_victim_choice.
+        // branch. Same state-pin route and reason as fling_victim_choice. PACKED per trigger ordinal
+        // (MTG_TECTONIC_ORDINALS; SpellEffects.h TectonicPackModes) when the plan's combat can hold
+        // more than one modal attacker -- ordinal 0 alone is the historical 0 / 1.
         int tectonic_mode_choice = -1;
 
         // ...and WHICH of the two exiled cards mode B keeps. -1 (default) == the ranked pick

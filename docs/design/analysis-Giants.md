@@ -851,8 +851,10 @@ Each is folded into **all three** dedup sites, the dominance key and the sim key
 `scripts/audit_viewer_decisions.py --deck ... --profile ...` → **5h PASS**; observed decision
 types `attack_mode`, `dig`, `discard`, `sacrifice`, `target`. One disclosed narrowing remains:
 
-* **Tectonic Giant mode-B card pick** — the *human* path surfaces it as a `dig` decision, but the
-  **autonomous** engine uses a ranked default (highest mana value, tie-break lower card number).
+* **Tectonic Giant mode-B card pick** *(superseded: searched since 2026-09-22, and for a Giant the plan
+  casts / a second attacking copy since 2026-10-29 -- see the last section)* — the *human* path surfaces it
+  as a `dig` decision, but the **autonomous** engine uses a ranked default (highest mana value, tie-break
+  lower card number).
   GI=7 showed this has real cost: the default picked Fire Diamond when **Mountain** was strictly
   better and would have cost the search its fourth land. A second searched axis is the follow-up.
 * **`attack_mode` heuristic default under-picks mode A.** `ResolveAttackModalMode` returns mode A
@@ -1996,3 +1998,88 @@ the digest is a broken experiment, not a finding.
 Identical to the pre-Giants baseline. All three `--strict` hard gates zero, and **`mull-drift` held
 at 10** — worth stating explicitly, because this change replaces the deck's mulligan policy and
 mull-drift is the counter that would have moved if reference keeps had gone out of sync.
+
+## Tectonic Giant / Surtland Flinger: the axes cover a creature the PLAN casts (2026-10-29)
+
+### The defect
+
+The Tectonic mode / keep axis (`Plan::tectonic_mode_choice` / `tectonic_keep_choice`) and the Flinger
+victim axis (`Plan::fling_victim_choice`) were fanned in `AppendSubdecisionAxes` only when the trigger's
+creature was **on the battlefield at the plan's start**. A Giant CAST this turn and attacking at once
+(Lightning Greaves' haste) took `ResolveAttackModalMode` and the ranked keep (highest MV); a Flinger cast
+the same way took `FlingVictimCandidates`' front, which never declines. Both are single-answer picks with
+search depth remaining: the in-window greedy the NO-GREEDY rule forbids. A second attacking Tectonic Giant
+had the same defect: the first trigger consumed the pins, so the second copy always took the default.
+
+The placeholder audit exposed it (`docs/design/placeholder-card-reads.md`): reading the keep's MV off the
+definition (`MTG_PLACEHOLDER_TECTONIC`) made "highest MV" real, and it kept a Stinkdrinker Daredevil over
+the Mountain the turn needed. Held-out s1350001 gi103 / gi118 / gi421 / gi976 each lost a turn, and none
+recovered at d8 b0:
+* gi976 T5: Giant cast, Greaves on; mode A was lethal (11 combat + 3 against 13), but the default took B.
+* gi421 T6: land-screwed; the Giant kept Lightning Bolt over the Mountain.
+* gi103 T5: one Giant in play plus a second one cast. Both triggers on damage (3 + 3 + 7 combat = 13
+  against 12) was lethal, but only the first trigger could be pinned.
+
+### The fix (five levers, all DEFAULT ON, each `=0` byte-identical to the old behaviour)
+
+| lever | what it does |
+|---|---|
+| `MTG_TECTONIC_CAST_AXIS` | Without a modal creature in play, a base plan fans when its own actions bring one into combat with a haste source reachable. Sources: a hand or staged cast, a Vial put, a put-with-haste source (Soulstoke) beside one in hand, or a plan that opens a breakpoint. Haste can come from the battlefield, the plan's casts, the creature's own Haste, or a haste-tagged {C}. Deck-gated on `GameState::deck_has_attack_modal`, a stamp in padding: `sizeof` unchanged. |
+| `MTG_TECTONIC_ORDINALS` | Both pins are PACKED per trigger ordinal (`SpellEffects.h TectonicModePinAt` / `TectonicKeepPinAt`). Ordinal 0 keeps the historical 0 / 1 values. The axis fans the PRODUCT over every modal creature that can attack: the ones in play plus the plan's casts, capped at 27 variants per base plan (Giants: 3 x 3 = 9). The attack projection (`CountAttackTriggerModalDamage`) reads the same ordinals. |
+| `MTG_TECTONIC_PIN_FOLD` | The pins are COMBAT pins. They are spent at declare-attackers whether or not a trigger fired (the Bruna convention) and are joined to `PlanHasCombatPin`, so `MTG_COMBAT_PIN_FOLD` folds a variant whose post-combat state a sibling reached: an inert pin, the variant equal to the default, or two exiled cards of one name. They are charged their node unit only when not folded (re-pricing, inert at b0) and never fanned on a post-combat list. |
+| `MTG_FLING_CAST_AXIS` | A Flinger the plan casts with haste reachable fans too, keyed by that cast's card number. On both routes the victim list adds the creatures the plan itself casts. |
+| `MTG_FLING_PIN_FOLD` | The Flinger pin gets the Tectonic fold shape. |
+
+The executor needed nothing new: it installs the chosen plan's pins through `WritePostApplyStatePins`, and
+both worlds resolve them in `ApplyAttackModalTriggers` / `FireAttackSacFling`. The defaults survive only
+beyond the horizon (the playout), on the base plan's own resolution, and for an ordinal the plan did not
+pin. Unit tests: `test/unit/test_tectonic_axis.cpp`.
+
+### Measurement (base 513e27555; held-out s2910001 std x 6000, s2920001 2HG x 3000; per-game paired)
+
+| comparison | slower | faster | net turns | units ratio |
+|---|---|---|---|---|
+| std: all five ON vs all OFF | **0** | 131 | **-179** | 0.686 |
+| std: Tectonic three ON (Flinger OFF) vs OFF | 0 | 101 | -149 | 0.716 |
+| std: Flinger two ON on top | 0 | 30 | -30 | 0.958 |
+| 2HG: all ON vs all OFF | **0** | 116 | **-224** | 0.639 |
+| std: ON + `MTG_PLACEHOLDER_TECTONIC=1` vs ON | 0 | 0 | 0 | 1.000 |
+| std: ON + PT + `MTG_TECTONIC_KEEP_LAND=1` vs ON + PT | 0 | 0 | 0 | 1.000 |
+| 2HG: ON + PT vs ON | 0 | 1 | -1 | 0.990 |
+| 2HG: ON + PT + KEEP_LAND vs ON + PT | 0 | 1 | -1 | 1.009 |
+| std: OFF + PT vs OFF (the audit's regression, reproduced) | 9 | 4 | +5 | 0.987 |
+
+Interleaved wall (old base, 10 alternating blocks x 150 games per arm): ON / OFF wall **0.79**, units
+0.71. On the old base (3b0abb513, same seeds) the attribution was:
+* fold alone (the two PIN_FOLDs): 0 slower / 8 faster, units 0.711. Most of the units saving is the fold:
+  the post-combat Tectonic lists had been tripled for every Giant in play.
+* fold + cast routes: -146.
+* ordinals on top: -37.
+
+**d8 b0, s1350001:**
+
+| arm | gi103 | gi118 | gi421 | gi976 |
+|---|---|---|---|---|
+| ON | 5 | 5 | 7 | 5 |
+| ON + PT | 5 | 5 | 7 | 5 |
+| ON + PT + KEEP_LAND | 5 | 5 | 7 | 5 |
+| OFF + PT (unrecovered before this change) | 6 | 6 | 8 | 6 |
+
+Same with `MTG_PLACEHOLDER_PROVIDER=0` on the old base. So the keep default no longer decides anything
+inside the window, and `MTG_PLACEHOLDER_TECTONIC` can turn on (a decision for the USER / the placeholder
+owner). No other deck can move: with the five levers OFF, Giants and Giants 2HG are byte-identical to the
+base binary, and at defaults so are the 38 other suite decks (a 10-60 game sample each, both bases).
+
+### Open: the same gate shape elsewhere (survey, not fixed here)
+
+* **Goblin Lackey** (`LackeyCandidateCountNow`, Goblins). Its put axis needs a Lackey that can attack
+  from the battlefield. A Lackey cast with Goblin Warchief / Chieftain haste takes the provider's top put.
+  This is a combat-damage trigger, so it is outside this change; it needs its own Goblins A/B.
+* **Primeval Titan's attack pick** (Landfall). Battlefield-only too, but Landfall holds no haste source, so
+  nothing is live today.
+* **A second attacking Surtland Flinger** still resolves on the default: the victim pin is one card
+  number, consumed by the first fling. A Flinger that only a breakpoint continuation casts is not covered
+  either; Giants has no breakpoint opener.
+* **Fling x Tectonic are not crossed.** Each axis fans base plans only ("one axis at a time"). A line that
+  needs a non-default fling AND a non-default Tectonic choice in the same combat is unrepresentable. This
+  is a property of every post-dedup axis, not specific to this change.

@@ -539,6 +539,11 @@ static_assert(sizeof(Player) == 200,
 // after deck_has_look_top_watcher). Classification: a DECK CONSTANT stamped once in StampDeckTraits -- identical
 // across every pair of states Build() compares, nothing to fold. It decides whether the payment refine may trade a
 // floated unit for a released source (ManaOracle.cpp RefinePayment); the refine memo keys it in its context bits.
+// +0 bytes (2026-10-29, the Tectonic cast route): `deck_has_attack_modal` (a bool in the 2-byte hole after
+// deck_creature_pip_colors, before m1_hand_turn -- beside the deck_has_* run before m_provider it cost +8,
+// measured 1160). Classification: a DECK CONSTANT stamped once in StampDeckTraits that only skips the Tectonic
+// axis's provably-empty cast-route scan -- nothing to fold. (The same change PACKS scripted_tectonic_mode /
+// _keep per trigger ordinal -- SpellEffects.h TectonicModePinAt; same ints, still FOLDED raw in Build().)
 static_assert(sizeof(GameState) == 1152,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
