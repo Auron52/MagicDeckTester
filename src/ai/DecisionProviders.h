@@ -3579,6 +3579,8 @@ public:
     // MTG_CYCLONE_CYCLER_RULE (DEFAULT OFF): which creature cycler a plan's cycle seed uses (CycloneCyclerRuleApply).
     bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
                                 std::vector<std::string>& if_not) const override;
+    bool CycleSeedAdmitOut(const GameState& s, const std::string& cycler, int plan_mana, int plan_blue,
+                           bool* decided) const override;
     bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
     // CANTRIP PROPOSALS (DEFAULT OFF pending the USER, Q33): MTG_CYCLONE_PUTBACK_RULE = rank 0 of the scored
     // order is the put-back rule (it turns the scorer on for the put-back by itself); MTG_CYCLONE_PUTBACK_SINGLE

@@ -68958,10 +68958,12 @@ static CycleSeedAdmitCtx BuildCycleSeedAdmitCtx(const GameState& state, const st
     }
     return c;
 }
-static bool CycleSeedAdmitted(const CycleSeedAdmitCtx& c, const std::vector<Action>& cands, const std::vector<int>& sel)
+static bool CycleSeedAdmitted(const GameState& state, const CycleSeedAdmitCtx& c, const std::vector<Action>& cands,
+                              const std::vector<int>& sel)
 {
     const Action* seed = nullptr;
     bool replacer_cast = false;
+    int plan_mana = 0, plan_blue = 0;   // what the plan's casts spend before the cycle (rituals' net output off)
     for (int j : sel)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
@@ -68969,12 +68971,25 @@ static bool CycleSeedAdmitted(const CycleSeedAdmitCtx& c, const std::vector<Acti
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { replacer_cast = true; }
+        if (!a.free_cast)
+        {
+            plan_mana += a.cost.ManaValue();
+            plan_blue += a.cost.blue;
+            if (d != nullptr && d->params.ritual_floating_mana > 0) { plan_mana -= d->params.ritual_floating_mana; }
+        }
     }
     if (seed == nullptr) { return true; }
-    const std::vector<std::string>& L = (c.replacer_out || replacer_cast) ? c.if_out : c.if_not;
     const CardDefinition* sd = seed->def ? seed->def : CardDatabase::Instance().LookupInterned(seed->card_name);
     if (sd == nullptr || !sd->card.IsCreature()) { return true; }   // the rule judges creature cyclers only
-    return std::find(L.begin(), L.end(), seed->card_name.str()) != L.end();
+    if (c.replacer_out || replacer_cast)
+    {
+        bool decided = false;
+        const bool ok = ResolveProvider(state).CycleSeedAdmitOut(state, seed->card_name.str(), std::max(0, plan_mana),
+                                                                 plan_blue, &decided);
+        if (decided) { return ok; }
+        return std::find(c.if_out.begin(), c.if_out.end(), seed->card_name.str()) != c.if_out.end();
+    }
+    return std::find(c.if_not.begin(), c.if_not.end(), seed->card_name.str()) != c.if_not.end();
 }
 // True when the selection's cycle seed carries a pin its sibling already covers (see above).
 static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<Action>& cands,
@@ -70023,7 +70038,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (seed_fold.on && CycleSeedPinRedundant(seed_fold, cands, sel)) { return; }
         // THE PROVIDER's CYCLER ADMISSION (DecisionProvider::CycleSeedAdmissionSets; a hard prune, default none): the
         // seed cycles after the plan's casts, so a plan casting the replacer first is judged with it out.
-        if (seed_admit.on && !CycleSeedAdmitted(seed_admit, cands, sel)) { return; }
+        if (seed_admit.on && !CycleSeedAdmitted(state, seed_admit, cands, sel)) { return; }
         // ...and Q36's seed-only walk fold (sound; see CycleSeedWalkRedundant). After the admission: a seed-only plan casts
         // nothing, so the admission reads the same (seed card, replacer out) for every sibling the fold matches.
         if (seed_fold.on && CycleSeedWalkFoldOn() && CycleSeedWalkRedundant(state, seed_fold, cands, sel)) { return; }
