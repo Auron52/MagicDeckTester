@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "cbd1f2c7759866946e9f2e55dff6855fa96f67ca",
+  "valueleaf": "em:2550e4f625f80f336c21"
+ },
+ "deck": "fluctuator",
+ "frozen": "97fc2c2371beb7bb1101ea14a70d4dfc2f777dd2",
+ "heartbeat": "2026-10-29T15:38:18Z",
+ "host": "550a08fdc1f3",
+ "run_id": "fluctuator-artifact-queue-d7d6a5-20261029T153818",
+ "score": 0.2304,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-29T15:38:18Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
