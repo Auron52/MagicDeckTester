@@ -1181,6 +1181,116 @@ Artifacts: `logs/cyclone/item8/` (identity batch outputs + per-game `.wins` / `.
 `logs/cyclone/q44/` (the A/B batch, `report.py` / `report.json`, `classify.py` and the per-depth first-divergence
 listings); single-game logs under `build/scratch/cyclone/q44/rep/`.
 
+### Sound folds F2/F4/F5/F3 + Q36 (2026-10-28)
+
+Design: `docs/design/cantrip-search-optimization.md` §2 (F2-F5) and §6 rows 3-5; Q26 (a) / Q36 below. Every fold is a
+per-job lever (heurarm) with a VERIFY mode that applies what it would decline and compares; the sound ones ship
+DEFAULT ON (CLAUDE.md "collapse wasted search unconditionally"), the one that is not exact ships OFF. Commits:
+865529ba0 (F2), 9618b2ba6 (F5 + the F4 candidate + the shared fan-table channel + an F2 guard), 506ba7dc1 (F3), 9b384907d (Q36).
+
+**What was built.**
+| fold | lever (default) | what it removes | why it is exact |
+|---|---|---|---|
+| F2 exact fan width | `MTG_PB_EXACT_WIDTH` (ON) | the clamped ranks past the real put-back list: the fan is the resolution's own count when nothing that changes hand or library is applied before the put-back (PutBackExactWidth: the hand minus the cast and a land-first inert land, plus the top `draw` cards, the resolver's class counter) | the same candidates in the same order; only duplicates of the last one go. A pure ritual ahead of it may still be DROPPED by the apply (the Q37 phantom-ritual credit), so it counts as still in hand: a tight upper bound, not exact |
+| F3 shuffle mirror | `MTG_PB_MIRROR_FOLD` (ON) | the second of (a, b) / (b, a) when the put-back's first library event is a shuffle (a library tutor cast next, or trailing land-search activations: Myriad Landscape) | ShuffleByKey orders by card NUMBER, so one set shuffles to one order -- provided the search before the shuffle cannot see the swap (at most one of the pair's classes findable by it), every number in library + hand is distinct, and the publishing apply witnessed the shuffle |
+| F4 stranded cast | `MTG_PB_STRAND_FOLD` (**OFF**, not exact) | a rank that puts back the last copy of a card the plan casts later (before any later cast that can draw) | it realises the smaller plan's same-pair member -- up to the payment allocation, which turned out NOT to be all (below) |
+| F5 cross-base prefix | `MTG_PB_XBASE_FOLD` (ON) | at a breakpoint-node host (FSLineWin), the whole fan of a base whose truncated prefix pended where an earlier base with the SAME prefix pended | the identical apply up to the partition at every rank (same actions, same resolution, same ordinal; the rank-0 collision witnesses that the tails' bills did not steer the prefix's payment) |
+| Q36 seed-only walk | `MTG_CYCLE_SEED_WALK_FOLD` (ON) | a cycle-seed variant of a SEED-ONLY plan with Unpredictable Cyclone out whose Curator scry + walk + keyed bottoming leave an earlier sibling's state (same pin), or any variant of a whiffing walk | the walk is computed exactly off the known library (the enumeration's state is the seed's); the random bottom is a keyed order of the set (KeyedBottom = BottomInRandomOrder's twin); the realised free-cast branch depends on the hit and the board only |
+
+**Verify modes (all mismatches must be 0).** Samples: Cyclone d3 b10 `--ignore-play-profile` x8 (seed 107000) and x16
+(107100), d5 b20 at the play settings x8 (108000), one pooled batch with every verify on; then the F2 re-check.
+| fold | compared | mismatches | notes |
+|---|---|---|---|
+| F2 | 1,924,815 + 6,192,156 resolutions | 0 / **3,224 then 0** (997,190 after the guard) | the 3,224 were all OVERcounts (emitted > real: harmless duplicates), every one the number-0 defect below: casting a number-0 Brainstorm erased a number-0 Ponder. Guard added: distinct card numbers in hand |
+| F3 | 48,978 + 8,739 mirror pairs | 0 (after the refinements; the design's version had **2,696**) | the shuffle ties number-0 cards (std::sort keeps the input order of ties) |
+| F4 | 252,185 + 45,201 pairs | **549 + 64 OTHER** (and 104,117 / 19,417 payment-only, 147,519 / 25,720 identical) | not exact -> OFF; a few of the 549 are a matching artifact (pairs keyed by card number, number-0 cards ambiguous) |
+| F5 | 3,796 ranks | 0 | |
+| Q36 | 1,237 variants | 0 | checked with the ENGINE's helpers on two copies |
+Fire rates in those 24 games: F2 sized 461,962 fans exactly (129,916 of them tight bounds) and left 147,501 on the
+old bound; F3 found mirror-eligible ranks in 2,445 of 134,639 fan tables; F5 41 collapsed fans; Q36 1,237 variants.
+
+**What the verify runs found beyond the folds.**
+1. **The number-0 card identity defect (pre-existing; Q53).** The rollout files a resolved instant / sorcery as its
+   DEFINITION's template card (`ap.graveyard.push_back(UnkickedSpellCard(def, def.card))` in apply_one; the
+   template's m_number is 0), not the cast copy (the Green Sun's Zenith shuffle had the same bug and was fixed by
+   GszShuffleCopyIdOn). An Eldrazi's graveyard shuffle (`put_into_graveyard_shuffles_graveyard`) then deals several
+   number-0 cards back into the library and the hand. Two consequences, both measured: (a) apply_one re-finds the
+   cast copy BY NUMBER after its payment (`cast_zone_number`), so casting a number-0 Brainstorm ERASED a number-0
+   Ponder -- the rollout's hand diverged from the real one (d5 T8, seed 108000); (b) ShuffleByKey's order is a total
+   order only over distinct numbers; number-0 cards tie and keep their input order, so a "shuffle" is not blind to
+   what came before it. The executor files the real copy, so after such a shuffle the clairvoyant search predicts a
+   different library / hand than the game deals. Not fixed here (it moves play wherever a graveyard comes back);
+   the three folds that rely on card identity (F2, F3, Q36) now require distinct numbers.
+2. **F3 is narrower than the design.** The shuffle is order-blind, but the SEARCH before it is not: a tutor's
+   candidate list is in library order and it takes the topmost copy of a name; a land search likewise. So the fold
+   needs at most one of the pair's classes findable by each search in the window -- Long-Term Plans, which finds
+   any card, qualifies only when its target is name-bound. Built plan-level only; the node-level form (the USER's
+   Brainstorm-then-crack-Scalding-Tarn line) needs continuation identity matched across two parents' lists: not
+   built (Q55).
+3. **F4 is not exact.** The payment allocation is steered by the plan's WHOLE bill (the line hold, PlanTraits),
+   the stranded cast's bill included, and a different allocation changes what the rest of the line achieves:
+   "Seething Song, Brainstorm, Ponder, cycle Curator of Mysteries" with the Ponder put back kept an Island up and
+   cycled the Curator; the smaller plan "Seething Song, Brainstorm, cycle Curator" tapped that Island for the Song
+   and could not pay the cycle. That line exists only through the stranding member, so declining it is lossy
+   under the engine's own model. Shipped OFF; measured as an arm below (Q54).
+
+**MEASUREMENT (held-out, paired, ONE pooled batch).** ONE pooled batch, one frozen binary (sha1 recorded; byte-identical to
+the rebuilt head 9b384907d), 8 threads, MTG_PGO=0 (a Release binary run directly), `MTG_PLAN_CACHE_KB=5000000` (the pool
+bound: paired, not byte-reproducible across interleavings, Q34), MTG_SLOW_GAME_MS=1, game logs. FRESH seeds (unused in
+this ledger before): 105000 d3 b10 `--ignore-play-profile` x400 and 106000 d5 b20 at the play settings (profile) x200.
+Arms as per-job flags: ON = the shipped set (F2, F3, F5, Q36 on; F4 off), OFF = all five off, F4 = ON + the F4 candidate.
+Kept games (the first seven kept: d0 log runs of the same seeds) 234 / 400 at d3, 123 / 200 at d5. delta = arm - ref in
+average win turn (unwon = 9; + = the arm slower); "same" = equal win turn; units = work units.
+| comparison | depth | n | avg arm / ref | delta (se) | slower / faster / same | identical play digest | units (all) | units (kept) | kept delta (se) |
+|---|---|---|---|---|---|---|---|---|---|
+| ON vs OFF | d3 b10 | 400 | 5.2375 / 5.2325 | **+0.0050 (0.0071)** | 3 / 2 / 395 | 390 | **x0.978** (1.594M vs 1.629M / game) | **x0.975** (414K vs 425K) | +0.0043 (0.0113) |
+| ON vs OFF | d5 b20 | 200 | 5.1400 / 5.1450 | **-0.0050 (0.0050)** | 0 / 1 / 199 | 196 | **x0.967** (1.861M vs 1.924M) | **x0.980** (594K vs 606K) | -0.0081 (0.0081) |
+| F4 vs ON | d3 b10 | 400 | 5.2400 / 5.2375 | +0.0025 (0.0083) | 3 / 2 / 395 | 391 | x1.003 | x0.998 | -0.0085 (0.0105) |
+| F4 vs ON | d5 b20 | 200 | 5.1500 / 5.1400 | +0.0100 (0.0071) | 2 / 0 / 198 | 194 | x1.006 | x1.011 | 0.0000 |
+The differing games: ON slower d3 gi 28, 136, 343, faster gi 65, 84; d5 faster gi 33. Fold activity in the batch (the ON
+and F4 arms; process totals): F3 declined 8.78M mirror ranks (479K fans with mirror-eligible ranks of 10.78M tables), F5
+78K ranks (1,107 fans), Q36 116K seed variants (2,174 of them whiffs), F4 (its arm) 8.17M ranks; F2 sized 44.2M fans
+exactly (6.6M tight bounds). Process peak RSS 10.3 GB (8 workers, the 5 GB pool bound); wall 3 h 39 m (one F4 game, gi
+367, ran 35+ min: a wall pathology of that game in every arm -- ON 33 min, OFF 22 min, at ~3.8M units, 17x the usual
+ms per unit -- not a fold).
+
+**Wall.** The batch's per-game thread-ms (MTG_PGO=0, one binary) reads ON/OFF x1.218 at d3 and x0.965 at d5 -- NOT a fold
+effect: the pooled arms ran at different times on a box whose load swung 7-37 (my gates, two other agents' batches),
+and the d3 figure is dominated by gi 367 (33 min ON, 22 min OFF, the same ~3.8M units). The controlled reading is the
+concurrent two-process probe below: -10% process wall. 
+
+**Peak RSS per arm** (the two arms as two CONCURRENT single-thread processes on the frozen binary, the plan-cache pool
+UNBOUNDED -- `MTG_PLAN_CACHE_KB=0` -- 6 games d3 b10 seed 109100, env levers): ON **1.71 GB** vs OFF **2.45 GB (-30%)**,
+process wall 3 m 28 s vs 3 m 52 s (-10%), both averaging 6.00. Most of the memory is presumably F2's: exact widths mean
+fewer clones in every list that is still materialised (the breakpoint continuation cache, the m2 memo); the declines
+(F3 / F5 / Q36) save applies, not storage.
+
+**`--budget-ms 0` (unlimited), folds ON vs OFF in one batch (seed 109000).** d3 b0 is INTRACTABLE on this deck: with the
+lookahead bottomer on, no game finished in 30 min on 4 threads (each mulligan plays every candidate bottom as an
+unlimited game); with it off (`MTG_BOTTOM_ROLLOUTS=0`, both arms), ten d3 games ran 50 min without finishing. Fell back
+to d2 x8 and d1 x20 per arm, cheap bottoming on both arms, a 45-minute per-game wall cap (`MTG_MAX_GAME_WALL_SEC=2700`;
+a capped game is UN-RUN, never a pass). At the time of writing: **d2 -- 3 pairs completed and equal** (gi 4, 5, 6: T5,
+T4, T3 in both arms; ON 131 / 92 / 1 s vs OFF 158 / 194 / 0 s), **0 different, 5 capped (UN-RUN)**: gi 0, 1, 2, 7 capped
+in both arms, gi 3 capped in OFF only (ON finished T5 in 21 min at 30.1M units; OFF was cut at 45 min, 49.9M units).
+**d1 -- 0 pairs completed (UN-RUN)**: the ON arm's games were still running or done (gi 1, 2, 5, 6, 7, 8, 10, 11, 13
+finished) when the OFF arm had barely started. The batch was left running (pid in
+`build/scratch/cyclone/folds/b0/batch_b0.pid`; `b0/report.py` pairs the results). So the unlimited-budget claim rests on
+the three equal d2 pairs plus the verify modes' identities; it is NOT a 20-game confirmation.
+
+**Verdict.** F2, F3, F5 and Q36 are exact by their verify modes. After the guards there were 0 mismatches over about 9M F2
+resolutions, 57.7K F3 mirror pairs, 3.8K F5 ranks and 1.2K Q36 variants. They ship DEFAULT ON. As a play change they are
+neutral within noise on fresh seeds: d3 +0.005 (se 0.007, 3 slower / 2 faster, 390 of 400 games playing the identical
+line) and d5 -0.005 (se 0.005, 0 / 1, 196 / 200 identical). Units are x0.978 / x0.967 (kept games x0.975 / x0.980), peak
+RSS per worker is -30% and the controlled process wall is -10%. They do not reach the cost gate on their own: the put-back
+fan's width is still the search's cost (Q33's SINGLE and the B1/B2 budget shapes are the levers that move it). F4 is not
+exact: 613 of ~297K verified pairs realise a different line, and its arm is slightly worse (d3 +0.0025, d5 +0.010) at
+equal units. It stays OFF (Q54). The CLAUDE.md adoption bar's d8 b0 recovery of the slower games was not run, because d3 b0
+is already intractable here (above). The differing games are read from the paired digests (99% identical) as budget
+butterflies, not as evidence either way.
+
+Artifacts: `logs/cyclone/folds/` (verify outputs, the A/B report and per-game `.wins` / `.units`, the budget-0
+check); scratch `build/scratch/cyclone/folds/`.
+
 ## Reference games (2026-10-28)
 The USER hand-played the deck's first 10 reference games in the play viewer (primary checkout,
 `references/Unpredictable_Cyclone/claude_s{1..10}_gi{0..9}.json`, committed 3a1b348a4 and on origin/references-autosave;
@@ -1420,6 +1530,11 @@ line? Default: no, the USER's bar (match every reference) is met.
   ON, amendments OFF).
 - Q36. Q26 (a) (fold the decline / take-and-Remand / j variants of a seed-only plan whose Cyclone walk is EXACTLY
   predictable) is not built: the whole seed-pin axis is 2.7% of the work. Owed as a sound collapse. Default: deferred.
+  **UPDATE 2026-10-28: BUILT** (`MTG_CYCLE_SEED_WALK_FOLD`, default ON; section "Sound folds F2/F4/F5/F3 + Q36"): a
+  seed-only variant whose scry + walk + keyed bottom leaves an earlier sibling's state (same pin) or whose walk whiffs
+  is not emitted; verify 1,237 / 0 mismatches; 116K variants folded in the A/B. One conservatism left: a DECLINE pin
+  on a castable hit is folded only when both its branches agree (the provider's take-dominance call is not read at
+  enumeration).
 - Q37. PHANTOM RITUAL PLANS IN THE HUMAN-PLAY MENU (Stage 5j). With one Mountain out, the viewer offers "cast: Seething
   Song" (and on turn 3 "Song, Song, Unpredictable Cyclone"); the apply drops the cast (`dropped_casts`) and the frame
   re-prompts the same menu. Cause: TurnSolver's order-free ritual affordability credit (a ritual's gross float counts toward
@@ -1499,6 +1614,28 @@ line? Default: no, the USER's bar (match every reference) is met.
   themselves -- the 0 charge made rank 0 the generic shed order's tie-break (it put the sole Cyclone / a Curator on top),
   which is where the held-out loss came from. Pairs naturally with Q44(2) / Q42 (a sane Cyclone shed order fixes the
   tie-break too). Measuring it is one more pooled A/B (~1 h at 14 threads). Default: not built.
+- Q53. THE NUMBER-0 CARD IDENTITY DEFECT (found by the sound-fold verify runs, 2026-10-28; pre-existing, NOT fixed). The
+  rollout files a resolved instant / sorcery as its definition's TEMPLATE card (apply_one,
+  `ap.graveyard.push_back(UnkickedSpellCard(def, def.card))`: m_number 0), not the cast copy -- the executor files
+  the real card. An Eldrazi's graveyard shuffle (`put_into_graveyard_shuffles_graveyard`) deals those number-0 cards
+  back into the library and the hand, and then (a) apply_one re-finds a cast copy BY NUMBER after its payment
+  (`cast_zone_number`), so casting a number-0 Brainstorm erased a number-0 Ponder (d5 b20 seed 108000, a T8
+  rollout); (b) Library::ShuffleByKey ties every number-0 card and keeps their input order (std::sort over ties),
+  so the search's post-shuffle library is not the one the CRN shuffle promises. Both make the clairvoyant search
+  predict a hand / library the real game does not deal, after the first graveyard shuffle of a game. Proposed fix:
+  file the cast copy (cast_number), the Green Sun's Zenith precedent (GszShuffleCopyIdOn) -- a play change for every
+  deck that brings a graveyard back (here: Emrakul, Ulamog the Infinite Gyre). The folds that rely on card identity
+  (F2, F3, Q36) require distinct numbers meanwhile. Default: reported, not fixed (outside the folds' brief).
+- Q54. F4, THE STRANDED-CAST FOLD (MTG_PB_STRAND_FOLD), is built and measured NOT exact: 613 of ~297K verified pairs
+  realise a different line than the smaller plan's same-pair member, because the payment allocation is steered by
+  the plan's whole bill (the stranded cast's included) and a different allocation changes what the rest of the line
+  can pay. Adopt it anyway as a payment-allocation fold (the land-position prefix probe's argument), or leave it
+  off? Measured as an arm of the 2026-10-28 A/B (see the section). Default: OFF (not exact => not a sound fold).
+- Q55. F3 is built PLAN-level only. The node-level form -- a breakpoint continuation whose first library event is a
+  shuffle, i.e. the USER's "Brainstorm, then crack Scalding Tarn" line -- needs the continuation matched by identity
+  across two parents' lists; not built. And Long-Term Plans (finds any card) qualifies for F3 only when its target
+  is name-bound, because an open tutor's candidate list is in library order. Build the node-level form? Default:
+  deferred (the plan-level fold already finds mirror-eligible ranks in ~1.8% of the fan tables).
 - QR1. (Reference games 2026-10-28) Plan-item cycling in the viewer is wired for decks whose provider SEARCHES its
   cycles (Cyclone); elsewhere a cycle stays a standalone plan, but the viewer badge now QUEUES it as its own segment instead
   of firing at once. Extend plan-item cycling to every deck? Default: Cyclone-style decks only.
