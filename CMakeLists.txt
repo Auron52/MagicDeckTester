@@ -460,6 +460,7 @@ add_executable(mtg-test
     test/unit/test_sulfur_falls_probe.cpp
     test/unit/test_generator_servant.cpp
     test/unit/test_garth_lotus_crack.cpp
+    test/unit/test_rock_seq_credit.cpp
     test/unit/test_manual_tap_sources.cpp
     test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp

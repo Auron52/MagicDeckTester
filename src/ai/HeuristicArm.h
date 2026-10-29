@@ -703,6 +703,7 @@ enum Slot : int
     LINE_FLOAT_COVERED,       // MTG_LINE_FLOAT_COVERED  the line float rung (MTG_LINE_FLOAT_TAP_FIRST) lets a source that makes a colour the line owes pay this payment's generic when the reserve left after the payment's own pips already covers every coloured pip the line still owes (no later pip needs that source for its colour). NivMizzetCombo seed 1180522 gi521 T2: Sol Ring's {1} spent the floating {U} Tandem Lookout needed with Cascade Bluffs untapped (Bluffs makes {U} only by filtering a {U}/{R}, and that {U} was the only feed). Applies under the unseen guard too: that guard protects creature-only-colour lands, which this does not touch. =0 -> the colour test always applies
     GARTH_LOTUS_CRACK,        // MTG_GARTH_LOTUS_CRACK  Garth One-Eye's Black Lotus can be conjured AND cracked in the same plan: a conjure-and-crack GarthActivate (ritual_float = 3, one variant per colour, credited in its colour) beside the conjure-and-keep one (USER 2026-10-28). FiveColour seed 1100028 gi27 T6: two Hellkites off eleven mana + the Lotus's three were inexpressible. Autonomous play only. =0 -> conjure-and-keep only
     SUBSET_SAC_COLOR,         // MTG_SUBSET_SAC_COLOR  the colour-presence gate credits a same-subset sac float's colour (a sac_for_mana_amount source's SacForMana -- Lotus Bloom, Black Lotus -- and Garth's conjure-and-crack; the creature sac outlets not yet): its pinned colour, every colour when it is resolved at apply. The MTG_SUBSET_ROCK_COLOR shape: the flat gate already credits the float, the presence gate saw only board colours. =0 -> board colours only
+    ROCK_SEQ_CREDIT,          // MTG_ROCK_SEQ_CREDIT  the same-subset mana-rock credit is SEQUENCED: a rock is credited once the board plus the rocks credited before it can pay for it (Sol Ring funds an Izzet Signet). It was all-or-nothing -- no rock credited unless the board alone paid every rock -- so a subset whose rocks fund each other read unpayable (NivMizzetCombo seed 1100014 gi13 T3 {Signet, Signet, Sol Ring}, ENUM-GAP). =0 -> the all-or-nothing guard
     COUNT
 };
 
@@ -1356,6 +1357,7 @@ inline const char* Name(int slot)
         "MTG_LINE_FLOAT_COVERED",
         "MTG_GARTH_LOTUS_CRACK",
         "MTG_SUBSET_SAC_COLOR",
+        "MTG_ROCK_SEQ_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

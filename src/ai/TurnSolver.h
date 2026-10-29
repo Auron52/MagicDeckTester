@@ -2757,6 +2757,11 @@ public:
     static std::string SacFloatColorFor(const GameState& state, const std::vector<Action>& acts,
                                         const Action& self);
 
+    // The sequenced same-subset rock credit (MTG_ROCK_SEQ_CREDIT; TurnSolver.cpp SequencedRockProduction):
+    // the production of the selected rocks castable in SOME order off `pool` plus the rocks before them.
+    static ManaPool SequencedRockProductionForTest(const ManaPool& pool, const std::vector<Action>& cands,
+                                                   const std::vector<int>& sel);
+
     // GARTH CONJURE-AND-CRACK: a GarthActivate naming Black Lotus that cracks the copy as it lands
     // (ritual_float = the Lotus's amount; chosen_float_color = its SEARCHED colour, one variant per
     // colour). A sac source of the plan like an on-board Lotus's SacForMana, so SacFloatColorFor charges

@@ -870,7 +870,7 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | Fungus, FiveColour | 8 | Concordant Crossroads' blanket haste does not unlock the plan's own dorks | the rock-credit stamp | credit them | open |
 | Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | open |
 | Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |
-| NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | open |
+| NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | **fixed below** |
 | NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | open |
 | EDF | 6 | the rescue's scalar ceiling omits the ETB-untap refund (Cloud of Faeries, Peregrine Drake) | `ef-scalar` pre-filter | add the refund | open |
 | EDF | 4 | the odometer gate prices the untap refund off the pre-plan board, missing a same-selection land Aura on the refunded land | `BuildManaGateIndex`, `ManaPruneBound` | scale the Aura bonus by the untappers | open (verified by `MTG_SEL_MANA_GATE=0`) |
@@ -909,6 +909,18 @@ Lotus Bloom's {B} for a Dragon was "no source makes black" whenever no land made
 now for `sac_for_mana_amount` sources and Garth's crack: a pinned colour, or every colour when it is resolved at
 apply. Held out: Dragonstorm 53 faster / 0 slower (seed 1240001, 5,000 games; no-wins 61 -> 53, avg 4.3912 -> 4.3732)
 and 56 / 0 (seed 1220001; 59 -> 52, 4.3996 -> 4.3838); wall 0.95x. Every other suite deck byte-identical.
+
+**Fix 3: rocks that fund each other (`MTG_ROCK_SEQ_CREDIT`, DEFAULT ON).** Both subset walkers credit a mana rock cast
+in the plan only "once the board can already pay for the rocks themselves" -- tested all-or-nothing against the sum
+of every selected rock's cost, so Sol Ring paying for an Izzet Signet, or one Signet for a second, earned nothing.
+`SequencedRockProduction` is the `SequencedRitualCredit` walk for rocks: a rock is credited once the board plus the
+rocks credited before it pay the accumulated cost, to a fixed point; a rock still never funds its own cost, and when
+the board pays every rock the result is the old one. NivMizzetCombo seed 1100014 gi13: the rock ENUM-GAPs 4 -> 0
+(and the game T6 -> T5); seed 1100022 gi21 T3 {Signet, Signet} closes. Some newly admitted plans are APPLY-DROP-ORDER
+-- the deck's own cast order puts a Signet before the Sol Ring that pays for it (a USER-owned order); the search
+scores those by what their apply really does. Held out (seed 1260001, every suite deck, 48,020 paired games): 37
+decision streams move (Dragons 10, Landfall 2, Niv 25), no win turn; Niv seed 1270001 (1,500 games): 2 faster / 2
+slower, both slower recovering at d8 b0 (gi1373, gi1465: T5 both arms); units flat.
 
 **The outlet half is blocked.** The same credit for a creature sac OUTLET (Skirk Prospector's {R}, Utopia Mycon's any
 colour) is just as valid, and measured Goblins 32 faster / 3 slower and Fungus 2 / 1 (seed 1230001, 4,000 games

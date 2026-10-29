@@ -44695,6 +44695,60 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
     return credit + ManaGateTriangular(gy);
 }
 
+// MTG_ROCK_SEQ_CREDIT (DEFAULT ON; =0 -> the all-or-nothing guard). Both subset walkers credit a
+// same-subset mana rock's production (Action::rock_mana) only "once the board can already pay for the
+// rocks themselves (a rock never funds its own cost)" -- but they tested that ALL-OR-NOTHING,
+// pool.CanPay(every selected rock's cost summed), so a rock that pays for ANOTHER rock earned nothing:
+// Sol Ring's {C}{C} for an Izzet Signet, one Signet for a second (NivMizzetCombo seed 1100014 gi13 T3
+// {Signet, Signet, Sol Ring} and seed 1100022 gi21 T3 {Signet, Signet}: mana-oracle ENUM-GAP, the board
+// paying every rock in some order). This is the SequencedRitualCredit walk for rocks: a rock is
+// credited once the board plus the production of the rocks credited before it pays the accumulated
+// cost, repeated to a fixed point -- so a rock still never funds its own cost. It only LOOSENS: when
+// the board pays every rock, every rock is credited exactly as before.
+static bool RockSeqCreditOn()
+{
+    static const bool on = EnvOn("MTG_ROCK_SEQ_CREDIT", true);
+    return heurarm::Flag(heurarm::ROCK_SEQ_CREDIT, on);
+}
+static ManaPool SequencedRockProduction(const ManaPool& pool, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    thread_local std::vector<int>  rk;
+    thread_local std::vector<char> done;
+    rk.clear();
+    for (int j : sel) { if (cands[static_cast<std::size_t>(j)].rock_mana.Total() > 0) { rk.push_back(j); } }
+    done.assign(rk.size(), 0);
+    ManaPool prod;
+    ManaCost acc;
+    for (bool progress = true; progress; )
+    {
+        progress = false;
+        for (std::size_t i = 0; i < rk.size(); ++i)
+        {
+            if (done[i]) { continue; }
+            const Action& r = cands[static_cast<std::size_t>(rk[i])];
+            ManaCost trial = acc;
+            trial.white += r.cost.white; trial.blue  += r.cost.blue;  trial.black += r.cost.black;
+            trial.red   += r.cost.red;   trial.green += r.cost.green;
+            trial.colorless += r.cost.colorless; trial.generic += r.cost.generic;
+            ManaPool probe = pool;
+            probe.AddPool(prod);
+            if (!probe.CanPay(trial)) { continue; }   // a later rock's production may unlock it
+            done[i]  = 1;
+            acc      = trial;
+            prod.AddPool(r.rock_mana);
+            progress = true;
+        }
+    }
+    return prod;
+}
+
+ManaPool TurnSolver::SequencedRockProductionForTest(const ManaPool& pool, const std::vector<Action>& cands,
+                                                    const std::vector<int>& sel)
+{
+    return SequencedRockProduction(pool, cands, sel);
+}
+
 // MTG_SEQ_PROBE -- the soundness instrument for the SEQUENCED ritual credit, mirroring
 // MTG_COLOR_EXACT_PROBE. The sequenced model feeds a PRUNE, so it may only ever reject a subset the
 // board GENUINELY cannot cast in ANY order; every rejection printed here is a candidate FALSE
@@ -48974,6 +49028,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 sel_rock = true;
             }
             if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+            else if (sel_rock && RockSeqCreditOn())   // rocks that fund each other (see SequencedRockProduction)
+            {
+                const ManaPool seq = SequencedRockProduction(pool, cands, sel);
+                if (seq.Total() > 0) { eff.AddPool(seq); eff_nc.AddPool(seq); credited = true; }
+            }
         }
         // §2a MINTED TREASURE -- the same-turn ramp credit that vanished with the SacForMana actions.
         //
@@ -66590,6 +66649,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 sel_rock = true;
             }
             if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+            else if (sel_rock && RockSeqCreditOn())   // rocks that fund each other (see SequencedRockProduction)
+            {
+                const ManaPool seq = SequencedRockProduction(pool, cands, sel);
+                if (seq.Total() > 0) { eff.AddPool(seq); eff_nc.AddPool(seq); credited = true; }
+            }
         }
         // §2a MINTED TREASURE -- lockstep twin of the credit in consider(); see the full rationale
         // there (mw68). §2a stops emitting the SacForMana actions whose ritual_float used to carry
