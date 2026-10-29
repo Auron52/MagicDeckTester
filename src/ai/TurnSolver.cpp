@@ -68163,13 +68163,213 @@ static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<A
     return false;
 }
 
+// ---- Q36: THE SEED-ONLY WALK FOLD (MTG_CYCLE_SEED_WALK_FOLD, SOUND, DEFAULT ON; ledger Q26 a / Q36) ----------------
+// A SEED-ONLY plan (its selection is one cycle seed, nothing else) with Unpredictable Cyclone already on the
+// battlefield cycles its card from exactly the enumeration's state: the land drop is already in it (EnumeratePlans
+// runs on the post-drop copy), no cast precedes the seed, and no deferred land can be played before it (no
+// land-order axis: LandOrderMatters false). So the seed's resolution -- Curator's scry pin (bottom the top
+// min(j, N) cards, N = the watchers on the battlefield, each scrying 1), then the Cyclone walk (exile from the top
+// until a card sharing a type with the cycled card) -- is computed exactly off the known library, the clairvoyant
+// search's own model:
+//     P = L[j':] + L[:j']                 (the bottomed cards go under, in order)
+//     hit = the first card of P whose type mask meets the cycled card's; rest = the cards above it
+//     the library after = P[after the hit] + RandomBottom(rest [+ the hit, declined])   -- e.g. a noncreature on top
+//     over Emrakul: j = 0 walks past it (it goes under), j = 1 bottoms it first; both leave [rest..., it].
+// RandomBottom (BottomInRandomOrder) is a common-random-numbers keyed order of the SET of cards (the stable keyed
+// shuffle, at the same ordinal for every variant; seedwalk::KeyedBottom is its twin), so the library after the walk
+// is computed exactly -- for both ways the free cast can realise (cast: the hit leaves; declined or uncastable: it
+// goes under with the rest), since the realised choice depends only on the hit and the board (castability, the
+// provider's take / Remand reads -- the same for every j). Two variants with the same pin, the same hit and the same
+// libraries after (and the same keyed-bottom count) reach the identical state, and so does every variant of a walk
+// that finds NO hit (the whole library goes under in one keyed order; nothing is castable, every pin declines). The
+// duplicate is not emitted; the sibling it equals is (j ascending within a pin, take first: CollectActions'
+// emission order, the same cost, the same name -- the existing pin fold's argument). With the watchers not all
+// scrying 1 the j pin is not read at all (ResolveDiscardScryTriggers falls back to ScryTop): every j > 0 is the
+// j = 0 sibling's state. MTG_CYCLE_SEED_WALK_FOLD_VERIFY=1 emits them instead and checks, by running the engine's
+// own scry / walk / bottoming helpers on two copies, that each would-be-dropped variant's post-walk state key
+// equals its sibling's.
+static bool CycleSeedWalkFoldOn()
+{
+    static const bool env = EnvOn("MTG_CYCLE_SEED_WALK_FOLD", true);
+    return heurarm::Flag(heurarm::CYCLE_SEED_WALK_FOLD, env);
+}
+static bool CycleSeedWalkFoldVerifyOn() { static const bool v = EnvOn("MTG_CYCLE_SEED_WALK_FOLD_VERIFY"); return v; }
+namespace seedwalk
+{
+inline std::atomic<long long> g_folded{0}, g_whiff{0}, g_verified{0}, g_bad{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (g_folded.load() == 0 && g_verified.load() == 0) { return; }
+        std::fprintf(stderr, "[seed-walk-fold] folded=%lld (whiff %lld) | verify checked=%lld MISMATCH=%lld\n",
+                     g_folded.load(), g_whiff.load(), g_verified.load(), g_bad.load());
+    }
+};
+inline Dump g_dump;
+struct Outcome
+{
+    bool have = false;
+    int  hit  = 0;
+    // The library after the walk, top first, for each way the free cast can realise (a cast hit leaves the library;
+    // a declined / uncastable one goes under with the rest), and how many keyed bottomings ran (search_count).
+    std::vector<int> lib_take, lib_decline;
+    int bump_take = 0, bump_decline = 0;
+    const CardDefinition* hit_def = nullptr;
+    // Equal for the branch the free cast REALISES: `branch` 1 = cast (take / take-and-Remand / the chain: the hit
+    // leaves the library either way), 0 = declined or uncastable, -1 = not known here (a decline pin on a castable
+    // hit: the provider's take-dominance decides) -- then both must agree.
+    bool Same(const Outcome& o, int branch) const
+    {
+        if (have != o.have || hit != o.hit) { return false; }
+        const bool t = lib_take == o.lib_take && bump_take == o.bump_take;
+        const bool d = lib_decline == o.lib_decline && bump_decline == o.bump_decline;
+        return branch == 1 ? t : branch == 0 ? d : (t && d);
+    }
+};
+// BottomInRandomOrder's order of `cards` (its lockstep twin: the same keyed shuffle, at the state's ordinal and the
+// search's salt), appended to `out`. Returns the search_count bump (one for a batch of two or more).
+inline int KeyedBottom(const GameState& state, const std::vector<const Card*>& cards, std::vector<int>& out)
+{
+    if (cards.size() < 2)
+    {
+        for (const Card* c : cards) { out.push_back(c->m_number); }
+        return 0;
+    }
+    Library tmp;
+    for (const Card* c : cards) { tmp.push_back(*c); }
+    const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
+    tmp.ShuffleByKey(SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), salt));
+    for (auto it = tmp.begin(); it != tmp.end(); ++it) { out.push_back(it->m_number); }
+    return 1;
+}
+// The walk after Curator bottoms the top `jb` cards (each goes under, in order).
+inline Outcome Walk(const GameState& state, unsigned mask, int jb)
+{
+    const Library& lib = state.ActivePlayer().library;
+    const std::size_t n = lib.size();
+    const std::size_t j = jb > 0 ? std::min<std::size_t>(static_cast<std::size_t>(jb), n) : 0;
+    std::vector<const Card*> p;
+    p.reserve(n);
+    for (std::size_t i = j; i < n; ++i) { p.push_back(&lib[i]); }
+    for (std::size_t i = 0; i < j; ++i) { p.push_back(&lib[i]); }
+    Outcome o;
+    std::size_t h = 0;
+    for (; h < p.size(); ++h)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(*p[h]);
+        if ((CycleWalkTypeMask(cd != nullptr ? cd->card : *p[h]) & mask) != 0) { o.have = true; o.hit = p[h]->m_number; o.hit_def = cd; break; }
+    }
+    std::vector<const Card*> rest(p.begin(), p.begin() + static_cast<std::ptrdiff_t>(std::min(h, p.size())));
+    std::vector<int> after;
+    for (std::size_t i = h + 1; o.have && i < p.size(); ++i) { after.push_back(p[i]->m_number); }
+    o.lib_take = after;
+    o.bump_take = KeyedBottom(state, rest, o.lib_take);
+    std::vector<const Card*> rest_d = rest;
+    if (o.have) { rest_d.push_back(p[h]); }
+    o.lib_decline = after;
+    o.bump_decline = KeyedBottom(state, rest_d, o.lib_decline);
+    return o;
+}
+}   // namespace seedwalk
+// The verify half: the engine's own helpers on two copies -- the scry pin, the walk, the bottoming and the hit to
+// hand (a take) / to the bottom (a decline). Their keys must be equal.
+static TranspositionTable::Key BuildDedupKey(const GameState& state);
+static TranspositionTable::Key SeedWalkProbeKey(const GameState& state, const CardDefinition& sd, int j, int fc)
+{
+    GameState s = state;
+    const int me = s.active_player_index;
+    ResolveDiscardScryTriggers(s, me, DiscardScryTriggers(s, me), j);
+    CycleWalk w;
+    WalkExileUntilSharedType(s, me, CycleWalkTypeMask(sd.card), w);
+    const CardDefinition* hd = w.have ? CardDatabase::Instance().LookupCached(w.hit) : nullptr;
+    const bool castable = w.have && CycleHitCastable(s, me, hd);
+    const int real_fc = castable ? (fc == kCycFcDecline ? kCycFcDecline : kCycFcTake) : kCycFcDecline;
+    if (real_fc == kCycFcDecline)
+    {
+        if (w.have) { w.rest.push_back(std::move(w.hit)); }
+        BottomInRandomOrder(s, me, std::move(w.rest));
+    }
+    else
+    {
+        BottomInRandomOrder(s, me, std::move(w.rest));
+        s.ActivePlayer().hand.push_back(std::move(w.hit));
+    }
+    return BuildDedupKey(s);
+}
+// True when this seed-only selection's walk equals an earlier-emitted sibling's (see above).
+static bool CycleSeedWalkRedundant(const GameState& state, const CycleSeedFoldCtx& c, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel)
+{
+    if (!c.on || !c.replacer_out || sel.size() != 1 || !state.deck_has_cycle_draw_replacement) { return false; }
+    const Action& seed = cands[static_cast<std::size_t>(sel[0])];
+    if (!IsCycleSeed(seed) || seed.def == nullptr || seed.def->card.IsLand()) { return false; }
+    if (LandOrderMatters(state) || !StableShuffleEnabled()) { return false; }
+    // RandomBottom keys on card NUMBERS: two library cards sharing one (the rollout files a resolved spell as its
+    // number-0 template; an Eldrazi's graveyard shuffle brings those into the library) tie, and their order is then
+    // not a function of the set alone. Distinct numbers only.
+    {
+        const Library& lib = state.ActivePlayer().library;
+        std::vector<int> nums;
+        nums.reserve(lib.size());
+        for (std::size_t i = 0; i < lib.size(); ++i) { nums.push_back(lib[i].m_number); }
+        std::sort(nums.begin(), nums.end());
+        if (std::adjacent_find(nums.begin(), nums.end()) != nums.end()) { return false; }
+    }
+    const int fc = seed.ponder_keep;
+    if (fc == kCycFcDefault) { return false; }
+    const int j  = seed.devour_count;
+    const int me = state.active_player_index;
+    const int n  = DiscardScryTriggers(state, me);
+    const bool all_one = DiscardScryTriggersAllOne(state, me);
+    // The scry each j realises: bottom min(j, N) when pinned and every watcher scries 1; with no watcher, or the
+    // pin unread (not all scry 1), the walk starts from the library as it is for every j.
+    auto bottomed = [&](int jj) { return (jj > 0 && n > 0 && all_one) ? std::min(jj, n) : 0; };
+    const unsigned mask = CycleWalkTypeMask(seed.def->card);
+    const seedwalk::Outcome mine = seedwalk::Walk(state, mask, bottomed(j));
+    const bool first = (j <= 0) && fc == kCycFcTake;   // (j = 0 or -1, take) is emitted first: never dropped
+    int twin_j = -2, twin_fc = fc;
+    if (!mine.have)
+    {
+        if (!first) { twin_j = j <= 0 ? j : 0; twin_fc = kCycFcTake; }   // the very first sibling: (0 or -1, take)
+    }
+    else
+    {
+        // The branch this pin realises: castability reads the hit and the battlefield, which a seed-only plan leaves as
+        // the enumeration sees them (the cycle's cost taps, the discard and the scry touch neither).
+        const bool castable = CycleHitCastable(state, me, mine.hit_def);
+        const int branch = !castable ? 0 : (fc == kCycFcDecline ? -1 : 1);
+        for (int j0 = 0; j0 < j; ++j0)
+        {
+            if (bottomed(j0) == bottomed(j) || seedwalk::Walk(state, mask, bottomed(j0)).Same(mine, branch)) { twin_j = j0; break; }
+        }
+    }
+    if (twin_j == -2) { return false; }
+    if (CycleSeedWalkFoldVerifyOn())
+    {
+        seedwalk::g_verified.fetch_add(1, std::memory_order_relaxed);
+        const TranspositionTable::Key a = SeedWalkProbeKey(state, *seed.def, j, fc);
+        const TranspositionTable::Key b = SeedWalkProbeKey(state, *seed.def, twin_j, twin_fc);
+        if (!(a == b))
+        {
+            const long long nb = seedwalk::g_bad.fetch_add(1, std::memory_order_relaxed);
+            if (nb < 10)
+            { std::fprintf(stderr, "[seed-walk-fold] VERIFY MISMATCH T%d %s j=%d fc=%d vs j=%d fc=%d whiff=%d\n",
+                           state.turn_number, seed.card_name.str().c_str(), j, fc, twin_j, twin_fc, mine.have ? 0 : 1); }
+        }
+        return false;   // verify emits it
+    }
+    seedwalk::g_folded.fetch_add(1, std::memory_order_relaxed);
+    if (!mine.have) { seedwalk::g_whiff.fetch_add(1, std::memory_order_relaxed); }
+    return true;
+}
 void TurnSolver::SoundFoldCounters(long long out[5])
 {
     out[0] = pbexact::g_exact.load();
     out[1] = pbfoldx::g_mirror_folded.load();
     out[2] = pbfoldx::g_strand_folded.load();
     out[3] = pbxbase::g_folded.load();
-    out[4] = 0;   // Q36 (not built yet)
+    out[4] = seedwalk::g_folded.load();
 }
 
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
@@ -68976,6 +69176,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // THE CYCLE-SEED PIN FOLD (sound; see CycleSeedPinRedundant): the sibling with the readable pin
         // is emitted beside this selection.
         if (seed_fold.on && CycleSeedPinRedundant(seed_fold, cands, sel)) { return; }
+        // ...and Q36's seed-only walk fold (sound; see CycleSeedWalkRedundant).
+        if (seed_fold.on && CycleSeedWalkFoldOn() && CycleSeedWalkRedundant(state, seed_fold, cands, sel)) { return; }
         // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
         // cross-product BETWEEN them beyond `sat_max_actions` chosen actions. The forced free equips
         // (auto_sel) ride EVERY subset by construction, so they are not a choice and must not count.

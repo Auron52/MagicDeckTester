@@ -6,6 +6,7 @@
 //         of it makes the count a TIGHT upper bound: the ritual may still be dropped); otherwise the old bound.
 #include <doctest/doctest.h>
 
+#include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -399,4 +400,111 @@ TEST_CASE("Sound fold F5: at a breakpoint-node host, a base whose prefix collaps
     CHECK(FoldCounterSf(3) == f1);
     CHECK(f1 > f0);
     CHECK(wt_on == wt_off);
+}
+
+namespace
+{
+// Cyclone on the battlefield, a Curator of Mysteries watcher (scry 1 per cycle), Street Wraith in hand; `lib` on top.
+GameState CycloneBoardSf(const std::vector<std::string>& lib, bool curator_out)
+{
+    EnsureCardsSf();
+    static const CycloneProvider cp;
+    GameState s;
+    s.m_provider          = &cp;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.game_seed           = 777;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.players[0].lands_played_this_turn = 1;
+    s.deck_has_cycle_draw_replacement = true;
+    s.deck_has_discard_scry_watcher   = true;
+    s.deck_has_extra_turn             = true;
+    s.deck_has_landfall               = false;
+    s.deck_has_draw_ping              = false;
+    s.deck_has_scry_watcher           = false;
+    for (int k = 0; k < 3; ++k) { PutSf(s, "Island", 1 + k); }
+    PutSf(s, "Unpredictable Cyclone", 10);
+    if (curator_out) { PutSf(s, "Curator of Mysteries", 11); }
+    s.players[0].hand.push_back(CardSf("Street Wraith", 20));
+    int l = 100;
+    for (const std::string& n : lib) { s.players[0].library.push_back(CardSf(n, l++)); }
+    for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(CardSf("Island", 200 + k)); }
+    return s;
+}
+// The Street Wraith seed-only plans' pins: (j, free-cast).
+std::vector<std::pair<int, int>> SeedOnlyPinsSf(const std::vector<TurnSolver::Plan>& plans)
+{
+    std::vector<std::pair<int, int>> v;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() != 1 || !IsCycleSeed(p.actions[0]) || !p.land_to_play.empty()) { continue; }
+        v.emplace_back(p.actions[0].devour_count, p.actions[0].ponder_keep);
+    }
+    std::sort(v.begin(), v.end());
+    return v;
+}
+}   // namespace
+
+TEST_CASE("Sound fold Q36: a seed-only walk equal to an earlier sibling's is not emitted")
+{
+    // Top: Toxic Deluge (a noncreature), then Emrakul. j = 0: the walk passes the Deluge (bottomed) and hits Emrakul;
+    // j = 1: Curator bottoms the Deluge, the walk hits Emrakul at once. Same hit, same library after, same bottom set.
+    {
+        GameState s = CycloneBoardSf({ "Toxic Deluge", "Emrakul, the Aeons Torn", "Ulamog, the Infinite Gyre" }, true);
+        std::vector<TurnSolver::Plan> on, off;
+        { ArmScopeSf _a(heurarm::CYCLE_SEED_WALK_FOLD, 1); on  = TurnSolver::EnumerateMainPlans(s, true); }
+        { ArmScopeSf _a(heurarm::CYCLE_SEED_WALK_FOLD, 0); off = TurnSolver::EnumerateMainPlans(s, true); }
+        const auto pins_on = SeedOnlyPinsSf(on), pins_off = SeedOnlyPinsSf(off);
+        std::string dbg;
+        for (const auto& x : pins_off) { dbg += "(" + std::to_string(x.first) + "," + std::to_string(x.second) + ")"; }
+        dbg += " | ";
+        for (const auto& x : pins_on) { dbg += "(" + std::to_string(x.first) + "," + std::to_string(x.second) + ")"; }
+        INFO("off=" << pins_off.size() << " on=" << pins_on.size() << " " << dbg);
+        // (1, take) is (0, take)'s state: not emitted. (1, decline) is kept -- a decline pin on a castable hit realises
+        // the provider's take-dominance call, unknown at enumeration, and its declined branch differs (the hit joins a
+        // two-card keyed bottom at j = 0, goes under alone at j = 1).
+        auto has = [](const std::vector<std::pair<int, int>>& v, int j, int fc)
+        { return std::count(v.begin(), v.end(), std::make_pair(j, fc)) > 0; };
+        CHECK(has(pins_off, 1, kCycFcTake));
+        CHECK_FALSE(has(pins_on, 1, kCycFcTake));
+        CHECK(has(pins_on, 0, kCycFcTake));
+        CHECK(has(pins_on, 1, kCycFcDecline) == has(pins_off, 1, kCycFcDecline));
+        CHECK(pins_on.size() < pins_off.size());
+        // The equality itself, by the engine's own helpers: the j = 1 and j = 0 walks leave one state.
+        GameState a = s, b = s;
+        ResolveDiscardScryTriggers(a, 0, DiscardScryTriggers(a, 0), 0);
+        ResolveDiscardScryTriggers(b, 0, DiscardScryTriggers(b, 0), 1);
+        CycleWalk wa, wb;
+        WalkExileUntilSharedType(a, 0, CycleWalkTypeMask(DefSf("Street Wraith").card), wa);
+        WalkExileUntilSharedType(b, 0, CycleWalkTypeMask(DefSf("Street Wraith").card), wb);
+        REQUIRE(wa.have);
+        REQUIRE(wb.have);
+        CHECK(wa.hit.m_number == wb.hit.m_number);
+        BottomInRandomOrder(a, 0, std::move(wa.rest));
+        BottomInRandomOrder(b, 0, std::move(wb.rest));
+        CHECK(OutcomeSf(a) == OutcomeSf(b));
+    }
+    // Top: Curator of Mysteries (a CREATURE) then Emrakul: j = 0 hits the Curator, j = 1 hits Emrakul -- kept.
+    {
+        GameState s = CycloneBoardSf({ "Curator of Mysteries", "Emrakul, the Aeons Torn", "Toxic Deluge" }, true);
+        std::vector<TurnSolver::Plan> on, off;
+        { ArmScopeSf _a(heurarm::CYCLE_SEED_WALK_FOLD, 1); on  = TurnSolver::EnumerateMainPlans(s, true); }
+        { ArmScopeSf _a(heurarm::CYCLE_SEED_WALK_FOLD, 0); off = TurnSolver::EnumerateMainPlans(s, true); }
+        CHECK(SeedOnlyPinsSf(on) == SeedOnlyPinsSf(off));
+    }
+    // No creature anywhere in the library: every walk whiffs -- only (0, take) is kept.
+    {
+        GameState s = CycloneBoardSf({ "Toxic Deluge", "Ponder" }, true);
+        std::vector<TurnSolver::Plan> on, off;
+        { ArmScopeSf _a(heurarm::CYCLE_SEED_WALK_FOLD, 1); on  = TurnSolver::EnumerateMainPlans(s, true); }
+        { ArmScopeSf _a(heurarm::CYCLE_SEED_WALK_FOLD, 0); off = TurnSolver::EnumerateMainPlans(s, true); }
+        // (Each plan shape appears once per other axis variant; compare the DISTINCT pins.)
+        auto distinct = [](std::vector<std::pair<int, int>> v) { v.erase(std::unique(v.begin(), v.end()), v.end()); return v; };
+        const auto pins_on = distinct(SeedOnlyPinsSf(on));
+        REQUIRE(distinct(SeedOnlyPinsSf(off)).size() > 1u);
+        REQUIRE(pins_on.size() == 1u);
+        CHECK(pins_on[0].first == 0);
+        CHECK(pins_on[0].second == kCycFcTake);
+    }
 }
