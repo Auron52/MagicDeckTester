@@ -7278,6 +7278,15 @@ namespace m2yield
 namespace leafeval
 {
 inline constexpr long long kInvalid = (std::numeric_limits<long long>::max)();
+}   // namespace leafeval
+// The graded no-win leaf quantity (leafeval::t_tb, LOWER = better) of the line the last ENFORCING SolveWithLookahead
+// on this thread committed; kInvalid when it committed none or the winner was not graded. Read only by the blind
+// resolution chooser (AIEngine::BlindChooseDrawSpell) to break the coarse win-turn ties between candidates the way the
+// search itself breaks them. Diagnostic plumbing: nothing in play reads it.
+static thread_local long long g_solve_committed_tb = leafeval::kInvalid;
+long long TurnSolver::LastCommittedTieBreak() { return g_solve_committed_tb; }
+namespace leafeval
+{
 // OWN DEATH (own_death_live decks only -- Prevent Damage). A line that killed us returns the no-win
 // turn like any other hopeless line, so the win-turn key alone TIES it with a line that merely did
 // not win -- and the fallback (plan.value) then happily picked the busier-looking suicide (measured:
@@ -24920,8 +24929,19 @@ static bool PutBackPredictionUnsafe(const CardDefinition& d)
 //   * A same-plan shuffle/tutor/fetch (PutBackPredictionUnsafe): the drawn cards are unknown, so the
 //     class-blind bound n(n-1)...(n-k+1) over the hand SIZE is used instead -- distinct positions bound
 //     distinct classes.
+static int PutBackAxisWidthUncapped(const GameState& state, const TurnSolver::Plan& p, std::size_t bs,
+                                    const CardDefinition& bd);
+// The fan's width: the upper bound below, capped by the provider's PLAN-LEVEL admission (DecisionProvider::
+// CantripFanCap; a hard prune whose resolution list is never longer than the cap -- wider ranks would only clamp).
 static int PutBackAxisWidth(const GameState& state, const TurnSolver::Plan& p, std::size_t bs,
                             const CardDefinition& bd)
+{
+    const int w = PutBackAxisWidthUncapped(state, p, bs, bd);
+    const int cap = ResolveProvider(state).CantripFanCap(state, /*putback=*/true);
+    return cap > 0 ? std::min(w, cap) : w;
+}
+static int PutBackAxisWidthUncapped(const GameState& state, const TurnSolver::Plan& p, std::size_t bs,
+                                    const CardDefinition& bd)
 {
     const Player& ap = state.ActivePlayer();
     const Action& cast = p.actions[bs];
@@ -27085,6 +27105,119 @@ struct Report
 };
 inline Report g_report;
 }   // namespace cantripattr
+
+// MTG_NODE_KIND_ATTRIB (DIAGNOSTIC, default off; counters and clocks only -- no behaviour reads them).
+// WHERE THE SEARCH'S NODES AND UNITS GO, by DECISION KIND, as a PARTITION (Unpredictable Cyclone
+// cost attribution, 2026-10-28; USER: "work out where the cost is originating ... in terms of branching
+// and per-node"). Every candidate a plan loop evaluates (the SolveWithLookahead root loop, FullSearchLine's
+// pre-combat and second-main loops, the breakpoint-node children) is ONE NODE, classified into exactly
+// one kind by the sub-decision that makes it a distinct candidate (priority order below: a put-back
+// variant that also carries a cycle seed counts as a put-back variant). Units (gamework::t_used) and wall
+// are credited to the INNERMOST open node: a node's own unit plus its rollout steps until a nested node
+// opens, so the rows SUM to the run (kOutside = executor / root overhead / horizon leaf outside any
+// candidate). Units per node by kind is then the per-node cost of that kind; nodes by kind is the
+// branching. Split real game vs mulligan-bottoming trial game (turncensus::t_probe).
+namespace nodekind
+{
+enum Kind { kOutside = 0, kPutBackVar, kPonderVar, kTutorVar, kSeedPin, kRemand, kCycleSeed, kPutBackBase,
+            kPonderBase, kFetch, kBpVar, kDiscardVar, kOther, kBpChild, kN };
+static const char* kNames[kN] = { "outside(executor/root/leaf)", "putback-variant(rank>=1)", "ponder-variant(order>=1)",
+    "tutor-variant", "cycle-seed-pin(j>0|decline|remand)", "remand-rider", "cycle-seed(default pin)",
+    "putback-cast(rank 0)", "ponder-cast(order 0)", "fetch/land-search", "bp-continuation-variant",
+    "cleanup-discard-variant", "other(base casts/lands/pass)", "bp-node-child" };
+inline bool On() { static const bool v = EnvOn("MTG_NODE_KIND_ATTRIB"); return v; }
+inline std::atomic<long long> g_units[kN][2], g_ns[kN][2], g_nodes[kN][2];
+inline thread_local int  t_stack[256];
+inline thread_local int  t_top = 0;
+inline thread_local long long t_umark = 0;
+inline thread_local std::chrono::steady_clock::time_point t_wmark;
+inline thread_local bool t_init = false;
+inline void Credit()
+{
+    const long long now = gamework::t_used;
+    const auto wnow = std::chrono::steady_clock::now();
+    if (!t_init) { t_init = true; t_umark = now; t_wmark = wnow; t_stack[0] = kOutside; return; }
+    const int k = t_stack[t_top];
+    const int pr = turncensus::t_probe > 0 ? 1 : 0;
+    if (now >= t_umark) { g_units[k][pr].fetch_add(now - t_umark, std::memory_order_relaxed); }
+    g_ns[k][pr].fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(wnow - t_wmark).count(),
+                          std::memory_order_relaxed);
+    t_umark = now;
+    t_wmark = wnow;
+}
+inline bool CastsWith(const TurnSolver::Plan& p, bool putback)
+{
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (putback ? d->params.put_back_from_hand > 0 : d->params.cast_reorder > 0) { return true; }
+    }
+    return false;
+}
+inline int KindOf(const TurnSolver::Plan& p)
+{
+    if (p.putback_choice >= 1) { return kPutBackVar; }
+    if (p.ponder_choice >= 1)  { return kPonderVar; }
+    if (p.tutor_choice >= 1)   { return kTutorVar; }
+    const Action* sd = CycleSeedOf(p.actions);
+    if (sd != nullptr && (sd->devour_count > 0 || sd->ponder_keep == 0 || sd->ponder_keep >= 2)) { return kSeedPin; }
+    for (const Action& a : p.actions) { if (!a.remand_by.empty()) { return kRemand; } }
+    if (sd != nullptr) { return kCycleSeed; }
+    if (CastsWith(p, true))  { return kPutBackBase; }
+    if (CastsWith(p, false)) { return kPonderBase; }
+    if (!p.fetch_target.empty()) { return kFetch; }
+    if (p.bp_choice >= 1) { return kBpVar; }
+    if (p.discard_choice >= 1) { return kDiscardVar; }
+    return kOther;
+}
+struct Scope
+{
+    bool on = false;
+    explicit Scope(int kind)
+    {
+        if (!On() || kind < 0) { return; }
+        Credit();
+        if (t_top + 1 >= 256) { return; }
+        on = true;
+        t_stack[++t_top] = kind;
+        g_nodes[kind][turncensus::t_probe > 0 ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+    }
+    explicit Scope(const TurnSolver::Plan& p) : Scope(On() ? KindOf(p) : -1) {}
+    ~Scope() { if (on) { Credit(); --t_top; } }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+struct Report
+{
+    ~Report()
+    {
+        if (!On()) { return; }
+        long long tu[2] = { 0, 0 }, tn[2] = { 0, 0 };
+        double tw[2] = { 0, 0 };
+        for (int k = 0; k < kN; ++k)
+        { for (int pr = 0; pr < 2; ++pr) { tu[pr] += g_units[k][pr].load(); tn[pr] += g_nodes[k][pr].load();
+                                           tw[pr] += g_ns[k][pr].load() / 1e9; } }
+        for (int pr = 0; pr < 2; ++pr)
+        {
+            std::fprintf(stderr, "[node-kind] === %s: units=%lld nodes=%lld wall(thread-sum)=%.1fs ===\n",
+                         pr == 0 ? "REAL game" : "BOTTOMING TRIAL games", tu[pr], tn[pr], tw[pr]);
+            for (int k = 0; k < kN; ++k)
+            {
+                const long long u = g_units[k][pr].load(), n = g_nodes[k][pr].load();
+                const double w = g_ns[k][pr].load() / 1e9;
+                std::fprintf(stderr, "[node-kind] %-36s nodes=%11lld (%5.1f%%) units=%12lld (%5.1f%%) wall=%9.1fs (%5.1f%%) "
+                                     "units/node=%8.1f us/node=%8.2f\n",
+                             kNames[k], n, tn[pr] ? 100.0 * n / tn[pr] : 0.0, u, tu[pr] ? 100.0 * u / tu[pr] : 0.0,
+                             w, tw[pr] > 0 ? 100.0 * w / tw[pr] : 0.0, n ? static_cast<double>(u) / n : 0.0,
+                             n ? 1e6 * w / n : 0.0);
+            }
+        }
+    }
+};
+inline Report g_report;
+}   // namespace nodekind
 
 // ---- MTG_VAMP_AXIS_CENSUS (DIAGNOSTIC, DEFAULT OFF; Vampires search cost, 2026-10-21) ---------------
 // WHICH DECISION MULTIPLIES THE SEARCH. For every candidate a plan loop charges a unit for (the
@@ -44199,7 +44332,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const int n_watch = watchers_bf + watchers_hand
                                       - (cd->params.cycle_or_discard_trigger_scry > 0 ? 1 : 0);
                     std::vector<int> js;
-                    if (n_watch > 0 && !human_seeds) { for (int j = 0; j <= n_watch; ++j) { js.push_back(j); } }
+                    // A provider HARD PRUNE (DecisionProvider::CycleScryPinHeuristic): no j pin -- the scry is the
+                    // provider's at resolution (-1, ResolveDiscardScryTriggers' unpinned branch).
+                    if (n_watch > 0 && !human_seeds && !cyc_prov.CycleScryPinHeuristic(state))
+                    { for (int j = 0; j <= n_watch; ++j) { js.push_back(j); } }
                     else { js.push_back(-1); }
                     // Cyclone's options for THIS cycler's walk.
                     std::vector<int> fcs;
@@ -68843,6 +68979,49 @@ static CycleSeedFoldCtx BuildCycleSeedFoldCtx(const GameState& state, const std:
     }
     return c;
 }
+// The provider's cycler admission (DecisionProvider::CycleSeedAdmissionSets), built once per enumeration.
+struct CycleSeedAdmitCtx
+{
+    bool on = false;
+    bool replacer_out = false;
+    std::vector<std::string> if_out, if_not;
+};
+static CycleSeedAdmitCtx BuildCycleSeedAdmitCtx(const GameState& state, const std::vector<Action>& cands)
+{
+    CycleSeedAdmitCtx c;
+    if (!state.deck_has_cycle_draw_replacement || HumanPlayActive()) { return c; }
+    bool any_seed = false;
+    for (const Action& a : cands) { if (IsCycleSeed(a)) { any_seed = true; break; } }
+    if (!any_seed) { return c; }
+    if (!ResolveProvider(state).CycleSeedAdmissionSets(state, c.if_out, c.if_not)) { return c; }
+    c.on = true;
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { c.replacer_out = true; }
+    }
+    return c;
+}
+static bool CycleSeedAdmitted(const CycleSeedAdmitCtx& c, const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const Action* seed = nullptr;
+    bool replacer_cast = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (IsCycleSeed(a)) { seed = &a; continue; }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { replacer_cast = true; }
+    }
+    if (seed == nullptr) { return true; }
+    const std::vector<std::string>& L = (c.replacer_out || replacer_cast) ? c.if_out : c.if_not;
+    const CardDefinition* sd = seed->def ? seed->def : CardDatabase::Instance().LookupInterned(seed->card_name);
+    if (sd == nullptr || !sd->card.IsCreature()) { return true; }   // the rule judges creature cyclers only
+    return std::find(L.begin(), L.end(), seed->card_name.str()) != L.end();
+}
 // True when the selection's cycle seed carries a pin its sibling already covers (see above).
 static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<Action>& cands,
                                   const std::vector<int>& sel)
@@ -69115,6 +69294,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     considerstats::Record("enum", is_pre_combat, cands, state);
     const CycleSeedFoldCtx seed_fold = BuildCycleSeedFoldCtx(state, cands);   // see CycleSeedPinRedundant
+    const CycleSeedAdmitCtx seed_admit = BuildCycleSeedAdmitCtx(state, cands);   // see CycleSeedAdmitted
     // Inject sequenced restricted-aura candidates (e.g. Daybreak Coronet on a creature that an Ethereal
     // Armor cast this same turn will enable) -- on a creature in play, and on a creature in HAND the plan
     // also casts (MTG_AURA_RESTRICTED_NEW_CREATURE). Autonomous default since increment 2(a)
@@ -69905,7 +70085,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // THE CYCLE-SEED PIN FOLD (sound; see CycleSeedPinRedundant): the sibling with the readable pin
         // is emitted beside this selection.
         if (seed_fold.on && CycleSeedPinRedundant(seed_fold, cands, sel)) { return; }
-        // ...and Q36's seed-only walk fold (sound; see CycleSeedWalkRedundant).
+        // THE PROVIDER's CYCLER ADMISSION (DecisionProvider::CycleSeedAdmissionSets; a hard prune, default none): the
+        // seed cycles after the plan's casts, so a plan casting the replacer first is judged with it out.
+        if (seed_admit.on && !CycleSeedAdmitted(seed_admit, cands, sel)) { return; }
+        // ...and Q36's seed-only walk fold (sound; see CycleSeedWalkRedundant). After the admission: a seed-only plan casts
+        // nothing, so the admission reads the same (seed card, replacer out) for every sibling the fold matches.
         if (seed_fold.on && CycleSeedWalkFoldOn() && CycleSeedWalkRedundant(state, seed_fold, cands, sel)) { return; }
         // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
         // cross-product BETWEEN them beyond `sat_max_actions` chosen actions. The forced free equips
@@ -79363,6 +79547,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     std::size_t k_max = 1;
                     for (int f = 2; f <= look; ++f) { k_max *= static_cast<std::size_t>(f); }
                     if (look <= 0) { k_max = 0; }
+                    // The provider's PLAN-LEVEL admission caps the fan (DecisionProvider::CantripFanCap: the
+                    // resolution list holds at most `cap` dispositions, ranks 0 .. cap-1).
+                    {
+                        const int cap = ResolveProvider(state).CantripFanCap(state, /*putback=*/false);
+                        if (cap > 0) { k_max = std::min<std::size_t>(k_max, static_cast<std::size_t>(cap - 1)); }
+                    }
                     if (pond_materialize) { cantripattr::NoteFan(cantripattr::kPonder, static_cast<long long>(k_max)); }   // diagnostic
                     if (pon_lz != nullptr && k_max > 0)
                     {
@@ -91317,6 +91507,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             pbsite::Note(pbsite::kFsM2, q, budget);
             cantripattr::Scope _cas(cantripattr::AxisOf(q));   // MTG_CANTRIP_ATTRIB (diagnostic)
             cantripattr::XScope _cax(q);   // MTG_CANTRIP_ATTRIB: the seed / tutor axes
+            nodekind::Scope _nk(q);   // MTG_NODE_KIND_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, q);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             vampaxis::Scope _vax(vax_list_m2, q);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
             if (s_rollout_stats)
@@ -91474,6 +91665,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     // MTG_CANTRIP_ATTRIB: the rest of this child (dedup, recursion) is spent under the
                     // variant its continuation resolved to, if any (the apply itself is not counted).
                     cantripattr::Scope _cas_node(cantripattr::On() ? cantripattr::t_last_cont_axis : -1);
+                    nodekind::Scope _nk_node(nodekind::On() ? nodekind::kBpChild : -1);   // MTG_NODE_KIND_ATTRIB
                     // The node's nested / demoted waves -- the FSLineWin host's twin (see there).
                     if (k == 0 && node_n < 0)
                     { NodeRecordChild0(node_nested, static_cast<std::size_t>(&q - post.data()), node_snap.bp_seen); }
@@ -91751,6 +91943,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     { ++g_fs_trunc_events; break; }
                     CanonWaveBillScope _cwb(walker.LastIsCanonOnly(), budget);   // MTG_BP_CANON_WAVE's price
                     ConsumeAt(budget, unitsite::kFsM2Wave);   // one interior node (plan applied)
+                    nodekind::Scope _nk(v);   // MTG_NODE_KIND_ATTRIB (diagnostic)
                     if (s_rollout_stats)
                     { g_interior_nodes.fetch_add(1, std::memory_order_relaxed); }
                     const uint64_t ck = (static_cast<uint64_t>(walker.LastBase()) << 8)
@@ -91936,6 +92129,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 for (const TurnSolver::Plan& q : tranche)
                 {
                     ConsumeAt(budget, unitsite::kFsTranche);
+                    nodekind::Scope _nk(q);   // MTG_NODE_KIND_ATTRIB (diagnostic)
                     LoadPlanState(s2_buf, state, reuse_s2);
                     GameState& s2 = s2_buf;
                     std::vector<Action> bp;
@@ -93691,6 +93885,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         pbsite::Note(pbsite::kFsPre, p, budget);
         cantripattr::Scope _cas(cantripattr::AxisOf(p));   // MTG_CANTRIP_ATTRIB (diagnostic)
         cantripattr::XScope _cax(p);   // MTG_CANTRIP_ATTRIB: the seed / tutor axes
+        nodekind::Scope _nk(p);   // MTG_NODE_KIND_ATTRIB (diagnostic)
         ChargePutBackVariant(budget, p);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
         vampaxis::Scope _vax(vax_list_pre, p, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
         if (s_rollout_stats)
@@ -94004,6 +94199,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         break;
                     }
                     ConsumeAt(budget, unitsite::kFsBpNode);
+                    nodekind::Scope _nk_node(nodekind::On() ? nodekind::kBpChild : -1);   // MTG_NODE_KIND_ATTRIB
                     if (s_rollout_stats)
                     {
                         g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -94609,6 +94805,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 if (BpWaveProbeOn()) { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
 
                 ConsumeAt(budget, unitsite::kFsBpWave);   // one interior node (plan applied)
+                nodekind::Scope _nk(v);   // MTG_NODE_KIND_ATTRIB (diagnostic)
                 if (s_rollout_stats)
                 {
                     g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -94823,6 +95020,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                   if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
                   return false; }
                 ConsumeAt(budget, unitsite::kFsGroupWave);   // one interior node (plan applied)
+                nodekind::Scope _nk(v);   // MTG_NODE_KIND_ATTRIB (diagnostic)
                 if (s_rollout_stats)
                 {
                     g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -99182,6 +99380,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                   int* out_committed_win,
                                                   int* out_committed_sub_depth)
 {
+    if (enforce_budget) { g_solve_committed_tb = leafeval::kInvalid; }   // see LastCommittedTieBreak
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     routetape::Suspend _rts;   // see TurnSolver::Solve
     // ORDER-CONDEMNATION root-turn authority: the OUTERMOST solve entry owns the marker (inner
@@ -100523,6 +100722,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             pbsite::Note(is_pre_combat ? pbsite::kLaPre : pbsite::kLaPost, plan, budget);
             cantripattr::Scope _cas(cantripattr::AxisOf(plan));   // MTG_CANTRIP_ATTRIB (diagnostic)
             cantripattr::XScope _cax(plan);   // MTG_CANTRIP_ATTRIB: the seed / tutor axes
+            nodekind::Scope _nk(plan);   // MTG_NODE_KIND_ATTRIB (diagnostic)
             ChargePutBackVariant(budget, plan);   // MTG_PUTBACK_PRICE (inert at an unlimited budget)
             VampCandCensus(plan, is_pre_combat);
             vampaxis::Scope _vax(vax_list, plan, &state);   // MTG_VAMP_AXIS_CENSUS (diagnostic)
@@ -101263,6 +101463,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             {
                 best_plan           = pass_best;
                 committed_win       = pass_best_win;
+                if (enforce_budget) { g_solve_committed_tb = pass_best_tb; }
                 committed_sub_depth = sub_depth;
                 m2yield::RecordCommit(sub_depth);
                 committed_esc_pool  = std::move(esc_pool);
@@ -101324,6 +101525,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                       BpWaveRank(walker.LastRank()); }
 
                     ConsumeAt(budget, unitsite::kLookaheadBpWave);
+                    nodekind::Scope _nk(v);   // MTG_NODE_KIND_ATTRIB (diagnostic)
                     PROF_INC(gamestate_copies);
                     const uint64_t ck = (static_cast<uint64_t>(walker.LastBase()) << 8)
                                       | static_cast<uint64_t>(walker.LastAt() & 0xFF);
@@ -101484,6 +101686,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                   if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
                   return false; }
                 ConsumeAt(budget, unitsite::kLookaheadGroupWave);
+                nodekind::Scope _nk(v);   // MTG_NODE_KIND_ATTRIB (diagnostic)
                 if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
@@ -101574,6 +101777,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         {
             best_plan           = pass_best;
             committed_win       = pass_best_win;
+            if (enforce_budget) { g_solve_committed_tb = pass_best_tb; }
             committed_sub_depth = sub_depth;
             m2yield::RecordCommit(sub_depth);
             committed_esc_pool  = std::move(esc_pool);   // escalation reads the COMMITTED pass
@@ -101699,6 +101903,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
             }
             committed_win = esc_best_win;
+            if (enforce_budget) { g_solve_committed_tb = leafeval::kInvalid; }   // the honest re-eval grades no leaf
         }
     }
 

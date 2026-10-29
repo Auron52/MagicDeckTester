@@ -39184,6 +39184,28 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
     return opts;
 }
 
+// PLAN-LEVEL ADMISSION (DecisionProvider::CantripPlanOf): filter a SCORED order `perm` (candidate indices, best
+// first) to the first -- best-scored -- member of every plan, dropping kCantripPlanDrop candidates and keeping
+// kCantripPlanKeep ones ungrouped. Never leaves it empty (an all-dropped fan keeps its rank 0).
+inline void CantripPlanFilter(std::vector<int>& perm, const std::vector<int>& plan)
+{
+    std::vector<int> out, seen;
+    out.reserve(perm.size());
+    for (int q : perm)
+    {
+        const int pq = plan[static_cast<std::size_t>(q)];
+        if (pq == DecisionProvider::kCantripPlanDrop) { continue; }
+        if (pq >= 0)
+        {
+            if (std::find(seen.begin(), seen.end(), pq) != seen.end()) { continue; }
+            seen.push_back(pq);
+        }
+        out.push_back(q);
+    }
+    if (out.empty() && !perm.empty()) { out.push_back(perm.front()); }
+    perm.swap(out);
+}
+
 // The SCORED Ponder fan, when the provider scores this resolution: the existing list (the provider's pick,
 // then every other order and the shuffle, the pick's duplicate dropped) STABLE-sorted by score, with the
 // SHUFFLE placed at index 0 or 1 -- the USER's rule (2026-10-27): "We can search the shuffle as needed and
@@ -39288,6 +39310,37 @@ inline bool ScoredReorderCandidates(const GameState& state, const std::vector<Ca
         if (q == 0 && !shuf.empty() && !(score[shuf.front()] < score[keep.front()])) { out.push_back(base[shuf.front()]); }
     }
     if (keep.empty()) { for (std::size_t i : shuf) { out.push_back(base[i]); } }
+    // PLAN-LEVEL ADMISSION (DecisionProvider::CantripPlanOf; a provider HARD PRUNE): the list above, filtered to
+    // its first member per plan (KEEP's first = the best keep order; the shuffle). Read after the cache: the plan
+    // hook's inputs are the provider's key's plus the looked cards, both in the key above.
+    {
+        std::vector<int> plan(out.size(), DecisionProvider::kCantripPlanKeep);
+        bool planned = !out.empty() && prov.CantripPlansActive(state, false);
+        // The readiness, if the cache hit skipped its derivation (the plan hook may read it).
+        if (planned && keyed && !prov.CantripReadinessOf(state, me, rd)) { planned = false; }
+        for (std::size_t i = 0; i < out.size() && planned; ++i)
+        {
+            TopDispositionView v;
+            v.shuffle  = out[i].shuffle;
+            v.draw_now = g_reorder_draw_after;
+            if (!out[i].shuffle)
+            {
+                for (int idx : out[i].top_order)
+                { if (v.n_top < 8 && idx >= 0 && idx < m) { v.top[v.n_top++] = &looked[static_cast<std::size_t>(idx)]; } }
+            }
+            planned = prov.CantripPlanOf(state, me, rd, v, plan[i]);
+        }
+        if (planned)
+        {
+            std::vector<int> perm(out.size());
+            for (std::size_t i = 0; i < perm.size(); ++i) { perm[i] = static_cast<int>(i); }
+            CantripPlanFilter(perm, plan);
+            std::vector<TopDisposition> kept;
+            kept.reserve(perm.size());
+            for (int i : perm) { kept.push_back(out[static_cast<std::size_t>(i)]); }
+            out.swap(kept);
+        }
+    }
     cost.Done(static_cast<long long>(base.size()));
     return true;
 }
@@ -39726,6 +39779,21 @@ inline thread_local int g_scripted_putback_choice = -1;   // -1 = the provider's
 // TurnSolver.cpp); -1 when nothing (or a human) resolved one.
 inline thread_local int g_putback_resolved_w = -1;
 inline thread_local int g_putback_resolved_i = -1;
+// THE BLIND RESOLUTION CHOOSER (the known-respecting clairvoyance test, gamesetup::BlindSearchSalt;
+// default null => byte-identical). Under the blind search a plan's put-back / Ponder pin was chosen against
+// a library the player could not see, so its ordinal names an arbitrary candidate of the REAL resolution.
+// A real player decides those AFTER the draw / the look, so in blind mode the executor (EffectHandler::
+// ResolveDrawSpell, real resolution only) asks this chooser for the rank instead: it evaluates every
+// candidate the resolution offers (the provider's list, prunes included) with a blind search from the
+// state the candidate leaves, and returns the best rank (ties to the lower rank, the provider's order).
+// Returns -1 to leave the plan's pin. Installed by AIEngine only for the real game in blind mode.
+struct BlindDrawSpellChooser
+{
+    virtual ~BlindDrawSpellChooser() = default;
+    virtual int Choose(const GameState& state, const StackEntry& entry, const CardDefinition& def) = 0;
+};
+inline thread_local BlindDrawSpellChooser* g_blind_draw_chooser = nullptr;
+
 struct ScriptedPutBack
 {
     explicit ScriptedPutBack(int k) : saved(g_scripted_putback_choice) { g_scripted_putback_choice = k; }
@@ -39793,6 +39861,21 @@ inline bool ScorePutBackCandidate(const GameState& state, int controller, const 
     }
     v.n_top = v.n_removed = std::min(take, 2);
     return ResolveProvider(state).ScoreTopDisposition(state, controller, rd, v, score);
+}
+// The plan of one put-back candidate (DecisionProvider::CantripPlanOf; the same view the scorer read).
+inline bool PlanOfPutBackCandidate(const GameState& state, int controller, const CantripReadiness& rd,
+                                   const int* idx, int take, int& plan)
+{
+    const Player& pl = state.players[controller];
+    TopDispositionView v;
+    v.putback = true;
+    for (int j = 0; j < take && j < 2; ++j)
+    {
+        v.top[j]     = &pl.hand[static_cast<std::size_t>(idx[j])];
+        v.removed[j] = idx[j];
+    }
+    v.n_top = v.n_removed = std::min(take, 2);
+    return ResolveProvider(state).CantripPlanOf(state, controller, rd, v, plan);
 }
 
 // Every distinct ordered selection of min(n, eligible) classes, PROVIDER-ORDERED. Each candidate is a
@@ -39906,12 +39989,18 @@ inline std::vector<std::vector<int>> PutBackCandidates(const GameState& state, i
             { all = ScorePutBackCandidate(state, controller, rd, out[q].data(), take, score[q]); }
             if (all)
             {
-                std::vector<std::size_t> perm(out.size());
-                for (std::size_t q = 0; q < perm.size(); ++q) { perm[q] = q; }
-                std::stable_sort(perm.begin(), perm.end(), [&](std::size_t a, std::size_t b) { return score[a] < score[b]; });
+                std::vector<int> perm(out.size());
+                for (std::size_t q = 0; q < perm.size(); ++q) { perm[q] = static_cast<int>(q); }
+                std::stable_sort(perm.begin(), perm.end(), [&](int a, int b) { return score[static_cast<std::size_t>(a)] < score[static_cast<std::size_t>(b)]; });
+                // PLAN-LEVEL ADMISSION (PutBackPickAt's twin).
+                std::vector<int> plan(out.size(), DecisionProvider::kCantripPlanKeep);
+                bool planned = ResolveProvider(state).CantripPlansActive(state, true);
+                for (std::size_t q = 0; q < out.size() && planned; ++q)
+                { planned = PlanOfPutBackCandidate(state, controller, rd, out[q].data(), take, plan[q]); }
+                if (planned) { CantripPlanFilter(perm, plan); }
                 std::vector<std::vector<int>> sorted;
-                sorted.reserve(out.size());
-                for (std::size_t q : perm) { sorted.push_back(std::move(out[q])); }
+                sorted.reserve(perm.size());
+                for (int q : perm) { sorted.push_back(std::move(out[static_cast<std::size_t>(q)])); }
                 out.swap(sorted);
             }
         }
@@ -40113,6 +40202,15 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
             for (std::size_t q = 0; q < n_seq; ++q) { sc.perm[q] = static_cast<int>(q); }
             std::stable_sort(sc.perm.begin(), sc.perm.end(),
                              [&](int a, int b) { return sc.score[static_cast<std::size_t>(a)] < sc.score[static_cast<std::size_t>(b)]; });
+            // PLAN-LEVEL ADMISSION (DecisionProvider::CantripPlanOf; a provider HARD PRUNE): the perm shrinks to the
+            // best member per plan, so the list -- and its count -- is the admitted set in both worlds.
+            {
+                std::vector<int> plan(n_seq, DecisionProvider::kCantripPlanKeep);
+                bool planned = prov.CantripPlansActive(state, true);
+                for (std::size_t q = 0; q < n_seq && planned; ++q)
+                { planned = PlanOfPutBackCandidate(state, controller, rd, sc.seq[q].data(), take, plan[q]); }
+                if (planned) { CantripPlanFilter(sc.perm, plan); }
+            }
             return true;
         };
         // The per-fan ranking cache (see cantriporder::RankCache): the provider's inputs + the candidate list.
@@ -40157,7 +40255,10 @@ inline PutBackPick PutBackPickAt(const GameState& state, int controller, int n, 
         }
         if (ok)
         {
-            const std::array<int, 2>& pk = sc.seq[static_cast<std::size_t>(sc.perm[static_cast<std::size_t>(r)])];
+            // The admitted count (the plan-level admission may have shortened the scored list) and the rank in it.
+            out.count = static_cast<int>(sc.perm.size());
+            const int ra = std::max(0, std::min(k, out.count - 1));
+            const std::array<int, 2>& pk = sc.seq[static_cast<std::size_t>(sc.perm[static_cast<std::size_t>(ra)])];
             out.idx[0] = pk[0];
             out.idx[1] = take == 2 ? pk[1] : -1;
             cost.Done(static_cast<long long>(sc.seq.size()));
