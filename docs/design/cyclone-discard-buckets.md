@@ -172,7 +172,7 @@ always, LTP takes the Cyclone slot, the dig fill order. *"The rest of the discar
 - The second Eldrazi is kept unconditionally, not only when a put-back spell is held ("2 can be useful if we can
   set them up").
 
-## As built (2026-10-29, branch `cyclone-discard`; DEFAULT OFF, the USER's adoption call)
+## As built (2026-10-29, branch `cyclone-discard`; the EL2 arm flipped ON in a separate commit, adoption standing unless the USER objects)
 
 Code: `src/ai/DecisionProviders.{h,cpp}` (CycloneProvider overrides + the shared model), `src/ai/HeuristicArm.h`
 (six per-job slots), unit tests `test/unit/test_cyclone_discard_buckets.cpp`.
@@ -191,9 +191,9 @@ Code: `src/ai/DecisionProviders.{h,cpp}` (CycloneProvider overrides + the shared
 
 | lever | default | what it does |
 |---|---|---|
-| `MTG_CYCLONE_BUCKET_DISCARD` | OFF | the bucket discard (everything below is inert without it) |
+| `MTG_CYCLONE_BUCKET_DISCARD` | **ON** (the EL2 flip commit; OFF before it) | the bucket discard (everything below is inert without it) |
 | `MTG_CYCLONE_DISCARD_DIG_PUTBACK_FIRST` | OFF | Q-D2 variant: after Cyclone, dig slot 2 = Brainstorm > Brainsurge > Ponder > LTP |
-| `MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND` | OFF | the second Eldrazi is kept over Remand |
+| `MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND` | **ON** (the EL2 flip commit) | the second Eldrazi is kept over Remand |
 | `MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY` | OFF | the USER's "arguable" exception: with no put-back effect in hand and 2+ cyclers, a shuffling second Eldrazi sheds with the Eldrazi beyond two |
 | `MTG_CYCLONE_DISCARD_SHUFFLE_PLAN` | OFF | with a known top: two candidates, the rule's pick plus the best shed of the other kind (shuffle vs non-shuffle) |
 | `MTG_CYCLONE_BUCKET_KEEPNEED` | OFF | "one model": the scored put-back's keep needs come from the bucket tiers (`CycloneBucketKeepNeed`) instead of the `kCyc*` tiers |
@@ -409,6 +409,9 @@ not with significance.
 - DIG, E2S and KN stay OFF:
   - DIG and E2S never changed a game;
   - KN failed d5.
-- A separate commit flips EL2's two defaults ON, so the integrator can take or drop it.
+- A separate commit flips EL2's two defaults ON, so the integrator can take or drop it. The coordinator relayed it to
+  the USER, and adoption stands unless the USER objects. With the flip: unit tests 2116 / 2116 (the bucket cases pin
+  their base order explicitly; a new case pins the shipped defaults), scenarios 333 / 333. Smoke is unaffected, because
+  Cyclone is not a suite deck.
 
 What would firm this up: the same A/B at the design's x400 / x200, which is a ~6 h pooled run on a quiet box.

@@ -32373,7 +32373,7 @@ bool CycloneDiscardDigPutbackFirstOn()
 }
 bool CycloneDiscardEldrazi2OverRemandOn()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND");   // DEFAULT OFF (an A/B arm)
+    static const bool on = EnvOn("MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND", true);   // DEFAULT ON with the bucket lever (EL2); =0 -> below Remand
     return heurarm::Flag(heurarm::CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND, on);
 }
 bool CycloneDiscardEldrazi2ShuffleEarlyOn()
@@ -32408,7 +32408,9 @@ bool CycLandRedCapable(const CardDefinition& d)
 
 bool CycloneBucketDiscardOn()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_BUCKET_DISCARD");   // DEFAULT OFF until the USER adopts it; =1 on
+    // DEFAULT ON (the EL2 arm, docs/design/cyclone-discard-buckets.md "Verdict": d3 -0.180 se 0.076, d5 -0.040 se 0.038
+    // vs the generic rule, units x0.98 / x0.97; PENDING the USER's adoption -- drop this commit to keep it OFF); =0 -> generic
+    static const bool on = EnvOn("MTG_CYCLONE_BUCKET_DISCARD", true);
     return heurarm::Flag(heurarm::CYCLONE_BUCKET_DISCARD, on);
 }
 bool CycloneBucketKeepNeedOn()
