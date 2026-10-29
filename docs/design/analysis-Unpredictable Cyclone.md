@@ -1219,7 +1219,7 @@ old bound; F3 found mirror-eligible ranks in 2,445 of 134,639 fan tables; F5 41 
    Ponder -- the rollout's hand diverged from the real one (d5 T8, seed 108000); (b) ShuffleByKey's order is a total
    order only over distinct numbers; number-0 cards tie and keep their input order, so a "shuffle" is not blind to
    what came before it. The executor files the real copy, so after such a shuffle the clairvoyant search predicts a
-   different library / hand than the game deals. Not fixed here (it moves play wherever a graveyard comes back);
+   different library / hand than the game deals. Fixed 2026-10-29 on `cyclone-q53` (see "Q53 fixed" below);
    the three folds that rely on card identity (F2, F3, Q36) now require distinct numbers.
 2. **F3 is narrower than the design.** The shuffle is order-blind, but the SEARCH before it is not: a tutor's
    candidate list is in library order and it takes the topmost copy of a name; a land search likewise. So the fold
@@ -1291,6 +1291,83 @@ butterflies, not as evidence either way.
 
 Artifacts: `logs/cyclone/folds/` (verify outputs, the A/B report and per-game `.wins` / `.units`, the budget-0
 check); scratch `build/scratch/cyclone/folds/`.
+
+### Q53 fixed: the rollout files the cast copy, not template #0 (2026-10-29)
+
+**The fix** (branch `cyclone-q53`, commit d3fc5eaec). apply_one now files a resolved instant / sorcery as the CAST COPY
+(`cast_number`), in the graveyard and in exile (`exiles_self_on_resolve`), exactly as `EffectHandler::MoveToGraveyard`
+does; the Green Sun's Zenith precedent (`GszShuffleCopyIdOn`). Lever `SpellCopyIdOn()` (GameLogger.h):
+`MTG_SPELL_COPY_ID`, default ON, also a heurarm per-job flag (`SPELL_COPY_ID`); `=0` or `--legacy-spell-copy` restores
+the template. Recordings carry `"spell_copy_id": 1`, and `test/viewer_protocol_check.py` replays an unstamped reference
+with `--legacy-spell-copy`. Every graveyard-shuffle path already moved the Card itself and kept its number
+(`PerformGraveyardShuffle`, Progenitus' `MaybeReplaceGraveyardWithLibraryShuffle`, the GSZ `ShuffleSelfIntoLibrary`);
+the two template filings in apply_one were the only place a number was lost (the rollout's permanents already carry
+`cast_number`). Unit test `test/unit/test_spell_copy_id.cpp`: Ponder #20 resolved by the executor files #20; by the
+rollout #20 with the lever, #0 without.
+
+**Gates.** Unit 2109/2109; scenarios 333/333; smoke 149/149 BYTE-IDENTICAL (0 cases move: the suite's
+graveyard-shuffle decks -- FiveColour/Progenitus, StompySurprise/Worldspine Wurm, Prevent Damage/Purity -- are
+unchanged at the smoke seeds, and Cyclone is not in the suite yet); viewer protocol 0 drift (250 ok / 427 repaired /
+1 beaten, 678 refs). GT not touched.
+
+**The prediction is now right -- measured, not argued.** A temporary probe (not committed) counted, inside apply_one,
+(a) casts of a number-0 card and (b) by-number re-finds that landed on a DIFFERENT card than the one chosen (the
+"Brainstorm#0 erased Ponder#0" defect). 16 d3 b10 games (seeds 110000+):
+
+| arm | rollout casts | casts of a #0 card | wrong-card re-finds |
+|---|---|---|---|
+| OLD (template) | 9.75M | 92,511 | 354 |
+| FIX (cast copy) | 10.2M | **0** | **0** |
+
+The moved game shown: d3 b10 gi13 (seed 110013; `logs/cyclone/q53/diag/gi13_d3_logdiff.txt`, both game logs beside
+it). The two games split at T1: OLD makes no land drop, holds Scalding Tarn and discards an Emrakul to the cleanup
+(graveyard shuffle on T1); FIX plays the Tarn. Both win T6. OLD's T1 search ran on corrupted rollouts -- 595 number-0
+casts and **49 wrong-card re-finds** in that game; FIX: 0 and 0. gi10 (T7 both) likewise splits at T1 (the fetch
+target), with OLD's later T4 cleanup discard of Emrakul shuffling the graveyard back.
+
+**Held-out A/B** (one pooled batch, 6 threads, per-job flag; fresh seeds 110000 d3 b10 ignore_play_profile x200 and
+111000 d5 b20 profile x100, per arm; wall unusable -- the batch was SIGSTOPped for a while on box load):
+
+| cell | FIX avg | OLD avg | delta (se) | slower / faster / same | play-changed | units |
+|---|---|---|---|---|---|---|
+| d3 b10 | 5.3350 | 5.2950 | **+0.040 (0.020)** | 5 / 0 / 195 | 28 / 200 | x1.002 |
+| d5 b20 (the deck's play setting) | 5.2000 | 5.2000 | 0.000 (0.035) | 3 / 3 / 94 | 21 / 100 | x0.979 |
+
+**Root-cause of the slower games** (all eight re-run single-game, deterministic: every repro reproduced its A/B win
+turn and unit count). The probe shows OLD's search in six of them running on corrupted rollouts (d3 gi193 209
+wrong-card re-finds, gi27 79, gi31 8,034; d5 gi46 344,628 number-0 casts, gi68 7,526 re-finds); gi135 and d5 gi72
+differ only through the post-shuffle library order (ShuffleByKey tied the number-0 cards). Every split is a decision
+inside a window that contains a graveyard shuffle. A budget ladder, same seeds:
+
+| game | A/B (FIX / OLD) | larger budget (FIX / OLD) |
+|---|---|---|
+| d3 gi147 | 7 / 4 | b40 5 / 6, b100 5 / 6 -- FIX better |
+| d3 gi135 | 7 / 6 | b40 5 / 6, b100 5 / 6 -- FIX better |
+| d3 gi193 | 7 / 5 | b40 6 / 6, b100 6 / 6 -- equal |
+| d5 gi46 | 8 / 6 | b60 6 / 6 -- equal |
+| d5 gi68 | 6 / 5 | b60 6 / 6 -- equal |
+| d5 gi72 | 8 / 7 | b60 5 / 5 -- equal |
+| d3 gi27 | 7 / 6 | b40 7 / 6, b100 7 / 6, d5 b20 7 / 6 -- FIX worse |
+| d3 gi31 | 7 / 6 | b40 7 / 5, b100 7 / 5, d5 b20 7 / 5 -- FIX worse |
+
+So six of eight recover (two beat OLD). gi31 is read through: at T1 OLD scores "Watery Grave, pass" 6 and Ponder 7,
+FIX scores pass 9 (no win found) and Ponder 6 -- at b10 and again at b100 (`logs/cyclone/q53/diag/gi31_*_T1_root.txt`).
+OLD's 6 for the pass is a value computed on rollouts that made 8,034 wrong-card re-finds in that game, i.e. on hands the
+game cannot deal; the real game then happened to reward the pass (T5 at b100). FIX's own line slips one turn
+mid-game: T1-T3 predict 6, T4 predicts 7, because the T3 search's win-6 continuation needs a T4 step the T4 search does
+not refind (a beyond-horizon greedy playout step; no number is involved -- the FIX probe counts 0 / 0). gi27 is the
+same shape at b10/b40/b100 (T1 identical at b100, the split later). Neither is a defect of the fix: OLD's better result
+comes from a root valued on states the game cannot reach, which is not something to restore. The d3 b10 +0.040 is
+5 discordant games, all of this kind (sign test p = 0.06); at the deck's play setting the fix is exactly neutral.
+The CLAUDE.md "every slower game recovers at d8 b0" bar cannot be run here (d3 b0 is intractable, see the sound-folds
+section); the budget ladder above stands in for it and is NOT that bar.
+
+**Verdict.** A modelling fix (Rule 0: the rollout filed a card the game does not have); ships DEFAULT ON. Units neutral
+(x1.002 / x0.979). Cyclone moves (14% of d3, 21% of d5 games change play); the suite does not. Landing it is the
+coordinator's / USER's call: the d3 b10 cell reads +0.040 (se 0.020) worse and the d5 b20 cell 0.000.
+
+Artifacts: `logs/cyclone/q53/` (A/B manifest, report, per-game `.wins` / `.units`; `diag/` the probe counts, the budget
+ladder, the log diffs and the T1 root dumps); scratch `build/scratch/cyclone/q53/`.
 
 ## Reference games (2026-10-28)
 The USER hand-played the deck's first 10 reference games in the play viewer (primary checkout,
@@ -1823,7 +1900,9 @@ smoke covers every deck).
   themselves -- the 0 charge made rank 0 the generic shed order's tie-break (it put the sole Cyclone / a Curator on top),
   which is where the held-out loss came from. Pairs naturally with Q44(2) / Q42 (a sane Cyclone shed order fixes the
   tie-break too). Measuring it is one more pooled A/B (~1 h at 14 threads). Default: not built.
-- Q53. THE NUMBER-0 CARD IDENTITY DEFECT (found by the sound-fold verify runs, 2026-10-28; pre-existing, NOT fixed). The
+- Q53. THE NUMBER-0 CARD IDENTITY DEFECT (found by the sound-fold verify runs, 2026-10-28; pre-existing). **FIXED 2026-10-29
+  on branch `cyclone-q53` (MTG_SPELL_COPY_ID, default ON) -- see "Q53 fixed" above; landing it is the open call (d3 b10
+  +0.040 se 0.020 on 5 discordant games, all root-caused to OLD valuing a root on corrupted rollouts; d5 b20 0.000).** The
   rollout files a resolved instant / sorcery as its definition's TEMPLATE card (apply_one,
   `ap.graveyard.push_back(UnkickedSpellCard(def, def.card))`: m_number 0), not the cast copy -- the executor files
   the real card. An Eldrazi's graveyard shuffle (`put_into_graveyard_shuffles_graveyard`) deals those number-0 cards
@@ -1834,7 +1913,7 @@ smoke covers every deck).
   predict a hand / library the real game does not deal, after the first graveyard shuffle of a game. Proposed fix:
   file the cast copy (cast_number), the Green Sun's Zenith precedent (GszShuffleCopyIdOn) -- a play change for every
   deck that brings a graveyard back (here: Emrakul, Ulamog the Infinite Gyre). The folds that rely on card identity
-  (F2, F3, Q36) require distinct numbers meanwhile. Default: reported, not fixed (outside the folds' brief).
+  (F2, F3, Q36) require distinct numbers meanwhile (the guards stay: the lever can be off). Default: fixed, default ON.
 - Q54. F4, THE STRANDED-CAST FOLD (MTG_PB_STRAND_FOLD), is built and measured NOT exact: 613 of ~297K verified pairs
   realise a different line than the smaller plan's same-pair member, because the payment allocation is steered by
   the plan's whole bill (the stranded cast's included) and a different allocation changes what the rest of the line
