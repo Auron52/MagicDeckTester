@@ -509,6 +509,21 @@ def screened_setting(root, d):
     return (None, None), None
 
 
+def settings_answered(verified, src, setting, root):
+    """Did the verifying verdict's run regenerate at `setting` (the deck's screened mull_gen depth/budget)?
+    Exact: the screened setting is read from `src` as it stood at the verdict's frozen commit, so a later
+    re-screen to a different setting raises the flag again."""
+    if not verified or not src or not verified.get("frozen"):
+        return False
+    if (verified.get("settings") or {}).get("depth") not in (None, setting[0]):
+        return False
+    try:
+        vp = json.loads(git("show", "%s:%s" % (verified["frozen"], src), cwd=root)).get("value_play", {}) or {}
+    except Exception:
+        return False
+    return (vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms")) == tuple(setting)
+
+
 _KCACHE = None
 
 
@@ -620,11 +635,19 @@ def assess_deck(H, d, cfg, smap):
                 it["flags"].append(("decklist", "; ".join(txt)))
             it["notes"].append("generated at %s, R=%s" % (kt["commit"], kt["R"]))
             meta = kt["meta"]
-            (sd, sb), _ = screened_setting(R, {"value": d.value, "profile": d.profile})
+            (sd, sb), ssrc = screened_setting(R, {"value": d.value, "profile": d.profile})
             if meta.get("depth") is not None and sd is not None:
                 if (meta.get("depth"), meta.get("budget_ms")) != (sd, sb):
-                    it["flags"].append(("settings", "generated at d%s b%s, deck now screens d%s b%s"
-                                        % (meta.get("depth"), meta.get("budget_ms"), sd, sb)))
+                    msg = "generated at d%s b%s, deck now screens d%s b%s" % (
+                        meta.get("depth"), meta.get("budget_ms"), sd, sb)
+                    if settings_answered(it.get("verified"), ssrc, (sd, sb), H.root):
+                        # A regeneration AT the screened setting already ran against this very table and kept
+                        # it: the mismatch is answered. Flagging it again re-queued the same job forever
+                        # (2026-10-29: Fluctuator kept-incumbent three times in one day, 15:38 / 19:05 / 20:07).
+                        it["notes"].append("settings: %s -- answered by the %s verdict at %s" % (
+                            msg, it["verified"]["verdict"], it["verified"]["frozen"][:9]))
+                    else:
+                        it["flags"].append(("settings", msg))
             inc_R = max([r for r in (kt.get("R"), meta.get("R")) if isinstance(r, int)] or [0]) or None
             plan = mull_plan(cfg, d.key, inc_R, meta.get("depth"), meta.get("budget_ms"), (sd, sb))
             it["plan"] = plan
