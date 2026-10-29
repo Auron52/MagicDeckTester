@@ -1186,7 +1186,11 @@ def versus_cost(wt, stem, since):
     Work units, not wall: they are thread- and load-invariant, so a shared box cannot tilt the verdict."""
     t0 = parse_iso(since).timestamp() if since else 0
     per = {}
-    for d in glob.glob(os.path.join(wt, "logs", "keepmodel_exh_versus_%s_r*" % stem)):
+    # mullgen.sh names the rounds off the SANITISED stem ("Melira Pod" -> Melira_Pod_r1); globbing the raw stem
+    # found nothing for any deck with a space, and Melira Pod's 2026-10-28 table was recorded "cost not measured".
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", stem)
+    dirs = set(glob.glob(os.path.join(wt, "logs", "keepmodel_exh_versus_%s_r*" % glob.escape(safe))))
+    for d in sorted(dirs | set(glob.glob(os.path.join(wt, "logs", "keepmodel_exh_versus_%s_r*" % glob.escape(stem))))):
         f = os.path.join(d, "batch.log")
         if not os.path.exists(f) or os.path.getmtime(f) < t0:
             continue
