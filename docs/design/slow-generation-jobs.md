@@ -213,3 +213,8 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   generation is DONE (keep table + leafless d6/b20 sidecar); the lhc overnight GT waits for the next full overnight run.
 - 2026-10-29 08:55 UTC: **Melira Pod value leaf RESUMED** (artifact-queue worker artifact-queue-d7d6a5, pid 493949,
   in-flight job at 99977194b; its table already landed 9af42771d). The worker continues the fleet queue afterwards.
+- 2026-10-29 10:53 UTC (Melira value leaf): phase A was already banked (11,489 rows); C0 nothing to calibrate (profile
+  pins leaf depth 0). Phase C matrix (started 08:57) ran ~20,500 games at 32/32 workers; now in its TAIL: one game,
+  s10010 gi=308, running 1.6-1.7 h in 7 cells (H4, H5, V4-V8) -> 7/32 cores busy. The matrix's wall-clock backstop
+  (predictive cut 120 min ~10:57, hard cap 210 min ~12:27) is the designed bound; left to it. Same Carrion Feeder
+  sac-loop tail family as the mulligan's refine (worst rollout 1,994 s).
