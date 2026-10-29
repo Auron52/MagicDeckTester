@@ -68,6 +68,30 @@
     "budget": null
    },
    "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.010969 t, cost 1.009x (se 0.009, 32 seeds)); incumbent restored"
+  },
+  {
+   "run_id": "fluctuator-artifact-queue-tool-647f24-20261029T200655",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "cbd1f2c7759866946e9f2e55dff6855fa96f67ca",
+   "frozen": "9ec1ce63b16958776b219447edf343a58059057b",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": 0.010969,
+   "cost": [
+    1.0088825154665375,
+    0.009234196299783205,
+    32
+   ],
+   "trade": false,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.010969 t, cost 1.009x (se 0.009, 32 seeds)); incumbent restored"
   }
  ]
 }
