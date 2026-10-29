@@ -194,6 +194,6 @@ hands (worst single rollout 1,994 s); the breakpoint subset-derive cost above is
 
 `bash scripts/mullgen.sh run decks/LifegainHeliodCombo fast` in `.claude/worktrees/lhc-gen`, frozen at 1d78d3511
 (src 07c4ce01d). Discovery (400 probes, threshold 0.01): one merge, Soul Warden + Soul's Attendant -> K=14,
-~77.5k distinct hands. USER 2026-10-29: *"Yes, Soul Warden and Soul's Attendant should merge."* -- the discovered merge is APPROVED. No `buckets.json` written mid-run (a policy enters bucket_fp); write one after this run lands if a regeneration should pin it. The value leaf follows
+~77.5k distinct hands. USER 2026-10-29: *"Yes, Soul Warden and Soul's Attendant should merge."* -- the discovered merge is APPROVED. No `buckets.json` written mid-run (a policy enters bucket_fp); write one after this run lands if a regeneration should pin it. Voice of the Blessed / Ajani's Pridemate (dist 0.0175, the nearest unmerged pair) stay APART -- USER agreed 2026-10-29: Voice's {W}{W} is 2 devotion for Heliod's 5 vs Pridemate's 1, the only goldfish difference and the measured deviation. The value leaf follows
 when this validates. Melira Pod's paused value leaf stays paused until then (stages are serial).
 - 2026-10-29 06:32 UTC: PGO build stage (first step of the run).
