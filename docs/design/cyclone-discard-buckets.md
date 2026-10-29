@@ -359,9 +359,9 @@ pooled batch, 9 threads. Combined with the first 50, that gives d5 x150:
 |---|---|---|---|---|
 | GEN | 5.207 | -- | -- | -- |
 | BKT | 5.180 | **-0.027 (0.038)** | 14 / 18 | x0.970 |
-| EL2 | 5.161 (n = 149) | **-0.040 (0.038)** | 13 / 19 | x0.966 |
+| EL2 | 5.167 | **-0.040 (0.038)** | 13 / 19 | x0.972 |
 
-EL2 vs BKT at d5: -0.013 (se 0.010), 0 slower / 2 faster. The six new BKT-slower games were classified by mechanism
+EL2 vs BKT at d5: -0.013 (se 0.009), 0 slower / 2 faster. The six new BKT-slower games were classified by mechanism
 only; a d5 blind ensemble costs about 200-600 s a game, more than the time left:
 - d5 53: T2 cycle vs draw; no sheds.
 - d5 58: T4 draw order; BKT then sheds a surplus Cyclone.
@@ -380,7 +380,7 @@ All six are (c): a root decision among unchanged candidates, before any real cle
 | arm | d3 (n = 100) | d5 | pooled d3 + d5 | (1) |
 |---|---|---|---|---|
 | BKT | -0.110 (se 0.071) | -0.027 (se 0.038, n = 150) | -0.060 over 250 | passes |
-| **EL2** | **-0.180 (se 0.076)** | **-0.040 (se 0.038, n = 149)** | **-0.096 over 249** | **passes; the best arm** |
+| **EL2** | **-0.180 (se 0.076)** | **-0.040 (se 0.038, n = 150)** | **-0.096 over 250** | **passes; the best arm** |
 | DIG, E2S | identical to BKT | identical to BKT at n = 50 | | inert at this sample |
 | KN | -0.070 (se 0.077) | +0.060 (se 0.072, n = 50) | | FAILS at d5 (not extended) |
 
@@ -400,7 +400,7 @@ not with significance.
   - No large-budget recovery check was run (intractable on Cyclone; ledger Q44).
 
 **(3) No performance cost.**
-- Work units per game: BKT x0.997 (d3) / x0.970 (d5); EL2 x0.978 / x0.966.
+- Work units per game: BKT x0.997 (d3) / x0.970 (d5); EL2 x0.978 / x0.972.
 - Wall is unmeasurable on this box (load 35-45). On a matched reading it is no worse.
 
 **Recommendation (the USER decides):** adopt **EL2**, i.e. `MTG_CYCLONE_BUCKET_DISCARD=1` +
