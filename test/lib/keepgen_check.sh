@@ -181,7 +181,7 @@ sed -i "s#$D#<D>#g; s#$SCRATCH#<S>#g" "$D"/*.report "$D"/*.err 2>/dev/null
 #   * the report's gen-time projection and slowest-rollout tables -- pure ms measurements and their
 #     derived hour estimates, whose ORDER also changes when two cells time within noise of each other.
 #     (The tables print at several points now, so the ms-line pattern is matched anywhere.)
-sed -i -E '/\[keepgen\] (usefulness|worker idle):/d; /sub-refine (wave [0-9]+:|converged after)/d; /\[keepgen\]   monitor:/d; /[0-9]+% +\([0-9]+\/[0-9]+ (tasks|rollouts)/d; /continuous: [0-9]+ rollouts fed/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.err 2>/dev/null
+sed -i -E '/\[keepgen\] (usefulness|worker idle|spec-journal):/d; /\[keepgen\]   spec-journal compacted:/d; /sub-refine (wave [0-9]+:|converged after)/d; /\[keepgen\]   monitor:/d; /[0-9]+% +\([0-9]+\/[0-9]+ (tasks|rollouts)/d; /continuous: [0-9]+ rollouts fed/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.err 2>/dev/null
 sed -i -E '/^  floor pass: [0-9]+s @ /d; /^  projected (COMPLETE|FAST)/d; /^  overnight target:/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.report 2>/dev/null
 sed -i -E 's#[0-9]+/s#<rate>/s#g; s#\b[0-9]+s\b#<t>s#g' "$D"/*.err "$D"/*.report 2>/dev/null
 
