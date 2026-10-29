@@ -288,6 +288,64 @@ std::map<std::string, int> FanOutcomesSf(const GameState& s, const std::vector<T
 }
 }   // namespace
 
+TEST_CASE("Sound fold F3: a put-back then a land-search shuffle -- mirrors reach one state, and the fold declines them")
+{
+    // Three Islands and an untapped Myriad Landscape: Brainstorm ({U}), then Myriad ({2}, {T}, sacrifice: two basics
+    // sharing a type, tapped; then SHUFFLE). The put-back hand holds no land, so the land search cannot see the swap.
+    GameState s = BoardSf(3, true, { "Lightning Bolt", "Goblin Guide" },
+                          { "Lightning Bolt", "Birds of Paradise", "Sol Ring", "Island", "Island", "Mountain" });
+    PutSf(s, "Myriad Landscape", 9);
+    s.deck_has_land_search = true;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    int fan = 0, fan_plain = 0;
+    const std::map<std::string, int> with_shuffle = FanOutcomesSf(s, plans, "land=;Brainstorm,Myriad Landscape,", &fan);
+    const std::map<std::string, int> plain        = FanOutcomesSf(s, plans, "land=;Brainstorm,", &fan_plain);
+    // Hand at the put-back: Bolt x2, Goblin Guide, Birds, Sol Ring -> 4 classes, one doubled: 13 ordered put-backs.
+    REQUIRE(fan == 13);
+    REQUIRE(fan_plain == 13);
+    CHECK(plain.size() == 13u);             // no shuffle: every ordered put-back is its own state
+    CHECK(with_shuffle.size() == 7u);       // the shuffle folds each (a, b) onto (b, a): 4*3/2 + 1
+    for (const auto& [o, k] : with_shuffle) { CHECK((k == 2 || k == 1)); }
+    // THE FOLD: a lookahead solve declines the mirrors (counted), and at an unlimited budget commits the same outcome.
+    auto solve = [&](int on) -> std::string
+    {
+        ArmScopeSf _a(heurarm::PB_MIRROR_FOLD, on);
+        const TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, true, 2, 8, nullptr, false, false, nullptr);
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, p, true);
+        return OutcomeSf(r);
+    };
+    const long long f0 = FoldCounterSf(1);
+    const std::string on = solve(1);
+    const long long f1 = FoldCounterSf(1);
+    const std::string off = solve(0);
+    CHECK(FoldCounterSf(1) == f1);          // off: nothing declined
+    CHECK(f1 > f0);                         // on: mirrors declined
+    CHECK(on == off);
+}
+
+TEST_CASE("Sound fold F3: the shuffle is order-blind only over DISTINCT card numbers")
+{
+    // Library::ShuffleByKey orders cards by a key of (seed, ordinal, card NUMBER): two orders of one set of distinct
+    // numbers shuffle to one order -- F3's premise.
+    Library a, b;
+    for (int n : { 7, 3, 11, 5, 2 })  { Card c; c.m_number = n; a.push_back(c); }
+    for (int n : { 3, 7, 11, 5, 2 })  { Card c; c.m_number = n; b.push_back(c); }
+    a.ShuffleByKey(99); b.ShuffleByKey(99);
+    for (std::size_t i = 0; i < a.size(); ++i) { CHECK(a[i].m_number == b[i].m_number); }
+    // Two cards sharing a number TIE, and the tie keeps their input order: the swap survives the shuffle. (The
+    // rollout files a resolved spell as its number-0 template; an Eldrazi's graveyard shuffle then brings several
+    // into the library -- why F3 requires distinct numbers, pbfan::Table::numbers_unique.)
+    Library c, d;
+    auto put = [](Library& l, int n, const char* nm) { Card x = DefSf(nm).card; x.m_number = n; l.push_back(x); };
+    put(c, 0, "Ponder"); put(c, 0, "Brainstorm"); put(c, 5, "Island");
+    put(d, 0, "Brainstorm"); put(d, 0, "Ponder"); put(d, 5, "Island");
+    c.ShuffleByKey(99); d.ShuffleByKey(99);
+    bool differ = false;
+    for (std::size_t i = 0; i < c.size(); ++i) { if (c[i].m_name != d[i].m_name) { differ = true; } }
+    CHECK(differ);
+}
+
 TEST_CASE("Sound fold F4 (default OFF): a rank that strands a later cast realises the smaller plan's same put-back")
 {
     // Brainstorm then Goblin Guide (the only copy). A put-back of Goblin Guide strands its cast: the apply realises

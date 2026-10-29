@@ -26792,6 +26792,17 @@ struct Table
     std::vector<const CardDefinition*> cls_def;      // per class: its definition (null when unknown)
     std::vector<int> cls_cnt;                        // per class: eligible copies in the hand at the resolution
     std::vector<InternedName> inelig_names;          // names with an ineligible (staged / impulse) copy in hand
+    // F3's witness (the requesting apply only): the library's shuffle ordinal at the fan's put-back and at the
+    // end of the main phase's trailing pass. A later > earlier means a shuffle happened in that window.
+    std::uint64_t sc_pb = 0, sc_trail = 0;
+    bool have_trail = false;
+    bool cont_acts  = false;   // a queued continuation's activations ran in that trailing pass
+    // Every card of the library and the hand carries a DISTINCT number at the resolution. ShuffleByKey's order is
+    // a total order only over distinct numbers: two cards sharing one (the rollout files a resolved instant /
+    // sorcery as its definition's template, number 0 -- an Eldrazi's graveyard shuffle then brings several
+    // number-0 cards into the library) tie, and std::sort orders ties by their input positions, so the shuffle is
+    // no longer blind to the put-back's order. F3 needs this.
+    bool numbers_unique = false;
 };
 inline thread_local bool  t_req = false;   // armed by a host for its NEXT apply only (the apply consumes it)
 inline thread_local Table t_last;          // the last requesting apply's table (published at its exit)
@@ -26838,11 +26849,47 @@ inline Table Build(const GameState& state, int controller, int n)
         t.pair.push_back(pr);
     }
     t.take  = cands.empty() ? 0 : static_cast<int>(cands.front().size());
+    std::vector<int> nums;
+    nums.reserve(pl.library.size() + pl.hand.size());
+    for (std::size_t i = 0; i < pl.library.size(); ++i) { nums.push_back(pl.library[i].m_number); }
+    for (const Card& c : pl.hand) { nums.push_back(c.m_number); }
+    std::sort(nums.begin(), nums.end());
+    t.numbers_unique = std::adjacent_find(nums.begin(), nums.end()) == nums.end();
     t.valid = true;
     return t;
 }
 }   // namespace pbfan
 
+// F3 -- THE SHUFFLE MIRROR FOLD (MTG_PB_MIRROR_FOLD, SOUND, DEFAULT ON). The fan's put-back (a, b) and its mirror
+// (b, a) move the SAME two cards (the last copy of each class) to the library top in the other order; nothing else
+// differs. Library::ShuffleByKey orders the shuffled cards by a key of (seed, shuffle ordinal, card NUMBER), so a
+// shuffle of the same set is the same order whatever order it started in. So when the FIRST library event after
+// the put-back is such a shuffle, (a, b) and (b, a) reach the IDENTICAL state, and the second one applied is a
+// post-apply duplicate the dedup would discard -- declined before its apply instead. EXACT, under three
+// conditions, every one checked:
+//   * THE WINDOW. The plan does nothing after the put-back but (at most) ONE more hand cast -- a library TUTOR
+//     (a search that shuffles) -- and trailing LAND-SEARCH activations (Myriad Landscape; they shuffle), then its
+//     cycle seed (which runs after). Its land drop is not deferred. So between the put-back and the end of the
+//     trailing pass the only library events are those searches. Only in a FULL-TAIL apply (no node partition
+//     can stop it at the cantrip).
+//   * THE SEARCH IS BLIND TO THE SWAP. A search reads the library before it shuffles: its candidate list is in
+//     library order and it takes the TOPMOST copy of a name (PerformTutor, the land search). Swapping the top two
+//     cards changes neither when AT MOST ONE of the pair's two classes is something that search can find (a
+//     name-bound tutor: that name; an open tutor: its type filter -- an untyped one finds anything; a land
+//     search: a land). And the pair must not put back the tutor's own last copy (it would not be cast).
+//   * THE SHUFFLE HAPPENED. The first applied variant's apply witnesses that the library's shuffle ordinal
+//     advanced between the fan's put-back and the end of the trailing pass (a dropped tutor / a stranded
+//     activation would not shuffle -- and payability does not depend on which cards went back).
+// Also gated on the stable shuffle (ShuffleByKey) and the search shuffle being on. NOT node-level (a breakpoint
+// continuation's first library event) -- see the ledger.
+// MTG_PB_MIRROR_FOLD_VERIFY=1 applies every mirror instead and compares its post-apply state key with the applied
+// twin's (must be equal).
+static bool PbMirrorFoldOn()
+{
+    static const bool env = EnvOn("MTG_PB_MIRROR_FOLD", true);
+    return heurarm::Flag(heurarm::PB_MIRROR_FOLD, env);
+}
+static bool PbMirrorFoldVerifyOn() { static const bool v = EnvOn("MTG_PB_MIRROR_FOLD_VERIFY"); return v; }
 // F4 -- THE STRANDED-CAST FOLD (MTG_PB_STRAND_FOLD, DEFAULT OFF: built as the design's degenerate-line fold, and
 // MEASURED NOT EXACT -- a LOSSY candidate, the USER's call; see the paragraph after this one). In a
 // FULL-TAIL apply a fan member whose pair puts back the last copies of a card the plan casts AFTER the put-back
@@ -26871,17 +26918,19 @@ static bool PbStrandFoldOn()
 static bool PbStrandFoldVerifyOn() { static const bool v = EnvOn("MTG_PB_STRAND_FOLD_VERIFY"); return v; }
 namespace pbfoldx
 {
-inline std::atomic<long long> g_tables{0}, g_strand_groups{0};
-inline std::atomic<long long> g_strand_folded{0};
+inline std::atomic<long long> g_tables{0}, g_mirror_groups{0}, g_strand_groups{0};
+inline std::atomic<long long> g_mirror_folded{0}, g_strand_folded{0};
+inline std::atomic<long long> g_mirror_ok{0}, g_mirror_bad{0};
 inline std::atomic<long long> g_strand_same{0}, g_strand_payonly{0}, g_strand_bad{0}, g_strand_unmatched{0};
 struct Dump
 {
     ~Dump()
     {
         if (g_tables.load() == 0) { return; }
-        std::fprintf(stderr, "[pb-fold-x] tables=%lld | F4 strand: groups=%lld folded=%lld verify same=%lld payment-only=%lld"
-                     " MISMATCH=%lld unmatched=%lld\n",
-                     g_tables.load(), g_strand_groups.load(), g_strand_folded.load(), g_strand_same.load(), g_strand_payonly.load(),
+        std::fprintf(stderr, "[pb-fold-x] tables=%lld | F3 mirror: groups=%lld folded=%lld verify ok=%lld MISMATCH=%lld"
+                     " | F4 strand: groups=%lld folded=%lld verify same=%lld payment-only=%lld MISMATCH=%lld unmatched=%lld\n",
+                     g_tables.load(), g_mirror_groups.load(), g_mirror_folded.load(), g_mirror_ok.load(), g_mirror_bad.load(),
+                     g_strand_groups.load(), g_strand_folded.load(), g_strand_same.load(), g_strand_payonly.load(),
                      g_strand_bad.load(), g_strand_unmatched.load());
     }
 };
@@ -26934,6 +26983,7 @@ struct PutBackFoldMemo
     struct X
     {
         bool computed = false, requested = false;
+        std::vector<int> mirror;      // per rank: the rank of its mirror pair when F3 holds for it, else -1
         std::vector<int> strand_b2;   // per rank: the real-list index of the smaller plan it strands into, else -1
         std::vector<std::array<std::int16_t, 2>> pair;
     };
@@ -26942,7 +26992,7 @@ struct PutBackFoldMemo
     bool on = false;
     // F3 / F4 (pbfan): armed by a FULL-TAIL host (its applies never stop at a breakpoint node), with its real list
     // for F4's lookup of the smaller plan.
-    bool x_on = false, strand_on = false, strand_verify = false;
+    bool x_on = false, mirror_on = false, strand_on = false, mirror_verify = false, strand_verify = false;
     const std::vector<TurnSolver::Plan>* real = nullptr;
     std::unordered_multimap<std::uint64_t, std::size_t> base_index;   // F4: LineHash -> fan base (real index)
     bool base_index_built = false;
@@ -26950,9 +27000,11 @@ struct PutBackFoldMemo
     void ArmX(bool full_tail, const std::vector<TurnSolver::Plan>* list, const GameState* st)
     {
         state_for_provider = st;
+        mirror_on     = PbMirrorFoldOn();
         strand_on     = PbStrandFoldOn();
+        mirror_verify = mirror_on && PbMirrorFoldVerifyOn();
         strand_verify = strand_on && PbStrandFoldVerifyOn();
-        x_on = on && full_tail && strand_on && !HumanPlayActive() && st != nullptr;
+        x_on = on && full_tail && (mirror_on || strand_on) && !HumanPlayActive() && st != nullptr;
         real = list;
     }
     // The sibling whose apply this variant would repeat (its cand index), or -1.
@@ -26970,6 +27022,19 @@ struct PutBackFoldMemo
         // F3 / F4 (unclamped ranks of a fan whose table is known).
         const X& x = it->second.x;
         if (!x_on || !x.computed || r != putback_choice || r >= static_cast<int>(x.pair.size())) { return -1; }
+        if (mirror_on && !mirror_verify)
+        {
+            const int m = x.mirror[static_cast<std::size_t>(r)];
+            if (m >= 0)
+            {
+                const auto fm = it->second.first.find(m);
+                if (fm != it->second.first.end())
+                {
+                    pbfoldx::g_mirror_folded.fetch_add(1, std::memory_order_relaxed);
+                    return fm->second;
+                }
+            }
+        }
         if (strand_on && !strand_verify)
         {
             const int b2 = x.strand_b2[static_cast<std::size_t>(r)];
@@ -27017,6 +27082,7 @@ struct PutBackFoldMemo
         x.computed = true;
         x.pair     = t.pair;
         const std::size_t n = t.pair.size();
+        x.mirror.assign(n, -1);
         x.strand_b2.assign(n, -1);
         pbfoldx::g_tables.fetch_add(1, std::memory_order_relaxed);
         // The fan's put-back cast: the first put-back card of the plan (the axis varies exactly that one).
@@ -27044,6 +27110,66 @@ struct PutBackFoldMemo
         auto inelig = [&](const InternedName& nm)
         { return std::find(t.inelig_names.begin(), t.inelig_names.end(), nm) != t.inelig_names.end(); };
         // The hand casts applied AFTER the put-back (plan order; not hoisted ahead of it).
+        // ---- F3: the window ------------------------------------------------------------------------------------
+        if (mirror_on)
+        {
+            const Action* tutor = nullptr;
+            bool ok = SearchShuffleEnabled() && StableShuffleEnabled() && t.numbers_unique
+                   && p.land_search_act_slot == TurnSolver::kLandSlotAfterCasts
+                   && (p.land_to_play.empty() || p.land_slot == 0) && !t.cont_acts && t.have_trail && t.sc_trail > t.sc_pb;
+            bool land_search = false;
+            for (std::size_t i = bs + 1; ok && i < p.actions.size(); ++i)
+            {
+                const Action& a = p.actions[i];
+                if (a.kind == Action::Kind::CastFromHand && tutor == nullptr && i == bs + 1 && !a.sacrifice_land
+                    && !a.alt_cost && !a.free_cast && a.remand_by.empty() && a.remand_chain_by.empty())
+                {
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                    if (d != nullptr && IsLibraryTutor(d->params) && !d->params.wish_from_sideboard
+                        && !d->params.tutor_from_graveyard && d->params.draw <= 0)
+                    { tutor = &a; continue; }
+                    ok = false;
+                }
+                else if (TurnSolver::IsLandSearchActivation(a)) { land_search = true; }
+                else if (IsCycleSeed(a)) { /* runs after the window */ }
+                else { ok = false; }
+            }
+            if (ok && (tutor != nullptr || land_search))
+            {
+                const CardDefinition* td = tutor ? (tutor->def ? tutor->def : CardDatabase::Instance().LookupInterned(tutor->card_name)) : nullptr;
+                auto tutor_finds = [&](int ci) -> bool
+                {
+                    if (td == nullptr) { return false; }
+                    if (!tutor->tutor_target.empty()) { return t.cls_name[static_cast<std::size_t>(ci)] == tutor->tutor_target; }
+                    const CardDefinition* cd = t.cls_def[static_cast<std::size_t>(ci)];
+                    if (td->params.tutor_types.empty() || cd == nullptr) { return true; }   // finds anything (superset)
+                    for (const std::string& ty : td->params.tutor_types) { if (CardMatchesTypeName(cd->card, ty)) { return true; } }
+                    return false;
+                };
+                auto land_finds = [&](int ci) -> bool
+                {
+                    if (!land_search) { return false; }
+                    const CardDefinition* cd = t.cls_def[static_cast<std::size_t>(ci)];
+                    return cd == nullptr || cd->card.IsLand();
+                };
+                bool any = false;
+                for (std::size_t r = 0; r < n; ++r)
+                {
+                    const auto& pr = t.pair[r];
+                    if (pr[0] < 0 || pr[1] < 0 || pr[0] == pr[1]) { continue; }
+                    if ((tutor_finds(pr[0]) ? 1 : 0) + (tutor_finds(pr[1]) ? 1 : 0) > 1) { continue; }
+                    if ((land_finds(pr[0]) ? 1 : 0) + (land_finds(pr[1]) ? 1 : 0) > 1) { continue; }
+                    if (tutor != nullptr && (inelig(tutor->card_name)
+                                             || copies_of(tutor->card_name) - in_pair(pr, tutor->card_name) < 1))
+                    { continue; }
+                    for (std::size_t q = 0; q < n; ++q)
+                    {
+                        if (t.pair[q][0] == pr[1] && t.pair[q][1] == pr[0]) { x.mirror[r] = static_cast<int>(q); any = true; break; }
+                    }
+                }
+                if (any) { pbfoldx::g_mirror_groups.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
         // ---- F4: the stranded later casts ------------------------------------------------------------------------
         if (strand_on && real != nullptr)
         {
@@ -27138,7 +27264,7 @@ struct PutBackFoldMemo
     template <class KeyFn, class BlindFn, class DescFn>
     void VerifyAfter(const TurnSolver::Plan& p, KeyFn key, BlindFn blind, DescFn desc_state)
     {
-        if (!strand_verify || !x_on || p.putback_group == 0 || p.bp_choice >= 0) { return; }
+        if (!(mirror_verify || strand_verify) || !x_on || p.putback_group == 0 || p.bp_choice >= 0) { return; }
         if (g_apd_last_putback_i < 0) { return; }
         const auto it = groups.find(p.putback_group);
         if (it == groups.end()) { return; }
@@ -27154,6 +27280,20 @@ struct PutBackFoldMemo
         }
         v_rank[{ p.putback_group, r }] = k;
         const X& x = it->second.x;
+        if (mirror_verify && x.computed && r < static_cast<int>(x.mirror.size()) && x.mirror[static_cast<std::size_t>(r)] >= 0)
+        {
+            const auto m = v_rank.find({ p.putback_group, x.mirror[static_cast<std::size_t>(r)] });
+            if (m != v_rank.end())
+            {
+                if (m->second.exact == k.exact) { pbfoldx::g_mirror_ok.fetch_add(1, std::memory_order_relaxed); }
+                else
+                {
+                    const long long nb = pbfoldx::g_mirror_bad.fetch_add(1, std::memory_order_relaxed);
+                    if (nb < 10) { std::fprintf(stderr, "[pb-fold-x] F3 VERIFY MISMATCH group=%d rank=%d mirror=%d\n   A: %s\n   B: %s\n", p.putback_group, r, x.mirror[static_cast<std::size_t>(r)], k.desc.c_str(), m->second.desc.c_str()); }
+                }
+            }
+        }
+        if (!strand_verify) { return; }
         const auto tp = std::make_tuple(p.putback_group, pbfan::t_last_top, pbfan::t_last_second);
         v_pair[tp] = k;
         auto judge = [](const VKeys& a, const VKeys& b, int g, int rr)
@@ -60952,6 +61092,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         && pbfan::t_cont_frames == pbtbl_frames)
                     {
                         pbtbl = pbfan::Build(state, state.active_player_index, def.params.put_back_from_hand);
+                        pbtbl.sc_pb = state.search_count;
                     }
                     ResolvePutBackFromHand(state, state.active_player_index, def.params.put_back_from_hand, def.card.m_name.str());
                     if (pb_first && g_putback_resolved_w > 0 && def.params.put_back_from_hand == 2 && ap.library.size() >= 2)
@@ -64397,6 +64538,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ...and the trailing pass, UNLESS the human's declared order already ran every activation
     // inline at its own position (human_seq). Skipping it there is what makes the interleave a
     // reordering rather than a duplication.
+    const bool pbx_cont_acts = !pending_cont_acts.empty();   // F3's witness (pbfan::Table::cont_acts)
     if (!human_seq)
     {
         // Plan::land_search_act_slot: its land-search activations already ran at their position
@@ -64429,6 +64571,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     else if (!pending_cont_acts.empty()) { apply_trailing_activations(pending_cont_acts); }
     pending_cont_acts.clear();
     main_trailing_done = true;
+    // F3's witness: the shuffle ordinal at the end of the main phase's trailing pass (see pbfan::Table).
+    if (pbtbl_want && pbtbl.valid && !pbtbl.have_trail)
+    {
+        pbtbl.sc_trail   = state.search_count;
+        pbtbl.have_trail = true;
+        pbtbl.cont_acts  = pbx_cont_acts || human_seq;
+    }
 
     // BREAKPOINT SITE 9 -- POST-ENTRY ACTIVATION (TurnSolver::PostEntryActivationPending; USER
     // 2026-09-08: "Walkers and other sources with activated abilities should also breakpoint in
@@ -68087,7 +68236,7 @@ static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<A
 void TurnSolver::SoundFoldCounters(long long out[5])
 {
     out[0] = pbexact::g_exact.load();
-    out[1] = 0;   // F3 (not built yet)
+    out[1] = pbfoldx::g_mirror_folded.load();
     out[2] = pbfoldx::g_strand_folded.load();
     out[3] = pbxbase::g_folded.load();
     out[4] = 0;   // Q36 (not built yet)
