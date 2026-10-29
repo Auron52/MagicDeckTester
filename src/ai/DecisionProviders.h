@@ -3602,6 +3602,18 @@ public:
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
     bool CleanupDiscardShedStable() const override;
     std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
+
+    // ---- THE DRAFTED CAST ORDER (MTG_CYCLONE_CAST_ORDER, DEFAULT OFF; docs/design/cyclone-cast-order.md) ----
+    // Long-Term Plans < Ponder < Brainstorm < Brainsurge < Remand < Seething Song < Unpredictable Cyclone <
+    // Curator < Street Wraith < Ulamog CH < Ulamog IG < Emrakul, read from PARAMS (CycloneCastOrderRankOf);
+    // TOTAL by name; the land drop and cycling keep their structural positions. The draft's FUNDING ranges
+    // ride CastOrderFallbackRanks (walked by the range ladder only). MTG_CYCLONE_ORDER_DRAW_TURNS (DEFAULT
+    // OFF, needs the order): OrderOpaqueCastsByRank, so draw turns follow the rank and the ladder runs.
+    int              CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    const char*      CastOrderTierName(int rank) const override;
+    bool             CastOrderTotalByName() const override;
+    bool             OrderOpaqueCastsByRank() const override;
+    std::vector<int> CastOrderFallbackRanks(const GameState& s, const CardDefinition& def) const override;
 };
 
 // ---- THE CYCLONE BUCKET MODEL, the USER's expendability rank (shared by the cleanup discard and, under
@@ -3659,6 +3671,13 @@ CycloneKnownTop CycloneKnownTopOf(const GameState& s, int me);
 CycloneBucketOpts CycloneBucketOptsNow(const GameState& s, int me);
 bool CycloneBucketDiscardOn();
 bool CycloneBucketKeepNeedOn();
+
+// The drafted Cyclone cast/cycle orders, exposed for the unit tests (test_cyclone_cast_order.cpp).
+// CycloneCastOrderRankOf: the param rank (-1 = a card the order does not name). CycloneCycleOrderKey: the
+// cycle order's key for cycler `d` (lower = cycled first) under `mode` (1 = draft 2, 2 = cheapest first).
+int CycloneCastOrderRankOf(const CardDefinition& def);
+int CycloneCycleOrderKey(const GameState& s, int me, const CardDefinition& d, int mode);
+int CycloneCycleOrderMode();
 
 class LandfallProvider : public DeckProvider
 {
