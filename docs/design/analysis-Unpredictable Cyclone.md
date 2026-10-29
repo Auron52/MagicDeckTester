@@ -1273,8 +1273,9 @@ a capped game is UN-RUN, never a pass). At the time of writing: **d2 -- 3 pairs 
 T4, T3 in both arms; ON 131 / 92 / 1 s vs OFF 158 / 194 / 0 s), **0 different, 5 capped (UN-RUN)**: gi 0, 1, 2, 7 capped
 in both arms, gi 3 capped in OFF only (ON finished T5 in 21 min at 30.1M units; OFF was cut at 45 min, 49.9M units).
 **d1 -- 0 pairs completed (UN-RUN)**: the ON arm's games were still running or done (gi 1, 2, 5, 6, 7, 8, 10, 11, 13
-finished) when the OFF arm had barely started. The batch was left running (pid in
-`build/scratch/cyclone/folds/b0/batch_b0.pid`; `b0/report.py` pairs the results). So the unlimited-budget claim rests on
+finished) when the OFF arm had barely started; the batch was then STOPPED (2026-10-29 05:39 UTC, the coordinator's
+call: an agent experiment, no d1 pair finished). Final counts: d2 3 pairs equal, 0 different, 5 capped; d1 0 pairs.
+So the unlimited-budget claim rests on
 the three equal d2 pairs plus the verify modes' identities; it is NOT a 20-game confirmation.
 
 **Verdict.** F2, F3, F5 and Q36 are exact by their verify modes. After the guards there were 0 mismatches over about 9M F2
