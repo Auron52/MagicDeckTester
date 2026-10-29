@@ -219,3 +219,4 @@ when this validates. Melira Pod's paused value leaf stays paused until then (sta
   (predictive cut 120 min ~10:57, hard cap 210 min ~12:27) is the designed bound; left to it. Same Carrion Feeder
   sac-loop tail family as the mulligan's refine (worst rollout 1,994 s).
 - 2026-10-29 11:11 UTC: Melira value leaf -- phase C finished 11:09 (no backstop cut; ~2 h 12 min). C.5 risk gate CLEAN (<=0.19% abandoned per cell; no verdict moved). Phase D: crossover 1->2 ... 5->6, trust d5 NOT trusted (V4 gap +0.0013, 95% upper 0.0027 > tol). Phase E (56 A/B jobs) started 11:10.
+- 2026-10-29 11:54 UTC: Melira value leaf -- phase E done 11:26: live leaf kept (staged +0.00025 @1.00x; nlesc +0.0054 @1.19x; nlfit +0.021 @0.80x; emul -0.0011 @1.21x = TRADE, user's call). E.7 grid (live d5/b60) picked d4b60 (+0.0011 t, t +2.05, 0.97x units); trades d5b90 -0.0019 @1.13x, d5b120 -0.0030 @1.21x; d6bX == d5bX at every budget (depth 6 never reached). E.7b nothing to recheck. E.6 running.
