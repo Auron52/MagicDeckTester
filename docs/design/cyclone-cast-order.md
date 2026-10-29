@@ -121,7 +121,9 @@ With Cyclone NOT out (every cycle is a plain draw):
 3. Curator.
 4. Street Wraith last: kept for the Cyclone (the USER rule) when one is in hand or at a known library position.
 
-Measured against the USER's cheapest-first as a second arm.
+USER 2026-10-29 on draft 2: *"Okay, then the other order is probably also fine. Realistically the order and what
+spells you cast are kind of different things anyway, but that is fine."* So draft 2 is the cycle order measured;
+the cheapest-first arm is dropped.
 
 **On condemnation:** agreed that it is a poor fit. Each walk can free-cast a Curator or bottom what it passed,
 and the re-solve after every cycle is what uses that. Condemnation's earlier measurement (FiveColour,
