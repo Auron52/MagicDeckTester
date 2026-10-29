@@ -1343,17 +1343,18 @@ OVERNIGHT_CASES=(
   "critter    5  5005  1425 20"
   "critter    5  6006  1425 20"
   "critter    5  7007  1425 20"
-  # lhc: LifegainHeliodCombo (see the SMOKE block) -- the overnight ENTRY set (no keep table yet; the
-  # FULL set comes just before its keep-table adoption): d0 4x2000, one d3 b10 sanity row, d5 4x300 b20.
+  # lhc: LifegainHeliodCombo (see the SMOKE block) -- the overnight FULL set (2026-10-29, just before its
+  # keep-table adoption, accepted with the table ABSENT): d0 4x2000, one d3 b10 sanity row, d5 4x500 b20 (the
+  # shipped play setting; above Hinata's 4x425 floor, ~0.4 s/game at d5 b20 in the 2026-10-29 held-out A/B).
   "lhc 0  4004 2000 0"
   "lhc 0  6006 2000 0"
   "lhc 0  8008 2000 0"
   "lhc 0 10010 2000 0"
   "lhc        3  4004   125 10"
-  "lhc        5  4004   300 20"
-  "lhc        5  5005   300 20"
-  "lhc        5  6006   300 20"
-  "lhc        5  7007   300 20"
+  "lhc        5  4004   500 20"
+  "lhc        5  5005   500 20"
+  "lhc        5  6006   500 20"
+  "lhc        5  7007   500 20"
   # melira: restored 2026-09-08 (see the SMOKE block). The four-seed d3/d5 sweep that was
   # ~7.5 CPU-hours from one deck now projects to ~25 core-minutes.
   "melira 0 4004 2000 0"

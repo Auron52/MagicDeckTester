@@ -669,6 +669,17 @@ landfall_smoke_d0_s1001	1
 landfall_smoke_d3_s1001	13033
 landfall_smoke_d5_s1001	29365
 lhc2hg_smoke_d5_s1001	34863
+lhc_overnight_d0_s10010	1
+lhc_overnight_d0_s4004	1
+lhc_overnight_d0_s6006	1
+lhc_overnight_d0_s8008	1
+lhc_overnight_d3_s30101	7310
+lhc_overnight_d3_s4004	9709
+lhc_overnight_d5_s30101	12830
+lhc_overnight_d5_s4004	17392
+lhc_overnight_d5_s5005	17197
+lhc_overnight_d5_s6006	16014
+lhc_overnight_d5_s7007	19482
 lhc_regression_d0_s2002	1
 lhc_regression_d3_s2002	14561
 lhc_regression_d3_s30001	38917
