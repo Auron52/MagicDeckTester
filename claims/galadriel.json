@@ -8,6 +8,8 @@
  "frozen": "dc35363d4841f70a7b4e649f9132b65ef82fce15",
  "heartbeat": "2026-10-29T15:34:55Z",
  "host": "550a08fdc1f3",
+ "landed": "97fc2c2371beb7bb1101ea14a70d4dfc2f777dd2",
+ "landed_at": "2026-10-29T15:37:19Z",
  "result_branch": "artifact-refresh/galadriel-20261029-1536",
  "run_id": "galadriel-artifact-queue-d7d6a5-20261029T151448",
  "score": 0.2808,
