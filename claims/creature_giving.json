@@ -4,9 +4,12 @@
   "valueleaf": "em:e9ea4e2f6fb6212c7fbf"
  },
  "deck": "creature_giving",
+ "detail": "mulligan: FAILED rc=1 -- see creature_giving.mulligan.log",
+ "finished": "2026-10-29T14:49:03Z",
  "frozen": "87e57645b09e5d843f02fed504086cc06c953351",
  "heartbeat": "2026-10-29T14:39:09Z",
  "host": "58199181d02e",
+ "result_branch": null,
  "run_id": "creature_giving-artifact-queue-tool-647f24-20261029T143611",
  "score": 0.3379,
  "stage": "mulligan",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-29T14:36:11Z",
- "state": "running",
+ "state": "failed",
  "worker": "artifact-queue-tool-647f24"
 }
