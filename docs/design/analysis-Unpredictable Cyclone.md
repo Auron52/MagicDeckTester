@@ -1462,6 +1462,111 @@ with M2 on (THREADS=8): **149 / 149 PASS, play-changed 0** (searched and d0; no 
 move one) -- no GT accept. Unit 2099 / 2099, scenarios 333 / 333. Artifacts: `logs/cyclone/mem/` (identity.txt,
 determinism.txt, m2_ab.txt, probe.txt, verify.txt, both smoke logs, the manifests, cmp.py).
 
+### Thread-count determinism by construction (2026-10-29)
+USER (on the M2 result): *"We don't want any non-determinism regarding thread-count."* Then: *"it would be better to make
+cache hits and misses cost the same in budgeting"*, *"we don't want to leave nondeterminism in the application"*, and the
+target *"relatively neutral results in terms of performance and quality rather than a big win"*, preferably with ONE
+setting. Binary lineage: 0fce7726a (M1+M3) + edaba76eb (M2) + ab4fbc6a2 (this work).
+
+**Root cause, measured (not assumed).** The coordinator's hypothesis -- "a hit charges less than a recompute" -- was
+checked first and is NOT what moved Cyclone: on the 8-game probe and on held-out d3 gi79, every one of the 126k-138k
+plan-cache computations (bp derivations, m1 / m2 enumerations) charged ZERO units (a new census,
+`MTG_PLAN_POOL_STATS`: "computations ... charging-units=0"). A single-thread sweep of the pool (5 MB .. 8 GB, M2 on and off)
+never moved gi79 either. What the cache DOES change is what a lookup serves, and what the computation leaves behind. Five
+mechanisms, each found by making the cache's residency the only variable (bp cache off, enum memo off, tiny pool) and
+diffing per-decision units (`MTG_TURN_CENSUS`):
+1. **Key hole: physical card copies (Cyclone).** BuildBreakpointKey folds zones by card NAME, but the search shuffle
+   (`Library::ShuffleByKey`) orders the library by card NUMBER, so two states holding the same names in different copies
+   shuffle -- draw, put back, fan -- differently. `MTG_BP_ENUM_LIBCHECK` on gi79: hits served under a library differing BY
+   COPY ONLY with CONTENT different from a fresh derivation; gi79 read 6,316,101 units with the bp cache off and 6,315,629
+   on. Fix: `MTG_PLAN_CACHE_EXACT_KEY` (DEFAULT ON) folds every zone's physical card numbers into the three pool-bound
+   caches' keys. After: LIBCHECK 0 / 1.06M content diffs; cache on = off = tiny pool = 6,316,101.
+2. **Key hole: the main-1 hand mask (Hinata2; PRE-EXISTING at 330cc85bf).** `GameState::HeldSinceMain1` (a per-NUMBER
+   mask) bars a land held since main 1 from the main-2 drop, and no key folded the mask: `MTG_ENUM_MEMO_VERIFY` on seed
+   123024 gi24 found 7 hits serving a main-2 list WITHOUT its land-drop half (cached 1 vs fresh 2 plans, state
+   fingerprint equal) -- also on the pre-M1 binary. Fix: the mask is folded with the physical cards. After: 0 mismatches.
+3. **Side channels of a derivation (Hinata2).** With every served list EXACTLY equal to a fresh derivation (a new
+   `MTG_BP_ENUM_VERIFY=3`: Plan::operator==, fold ids up to relabelling -- 59,846 hits, 0 diffs), gi24 still read 379,907
+   units with the bp cache off and 379,700 on. A derivation enumerates and the enumeration APPLIES plans on copies; those
+   applies bump the channels the CALLER reads as before/after deltas around its own apply (g_bp_any_last,
+   g_bp_classon_last, g_bp_latent9_last, g_bp_truncasym_last, g_look_top_resolved -- the stillborn decline, the NOBP skip,
+   the uniform collapse, the slot-prefix probe) and overwrite its last-values (g_bp_seen_last / fired / cands / demoted /
+   chain_ci). So the caller saw nested events only on a MISS. (Not one of eleven other memos -- solve, rollout-m1,
+   exhaustive-leaf, FS no-win, LA tie-prune, no-win store, collect, pay-probe, SPS walk, arm hash, RH moved -- carried it:
+   each disabled in both arms left the gap at +207.) Fix: `MTG_BP_DERIVE_ISOLATE` (DEFAULT ON): a derivation saves and
+   restores those channels, so a miss is observably a hit. After: bp cache on = off = tiny = enum memo off = 379,527.
+4. **The cost a hit skipped (KittyEquipment).** Kitty's derivations DO charge: the equip-route DFS runs inside the
+   enumeration and bills the decision budget (8 units / link). A hit skipped that. The user's rule, built two ways:
+   *mode 2* stores the units a computation charged and replays them on a hit -- MEASURED to OVERCHARGE: the route
+   memoises its boards per DECISION (`SeenForThisDecision`), so a recompute is warm where the first run was cold: seed
+   1015 gi14 d3 b10 read 20,443 units (and lost a turn, T3 -> T4) against 4,424 when every lookup recomputed (bp cache
+   off). *Mode 1* (DEFAULT, `MTG_CACHE_HIT_CHARGE=1`) is the recompute itself: a computation that charged any unit, or ran
+   a decision-memoising charging sub-search (the equip route, the AA route walk -- `TurnSolver::NoteChargingSubsearch`),
+   is not stored, so every lookup of it costs what computing it costs; a computation that charged nothing is stored and
+   served free, which is what a recompute costs. Plus, on every hit, the computation's side counters (group-cap drops,
+   condemnation drops, truncation events, budget binds) are replayed as the enum memo already replayed most of them.
+   Two more context dependences found the same way on Kitty and closed: the route's per-decision verdict memo
+   (`TrialPolicy`, reached without a walk -- now noted too) and the SEARCH CONTEXT the route reads to decide whether it
+   runs at all (beyond the horizon, the depth-0 runner, a decision root open, a finite budget): folded into the three
+   caches' keys with the physical cards. After: seed 1015 gi14 d3 4,424 units with the cache on, off and at a tiny pool;
+   d5 10,340 on and tiny (10,348 with the bp cache fully OFF, which also disables the canon-front memo -- a per-game,
+   per-thread memo outside the pool, so outside this contract; noted, not chased).
+5. **The GLOBAL pools.** Even with 1-4 the plan pool's admission depended on what OTHER threads held. Fix:
+   `MTG_PLAN_CACHE_PER_THREAD` (DEFAULT ON): admission against a fixed per-thread quota (`MTG_PLAN_CACHE_THREAD_KB`,
+   default 512 MB; with an explicit `MTG_PLAN_CACHE_KB` the quota is that budget's share per machine worker, =0 unbounded),
+   the caches being thread_local and cleared per game -- so a game's admissions are a function of its own history. The FSL
+   line-cache pool likewise (`MTG_FSL_PER_THREAD`, DEFAULT ON: MTG_FSL_POOL / the machine's worker count per thread; the
+   process bound unchanged). The FSL cache cannot take hit-equals-miss: an entry is reused across iterative-deepening
+   passes, as a truncated line or a no-win bound, so what a recompute at the hit site would return or charge is not a
+   recorded quantity. (Neither Cyclone, Hinata nor Kitty touches the FSL pool at these settings: 0 MB used.) Other
+   pools in MemBudget.h: the TT cap is per table, from the machine's RAM and worker count (constants), and every TT is a
+   per-decision local -- deterministic per decision; no other global pool. Thread-local caches surviving a game: the
+   cantrip rank cache (exact key, verify mode, no units -- wall only); every other plan memo is cleared per game
+   (ClearPerGameCaches) or epoch-scoped per decision.
+
+**Invariance, proved on the final binary (ab4fbc6a2).** One manifest, 168 games: Cyclone d3 b10 x48 (seed 121000,
+`--ignore-play-profile`), Cyclone d5 b20 x24 (122000, play settings), Hinata2 d3 b10 x48 (123000), KittyEquipment d3 b10 x48
+(124000); profiles attached; `MTG_DUMP_UNITS=1 MTG_SLOW_GAME_MS=1`:
+| run | threads | plan pool | refused stores | vs t6: digests / win turns / units |
+|---|---|---|---|---|
+| t6 | 6 | shipped (512 MB / thread) | 0 | -- |
+| t1 | 1 | shipped | 0 | 168 / 168 identical |
+| tiny6 | 6 | 20 MB (833 KB / thread) | 382,776 | 168 / 168 identical |
+| unb6 | 6 | unbounded (`MTG_PLAN_CACHE_KB=0`) | 0 | 168 / 168 identical |
+| t12, tiny12 | 12 | shipped / 20 MB | -- | **PENDING** (t12 was paused by the coordinator at 161 / 168 games when the box load reached 75; tiny12 not started) |
+Per-game peak plan-cache holding (the quota's question): 158 games of that manifest max 330 MB, p99 268 MB, p95 128 MB,
+median 9.7 MB; the 1,300-game A/B below max 512 MB (ONE game reached the quota: 4 refused stores -- a refusal is now a
+fact about that game alone and changes nothing, see tiny6), p99 218 MB, p95 100 MB, median 1.3 MB. Default quota kept at
+512 MB; 1 GB would remove the one binding game at a worse worst-case RSS bound (workers x quota).
+The 107000 / 108000 A/B shapes (d3 b10 x200 + d5 b20 x100) at the shipped quota, 6 threads: play identical to the
+2026-10-28 M2 run of the same manifest (300 / 300 digests; units differ in 4 games, the exact key), 19 refused stores
+(several heavy Cyclone games reach the 512 MB quota: per-game peak p99 524 MB, p95 192 MB, median 43 MB -- harmless now,
+see tiny6). The same shapes at 12 threads: **PENDING** (box over the thread cap).
+
+**The play change, measured.** Smoke (THREADS=5): **149 / 149, play-changed 0** on every deck. Held-out paired A/B, the
+committed tree (edaba76eb) vs this change, ONE manifest run as two concurrent 5-thread processes (fresh seeds 140000-145000,
+unused in the ledger and the Cyclone scratch), profiles attached:
+| job | n | old | new | delta (se) | new slower / faster | digests identical | units new/old | thread-ms new/old |
+|---|---|---|---|---|---|---|---|---|
+| Cyclone d3 b10 (140000) | 200 | 5.080 | 5.080 | 0.000 (0) | 0 / 0 | 200 / 200 | x1.0000 | x1.005 |
+| Cyclone d5 b20 (141000, play) | 100 | 5.230 | 5.230 | 0.000 (0) | 0 / 0 | 100 / 100 | x1.0000 | x0.996 |
+| Hinata2 play (142000) | 200 | 5.300 | 5.300 | 0.000 (0) | 0 / 0 | 200 / 200 | x1.0000 | x0.971 |
+| Hinata2 d3 b10 (143000) | 200 | 5.420 | 5.420 | 0.000 (0) | 0 / 0 | 200 / 200 | x0.9999 | x1.008 |
+| KittyEquipment d3 b10 (144000) | 300 | 3.643 | 3.643 | 0.000 (0) | 0 / 0 | 300 / 300 | x1.0099 | **x1.269** |
+| KittyEquipment d5 b20 (145000) | 300 | 3.740 | 3.740 | 0.000 (0) | 0 / 0 | 300 / 300 | x1.0047 | **x1.130** |
+(Win turns from the per-game `.wins`, unwon = 9; process wall 3,977 s -> 4,007 s, +0.8%; max RSS 1.56 -> 1.64 GB.) **No slower
+game anywhere, so there was nothing to root-cause; quality is identical on all 1,300 games.** Units move only where a hit used
+to skip a charge: Kitty +0.5% / +1.0% (some game's decisions now pay its route recomputes; no decision changed), Hinata
+-0.01% (the isolated channels). Wall: neutral on Cyclone and Hinata; **Kitty +13% / +27% thread-time** -- its route-charging
+derivations are recomputed on every lookup now (mode 1), 56k charging computations and 561k unstorable ones in the run.
+**Budget factor: 1.0 (none).** One global factor cannot buy back the Kitty wall without changing play (a factor changes
+how much is searched, and play is already identical), and no deck lost quality to re-gain. The Kitty wall is the price of
+exact hit-equals-miss on a deck whose derivations run a decision-memoised sub-search; the alternative that would recover
+it -- caching those derivations per decision only (epoch-scoped) at the cost the route's warm memo implies -- is a design
+question for the USER (Q57; Q54 on cyclone-mem), not a settings one.
+Regression tier: not run (my thread share; the A/B above is 1,300 games on the three decks the change can move, and
+smoke covers every deck).
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1619,14 +1724,13 @@ determinism.txt, m2_ab.txt, probe.txt, verify.txt, both smoke logs, the manifest
   adopt (with the put-back RULE), and consider the Ponder keep-vs-shuffle proposal neutral (+0.01, x0.98: not worth it on
   its own). Default: OFF until the USER answers.
 - Q34. The plan-cache pool BINDS on this deck even at 11.7 GB on 24 threads, so its pooled results are not byte-identical
-  across thread counts / interleavings (the batch's [determinism] WARNING). Once in the suite its GT would not be
-  reproducible at a different thread count. The put-back single pick removes it (123 MB per worker). Default: disclosed;
-  no pool change made. **RESOLVED 2026-10-28 by M1 + M2** ("Memory: M1/M3 lazy fans + M2 stored-size pricing"): the bp
-  continuation cache now holds its put-back / Ponder fans lazily (the 8-game probe's max RSS 2.08 GB -> 0.25 GB) and the
-  pool charges what is stored (M2, default ON), so at the SHIPPED 2.4 GB pool a Cyclone batch refuses nothing at 6 or 12
-  threads (peak 0.5-1.3 GB; the warning is gone) and the same manifest is byte-identical at 6 and 12 threads. The one
-  measured artifact of the old binding (held-out d3 gi79, +86 units in the M2-off batch only) reproduces alone at the M2-on
-  value. Nothing to decide unless the USER wants the old pricing back (`MTG_PLAN_CACHE_STORED_PRICE=0`).
+  across thread counts / interleavings (the batch's [determinism] WARNING). **RESOLVED 2026-10-29 BY CONSTRUCTION**
+  ("Thread-count determinism by construction"): the plan caches now serve exactly what a recompute would (exact keys,
+  isolated derivation channels) at exactly its cost (hit-equals-miss, mode 1), and the pools admit per thread. Proved on a
+  168-game Cyclone / Hinata / Kitty manifest: 1 and 6 threads, a 20 MB pool (382,776 refusals) and an unbounded pool --
+  all byte-identical (digests, win turns, units), and 1 / 6 threads with tiny and unbounded pools are proved; the 12-thread
+  runs (t12, tiny12, the 107000 / 108000 shapes at 12) are PENDING -- Q34 closes when they pass. The 2026-10-28 M2 fix alone was not enough (USER: *"We don't
+  want any non-determinism regarding thread-count"*): it only stopped the pool binding at the shipped size.
 - Q35. LTP measured neutral (+0.005, se 0.037) and 8% cheaper; its 11 losses are shuffle luck by the salt ensemble (still
   slower in 1 of 11 under four other search shuffles). The Tarn rule is the only USER rule with a clear gain (-0.06 turns);
   5 of its 18 losses persist across salts (gi 25, 61, 130, 154, 184 of seed 81000 d3) -- root-cause them if the rule is to
@@ -1740,13 +1844,26 @@ determinism.txt, m2_ab.txt, probe.txt, verify.txt, both smoke logs, the manifest
   across two parents' lists; not built. And Long-Term Plans (finds any card) qualifies for F3 only when its target
   is name-bound, because an open tutor's candidate list is in library order. Build the node-level form? Default:
   deferred (the plan-level fold already finds mirror-eligible ranks in ~1.8% of the fan tables).
-- Q56. M2 (stored-size pricing (numbered Q53 on branch cyclone-mem; renumbered at integration, Q53 is the number-0 defect), `MTG_PLAN_CACHE_STORED_PRICE`) is ADOPTED DEFAULT ON (agent's call under the brief's bar:
-  0 of 300 held-out games changed, the [determinism] warning gone at the shipped pool). It applies to every deck, but it can
-  only change admission where a lazily held list sits in a pool that binds -- smoke (149 cases) is unchanged with it. Peak RSS
-  rises where the pool used to bind (Cyclone 6 threads 1.1 -> 2.0 GB): the pool is now spent on what it holds. Veto? Default:
-  ON. Also disclosed, not changed: the m1 / m2 enum memos price a lazy list under `=0` at PbLazyListBytes, which does not
-  reproduce the materialised vector's growth slack (pre-existing for the m1 memo; new for the m2 memo, which stored 0 lazy
-  lists on every deck checked).
+- Q56. (cyclone-mem's Q53, renumbered at integration) M2 (stored-size pricing, `MTG_PLAN_CACHE_STORED_PRICE`) is ADOPTED DEFAULT ON (agent's call under the brief's bar:
+  0 of 300 held-out games changed, the [determinism] warning gone at the shipped pool). Since 2026-10-29 it no longer
+  carries the determinism (per-thread admission and hit-equals-miss do, by construction); it now only decides how much the
+  per-thread quota holds. Peak RSS rises where the pool used to bind (Cyclone 6 threads 1.1 -> 2.0 GB). Veto? Default: ON.
+  Also disclosed, not changed: under `=0` the m1 / m2 enum memos price a lazy list at PbLazyListBytes, which does not
+  reproduce the materialised vector's growth slack.
+- Q57. (cyclone-mem's Q54, renumbered at integration) Hit-equals-miss on KittyEquipment costs WALL, not quality: its continuation derivations run the equip-route DFS
+  (which bills the decision budget and memoises its boards per decision), and an exact hit price is a recompute, so those
+  derivations are no longer cached -- +13% (d5) / +27% (d3) thread-time on 600 held-out games, every game's play identical.
+  The literal "store the units and charge them again" (`MTG_CACHE_HIT_CHARGE=2`) is built but OVERCHARGES (the recompute is
+  warm), losing quality (seed 1015 gi14 T3 -> T4). A wall-recovering option, NOT built: keep such entries for the rest of
+  the DECISION only (the route's memo lives that long), charging nothing on a same-decision hit -- exact only if the
+  route's memo makes every same-decision recompute free. The argument holds for the equip route: every in-search route walk
+  goes through `equiproute::TrialPolicy`, whose verdict memo is per DECISION and only grows (cleared only at a new decision
+  or past 2^20 boards), so once a derivation has run its trials a recompute later in the same decision is a memo hit per
+  trial -- 0 units and the same verdicts. So YES, such a derivation (including one whose route charged 0) is eligible to be
+  stored exactly, for the rest of its decision, while the memo generation stands. Built as a patch, NOT built-tested or
+  measured (the box was over the thread cap): `logs/cyclone/mem/route_decision_scoped.UNTESTED.patch`
+  (TurnSolver::TrialRouteBegin/End, Cost::decision_only + route memo generation). Default: mode 1 as shipped.
+  Budget factor: 1.0 (no deck lost quality; a factor cannot buy back wall without changing play).
 - QR1. (Reference games 2026-10-28) Plan-item cycling in the viewer is wired for decks whose provider SEARCHES its
   cycles (Cyclone); elsewhere a cycle stays a standalone plan, but the viewer badge now QUEUES it as its own segment instead
   of firing at once. Extend plan-item cycling to every deck? Default: Cyclone-style decks only.
