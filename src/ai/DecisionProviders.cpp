@@ -31195,13 +31195,13 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
         if (need == kCycDead) { ++dead; }
     }
     // ONE MODEL (MTG_CYCLONE_BUCKET_KEEPNEED, DEFAULT OFF; inert unless MTG_CYCLONE_BUCKET_DISCARD): the keep needs are
-    // the bucket model's (CycloneExpendabilityRank, the discard's own ranking) instead of the tiers above. The known
+    // the bucket model's (CycloneBucketRankOf, the discard's own ranking) instead of the tiers above. The known
     // top is not read here (Unknown): the put-back is the act that SETS the top, and the cache key does not carry it.
     if (CycloneBucketKeepNeedOn())
     {
-        CycloneExpendabilityOpts o = CycloneExpendabilityOptsNow(s, me);
+        CycloneBucketOpts o = CycloneBucketOptsNow(s, me);
         o.top = CycloneKnownTop::Unknown;
-        const CycloneExpendability e = CycloneExpendabilityRank(s, me, o);
+        const CycloneBucketRank e = CycloneBucketRankOf(s, me, o);
         dead = 0;
         for (int i = 0; i < hn; ++i)
         {
@@ -31421,7 +31421,7 @@ bool CycloneProvider::CantripOrderKey(const GameState& s, int controller, std::v
     if (CycloneBucketKeepNeedOn())
     {
         // The bucket model's sub-levers move the keep needs (MTG_CYCLONE_BUCKET_KEEPNEED); the known top is not read.
-        const CycloneExpendabilityOpts o = CycloneExpendabilityOptsNow(s, controller);
+        const CycloneBucketOpts o = CycloneBucketOptsNow(s, controller);
         key.push_back(0xB0C70000ull | 4u | (o.dig_putback_first_after_cyclone ? 1u : 0u) | (o.eldrazi2_over_remand ? 2u : 0u));
     }
     key.push_back(static_cast<std::uint64_t>(controller));
@@ -31975,20 +31975,20 @@ CycloneKnownTop CycloneKnownTopOf(const GameState& s, int me)
     return (d != nullptr && d->card.IsCreature()) ? CycloneKnownTop::Setup : CycloneKnownTop::Junk;
 }
 
-CycloneExpendabilityOpts CycloneExpendabilityOptsNow(const GameState& s, int me)
+CycloneBucketOpts CycloneBucketOptsNow(const GameState& s, int me)
 {
-    CycloneExpendabilityOpts o;
+    CycloneBucketOpts o;
     o.dig_putback_first_after_cyclone = CycloneDiscardDigPutbackFirstOn();
     o.eldrazi2_over_remand            = CycloneDiscardEldrazi2OverRemandOn();
     o.top                             = CycloneKnownTopOf(s, me);
     return o;
 }
 
-CycloneExpendability CycloneExpendabilityRank(const GameState& s, int me, const CycloneExpendabilityOpts& o)
+CycloneBucketRank CycloneBucketRankOf(const GameState& s, int me, const CycloneBucketOpts& o)
 {
     const Player& pl = s.players[static_cast<std::size_t>(me)];
     const int hn = static_cast<int>(pl.hand.size());
-    CycloneExpendability out;
+    CycloneBucketRank out;
     out.tier.assign(static_cast<std::size_t>(hn), kCycTierRemand);
     out.shuffles.assign(static_cast<std::size_t>(hn), 0);
     std::vector<int> sub(static_cast<std::size_t>(hn), 0);   // within-tier key: lower sheds first
@@ -32240,7 +32240,7 @@ std::vector<int> CycloneProvider::CleanupDiscardShedOrder(
     if (!CycloneBucketDiscardOn()) { return DeckProvider::CleanupDiscardShedOrder(s, required_pieces); }
     const int me = s.active_player_index;
     if (s.players[static_cast<std::size_t>(me)].hand.empty()) { return DeckProvider::CleanupDiscardShedOrder(s, required_pieces); }
-    const CycloneExpendability e = CycloneExpendabilityRank(s, me, CycloneExpendabilityOptsNow(s, me));
+    const CycloneBucketRank e = CycloneBucketRankOf(s, me, CycloneBucketOptsNow(s, me));
     return CleanupDiscardRankingWithOrder(s, required_pieces, e.shed_order);
 }
 
@@ -32250,8 +32250,8 @@ std::vector<int> CycloneProvider::CleanupDiscardCandidates(
     if (!CycloneBucketDiscardOn()) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
     const int me = s.active_player_index;
     if (s.players[static_cast<std::size_t>(me)].hand.empty()) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
-    const CycloneExpendabilityOpts o = CycloneExpendabilityOptsNow(s, me);
-    const CycloneExpendability e = CycloneExpendabilityRank(s, me, o);
+    const CycloneBucketOpts o = CycloneBucketOptsNow(s, me);
+    const CycloneBucketRank e = CycloneBucketRankOf(s, me, o);
     std::vector<int> ranked = CleanupDiscardRankingWithOrder(s, required_pieces, e.shed_order);
     // THE WIDTH EXCEPTION (MTG_CYCLONE_DISCARD_SHUFFLE_PLAN): with the top known, a shuffle shed and a non-shuffle
     // shed are "options that are vastly different" -- return the rule's pick and the best shed of the other kind.
