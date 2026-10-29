@@ -44,6 +44,30 @@
     "    A/B 6000 g vs R = 0 (seed 7300000; no win = 9): fitted [137.8, 0.0, 0.0, 0.0, 0.0] units -0.6%, 0 moved: 0 flicker, 0 real",
     "    existing [137.8, 0.0, 0.0, 0.0, 0.0]: units -0.6%, 0 moved: 0 flicker, 0 real"
    ]
+  },
+  {
+   "run_id": "fluctuator-artifact-queue-tool-647f24-20261029T190457",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "cbd1f2c7759866946e9f2e55dff6855fa96f67ca",
+   "frozen": "bd017c90ce626e441253430db10cdaef21f44005",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": 0.010969,
+   "cost": [
+    1.0088825154665375,
+    0.009234196299783205,
+    32
+   ],
+   "trade": false,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.010969 t, cost 1.009x (se 0.009, 32 seeds)); incumbent restored"
   }
  ]
 }
