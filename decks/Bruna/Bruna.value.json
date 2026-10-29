@@ -1,8 +1,16 @@
 {
+ "escalation_skip_r": [97.0, 48.3, 19.7, 11.2, 6.9, 0.0],
  "value_play": {
   "mull_gen_depth": 1,
   "mull_gen_budget_ms": 3,
-  "expected_buckets": 21
+  "expected_buckets": 21,
+  "ladder": "escalation",
+  "leaf": "none",
+  "alpha": "relaxed",
+  "target_depth": 6,
+  "budget_ms": 20,
+  "enabled": true,
+  "note": "E.7 play-setting stage 2026-10-29: d6b20 adopted over the built-in default (no enabled block) (d5/20); notably better than the cheapest passing arm emul_d5b20; cost 0.99x vs live"
  },
  "value_leaf_table": {
   "metric": "loss_penalized_avg_win_turn",

@@ -1,0 +1,25 @@
+{
+ "deck": "bruna",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "bruna-artifact-queue-d7d6a5-20261029T115752",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:8da6bbd94cc2f05973c8",
+   "frozen": "edc8f5e9f67d60ae56d3344e5a7030730e13eedc",
+   "src_tree": "8daada03317941992e8eda22de26a45452072d22",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_bruna/DECISIONS.txt)",
+   "decisions": [
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T14:55:57  PHASE E.6: ADOPTED bruna escalation_skip_r = [97.0, 48.3, 19.7, 11.2, 6.9, 0.0] -- this tree, NOT committed",
+    "    probe 1200 g (seed 7100000): 711 ladder escalations, headroom 5.1% of all work, fitted vector [97.0, 48.3, 19.7, 11.2, 6.9, 0.0] (n/depth 711/238/53/30/23/29) projects -2.2%",
+    "    A/B 6000 g vs R = 0 (seed 7300000; no win = 9): fitted [97.0, 48.3, 19.7, 11.2, 6.9, 0.0] units -2.1%, 1 moved: 0 flicker, 1 real (gi4290 6->5)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it can change play)."
+   ]
+  }
+ ]
+}
