@@ -1,0 +1,336 @@
+{
+  "seed": 4, "game_index": 3, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [15] }, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 18, "name": "Plains" }, { "num": 59, "name": "Walking Ballista" }, { "num": 55, "name": "Voice of the Blessed" }, { "num": 1, "name": "Abiding Grace" }, { "num": 56, "name": "Voice of the Blessed" }, { "num": 19, "name": "Plains" }, { "num": 20, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 48, "name": "Soul Warden" }, { "num": 47, "name": "Soul Warden" }, { "num": 51, "name": "Soul's Attendant" }, { "num": 43, "name": "Serra Ascendant" }, { "num": 25, "name": "Plains" }, { "num": 15, "name": "Heliod, Sun-Crowned" }, { "num": 36, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 48, "name": "Soul Warden", "win_optimal": true }, { "num": 47, "name": "Soul Warden", "win_optimal": true }, { "num": 51, "name": "Soul's Attendant", "win_optimal": true }, { "num": 43, "name": "Serra Ascendant", "win_optimal": true }, { "num": 25, "name": "Plains", "win_optimal": true }, { "num": 15, "name": "Heliod, Sun-Crowned", "win_optimal": true }, { "num": 36, "name": "Plains", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 15, "name": "Heliod, Sun-Crowned" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "cast=Soul Warden"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 25, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Soul Warden", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Soul Warden", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Soul's Attendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Soul Warden", "land": "Plains", "casts": ["Soul Warden"], "actions": [{ "card": "Soul Warden" }] },
+    { "index": 1, "summary": "land=Plains; cast: Soul's Attendant", "land": "Plains", "casts": ["Soul's Attendant"], "actions": [{ "card": "Soul's Attendant" }] },
+    { "index": 2, "summary": "land=Plains; cast: Serra Ascendant", "land": "Plains", "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 3, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "tapped": true, "is_land": true }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Soul Warden", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Soul's Attendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "tapped": true, "is_land": true }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Soul Warden", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Soul's Attendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Plains", "cast=Soul Warden", "cast=Serra Ascendant"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Walking Ballista" }],
+  "events": [{ "turn": 2, "kind": "drain", "text": "💚 2/2 Creature entered under the opponent — Soul Warden: you +1 (20→21)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "is_land": true, "taps": "W" }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Soul Warden", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Soul's Attendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Walking Ballista", "cost": "{X}{X}", "mv": 0, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1, "life_gained_this_turn": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Soul Warden, Soul's Attendant", "land": "Plains", "casts": ["Soul Warden", "Soul's Attendant"], "cast_order_canonical": ["Soul Warden", "Soul's Attendant"], "actions": [{ "card": "Soul Warden" }, { "card": "Soul's Attendant" }] },
+    { "index": 1, "summary": "land=Plains; cast: Soul's Attendant, Soul Warden", "land": "Plains", "casts": ["Soul's Attendant", "Soul Warden"], "cast_order_canonical": ["Soul's Attendant", "Soul Warden"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Soul Warden" }] },
+    { "index": 2, "summary": "land=Plains; cast: Serra Ascendant, Soul Warden", "land": "Plains", "casts": ["Serra Ascendant", "Soul Warden"], "cast_order_canonical": ["Serra Ascendant", "Soul Warden"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Soul Warden" }] },
+    { "index": 3, "summary": "land=Plains; cast: Soul Warden, Serra Ascendant", "land": "Plains", "casts": ["Soul Warden", "Serra Ascendant"], "cast_order_canonical": ["Soul Warden", "Serra Ascendant"], "actions": [{ "card": "Soul Warden" }, { "card": "Serra Ascendant" }] },
+    { "index": 4, "summary": "land=Plains; cast: Serra Ascendant, Soul's Attendant", "land": "Plains", "casts": ["Serra Ascendant", "Soul's Attendant"], "cast_order_canonical": ["Serra Ascendant", "Soul's Attendant"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Soul's Attendant" }] },
+    { "index": 5, "summary": "land=Plains; cast: Soul's Attendant, Serra Ascendant", "land": "Plains", "casts": ["Soul's Attendant", "Serra Ascendant"], "cast_order_canonical": ["Soul's Attendant", "Serra Ascendant"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Serra Ascendant" }] },
+    { "index": 6, "summary": "land=Plains; cast: Soul Warden, Soul's Attendant, Walking Ballista (X=0)", "land": "Plains", "casts": ["Soul Warden", "Soul's Attendant", "Walking Ballista"], "cast_order_canonical": ["Soul Warden", "Soul's Attendant", "Walking Ballista"], "actions": [{ "card": "Soul Warden" }, { "card": "Soul's Attendant" }, { "card": "Walking Ballista" }] },
+    { "index": 7, "summary": "land=Plains; cast: Soul Warden, Walking Ballista (X=0), Soul's Attendant", "land": "Plains", "casts": ["Soul Warden", "Walking Ballista", "Soul's Attendant"], "cast_order_canonical": ["Soul Warden", "Walking Ballista", "Soul's Attendant"], "actions": [{ "card": "Soul Warden" }, { "card": "Walking Ballista" }, { "card": "Soul's Attendant" }] },
+    { "index": 8, "summary": "land=Plains; cast: Soul's Attendant, Soul Warden, Walking Ballista (X=0)", "land": "Plains", "casts": ["Soul's Attendant", "Soul Warden", "Walking Ballista"], "cast_order_canonical": ["Soul's Attendant", "Soul Warden", "Walking Ballista"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Soul Warden" }, { "card": "Walking Ballista" }] },
+    { "index": 9, "summary": "land=Plains; cast: Soul's Attendant, Walking Ballista (X=0), Soul Warden", "land": "Plains", "casts": ["Soul's Attendant", "Walking Ballista", "Soul Warden"], "cast_order_canonical": ["Soul's Attendant", "Walking Ballista", "Soul Warden"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Walking Ballista" }, { "card": "Soul Warden" }] },
+    { "index": 10, "summary": "land=Plains; cast: Walking Ballista (X=0), Soul Warden, Soul's Attendant", "land": "Plains", "casts": ["Walking Ballista", "Soul Warden", "Soul's Attendant"], "cast_order_canonical": ["Walking Ballista", "Soul Warden", "Soul's Attendant"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul Warden" }, { "card": "Soul's Attendant" }] },
+    { "index": 11, "summary": "land=Plains; cast: Walking Ballista (X=0), Soul's Attendant, Soul Warden", "land": "Plains", "casts": ["Walking Ballista", "Soul's Attendant", "Soul Warden"], "cast_order_canonical": ["Walking Ballista", "Soul's Attendant", "Soul Warden"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul's Attendant" }, { "card": "Soul Warden" }] },
+    { "index": 12, "summary": "land=Plains; cast: Serra Ascendant, Soul Warden, Walking Ballista (X=0)", "land": "Plains", "casts": ["Serra Ascendant", "Soul Warden", "Walking Ballista"], "cast_order_canonical": ["Serra Ascendant", "Soul Warden", "Walking Ballista"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Soul Warden" }, { "card": "Walking Ballista" }] },
+    { "index": 13, "summary": "land=Plains; cast: Serra Ascendant, Walking Ballista (X=0), Soul Warden", "land": "Plains", "casts": ["Serra Ascendant", "Walking Ballista", "Soul Warden"], "cast_order_canonical": ["Serra Ascendant", "Walking Ballista", "Soul Warden"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Walking Ballista" }, { "card": "Soul Warden" }] },
+    { "index": 14, "summary": "land=Plains; cast: Soul Warden, Serra Ascendant, Walking Ballista (X=0)", "land": "Plains", "casts": ["Soul Warden", "Serra Ascendant", "Walking Ballista"], "cast_order_canonical": ["Soul Warden", "Serra Ascendant", "Walking Ballista"], "actions": [{ "card": "Soul Warden" }, { "card": "Serra Ascendant" }, { "card": "Walking Ballista" }] },
+    { "index": 15, "summary": "land=Plains; cast: Walking Ballista (X=0), Soul Warden, Serra Ascendant", "land": "Plains", "casts": ["Walking Ballista", "Soul Warden", "Serra Ascendant"], "cast_order_canonical": ["Walking Ballista", "Soul Warden", "Serra Ascendant"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul Warden" }, { "card": "Serra Ascendant" }] },
+    { "index": 16, "summary": "land=Plains; cast: Serra Ascendant, Soul's Attendant, Walking Ballista (X=0)", "land": "Plains", "casts": ["Serra Ascendant", "Soul's Attendant", "Walking Ballista"], "cast_order_canonical": ["Serra Ascendant", "Soul's Attendant", "Walking Ballista"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Soul's Attendant" }, { "card": "Walking Ballista" }] },
+    { "index": 17, "summary": "land=Plains; cast: Serra Ascendant, Walking Ballista (X=0), Soul's Attendant", "land": "Plains", "casts": ["Serra Ascendant", "Walking Ballista", "Soul's Attendant"], "cast_order_canonical": ["Serra Ascendant", "Walking Ballista", "Soul's Attendant"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Walking Ballista" }, { "card": "Soul's Attendant" }] },
+    { "index": 18, "summary": "land=Plains; cast: Soul's Attendant, Serra Ascendant, Walking Ballista (X=0)", "land": "Plains", "casts": ["Soul's Attendant", "Serra Ascendant", "Walking Ballista"], "cast_order_canonical": ["Soul's Attendant", "Serra Ascendant", "Walking Ballista"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Serra Ascendant" }, { "card": "Walking Ballista" }] },
+    { "index": 19, "summary": "land=Plains; cast: Walking Ballista (X=0), Soul's Attendant, Serra Ascendant", "land": "Plains", "casts": ["Walking Ballista", "Soul's Attendant", "Serra Ascendant"], "cast_order_canonical": ["Walking Ballista", "Soul's Attendant", "Serra Ascendant"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul's Attendant" }, { "card": "Serra Ascendant" }] },
+    { "index": 20, "summary": "land=Plains; cast: Soul Warden", "land": "Plains", "casts": ["Soul Warden"], "actions": [{ "card": "Soul Warden" }] },
+    { "index": 21, "summary": "land=Plains; cast: Soul's Attendant", "land": "Plains", "casts": ["Soul's Attendant"], "actions": [{ "card": "Soul's Attendant" }] },
+    { "index": 22, "summary": "land=Plains; cast: Serra Ascendant", "land": "Plains", "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 23, "summary": "land=Plains; cast: Soul Warden, Walking Ballista (X=0)", "land": "Plains", "casts": ["Soul Warden", "Walking Ballista"], "cast_order_canonical": ["Soul Warden", "Walking Ballista"], "actions": [{ "card": "Soul Warden" }, { "card": "Walking Ballista" }] },
+    { "index": 24, "summary": "land=Plains; cast: Walking Ballista (X=0), Soul Warden", "land": "Plains", "casts": ["Walking Ballista", "Soul Warden"], "cast_order_canonical": ["Walking Ballista", "Soul Warden"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul Warden" }] },
+    { "index": 25, "summary": "land=Plains; cast: Soul's Attendant, Walking Ballista (X=0)", "land": "Plains", "casts": ["Soul's Attendant", "Walking Ballista"], "cast_order_canonical": ["Soul's Attendant", "Walking Ballista"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Walking Ballista" }] },
+    { "index": 26, "summary": "land=Plains; cast: Walking Ballista (X=0), Soul's Attendant", "land": "Plains", "casts": ["Walking Ballista", "Soul's Attendant"], "cast_order_canonical": ["Walking Ballista", "Soul's Attendant"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul's Attendant" }] },
+    { "index": 27, "summary": "land=Plains; cast: Serra Ascendant, Walking Ballista (X=0)", "land": "Plains", "casts": ["Serra Ascendant", "Walking Ballista"], "cast_order_canonical": ["Serra Ascendant", "Walking Ballista"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Walking Ballista" }] },
+    { "index": 28, "summary": "land=Plains; cast: Walking Ballista (X=1)", "land": "Plains", "casts": ["Walking Ballista"], "actions": [{ "card": "Walking Ballista", "x": 1 }] },
+    { "index": 29, "summary": "land=none; cast: Soul Warden", "land": null, "casts": ["Soul Warden"], "actions": [{ "card": "Soul Warden" }] },
+    { "index": 30, "summary": "land=none; cast: Soul's Attendant", "land": null, "casts": ["Soul's Attendant"], "actions": [{ "card": "Soul's Attendant" }] },
+    { "index": 31, "summary": "land=none; cast: Serra Ascendant", "land": null, "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 32, "summary": "land=none; cast: Soul Warden, Walking Ballista (X=0)", "land": null, "casts": ["Soul Warden", "Walking Ballista"], "cast_order_canonical": ["Soul Warden", "Walking Ballista"], "actions": [{ "card": "Soul Warden" }, { "card": "Walking Ballista" }] },
+    { "index": 33, "summary": "land=none; cast: Walking Ballista (X=0), Soul Warden", "land": null, "casts": ["Walking Ballista", "Soul Warden"], "cast_order_canonical": ["Walking Ballista", "Soul Warden"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul Warden" }] },
+    { "index": 34, "summary": "land=none; cast: Soul's Attendant, Walking Ballista (X=0)", "land": null, "casts": ["Soul's Attendant", "Walking Ballista"], "cast_order_canonical": ["Soul's Attendant", "Walking Ballista"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Walking Ballista" }] },
+    { "index": 35, "summary": "land=none; cast: Walking Ballista (X=0), Soul's Attendant", "land": null, "casts": ["Walking Ballista", "Soul's Attendant"], "cast_order_canonical": ["Walking Ballista", "Soul's Attendant"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul's Attendant" }] },
+    { "index": 36, "summary": "land=none; cast: Serra Ascendant, Walking Ballista (X=0)", "land": null, "casts": ["Serra Ascendant", "Walking Ballista"], "cast_order_canonical": ["Serra Ascendant", "Walking Ballista"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Walking Ballista" }] },
+    { "index": 37, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 38, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 39, "summary": "land=none; cast: Walking Ballista (X=0)", "land": null, "casts": ["Walking Ballista"], "actions": [{ "card": "Walking Ballista" }] }
+  ],
+  "plans_hidden": 96,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "drain", "text": "💚 Soul Warden entered — Soul Warden: you +1 (21→22)" }, { "turn": 2, "kind": "drain", "text": "💚 Serra Ascendant entered — Soul Warden ×2: you +2 (22→24)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 24, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 51, "name": "Soul's Attendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Walking Ballista", "cost": "{X}{X}", "mv": 0, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0, "life_gained_this_turn": 4 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Walking Ballista (X=0)", "land": null, "casts": ["Walking Ballista"], "actions": [{ "card": "Walking Ballista" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Soul Warden (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 24, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 2, "num": 48, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 51, "name": "Soul's Attendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Walking Ballista", "cost": "{X}{X}", "mv": 0, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0, "life_gained_this_turn": 4 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Walking Ballista (X=0)", "land": null, "casts": ["Walking Ballista"], "actions": [{ "card": "Walking Ballista" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "cast=Soul's Attendant", "cast=Walking Ballista"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Unexpectedly Absent" }],
+  "events": [{ "turn": 3, "kind": "drain", "text": "💚 2/2 Creature entered under the opponent — Soul Warden ×2: you +2 (24→26)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 51, "name": "Soul's Attendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 60, "name": "Walking Ballista", "cost": "{X}{X}", "mv": 0, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1, "life_gained_this_turn": 2 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Soul's Attendant", "land": null, "casts": ["Soul's Attendant"], "actions": [{ "card": "Soul's Attendant" }] },
+    { "index": 1, "summary": "land=none; cast: Soul's Attendant, Walking Ballista (X=0)", "land": null, "casts": ["Soul's Attendant", "Walking Ballista"], "cast_order_canonical": ["Soul's Attendant", "Walking Ballista"], "actions": [{ "card": "Soul's Attendant" }, { "card": "Walking Ballista" }] },
+    { "index": 2, "summary": "land=none; cast: Walking Ballista (X=0), Soul's Attendant", "land": null, "casts": ["Walking Ballista", "Soul's Attendant"], "cast_order_canonical": ["Walking Ballista", "Soul's Attendant"], "actions": [{ "card": "Walking Ballista" }, { "card": "Soul's Attendant" }] },
+    { "index": 3, "summary": "land=none; cast: Walking Ballista (X=1)", "land": null, "casts": ["Walking Ballista"], "actions": [{ "card": "Walking Ballista", "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 5, "summary": "land=none; cast: Unexpectedly Absent (X=0), Walking Ballista (X=0)", "land": null, "casts": ["Unexpectedly Absent", "Walking Ballista"], "cast_order_canonical": ["Unexpectedly Absent", "Walking Ballista"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Walking Ballista" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "drain", "text": "💚 Soul's Attendant entered — Soul Warden ×2: you +2 (26→28)" }, { "turn": 3, "kind": "drain", "text": "💚 Walking Ballista entered — Soul Warden ×2, Soul's Attendant: you +3 (28→31)" }, { "turn": 3, "kind": "death", "text": "☠ Walking Ballista dies (0 toughness)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 31, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul's Attendant", "idx": 8, "num": 51, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Walking Ballista"], "library_size": 52, "land_drops_left": 1, "life_gained_this_turn": 7 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Soul Warden (1), Soul Warden (1), Serra Ascendant (6) — 8 to opponent (19→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 37, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "tapped": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Soul Warden", "idx": 2, "num": 48, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul's Attendant", "idx": 8, "num": 51, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Walking Ballista"], "library_size": 52, "land_drops_left": 1, "life_gained_this_turn": 13 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Voice of the Blessed" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 37, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul's Attendant", "idx": 8, "num": 51, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Voice of the Blessed", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Walking Ballista"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Voice of the Blessed", "land": null, "casts": ["Voice of the Blessed"], "actions": [{ "card": "Voice of the Blessed" }] },
+    { "index": 1, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "❤️ life gained: Voice of the Blessed +1/+1" }, { "turn": 4, "kind": "trigger", "text": "❤️ life gained: Voice of the Blessed +1/+1" }, { "turn": 4, "kind": "trigger", "text": "❤️ life gained: Voice of the Blessed +1/+1" }, { "turn": 4, "kind": "drain", "text": "💚 Voice of the Blessed entered — Soul Warden ×2, Soul's Attendant: you +3 (37→40)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 40, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul's Attendant", "idx": 8, "num": 51, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Voice of the Blessed", "idx": 9, "num": 58, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }], "vial_counters": [], "hand": [{ "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Walking Ballista"], "library_size": 51, "land_drops_left": 1, "life_gained_this_turn": 3 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "❤️ life gained: Voice of the Blessed +1/+1" }, { "turn": 4, "kind": "combat", "text": "⚔ attacked: Soul Warden (1), Soul Warden (1), Serra Ascendant (6), Soul's Attendant (1) — 9 to opponent (11→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 46, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "tapped": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Soul Warden", "idx": 2, "num": 48, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul's Attendant", "idx": 8, "num": 51, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Voice of the Blessed", "idx": 9, "num": 58, "is_land": false, "power": 6, "toughness": 6, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [{ "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Walking Ballista"], "library_size": 51, "land_drops_left": 1, "life_gained_this_turn": 9 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Auriok Champion" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 46, "battlefield": [{ "name": "Plains", "idx": 1, "num": 25, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 36, "is_land": true, "taps": "W" }, { "name": "Serra Ascendant", "idx": 6, "num": 43, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Soul Warden", "idx": 2, "num": 48, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul Warden", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Soul's Attendant", "idx": 8, "num": 51, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Voice of the Blessed", "idx": 9, "num": 58, "is_land": false, "power": 6, "toughness": 6, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }], "vial_counters": [], "hand": [{ "num": 10, "name": "Auriok Champion", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Walking Ballista"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Auriok Champion", "land": null, "casts": ["Auriok Champion"], "actions": [{ "card": "Auriok Champion" }] },
+    { "index": 1, "summary": "land=none; cast: Unexpectedly Absent (X=0)", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Voice of the Blessed +1/+1" },
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Soul Warden (1), Soul Warden (1), Serra Ascendant (6), Soul's Attendant (1), Voice of the Blessed (6) — 15 to opponent (2→-13)" }
+  ]
+}
