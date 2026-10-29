@@ -1,7 +1,9 @@
 # Cantrip search cost: Brainstorm, Brainsurge, Ponder, Preordain
 
-Status: DESIGN (2026-10-27), not implemented. This is a read-only study written against the Cyclone
-phase-5 tree (`f3d4974fa` + `9341d9823`). Every file:line below refers to that tree.
+Status: DESIGN (2026-10-27), partly built: items 1 and 8 (the ranking-cache half) 2026-10-28, and the sound
+folds F2, F3 (plan-level), F5 and Q36 2026-10-28 (F4 built, measured NOT exact, shipped off) -- each section's
+STATUS note and the Cyclone ledger ("Sound folds F2/F4/F5/F3 + Q36") carry the details. This was a read-only study
+written against the Cyclone phase-5 tree (`f3d4974fa` + `9341d9823`). Every file:line below refers to that tree.
 
 USER 2026-10-27: *"Let's leave the mulligan stuff until the profile generation. I want to focus on
 other performance wins. We should also look at optimizing brainstorm, ponder and preordain (and
@@ -245,6 +247,13 @@ itself, plus the top `draw` library cards. Emit exactly `count` ranks.
   - List length: clamped declines count in `candidates_done` but cost 0, so they distort the
     overrun guard's `avg_per_cand` projection (93196-93214). That is a play change, so A/B it.
 
+- **STATUS 2026-10-28: BUILT** (`MTG_PB_EXACT_WIDTH`, default ON; `PutBackExactWidth`). Exact when nothing that
+  changes hand or library is applied before the put-back (checked against ApplyPlanDirect's canonical order). Two
+  amendments the verify mode forced: a pure ritual ahead of the put-back can still be DROPPED by the apply (the Q37
+  phantom-ritual credit), so it counts as still in hand -- a tight upper bound, not exact; and the hand must hold
+  DISTINCT card numbers (the rollout re-finds the cast copy by number; number-0 template cards -- Cyclone ledger
+  Q53 -- made a Brainstorm cast erase a Ponder). The sized fans emit 37% fewer ranks than the bound (Cyclone).
+
 **F3. Put-back followed by a shuffle: from ordered to unordered.** If the plan's actions after the
 put-back cast reach a shuffle of our library before any draw, look, library read or walk, then
 (a, b) and (b, a) give the IDENTICAL state, because `ShuffleByKey` is order-independent (§1.4). The
@@ -265,6 +274,14 @@ copies are the same cards because the last-copy remap is per class.
   actions (they are fixed in the full-tail apply). For a continuation, only at the node, after the
   parent is applied.
 
+- **STATUS 2026-10-28: BUILT, plan-level** (`MTG_PB_MIRROR_FOLD`, default ON). The claim above is right for the
+  SHUFFLE and wrong for what precedes it: a search reads the library before it shuffles (a tutor's candidate list is
+  in library order, it takes the topmost copy of a name; a land search likewise), so the fold needs at most one of
+  the pair's classes findable by each search in the window -- Long-Term Plans (any card) qualifies only when
+  name-bound. It also needs DISTINCT card numbers (ShuffleByKey ties number-0 cards and keeps their input order;
+  ledger Q53) and a witness that the shuffle happened. The node-level form (the continuation's first library event)
+  is NOT built.
+
 **F4. Put-back pairs that strand the plan's own later cast.** In full-tail applies (every nested
 `SolveWithLookahead`, where 96% of variant applies happen), the base "Brainstorm, then X" fans pairs
 that put back X's last copy. X's cast then fails and the apply realises "Brainstorm" plus the same
@@ -281,6 +298,12 @@ pick without X.
 - Sound by the degenerate-line argument. It is not an identity, so verify it with a mode that
   applies both and compares realised action records.
 
+- **STATUS 2026-10-28: BUILT, DEFAULT OFF -- NOT EXACT** (`MTG_PB_STRAND_FOLD`). "Any residual difference is the
+  payment allocation" is true, but the allocation is not inert: it is steered by the plan's whole bill (the line
+  hold), the stranded cast's included, and a different allocation changes what the rest of the line can pay --
+  verify: 613 of ~297K compared pairs realise a different line (e.g. the stranding member keeps an Island up and
+  cycles a Curator the smaller plan cannot pay). A lossy candidate for the USER (Cyclone ledger Q54).
+
 **F5. Cross-base duplicates at a truncated cantrip.** Where the breakpoint node hosts the cantrip
 (`partition_here`, TurnSolver.cpp:57282-57305; `node_owns_site`, 55017-55021), every base sharing
 one truncated prefix reaches the same partition state. `node_prefix_seen` already lets only the
@@ -289,6 +312,11 @@ rank k of base j truncates to rank k of base i.
 - Fix: map duplicate-prefix bases to their first, and decline all their clones unbuilt.
 - Exact: the same state at resolution and the same ordinal give the same pick.
 - Gain: in the FSLineWin host only, roughly (number of tails - 1) x w applies per node.
+
+- **STATUS 2026-10-28: BUILT** (`MTG_PB_XBASE_FOLD`, default ON), with the identity spelled out: the two bases'
+  actions through the put-back cast are identical field for field, their tails are later hand casts only (truncated),
+  and their rank-0 pends collide (the witness that the tails' bills did not steer the prefix's payment). Verify: 0
+  mismatches. Small, as predicted (FSLineWin's node host only).
 
 **F6. Dead cards whose position is irrelevant.** NOT exact in general. A dead card on top still
 delays every later draw by one, and the library differs afterwards.
@@ -600,14 +628,14 @@ five-fold.
 
 | # | item | class | expected gain | decks | measurement |
 |---|---|---|---|---|---|
-| 1 | **Go-off estimate {k, c} + scored ORDER** (`CantripReadinessOf` / `ScoreTopDisposition`; CycloneProvider; generic per-card helper) | ORDER (re-price, inert at unlimited) | ~0 alone; the precondition for 2, 6 and the SINGLE re-measure | Cyclone (Niv and Hinata opt in later) | Paired held-out A/B order-on vs order-off at the shipped budget (d3 b10 x200, d5 b20 x100, one pooled batch, per-job flags), plus units. Second arm: SINGLE under the new order vs the old rule (measures rank-0 quality). Third: the go-off estimate's cost (census) |
+| 1 | **Go-off estimate {k, c} + scored ORDER** (`CantripReadinessOf` / `ScoreTopDisposition`; CycloneProvider; generic per-card helper) -- **DONE 2026-10-28** | ORDER (re-price, inert at unlimited) | ~0 alone; the precondition for 2, 6 and the SINGLE re-measure | Cyclone (Niv and Hinata opt in later) | Paired held-out A/B order-on vs order-off at the shipped budget (d3 b10 x200, d5 b20 x100, one pooled batch, per-job flags), plus units. Second arm: SINGLE under the new order vs the old rule (measures rank-0 quality). Third: the go-off estimate's cost (census) |
 | 2 | **B1 + B2: rank waves at the root, exhaustion-gated admission in nested solves, W >= 2** | re-price, inert at unlimited | the bulk of the 57% put-back share. Expected between today and SINGLE's x0.25 kept-game units; first pass fits | Cyclone; Hinata (Ponder W = 3) | Arms W = 2/4/8 vs today vs SINGLE, held-out paired. `--budget-ms 0` byte-identity on ~20 games (structural inertness). Every slower game re-run at d8 b0 (adoption bar). Then smoke/regression GT accept for Hinata |
-| 3 | **F2 exact width** (sharpen `PutBackPredictionUnsafe` to actions before the cast) | sound identity; re-prices the overrun projection | about 45% fewer clones; memory; truer overrun guard | Cyclone (Niv only under human or unpruned play, while SINGLE is ON) | `MTG_PB_LAZY_CANDS_VERIFY`-style check (the emitted width equals the resolution count when "safe"); held-out A/B; units |
-| 4 | **F4 stranded-cast pairs + F5 cross-base truncated-prefix decline** | sound (F5 identity; F4 degenerate-line) | F4 -25..-46% on fans with tails in nested solves; F5 (tails - 1) x w applies per node | Cyclone | Verify modes (apply both, compare the realised record or state key); held-out A/B; units |
-| 5 | **F3 shuffle mirror fold** (plan-level now; node-level for continuations) | sound identity (exact under `ShuffleByKey`) | halves the shuffle-branch fans | Cyclone | Verify (state equality); A/B read with the re-salt clairvoyance method |
+| 3 | **F2 exact width** (sharpen `PutBackPredictionUnsafe` to actions before the cast) -- **DONE 2026-10-28** | sound identity; re-prices the overrun projection | about 45% fewer clones; memory; truer overrun guard | Cyclone (Niv only under human or unpruned play, while SINGLE is ON) | `MTG_PB_LAZY_CANDS_VERIFY`-style check (the emitted width equals the resolution count when "safe"); held-out A/B; units |
+| 4 | **F4 stranded-cast pairs + F5 cross-base truncated-prefix decline** -- **F5 DONE 2026-10-28; F4 built, not exact, OFF** | sound (F5 identity; F4 degenerate-line) | F4 -25..-46% on fans with tails in nested solves; F5 (tails - 1) x w applies per node | Cyclone | Verify modes (apply both, compare the realised record or state key); held-out A/B; units |
+| 5 | **F3 shuffle mirror fold** (plan-level now; node-level for continuations) -- **plan-level DONE 2026-10-28; node-level not built** | sound identity (exact under `ShuffleByKey`) | halves the shuffle-branch fans | Cyclone | Verify (state equality); A/B read with the re-salt clairvoyance method |
 | 6 | **Prunes PB-KEEP, PB-ELDRAZI, PB-NOCREATURE-ABOVE, PB-SHUFFLE, PONDER-GOOFF, SINGLE**, each hard and staged | LOSSY when hard (USER's call); staged = re-price | fan ~56 -> ~4-8 hard; SINGLE x0.25 | Cyclone | One pooled batch, one per-job flag per lever plus the all-on arm, held-out paired d3/d5; slower games at d8 b0 and the re-salt reading; results to the USER |
 | 7 | **M1/M3 lazy fans in the bp cache and m2 memo; M2 stored-size pricing** | M1/M3 sound (byte-identical); M2 re-price | RSS 3.85 GB -> Hinata-level expected; determinism warning gone | Cyclone, Niv | Verify mode; RSS and pool hiwater on the 8-game single-thread probe (`MTG_PLAN_CACHE_KB=0`); smoke byte-identity for M1; A/B for M2 |
-| 8 | **Per-fan ranking cache + prefix snapshot** | sound, byte-identical | wall only (prefix apply x (w-1) per fan; the ranking per apply) | all three | Byte-identity on smoke + 100 Cyclone games; wall A/B with `MTG_PGO=0` on both arms |
+| 8 | **Per-fan ranking cache + prefix snapshot** -- **ranking cache DONE 2026-10-28; prefix snapshot not built** | sound, byte-identical | wall only (prefix apply x (w-1) per fan; the ranking per apply) | all three | Byte-identity on smoke + 100 Cyclone games; wall A/B with `MTG_PGO=0` on both arms |
 | 9 | **F1 Ponder identical-name fold; F7 tail fold; F6 inert-class merge** | sound | Ponder 6 -> 2-3 variants on duplicate looks; small elsewhere | Hinata, Cyclone | Verify mode; Hinata smoke/regression GT accept plus a held-out A/B |
 | 10 | Preordain as a searched scry (Niv Q14), using item 1's order + item 2's waves | completeness (adds width 5, F1-folded) | quality, not cost | Niv, Hinata | The USER's decision first; then held-out A/B |
 
