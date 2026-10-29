@@ -274,8 +274,11 @@ def drive_game(deck, profile, seed, gi, max_turns, reveal, determinism_samples=3
             key = (obj.get("turn"), obj.get("phase"),
                    tuple(p.get("summary", "") for p in obj.get("plans", [])))
             if key in seen_menus and obj.get("dropped_casts") and reply != [-1]:
+                # dropped_reasons (the engine's per-drop reason, Q37): what the cast was short of.
+                why = "; ".join(r for r in (obj.get("dropped_reasons") or []) if r)
                 advisories.append(f"phantom plan re-offered at turn {obj.get('turn')}: dropped "
-                                  f"{obj.get('dropped_casts')} -- driver passed")
+                                  f"{obj.get('dropped_casts')}" + (f" ({why})" if why else "")
+                                  + " -- driver passed")
                 reply = [-1]
             seen_menus.add(key)
         choices += reply

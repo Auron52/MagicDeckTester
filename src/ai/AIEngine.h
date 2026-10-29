@@ -670,6 +670,8 @@ struct HumanCommitPreview
     bool                     unpayable = false; // "**": the queued order cannot pay -- the commit
                                                 // applies NOTHING of the segment (never reorders it)
     std::vector<std::string> dropped;           // trial_result: casts the applied plan drops
+    std::vector<std::string> dropped_reasons;   // ...and why, index-aligned (Q37: "X costs {2}{R}; only 1
+                                                // mana available"; "" when the drop site gives none)
     std::vector<std::string> failed;            // trial_result: steps that did not happen
 };
 HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::Plan& chosen,

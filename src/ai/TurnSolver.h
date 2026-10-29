@@ -927,6 +927,15 @@ inline bool IsCycleSeed(const Action& a)
 {
     return a.kind == Action::Kind::DigDraw && !a.dig_sacrifice && a.hand_index < 0 && a.def != nullptr;
 }
+// A HUMAN-PLAY cycle seed on a deck whose provider does NOT search its cycles (QR1, HumanPlayCycleSources) carries
+// hand_index kHumanGenericCycleSeedHand (-2) instead of -1: still a seed everywhere (every reader tests
+// hand_index < 0), but distinguishable from the standalone dig plan's action and its breakpoint variants, which
+// can carry a back-filled def and so read as seeds too. EnumerateMainPlans' OrderHumanCycleSeedPlans keys on it.
+constexpr int kHumanGenericCycleSeedHand = -2;
+inline bool IsHumanGenericCycleSeed(const Action& a)
+{
+    return IsCycleSeed(a) && a.hand_index == kHumanGenericCycleSeedHand;
+}
 inline const Action* CycleSeedOf(const std::vector<Action>& acts)
 {
     for (const Action& a : acts) { if (IsCycleSeed(a)) { return &a; } }

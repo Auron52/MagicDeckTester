@@ -35182,6 +35182,33 @@ Action TurnSolver::ChandraNestedCastOption(const std::string& option)
     return a;
 }
 
+// THE HAND CYCLERS HUMAN PLAY OFFERS AS PLAN ITEMS (QR1, USER 2026-10-29: "Cycling should show in plans" --
+// for every deck, after 2026-10-28's "Cycling should be a plan item like any other" for Unpredictable Cyclone).
+// A provider that SEARCHES its cycles (CyclesAreSearched) names them itself (SearchedCycleSources: the search's
+// own seeds, so human play and the search agree). Every other deck: each DISTINCT hand card with cycling (the
+// copies are one option -- the apply cycles BY NAME), its life half payable (Street Wraith), in hand order. No
+// restriction beyond what the card can legally do. Human play only (CollectActions' human seeds), so the
+// autonomous search -- which keeps the generic dig loop on these decks (the USER's 2026-09-29 dig gate) -- never
+// reads this. On such a deck the seeds are tagged (kHumanGenericCycleSeedHand) and their plans are appended after
+// every older menu entry (OrderHumanCycleSeedPlans), the standalone "cycle X to draw" plan keeping its place.
+static std::vector<std::string> HumanPlayCycleSources(const GameState& state)
+{
+    const DecisionProvider& prov = ResolveProvider(state);
+    if (prov.CyclesAreSearched()) { return prov.SearchedCycleSources(state); }
+    std::vector<std::string> out;
+    const int me = state.active_player_index;
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        if (c.m_is_staged) { continue; }   // cycling is from HAND (CR 702.29a): an impulse-staged copy cannot
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.cycling_cost.has_value()) { continue; }
+        if (!CyclingLifePayable(state, me, *d)) { continue; }
+        const std::string nm = c.m_name.str();
+        if (std::find(out.begin(), out.end(), nm) == out.end()) { out.push_back(nm); }
+    }
+    return out;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
@@ -44342,11 +44369,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // T4: the human had to tap by hand). The human answers Curator's scry and Cyclone's free cast at
         // resolution, so a human seed carries no pins (j = -1, fc = default); AppendHumanPlayDigPlans skips the
         // cyclers these seeds cover.
+        // EVERY DECK (QR1, USER 2026-10-29: "Cycling should show in plans"): the human seeds come from
+        // HumanPlayCycleSources -- the provider's searched list where it has one, else every distinct hand cycler.
+        // The autonomous search's seeds stay the provider's alone (empty for a deck that does not search its
+        // cycles), so its enumeration is unchanged.
         const bool human_seeds = HumanPlayActive();
         if (((g_search_candidate_enum || g_condemn_root_turn < 0) && !human_seeds) || human_seeds)
         {
             const DecisionProvider& cyc_prov = ResolveProvider(state);
-            const std::vector<std::string> cyc_names = cyc_prov.SearchedCycleSources(state);
+            const std::vector<std::string> cyc_names =
+                human_seeds ? HumanPlayCycleSources(state) : cyc_prov.SearchedCycleSources(state);
             if (!cyc_names.empty())
             {
                 const int me = state.active_player_index;
@@ -44439,6 +44471,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             a.card_name      = cd->card.m_name;
                             a.def            = cd;
                             a.hand_index     = -1;   // by NAME (copies fold); the copy count is kDupCopies'
+                            // ...tagged on a deck that does not search its cycles (QR1: human play only), so the
+                            // menu can append these plans after every older one (OrderHumanCycleSeedPlans).
+                            if (human_seeds && !cyc_prov.CyclesAreSearched()) { a.hand_index = kHumanGenericCycleSeedHand; }
                             a.cost           = cc;
                             a.devour_count   = j;
                             a.ponder_keep    = fc;
@@ -54681,8 +54716,12 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         // CARD's effective cycling cost, never a.cost -- a recorded DigDraw carries none, and the executor
         // builds these traits off its records while the rollout builds them off the plan (lockstep). The
         // first cycle of the list only: a section holds at most one seed.
+        // Human play carries cycle seeds on EVERY deck (QR1, HumanPlayCycleSources), so its plans hold the colour
+        // too. A deck that does not search its cycles carries none in autonomous play -- and the executor's
+        // records there are the legacy dig loop's, which must stay unheld -- so the gate is the provider OR human
+        // play (false inside every rollout and after a --choices-then-auto hand-back).
         if (a.kind == Action::Kind::DigDraw && !a.dig_sacrifice && t.cycle_seed_def == nullptr
-            && ActLineHoldEnabled() && ResolveProvider(state).CyclesAreSearched())
+            && ActLineHoldEnabled() && (ResolveProvider(state).CyclesAreSearched() || HumanPlayActive()))
         {
             const CardDefinition* cd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (cd != nullptr && cd->params.cycling_cost.has_value())
@@ -58379,6 +58418,24 @@ struct DepletionSbaAtResolution
     DepletionSbaAtResolution& operator=(const DepletionSbaAtResolution&) = delete;
 };
 
+// THE REASON A DECLARED PAYMENT FAILED (Q37, USER 2026-10-29: "Seething Song plans should error properly if
+// cast with 1 mana"). Read off the board AT the failed payment -- the payer restores atomically, so `s` is the
+// board the payment saw -- for the viewer's drop sink (PlayReportDrop): "Seething Song costs {2}{R}; only 1 mana
+// available". The amount is AvailableManaPool (every untapped source's production plus the floating pool, the
+// phantom filter wilds excluded exactly as CanPayFlat excludes them). Called only when PlayDropReasonWanted()
+// (human play's real apply or its trial copy), so no search scope ever pays for the scan.
+static std::string DroppedCostReason(const GameState& s, const std::string& what, const ManaCost& cost)
+{
+    const ManaPool pool  = AvailableManaPool(s);
+    const int      avail = pool.Total() - std::min(pool.wild_phantom, pool.wild);
+    const std::string c  = what + " costs " + cost.ToDisplayString() + "; ";
+    if (cost.ManaValue() > avail)
+    { return c + (avail <= 0 ? std::string("no mana available") : "only " + std::to_string(avail) + " mana available"); }
+    if (!pool.CanPayFlat(cost))
+    { return c + "the " + std::to_string(avail) + " mana available cannot make its colours"; }
+    return c + "the " + std::to_string(avail) + " mana available could not be spent on it";
+}
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
@@ -60560,7 +60617,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (phyrexian_life > 0
                 && state.players[state.active_player_index].life <= phyrexian_life)
             {
-                if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
+                if (sink_stack.empty() && g_play_dropped_cast_sink)
+                {
+                    PlayReportDrop(name, PlayDropReasonWanted()
+                        ? name + " needs " + std::to_string(phyrexian_life) + " life for its Phyrexian mana; you have "
+                          + std::to_string(state.players[state.active_player_index].life)
+                        : std::string());
+                }
                 if (sink_stack.empty())   // see SlotPrefixProbe
                 { SlotPrefixProbeNoteDrop(land_after_deferred && deferred_land_slot > 0, deferred_watchers_seen); }
                 return;
@@ -60635,7 +60698,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // inferring it from a board diff (the false-positiving detectDropped). Only top-level
                 // main-plan casts (sink_stack empty) -- nested breakpoint re-solve casts are engine-driven,
                 // not part of the user's committed line. Sink is nulled off real play so GT stays identical.
-                if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
+                if (sink_stack.empty() && g_play_dropped_cast_sink)
+                { PlayReportDrop(name, PlayDropReasonWanted() ? DroppedCostReason(state, name, ec) : std::string()); }
                 // ... and the same fact WITHOUT needing a hook. The sink above is nulled for every
                 // search/enumeration scope, so the cast-ordering search could not see that an ordering
                 // it was about to offer drops one of its own casts. See g_dropped_cast_count.
@@ -64739,7 +64803,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // dropped part of the line exactly like an unpayable cast, so it reaches the viewer's
                     // drop sink. Sink-gated (real play only) -> autonomous play and rollouts unchanged.
                     if (sink_stack.empty() && g_play_dropped_cast_sink)
-                    { g_play_dropped_cast_sink->push_back(a.card_name.str() + " (activation)"); }
+                    {
+                        PlayReportDrop(a.card_name.str() + " (activation)", PlayDropReasonWanted()
+                            ? DroppedCostReason(state, a.card_name.str() + "'s ability", act_cost) : std::string());
+                    }
                     if (taps)
                     { SetPermTapped(state, state.active_player_index, src_id, false); }
                     // MTG_ACT_DROP_AUDIT "unpaid" -- the cross-world, cross-deck twin of the
@@ -64756,7 +64823,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                      && PermAbilityDeadReason(state, state.active_player_index, a.sac_source_id,
                                               a.ability_mode) == 1)
             {
-                g_play_dropped_cast_sink->push_back(a.card_name.str() + " (activation)");
+                PlayReportDrop(a.card_name.str() + " (activation)",
+                               a.card_name.str() + " was tapped for mana earlier in this line, so its ability "
+                               "could not be activated");
                 if (ActDropAuditOn())
                 { NoteActDrop(1, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
             }
@@ -65021,7 +65090,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // REPORT a declared put that did not happen (sweep flag R): the viewer's drop sink, the same
             // way an unpayable cast is reported. Sink-gated (real play only) -> autonomous unchanged.
             if (!put_paid && sink_stack.empty() && g_play_dropped_cast_sink)
-            { g_play_dropped_cast_sink->push_back("put " + a.card_name.str() + " (activation)"); }
+            {
+                PlayReportDrop("put " + a.card_name.str() + " (activation)", !PlayDropReasonWanted() ? std::string()
+                    : !put_legal ? "putting " + a.card_name.str() + " is no longer possible (the card or its source is gone or tapped)"
+                    : DroppedCostReason(state, "putting " + a.card_name.str(), a.cost));
+            }
             if (put_paid)
             {
                 ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
@@ -74550,7 +74623,13 @@ static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<Tu
     const int lethal_lands = (opp_life > 0) ? (opp_life + le_rate - 1) / le_rate : 0;
     // No base plan to fan from (out of other plays) -> seed a "pass" base so Land's Edge is still
     // offered as a standalone line; otherwise the chooser sees zero plans and the turn advances.
-    if (all.empty()) { all.push_back(TurnSolver::Plan{}); }
+    // A human cycle seed's plan does not count as "another play" here (QR1): it is a NEW plan, appended after
+    // every older one (OrderHumanCycleSeedPlans), and without this the pass base -- and every Land's Edge line
+    // fanned from it -- vanished from a frame that only offered the cycle beside the discards (treasure_hunt
+    // reference claude_s8_gi7, T5 after Treasure Hunt: the human's "Land's Edge +discard8").
+    if (std::all_of(all.begin(), all.end(), [](const TurnSolver::Plan& p)
+                    { return std::any_of(p.actions.begin(), p.actions.end(), IsHumanGenericCycleSeed); }))
+    { all.push_back(TurnSolver::Plan{}); }
     const size_t base_count = all.size();
     for (size_t i = 0; i < base_count; ++i)
     {
@@ -74570,6 +74649,36 @@ static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<Tu
             all.push_back(std::move(v));
         }
     }
+}
+
+// HUMAN-PLAY CYCLE SEEDS ON A DECK THAT DOES NOT SEARCH ITS CYCLES (QR1, USER 2026-10-29: "Cycling should show
+// in plans"). CollectActions gives such a deck's human menu one cycle seed per distinct hand cycler
+// (HumanPlayCycleSources), so a cycle rides in one plan with the turn's casts and land and the plan's payment
+// holds the colour it needs (PlanTraits::cycle_seed_pips). The menu those seeds join must not renumber: a saved
+// reference names its picks by INDEX (and replays by content only as a repair), and the viewer re-prompts by
+// index. So, as the COMBO OFF gate does for its plan: every seed-bearing plan is moved AFTER every other plan
+// (stable, so the older plans keep their order and their indices), and the seed-only plan with no land -- the
+// exact duplicate of the standalone "cycle X to draw" plan AppendHumanPlayDigPlans still adds at its historical
+// place -- is dropped. Run TWICE: at the end of AppendHumanPlayDigPlans, BEFORE the breakpoint / sub-decision
+// variant passes -- those fan the list in order under a shared width budget, so seed plans interleaved among the
+// older ones would spend it first and starve the older plans of the variants they always had (treasure_hunt
+// reference claude_s8_gi7, T5: five "Land's Edge +discard8" variants lost) -- and again at the end of
+// EnumerateMainPlans, after every later append (the COMBO OFF plan included). (The land-drop path also re-runs
+// it right before AppendBreakpointVariants, after its tapland stable_sort.)
+// Human play only, and never for a provider that searches its cycles (Unpredictable Cyclone:
+// its seeds are the search's own and its menu order is already what its references were saved against).
+static void OrderHumanCycleSeedPlans(const GameState& state, std::vector<TurnSolver::Plan>& plans)
+{
+    if (!HumanPlayActive() || ResolveProvider(state).CyclesAreSearched()) { return; }
+    // Keyed on the human seed's own tag (kHumanGenericCycleSeedHand), never on IsCycleSeed alone: the standalone
+    // plan's breakpoint variants can carry a back-filled def and read as seeds, and they are OLD menu entries.
+    auto has_seed = [](const TurnSolver::Plan& p)
+    { return std::any_of(p.actions.begin(), p.actions.end(), IsHumanGenericCycleSeed); };
+    if (std::none_of(plans.begin(), plans.end(), has_seed)) { return; }
+    plans.erase(std::remove_if(plans.begin(), plans.end(), [](const TurnSolver::Plan& p)
+                { return p.actions.size() == 1 && IsHumanGenericCycleSeed(p.actions[0]) && p.land_to_play.empty(); }),
+                plans.end());
+    std::stable_partition(plans.begin(), plans.end(), [&](const TurnSolver::Plan& p) { return !has_seed(p); });
 }
 
 // Human-play only: make cycling (a land in hand, e.g. Lonely Sandbar / Forgotten Cave) and
@@ -74631,7 +74740,10 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     std::unordered_set<std::string> seen;
     // A provider that SEARCHES its cycles offers every cycler it admits as a plan ACTION (CollectActions'
     // cycle seeds, human play included), so the human combines it with the turn's casts in one line; a
-    // standalone twin here would only duplicate the seed-only plan.
+    // standalone twin here would only duplicate the seed-only plan. Every OTHER deck gets the same seeds in
+    // human play too (QR1, HumanPlayCycleSources) but KEEPS these standalone plans at their historical place
+    // in the menu: EnumerateMainPlans drops the seed-only duplicate instead and appends the seed-bearing plans
+    // after every other plan, so no index a saved reference names moves (see OrderHumanCycleSeedPlans).
     if (ResolveProvider(state).CyclesAreSearched())
     {
         for (const std::string& nm : ResolveProvider(state).SearchedCycleSources(state)) { seen.insert("c:" + nm); }
@@ -74657,6 +74769,11 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
         if (!seen.insert("s:" + nm).second) { continue; }
         add_variants(nm, true, d->params.sacrifice_draw_cost.value());
     }
+    // QR1: the human cycle-seed plans behind every older plan, and the seed-only duplicate of a standalone plan
+    // above dropped, BEFORE the variant passes run: they fan the first of two equivalent plans and share a width
+    // budget, so a surviving seed-only plan took the standalone plan's variants (EldraziDisplacerFlicker reference
+    // claude_s22_gi21, T4) and interleaved seed plans starved older ones (treasure_hunt claude_s8_gi7, T5).
+    OrderHumanCycleSeedPlans(state, all);
 }
 
 // Does a creature PUT onto the battlefield -- fetched by a tutor, by a Pod/Vial activation, or off
@@ -84794,6 +84911,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     const bool axes_stats = BpDeriveAxesStatsOn() && g_bp_enum_depth > 0;
     const auto axes_t0 = axes_stats ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const long long pre_axes = static_cast<long long>(all.size());
+    // QR1: the tapland stable_sort above can interleave the human cycle-seed plans among the older ones again, and
+    // the breakpoint fan below caps its base plans IN LIST ORDER (MTG_BP_MAXBASE) -- so restore "older plans
+    // first" here, or the seeds take the fan an older plan always had (EldraziDisplacerFlicker claude_s16_gi15 T4).
+    OrderHumanCycleSeedPlans(state, all);
     AppendBreakpointVariants(state, all);
     PbAxesAndTwins(state, is_pre_combat, all, pb_lazy);   // the axes, then the soulbond decline twins
     if (axes_stats)
@@ -102536,6 +102657,9 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                          static_cast<int>(plans.size()), s.c_str());
         }
     }
+    // QR1: the new cycle-seed plans after EVERY older one -- the COMBO OFF plan and every other append above
+    // included -- so no index a saved reference names moves.
+    OrderHumanCycleSeedPlans(state, plans);
     return plans;
 }
 
