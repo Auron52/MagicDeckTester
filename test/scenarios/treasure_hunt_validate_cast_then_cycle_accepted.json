@@ -1,0 +1,46 @@
+{
+  "deck": "decks/treasure_hunt/treasure_hunt.txt",
+  "turn": 3,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Island",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Treasure Hunt",
+    "Lonely Sandbar"
+  ],
+  "library_top": [
+    "Mountain",
+    "Throes of Chaos"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_UNPRUNED": "1"
+  },
+  "comment": "QR1 (USER 2026-10-29: 'Cycling should show in plans'): on a deck whose provider does not search its cycles, the line 'cast Treasure Hunt, cycle Lonely Sandbar' is now an enumerated human-play plan (accept) -- it used to be 'unsupported' (the cycle was a standalone plan only).",
+  "max_turns": 3,
+  "validate_line": "cast=Treasure Hunt;cycle=Lonely Sandbar;seq=cast=Treasure Hunt|cycle=Lonely Sandbar",
+  "expect_verdict": "accept"
+}

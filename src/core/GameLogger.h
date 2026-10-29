@@ -1036,6 +1036,48 @@ inline void EmitPlayEvent(int turn, const char* kind, std::string text)
 // search/rollout/enumeration scope (incl. CheckLine's plan_pays trial-apply), so autonomous play is
 // byte-identical (appending to an external vector never touches GameState). Inert unless set.
 extern thread_local std::vector<std::string>* g_play_dropped_cast_sink;
+// ...and WHY each one dropped (Q37, USER 2026-10-29: "Seething Song plans should error properly if cast with 1
+// mana"). One human-readable reason per entry of the cast sink above, read off the board AT the failed payment
+// ("Seething Song costs {2}{R}; only 1 mana available"), so the viewer's rollback and the line validation can say
+// what the line was short of instead of a generic "not enough mana". PAIRED: written only while
+// g_play_dropped_reason_pair == g_play_dropped_cast_sink, so a scope that swaps the cast sink for a local one
+// (a trial apply) without swapping this pair never lands its reasons in the outer log -- and RevealLogPause,
+// which nulls the cast sink, silences both. Index-aligned with the cast sink: a drop recorded by a site that
+// gives no reason gets "" (PlayReportDrop pads). Viewer-only, like the cast sink: GameState is never touched.
+extern thread_local std::vector<std::string>*       g_play_dropped_reason_sink;
+extern thread_local const std::vector<std::string>* g_play_dropped_reason_pair;
+// Is a reason wanted for the next drop? (Callers build the reason -- a board scan -- only when this is true.)
+inline bool PlayDropReasonWanted()
+{
+    return g_play_dropped_cast_sink != nullptr && g_play_dropped_reason_sink != nullptr
+        && g_play_dropped_reason_pair == g_play_dropped_cast_sink;
+}
+// Record one drop in the cast sink (the caller has checked it is non-null) and, when wanted, its reason.
+inline void PlayReportDrop(const std::string& name, const std::string& reason)
+{
+    g_play_dropped_cast_sink->push_back(name);
+    if (PlayDropReasonWanted())
+    {
+        g_play_dropped_reason_sink->resize(g_play_dropped_cast_sink->size() - 1);   // pad any unreasoned drop
+        g_play_dropped_reason_sink->push_back(reason);
+    }
+}
+// Install a (casts, reasons) pair for a scope -- the harness's logs, or a trial apply's locals -- and restore
+// the previous pair on exit.
+struct PlayDropSinkScope
+{
+    std::vector<std::string>*       prev_casts;
+    std::vector<std::string>*       prev_reasons;
+    const std::vector<std::string>* prev_pair;
+    PlayDropSinkScope(std::vector<std::string>* casts, std::vector<std::string>* reasons)
+        : prev_casts(g_play_dropped_cast_sink), prev_reasons(g_play_dropped_reason_sink),
+          prev_pair(g_play_dropped_reason_pair)
+    { g_play_dropped_cast_sink = casts; g_play_dropped_reason_sink = reasons; g_play_dropped_reason_pair = casts; }
+    ~PlayDropSinkScope()
+    { g_play_dropped_cast_sink = prev_casts; g_play_dropped_reason_sink = prev_reasons; g_play_dropped_reason_pair = prev_pair; }
+    PlayDropSinkScope(const PlayDropSinkScope&) = delete;
+    PlayDropSinkScope& operator=(const PlayDropSinkScope&) = delete;
+};
 
 // ---- RevealLogPause fast-path flag (PURE PERF; docs/design/engine-cost-profile-2026-08-16.md #2) --
 // RevealLogPause proves "nothing is installed" by loading 26 chooser/sink pointers, and it is

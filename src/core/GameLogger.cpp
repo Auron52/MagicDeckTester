@@ -80,6 +80,8 @@ thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullpt
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
 thread_local int g_play_extra_turns_taken = 0;
 thread_local std::vector<std::string>* g_play_dropped_cast_sink = nullptr;
+thread_local std::vector<std::string>*       g_play_dropped_reason_sink = nullptr;   // see GameLogger.h (Q37)
+thread_local const std::vector<std::string>* g_play_dropped_reason_pair = nullptr;
 thread_local bool g_human_play_suppressed = false;
 thread_local bool g_unpruned_suppressed   = false;   // see GameLogger.h (hand-back pruning switch)
 // Live only inside the COMBO OFF verify / apply -- see ComboOffFinishScope in GameLogger.h.

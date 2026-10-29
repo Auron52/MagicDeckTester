@@ -359,27 +359,31 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
     // A trial apply on a copy: the casts it drops, and (when asked) the order it realised and the steps
     // that did not happen. The capture pointers are null for every legacy pin, so the historical trials
     // are untouched.
+    // `reasons_out` (optional): why each drop happened, index-aligned with `drops_out` (Q37).
     auto trial = [&](const TurnSolver::Plan& pl, std::vector<std::string>* drops_out,
-                     std::vector<std::string>* seen, std::vector<std::string>* fails) -> std::size_t
+                     std::vector<std::string>* seen, std::vector<std::string>* fails,
+                     std::vector<std::string>* reasons_out = nullptr) -> std::size_t
     {
         GameState g = state;
         TurnSolver::Plan t = pl;
-        std::vector<std::string> drops;
+        std::vector<std::string> drops, reasons;
         std::vector<std::string>* const prev_sink = g_play_dropped_cast_sink;
         {
             ComboOffApplyPause co_quiet;
             RevealLogPause quiet;
-            g_play_dropped_cast_sink = &drops;
+            // The trial's OWN (casts, reasons) pair: the harness's logs never see a trial's drops.
+            PlayDropSinkScope drop_scope(&drops, &reasons);
             g_line_order_capture     = seen;
             g_human_step_fail_sink   = fails;
             if (is_pre_combat_main) { TurnSolver::DeferHumanAuraSwapToCombat(g, t, nullptr); }
             TurnSolver::ApplyPlan(g, t, is_pre_combat_main);
-            g_play_dropped_cast_sink = nullptr;
             g_line_order_capture     = nullptr;
             g_human_step_fail_sink   = nullptr;
         }
         g_play_dropped_cast_sink = prev_sink;
+        reasons.resize(drops.size());
         if (drops_out != nullptr) { *drops_out = drops; }
+        if (reasons_out != nullptr) { *reasons_out = reasons; }
         return drops.size();
     };
     bool fallback = false;
@@ -392,21 +396,25 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
     // form (no "**"), so saved references replay as recorded.
     if (pv.sequence)
     {
-        std::vector<std::string> drops_v, seen_ok;
-        trial(pinned, &drops_v, nullptr, nullptr);
+        std::vector<std::string> drops_v, seen_ok, why_v;
+        trial(pinned, &drops_v, nullptr, nullptr, &why_v);
         if (!drops_v.empty())
         {
             const bool engine_pays = trial(chosen, nullptr, &seen_ok, nullptr) == 0;
             std::string pays;
             for (const std::string& x : seen_ok) { pays += (pays.empty() ? "" : ", ") + x; }
-            for (const std::string& d : drops_v)
+            for (std::size_t k = 0; k < drops_v.size(); ++k)
             {
+                const std::string& d = drops_v[k];
                 std::string cost;
                 for (const Card& c : state.ActivePlayer().hand)
                 { if (c.m_name == d) { cost = c.m_mana_cost.ToString(); break; } }
-                pv.errors.push_back("cast " + d + ": it cannot be paid at its position in your order -- "
-                                    + (cost.empty() ? std::string("its cost") : cost)
-                                    + " is more than the steps queued before it leave available"
+                // The board's own account of the shortfall when the drop site gave one (Q37: "Seething Song
+                // costs {2}{R}; only 1 mana available" -- what is left at that position in the order).
+                const std::string why = k < why_v.size() && !why_v[k].empty()
+                    ? why_v[k] + " at that point"
+                    : (cost.empty() ? std::string("its cost") : cost) + " is more than the steps queued before it leave available";
+                pv.errors.push_back("cast " + d + ": it cannot be paid at its position in your order -- " + why
                                     + (engine_pays ? " (the order " + pays + " pays every spell: queue it that way)"
                                                    : std::string()));
             }
@@ -446,7 +454,7 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
         pv.plan = chosen;
     }
     else { pv.plan = std::move(pinned); }
-    if (trial_result) { trial(pv.plan, &pv.dropped, nullptr, &pv.failed); }
+    if (trial_result) { trial(pv.plan, &pv.dropped, nullptr, &pv.failed, &pv.dropped_reasons); }
     return pv;
 }
 
