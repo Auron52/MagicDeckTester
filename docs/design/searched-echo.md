@@ -177,7 +177,7 @@ whose axis is live by default.
 | 4 | Search for Tomorrow off suspend (`CastOffSuspend`) | land pick front | YES, `scripted_upkeep_land_search`, no kill switch | Hydras, Landfall |
 | 5 | Aether Vial charge | `WantVialCharge` | Pin exists (`scripted_vial_charge`); `MTG_VIAL_AXIS` default OFF (USER 2026-08-30: "in general we don't want to fully search vial decisions") | Goblins, Knights, LandfallElementals, Minotaur, Pirates, Soldiers, slivers_vial, Vampires, WhiteKnights |
 | 6 | Varchild cumulative upkeep (`PerformUpkeepCumulativeGifts`) | `PaysCumulativeUpkeep` = true | NO, dominance-safe one-option prune (above) | Creature Giving |
-| 7 | Defense of the Heart put list (`PerformUpkeepSacTutor`) | `SacTutorPutList` (closed-form immediate-drain maximisation; subset AND enter order) | **NO** -- a genuine multi-option pick, not shown dominated. Next item | Creature Giving |
+| 7 | Defense of the Heart put list (`PerformUpkeepSacTutor`) | `SacTutorPutList` (closed-form immediate-drain maximisation; subset AND enter order) -> now the FIRST entry of the menu `SacTutorPutOptions` | **YES** (2026-10-29), `scripted_doth_put`, `MTG_DOTH_AXIS` ON: the boundary fan crosses every menu entry (docs/design/searched-doth-put.md) | Creature Giving |
 | 8 | Emeria upkeep return (`PerformUpkeepGyReanimate`) | list front / decline | YES, `scripted_upkeep_gy_reanimate`, `MTG_EMERIA_AXIS` ON | LifegainHeliodCombo |
 | 9 | Mirri's Guile top-3 order (`PerformUpkeepReorder`) | `HeuristicTopDisposition` | **NO** (an ordering pick) -- no current deck holds the card (only archived StompySurprise/v1) | none current |
 | 10 | **Echo** | `PayEchoToKeep` | **YES, this change** (`scripted_echo`, `MTG_ECHO_AXIS` ON) | Goblins, goblins2hg |
@@ -190,11 +190,15 @@ whose axis is live by default.
 Executor-only: **Dwarven Hold's storage hold** (`GameEngine::UpkeepTail` -> `StorageLandHold`). The
 rollout never asks. That is lockstep today only because the base returns false and nothing overrides it.
 Any override would split the two worlds (Dragonstorm).
+*(2026-10-29: FIXED with #7. Both worlds now ask through ONE function, `PerformUpkeepStorageHolds`, at the
+same point of the upkeep, and the rollout's untap step now clears `storage_hold_this_turn` as the executor's
+does. Byte-identical while no provider holds; see searched-doth-put.md.)*
 
 **Next items, in order of live impact:** #7 (Defense of the Heart's put list, a live multi-option pick
 in Creature Giving), #2 (the cleanup-discard axis is wired but its width is 1 everywhere), #5 (the Vial
 axis is a USER decision, default OFF), #9 / #11 / #13 (no current deck, or behind an off lever), and the
 Dwarven Hold lockstep hazard.
+*(2026-10-29: #7 and the Dwarven Hold hazard are done -- docs/design/searched-doth-put.md. #2 is next.)*
 
 ## Measurement
 
@@ -286,4 +290,4 @@ So the smoke ground truth does not move, and the regression GT moves by that one
 2. **Relative vs absolute echo pins** (the lockstep section above). Relative keeps the provider's exact
    ordering and inherits the provider's both-worlds contract. Absolute is immune to a provider split but
    orders by a proxy. Recommendation: keep relative, since the one known split is fixed (962d538dd).
-3. **Next items** from the survey: Defense of the Heart's put list first.
+3. **Next items** from the survey: Defense of the Heart's put list first. *(Done 2026-10-29: docs/design/searched-doth-put.md.)*

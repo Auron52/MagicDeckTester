@@ -1400,6 +1400,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool upkeep_reanimate = false;
         // An echo card (GameState::deck_has_echo): the searched-echo axis's plan walk.
         bool echo = false;
+        // An upkeep sac-tutor (GameState::deck_has_sac_tutor, Defense of the Heart): the searched put-list fan.
+        bool sac_tutor = false;
         // The Niv-Mizzet draw/damage loop (GameState::deck_has_draw_ping): the four params its two
         // shared hooks (ResolveDrawTriggers, OnCreatureDealtDamageToOpponent) test.
         bool draw_ping = false;
@@ -1475,6 +1477,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (!d->params.combat_damage_puts_subtype_from_hand.empty()) { combat_put = true; }
                 if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
                 if (d->params.echo_cost.has_value())          { echo = true; }
+                if (d->params.upkeep_sac_tutor_creatures > 0)  { sac_tutor = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
                     || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
                 { draw_ping = true; }
@@ -1559,6 +1562,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no echo permanent can exist, so the echo axis's
         // per-plan walk (AppendSubdecisionAxes) finds no obligation and is dead code for that deck.
         state.deck_has_echo                = garth || echo;
+        // Same reasoning, no lever: a clear bit proves no Defense of the Heart can exist, so the searched put-list
+        // fan's battlefield walk at every turn boundary (BoundaryFan) is dead code for that deck.
+        state.deck_has_sac_tutor           = garth || sac_tutor;
         // Same reasoning, no lever: a clear bit proves no permanent can carry a draw trigger or a
         // damage->draw grant, so every ResolveDrawTriggers flush and the combat hook are dead code.
         state.deck_has_draw_ping           = garth || draw_ping;

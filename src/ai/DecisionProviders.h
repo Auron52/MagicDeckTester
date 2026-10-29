@@ -1780,6 +1780,19 @@ public:
     // defer the d0 drop when a hand-land tutor is payable from the mana already on board, so
     // the fetched Orchard can be the drop. Gated with MTG_CG_ORDER.
     bool LandDropAfterHandLandTutor(const GameState&, int) const override;
+
+    // THE SEARCHED DEFENSE OF THE HEART MENU's folds (MTG_DOTH_AXIS / MTG_DOTH_FOLDS), proven card by card for
+    // THIS pool against the passive goldfish opponent (docs/design/searched-doth-put.md, "The folds"). A
+    // creature outside the proven pool gets no fold at all, so adding a creature to the list can only widen
+    // the menu, never make a line unfindable.
+    //   COMMUTE: of the pool, only Hunted Phantasm (ETB: the opponent makes five 1/1s) and Massacre Wurm (ETB:
+    //     -2/-2 sweep) fire an own enter trigger; the other puts' entries fire only our lifegain watchers, which
+    //     neither ETB touches -- so two puts commute unless BOTH are those two.
+    //   FREE-GAIN: Suture Priest, Soul Warden, Essence Warden, Birds of Paradise, Varchild's War-Riders -- no
+    //     enter trigger and nothing on the battlefield that can cost us vs the goldfish, so on the stable shuffle
+    //     the put weakly dominates leaving the copy in the library (the mimic argument in the doc).
+    bool SacTutorPutsCommute(const CardDefinition& a, const CardDefinition& b) const override;
+    bool SacTutorFreeGainPut(const CardDefinition& d) const override;
 };
 
 // FiveColour (5-colour domain/goodstuff): eleven fetchlands feeding six shocks, two triomes and

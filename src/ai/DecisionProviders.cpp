@@ -2837,60 +2837,44 @@ std::vector<std::string> DecisionProvider::TutorHandPutList(
     return out;
 }
 
-std::vector<std::string> DecisionProvider::SacTutorPutList(
-    const GameState& s, int controller, const CardParams& /*pp*/, int max_puts) const
+namespace
 {
-    // Defense of the Heart default: deterministic closed-form immediate-drain maximisation.
-    // Enumerate singles + ordered pairs of library creature NAMES (repeats allowed up to copy
-    // count) and score the burst each sequence realises the moment it enters, using the same
-    // arithmetic the engine's resolution applies (see PerformUpkeepSacTutor):
-    //   - a gift-maker's tokens each drain the CURRENT enter-watch total (Suture Priests);
-    //   - a sweeper kills every opp creature with toughness - damage <= debuff, each death
-    //     draining the CURRENT death-watch total (Massacre Wurms, incl. the newcomer itself);
-    //   - a watcher entering EARLIER in the sequence raises the multiplier for later cards.
-    // Total printed power breaks ties (attack value). Fires at most once per game per copy
-    // (the permanent is sacrificed), so the ~O(names^2) scan is cheap.
-    const Player& ap  = s.players[controller];
-
-    int enter_drain = 0, death_drain = 0;
-    std::vector<int> opp_margin;   // per opp creature: effective toughness - marked damage
-    for (const Permanent& p : s.battlefield)
+// Defense of the Heart's closed-form immediate-drain score, SHARED by SacTutorPutList (which maximises it)
+// and SacTutorPutOptions (which ORDERS the searched put lists by it -- MTG_DOTH_AXIS). Score(seq) is the
+// burst the sequence realises the moment it enters, using the same arithmetic the engine's resolution
+// applies (see PerformUpkeepSacTutor):
+//   - a gift-maker's tokens each drain the CURRENT enter-watch total (Suture Priests);
+//   - a sweeper kills every opp creature with toughness - damage <= debuff, each death
+//     draining the CURRENT death-watch total (Massacre Wurms, incl. the newcomer itself);
+//   - a watcher entering EARLIER in the sequence raises the multiplier for later cards.
+// Total printed power breaks ties (attack value). Extracted verbatim from SacTutorPutList's former
+// seq_value lambda (byte-identical picks).
+class SacTutorBurstScorer
+{
+public:
+    SacTutorBurstScorer(const GameState& s, int controller)
     {
-        if (p.controller_index == controller)
+        for (const Permanent& p : s.battlefield)
         {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d)
+            if (p.controller_index == controller)
             {
-                enter_drain += d->params.opp_creature_enters_life_loss;
-                death_drain += d->params.opp_dies_life_loss;
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d)
+                {
+                    enter_drain_ += d->params.opp_creature_enters_life_loss;
+                    death_drain_ += d->params.opp_dies_life_loss;
+                }
+            }
+            else if (p.card.IsCreature() || p.is_animated)
+            {
+                opp_margin_.push_back(p.EffectiveToughness() - p.damage);
             }
         }
-        else if (p.card.IsCreature() || p.is_animated)
-        {
-            opp_margin.push_back(p.EffectiveToughness() - p.damage);
-        }
     }
-
-    // Distinct library creature names + copy counts. Keyed by the card's canonical
-    // CardDefinition* (LookupCached returns the SAME pointer for every copy of a name), which is
-    // byte-identical to name-keying -- one definition per name -- but skips the per-card std::string
-    // construction (`.str()`) and string hashing that showed up hot on this DotH-heavy deck. The map
-    // is only ever count-queried, never iterated, so the pointer key's arbitrary order is irrelevant;
-    // `names` (a vector) still carries the library first-occurrence order that the enumeration below
-    // depends on.
-    std::vector<const CardDefinition*>            names;
-    std::map<const CardDefinition*, int>          copies;
-    for (const Card& lc : ap.library)
+    long long Score(const std::vector<const CardDefinition*>& seq) const
     {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
-        if (!d || !d->card.IsCreature()) { continue; }
-        if (copies[d]++ == 0) { names.push_back(d); }
-    }
-    if (names.empty() || max_puts <= 0) { return {}; }
-
-    auto seq_value = [&](const std::vector<const CardDefinition*>& seq) -> long long {
-        int P = enter_drain, W = death_drain;
-        std::vector<int> margin = opp_margin;
+        int P = enter_drain_, W = death_drain_;
+        std::vector<int> margin = opp_margin_;
         long long burst = 0, power = 0;
         // All puts enter SIMULTANEOUSLY (see PerformUpkeepSacTutor), so EVERY newcomer's
         // watchers are live before any enter-trigger resolves: a double Massacre Wurm drains
@@ -2928,7 +2912,44 @@ std::vector<std::string> DecisionProvider::SacTutorPutList(
             power += std::max(0, d->card.m_power.value_or(0));
         }
         return burst * 64 + power;   // burst dominates; power is a pure tiebreak
-    };
+    }
+private:
+    int              enter_drain_ = 0, death_drain_ = 0;
+    std::vector<int> opp_margin_;   // per opp creature: effective toughness - marked damage
+};
+}   // namespace
+
+std::vector<std::string> DecisionProvider::SacTutorPutList(
+    const GameState& s, int controller, const CardParams& /*pp*/, int max_puts) const
+{
+    // Defense of the Heart default: deterministic closed-form immediate-drain maximisation.
+    // Enumerate singles + ordered pairs of library creature NAMES (repeats allowed up to copy
+    // count) and score the burst each sequence realises the moment it enters (SacTutorBurstScorer,
+    // above). Fires at most once per game per copy (the permanent is sacrificed), so the
+    // ~O(names^2) scan is cheap. Under MTG_DOTH_AXIS this is no longer the decision but its FIRST
+    // BRANCH: SacTutorPutOptions puts it at rank 0 and the search crosses every other list too.
+    const Player& ap  = s.players[controller];
+    const SacTutorBurstScorer scorer(s, controller);
+
+    // Distinct library creature names + copy counts. Keyed by the card's canonical
+    // CardDefinition* (LookupCached returns the SAME pointer for every copy of a name), which is
+    // byte-identical to name-keying -- one definition per name -- but skips the per-card std::string
+    // construction (`.str()`) and string hashing that showed up hot on this DotH-heavy deck. The map
+    // is only ever count-queried, never iterated, so the pointer key's arbitrary order is irrelevant;
+    // `names` (a vector) still carries the library first-occurrence order that the enumeration below
+    // depends on.
+    std::vector<const CardDefinition*>            names;
+    std::map<const CardDefinition*, int>          copies;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        if (!d || !d->card.IsCreature()) { continue; }
+        if (copies[d]++ == 0) { names.push_back(d); }
+    }
+    if (names.empty() || max_puts <= 0) { return {}; }
+
+    auto seq_value = [&](const std::vector<const CardDefinition*>& seq) -> long long
+    { return scorer.Score(seq); };
 
     std::vector<const CardDefinition*> best_seq;
     long long best_val = -1;
@@ -2955,6 +2976,137 @@ std::vector<std::string> DecisionProvider::SacTutorPutList(
     std::vector<std::string> out;
     out.reserve(best_seq.size());
     for (const CardDefinition* d : best_seq) { out.push_back(d->card.m_name.str()); }
+    return out;
+}
+
+// MTG_DOTH_FOLDS (DEFAULT ON; heurarm slot DOTH_FOLDS): the provider-proven folds of the searched put-list
+// menu (SacTutorPutsCommute beyond identical cards, SacTutorFreeGainPut). Both are SOUND folds -- an order
+// swap that reaches the same state, a list a free-gain card weakly improves -- so the lever exists to
+// MEASURE them (=0 searches the unfolded menu: the same answers at unlimited budget, more work), not to
+// choose between plays.
+static bool SacTutorFoldsOn()
+{
+    static const bool env = EnvOn("MTG_DOTH_FOLDS", true);
+    return heurarm::Flag(heurarm::DOTH_FOLDS, env);
+}
+
+std::vector<std::vector<std::string>> DecisionProvider::SacTutorPutOptions(
+    const GameState& s, int controller, const CardParams& pp, int max_puts) const
+{
+    // THE SEARCHED MENU (MTG_DOTH_AXIS; see the header and docs/design/searched-doth-put.md). Rank 0 is the
+    // provider's own pick, ALWAYS -- it is the first branch and it wins every tie.
+    std::vector<std::vector<std::string>> out;
+    out.push_back(SacTutorPutList(s, controller, pp, max_puts));
+
+    // The library's creature DEFINITIONS (one per name, first-occurrence order) and their copy counts: an
+    // option names cards, and the resolution puts the first library copy of each name.
+    const Player& ap = s.players[static_cast<std::size_t>(controller)];
+    std::vector<const CardDefinition*> names;
+    std::vector<int>                   copies;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        if (!d || !d->card.IsCreature()) { continue; }
+        const auto it = std::find(names.begin(), names.end(), d);
+        if (it == names.end()) { names.push_back(d); copies.push_back(1); }
+        else                   { ++copies[static_cast<std::size_t>(it - names.begin())]; }
+    }
+    constexpr int kMenuMaxLen = 3;   // "up to two" for Defense of the Heart; the enumeration is general to 3
+    const int len_cap = std::min(max_puts, kMenuMaxLen);
+    if (names.empty() || len_cap <= 0) { return out; }
+
+    const bool folds = SacTutorFoldsOn();
+    const int  n     = static_cast<int>(names.size());
+    // Two puts COMMUTE when swapping their resolution order reaches the same state up to battlefield order:
+    // two copies of one card always (identical); otherwise only what the provider proves for its pool.
+    std::vector<std::vector<char>> comm(static_cast<std::size_t>(n), std::vector<char>(static_cast<std::size_t>(n), 0));
+    for (int a = 0; a < n; ++a)
+    for (int b = 0; b < n; ++b)
+    { comm[a][b] = (a == b || (folds && SacTutorPutsCommute(*names[a], *names[b]))) ? 1 : 0; }
+    std::vector<char> free_gain(static_cast<std::size_t>(n), 0);
+    if (folds) { for (int a = 0; a < n; ++a) { free_gain[a] = SacTutorFreeGainPut(*names[a]) ? 1 : 0; } }
+
+    // THE IDENTITY CLASS of an index sequence: the lexicographically smallest sequence reachable by swapping
+    // ADJACENT commuting entries (the trace-monoid normal form; at most 3! orders, so a plain closure).
+    auto canon = [&](const std::vector<int>& q0) -> std::vector<int>
+    {
+        if (q0.size() < 2) { return q0; }
+        if (q0.size() == 2)   // the Defense of the Heart case, without the closure's allocations
+        { return (comm[q0[0]][q0[1]] && q0[1] < q0[0]) ? std::vector<int>{ q0[1], q0[0] } : q0; }
+        std::vector<std::vector<int>> seen_q{ q0 }, frontier{ q0 };
+        std::vector<int> best = q0;
+        while (!frontier.empty())
+        {
+            std::vector<int> q = std::move(frontier.back());
+            frontier.pop_back();
+            for (std::size_t i = 0; i + 1 < q.size(); ++i)
+            {
+                if (!comm[q[i]][q[i + 1]]) { continue; }
+                std::vector<int> r = q;
+                std::swap(r[i], r[i + 1]);
+                if (std::find(seen_q.begin(), seen_q.end(), r) != seen_q.end()) { continue; }
+                if (r < best) { best = r; }
+                seen_q.push_back(r);
+                frontier.push_back(std::move(r));
+            }
+        }
+        return best;
+    };
+
+    std::set<std::vector<int>> classes;
+    {
+        std::vector<int> front_idx;
+        bool mapped = true;
+        for (const std::string& nm : out[0])
+        {
+            int at = -1;
+            for (int a = 0; a < n; ++a) { if (names[a]->card.m_name.str() == nm) { at = a; break; } }
+            if (at < 0) { mapped = false; break; }
+            front_idx.push_back(at);
+        }
+        if (mapped) { classes.insert(canon(front_idx)); }
+    }
+
+    struct Cand { std::vector<int> seq; long long score; };
+    std::vector<Cand> cands;
+    const SacTutorBurstScorer scorer(s, controller);
+    std::vector<int> cur, used(static_cast<std::size_t>(n), 0);
+    std::vector<const CardDefinition*> defs;
+    std::function<void()> walk = [&]()
+    {
+        // DOMINANCE (provider-proven): a list with a free slot loses to itself plus a spare FREE-GAIN card.
+        bool dominated = false;
+        if (static_cast<int>(cur.size()) < len_cap)
+        {
+            for (int a = 0; a < n; ++a)
+            { if (free_gain[a] && used[a] < copies[a]) { dominated = true; break; } }
+        }
+        if (!dominated && classes.insert(canon(cur)).second)
+        {
+            defs.clear();
+            for (int a : cur) { defs.push_back(names[a]); }
+            cands.push_back({ cur, scorer.Score(defs) });
+        }
+        if (static_cast<int>(cur.size()) == len_cap) { return; }
+        for (int a = 0; a < n; ++a)
+        {
+            if (used[a] >= copies[a]) { continue; }
+            ++used[a]; cur.push_back(a);
+            walk();
+            cur.pop_back(); --used[a];
+        }
+    };
+    walk();
+    // ORDER (the provider's prerogative): the same immediate-drain score SacTutorPutList maximises, best
+    // first, enumeration order among equals -- so a cutoff found early prunes the rest.
+    std::stable_sort(cands.begin(), cands.end(), [](const Cand& x, const Cand& y) { return x.score > y.score; });
+    for (const Cand& c : cands)
+    {
+        if (static_cast<int>(out.size()) > kDothPinRankMask) { break; }   // the pin addresses ranks 0..127
+        std::vector<std::string> lst;
+        for (int a : c.seq) { lst.push_back(names[a]->card.m_name.str()); }
+        out.push_back(std::move(lst));
+    }
     return out;
 }
 
@@ -18847,6 +18999,51 @@ CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, cons
     // No Orchard left: the full list returns and the search picks (mana fixing is board-
     // dependent -- exactly the depth a static fallback ranking lacks).
     return GenericProvider::TutorCandidates(s, controller, pp);
+}
+
+// ---- CreatureGivingProvider: the searched Defense of the Heart menu's folds (MTG_DOTH_AXIS) ----
+// The proofs are card by card from cards.json, for this pool only, against the passive goldfish opponent
+// (never attacks, never blocks, casts nothing); docs/design/searched-doth-put.md "The folds" has them in full
+// with their break conditions. Classified by NAME so that a creature added to the list later -- whatever its
+// parameters -- lands in kUnproven and gets no fold until someone extends the proof.
+namespace
+{
+enum class CgPutClass { kUnproven, kFreeGain, kEtbBearing };
+CgPutClass CgPutClassOf(const CardDefinition& d)
+{
+    const std::string n = d.card.m_name.str();
+    // No own enter trigger; on the battlefield only: Suture Priest (gain 1 when another creature of ours
+    // enters, the opponent loses 1 when one of theirs enters), the Wardens (gain 1 when another creature
+    // enters), Birds (a mana ability), Varchild (a 3/4 trampler whose cumulative upkeep gifts the opponent
+    // 1/1s -- always paid, the searched-echo doc's dominance proof). Nothing in the pool reads our life
+    // beyond a shock's "pay 2" and own death is not live for this deck, and every opposing creature only
+    // feeds our drains / Defense of the Heart's count.
+    if (n == "Suture Priest" || n == "Soul Warden" || n == "Essence Warden" || n == "Birds of Paradise"
+        || n == "Varchild's War-Riders")
+    { return CgPutClass::kFreeGain; }
+    // An own enter trigger whose TIMING is a real choice: Hunted Phantasm's five gifted 1/1s drain per Suture
+    // Priest then, and feed a later sweep; Massacre Wurm's -2/-2 sweep drains 2 per death per Wurm then, and
+    // eats the opponent's creatures a later Defense of the Heart needs.
+    if (n == "Hunted Phantasm" || n == "Massacre Wurm") { return CgPutClass::kEtbBearing; }
+    return CgPutClass::kUnproven;
+}
+}   // namespace
+
+bool CreatureGivingProvider::SacTutorPutsCommute(const CardDefinition& a, const CardDefinition& b) const
+{
+    if (&a == &b) { return true; }
+    const CgPutClass ca = CgPutClassOf(a), cb = CgPutClassOf(b);
+    if (ca == CgPutClass::kUnproven || cb == CgPutClass::kUnproven) { return false; }
+    // A free-gain put's entry fires only our lifegain watchers (Suture Priest, the Wardens); an ETB-bearing
+    // put's trigger touches only the OPPONENT's board and life (Phantasm's gift, the Wurm's sweep and its
+    // death drains), so the two orders reach the same state up to battlefield order. Phantasm-then-Wurm vs
+    // Wurm-then-Phantasm do not commute: the sweep kills the gifted Goblins (2 each per Wurm) or misses them.
+    return !(ca == CgPutClass::kEtbBearing && cb == CgPutClass::kEtbBearing);
+}
+
+bool CreatureGivingProvider::SacTutorFreeGainPut(const CardDefinition& d) const
+{
+    return CgPutClassOf(d) == CgPutClass::kFreeGain;
 }
 
 // ---- FiveColourProvider -----------------------------------------------------
@@ -35694,6 +35891,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.scripted_combat_land_search_crack); v.push_back(s.scripted_grace_choice);
     v.push_back(s.scripted_upkeep_gy_reanimate);
     v.push_back(s.scripted_echo);
+    v.push_back(s.scripted_doth_put);
     v.push_back(static_cast<long long>(s.battlefield.size()));
     for (const Permanent& p : s.battlefield)
     {

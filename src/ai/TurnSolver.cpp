@@ -1595,6 +1595,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("looktop", first.look_top_pins != dup.look_top_pins);
     pl("upkreanim", first.upkeep_gy_reanimate_choice != dup.upkeep_gy_reanimate_choice);
     pl("echo", first.echo_choice != dup.echo_choice);
+    pl("doth", first.doth_put_choice != dup.doth_put_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     pl("etbc", first.etbcounter_choice != dup.etbcounter_choice);
@@ -6147,6 +6148,7 @@ static bool M2SkipEmptyApplyOn()
 // PRICE is negotiable. See docs/design/fungus-second-main-and-devour.md §8.
 
 static bool EchoUncoveredPending(const GameState& state);   // fwd (the searched echo axis, with the axes)
+static bool DothUncoveredPending(const GameState& state);   // fwd (the searched DotH put list, with BoundaryFan)
 static bool SecondMainUnproductive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
@@ -6156,6 +6158,9 @@ static bool SecondMainUnproductive(const GameState& state)
     // second main is the last plan of the turn), so the phase is never skipped while one is pending.
     // False for every deck without an echo card.
     if (EchoUncoveredPending(state)) { return false; }
+    // ...and the same for a Defense of the Heart trigger the state's pin does not cover (MTG_DOTH_AXIS): the
+    // second main's crossing is where it is decided. False for every deck without the card.
+    if (DothUncoveredPending(state)) { return false; }
     // Moraug: any landfall main 2 can make (a held land, a ramp spell main 1 could have cast, a fetch to crack)
     // buys an additional combat, so the phase is never skipped as a re-run of main 1 while the source is ours.
     if (ExtraCombatSecondMainLive(state)) { return false; }
@@ -24943,6 +24948,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x454D45524941ull); fold(static_cast<uint64_t>(p.upkeep_gy_reanimate_choice)); }   // "EMERIA"
     // The searched echo pin (next upkeep's pay/decline): the same must-fold, value-gated rule.
     if (p.echo_choice >= 0) { fold(0x4543484Full); fold(static_cast<uint64_t>(p.echo_choice)); }   // "ECHO"
+    // The searched Defense of the Heart put list (next upkeep): the same must-fold, value-gated rule.
+    if (p.doth_put_choice >= 0) { fold(0x444F5448ull); fold(static_cast<uint64_t>(p.doth_put_choice)); }   // "DOTH"
     // Searched land-drop TIMING and the landfall-target policy (2026-10-15). MUST-FOLD, the fling /
     // Tectonic rule below: "land before the casts" and "land after the casts" are different plans
     // (and so are two target ranks), and a fingerprint that cannot tell them apart re-steals the
@@ -25313,7 +25320,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1 && p.grace_choice == -1
-        && p.upkeep_gy_reanimate_choice == -1 && p.echo_choice == -1
+        && p.upkeep_gy_reanimate_choice == -1 && p.echo_choice == -1 && p.doth_put_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
         && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
@@ -26133,6 +26140,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     if (p.upkeep_gy_reanimate_choice >= 0)
     { h = Mix(h, 0x454Dull + static_cast<std::uint64_t>(p.upkeep_gy_reanimate_choice)); }   // value-gated
     if (p.echo_choice >= 0) { h = Mix(h, 0xEC40ull + static_cast<std::uint64_t>(p.echo_choice)); }   // value-gated
+    if (p.doth_put_choice >= 0)
+    { h = Mix(h, 0xD0E70000ull + static_cast<std::uint64_t>(p.doth_put_choice)); }   // value-gated
     for (int x : p.sac_pins) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
     h = Mix(h, p.atk_forfeit ? 1u : 0u);
     h = Mix(h, p.soulbond_decline ? 1u : 0u);
@@ -47254,6 +47263,7 @@ namespace solvememo
             || a.grace_choice != b.grace_choice
             || a.upkeep_gy_reanimate_choice != b.upkeep_gy_reanimate_choice
             || a.echo_choice != b.echo_choice
+            || a.doth_put_choice != b.doth_put_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.land_slot != b.land_slot
             || a.land_from_top != b.land_from_top
@@ -63380,6 +63390,29 @@ static void NoteEchoUncoveredSearch(const GameState& s, const Permanent& p, int 
                      p.card.m_name.str().c_str(), bf.c_str());
     }
 }
+// The Defense of the Heart cover census's search-side split (MTG_DOTH_AXIS_STATS; SpellEffects.h NoteDothCover
+// counts the totals), the echo split's twin: a trigger past the pin's cover, resolved while the innermost search
+// frame still had depth -- in a SEARCHED frame (a crossing no BoundaryFan covered: the no-greedy invariant, must
+// read 0), in the playout beyond the horizon (permitted), or at a constant-leaf edge (the identity fold).
+// MTG_DOTH_AXIS_STATS=2 prints the first searched ones.
+static std::atomic<long long> g_doth_unc_searched{0}, g_doth_unc_narrow{0}, g_doth_unc_edgefold{0};
+static void NoteDothUncoveredSearch(const GameState& s, int ordinal, int pin)
+{
+    if (!DothCensusOn() || ordinal < DothPinCover(pin) || HumanPlayActive() || !greedywindow::InWindow(0)) { return; }
+    if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
+    { g_doth_unc_narrow.fetch_add(1, std::memory_order_relaxed); return; }
+    if (EchoEdgeFoldHere(s)) { g_doth_unc_edgefold.fetch_add(1, std::memory_order_relaxed); return; }
+    const long long n = g_doth_unc_searched.fetch_add(1, std::memory_order_relaxed);
+    static const int s_lvl = EnvInt("MTG_DOTH_AXIS_STATS", 0);
+    if (s_lvl >= 2 && n < 40)
+    {
+        std::fprintf(stderr, "[doth-axis] UNCOVERED in window: T%d ord=%d pin=%d frame_depth=%d nest(rollout=%d fsline=%d"
+                             " cs_solver=%d m2solve=%d greedy=%d bp_enum=%d m2fix=%d narrow=%d turn_depth=%d)\n",
+                     s.turn_number, ordinal, pin, greedywindow::t_depth, g_rollout_nest, g_fsline_nest,
+                     g_cs_solver_nest, g_cs_m2solve_nest, g_greedy_solve_nest, g_bp_enum_depth, g_m2fix_nest,
+                     t_rollout_narrow ? 1 : 0, t_echo_rollout_turn_depth);
+    }
+}
 static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
@@ -63662,6 +63695,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             p.entered_this_turn = false;
             p.fresh_hold_exempt = false;   // lockstep with GameEngine::UntapStep (Permanent.h)
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
+            p.storage_hold_this_turn = false;   // Dwarven Hold's per-turn hold (lockstep w/ GameEngine::UntapStep)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.lifegain_counters_used_this_turn = false;   // Nykthos Paragon once-each-turn (PER COPY)
             p.once_per_turn_used = false;                 // Stromkirk Condemned once-each-turn (PER COPY)
@@ -63756,6 +63790,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (charge) { ++p.charge_counters; }
     }
 
+    // Dwarven Hold's upkeep hold -- the SAME function GameEngine::UpkeepTail calls first, at the same point
+    // (after the Vial charges, before the other upkeep triggers). See PerformUpkeepStorageHolds.
+    PerformUpkeepStorageHolds(state);
     // Emeria, the Sky Ruin: its intervening if and legal targets are fixed as the beginning-of-upkeep
     // triggers go on the stack -- BEFORE any of the upkeep triggers below resolves (CR 603.3d / 603.4).
     // Lockstep twin at the top of GameEngine::UpkeepTail; empty for every deck without the card.
@@ -63808,7 +63845,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Defense of the Heart sac-tutor check. Mirrors GameEngine::UpkeepTail's identical block
     // (lockstep); param-gated -> byte-identical for every other deck.
     PerformUpkeepCumulativeGifts(state);
-    PerformUpkeepSacTutor(state);
+    // Defense of the Heart: the searched put list the previous turn's plan pinned (or the fan's crossing stamped),
+    // through the same function the executor's upkeep uses; consumes the pin whatever it finds.
+    PerformUpkeepSacTutor(state, &NoteDothUncoveredSearch);
     PerformUpkeepSlumber(state);   // Marit Lage's Slumber (lockstep twin in GameEngine's upkeep)
     // Emeria, the Sky Ruin (lockstep twin in GameEngine::UpkeepTail): consumes the searched pin the
     // previous turn's plan left on the state, against the snapshot taken before the upkeep tokens.
@@ -74396,6 +74435,37 @@ namespace echostats
     };
     static Dumper g_dumper;
 }
+// MTG_DOTH_AXIS_STATS=1: the Defense of the Heart cover census (SpellEffects.h, NoteDothCover) at exit. Its fan
+// counters live with BoundaryFan (defined later), so they are read through this hook.
+static void DothStatsFanCounts(long long* fans, long long* crossings);
+namespace dothstats
+{
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            static const bool on = EnvOn("MTG_DOTH_AXIS_STATS");
+            if (!on) { return; }
+            long long fans = 0, crossings = 0;
+            DothStatsFanCounts(&fans, &crossings);
+            const long long built = g_doth_menu_built.load();
+            std::fprintf(stderr, "[doth-axis] resolutions=%lld covered=%lld off_front=%lld uncovered_in_window=%lld"
+                                 " uncovered_beyond=%lld | real: resolutions=%lld uncovered=%lld\n",
+                         (long long)g_doth_resolutions.load(), (long long)g_doth_covered.load(),
+                         (long long)g_doth_off_front.load(), (long long)g_doth_uncovered_in_window.load(),
+                         (long long)g_doth_uncovered_beyond.load(), (long long)g_doth_real_resolutions.load(),
+                         (long long)g_doth_real_uncovered.load());
+            std::fprintf(stderr, "[doth-axis] uncovered in a frame with depth: searched=%lld playout=%lld"
+                                 " constant_leaf_edge_fold=%lld | fans=%lld crossings=%lld | menus built=%lld"
+                                 " mean=%.2f max=%lld\n",
+                         (long long)g_doth_unc_searched.load(), (long long)g_doth_unc_narrow.load(),
+                         (long long)g_doth_unc_edgefold.load(), fans, crossings, built,
+                         built > 0 ? static_cast<double>(g_doth_menu_sum.load()) / static_cast<double>(built) : 0.0,
+                         (long long)g_doth_menu_max.load());
+        }
+    };
+    static Dumper g_dumper;
+}
 // An obligation pending that the state's pin does not cover -- the second main has an echo decision to make,
 // so its 0-cost empty path (which never enumerates) must not be taken.
 static bool EchoUncoveredPending(const GameState& state)
@@ -79330,6 +79400,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.grace_choice);
             add(pl.upkeep_gy_reanimate_choice);   // Emeria: in padding, so the size pin cannot catch it
             add(pl.echo_choice);   // the searched echo pin: in padding, so the size pin cannot catch it
+            add(pl.doth_put_choice);   // the searched DotH put list: in padding, so the size pin cannot catch it
             add(pl.land_slot); add(pl.landfall_target_choice); add(pl.combat_landfall_target_choice);
             add(pl.fb_hold_choice);  // the searched banked hold: in padding, so the size pin cannot catch it
             add(pl.land_from_top);   // Courser: in padding, so the size pin below cannot catch it
@@ -84073,7 +84144,10 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          // Emeria's packed next-upkeep pin (appended: value-gated, own slot).
                          static_cast<int>(state.scripted_upkeep_gy_reanimate),
                          // The searched echo pin, read at the next upkeep (appended: value-gated, own slot).
-                         static_cast<int>(state.scripted_echo) };
+                         static_cast<int>(state.scripted_echo),
+                         // The searched Defense of the Heart put list, read at the next upkeep (appended:
+                         // value-gated, own slot).
+                         static_cast<int>(state.scripted_doth_put) };
     for (int i = 0; i < static_cast<int>(sizeof(pins) / sizeof(pins[0])); ++i)
     {
         if (pins[i] != -1)
@@ -86587,6 +86661,171 @@ static std::vector<int> EchoBoundaryPins(const GameState& s)
     return pins;
 }
 std::vector<int> TurnSolver::EchoBoundaryPinsForTest(const GameState& state) { return EchoBoundaryPins(state); }
+// ---- THE SEARCHED DEFENSE OF THE HEART PUT LIST (MTG_DOTH_AXIS, DEFAULT ON; =0 -> the provider's pick everywhere,
+// play-identical to the pre-axis tree -- an A/B arm) -------------------------------------------------------------
+// Defense of the Heart's trigger resolves at the NEXT upkeep (put up to two creature cards from the library), and
+// both worlds used to take the put list from the provider's closed-form pick (SacTutorPutList) there: at the
+// executor's real upkeep and at every simulated turn boundary, including the ones FSLineTail and the lookahead
+// cross with depth remaining -- an in-window greedy pick (USER HARD RULE 2026-09-30). WHICH creatures and their
+// ENTER ORDER is a genuine multi-option decision (docs/design/searched-doth-put.md), and its menu is a function of
+// the UPKEEP state (the library, the opponent's board after the turn-start Orchard Spirits and Varchild's gifts,
+// an earlier trigger's puts), which no plan can see when it is enumerated. So it is decided where the search
+// CROSSES the boundary: the BOUNDARY FAN below crosses once per menu entry (DecisionProvider::SacTutorPutOptions,
+// the provider's own pick first so it wins every tie) and records the winning rank on the plan of the turn that
+// crossed (Plan::doth_put_choice), which the executor writes at that plan's apply; both upkeeps resolve it through
+// DothUpkeepPutList. The fan learns each trigger's menu size from the crossing itself (DothProbe) and walks the
+// ranks as an odometer over the trigger ordinals (a second trigger's menu depends on the first's puts).
+//
+// NOT here: in human play (the person picks at the prompt), in a narrowed tail rollout and the d0 runner (beyond
+// the horizon the provider's pick is the permitted playout policy), and at a full-line node whose next turn is a
+// CONSTANT leaf (EchoEdgeFoldHere: that leaf cannot tell two put lists apart -- FSLineWin at depth 0 reads no
+// win off the boundary -- and a deeper pass searches the turn, so no line is unfindable at any budget).
+static bool DothAxisOn()
+{
+    static const bool env = EnvOn("MTG_DOTH_AXIS", true);   // DEFAULT ON; =0 -> the provider's pick
+    return heurarm::Flag(heurarm::DOTH_AXIS, env);
+}
+static bool DothAxisLiveHere(const GameState& state)
+{
+    return state.deck_has_sac_tutor && g_bp_enum_depth == 0 && !t_rollout_narrow && !HumanPlayActive()
+        && DothAxisOn() && !EchoEdgeFoldHere(state);
+}
+// A Defense of the Heart that can trigger at the next upkeep and that the state's pin does not cover -- the
+// second main is the last plan of the turn and must cross (and fan) rather than take its 0-cost empty path.
+// False for every deck without the card.
+static bool DothUncoveredPending(const GameState& state)
+{
+    return DothAxisLiveHere(state) && UpkeepSacTutorsOnBattlefield(state) > DothPinCover(state.scripted_doth_put);
+}
+
+// THE BOUNDARY FAN, generalised (searched echo + searched Defense of the Heart). Every in-window crossing site
+// iterates it:
+//     BoundaryFan fan(pre, with_echo);
+//     while (fan.Next()) { copy pre if fan.Copies(); fan.Stamp(copy); if (!fan.Cross(copy)) continue; ...
+//                          on adoption: fan.Record(plan); }
+// The crossings are ordered "follow" first -- echo's provider answer (EchoBoundaryPins' first pin) and every
+// Defense of the Heart trigger's rank 0 -- so ties keep the provider's picks. Echo's pins are the outer loop (a
+// fixed list, as before); the Defense of the Heart ranks are the inner ODOMETER over the trigger ordinals the
+// state's pin does not cover, its radices learned crossing by crossing. With no Defense of the Heart live the
+// iteration, the copies and the recording are exactly the echo boundary fan's (byte-identical).
+class BoundaryFan
+{
+public:
+    BoundaryFan(const GameState& pre, bool with_echo)
+    {
+        if (with_echo) { echo_ = EchoBoundaryPins(pre); }
+        if (DothAxisLiveHere(pre))
+        {
+            c0_ = DothPinCover(pre.scripted_doth_put);
+            if (c0_ < kDothPinMaxOrd && UpkeepSacTutorsOnBattlefield(pre) > c0_)
+            {
+                doth_ = true;
+                for (int j = 0; j < c0_; ++j) { ranks_[j] = DothPinRank(pre.scripted_doth_put, j); }
+            }
+        }
+    }
+    // Will the site cross more than once? Decided BEFORE the first crossing, so a live Defense of the Heart counts
+    // (its menu is learned on the first crossing): the site then crosses per-crossing copies of its state.
+    bool Copies() const { return echo_.size() > 1 || doth_; }
+    bool DothLive() const { return doth_; }
+    bool Next()
+    {
+        if (!started_) { started_ = true; ResetDoth(); return true; }
+        if (doth_ && nobs_ > c0_)
+        {
+            for (int j = std::min(nobs_, kDothPinMaxOrd) - 1; j >= c0_; --j)
+            {
+                if (ranks_[j] + 1 < sizes_[j])
+                {
+                    ++ranks_[j];
+                    for (int k = j + 1; k < kDothPinMaxOrd; ++k) { ranks_[k] = 0; }
+                    nobs_ = j + 1;   // the later ordinals are re-learned by the next crossing
+                    return true;
+                }
+            }
+        }
+        if (ei_ + 1 < echo_.size()) { ++ei_; ResetDoth(); return true; }
+        return false;
+    }
+    void Stamp(GameState& sx) const
+    {
+        if (echo_.size() > 1) { sx.scripted_echo = static_cast<std::int16_t>(echo_[ei_]); }
+        // The crossing's pin covers every ordinal (unexplored ones at rank 0 = the provider's pick, which IS the
+        // branch being scored), so nothing in it resolves uncovered.
+        if (doth_) { sx.scripted_doth_put = DothPinPack(kDothPinMaxOrd, ranks_); }
+    }
+    // The crossing itself (SimulateEndAndStartNextTurn), with the probe open when a Defense of the Heart is live
+    // so the fan learns the menu sizes this crossing met.
+    bool Cross(GameState& sx);
+    int EchoPin() const { return echo_.empty() ? -2 : echo_[ei_]; }
+    // The pin to RECORD for this crossing: the ordinals it actually resolved, with their ranks (-2 = record
+    // nothing: no Defense of the Heart live, or no trigger past the inherited cover resolved).
+    int DothPin() const { return (doth_ && nobs_ > c0_) ? DothPinPack(nobs_, ranks_) : -2; }
+    void Record(TurnSolver::Plan& p) const
+    {
+        if (EchoPin() != -2) { p.echo_choice = static_cast<std::int16_t>(EchoPin()); }
+        if (DothPin() != -2) { p.doth_put_choice = DothPin(); }
+    }
+    // Write the recorded pins onto a state (the one-rollout hosts re-cross their own copy with the winner).
+    void RecordOnState(GameState& sx, int echo_pin, int doth_pin) const
+    {
+        if (echo_pin != -2) { sx.scripted_echo = static_cast<std::int16_t>(echo_pin); }
+        if (doth_pin != -2) { sx.scripted_doth_put = doth_pin; }
+    }
+private:
+    void ResetDoth()
+    {
+        for (int k = c0_; k < kDothPinMaxOrd; ++k) { ranks_[k] = 0; sizes_[k] = 1; }
+        nobs_ = 0;
+    }
+    std::vector<int> echo_;
+    std::size_t      ei_      = 0;
+    bool             started_ = false;
+    bool             doth_    = false;
+    int              c0_      = 0;                    // ordinals the state's pin already covers (kept fixed)
+    int              nobs_    = 0;                    // ordinals the last crossing resolved
+    int              ranks_[kDothPinMaxOrd] = {};
+    int              sizes_[kDothPinMaxOrd] = { 1, 1, 1, 1 };
+};
+static std::atomic<long long> g_doth_fans{0}, g_doth_fan_crossings{0};
+static void DothStatsFanCounts(long long* fans, long long* crossings)
+{ *fans = g_doth_fans.load(); *crossings = g_doth_fan_crossings.load(); }
+bool BoundaryFan::Cross(GameState& sx)
+{
+    if (!doth_) { return SimulateEndAndStartNextTurn(sx); }
+    bool ok = false;
+    DothProbe pr;
+    {
+        DothProbeScope scope;
+        ok = SimulateEndAndStartNextTurn(sx);
+        pr = scope.Read();
+    }
+    nobs_ = std::min(pr.n, kDothPinMaxOrd);
+    for (int j = c0_; j < nobs_; ++j) { sizes_[j] = std::max(1, pr.size[j]); }
+    static const bool s_stats = EnvOn("MTG_DOTH_AXIS_STATS");
+    if (s_stats)
+    {
+        g_doth_fan_crossings.fetch_add(1, std::memory_order_relaxed);
+        bool first = true;
+        for (int j = c0_; j < kDothPinMaxOrd; ++j) { if (ranks_[j] != 0) { first = false; break; } }
+        if (first && ei_ == 0) { g_doth_fans.fetch_add(1, std::memory_order_relaxed); }
+    }
+    return ok;
+}
+std::vector<int> TurnSolver::DothBoundaryPinsForTest(const GameState& state)
+{
+    // Every crossing the fan makes from `state`, as the pin it would record (-1 = the crossing decided nothing).
+    std::vector<int> out;
+    BoundaryFan fan(state, /*with_echo=*/false);
+    while (fan.Next())
+    {
+        GameState sx = state;
+        fan.Stamp(sx);
+        fan.Cross(sx);
+        out.push_back(fan.DothPin() == -2 ? -1 : fan.DothPin());
+    }
+    return out;
+}
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
@@ -86635,9 +86874,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // 2026-10-02) does NOT need the loop here: SecondMainUnproductive proves the phase can do
         // nothing, so no plan opens a breakpoint and the walker would be empty.
         const bool m2_deferred_only = ResolveProvider(state).SecondMainNeedsDeferredCast();
-        // (Not with an uncovered echo obligation pending: the second main must decide it, so it runs the loop.)
+        // (Not with an uncovered echo obligation or Defense of the Heart trigger pending: the second main must
+        // decide it at its crossing, so it runs the loop.)
         if (m2_deferred_only && M2EmptyFastOn() && M2FixModeFor(state) == 0
-            && SecondMainUnproductive(state) && !EchoUncoveredPending(state))
+            && SecondMainUnproductive(state) && !EchoUncoveredPending(state) && !DothUncoveredPending(state))
         {
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
             ConsumeAt(budget, unitsite::kFsMain2);   // the one interior node this decision is worth
@@ -87293,17 +87533,16 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         q_rec.breakpoint_actions = std::move(bp3);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
                     }
-                    // SEARCHED ECHO, the boundary fan (see the base loop below): a breakpoint child's continuation.
-                    const std::vector<int> echo_pins = EchoBoundaryPins(s3);
-                    const std::size_t echo_n = echo_pins.empty() ? 1 : echo_pins.size();
+                    // THE BOUNDARY FAN (searched echo + Defense of the Heart; see the base loop below): a breakpoint
+                    // child's continuation.
+                    BoundaryFan fan(s3, /*with_echo=*/true);
                     std::optional<GameState> s3_fan;
-                    for (std::size_t ei = 0; ei < echo_n; ++ei)
+                    while (fan.Next())
                     {
-                        const int echo_pin = echo_pins.empty() ? -2 : echo_pins[ei];
                         GameState* sxp = &s3;
-                        if (echo_n > 1) { s3_fan = s3; s3_fan->scripted_echo = static_cast<std::int16_t>(echo_pin); sxp = &*s3_fan; }
+                        if (fan.Copies()) { s3_fan = s3; fan.Stamp(*s3_fan); sxp = &*s3_fan; }
                         GameState& sx = *sxp;
-                        if (!SimulateEndAndStartNextTurn(sx)) { continue; }
+                        if (!fan.Cross(sx)) { continue; }
                         ExpireStagedCards(sx);
                         TurnSolver::SearchLine sub =
                             FSLineWin(sx, depth, max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
@@ -87345,9 +87584,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             }
                             best.win_turn = sub.win_turn;
                             best.phases.clear();
-                            TurnSolver::Plan q_rec = (echo_n > 1) ? v : std::move(v);
-                            if (echo_pin != -2) { q_rec.echo_choice = static_cast<std::int16_t>(echo_pin); }
-                            q_rec.breakpoint_actions = (echo_n > 1) ? bp3 : std::move(bp3);
+                            TurnSolver::Plan q_rec = fan.Copies() ? v : std::move(v);
+                            fan.Record(q_rec);
+                            q_rec.breakpoint_actions = fan.Copies() ? bp3 : std::move(bp3);
                             best.phases.push_back({ false, std::move(q_rec) });
                             best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                             // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
@@ -87398,18 +87637,17 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 return { state.turn_number, { { false, std::move(q_rec) } } };
             }
             const bool m2t_skip3 = m2t_here && EnvInt("MTG_M2T_TRACE", 0) >= 3;
-            // SEARCHED ECHO, the boundary fan (EchoBoundaryPins): an obligation this apply created that no
-            // enumeration could see is decided here, one crossing per pin; no pin = the historical single crossing.
-            const std::vector<int> echo_pins = EchoBoundaryPins(s2);
-            const std::size_t echo_n = echo_pins.empty() ? 1 : echo_pins.size();
+            // THE BOUNDARY FAN (BoundaryFan: searched echo -- an obligation this apply created that no enumeration
+            // could see -- and the searched Defense of the Heart put list): one crossing per pin, the provider's
+            // answers first; nothing live = the historical single crossing.
+            BoundaryFan fan(s2, /*with_echo=*/true);
             std::optional<GameState> s2_fan;   // a per-pin copy, only when fanning (s2 stays the pre-boundary state)
-            for (std::size_t ei = 0; ei < echo_n; ++ei)
+            while (fan.Next())
             {
-                const int echo_pin = echo_pins.empty() ? -2 : echo_pins[ei];
                 GameState* sxp = &s2;
-                if (echo_n > 1) { s2_fan = s2; s2_fan->scripted_echo = static_cast<std::int16_t>(echo_pin); sxp = &*s2_fan; }
+                if (fan.Copies()) { s2_fan = s2; fan.Stamp(*s2_fan); sxp = &*s2_fan; }
                 GameState& sx = *sxp;
-                if (!SimulateEndAndStartNextTurn(sx))
+                if (!fan.Cross(sx))
                 {
                     if (m2t_skip3) { std::fprintf(stderr, "[m2t]     skip q=%s: EOT sim failed\n", m2t_sum(q).c_str()); }
                     continue;
@@ -87451,8 +87689,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     best.win_turn = sub.win_turn;
                     best.phases.clear();
                     TurnSolver::Plan q_rec = q;
-                    if (echo_pin != -2) { q_rec.echo_choice = static_cast<std::int16_t>(echo_pin); }
-                    q_rec.breakpoint_actions = (echo_n > 1) ? bp : std::move(bp);
+                    fan.Record(q_rec);
+                    q_rec.breakpoint_actions = fan.Copies() ? bp : std::move(bp);
                     best.phases.push_back({ false, std::move(q_rec) });
                     best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
 
@@ -87544,16 +87782,14 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     }
                     // SEARCHED ECHO, the boundary fan (see the base loop above): a wave variant's continuation is
                     // exactly where an uncovered obligation comes from (its cast, or the cast a tutor fed).
-                    const std::vector<int> echo_pins = EchoBoundaryPins(s);
-                    const std::size_t echo_n = echo_pins.empty() ? 1 : echo_pins.size();
+                    BoundaryFan fan(s, /*with_echo=*/true);
                     std::optional<GameState> s_fan;
-                    for (std::size_t ei = 0; ei < echo_n; ++ei)
+                    while (fan.Next())
                     {
-                        const int echo_pin = echo_pins.empty() ? -2 : echo_pins[ei];
                         GameState* sxp = &s;
-                        if (echo_n > 1) { s_fan = s; s_fan->scripted_echo = static_cast<std::int16_t>(echo_pin); sxp = &*s_fan; }
+                        if (fan.Copies()) { s_fan = s; fan.Stamp(*s_fan); sxp = &*s_fan; }
                         GameState& sx = *sxp;
-                        if (!SimulateEndAndStartNextTurn(sx)) { continue; }
+                        if (!fan.Cross(sx)) { continue; }
                         ExpireStagedCards(sx);
                         TurnSolver::SearchLine sub =
                             FSLineWin(sx, depth, max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget),
@@ -87563,8 +87799,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             best.win_turn = sub.win_turn;
                             best.phases.clear();
                             TurnSolver::Plan q_rec = v;
-                            if (echo_pin != -2) { q_rec.echo_choice = static_cast<std::int16_t>(echo_pin); }
-                            q_rec.breakpoint_actions = (echo_n > 1) ? bp : std::move(bp);
+                            fan.Record(q_rec);
+                            q_rec.breakpoint_actions = fan.Copies() ? bp : std::move(bp);
                             best.phases.push_back({ false, std::move(q_rec) });
                             best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                             // Same horizon edge as the base loop's first-verified-win shortcut.
@@ -87745,6 +87981,48 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         return best;
     }
 
+    // THE BOUNDARY FAN at the SINGLE-MAIN boundary (searched Defense of the Heart, MTG_DOTH_AXIS). Creature Giving is
+    // single-main, so this is where its search crosses into the turn whose upkeep resolves the trigger: one crossing
+    // per entry of the provider's menu, the provider's pick first (it keeps every tie), each searched exactly as the
+    // single crossing below is (closure, dominance, the next turn's FSLineWin). The winner's pin goes back to the
+    // caller on the line (SearchLine::boundary_doth), which stamps it on the main-1 plan that crossed. Echo is NOT
+    // fanned here (its documented single-main residual, docs/design/searched-echo.md: no echo deck is single-main).
+    {
+        BoundaryFan fan(state, /*with_echo=*/false);
+        if (fan.DothLive())
+        {
+            TurnSolver::SearchLine best_tail{ max_turns + 1, {} };
+            int  best_doth = -2;
+            bool have      = false;
+            while (fan.Next())
+            {
+                GameState s = state;
+                fan.Stamp(s);
+                if (!fan.Cross(s)) { continue; }
+                ExpireStagedCards(s);
+                const int cut = have ? FsChildCut(s, cutoff, best_tail.win_turn, max_turns, budget) : cutoff;
+                if (eot_seen != nullptr && !eot_seen->Visit(BuildDedupKey(s), s, cut, depth, max_turns)) { continue; }
+                domin::Probe dprobe;
+                if (DomActive() && dom_arch)
+                {
+                    dprobe = domin::Check(*dom_arch, s);
+                    if (dprobe.prune) { continue; }
+                }
+                TurnSolver::SearchLine line = FSLineWin(s, depth, max_turns, cut, second_main, tt, lc, budget);
+                if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, line.win_turn); }
+                if (!have || line.win_turn < best_tail.win_turn)
+                {
+                    best_tail = std::move(line);
+                    best_doth = fan.DothPin();
+                    have      = true;
+                    // First VERIFIED win -- the m2 loop's shortcut, same horizon edge.
+                    if (FsHorizonExitOn() && best_tail.win_turn <= state.turn_number + depth) { ++g_fs_hexits; break; }
+                }
+            }
+            best_tail.boundary_doth = best_doth;
+            return best_tail;
+        }
+    }
     GameState s = state;
     if (!SimulateEndAndStartNextTurn(s)) { return { max_turns + 1, {} }; }
     ExpireStagedCards(s);
@@ -87762,7 +88040,14 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     TurnSolver::SearchLine tail_line =
         FSLineWin(s, depth, max_turns, cutoff, second_main, tt, lc, budget);
     if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, tail_line.win_turn); }
+    tail_line.boundary_doth = -2;   // nothing crossed here was fanned (a deeper level's pin is not this one's)
     return tail_line;
+}
+// The caller's half of the single-main boundary fan: the pin the tail chose belongs on the main-1 plan that
+// crossed (WritePostApplyStatePins writes it at that plan's apply, in both worlds).
+static void StampBoundaryPins(TurnSolver::Plan& p, const TurnSolver::SearchLine& tail)
+{
+    if (tail.boundary_doth != -2) { p.doth_put_choice = tail.boundary_doth; }
 }
 
 // `state` is positioned at the START of the active player's pre-combat main (land
@@ -89760,6 +90045,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         best.phases.clear();
                         TurnSolver::Plan p_rec = std::move(v);
                         p_rec.breakpoint_actions = std::move(bp3);
+                        StampBoundaryPins(p_rec, tail);
                         best.phases.push_back({ true, std::move(p_rec) });
                         best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
                         // In-horizon win: same COMPLETE-NODES deferral as the main loop below.
@@ -90142,6 +90428,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::Plan p_rec = p;
             p_rec.atk_dork_release = chose_release;   // searched combat variant -> executor pin
             p_rec.breakpoint_actions = std::move(bp);
+            StampBoundaryPins(p_rec, tail);
             best.phases.push_back({ true, std::move(p_rec) });
             best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
 
@@ -90364,6 +90651,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     best.phases.clear();
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = std::move(bp);
+                    StampBoundaryPins(p_rec, tail);
                     best.phases.push_back({ true, std::move(p_rec) });
                     best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
                     // Same reasoning as the main loop: with COMPLETE NODES on we keep walking the
@@ -90499,6 +90787,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     best.phases.clear();
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = bp_out;
+                    StampBoundaryPins(p_rec, tail);
                     best.phases.push_back({ true, std::move(p_rec) });
                     best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
                 }
@@ -94463,6 +94752,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 iv("putback", q.putback_choice, -1); iv("discard", q.discard_choice, -1); iv("scry", q.scry_choice, -1);
                 iv("etbcounter", q.etbcounter_choice, -1); iv("le_fire", q.le_fire_choice, -1); iv("grace", q.grace_choice, -1);
                 iv("echo", q.echo_choice, -1);
+                iv("doth", q.doth_put_choice, -1);
                 std::fprintf(stderr, "[nc]   #%zu %s |%s\n", i, FsPlanText(q).c_str(), ax.c_str());
             }
         }
@@ -94778,24 +95068,37 @@ static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
 // crossed and rolled out at this pass's fidelity and the best is left on `copy` ("follow" first, so it wins
 // ties); the caller records the returned pin (-2 = none) on the plan it adopts, and its own rollout of the
 // winner repeats the one already played (the leaf table answers it).
-static int EchoBoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
-                                       int cutoff, bool second_main, TranspositionTable* tt)
+// Generalised to the BoundaryFan (searched echo + the searched Defense of the Heart put list, MTG_DOTH_AXIS): the
+// fan's crossings in its order (the provider's answers first), one rollout each, the strict best left on `copy`.
+// With no Defense of the Heart live this is the echo-only routine exactly (same pins, order, cutoff, result).
+struct BoundaryChoice { int echo = -2; int doth = -2; };
+static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
 {
-    const std::vector<int> pins = EchoBoundaryPins(copy);
-    if (pins.size() <= 1) { return -2; }
-    int best_pin = pins.front();
-    int best_wt  = max_turns + 2;
-    for (const int ep : pins)
+    if (bc.echo != -2) { p.echo_choice = static_cast<std::int16_t>(bc.echo); }
+    if (bc.doth != -2) { p.doth_put_choice = bc.doth; }
+}
+static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
+                                              int cutoff, bool second_main, TranspositionTable* tt)
+{
+    BoundaryChoice best;
+    BoundaryFan fan(copy, /*with_echo=*/true);
+    if (!fan.Copies()) { return best; }
+    int best_wt = max_turns + 2;
+    while (fan.Next())
     {
         GameState ce = copy;
-        ce.scripted_echo = static_cast<std::int16_t>(ep);
+        fan.Stamp(ce);
         int wt = max_turns + 1;
-        if (SimulateEndAndStartNextTurn(ce))
-        { wt = SimulateToEnd(std::move(ce), sub_depth, max_turns, budget, cutoff, second_main, tt); }
-        if (wt < best_wt) { best_wt = wt; best_pin = ep; }
+        // A Defense of the Heart fan has many branches: each later one need only beat the best so far, and
+        // SimulateToEnd aborts only AFTER its cutoff turn, so a STRICTLY earlier win is still found (only a
+        // strict improvement is taken below). The echo-only fan keeps its historical cutoff.
+        const int cut = (fan.DothLive() && best_wt <= max_turns) ? std::min(cutoff, best_wt - 1) : cutoff;
+        if (fan.Cross(ce))
+        { wt = SimulateToEnd(std::move(ce), sub_depth, max_turns, budget, cut, second_main, tt); }
+        if (wt < best_wt) { best_wt = wt; best.echo = fan.EchoPin(); best.doth = fan.DothPin(); }
     }
-    copy.scripted_echo = static_cast<std::int16_t>(best_pin);
-    return best_pin;
+    fan.RecordOnState(copy, best.echo, best.doth);
+    return best;
 }
 
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
@@ -96714,11 +97017,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 ++candidates_done;
                 continue;
             }
-            // SEARCHED ECHO, the boundary fan (EchoBoundaryChooseByRollout): an obligation this candidate's
-            // apply created is decided here, and the chosen pin rides the plan if it is adopted.
-            const int sla_echo_pin = EchoBoundaryChooseByRollout(copy, sub_depth, max_turns, budget,
-                                                                 pass_has_best ? pass_best_win : max_turns + 1,
-                                                                 second_main, tt);
+            // THE BOUNDARY FAN (BoundaryChooseByRollout): an echo obligation this candidate's apply created, or a
+            // Defense of the Heart trigger at the next upkeep, is decided here, and the chosen pins ride the plan
+            // if it is adopted.
+            const BoundaryChoice sla_bc = BoundaryChooseByRollout(copy, sub_depth, max_turns, budget,
+                                                                  pass_has_best ? pass_best_win : max_turns + 1,
+                                                                  second_main, tt);
             if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
             // EOT dominance. Placed AFTER this turn's win checks above, so a candidate that WINS
             // has already returned and can never be pruned here -- only its (losing-this-turn)
@@ -96836,7 +97140,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             {
                 pass_best_win = win_turn;
                 pass_best     = plan;
-                if (sla_echo_pin != -2) { pass_best.echo_choice = static_cast<std::int16_t>(sla_echo_pin); }
+                RecordBoundaryChoice(pass_best, sla_bc);
                 pass_best_tb   = leaf_tb;
                 pass_best_life = leaf_life;
                 pass_best_inf  = leaf_inf;
@@ -97012,9 +97316,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                         continue;
                     }
-                    const int wave_echo_pin = EchoBoundaryChooseByRollout(copy, sub_depth, max_turns, budget,
-                                                                          pass_has_best ? pass_best_win : max_turns + 1,
-                                                                          second_main, tt);
+                    const BoundaryChoice wave_bc = BoundaryChooseByRollout(copy, sub_depth, max_turns, budget,
+                                                                           pass_has_best ? pass_best_win : max_turns + 1,
+                                                                           second_main, tt);
                     if (!SimulateEndAndStartNextTurn(copy)) { continue; }
                     // EXACT TIE PRUNE, wave form: only a STRICTLY earlier win is taken below, and
                     // this rollout cannot return earlier than copy.turn_number.
@@ -97035,7 +97339,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
                     pass_best_win = win_turn;
                     pass_best     = v;
-                    if (wave_echo_pin != -2) { pass_best.echo_choice = static_cast<std::int16_t>(wave_echo_pin); }
+                    RecordBoundaryChoice(pass_best, wave_bc);
                     pass_has_best = true;
                 }
             }
@@ -97246,10 +97550,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             TranspositionTable esc_tt;        // honest table, never shared with the filtered pass
             CondemnSuppressGuard _esc_sup;    // the whole re-evaluation is unfiltered
             int esc_best_win = max_turns + 1;
-            int esc_echo_pin = -2;   // the boundary fan's pick for the plan esc_eval just scored (-2 = none)
+            BoundaryChoice esc_bc;   // the boundary fan's picks for the plan esc_eval just scored (-2 = none)
             auto esc_eval = [&](const Plan& plan) -> int
             {
-                esc_echo_pin = -2;
+                esc_bc = BoundaryChoice{};
                 ConsumeAt(budget, unitsite::kEscEval);
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
@@ -97273,11 +97577,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                     if (OpponentHasLost(copy)) { return state.turn_number; }
                 }
-                // SEARCHED ECHO, the boundary fan (EchoBoundaryChooseByRollout): a finalist that takes over
-                // carries the pin its re-score chose; the committed winner already carries its own.
-                esc_echo_pin = EchoBoundaryChooseByRollout(copy, committed_sub_depth, max_turns, budget,
-                                                           esc_best_win, second_main,
-                                                           tt == nullptr ? nullptr : &esc_tt);
+                // THE BOUNDARY FAN (BoundaryChooseByRollout): a finalist that takes over carries the pins its
+                // re-score chose; the committed winner already carries its own.
+                esc_bc = BoundaryChooseByRollout(copy, committed_sub_depth, max_turns, budget,
+                                                 esc_best_win, second_main,
+                                                 tt == nullptr ? nullptr : &esc_tt);
                 if (!SimulateEndAndStartNextTurn(copy)) { return max_turns + 1; }
                 return SimulateToEnd(std::move(copy), committed_sub_depth, max_turns, budget,
                                      esc_best_win, second_main, tt == nullptr ? nullptr : &esc_tt);
@@ -97310,7 +97614,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 {
                     esc_best_win = w;
                     best_plan = p;
-                    if (esc_echo_pin != -2) { best_plan.echo_choice = static_cast<std::int16_t>(esc_echo_pin); }
+                    RecordBoundaryChoice(best_plan, esc_bc);
                 }
             }
             committed_win = esc_best_win;
@@ -98025,6 +98329,11 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // pin-free key -- every deck without an echo card -- is byte-identical.
     if (state.scripted_echo >= 0)
     { Fold(k, 0xEC40); Fold(k, static_cast<uint64_t>(state.scripted_echo)); }
+    // The searched DEFENSE OF THE HEART pin (GameState::scripted_doth_put): the boundary fan reads the cover a
+    // state's pin already holds and fans only the triggers past it, so a memoised m2 solve under one pin is not
+    // another's. Folded only when set -- every deck without the card keeps its exact key.
+    if (state.scripted_doth_put >= 0)
+    { Fold(k, 0xD0E7); Fold(k, static_cast<uint64_t>(state.scripted_doth_put)); }
     // LIVE ORDER-CONDEMNATION stamp (added 2026-08-20, when the m2-facing enum memo gained
     // coverage): a live stamp FILTERS the post-combat harvest, so two same-board states with
     // different stamp lists enumerate differently -- exactly the "same-turn m2 memo must fold
@@ -104742,6 +105051,9 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // The searched echo pin, read at the NEXT turn's upkeep (both worlds' echo loops) -- write-when-set, so a
     // main-2 plan with nothing new to decide leaves main 1's pin (and its cover) standing.
     if (p.echo_choice >= 0) { s.scripted_echo = p.echo_choice; }
+    // The searched Defense of the Heart put list, read at the NEXT turn's upkeep (PerformUpkeepSacTutor, both
+    // worlds) -- write-when-set, so a plan whose turn crossed no trigger leaves an earlier pin standing.
+    if (p.doth_put_choice >= 0) { s.scripted_doth_put = p.doth_put_choice; }
     // Land-search picks: Primeval Titan's attack trigger and the in-combat Khalni crack (this turn's
     // declare-attackers), Search for Tomorrow off suspend (the NEXT upkeep).
     if (p.attack_land_search_choice >= 0) { s.scripted_attack_land_search = p.attack_land_search_choice; }

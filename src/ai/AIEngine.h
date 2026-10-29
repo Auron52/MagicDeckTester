@@ -164,6 +164,10 @@ public:
     // it to depth removes the search/executor and single-deck/batch config-mismatch
     // footguns that an independent toggle caused.
     bool LookaheadBottoming() const { return m_lookahead_depth > 0; }
+    // Does this engine SEARCH its turns (depth > 0, not a rollout engine, not human play)? Read only by the
+    // MTG_DOTH_AXIS_STATS census at the real upkeep (GameEngine::UpkeepTail), which counts a searched game's
+    // Defense of the Heart resolutions that no plan's pin covered.
+    bool SearchesTurnsForCensus() const { return m_lookahead_depth > 0 && !m_in_rollout && !HumanPlayActive(); }
 
     // Sets the max-turns horizon used by ActivateLandsEdge rollouts (depth > 0).
     // Called by GameEngine::PlayOut so the value tracks each game's actual limit.

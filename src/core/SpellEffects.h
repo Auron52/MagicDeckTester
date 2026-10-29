@@ -20798,17 +20798,251 @@ inline void PerformUpkeepCumulativeGifts(GameState& state)
     }
 }
 
+// ---- Dwarven Hold's upkeep HOLD (storage_charge_mode "upkeep_if_tapped"), ONE function for both worlds ----------
+// "You may choose not to untap Dwarven Hold during your untap step. At the beginning of your upkeep, if Dwarven Hold
+// is tapped, put a storage counter on it." Modelled as a pre-draw commitment: a HOLD flags the land not-live for the
+// turn (StorageSourceLive), so it is never tapped for mana and banks its counter at end of turn. The autonomous
+// answer is the provider's (StorageLandHold; base false = never hold, the historical behaviour), a human chooser
+// overrides it in real play.
+//
+// It used to live only in the executor (GameEngine::UpkeepTail): the rollout never asked, and never cleared the
+// flag at its untap either. That was lockstep only because the base answers false and nothing overrides it -- an
+// override would have split the two worlds (the search pricing a land the real game holds, or the reverse) and a
+// held land would have stayed held for every later simulated turn. Now both worlds call THIS at the same point of
+// the upkeep (first thing after the Vial charges: GameEngine::UpkeepTail, the rollout's SimulateEndAndStartNextTurn),
+// and both untap steps clear the flag. Byte-identical while no provider holds: nothing sets the flag.
+inline void PerformUpkeepStorageHolds(GameState& state)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.tapped || p.storage_counters <= 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.storage_land || d->params.storage_charge_mode != "upkeep_if_tapped")
+        { continue; }
+        bool hold = ResolveProvider(state).StorageLandHold(
+            state, state.active_player_index, *d, p.storage_counters);
+        if (g_play_storage_hold_chooser)   // human play only; nulled during search (RevealLogPause)
+        { hold = (*g_play_storage_hold_chooser)(state, p, p.storage_counters); }
+        if (hold) { p.storage_hold_this_turn = true; }
+    }
+}
+
+// ---- THE SEARCHED DEFENSE OF THE HEART PUT LIST (Plan::doth_put_choice -> GameState::scripted_doth_put;
+// MTG_DOTH_AXIS) ---------------------------------------------------------------------------------------------
+// Defense of the Heart: "At the beginning of your upkeep, if an opponent controls three or more creatures,
+// sacrifice this enchantment, search your library for up to two creature cards, put those cards onto the
+// battlefield, then shuffle." WHICH creatures, and in what ENTER order, is a genuine multi-option decision
+// (Hunted Phantasm's gift before or after Massacre Wurm's sweep, a second Suture Priest now vs a Phantasm's
+// burst, the Wurm now vs saved for a bigger board), and both worlds used to take it from the provider's
+// closed-form pick (SacTutorPutList) -- at the executor's real upkeep and at every simulated turn boundary the
+// search crossed with depth left: an in-window greedy pick (CLAUDE.md NO GREEDY). Now the SEARCH decides it
+// where it crosses the boundary (TurnSolver.cpp, BoundaryFan) and the plan of the turn before carries the
+// answer; the provider only ORDERS the menu (its own pick first) and restricts it by proven folds.
+//
+// Encoding: -1 = no pin. Else bits 0..27 hold a RANK per trigger ordinal (kDothPinRankBits each, ordinal 0
+// lowest; an ordinal is the trigger's position in this upkeep's resolution order) into that trigger's
+// resolution-time menu (DecisionProvider::SacTutorPutOptions: rank 0 = the provider's pick), and bits 28..30
+// how many ordinals the pin COVERS. An ordinal past the cover takes the provider's pick: that is the playout
+// policy beyond the horizon (a plan the greedy playout made carries no pin) and the d0 runner's -- never the
+// window's, where every crossing with an uncovered trigger is fanned. A rank past the menu's end clamps to the
+// last entry (cannot happen in lockstep: the menu is a function of the upkeep state both worlds share).
+constexpr int kDothPinRankBits   = 7;
+constexpr int kDothPinRankMask   = (1 << kDothPinRankBits) - 1;          // ranks 0..127
+constexpr int kDothPinMaxOrd     = 4;                                    // 4 copies of the card, 4 ordinals
+constexpr int kDothPinCoverShift = kDothPinRankBits * kDothPinMaxOrd;    // 28
+inline int DothPinCover(int pin) { return pin < 0 ? 0 : (pin >> kDothPinCoverShift) & 0x7; }
+inline int DothPinRank(int pin, int ordinal)
+{
+    if (ordinal < 0 || ordinal >= DothPinCover(pin)) { return 0; }
+    return (pin >> (kDothPinRankBits * ordinal)) & kDothPinRankMask;
+}
+inline int DothPinPack(int cover, const int* ranks)
+{
+    cover = std::max(0, std::min(cover, kDothPinMaxOrd));
+    int pin = cover << kDothPinCoverShift;
+    for (int j = 0; j < cover; ++j)
+    { pin |= (std::max(0, std::min(ranks[j], kDothPinRankMask))) << (kDothPinRankBits * j); }
+    return pin;
+}
+// Is `d` an upkeep sac-tutor (Defense of the Heart)? The trigger the pin answers.
+inline bool IsUpkeepSacTutor(const CardDefinition* d) { return d != nullptr && d->params.upkeep_sac_tutor_creatures > 0; }
+// The sac-tutors the active player controls -- an UPPER bound on this player's next-upkeep resolutions (each
+// copy resolves at most once; the intervening if can stop it). The boundary fan's liveness test.
+inline int UpkeepSacTutorsOnBattlefield(const GameState& s)
+{
+    if (!s.deck_has_sac_tutor) { return 0; }
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (IsUpkeepSacTutor(CardDatabase::Instance().LookupCached(p.card))) { ++n; }
+    }
+    return n;
+}
+
+// THE PROBE: the boundary fan's channel back out of a crossing. The menu is built at the UPKEEP state, which no
+// fan site can see before it crosses, so while a site holds the probe open every resolution records its menu
+// size by ordinal; the site reads it right after the crossing (before anything nested can cross again) and
+// learns how many branches each trigger had. Never read by play.
+struct DothProbe
+{
+    bool on = false;
+    int  n  = 0;                       // resolutions seen (= highest ordinal + 1)
+    int  size[kDothPinMaxOrd] = {};    // each one's menu size (capped at kDothPinRankMask + 1)
+};
+inline thread_local DothProbe g_doth_probe;
+struct DothProbeScope
+{
+    DothProbe saved;
+    DothProbeScope() : saved(g_doth_probe) { g_doth_probe = DothProbe{}; g_doth_probe.on = true; }
+    ~DothProbeScope() { g_doth_probe = saved; }
+    DothProbe Read() const { return g_doth_probe; }
+    DothProbeScope(const DothProbeScope&)            = delete;
+    DothProbeScope& operator=(const DothProbeScope&) = delete;
+};
+
+// THE COVER CENSUS (never read by play; printed under MTG_DOTH_AXIS_STATS=1). Every resolution either rides the
+// pin's cover (searched) or takes the provider's pick. UNCOVERED_IN_WINDOW: the provider answered while the
+// innermost search frame still had depth (greedywindow::InWindow) -- a host that crossed without fanning; the
+// no-greedy invariant's instrument (the echo cover census's twin), MUST read 0. TurnSolver's hook splits it into
+// searched / playout / constant-leaf edge. REAL_*: the executor's own upkeeps in a searched game.
+inline std::atomic<long long> g_doth_resolutions{0}, g_doth_covered{0}, g_doth_off_front{0};
+inline std::atomic<long long> g_doth_uncovered_in_window{0}, g_doth_uncovered_beyond{0};
+inline std::atomic<long long> g_doth_real_resolutions{0}, g_doth_real_uncovered{0};
+inline std::atomic<long long> g_doth_menu_built{0}, g_doth_menu_sum{0}, g_doth_menu_max{0};
+// The census is OFF unless asked for: unlike the rest of the resolution, these shared counters are written by
+// every thread, so they are not touched at all on an ordinary run.
+inline bool DothCensusOn() { static const bool on = EnvOn("MTG_DOTH_AXIS_STATS"); return on; }
+inline void NoteDothCover(int pin, int ordinal)
+{
+    if (!DothCensusOn()) { return; }
+    g_doth_resolutions.fetch_add(1, std::memory_order_relaxed);
+    if (ordinal < DothPinCover(pin))
+    {
+        g_doth_covered.fetch_add(1, std::memory_order_relaxed);
+        if (DothPinRank(pin, ordinal) > 0) { g_doth_off_front.fetch_add(1, std::memory_order_relaxed); }
+    }
+    else if (!HumanPlayActive() && greedywindow::InWindow(0))
+    { g_doth_uncovered_in_window.fetch_add(1, std::memory_order_relaxed); }
+    else { g_doth_uncovered_beyond.fetch_add(1, std::memory_order_relaxed); }
+}
+
+// THE MENU CACHE. A boundary fan crosses ONE pre-boundary state once per menu entry, so every crossing of a fan
+// rebuilds the same menu at the same upkeep state -- measured as ~10% of a Creature Giving game's CPU before this
+// cache. Keyed EXACTLY (no hash) on everything SacTutorPutOptions may read, which is its documented contract
+// (DecisionProvider.h): the provider, the controller, max_puts, the DOTH_FOLDS lever, the closed-form score's
+// inputs (our enter / death drain watchers, each opposing creature's toughness margin in battlefield order) and
+// the library's creature definitions with their counts in first-occurrence order. Per thread, a few entries
+// (a fan's crossings nest deeper fans between them). Pure caching: the menu returned is the one a fresh build
+// returns.
+struct DothMenuCacheEntry
+{
+    std::vector<std::uintptr_t>           key;
+    std::vector<std::vector<std::string>> menu;
+};
+inline thread_local std::array<DothMenuCacheEntry, 8> t_doth_menu_cache;
+inline thread_local unsigned                          t_doth_menu_next = 0;
+inline void DothMenuKey(const GameState& s, int controller, int max_puts, std::vector<std::uintptr_t>& k)
+{
+    k.clear();
+    const DecisionProvider& prov = ResolveProvider(s);
+    k.push_back(reinterpret_cast<std::uintptr_t>(&prov));
+    k.push_back(reinterpret_cast<std::uintptr_t>(prov.Name()));   // a recycled address is not the same provider
+    k.push_back(static_cast<std::uintptr_t>(controller));
+    k.push_back(static_cast<std::uintptr_t>(max_puts));
+    static const bool s_folds_env = EnvOn("MTG_DOTH_FOLDS", true);
+    k.push_back(heurarm::Flag(heurarm::DOTH_FOLDS, s_folds_env) ? 1u : 0u);
+    long long enter = 0, death = 0;
+    std::size_t margins_at = k.size();
+    k.push_back(0); k.push_back(0);   // enter / death drain, filled below
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d) { enter += d->params.opp_creature_enters_life_loss; death += d->params.opp_dies_life_loss; }
+        }
+        else if (p.card.IsCreature() || p.is_animated)
+        { k.push_back(static_cast<std::uintptr_t>(static_cast<std::intptr_t>(p.EffectiveToughness() - p.damage))); }
+    }
+    k[margins_at]     = static_cast<std::uintptr_t>(enter);
+    k[margins_at + 1] = static_cast<std::uintptr_t>(death);
+    k.push_back(~std::uintptr_t{0});   // separator: margins | library
+    const std::size_t lib_at = k.size();
+    for (const Card& lc : s.players[static_cast<std::size_t>(controller)].library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        if (!d || !d->card.IsCreature()) { continue; }
+        const std::uintptr_t dp = reinterpret_cast<std::uintptr_t>(d);
+        bool found = false;
+        for (std::size_t i = lib_at; i + 1 < k.size(); i += 2) { if (k[i] == dp) { ++k[i + 1]; found = true; break; } }
+        if (!found) { k.push_back(dp); k.push_back(1); }
+    }
+}
+inline const std::vector<std::vector<std::string>>& DothMenuCached(const GameState& s, int controller,
+                                                                   const CardParams& pp, int max_puts)
+{
+    static thread_local std::vector<std::uintptr_t> key;
+    DothMenuKey(s, controller, max_puts, key);
+    for (DothMenuCacheEntry& e : t_doth_menu_cache) { if (!e.menu.empty() && e.key == key) { return e.menu; } }
+    DothMenuCacheEntry& e = t_doth_menu_cache[t_doth_menu_next++ % t_doth_menu_cache.size()];
+    e.key  = key;
+    e.menu = ResolveProvider(s).SacTutorPutOptions(s, controller, pp, max_puts);
+    if (e.menu.empty()) { e.menu.emplace_back(); }   // never empty: entry 0 is the provider's (possibly empty) pick
+    return e.menu;
+}
+
+// THE ONE put list both upkeeps (GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn, both via
+// PerformUpkeepSacTutor) use for the trigger at `ordinal`: the provider's pick at rank 0, else the rank-th entry
+// of the provider's menu built at THIS state. Rank 0 with no probe open calls SacTutorPutList directly -- the
+// exact pre-axis call, so every unpinned resolution (MTG_DOTH_AXIS=0, the playout, the d0 runner) is unchanged.
+inline std::vector<std::string> DothUpkeepPutList(const GameState& s, int controller, const CardParams& pp,
+                                                  int max_puts, int ordinal, int pin)
+{
+    const int rank = DothPinRank(pin, ordinal);
+    if (rank == 0 && !g_doth_probe.on)
+    { return ResolveProvider(s).SacTutorPutList(s, controller, pp, max_puts); }
+    const std::vector<std::vector<std::string>>& menu = DothMenuCached(s, controller, pp, max_puts);
+    const int sz = std::min(static_cast<int>(menu.size()), kDothPinRankMask + 1);
+    if (DothCensusOn())
+    {
+        g_doth_menu_built.fetch_add(1, std::memory_order_relaxed);
+        g_doth_menu_sum.fetch_add(sz, std::memory_order_relaxed);
+        for (long long cur = g_doth_menu_max.load(std::memory_order_relaxed);
+             sz > cur && !g_doth_menu_max.compare_exchange_weak(cur, sz, std::memory_order_relaxed); ) {}
+    }
+    if (g_doth_probe.on && ordinal >= 0 && ordinal < kDothPinMaxOrd)
+    {
+        g_doth_probe.size[ordinal] = sz;
+        g_doth_probe.n = std::max(g_doth_probe.n, ordinal + 1);
+    }
+    if (sz <= 0) { return {}; }
+    return menu[static_cast<std::size_t>(std::min(rank, sz - 1))];
+}
+
 // Defense of the Heart: "At the beginning of your upkeep, if an opponent controls three or more
 // creatures, sacrifice this enchantment, search your library for up to two creature cards, put
 // those cards onto the battlefield, then shuffle." The intervening-if is checked here (trigger
-// time == resolution time in this engine's upkeep). WHICH creatures + their enter ORDER is the
-// provider's SacTutorPutList (default: closed-form immediate-drain maximisation); a human
-// override rides g_play_sac_tutor_chooser (nulled by RevealLogPause -> search/rollout
-// byte-identical). Each put creature enters through the shared cascades, so a put Hunted
-// Phantasm gifts its Goblins (draining per Suture Priest) and a put Massacre Wurm sweeps.
-inline void PerformUpkeepSacTutor(GameState& state)
+// time == resolution time in this engine's upkeep). WHICH creatures + their enter ORDER is SEARCHED
+// (MTG_DOTH_AXIS, above): the previous turn's plan left GameState::scripted_doth_put, a rank per
+// trigger ordinal into the provider's menu (DothUpkeepPutList); an uncovered trigger takes the
+// provider's SacTutorPutList (default: closed-form immediate-drain maximisation). A human override
+// rides g_play_sac_tutor_chooser (nulled by RevealLogPause -> search/rollout byte-identical). Each put
+// creature enters through the shared cascades, so a put Hunted Phantasm gifts its Goblins (draining
+// per Suture Priest) and a put Massacre Wurm sweeps. `search_note` (the rollout's census split,
+// TurnSolver) and `real_searched` (the executor's upkeep in a searched game) feed MTG_DOTH_AXIS_STATS
+// only. Called IDENTICALLY by both worlds (GameEngine::UpkeepTail, SimulateEndAndStartNextTurn).
+using DothSearchNote = void (*)(const GameState&, int ordinal, int pin);
+inline void PerformUpkeepSacTutor(GameState& state, DothSearchNote search_note = nullptr,
+                                  bool real_searched = false)
 {
     const int active = state.active_player_index;
+    // The searched pin (Plan::doth_put_choice) is CONSUMED by this upkeep whatever it finds, in both worlds,
+    // so a pin whose trigger did not fire (the intervening if failed) cannot leak into the turn it opens.
+    const int doth_pin = state.scripted_doth_put;
+    state.scripted_doth_put = -1;
+    int doth_ord = 0;
     // Snapshot the triggering copies first: resolving one (sacrifice + puts) mutates the
     // battlefield. Two copies both fire if the condition holds for each in turn.
     for (;;)
@@ -20835,9 +21069,17 @@ inline void PerformUpkeepSacTutor(GameState& state)
         ap.graveyard.push_back(state.battlefield[src_index].card);
         state.battlefield.erase(state.battlefield.begin() + src_index);
 
-        // The put-list: provider heuristic, overridable by the human chooser.
+        // The put-list: the searched rank into the provider's menu (the provider's pick when the pin does
+        // not cover this ordinal) -- ONE function in both worlds -- overridable by the human chooser.
+        NoteDothCover(doth_pin, doth_ord);
+        if (search_note != nullptr) { search_note(state, doth_ord, doth_pin); }
+        if (real_searched && DothCensusOn())
+        {
+            g_doth_real_resolutions.fetch_add(1, std::memory_order_relaxed);
+            if (doth_ord >= DothPinCover(doth_pin)) { g_doth_real_uncovered.fetch_add(1, std::memory_order_relaxed); }
+        }
         std::vector<std::string> put_list =
-            ResolveProvider(state).SacTutorPutList(state, active, pp, max_puts);
+            DothUpkeepPutList(state, active, pp, max_puts, doth_ord++, doth_pin);
         if (g_play_sac_tutor_chooser)
         {
             // Candidates = every library creature card (one entry per copy), in library order.

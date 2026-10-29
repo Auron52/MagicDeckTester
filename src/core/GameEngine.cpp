@@ -486,19 +486,11 @@ void GameEngine::UpkeepTail(GameState& state)
     // The pre-draw/post-draw asymmetry described above is real but it is an INFORMATION difference,
     // so it only bites a NON-CLAIRVOYANT decider (a human, or the NC model). A clairvoyant search
     // sees this turn's draw either way, so both lands should be equally representable to it.
-    for (Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index) { continue; }
-        if (p.tapped || p.storage_counters <= 0) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->params.storage_land || d->params.storage_charge_mode != "upkeep_if_tapped")
-        { continue; }
-        bool hold = ResolveProvider(state).StorageLandHold(
-            state, state.active_player_index, *d, p.storage_counters);
-        if (g_play_storage_hold_chooser)
-        { hold = (*g_play_storage_hold_chooser)(state, p, p.storage_counters); }
-        if (hold) { p.storage_hold_this_turn = true; }
-    }
+    //
+    // ONE function for both worlds (SpellEffects.h PerformUpkeepStorageHolds): the rollout's
+    // SimulateEndAndStartNextTurn asks the same question at the same point, so a provider that
+    // overrides StorageLandHold cannot split the executor from the search.
+    PerformUpkeepStorageHolds(state);
 
     // Emeria, the Sky Ruin: its intervening if and legal targets are fixed as the beginning-of-upkeep
     // triggers go on the stack -- BEFORE any of the upkeep triggers below resolves (CR 603.3d / 603.4).
@@ -546,7 +538,10 @@ void GameEngine::UpkeepTail(GameState& state)
     // Defense of the Heart sac-tutor check. Mirrors the rollout's identical block in
     // TurnSolver::SimulateEndAndStartNextTurn (lockstep); param-gated -> byte-identical elsewhere.
     PerformUpkeepCumulativeGifts(state);
-    PerformUpkeepSacTutor(state);
+    // Defense of the Heart: resolves the searched put list the previous turn's plan pinned
+    // (GameState::scripted_doth_put, MTG_DOTH_AXIS) through the same function the rollout uses, and
+    // consumes the pin whatever it finds. The flag only feeds the MTG_DOTH_AXIS_STATS census.
+    PerformUpkeepSacTutor(state, nullptr, m_ai.SearchesTurnsForCensus());
     PerformUpkeepSlumber(state);   // Marit Lage's Slumber (lockstep twin in SimulateEndAndStartNextTurn)
     // Emeria, the Sky Ruin's intervening-if return (consumes the previous turn's searched pin), against
     // the triggers and targets fixed at the top of this upkeep (emeria_snapshot). Lockstep twin in

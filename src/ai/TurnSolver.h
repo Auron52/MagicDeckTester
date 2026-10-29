@@ -1094,6 +1094,14 @@ public:
         //
         // Both flags are human-menu only and neither is read by the search or any digest.
         bool combo_off_offered  = false;
+        // SEARCHED DEFENSE OF THE HEART PUT LIST (MTG_DOTH_AXIS, 2026-10-29): the NEXT upkeep's put lists, packed
+        // exactly as GameState::scripted_doth_put (a rank per trigger ordinal into the resolution-time option
+        // list, rank 0 = the provider's pick, + the count of ordinals it covers); -1 = write nothing. Written
+        // write-when-set by WritePostApplyStatePins and consumed at that upkeep in both worlds. Chosen where
+        // the search crosses the turn boundary (the BOUNDARY FAN, TurnSolver.cpp BoundaryFan: one crossing
+        // per option, the provider's first so it wins ties) and recorded on the plan of the turn that crossed.
+        // An int32 in the 5-byte hole after combo_off_offered (gdb ptype /o: 36; sizeof(Plan) unchanged).
+        std::int32_t doth_put_choice = -1;
         // Which rule fired, for the viewer label, the logs and the fixture harness.
         std::string combo_off_rule;
 
@@ -2522,6 +2530,9 @@ public:
     // ...and the boundary fan's pins for a state about to cross it (EchoBoundaryPins): one per inverted
     // subset of the obligations its echo pin does not cover, "follow" first; empty when all are covered.
     static std::vector<int> EchoBoundaryPinsForTest(const GameState& state);
+    // Test hook (searched Defense of the Heart, MTG_DOTH_AXIS): every crossing the boundary fan makes from `state`
+    // (a state at the end of its turn), in order, as the pin it would record (-1 = that crossing decided nothing).
+    static std::vector<int> DothBoundaryPinsForTest(const GameState& state);
     // MTG_LEAF_KILL_ONLY test hook: one horizon rollout exactly as FSLineWin's leaf runs it (SimulateToEnd
     // at `depth` under `cutoff`, a fresh leaf table, no budget), and how many kill-only turns it armed /
     // candidate rollouts it skipped on this thread (counted in every build, thread-local).
@@ -3436,6 +3447,11 @@ public:
         // replayable continuation). Propagated up through every adoption; a committed line carrying it
         // is re-searched with the shortcut off so play always replays a complete line.
         bool truncated = false;
+        // THE BOUNDARY FAN's answer at a SINGLE-MAIN boundary (searched Defense of the Heart, MTG_DOTH_AXIS): the
+        // put-list pin FSLineTail's single-main tail chose where it crossed into the next turn, which belongs on
+        // the plan of the turn that crossed -- the CALLER's main-1 plan, which this line does not contain. The
+        // caller stamps it there (StampBoundaryPins); -2 = nothing chosen. Never set by FSLineWin itself.
+        int boundary_doth = -2;
     };
 
     // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate

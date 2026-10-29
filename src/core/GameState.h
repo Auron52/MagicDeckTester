@@ -441,6 +441,21 @@ struct GameState
     // byte-identical. Folded into BuildSimKey / BuildBreakpointKey when non-zero (two mid-turn
     // states that differ only in which {C} is hasty play differently).
     int                      floating_haste_c = 0;
+    // THE SEARCHED DEFENSE OF THE HEART PUT LIST (Plan::doth_put_choice, MTG_DOTH_AXIS, 2026-10-29). Defense of
+    // the Heart's upkeep trigger ("search your library for up to two creature cards, put those cards onto the
+    // battlefield") resolves at the NEXT upkeep, after this turn's plan apply and the turn boundary, so the
+    // search's answer rides the STATE (the scripted_echo / scripted_upkeep_gy_reanimate shape): -1 = unpinned
+    // (every trigger takes the provider's SacTutorPutList); else a RANK per trigger ordinal (kDothPinRankBits
+    // each, ordinal 0 lowest) into that trigger's resolution-time option list (DecisionProvider::
+    // SacTutorPutOptions -- the provider's own pick is rank 0), plus how many ordinals the pin COVERS (bits
+    // kDothPinCoverShift..): an ordinal past the cover takes the provider's pick (SpellEffects.h, DothPin*).
+    // Written by the plan apply (TurnSolver::WritePostApplyStatePins, both worlds, write-when-set) and
+    // consumed + cleared by the NEXT upkeep in both worlds (PerformUpkeepSacTutor, called from
+    // GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn) -- so it SURVIVES the turn
+    // boundary and is never cleared with the per-turn pins. FUTURE-DETERMINING: folded value-gated in
+    // dominance::Build(), BuildDedupKey's pending pins and BuildBreakpointKey. An int32 in the 4-byte hole
+    // before floating_bigspell_pp (gdb ptype /o: 772; sizeof(GameState) unchanged).
+    std::int32_t             scripted_doth_put = -1;
     const struct CardParams* floating_bigspell_pp = nullptr;
     // STORM counter: number of spells cast THIS TURN (by the active player -- the only caster in
     // the goldfish). Incremented by exactly 1 at every shared cast site (AIEngine::CastSpellFromHand,
@@ -795,6 +810,12 @@ struct GameState
     // lever). DEFAULT TRUE == run the flush (an unstamped GameState -- the scenario harness, a unit
     // test -- keeps every trigger), the only-err-true rule.
     bool                     deck_has_draw_ping              = true;
+    // Does the deck hold an upkeep SAC-TUTOR (CardParams::upkeep_sac_tutor_creatures: Defense of the Heart)?
+    // DECK CONSTANT, stamped by StampDeckTraits (mainboard + sideboard, Garth holding it open); gates the
+    // searched put-list fan (MTG_DOTH_AXIS) so every deck without one never walks its battlefield for a
+    // trigger at a turn boundary. DEFAULT TRUE (an unstamped state -- a unit test -- keeps the walk). In the
+    // 1-byte hole before draw_trigger_mark (gdb ptype /o: 825; sizeof(GameState) unchanged).
+    bool                     deck_has_sac_tutor              = true;
     // The draw-trigger WATERMARK: how many of the ACTIVE player's cards_drawn_this_turn have already
     // had their "whenever you draw" triggers resolved. ResolveDrawTriggers processes exactly the
     // draws in (draw_trigger_mark, cards_drawn_this_turn] and advances it, which makes every flush

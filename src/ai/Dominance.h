@@ -552,6 +552,12 @@ static_assert(sizeof(Player) == 200,
 // +0 bytes (2026-10-29, the Lackey cast route): `deck_has_combat_put` (a bool, the last byte of the deck_has_attack_modal hole).
 // Classification: DECK CONSTANT, nothing to fold. (scripted_cheat_choice is now PACKED per damaging-Lackey
 // trigger -- SpellEffects.h LackeyRankAt; same int, still FOLDED raw in Build().)
+// +0 bytes (2026-10-29, the searched Defense of the Heart put list): `scripted_doth_put` (an int32_t, in the 4-byte
+// hole after floating_haste_c: 772) and `deck_has_sac_tutor` (a bool, in the 1-byte hole after deck_has_draw_ping:
+// 825), measured with gdb ptype /o, total 1152 unchanged. Classification: the bool is a DECK CONSTANT stamped once
+// in StampDeckTraits that only skips the boundary fan's provably-empty battlefield walk -- nothing to fold; the pin
+// is FUTURE-DETERMINING (set by the turn's plan apply, consumed at the NEXT upkeep), FOLDED in Build() value-gated
+// (and in BuildDedupKey's pending pins and BuildBreakpointKey).
 static_assert(sizeof(GameState) == 1152,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -925,6 +931,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // its own domain tag so every deck without an echo card keeps its exact key.
     if (s.scripted_echo >= 0)
     { fold(0xEC40000000ull + static_cast<std::uint64_t>(s.scripted_echo)); }
+    // The searched Defense of the Heart put list (Plan::doth_put_choice): the same class -- set by the turn's apply,
+    // consumed at the NEXT upkeep -- value-gated with its own domain tag so every deck without the card keeps its key.
+    if (s.scripted_doth_put >= 0)
+    { fold(0xD0E700000000ull + static_cast<std::uint64_t>(s.scripted_doth_put)); }
     // Moraug's queued additional combats (GameState::pending_extra_combats): future-determining, value-gated.
     if (s.pending_extra_combats != 0)
     { fold(0xE7C0000ull + static_cast<std::uint64_t>(s.pending_extra_combats)); }

@@ -228,6 +228,35 @@ public:
     virtual std::vector<std::string>
     SacTutorPutList(const GameState& s, int controller, const CardParams& pp, int max_puts) const;
 
+    // SacTutorPutOptions -- THE SEARCHED Defense of the Heart put list (MTG_DOTH_AXIS, 2026-10-29). SacTutorPutList
+    // above used to BE the decision, at the executor's upkeep and at every simulated turn boundary the search
+    // crossed with depth left -- an in-window greedy pick (CLAUDE.md, NO GREEDY). Now the search branches over
+    // this menu where it crosses the boundary (TurnSolver.cpp, BoundaryFan) and the plan of the turn before
+    // carries the chosen RANK (Plan::doth_put_choice -> GameState::scripted_doth_put); both upkeeps resolve it
+    // through DothUpkeepPutList (SpellEffects.h) against this list, built at the UPKEEP state.
+    //   ENTRY 0 IS ALWAYS SacTutorPutList's ANSWER: the provider's pick is the first branch and wins every tie.
+    // The rest follow in the provider's order. The DEFAULT enumerates every ordered list of up to max_puts
+    // library creature cards (copies honoured), orders them by the closed-form immediate-drain score
+    // SacTutorPutList maximises, and applies two folds whose proofs the provider supplies through the hooks
+    // below (docs/design/searched-doth-put.md):
+    //   * IDENTITY: two lists that differ only by the resolution order of puts that COMMUTE
+    //     (SacTutorPutsCommute) reach the same state up to battlefield order -- one is kept;
+    //   * DOMINANCE: a list with a free slot is dropped while a FREE-GAIN card (SacTutorFreeGainPut) still has a
+    //     spare copy -- adding it weakly dominates.
+    // A provider may only ORDER and RESTRICT, and a restriction needs its proof.
+    // CONTRACT (it is cached on exactly this, SpellEffects.h DothMenuKey): a pure function of the provider, the
+    // controller, max_puts, MTG_DOTH_FOLDS, our creature-enter / creature-death drain watchers, each opposing
+    // creature's toughness margin in battlefield order, and the library's creature definitions with their counts
+    // in first-occurrence order. An override (of this, of SacTutorPutList or of the fold hooks) that reads
+    // anything else must extend that key.
+    virtual std::vector<std::vector<std::string>>
+    SacTutorPutOptions(const GameState& s, int controller, const CardParams& pp, int max_puts) const;
+    // ...the two fold hooks (MTG_DOTH_FOLDS, default ON, gates both). The defaults prove nothing beyond the
+    // trivial: two copies of ONE definition commute, nothing is free-gain. An override states its proof and the
+    // conditions under which it breaks, card by card, for the pool it covers (CreatureGivingProvider).
+    virtual bool SacTutorPutsCommute(const CardDefinition& a, const CardDefinition& b) const { return &a == &b; }
+    virtual bool SacTutorFreeGainPut(const CardDefinition& /*d*/) const { return false; }
+
     // TutorHandPutList -- Ranger of Eos's ETB multi-tutor TO HAND ("search your library for up to
     // two creature cards with mana value 1 or less"): which cards (by NAME, ordered, one entry per
     // library COPY -- repeats honour multiplicity) to fetch. Resolved once at the ETB on both the

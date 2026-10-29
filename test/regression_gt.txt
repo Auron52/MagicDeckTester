@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 87bf2ed4c  date 2026-10-29
+# Regression ground truth -- commit f86c936da  date 2026-10-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-10-27): Overnight rebaseline 2026-10-27 on af6bfce94 (PGO, 22m20s): the USER Hinata floor (keep-table decks >= Hinata's play-row games: edf/landfall/melira/niv/pd/snow + 2hg), the USER adoptions (LandfallElementals staged b20, NivMizzetCombo emulnl b20) and upstream MTG_PAY_SHRINK default ON + mana oracle. Overlapping games: searched 185 faster / 28 slower, d0 50 / 46; classify 24 churn / 4 PERSISTS (edf s5005 gi328 draws diverge T3; elementals s5005 gi399, s7007 gi376 and niv s4004 gi151 on the adopted shapes, measured better held out).
 # accepted-with-regressions (overnight, 2026-10-28): Bruna TUTOR FIT (USER 2026-10-11) + keep table ADOPTED (see the smoke note). TUTOR FIT alone, table absent: searched 4 slower / 3 faster (all 4 PERSIST at 4x/16x and pass a Glittering Wish / Open the Armory before diverging; net +1 turn over 2,000 d5 games), d0 net faster. With the table: d5 s4004-7007 4.956->4.806 / 5.030->4.852 / 4.936->4.790 / 5.120->4.808, d3 s4004 5.104->4.696, d0 -0.26..-0.29 on all 4 seeds; backstop d3/d5 s30231 (3 games) 3.667->4.333 = 1 game, different mulligan count. Attribution 5176 mull-count + 928 bottom + 25 bottom-order; the 5 d5 'unexplained' games (same hand and bottom, play differs) are the lookahead bottoming's residue, not a table leak: each reproduces singly and matches the table-off digest with the table keeping and MTG_EXHAUSTIVE_BOTTOM=0. Units/game 3.8-5.3x lower.
@@ -42,7 +42,7 @@ goblins_smoke_d3_s1001=3.7000/e27e7605786a321c
 goblins_smoke_d5_s1001=3.6200/e68434d258e85a78
 creature_giving_smoke_d0_s1001=5.5080/1bf22a1cd4ed7839
 creature_giving_smoke_d3_s1001=4.7200/bd7376a1dd3cbc0f
-creature_giving_smoke_d5_s1001=4.6800/9526dacc661330b4
+creature_giving_smoke_d5_s1001=4.6800/42ee221e7d6f7214
 mirrorwing_smoke_d0_s1001=5.7160/cb11851fbd37ba43
 mirrorwing_smoke_d3_s1001=4.4000/73ed211032b76099
 mirrorwing_smoke_d5_s1001=4.2000/a45589affc8cf5f2
@@ -90,7 +90,7 @@ burn2hg_smoke_d5_s1001=5.8000/ed65acbb9efb428b
 th2hg_smoke_d5_s1001=4.4400/7c99e60c32e0dd9a
 dragonstorm2hg_smoke_d5_s1001=4.7000/4f32c93c3c75b643
 auras2hg_smoke_d5_s1001=4.5200/c2ea0caf22eb0603
-creature_giving2hg_smoke_d5_s1001=4.9600/424e17b358bc1a67
+creature_giving2hg_smoke_d5_s1001=4.9400/f23852c6d3abb684
 mirrorwing2hg_smoke_d5_s1001=4.6800/afa2a5bd163547ae
 stompy2hg_smoke_d5_s1001=4.3200/18469c4192a9c5e1
 kittyv32hg_smoke_d5_s1001=4.3800/8fe9c4a14bdc44de
@@ -282,9 +282,9 @@ goblins_regression_d3_s2002=3.7200/08b3d88deffde1d0
 goblins_regression_d5_s2002=3.8320/f67128625c59b152
 goblins_regression_d5_s3003=3.8160/55325e002142d204
 creature_giving_regression_d0_s2002=5.5670/23b7ec77008ea1c7
-creature_giving_regression_d3_s2002=4.5700/2d17276f9123af79
-creature_giving_regression_d5_s2002=4.6400/b49a55ae560dc33a
-creature_giving_regression_d5_s3003=4.6376/44e9b27eaeef6410
+creature_giving_regression_d3_s2002=4.5700/c54477e30423bc45
+creature_giving_regression_d5_s2002=4.6400/3e88a3eaaf4e39ab
+creature_giving_regression_d5_s3003=4.6353/e2339be664fd814e
 mirrorwing_regression_d0_s2002=5.9060/8df222a1ac607eae
 mirrorwing_regression_d3_s2002=4.3067/b62d0caf9dd25bd9
 mirrorwing_regression_d5_s2002=4.1867/8f6ed27cd01a2ba9

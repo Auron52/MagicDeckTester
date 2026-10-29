@@ -752,6 +752,8 @@ enum Slot : int
     LACKEY_CAST_AXIS,         // MTG_LACKEY_CAST_AXIS  the Lackey put axis fans for a Lackey the PLAN brings in (a hand cast, a Vial put, a breakpoint continuation) with a haste source reachable (Goblin Warchief / Chieftain), not only one already able to attack; the put width counts the candidates the plan's own tutors-to-hand add (Goblin Matron). DEFAULT ON; =0 -> the battlefield-only gate and the hand-as-it-stands width
     COMBAT_STABLE_SOURCES,    // MTG_COMBAT_STABLE_SOURCES  the combat-damage triggers resolve each damaging source by IDENTITY (m_number), not by a battlefield position captured before an earlier trigger could remove a permanent: Goblin Lackey's triggers are snapshotted before the first put (a Goblin Chainwhirler put killing an earlier opposing 1/1 no longer drops or misattributes a later Lackey's trigger), the put permanent is re-found for its own ETB and the legend rule, the later hooks (Shroofus tokens, Neheb) re-find their sources, and the two-step path re-finds its attackers and board sources for the regular step. A RULES fix; DEFAULT ON, the slot exists only for the paired A/B; =0 -> the stale positions, byte-identical to before
     LACKEY_DECLINE,           // MTG_LACKEY_DECLINE  the Lackey put axis also searches DECLINING the put ("you MAY put"), ordered after every put rank (rank kLackeyDeclineRank), per damaging-Lackey ordinal. DEFAULT ON; =0 -> puts only, byte-identical to before
+    DOTH_AXIS,                // MTG_DOTH_AXIS  Defense of the Heart's upkeep put list (which creatures, and their enter order) is SEARCHED: where the search crosses a turn boundary with an uncovered trigger at the next upkeep it crosses once per entry of the provider's menu (DecisionProvider::SacTutorPutOptions: its own SacTutorPutList pick FIRST, so it wins ties) and records the winning rank on the plan of the turn that crossed (Plan::doth_put_choice -> GameState::scripted_doth_put, consumed at that upkeep in both worlds through DothUpkeepPutList). It was the provider's closed-form immediate-drain pick at the executor's upkeep and at every simulated boundary -- an in-window greedy pick (docs/design/searched-doth-put.md). Beyond the horizon (narrowed playout, d0 runner) the provider's pick stays. DEFAULT ON; =0 -> the provider's pick everywhere, play-identical to the pre-axis tree (an A/B arm only)
+    DOTH_FOLDS,               // MTG_DOTH_FOLDS  the searched Defense of the Heart menu's two provider-proven SOUND folds (SacTutorPutsCommute: two puts whose resolution order reaches the same state up to battlefield order; SacTutorFreeGainPut: a list with a free slot loses to itself plus a spare free-gain card). Creature Giving's proofs are card by card for its pool. DEFAULT ON; =0 searches the unfolded menu -- the same answers at unlimited budget for more work (a measurement arm)
     COUNT
 };
 
@@ -1448,6 +1450,8 @@ inline const char* Name(int slot)
         "MTG_LACKEY_CAST_AXIS",
         "MTG_COMBAT_STABLE_SOURCES",
         "MTG_LACKEY_DECLINE",
+        "MTG_DOTH_AXIS",
+        "MTG_DOTH_FOLDS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
