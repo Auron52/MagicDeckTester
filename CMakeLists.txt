@@ -474,6 +474,7 @@ add_executable(mtg-test
     test/unit/test_lfe_fury.cpp
     test/unit/test_lfe_fixpay.cpp
     test/unit/test_lfe_integration.cpp
+    test/unit/test_nowin_order_exact.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism
