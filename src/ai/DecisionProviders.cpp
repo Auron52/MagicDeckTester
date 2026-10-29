@@ -31421,6 +31421,10 @@ bool CycloneCantripOrderOn()
 }
 // THE PLAN-LEVEL HARD PRUNES (USER design 2026-10-28; HeuristicArm.h for the statements). All DEFAULT OFF: lossy,
 // the USER adopts. Each needs the scored order (MTG_CYCLONE_CANTRIP_ORDER, or the put-back RULE) to have a fan to cut.
+// MTG_CYCLONE_PB_PLANS stays DEFAULT OFF (2026-10-29): bar (2) holds for d5 gi179 (clairvoyance, isolated T1 test) but
+// NOT for d3 gi92 -- with two Eldrazi and no go-off this turn, JUNK's Emrakul-first order is worse given what the player
+// knows (the lesser Eldrazi on top measured -0.44, se 0.22). The order amendment is owed (ledger "Hard prunes + known-top
+// blind test", QP2).
 bool CyclonePbPlansOn()
 {
     static const bool on = EnvOn("MTG_CYCLONE_PB_PLANS");
@@ -31442,6 +31446,17 @@ bool CyclonePbPlainRankOn()
 {
     static const bool on = EnvOn("MTG_CYCLONE_PB_PLAIN_RANK");
     return heurarm::Flag(heurarm::CYCLONE_PB_PLAIN_RANK, on);
+}
+// MTG_CYCLONE_KEEP_AMEND / MTG_CYCLONE_KEEP_MYRIAD (the amended keep priority, DEFAULT OFF; HeuristicArm.h).
+bool CycloneKeepAmendOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_KEEP_AMEND");
+    return heurarm::Flag(heurarm::CYCLONE_KEEP_AMEND, on);
+}
+bool CycloneKeepMyriadOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_KEEP_MYRIAD");
+    return heurarm::Flag(heurarm::CYCLONE_KEEP_MYRIAD, on);
 }
 bool CycloneCantripSituationalOn()
 {
@@ -31475,9 +31490,13 @@ constexpr int kCycCyclone = 1000, kCycLandNeeded = 300, kCycSongNeeded = 300, kC
 int CycloneBucketKeepNeed(int tier, bool free_cycler);   // the bucket model's keep need (defined with the discard)
 namespace
 {
+// MTG_CYCLONE_KEEP_AMEND: an Eldrazi while a Brainstorm / Brainsurge is held (above the surplus lands, below Song);
+// MTG_CYCLONE_KEEP_MYRIAD: an EARLY Myriad Landscape (ramp + insurance: above a plain needed land).
+constexpr int kCycEldraziStash = 22, kCycMyriadEarly = 310;
 // aux[] layout of the Cyclone readiness (provider-private).
 enum CycAux { kAuxCycBf = 0, kAuxCycHand, kAuxFree, kAuxManaCyc, kAuxLandsHand, kAuxLandsNeeded, kAuxSongNeeded,
-              kAuxSongHand, kAuxEldHand, kAuxBranch, kAuxAvail0, kAuxAvail1, kAuxDropOpen, kAuxAvail3 };
+              kAuxSongHand, kAuxEldHand, kAuxBranch, kAuxAvail0, kAuxAvail1, kAuxDropOpen, kAuxAvail3,
+              kAuxPbSpell, kAuxLandDemote };
 
 // A library card's keep need if it joined the hand (Ponder's look). Same tiers, judged against the hand as it is.
 int CycNeedOfNew(const CantripReadiness& r, const CardDefinition& d)
@@ -31485,13 +31504,14 @@ int CycNeedOfNew(const CantripReadiness& r, const CardDefinition& d)
     if (d.params.goldfish_inert) { return kCycDead; }
     if (d.params.cycle_draw_exile_shared_type_freecast)
     { return (r.aux[kAuxCycBf] == 0 && r.aux[kAuxCycHand] == 0) ? kCycCyclone : kCycDead; }
-    if (CycIsEldrazi(d)) { return kCycEldrazi; }
+    if (CycIsEldrazi(d)) { return r.aux[kAuxPbSpell] != 0 ? kCycEldraziStash : kCycEldrazi; }
     if (CycIsCreatureCycler(d))
     {
         if (CycIsFreeCycler(d)) { return r.aux[kAuxFree] < 3 ? kCycFreeCycler : kCycCyclerSurplus; }
         return r.aux[kAuxFree] + r.aux[kAuxManaCyc] < 3 ? kCycManaCycler : kCycCyclerSurplus;
     }
-    if (d.card.IsLand()) { return r.aux[kAuxLandsHand] < r.aux[kAuxLandsNeeded] ? kCycLandNeeded : kCycLandSurplus; }
+    if (d.card.IsLand())
+    { return r.aux[kAuxLandsHand] < r.aux[kAuxLandsNeeded] - r.aux[kAuxLandDemote] ? kCycLandNeeded : kCycLandSurplus; }
     if (CycIsSong(d)) { return (r.aux[kAuxSongNeeded] != 0 && r.aux[kAuxSongHand] == 0) ? kCycSongNeeded : kCycSong; }
     if (CycIsSelection(d)) { return kCycSelection; }
     if (d.params.counters_target_spell_to_hand) { return kCycRemand; }
@@ -31562,14 +31582,43 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
         if (CycIsEldrazi(*d)) { ++eld; }
         if (IsLongTermPlansTutor(pp)) { ltp = true; }
     }
+    // MTG_CYCLONE_KEEP_MYRIAD: a RAMP Myriad Landscape in hand (USER: "It accelerates us and turns into 2 lands").
+    // Played on the first open drop (turn t1), its {2} activation the turn after (two OTHER mana sources then: the
+    // lands we control + the next drop), the two basics enter tapped: +1 land from turn t1 + 2.
+    const bool amend = CycloneKeepAmendOn();
+    const bool myr_on = amend && CycloneKeepMyriadOn();
+    int myriad_hand = 0;
+    for (int i = 0; i < hn; ++i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d != nullptr && d->card.IsLand() && d->params.land_search_activation_sacrifice_self) { ++myriad_hand; }
+    }
+    const int myr_t1 = drop_open ? 0 : 1;
+    const bool myr_fits = myr_on && myriad_hand > 0 && total + std::min(lands_u + lands_t - 1, 1) >= 2;
+    bool myr_ramp = false;   // decided below: the Myriad line must reach the Cyclone's mana strictly earlier
     // The projected mana on turn t (0 = this turn), Seething Song included.
     auto avail_at = [&](int t)
     {
         int avail = t == 0 ? untapped + ((drop_open && lands_u > 0) ? 1 : 0)
                            : total + std::min(lands_u + lands_t, t + (drop_open ? 1 : 0));
+        if (myr_ramp && t >= myr_t1 + 2) { avail += 1; }
         if (song && avail >= 3) { avail += 2; }
         return avail;
     };
+    // USER: "If the acceleration is relevant is the best test for Myriad Landscape. In this case we can play it T2 for
+    // cracking T3, which I consider pretty good." Keep the Myriad line only when it brings the turn the mana for the
+    // Cyclone ({3}{R}{R}: 5, or none when it is out) is reached STRICTLY earlier (projection horizon 6 for the test).
+    int myr_turn_with = 99, myr_turn_without = 99;
+    if (myr_fits && !cyc_bf)
+    {
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            myr_ramp = pass == 1;
+            int& out = pass == 1 ? myr_turn_with : myr_turn_without;
+            for (int t = 0; t <= 6; ++t) { if (avail_at(t) >= 5) { out = t; break; } }
+        }
+    }
+    myr_ramp = myr_fits && !cyc_bf && myr_turn_with < myr_turn_without;
     // k and c.
     bool missing = (!cyc_bf && cyc_hand == 0) || (free_c + mana_c == 0);
     int k = 3, c = 0;
@@ -31599,14 +31648,104 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
     const bool song_needed = !cyc_bf && total + lands_hand < 5;
     r.keep_need.assign(static_cast<std::size_t>(hn), kCycOther);
     int cyc_seen = 0, lands_given = 0, cyclers_given = 0;
-    // Lands by preference: untapped-entering first (hand order), then the enters-tapped ones.
-    for (int pass = 0; pass < 2; ++pass)
+    // MTG_CYCLONE_KEEP_AMEND (a): THE LAST NEEDED LAND IS DEMOTED to the surplus tier when the draws before the go-off
+    // are expected to bring a land: E = D * L / N >= 1, D = k draw steps + the kept cantrips' looks (Brainstorm 3,
+    // Brainsurge 4, Ponder 3) + one per creature cycler in hand, L / N = the library's land density (its composition,
+    // which the player knows from the list; never its order). USER: "A fourth land is usually easy to find incidentally
+    // over the span of 4 turns." The demoted land is a PLAIN land (not a fetch, not Myriad), the one the colour need
+    // spares (a red one is kept over a blue one when short on red; else the hand's last).
+    bool pb_spell = false;
+    int  looks = 0;
+    for (int i = 0; i < hn; ++i)
     {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        const CardParams& pp = d->params;
+        if (pp.draw > 0 && pp.put_back_from_hand > 0) { pb_spell = true; looks += pp.draw; }
+        else if (pp.draw > 0 && pp.cast_reorder > 0)  { looks += std::max(pp.draw, pp.cast_reorder); }
+        if (CycIsCreatureCycler(*d)) { looks += 1; }
+    }
+    bool demote = false;
+    const bool short_red_amend = amend && !cyc_bf && CycloneShortOnRed(s, me);
+    if (amend && lands_needed > 0)
+    {
+        int lib_lands = 0;
+        const std::size_t ln = pl.library.size();
+        for (std::size_t i = 0; i < ln; ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.library.RawAt(i));
+            if (d != nullptr && d->card.IsLand()) { ++lib_lands; }
+        }
+        const int draws = std::max(0, k) + looks;
+        demote = ln > 0 && static_cast<long long>(draws) * lib_lands >= static_cast<long long>(ln);
+    }
+    if (!amend)
+    {
+        // Lands by preference: untapped-entering first (hand order), then the enters-tapped ones.
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            for (int i = 0; i < hn; ++i)
+            {
+                const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+                if (d == nullptr || !d->card.IsLand() || CycLandEntersUntapped(*d) != (pass == 0)) { continue; }
+                r.keep_need[static_cast<std::size_t>(i)] = lands_given++ < lands_needed ? kCycLandNeeded : kCycLandSurplus;
+            }
+        }
+    }
+    else
+    {
+        // THE NEED ORDER (amended): fetchlands, then other untapped-entering non-basics (filters, duals), then the basic
+        // lands (a red one first when short on red), then the enters-tapped ones -- each in hand order. A RAMP Myriad
+        // (MTG_CYCLONE_KEEP_MYRIAD: its line reaches the Cyclone's mana strictly earlier) is outside the need: it is
+        // kept at kCycMyriadEarly on its own merit (ramp + insurance; its second land is in the projection), so the
+        // plain lands fill the need and the LAST of them is the demotable one. A non-ramp Myriad is an ordinary
+        // enters-tapped land (last; the USER: "In later turns I would drop it").
+        auto is_myr  = [](const CardDefinition& d) { return d.card.IsLand() && d.params.land_search_activation_sacrifice_self; };
+        auto is_basic = [](const CardDefinition& d) { return IsBasicLandCard(d); };
+        auto rank_of = [&](const CardDefinition& d)
+        {
+            if (!CycLandEntersUntapped(d)) { return 4; }
+            if (!d.params.fetch_land_types.empty()) { return 0; }
+            if (!is_basic(d)) { return 1; }
+            return (short_red_amend && DefMakes(d, Color::Red)) ? 2 : 3;
+        };
+        std::vector<int> order;
+        int myr_kept = -1;
         for (int i = 0; i < hn; ++i)
         {
             const CardDefinition* d = defs[static_cast<std::size_t>(i)];
-            if (d == nullptr || !d->card.IsLand() || CycLandEntersUntapped(*d) != (pass == 0)) { continue; }
-            r.keep_need[static_cast<std::size_t>(i)] = lands_given++ < lands_needed ? kCycLandNeeded : kCycLandSurplus;
+            if (d == nullptr || !d->card.IsLand()) { continue; }
+            if (myr_ramp && myr_kept < 0 && is_myr(*d)) { myr_kept = i; r.keep_need[static_cast<std::size_t>(i)] = kCycMyriadEarly; continue; }
+            order.push_back(i);
+        }
+        std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+        { return rank_of(*defs[static_cast<std::size_t>(x)]) < rank_of(*defs[static_cast<std::size_t>(y)]); });
+        int last_needed = -1;
+        for (int i : order)
+        {
+            const bool need = lands_given++ < lands_needed;
+            r.keep_need[static_cast<std::size_t>(i)] = need ? kCycLandNeeded : kCycLandSurplus;
+            if (need) { last_needed = i; }
+        }
+        // The demotion takes the LAST needed land only, and only a plain land (not a fetch, a filter, or Myriad).
+        if (demote && last_needed >= 0 && lands_given >= lands_needed)
+        {
+            const CardDefinition& d = *defs[static_cast<std::size_t>(last_needed)];
+            if (d.params.fetch_land_types.empty() && !is_myr(d) && !d.params.is_filter)
+            { r.keep_need[static_cast<std::size_t>(last_needed)] = kCycLandSurplus; }
+            else { demote = false; }
+        }
+        else
+        {
+            demote = false;
+        }
+        // The colour tie-break: a red land one point above an equal blue one when short on red.
+        if (short_red_amend)
+        {
+            for (int i : order)
+            {
+                if (DefMakes(*defs[static_cast<std::size_t>(i)], Color::Red)) { r.keep_need[static_cast<std::size_t>(i)] += 1; }
+            }
         }
     }
     // Creature cyclers: the free ones (Street Wraith) first, up to three in all.
@@ -31630,7 +31769,7 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
         if (d->card.IsLand() || CycIsCreatureCycler(*d)) { /* assigned above */ }
         else if (pp.goldfish_inert) { need = kCycDead; }
         else if (pp.cycle_draw_exile_shared_type_freecast) { need = (!cyc_bf && cyc_seen++ == 0) ? kCycCyclone : kCycDead; }
-        else if (CycIsEldrazi(*d)) { need = kCycEldrazi; }
+        else if (CycIsEldrazi(*d)) { need = (amend && pb_spell) ? kCycEldraziStash : kCycEldrazi; }
         else if (CycIsSong(*d)) { need = song_needed ? kCycSongNeeded : kCycSong; }
         else if (CycIsSelection(*d)) { need = kCycSelection; }
         else if (pp.counters_target_spell_to_hand) { need = kCycRemand; }
@@ -31667,6 +31806,9 @@ void CycloneGoOff(const GameState& s, int me, CantripReadiness& r)
     r.aux[kAuxAvail1]      = avail_at(1);
     r.aux[kAuxDropOpen]    = drop_open ? 1 : 0;
     r.aux[kAuxAvail3]      = avail_at(3);   // the estimate's last projected turn (read by the cycler rule only)
+    r.aux[kAuxPbSpell]     = (amend && pb_spell) ? 1 : 0;
+    r.aux[kAuxLandDemote]  = (amend && demote) ? 1 : 0;
+    if (amend && myr_ramp) { r.aux[kAuxLandsHand] = lands_hand - 1; }   // the ramp Myriad is outside the land need
     // THE SHUFFLE LINE (design §3.2 item 3): admitted only when ALL hold -- go-off 2+ draws away, 1-2 dead cards
     // in hand, a piece missing, and a shuffle available after the cantrip this turn.
     r.aux[kAuxBranch] = (k >= 2 && dead >= 1 && dead <= 2 && missing && r.shuffle_after) ? 1 : 0;
@@ -31847,7 +31989,7 @@ bool CycloneProvider::CantripOrderKey(const GameState& s, int controller, std::v
     const bool situ = CycloneCantripSituationalOn();
     key.push_back(0xC1C10000ull | (order ? 1u : 0u) | (rule ? 2u : 0u) | (CyclonePutBackUsableOn() ? 4u : 0u)
                   | (CyclonePbPlansOn() ? 8u : 0u) | (CyclonePonderPlansOn() ? 16u : 0u) | (situ ? 32u : 0u)
-                  | (CyclonePbPlainRankOn() ? 64u : 0u));
+                  | (CyclonePbPlainRankOn() ? 64u : 0u) | (CycloneKeepAmendOn() ? 128u : 0u) | (CycloneKeepMyriadOn() ? 256u : 0u));
     // The situational layer reads the KNOWN library positions (CycAvailableKnown): their cards are inputs too.
     if (situ)
     {
@@ -32250,14 +32392,32 @@ static int CycJunkPick(const GameState& s, int me, const CantripReadiness& r, in
         // Least kept first: outside the core before the core, then the lowest (effective) rank.
         cs.push_back({ i, (core[static_cast<std::size_t>(i)] ? 1000000LL : 0LL) + eff, raw });
     }
-    std::stable_sort(cs.begin(), cs.end(), [](const C& a, const C& b) { return a.key != b.key ? a.key < b.key : a.i > b.i; });
+    const bool raw_tb = CycloneKeepAmendOn();   // the amended priority breaks the redraw case's /16 ties by the raw need
+    std::stable_sort(cs.begin(), cs.end(), [raw_tb](const C& a, const C& b)
+    {
+        if (a.key != b.key) { return a.key < b.key; }
+        if (raw_tb && a.raw != b.raw) { return a.raw < b.raw; }
+        return a.i > b.i;
+    });
     const int n = std::min<int>(take, static_cast<int>(cs.size()));
     if (n <= 0) { return 0; }
     if (n == 1) { out[0] = cs[0].i; return 1; }
     // The MORE useful of the two on top (drawn first), the less useful second ("because we may shuffle before we get to it").
     const C& a = cs[0];
     const C& b = cs[1];
-    const bool a_more = a.key > b.key || (a.key == b.key && a.raw >= b.raw);
+    bool a_more = a.key > b.key || (a.key == b.key && a.raw >= b.raw);
+    // MTG_CYCLONE_KEEP_AMEND: WHICH two go back is the keep priority, their ORDER is the USER's go-off rule: "if it is
+    // this turn you are cycling with cyclone you would want the Emrakul on top. Otherwise you may want it second or third
+    // from the top ... so that you don't draw it and can drop it instead." One Eldrazi in the pair: on top only when
+    // going off this turn (k = 0), else the other card above it. (The amended rank lifts an Eldrazi above a surplus land
+    // while a put-back spell is held; that must not move it onto the top.)
+    if (raw_tb)
+    {
+        const CardDefinition* da = defs[static_cast<std::size_t>(a.i)];
+        const CardDefinition* db = defs[static_cast<std::size_t>(b.i)];
+        const bool ea = da != nullptr && CycIsEldrazi(*da), eb = db != nullptr && CycIsEldrazi(*db);
+        if (ea != eb) { a_more = (r.k == 0) ? ea : eb; }
+    }
     out[0] = a_more ? a.i : b.i;
     out[1] = a_more ? b.i : a.i;
     return 2;
@@ -32310,6 +32470,35 @@ bool CycloneProvider::CantripPlanOf(const GameState& s, int controller, const Ca
                 is_junk = a.m_name_hash == b.m_name_hash && a.m_power == b.m_power && a.m_toughness == b.m_toughness;
             }
             const bool setup_exists = r.aux[kAuxEldHand] > 0 && !r.missing_piece && r.k >= 0 && r.k <= 1;
+            // DIAGNOSTIC (MTG_DIAG_PB_T1_ORDER=2; off = 0, never in play): on the game's TURN 1 only, a JUNK pair with an
+            // Eldrazi second (a non-Eldrazi or a second Eldrazi on top) is offered REVERSED instead -- the gi179 / gi92
+            // isolation tests of the T1 put-back order (ledger). Later turns are the plain PB_PLANS fan in both arms.
+            static const int s_t1_order = []{ const char* e = std::getenv("MTG_DIAG_PB_T1_ORDER"); return (e && *e) ? std::atoi(e) : 0; }();
+            if (s_t1_order == 2 && s.turn_number == 1 && nj == 2 && v.n_removed == 2)
+            {
+                const CardDefinition* top_d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(junk[0])]);
+                const CardDefinition* sec_d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(junk[1])]);
+                if (top_d != nullptr && sec_d != nullptr && CycIsEldrazi(*sec_d))   // Eldrazi second (one or two Eldrazi)
+                {
+                    bool rev = true;
+                    for (int j = 0; j < 2 && rev; ++j)
+                    {
+                        const Card& a = pl.hand[static_cast<std::size_t>(v.removed[j])];
+                        const Card& b = pl.hand[static_cast<std::size_t>(junk[1 - j])];
+                        rev = a.m_name_hash == b.m_name_hash && a.m_power == b.m_power && a.m_toughness == b.m_toughness;
+                    }
+                    static std::atomic<bool> s_printed{ false };
+                    if (!s_printed.exchange(true))
+                    {
+                        std::fprintf(stderr, "[diag-pb-t1] k=%d c=%d missing=%d shuffle_after=%d junk_top=%s junk_second=%s\n",
+                                     r.k, r.c, r.missing_piece ? 1 : 0, r.shuffle_after ? 1 : 0,
+                                     pl.hand[static_cast<std::size_t>(junk[0])].m_name.str().c_str(),
+                                     pl.hand[static_cast<std::size_t>(junk[1])].m_name.str().c_str());
+                    }
+                    if (rev)     { plan_out = kJunk; return true; }
+                    if (is_junk) { plan_out = kCantripPlanDrop; return true; }
+                }
+            }
             if (is_junk)                     { plan = kJunk; }
             else if (eld && setup_exists)    { plan = kSetup; }
             else                             { plan_out = kCantripPlanDrop; return true; }

@@ -198,6 +198,42 @@ TEST_CASE("Cyclone cantrip plans: the put-back fan is the JUNK pick and, when a 
         CHECK(std::find(pl.begin(), pl.end(), std::string(kPonderP)) != pl.end());
         CHECK(pl != pri);
     }
+    SUBCASE("MTG_CYCLONE_KEEP_AMEND (+ KEEP_MYRIAD), d5 gi179: the spare plain land and Emrakul go back, Myriad stays")
+    {
+        // d5 gi179's turn-1 Brainstorm: one Island out (the drop used), no Cyclone, Brainsurge held. Off: JUNK =
+        // [Myriad, Emrakul] (Myriad the enters-tapped 5th land, surplus 20 over the Eldrazi's 10). The amended priority
+        // with the ramp Myriad: Myriad (play T2, crack T3: the Cyclone's 5 mana a turn earlier) kept above a plain land;
+        // the need (4) = Tarn, Bluffs, Mountain (red: short on red), Island -- the LAST, a plain land, demoted (the draws
+        // before go-off bring a land); Emrakul above the surplus lands (Brainsurge held). JUNK = Island + Emrakul; the
+        // ORDER is the go-off rule (no go-off this turn: the Eldrazi second): Island on top.
+        const GameState s = StateP({ "Island" }, { kPonderP, "Cascade Bluffs", "Island", "Myriad Landscape", "Mountain",
+                                                   kEmrP, "Brainsurge", "Curator of Mysteries", kTarnP });
+        ArmP on;
+        on.Set(heurarm::CYCLONE_PB_PLANS, 1);
+        {
+            const std::vector<NamesP> off = FanP(s);
+            REQUIRE(off.size() == 1);
+            CHECK(off[0] == NamesP{ "Myriad Landscape", kEmrP });
+        }
+        {
+            ArmP am;
+            am.Set(heurarm::CYCLONE_KEEP_AMEND, 1).Set(heurarm::CYCLONE_KEEP_MYRIAD, 1);
+            const std::vector<NamesP> fan = FanP(s);
+            REQUIRE(fan.size() == 1);
+            CHECK(fan[0] == NamesP{ "Island", kEmrP });
+            CHECK(ProvP().CantripFanCap(s, true) == 2);
+        }
+        {
+            // The amendment without the Myriad sub-lever: Myriad is the enters-tapped surplus land again, so the two
+            // 20s (the demoted Island and Myriad) go back and the Eldrazi (22, Brainsurge held) stays.
+            ArmP am;
+            am.Set(heurarm::CYCLONE_KEEP_AMEND, 1);
+            const std::vector<NamesP> fan = FanP(s);
+            REQUIRE(fan.size() == 1);
+            CHECK(std::find(fan[0].begin(), fan[0].end(), std::string(kEmrP)) == fan[0].end());
+            CHECK(std::find(fan[0].begin(), fan[0].end(), std::string("Myriad Landscape")) != fan[0].end());
+        }
+    }
 }
 
 TEST_CASE("Cyclone cantrip plans: the USER's go-off rules survive as the SETUP fulfilment")
