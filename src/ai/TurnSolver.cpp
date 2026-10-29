@@ -24408,17 +24408,19 @@ inline thread_local int t_expect_w = -1;
 // MTG_PB_EXACT_WIDTH_DEBUG (verify mode): the enumeration's description of each exact fan, printed on a mismatch.
 inline thread_local std::unordered_map<int, std::string> t_expect_desc;
 inline thread_local int t_expect_group = 0;
+inline thread_local std::string t_dbg_ctx;   // MTG_PB_EXACT_WIDTH_DEBUG: the resolving apply's context
+inline thread_local std::string t_dbg_start; // ...and its starting state
 inline std::atomic<long long> g_exact{0}, g_tight{0}, g_bound{0}, g_ranks_exact{0}, g_ranks_bound_would{0};
-inline std::atomic<long long> g_verified{0}, g_mismatch{0};
+inline std::atomic<long long> g_verified{0}, g_mismatch{0}, g_mismatch_over{0};
 struct Dump
 {
     ~Dump()
     {
         if (g_exact.load() == 0 && g_bound.load() == 0 && g_verified.load() == 0) { return; }
         std::fprintf(stderr, "[pb-exact-width] exact_fans=%lld (of them tight-bound %lld) bound_fans=%lld exact_ranks=%lld"
-                     " (upper bound would emit %lld) | verify resolutions=%lld MISMATCH=%lld\n",
+                     " (upper bound would emit %lld) | verify resolutions=%lld MISMATCH=%lld (of them emitted > real: %lld)\n",
                      g_exact.load(), g_tight.load(), g_bound.load(), g_ranks_exact.load(), g_ranks_bound_would.load(),
-                     g_verified.load(), g_mismatch.load());
+                     g_verified.load(), g_mismatch.load(), g_mismatch_over.load());
     }
 };
 inline Dump g_dump;
@@ -24463,6 +24465,7 @@ inline void Check(int pin_before, int real_count, const GameState& st, const cha
     g_verified.fetch_add(1, std::memory_order_relaxed);
     if (bound ? real_count > want : real_count != want)
     {
+        if (want > real_count) { g_mismatch_over.fetch_add(1, std::memory_order_relaxed); }
         const long long n = g_mismatch.fetch_add(1, std::memory_order_relaxed);
         if (n < 20)
         {
@@ -24471,8 +24474,9 @@ inline void Check(int pin_before, int real_count, const GameState& st, const cha
             for (const Card& c : st.ActivePlayer().hand) { h += c.m_name.str() + (PutBackEligible(c) ? "" : "*") + ","; }
             for (std::size_t i = 0; i < 2 && i < st.ActivePlayer().library.size(); ++i)
             { h += " top" + std::to_string(i) + "=" + st.ActivePlayer().library[i].m_name.str(); }
-            std::fprintf(stderr, "[pb-exact-width] VERIFY MISMATCH T%d %s emitted=%d resolution=%d :: %s || at resolution (after): %s\n",
-                         turn, card, want, real_count, d == t_expect_desc.end() ? "" : d->second.c_str(), h.c_str());
+            std::fprintf(stderr, "[pb-exact-width] VERIFY MISMATCH T%d %s emitted=%d resolution=%d :: %s || at resolution (after): %s || %s\n",
+                         turn, card, want, real_count, d == t_expect_desc.end() ? "" : d->second.c_str(), h.c_str(),
+                         (t_dbg_ctx + " || " + t_dbg_start).c_str());
         }
     }
 }
@@ -24503,6 +24507,24 @@ static bool PbPreCastPure(const Action& a)
     if (pp.draw > 0 || pp.cast_scry > 0 || pp.cast_reorder > 0 || pp.put_back_from_hand > 0 || IsLibraryTutor(pp)
         || pp.counters_target_spell_to_hand || d->tmpl == CardTemplate::DrawSpell || d->tmpl == CardTemplate::DrawX
         || d->tmpl == CardTemplate::DrawUntilNonland)
+    { return false; }
+    return true;
+}
+// A hand cast that cannot put a card into the hand or read the library when it resolves (F4: a card the put-back
+// returned to the library stays there past it). Param-keyed: no draw / look / scry / tutor / put-back / Remand,
+// no ETB dig / reveal / tutor / regrowth / land search, not a draw template.
+static bool PbCastLibraryBlind(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || !a.remand_by.empty() || !a.remand_chain_by.empty()) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (d == nullptr) { return false; }
+    const CardParams& pp = d->params;
+    if (pp.draw > 0 || pp.cast_scry > 0 || pp.cast_reorder > 0 || pp.put_back_from_hand > 0 || IsLibraryTutor(pp)
+        || pp.counters_target_spell_to_hand || pp.etb_dig_count > 0 || pp.etb_reveal_count > 0
+        || pp.etb_tutor_hand_count > 0 || pp.etb_exile_until_nonland || pp.etb_return_gy_to_hand
+        || pp.land_search_on_resolve || pp.land_search_on_enter_or_attack || pp.cascade_max_mv > 0
+        || pp.stages_cards || pp.expressive_iteration
+        || d->tmpl == CardTemplate::DrawSpell || d->tmpl == CardTemplate::DrawX || d->tmpl == CardTemplate::DrawUntilNonland)
     { return false; }
     return true;
 }
@@ -24583,6 +24605,16 @@ static int PutBackExactWidth(const GameState& state, const TurnSolver::Plan& p, 
             if (ld == nullptr || !PbLandPlayInert(state, *ld)) { return -1; }
             removed.push_back(p.land_to_play);
         }
+    }
+    // DISTINCT CARD NUMBERS in the hand: the apply re-finds the cast copy BY NUMBER after its payment (apply_one's
+    // cast_zone_number), so with two hand cards sharing one -- the rollout files a resolved spell as its number-0
+    // template, and an Eldrazi's graveyard shuffle deals those back -- it can erase ANOTHER card than the one cast
+    // (measured: casting a number-0 Brainstorm removed a number-0 Ponder). The hand at the put-back is then not the
+    // one counted here; keep the bound.
+    for (std::size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        for (std::size_t q = i + 1; q < ap.hand.size(); ++q)
+        { if (ap.hand[i].m_number == ap.hand[q].m_number) { return -1; } }
     }
     // Each removed name: enough eligible copies, all of ONE class, and no ineligible copy a cast could take.
     std::vector<int> take_out(ap.hand.size(), 0);
@@ -26742,11 +26774,187 @@ static void ChargePutBackVariant(SearchBudget* budget, const TurnSolver::Plan& p
     t_putback_price_charged += n;
 }
 
+// ---- F3 / F4: THE FAN TABLE CHANNEL and the extended put-back fold -----------------------------------------
+// docs/design/cantrip-search-optimization.md §2 F3 / F4. Both folds need to know, for a fan, WHICH pair of hand
+// classes each rank names -- the ranks are an ordinal into the provider-ordered list built at the resolution, so
+// only the resolution can say. The first applied VARIANT of a fan (its pin is consumed by the fan's own put-back,
+// see ApplyPlanDirect) is asked to publish the resolution's whole rank -> (top class, second class) table, with
+// each class's name / definition / copy count in the hand at the resolution. Every member of one fan reaches the
+// SAME resolution (identical prefix -- the existing fold's premise), so the table holds for all of them.
+namespace pbfan
+{
+struct Table
+{
+    bool valid = false;
+    int  take  = 0;
+    std::vector<std::array<std::int16_t, 2>> pair;   // per rank: class ids (second = -1 for a one-card put-back)
+    std::vector<InternedName> cls_name;              // per class: the card's name (casts take a copy BY NAME)
+    std::vector<const CardDefinition*> cls_def;      // per class: its definition (null when unknown)
+    std::vector<int> cls_cnt;                        // per class: eligible copies in the hand at the resolution
+    std::vector<InternedName> inelig_names;          // names with an ineligible (staged / impulse) copy in hand
+};
+inline thread_local bool  t_req = false;   // armed by a host for its NEXT apply only (the apply consumes it)
+inline thread_local Table t_last;          // the last requesting apply's table (published at its exit)
+inline thread_local int   t_cont_frames = 0;   // live ContPinFrames (a continuation's pins are not the fan's)
+// The realised put-back of the last apply to return (its FIRST put-back): the top / second card numbers.
+inline thread_local int   t_last_top = -1, t_last_second = -1;
+inline Table Build(const GameState& state, int controller, int n)
+{
+    Table t;
+    if (n <= 0 || n > 2) { return t; }
+    const Player& pl = state.players[static_cast<std::size_t>(controller)];
+    std::vector<std::uint64_t> keys;
+    std::vector<int> hand_cls(pl.hand.size(), -1);
+    for (std::size_t i = 0; i < pl.hand.size(); ++i)
+    {
+        const Card& c = pl.hand[i];
+        if (!PutBackEligible(c))
+        {
+            if (std::find(t.inelig_names.begin(), t.inelig_names.end(), c.m_name) == t.inelig_names.end())
+            { t.inelig_names.push_back(c.m_name); }
+            continue;
+        }
+        const std::uint64_t k = PutBackClassKey(state, c);
+        int ci = -1;
+        for (std::size_t j = 0; j < keys.size(); ++j) { if (keys[j] == k) { ci = static_cast<int>(j); break; } }
+        if (ci < 0)
+        {
+            ci = static_cast<int>(keys.size());
+            keys.push_back(k);
+            t.cls_name.push_back(c.m_name);
+            t.cls_def.push_back(CardDatabase::Instance().LookupCached(c));
+            t.cls_cnt.push_back(0);
+        }
+        ++t.cls_cnt[static_cast<std::size_t>(ci)];
+        hand_cls[i] = ci;
+    }
+    const std::vector<std::vector<int>> cands = PutBackCandidates(state, controller, n);   // the reference list
+    t.pair.reserve(cands.size());
+    for (const std::vector<int>& c : cands)
+    {
+        std::array<std::int16_t, 2> pr{ -1, -1 };
+        for (std::size_t j = 0; j < c.size() && j < 2; ++j)
+        { pr[j] = static_cast<std::int16_t>(hand_cls[static_cast<std::size_t>(c[j])]); }
+        t.pair.push_back(pr);
+    }
+    t.take  = cands.empty() ? 0 : static_cast<int>(cands.front().size());
+    t.valid = true;
+    return t;
+}
+}   // namespace pbfan
+
+// F4 -- THE STRANDED-CAST FOLD (MTG_PB_STRAND_FOLD, DEFAULT OFF: built as the design's degenerate-line fold, and
+// MEASURED NOT EXACT -- a LOSSY candidate, the USER's call; see the paragraph after this one). In a
+// FULL-TAIL apply a fan member whose pair puts back the last copies of a card the plan casts AFTER the put-back
+// cannot make that cast (the casts take a copy by name; none is left): the apply realises "the same plan minus
+// those casts, with the same put-back". That line is the same-pair member of the smaller plan's OWN fan, which
+// is in the same candidate list (checked: the smaller plan is matched field for field, Plan::operator== after the
+// derived scratch fields are taken from it) and reaches the same resolution (it casts the same prefix). What
+// they can differ in is the payment allocation only -- the line hold steers the prefix's taps toward the
+// stranded cast's bill (the standing mana-payment exemption; the land-position prefix probe's argument). So no
+// line becomes unfindable at any budget. Casts only (a stranded cycle seed runs after the deferred re-solve,
+// which can draw the card back), and only up to the first later cast that can draw (a Ponder after the
+// Brainstorm draws the put-back card back). MTG_PB_STRAND_FOLD_VERIFY=1 applies them instead and compares each
+// with its counterpart: equal state keys, or keys equal once every tap and the floating mana are cleared.
+// WHY IT IS OFF. The verify run (Cyclone d3 b10, 8 games, seed 107000) found 64 of 45,201 compared pairs that
+// differ beyond the taps: the payment ALLOCATION is steered by the plan's whole bill (the line hold, PlanTraits),
+// the stranded cast's bill included, and a different allocation changes what the REST of the line achieves --
+// "Seething Song, Brainstorm, Ponder, cycle Curator" with the Ponder stranded kept an Island up and cycled the
+// Curator; the smaller plan "Seething Song, Brainstorm, cycle Curator" tapped it for the Song and could not. That
+// line is reachable only through the stranding member, so declining it is LOSSY under the engine's own model
+// (the payer is not searched, so no other plan carries that allocation). Not exact => not shipped; reported.
+static bool PbStrandFoldOn()
+{
+    static const bool env = EnvOn("MTG_PB_STRAND_FOLD", false);   // DEFAULT OFF: measured NOT exact (see above)
+    return heurarm::Flag(heurarm::PB_STRAND_FOLD, env);
+}
+static bool PbStrandFoldVerifyOn() { static const bool v = EnvOn("MTG_PB_STRAND_FOLD_VERIFY"); return v; }
+namespace pbfoldx
+{
+inline std::atomic<long long> g_tables{0}, g_strand_groups{0};
+inline std::atomic<long long> g_strand_folded{0};
+inline std::atomic<long long> g_strand_same{0}, g_strand_payonly{0}, g_strand_bad{0}, g_strand_unmatched{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (g_tables.load() == 0) { return; }
+        std::fprintf(stderr, "[pb-fold-x] tables=%lld | F4 strand: groups=%lld folded=%lld verify same=%lld payment-only=%lld"
+                     " MISMATCH=%lld unmatched=%lld\n",
+                     g_tables.load(), g_strand_groups.load(), g_strand_folded.load(), g_strand_same.load(), g_strand_payonly.load(),
+                     g_strand_bad.load(), g_strand_unmatched.load());
+    }
+};
+inline Dump g_dump;
+// The fields of a Plan that are SCRATCH (scores, sibling ids, list positions, labels) rather than the line: taken
+// from the candidate before a field-for-field comparison, so only the line can differ.
+inline void CopyScratch(TurnSolver::Plan& t, const TurnSolver::Plan& from)
+{
+    t.value              = from.value;
+    t.land_tie_key       = from.land_tie_key;
+    t.wins_this_turn     = from.wins_this_turn;
+    t.would_drop         = from.would_drop;
+    t.combo_off_verified = from.combo_off_verified;
+    t.combo_off_rule     = from.combo_off_rule;
+    t.searched_order     = from.searched_order;
+    t.putback_choice     = from.putback_choice;
+    t.putback_group      = from.putback_group;
+    t.bounce_group       = from.bounce_group;
+    t.dig_group          = from.dig_group;
+    t.bp_base            = from.bp_base;
+    t.bp_self            = from.bp_self;
+    t.bp_wave0           = from.bp_wave0;
+    t.bp_sched           = from.bp_sched;
+    t.horizon_leaf       = from.horizon_leaf;
+}
+// A cheap content hash of a plan's line (its land and actions, minus the actions in `skip`), for the F4 lookup.
+inline std::uint64_t LineHash(const TurnSolver::Plan& p, const std::vector<std::size_t>& skip)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&h](std::uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); };
+    mix(std::hash<std::string>{}(p.land_to_play));
+    mix(std::hash<std::string>{}(p.fetch_target));
+    mix(static_cast<std::uint64_t>(p.land_slot + 128));
+    for (std::size_t i = 0; i < p.actions.size(); ++i)
+    {
+        if (std::find(skip.begin(), skip.end(), i) != skip.end()) { continue; }
+        const Action& a = p.actions[i];
+        mix(static_cast<std::uint64_t>(a.kind));
+        mix(std::hash<std::string>{}(a.card_name.str()));
+        mix(static_cast<std::uint64_t>(a.hand_index + 2));
+        mix(static_cast<std::uint64_t>(a.devour_count + 2) * 31 + static_cast<std::uint64_t>(a.ponder_keep + 2));
+    }
+    return h;
+}
+}   // namespace pbfoldx
+
 struct PutBackFoldMemo
 {
-    struct Group { int width = -1; std::unordered_map<int, int> first; };   // resolved rank -> cand index
+    // F3 / F4 per fan, computed once from its table (see pbfan).
+    struct X
+    {
+        bool computed = false, requested = false;
+        std::vector<int> strand_b2;   // per rank: the real-list index of the smaller plan it strands into, else -1
+        std::vector<std::array<std::int16_t, 2>> pair;
+    };
+    struct Group { int width = -1; std::unordered_map<int, int> first; X x; };   // first: resolved rank -> cand index
     std::unordered_map<int, Group> groups;
     bool on = false;
+    // F3 / F4 (pbfan): armed by a FULL-TAIL host (its applies never stop at a breakpoint node), with its real list
+    // for F4's lookup of the smaller plan.
+    bool x_on = false, strand_on = false, strand_verify = false;
+    const std::vector<TurnSolver::Plan>* real = nullptr;
+    std::unordered_multimap<std::uint64_t, std::size_t> base_index;   // F4: LineHash -> fan base (real index)
+    bool base_index_built = false;
+    int  armed_group = 0;   // the group whose table the next apply was asked for
+    void ArmX(bool full_tail, const std::vector<TurnSolver::Plan>* list, const GameState* st)
+    {
+        state_for_provider = st;
+        strand_on     = PbStrandFoldOn();
+        strand_verify = strand_on && PbStrandFoldVerifyOn();
+        x_on = on && full_tail && strand_on && !HumanPlayActive() && st != nullptr;
+        real = list;
+    }
     // The sibling whose apply this variant would repeat (its cand index), or -1.
     int Declines(const TurnSolver::Plan& p) const
     { return DeclinesKey(p.putback_group, p.putback_choice, p.bp_choice); }
@@ -26758,19 +26966,318 @@ struct PutBackFoldMemo
         if (it == groups.end() || it->second.width <= 0) { return -1; }
         const int r = std::min(putback_choice, it->second.width - 1);
         const auto f = it->second.first.find(r);
-        return f == it->second.first.end() ? -1 : f->second;
+        if (f != it->second.first.end()) { return f->second; }
+        // F3 / F4 (unclamped ranks of a fan whose table is known).
+        const X& x = it->second.x;
+        if (!x_on || !x.computed || r != putback_choice || r >= static_cast<int>(x.pair.size())) { return -1; }
+        if (strand_on && !strand_verify)
+        {
+            const int b2 = x.strand_b2[static_cast<std::size_t>(r)];
+            if (b2 >= 0)
+            {
+                pbfoldx::g_strand_folded.fetch_add(1, std::memory_order_relaxed);
+                return b2;
+            }
+        }
+        return -1;
+    }
+    // Before an apply: ask it for its fan's table if F3 / F4 needs one and none was asked for yet. Only a
+    // VARIANT asks (its pin is consumed by the fan's own put-back -- see the resolution site).
+    void ArmTable(const TurnSolver::Plan& p)
+    {
+        armed_group = 0;
+        if (!x_on || p.putback_group == 0 || p.putback_choice < 1 || p.bp_choice >= 0) { return; }
+        Group& g = groups[p.putback_group];
+        if (g.x.requested) { return; }
+        g.x.requested = true;
+        armed_group   = p.putback_group;
+        pbfan::t_req  = true;
+        pbfan::t_last = pbfan::Table{};
     }
     // After an apply that ran to the end: the width (first member) and this candidate's resolved rank.
     void Record(const TurnSolver::Plan& p, bool complete, int cand)
     {
-        if (!on || p.putback_group == 0 || !complete || p.bp_choice >= 0) { return; }
-        if (g_apd_last_putback_w <= 0 || g_apd_last_putback_i < 0) { return; }
+        pbfan::t_req = false;   // never left armed for an unrelated apply
+        if (!on || p.putback_group == 0 || !complete || p.bp_choice >= 0) { armed_group = 0; return; }
+        if (g_apd_last_putback_w <= 0 || g_apd_last_putback_i < 0) { armed_group = 0; return; }
         Group& g = groups[p.putback_group];
         if (g.width < 0) { g.width = g_apd_last_putback_w; }
-        if (g.width != g_apd_last_putback_w) { return; }   // defensive: siblings must agree
+        if (g.width != g_apd_last_putback_w) { armed_group = 0; return; }   // defensive: siblings must agree
         g.first.emplace(g_apd_last_putback_i, cand);
+        if (armed_group == p.putback_group)
+        {
+            armed_group = 0;
+            if (pbfan::t_last.valid && static_cast<int>(pbfan::t_last.pair.size()) == g.width) { ComputeX(p, g, pbfan::t_last); }
+        }
+    }
+    // F3 / F4 per rank, from the table and the plan (any member: the fan's line, with putback_choice).
+    void ComputeX(const TurnSolver::Plan& p, Group& g, const pbfan::Table& t)
+    {
+        X& x = g.x;
+        x.computed = true;
+        x.pair     = t.pair;
+        const std::size_t n = t.pair.size();
+        x.strand_b2.assign(n, -1);
+        pbfoldx::g_tables.fetch_add(1, std::memory_order_relaxed);
+        // The fan's put-back cast: the first put-back card of the plan (the axis varies exactly that one).
+        std::size_t bs = p.actions.size();
+        for (std::size_t i = 0; i < p.actions.size(); ++i)
+        {
+            const Action& a = p.actions[i];
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d != nullptr && d->params.put_back_from_hand > 0) { bs = i; break; }
+        }
+        if (bs >= p.actions.size() || t.take != 2) { return; }
+        auto copies_of = [&](const InternedName& nm) -> int
+        {
+            int c = 0;
+            for (std::size_t ci = 0; ci < t.cls_name.size(); ++ci) { if (t.cls_name[ci] == nm) { c += t.cls_cnt[ci]; } }
+            return c;
+        };
+        auto in_pair = [&](const std::array<std::int16_t, 2>& pr, const InternedName& nm) -> int
+        {
+            int c = 0;
+            for (int j = 0; j < 2; ++j) { if (pr[j] >= 0 && t.cls_name[static_cast<std::size_t>(pr[j])] == nm) { ++c; } }
+            return c;
+        };
+        auto inelig = [&](const InternedName& nm)
+        { return std::find(t.inelig_names.begin(), t.inelig_names.end(), nm) != t.inelig_names.end(); };
+        // The hand casts applied AFTER the put-back (plan order; not hoisted ahead of it).
+        // ---- F4: the stranded later casts ------------------------------------------------------------------------
+        if (strand_on && real != nullptr)
+        {
+            // The hand casts applied after the put-back, up to (not past) the first one that can DRAW or otherwise
+            // read the library: a card put back can come back into the hand there (a Ponder after the Brainstorm
+            // draws the top card), so no cast at or after it is stranded for sure. Nothing may draw on a cast
+            // either (no cast-draw watcher, no draw-ping loop).
+            std::vector<std::size_t> later;   // action indices of the hand casts applied after the put-back
+            const GameState& st = StateForProvider();
+            bool draw_watch = st.deck_has_draw_ping;
+            for (const Permanent& pm : st.battlefield)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+                if (d != nullptr && d->params.cast_trigger_instant_sorcery_draw > 0) { draw_watch = true; }
+            }
+            for (std::size_t i = bs + 1; !draw_watch && i < p.actions.size(); ++i)
+            {
+                const Action& a = p.actions[i];
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                if (!PbRunsAfterPutBack(st, a)) { later.clear(); break; }   // a hoist: not modelled
+                later.push_back(i);
+                if (!PbCastLibraryBlind(a)) { break; }   // it may draw a put-back card back: nothing after it strands
+            }
+            bool any = false;
+            std::map<std::vector<std::size_t>, int> cache;   // stranded set -> B2 real index (or -1)
+            for (std::size_t r = 0; !later.empty() && r < n; ++r)
+            {
+                const auto& pr = t.pair[r];
+                std::vector<std::size_t> skip;
+                bool clean = true;
+                for (int j = 0; j < 2 && clean; ++j)
+                {
+                    if (pr[j] < 0) { continue; }
+                    const InternedName nm = t.cls_name[static_cast<std::size_t>(pr[j])];
+                    if (j == 1 && pr[0] >= 0 && t.cls_name[static_cast<std::size_t>(pr[0])] == nm) { continue; }   // counted once
+                    int casts = 0;
+                    for (std::size_t li : later) { if (p.actions[li].card_name == nm) { ++casts; } }
+                    if (casts == 0) { continue; }
+                    if (inelig(nm)) { clean = false; break; }
+                    const int left = copies_of(nm) - in_pair(pr, nm);
+                    if (left >= casts) { continue; }
+                    // The casts of this name past the copies left are the stranded ones: the LAST ones in plan order.
+                    int strand = casts - std::max(0, left);
+                    for (std::size_t q = later.size(); q-- > 0 && strand > 0;)
+                    { if (p.actions[later[q]].card_name == nm) { skip.push_back(later[q]); --strand; } }
+                }
+                if (!clean || skip.empty()) { continue; }
+                std::sort(skip.begin(), skip.end());
+                auto c = cache.find(skip);
+                if (c == cache.end()) { c = cache.emplace(skip, FindSmaller(p, skip)).first; }
+                if (c->second >= 0) { x.strand_b2[r] = c->second; any = true; }
+            }
+            if (any) { pbfoldx::g_strand_groups.fetch_add(1, std::memory_order_relaxed); }
+        }
+    }
+    // The provider reads in PbRunsAfterPutBack need a state; the hoist predicates read only the provider and the
+    // card, so the list's own state is not needed -- the host sets it.
+    const GameState* state_for_provider = nullptr;
+    const GameState& StateForProvider() const { return *state_for_provider; }
+    // F4: the fan base in the real list that IS plan `p` minus the actions `skip` (field for field), or -1.
+    int FindSmaller(const TurnSolver::Plan& p, const std::vector<std::size_t>& skip)
+    {
+        if (real == nullptr) { return -1; }
+        if (!base_index_built)
+        {
+            base_index_built = true;
+            for (std::size_t i = 0; i < real->size(); ++i)
+            {
+                const TurnSolver::Plan& q = (*real)[i];
+                if (q.putback_group == 0 || q.putback_choice >= 0 || q.bp_choice >= 0) { continue; }
+                base_index.emplace(pbfoldx::LineHash(q, {}), i);
+            }
+        }
+        TurnSolver::Plan t = p;
+        for (std::size_t k = skip.size(); k-- > 0;) { t.actions.erase(t.actions.begin() + static_cast<std::ptrdiff_t>(skip[k])); }
+        const auto range = base_index.equal_range(pbfoldx::LineHash(p, skip));
+        for (auto it = range.first; it != range.second; ++it)
+        {
+            const TurnSolver::Plan& q = (*real)[it->second];
+            pbfoldx::CopyScratch(t, q);
+            if (t == q) { return static_cast<int>(it->second); }
+        }
+        return -1;
+    }
+    // ---- VERIFY (MTG_PB_MIRROR_FOLD_VERIFY / MTG_PB_STRAND_FOLD_VERIFY): every would-be-folded member is applied;
+    // after each apply of a fan member, its post-apply key (and a key blind to taps / floating mana) is compared with
+    // its twin's. `key` / `blind` compute those keys on the post-apply state.
+    struct VKeys { TranspositionTable::Key exact, blind; std::string desc; };
+    std::map<std::pair<int, int>, VKeys> v_rank;                    // (group, resolved rank) -> keys
+    std::map<std::tuple<int, int, int>, VKeys> v_pair;              // (group, top #, second #) -> keys
+    std::map<std::tuple<int, int, int>, std::vector<VKeys>> v_pending;   // F4: awaiting B2's same-pair member
+    template <class KeyFn, class BlindFn, class DescFn>
+    void VerifyAfter(const TurnSolver::Plan& p, KeyFn key, BlindFn blind, DescFn desc_state)
+    {
+        if (!strand_verify || !x_on || p.putback_group == 0 || p.bp_choice >= 0) { return; }
+        if (g_apd_last_putback_i < 0) { return; }
+        const auto it = groups.find(p.putback_group);
+        if (it == groups.end()) { return; }
+        const int r = g_apd_last_putback_i;
+        static const bool s_dbg = EnvOn("MTG_PB_FOLD_X_DEBUG");
+        VKeys k{ key(), blind(), std::string{} };
+        if (s_dbg)
+        {
+            k.desc = "plan=";
+            for (const Action& a : p.actions) { k.desc += std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str() + ","; }
+            k.desc += " land=" + p.land_to_play + " pb=" + std::to_string(p.putback_choice) + " top#=" + std::to_string(pbfan::t_last_top)
+                    + "/" + std::to_string(pbfan::t_last_second) + " :: " + desc_state();
+        }
+        v_rank[{ p.putback_group, r }] = k;
+        const X& x = it->second.x;
+        const auto tp = std::make_tuple(p.putback_group, pbfan::t_last_top, pbfan::t_last_second);
+        v_pair[tp] = k;
+        auto judge = [](const VKeys& a, const VKeys& b, int g, int rr)
+        {
+            if (a.exact == b.exact) { pbfoldx::g_strand_same.fetch_add(1, std::memory_order_relaxed); return; }
+            if (a.blind == b.blind) { pbfoldx::g_strand_payonly.fetch_add(1, std::memory_order_relaxed); return; }
+            const long long nb = pbfoldx::g_strand_bad.fetch_add(1, std::memory_order_relaxed);
+            if (nb < 10) { std::fprintf(stderr, "[pb-fold-x] F4 VERIFY MISMATCH group=%d rank=%d\n   B1: %s\n   B2: %s\n", g, rr, a.desc.c_str(), b.desc.c_str()); }
+        };
+        const auto pend = v_pending.find(tp);
+        if (pend != v_pending.end())
+        {
+            for (const VKeys& e : pend->second) { judge(e, k, p.putback_group, r); }
+            v_pending.erase(pend);
+        }
+        if (x.computed && r < static_cast<int>(x.strand_b2.size()) && x.strand_b2[static_cast<std::size_t>(r)] >= 0 && real != nullptr)
+        {
+            const int g2 = (*real)[static_cast<std::size_t>(x.strand_b2[static_cast<std::size_t>(r)])].putback_group;
+            const auto t2 = std::make_tuple(g2, pbfan::t_last_top, pbfan::t_last_second);
+            const auto f = v_pair.find(t2);
+            if (f != v_pair.end()) { judge(k, f->second, p.putback_group, r); }
+            else { v_pending[t2].push_back(k); }
+        }
+    }
+    ~PutBackFoldMemo()
+    {
+        if (strand_verify)
+        {
+            for (const auto& [t2, v] : v_pending)
+            { pbfoldx::g_strand_unmatched.fetch_add(static_cast<long long>(v.size()), std::memory_order_relaxed); }
+        }
     }
 };
+// F5 -- THE CROSS-BASE TRUNCATED-PREFIX FOLD (MTG_PB_XBASE_FOLD, SOUND, DEFAULT ON). At a breakpoint-node host
+// (FSLineWin, MTG_BP_NODE) a base plan that casts a put-back card as its first plain cantrip PENDS at the
+// partition: its tail is truncated (partition_here) and the node hosts the continuation. node_prefix_seen
+// already collapses two bases whose prefixes reach one partition state -- but each such base's whole put-back
+// fan was still applied, one unit and one apply per rank, only to collapse at that same test. Two bases with the
+// SAME prefix -- actions up to and including the put-back cast identical field for field, every plan-level
+// field identical (the scratch fields aside), tails that are only hand casts after it (truncated, never applied)
+// -- run the identical apply up to the put-back, whatever the rank: the pin is consumed only there, the
+// resolution sees the same state and the same ordinal picks the same cards, and the truncation stops both at
+// the same point. Their rank-0 applies pending at ONE state is the witness that the tails' bills did not steer
+// the prefix's payment apart (the line hold); the payment precedes the pin, so it holds for every rank. So every
+// rank of the later base pends where the earlier base's same rank pends: declined unbuilt, with the bookkeeping
+// of a collapsed pend (the probe's no-win value, the beam refund). MTG_PB_XBASE_FOLD_VERIFY=1 applies them
+// instead and compares each one's partition key with the earlier base's same rank.
+static bool PbXbaseFoldOn()
+{
+    static const bool env = EnvOn("MTG_PB_XBASE_FOLD", true);
+    return heurarm::Flag(heurarm::PB_XBASE_FOLD, env);
+}
+static bool PbXbaseFoldVerifyOn() { static const bool v = EnvOn("MTG_PB_XBASE_FOLD_VERIFY"); return v; }
+namespace pbxbase
+{
+inline std::atomic<long long> g_groups{0}, g_folded{0}, g_ok{0}, g_bad{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (g_groups.load() == 0 && g_ok.load() == 0) { return; }
+        std::fprintf(stderr, "[pb-xbase] F5 groups=%lld folded=%lld | verify ok=%lld MISMATCH=%lld\n",
+                     g_groups.load(), g_folded.load(), g_ok.load(), g_bad.load());
+    }
+};
+inline Dump g_dump;
+// The index of the plan's first put-back cast (the one the axis fans), or actions.size().
+inline std::size_t FannedCast(const TurnSolver::Plan& p)
+{
+    for (std::size_t i = 0; i < p.actions.size(); ++i)
+    {
+        const Action& a = p.actions[i];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && d->params.put_back_from_hand > 0) { return i; }
+    }
+    return p.actions.size();
+}
+}   // namespace pbxbase
+// Do fan bases `a` and `b` run the identical apply up to (and through) their put-back cast? See F5.
+static bool PbSamePrefix(const GameState& state, const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+{
+    const std::size_t ba = pbxbase::FannedCast(a), bb = pbxbase::FannedCast(b);
+    if (ba != bb || ba >= a.actions.size()) { return false; }
+    for (const TurnSolver::Plan* q : { &a, &b })
+    {
+        for (std::size_t i = ba + 1; i < q->actions.size(); ++i)
+        {
+            const Action& x = q->actions[i];
+            if (x.kind != Action::Kind::CastFromHand || !PbRunsAfterPutBack(state, x)) { return false; }
+        }
+    }
+    TurnSolver::Plan ta = a, tb = b;
+    ta.actions.resize(ba + 1);
+    tb.actions.resize(ba + 1);
+    pbfoldx::CopyScratch(ta, tb);
+    return ta == tb;
+}
+
+// The post-apply key with every tap of our permanents and the floating mana cleared: two states equal under it
+// differ at most in the payment allocation (F4's verify).
+static TranspositionTable::Key BuildDedupKey(const GameState& state);
+// MTG_PB_FOLD_X_DEBUG: a short description of a post-apply state, for a verify mismatch.
+static std::string PbStateDesc(const GameState& s)
+{
+    const Player& ap = s.ActivePlayer();
+    std::string o = "sc=" + std::to_string(s.search_count) + " life=" + std::to_string(ap.life) + " lib=";
+    for (std::size_t i = 0; i < 8 && i < ap.library.size(); ++i) { o += ap.library[i].m_name.str() + "#" + std::to_string(ap.library[i].m_number) + ","; }
+    o += " hand=";
+    for (const Card& c : ap.hand) { o += c.m_name.str() + ","; }
+    o += " gy=";
+    for (const Card& c : ap.graveyard) { o += c.m_name.str() + ","; }
+    o += " bf=";
+    for (const Permanent& pm : s.battlefield) { if (pm.controller_index == s.active_player_index) { o += pm.card.m_name.str() + (pm.tapped ? "(T)" : "") + ","; } }
+    o += " exile=" + std::to_string(s.exile.size()) + " fl=" + std::to_string(s.floating_mana.Total());
+    return o;
+}
+static TranspositionTable::Key PbPaymentBlindKey(const GameState& s)
+{
+    GameState b = s;
+    for (Permanent& pm : b.battlefield) { if (pm.controller_index == b.active_player_index) { pm.tapped = false; } }
+    b.floating_mana = ManaPool{};
+    return BuildDedupKey(b);
+}
 
 struct DigFoldMemo
 {
@@ -56760,6 +57267,7 @@ struct ContPinFrame
     ContPinFrame(const TurnSolver::Plan& p, std::vector<Action>* s)
         : pins(ContPinsOf(p)), sink(s), before(s != nullptr ? s->size() : 0)
     {
+        ++pbfan::t_cont_frames;
         if (pins.Any()) { scope.emplace(&pins); }
         // MTG_PB_EXACT_WIDTH_VERIFY (F2): a continuation variant's fan width, checked where its pin is consumed.
         if (PbExactWidthVerifyOn()) { pbx.emplace(p.putback_group, p.putback_choice, /*pin_base=*/false); }
@@ -56767,6 +57275,7 @@ struct ContPinFrame
     std::optional<pbexact::ExpectScope> pbx;
     ~ContPinFrame()
     {
+        --pbfan::t_cont_frames;
         if (sink == nullptr || sink->size() <= before) { return; }
         bool tag = pins.Any();
         for (std::size_t i = before; !tag && i-- > 0;) { if ((*sink)[i].cont_pins) { tag = true; } }
@@ -56915,6 +57424,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         int& w; int& i;
         ~ApdPbOut() { g_apd_last_putback_w = w; g_apd_last_putback_i = i; }
     } _apd_pb_out{ apd_pb_w, apd_pb_i };
+    // ...and F3 / F4's (pbfan): the fan's resolution TABLE when the host asked THIS apply for it (consumed here, so
+    // a nested apply never sees the request), and the realised put-back's two card numbers (every apply).
+    const bool pbtbl_want   = pbfan::t_req;
+    pbfan::t_req            = false;
+    const int  pbtbl_frames = pbfan::t_cont_frames;
+    pbfan::Table pbtbl;
+    int apd_pb_top = -1, apd_pb_second = -1;
+    struct PbTblOut
+    {
+        bool want; pbfan::Table& t; int& top; int& second;
+        ~PbTblOut()
+        {
+            pbfan::t_last_top = top; pbfan::t_last_second = second;
+            if (want) { pbfan::t_last = std::move(t); }
+        }
+    } _pbtbl_out{ pbtbl_want, pbtbl, apd_pb_top, apd_pb_second };
     // Prevent Damage backstop: no tap-trigger may be pending when a plan starts applying (armed only;
     // MTG_DMG_EVENT_VERIFY aborts if one is -- a missed flush site).
     dmgev::BackstopFlush(state, "ApplyPlanDirect");
@@ -57086,6 +57611,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // MTG_PB_EXACT_WIDTH_VERIFY (F2): this plan's fan width, checked at the put-back that consumes the pin. Not on a
     // node RESUME (its put-back resolved in the snapshot's prefix).
     pbexact::ExpectScope _pbx(bp_resume == nullptr ? plan.putback_group : 0, plan.putback_choice, /*pin_base=*/true);
+    if (pbexact::t_expect_w != -1)
+    {
+        static const bool s_pbx_dbg0 = EnvOn("MTG_PB_EXACT_WIDTH_DEBUG");
+        if (s_pbx_dbg0)
+        {
+            pbexact::t_dbg_start = "START hand=";
+            for (const Card& c : state.ActivePlayer().hand) { pbexact::t_dbg_start += c.m_name.str() + "#" + std::to_string(c.m_number) + ","; }
+            pbexact::t_dbg_start += " lib=";
+            for (std::size_t li = 0; li < 6 && li < state.ActivePlayer().library.size(); ++li)
+            { pbexact::t_dbg_start += state.ActivePlayer().library[li].m_name.str() + "#" + std::to_string(state.ActivePlayer().library[li].m_number) + ","; }
+            pbexact::t_dbg_start += " turn=" + std::to_string(state.turn_number) + " lands_played=" + std::to_string(state.ActivePlayer().lands_played_this_turn)
+                                  + " spells=" + std::to_string(state.spells_cast_this_turn);
+        }
+    }
     ScriptedEtbCounter _sec(plan.etbcounter_choice);   // searched optional ETB counter payment; -1 inert
     // Searched landfall-target POLICY (Plan::landfall_target_choice) for this turn: installed BEFORE
     // the land block below so the plan's own land drop's targeted triggers read it. -1 installs
@@ -60406,9 +60945,31 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     g_putback_resolved_w = -1;
                     const bool pb_pinned = g_scripted_putback_choice >= 0;   // MTG_CANTRIP_ATTRIB only
                     const int  pb_pin_before = g_scripted_putback_choice;      // MTG_PB_EXACT_WIDTH_VERIFY
+                    // F3 / F4 (pbfan): the requested table, at the resolution that consumes THIS plan's own pin --
+                    // the fan's put-back (not a continuation's: no continuation frame opened since the apply began).
+                    const bool pb_first = apd_pb_w < 0;
+                    if (pb_first && pbtbl_want && !pbtbl.valid && pb_pin_before >= 1 && pb_pin_before == plan.putback_choice
+                        && pbfan::t_cont_frames == pbtbl_frames)
+                    {
+                        pbtbl = pbfan::Build(state, state.active_player_index, def.params.put_back_from_hand);
+                    }
                     ResolvePutBackFromHand(state, state.active_player_index, def.params.put_back_from_hand, def.card.m_name.str());
+                    if (pb_first && g_putback_resolved_w > 0 && def.params.put_back_from_hand == 2 && ap.library.size() >= 2)
+                    { apd_pb_top = ap.library[0].m_number; apd_pb_second = ap.library[1].m_number; }
                     if (pbexact::t_expect_w != -1)
-                    { pbexact::Check(pb_pin_before, g_putback_resolved_w, state, def.card.m_name.str().c_str()); }
+                    {
+                        static const bool s_pbx_dbg = EnvOn("MTG_PB_EXACT_WIDTH_DEBUG");
+                        if (s_pbx_dbg)
+                        {
+                            pbexact::t_dbg_ctx = "plan=";
+                            for (const Action& a2 : plan.actions) { pbexact::t_dbg_ctx += a2.card_name.str() + (a2.remand_by.empty() ? "" : "[R]") + ","; }
+                            pbexact::t_dbg_ctx += " pb=" + std::to_string(plan.putback_choice) + " grp=" + std::to_string(plan.putback_group)
+                                + " apd=" + std::to_string(g_apd_depth) + " resume=" + std::to_string(bp_resume != nullptr ? 1 : 0)
+                                + " spells=" + std::to_string(state.spells_cast_this_turn) + " sinks=" + std::to_string(sink_stack.size())
+                                + " frames=" + std::to_string(pbfan::t_cont_frames);
+                        }
+                        pbexact::Check(pb_pin_before, g_putback_resolved_w, state, def.card.m_name.str().c_str());
+                    }
                     cantripattr::NoteResolution(cantripattr::kBrainstorm, g_putback_resolved_w, pb_pinned);
                     if (apd_pb_w < 0 && g_putback_resolved_w >= 0)
                     { apd_pb_w = g_putback_resolved_w; apd_pb_i = g_putback_resolved_i; }
@@ -67523,6 +68084,14 @@ static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<A
     return false;
 }
 
+void TurnSolver::SoundFoldCounters(long long out[5])
+{
+    out[0] = pbexact::g_exact.load();
+    out[1] = 0;   // F3 (not built yet)
+    out[2] = pbfoldx::g_strand_folded.load();
+    out[3] = pbxbase::g_folded.load();
+    out[4] = 0;   // Q36 (not built yet)
+}
 
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
@@ -89372,6 +89941,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         m2_dig_fold.on = DigSearchedChoiceOn();
         PutBackFoldMemo m2_pb_fold;   // ...and the put-back fold, on the same argument
         m2_pb_fold.on = PutBackFoldOn();
+        m2_pb_fold.ArmX(!node_host_here, &post, &state);   // F3 / F4: only where no apply can stop at a node
         // ---- THE M2 FIXPOINT STEP (MTG_M2_FIXPOINT; EngineFlags.h / M2FixModeFor) -----------------
         // ONE body for the two places a main-2 line can need it: this loop's own plans, and the wave
         // walker's variants below (MTG_BP_M2_WAVE_FIXPOINT) -- the walker used to send its lines
@@ -89564,11 +90134,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             const std::uint64_t truncasym_before = g_bp_truncasym_last;
             PrePlanShareArm(m2_pps, s2);
             const std::uint64_t m2_canon_before = g_bp_base_canon_last;
+            m2_pb_fold.ArmTable(q);   // F3 / F4: this member publishes its fan's table if asked
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
             if (q.bp_choice < 0 && g_bp_base_canon_last != m2_canon_before && BpCanonWaveOn())
             { m2_canon_bases.insert(static_cast<std::size_t>(&q - post.data())); }
             m2_dig_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
             m2_pb_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
+            m2_pb_fold.VerifyAfter(q, [&] { return BuildDedupKey(s2); }, [&] { return PbPaymentBlindKey(s2); }, [&] { return PbStateDesc(s2); });
             if (m2_plain_rank) { m2_known_n.emplace(m2_nkey, g_bp_cands_last); }
             {
                 const std::size_t pos = static_cast<std::size_t>(&q - post.data());
@@ -91513,6 +92085,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
     std::vector<NodeNested> node_nested;   // MTG_BP_NODE_NESTED_SLOTS: handed to the wave walker below
+    pb_fold.ArmX(!node_host_here, &pre, &state);   // F3 / F4: only where no apply can stop at a node
+    // F5 (MTG_PB_XBASE_FOLD, see PbSamePrefix): the fan bases that first pended at each partition state, the
+    // fans whose every rank pends at an earlier base's same-rank state (-> that base's group), and (verify) the
+    // partition keys of applied ranks.
+    const bool xbase_on     = node_host_here && PbXbaseFoldOn() && !HumanPlayActive();
+    const bool xbase_verify = xbase_on && PbXbaseFoldVerifyOn();
+    std::unordered_map<TranspositionTable::Key, std::pair<int, TurnSolver::Plan>, TranspositionTable::KeyHash> xbase_host;
+    std::unordered_map<int, int> xbase_of;   // folded group -> the earlier base's group
+    std::map<std::pair<int, int>, TranspositionTable::Key> xbase_vkey;   // verify: (group, rank) -> partition key
 
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
@@ -91877,6 +92458,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             FswDeclinedTrace(state, depth, p, "putback-fold", {}, state, -1, best.win_turn);
             continue;
         }
+        // F5 (MTG_PB_XBASE_FOLD): a rank of a fan whose base's prefix collapsed onto an earlier base's -- its
+        // pend collapses onto that base's same rank. The bookkeeping of a collapsed pend: the probe's no-win
+        // value and the beam refund.
+        if (xbase_on && !xbase_verify && p.putback_choice >= 1 && p.bp_choice < 0 && xbase_of.count(p.putback_group) != 0)
+        {
+            pbxbase::g_folded.fetch_add(1, std::memory_order_relaxed);
+            if (rec_vals) { node_vals.push_back(max_turns + 1); }
+            if (beam_here) { --_beam_i; }
+            FswDeclinedTrace(state, depth, p, "putback-xbase-fold", {}, state, -1, best.win_turn);
+            continue;
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
@@ -91970,6 +92562,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const EtbcFold::Witness ec_w0 = etbc_fold.on ? EtbcFold::Witness::Take(pf_units0) : EtbcFold::Witness{};
         PrePlanShareArm(fsw_pps, s);
         const std::uint64_t m1_canon_before = g_bp_base_canon_last;
+        pb_fold.ArmTable(p);   // F3 / F4: this member publishes its fan's table if asked
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
         if (p.bp_choice < 0 && g_bp_base_canon_last != m1_canon_before && BpCanonWaveOn())
         { m1_canon_bases.insert(static_cast<std::size_t>(p_pos)); }
@@ -92012,6 +92605,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         dig_fold.Record(p, !node_snap.pending, static_cast<int>(pre_i));
         pb_fold.Record(p, !node_snap.pending, static_cast<int>(pre_i));
+        pb_fold.VerifyAfter(p, [&] { return BuildDedupKey(s); }, [&] { return PbPaymentBlindKey(s); }, [&] { return PbStateDesc(s); });
         bounce_fold.Record(p, static_cast<int>(pre_i), !node_snap.pending,
                            [&] { return BuildDedupKey(s); });
         if (bounce_expect != nullptr) { BounceFoldMemo::CountVerify(BuildDedupKey(s) == *bounce_expect); }
@@ -92129,6 +92723,39 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const TranspositionTable::Key pend_key = BuildDedupKey(node_snap.state);
             if (dupe_trace_pre) { bpnode::PendTraceRecord(pend_key, DupeSig(p), node_snap.state); }
             const bool node_fresh = node_prefix_seen.insert(pend_key).second;
+            // F5 (MTG_PB_XBASE_FOLD): learn which fan bases collapse onto an earlier base's prefix; verify the ranks.
+            if (xbase_on && p.putback_group != 0 && p.bp_choice < 0 && g_apd_last_putback_w > 0)
+            {
+                if (p.putback_choice < 0)
+                {
+                    if (node_fresh) { xbase_host.emplace(pend_key, std::make_pair(p.putback_group, p)); }
+                    else
+                    {
+                        const auto h = xbase_host.find(pend_key);
+                        if (h != xbase_host.end() && h->second.first != p.putback_group
+                            && PbSamePrefix(state, h->second.second, p)
+                            && xbase_of.emplace(p.putback_group, h->second.first).second)
+                        { pbxbase::g_groups.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                }
+                else if (xbase_verify)
+                {
+                    const int vk = g_apd_last_putback_i;
+                    xbase_vkey[{ p.putback_group, vk }] = pend_key;
+                    // Compare this rank with its twin across the collapse, whichever of the two applied first.
+                    auto judge = [&](int other_group)
+                    {
+                        const auto e = xbase_vkey.find({ other_group, vk });
+                        if (e == xbase_vkey.end()) { return; }
+                        if (e->second == pend_key) { pbxbase::g_ok.fetch_add(1, std::memory_order_relaxed); return; }
+                        const long long nb = pbxbase::g_bad.fetch_add(1, std::memory_order_relaxed);
+                        if (nb < 10) { std::fprintf(stderr, "[pb-xbase] F5 VERIFY MISMATCH T%d group=%d rank=%d\n", state.turn_number, p.putback_group, vk); }
+                    };
+                    const auto f = xbase_of.find(p.putback_group);
+                    if (f != xbase_of.end()) { judge(f->second); }
+                    for (const auto& [fg, hg] : xbase_of) { if (hg == p.putback_group) { judge(fg); } }
+                }
+            }
             if (s_rollout_stats && !node_fresh) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); }
             if (node_fresh)
             {
@@ -98206,6 +98833,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // ...and the put-back fold (see PutBackFoldMemo), on the same condition.
         PutBackFoldMemo pb_fold;
         pb_fold.on = bp_variants_here && PutBackFoldOn();
+        pb_fold.ArmX(/*full_tail=*/true, &candidates, &state);   // F3 / F4: these applies never stop at a node
         // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
         // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
         // runs every rollout turn and is where the doc says the searched-breakpoint gain actually
@@ -98784,7 +99412,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         etbc_fold.on ? EtbcFold::Witness::Take(cp_units0) : EtbcFold::Witness{};
                     PrePlanShareArm(la_pps, copy);   // `copy` is a fresh copy of `state` (no cp_shared)
                     const pofold::Harvest po_h = pofold::ApplyMeasured(
-                        po_arm_base(plan), po_arm_r0(plan), po_ci, [&] { ApplyPlanDirect(copy, plan, true); });
+                        po_arm_base(plan), po_arm_r0(plan), po_ci, [&] { pb_fold.ArmTable(plan); ApplyPlanDirect(copy, plan, true); });
                     etbc_fold.Record(cp_i, ec_w0, budget != nullptr ? budget->Used() : 0, false,
                                      [&] { return BuildDedupKey(copy); });
                     if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(copy), state.turn_number); }
@@ -98812,6 +99440,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 pb_fold.Record(plan, true, static_cast<int>(cand_index));
+                pb_fold.VerifyAfter(plan, [&] { return BuildDedupKey(copy); }, [&] { return PbPaymentBlindKey(copy); }, [&] { return PbStateDesc(copy); });
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
                                    [&] { return BuildDedupKey(copy); });
                 if (bounce_expect != nullptr)
@@ -99072,7 +99701,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 PrePlanShareArm(la_pps, copy);   // `copy` is a fresh copy of `state`
                 {
                     const pofold::Harvest po_h = pofold::ApplyMeasured(
-                        po_arm_base(plan), po_arm_r0(plan), po_ci, [&] { ApplyPlanDirect(copy, plan, false); });
+                        po_arm_base(plan), po_arm_r0(plan), po_ci, [&] { pb_fold.ArmTable(plan); ApplyPlanDirect(copy, plan, false); });
                     etbc_fold.Record(cand_index, ec_w0, budget != nullptr ? budget->Used() : 0, false,
                                      [&] { return BuildDedupKey(copy); });
                     if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(copy), state.turn_number); }
@@ -99081,6 +99710,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
                 dig_fold.Record(plan, true, static_cast<int>(cand_index));
                 pb_fold.Record(plan, true, static_cast<int>(cand_index));
+                pb_fold.VerifyAfter(plan, [&] { return BuildDedupKey(copy); }, [&] { return PbPaymentBlindKey(copy); }, [&] { return PbStateDesc(copy); });
                 bounce_fold.Record(plan, static_cast<int>(cand_index), true,
                                    [&] { return BuildDedupKey(copy); });
                 if (bounce_expect != nullptr)
