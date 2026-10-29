@@ -34,6 +34,7 @@ order, `MTG_BP_MAXBASE`), and at the end of `EnumerateMainPlans` (behind the COM
 
 ## Evidence (final binary)
 
+* smoke 149/149 PASS, play-changed 0 (searched and d0), THREADS=4 MTG_PGO=0, on the committed binary.
 * unit 2108/2108; scenarios 339/339 (6 new: `cyclone_human_song_one_mountain_rejected`,
   `dragonstorm_human_{song,pyretic}_one_mountain_rejected`, `hinata_human_irencrag_one_mountain_rejected`,
   `treasure_hunt_human_cycle_in_line_keeps_blue` -- fails with `MTG_ACT_LINE_HOLD=0` --,
@@ -55,10 +56,17 @@ order, `MTG_BP_MAXBASE`), and at the end of `EnumerateMainPlans` (behind the COM
 1. **Valve interaction on very wide boards.** When a frame already exceeds the viewer plan-space bound, the seed
    family doubles the position count and the valve can drop one more OLD group (EDF `claude_s5_gi4` T4, replay
    bound 8192: baseline dropped Cloud of Faeries, new drops Cloud of Faeries + Mariposa Military Base; 1437 vs
-   1436 plans; the reference still replays with the identical verdict and detail). Fix: in the valve's rank-fill
-   (`vranked`, TurnSolver.cpp, "THE RANK-FILL SPENDS ITS LAST SLOTS ON AFFORDABLE GROUPS FIRST"), rank a group
-   whose actions are `IsHumanGenericCycleSeed` LAST, so the new family is the first thing dropped and the older
-   menu is untouched. Then re-run the prefix check.
+   1436 plans; the reference still replays with the identical verdict and detail). The seed family is a group of
+   its own in `CapGroupsBySituationalRank`'s viewer valve, and the valve's KIND seeding ("SEED ONE GROUP PER ACTION
+   KIND") reserves it as the DigDraw kind's representative before older groups fill. Re-ranking alone is not
+   enough (the kind seeding, and a frame that fit in full before now entering the valve and pooling). Proposed
+   fix: when `HumanPlayActive()` and the deck does not search its cycles, take the groups whose actions are
+   `IsHumanGenericCycleSeed` OUT of `groups` / `group_hand_index` before the valve runs (so it decides exactly as
+   the baseline), then append each back only if `viewerplancap::Estimate` with it still fits `pcap` / `wcap`; never
+   count it in `dropped_groups` / `dropped_names` (the cycle stays offered as the standalone plan, so "not offered
+   this turn" would be false). All of the valve's return points must re-add, so do it at the EnumeratePlans call
+   site of `CapGroupsBySituationalRank` (Solve's call is autonomous and must not change). Then re-run the prefix
+   check and the protocol sweep.
 2. Finish the prefix check over the remaining cycling-deck refs, `viewer_validate_check.js`, and the final full
    protocol sweep on the final binary.
 
@@ -67,11 +75,11 @@ order, `MTG_BP_MAXBASE`), and at the end of `EnumerateMainPlans` (behind the COM
 ```
 ./build.sh
 D=/workspaces/MagicDeckTester2/build/scratch/cyclone-viewer; cp build/Release/mtg $D/mtg.final
-THREADS=4 MTG_PGO=0 bash test/regression.sh --smoke                       # if not already PASS (play-changed 0)
+THREADS=4 MTG_PGO=0 bash test/regression.sh --smoke                       # after any engine change (PASS at a89fd7ca2)
 MTG_BIN=$D/mtg.final python3 test/viewer_protocol_check.py --strict --threads 4
 REFS=$(find references/EldraziDisplacerFlicker references/FiveColour references/Fluctuator references/treasure_hunt \
        references/WhiteKnights references/Unpredictable_Cyclone -name 'claude_s*.json' | sort)
-python3 $D/t/menu_prefix.py $D/mtg.base $D/mtg.final 4 $REFS              # mtg.base = build of ff116556c
+python3 test/viewer_menu_prefix_check.py $D/mtg.base $D/mtg.final 4 $REFS              # mtg.base = build of ff116556c
 MTG_BIN=$D/mtg.final node test/viewer_validate_check.js
 ```
-`$D/mtg.base` and `$D/t/menu_prefix.py` live on the build volume (regenerable: build ff116556c for the base).
+`$D/mtg.base` lives on the build volume (regenerable: build ff116556c). The prefix check is `test/viewer_menu_prefix_check.py` (run from the repo root).
