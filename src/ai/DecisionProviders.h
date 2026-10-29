@@ -3584,7 +3584,7 @@ public:
     bool CantripPlansActive(const GameState& s, bool putback) const override;
     // MTG_CYCLONE_SEED_PLANS (DEFAULT OFF): the cycle seeds' Curator scry pin -> the walk-aware scry below.
     bool CycleScryPinHeuristic(const GameState& s) const override;
-    // MTG_CYCLONE_CYCLER_RULE (DEFAULT OFF): which creature cycler a plan's cycle seed uses (CycloneCyclerRuleApply).
+    // MTG_CYCLONE_CYCLER_RULE (DEFAULT ON since 2026-10-29): which creature cycler a plan's cycle seed uses (CycloneCyclerRuleApply).
     bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
                                 std::vector<std::string>& if_not) const override;
     bool CycleSeedAdmitOut(const GameState& s, const std::string& cycler, int plan_mana, int plan_blue,
