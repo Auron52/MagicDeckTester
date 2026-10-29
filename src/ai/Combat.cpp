@@ -363,6 +363,15 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
 CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>& atk_idx,
                                        int exalted_bonus, bool collect_descs)
 {
+    // MTG_LACKEY_PIN_FOLD: Goblin Lackey's put pin is THIS combat's -- spent once combat damage is over, whether or
+    // not a put fired (no Lackey connected, nothing matching in hand), on every return path including the
+    // two-step one. A pinned variant whose put never fired then leaves combat in its base plan's state, which is
+    // what MTG_COMBAT_PIN_FOLD compares. =0: it rides on to the turn start, as before.
+    struct SpendLackeyPin
+    {
+        GameState& s;
+        ~SpendLackeyPin() { if (LackeyPinFoldOn()) { s.scripted_cheat_choice = -1; } }
+    } spend_lackey_pin{ state };
     CombatDamageResult out;
     const int active  = state.active_player_index;
     const int opp_idx = 1 - active;

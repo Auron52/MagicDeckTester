@@ -922,7 +922,8 @@ static bool CombatPinFoldOn()
 static bool PlanHasAttackTriggerPin(const TurnSolver::Plan& p)
 {
     return ((p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0) && TectonicPinFoldOn())
-        || (p.fling_victim_choice != -1 && FlingPinFoldOn());   // ...and Surtland Flinger's victim (same shape)
+        || (p.fling_victim_choice != -1 && FlingPinFoldOn())    // ...and Surtland Flinger's victim (same shape)
+        || (p.lackey_choice >= 0 && LackeyPinFoldOn());         // ...and Goblin Lackey's put (spent at combat damage)
 }
 static bool PlanHasCombatPin(const TurnSolver::Plan& p)
 {
@@ -24266,6 +24267,25 @@ static bool FlingCastAxisEnabled()
 {
     static const bool on = EnvOn("MTG_FLING_CAST_AXIS", true);
     return heurarm::Flag(heurarm::FLING_CAST_AXIS, on);
+}
+// ...and the same for Goblin Lackey's put (MTG_LACKEY_CAST_AXIS, DEFAULT ON; =0 -> the battlefield-only gate and the
+// hand-as-it-stands width). See the SEARCHED GOBLIN LACKEY PUT block in AppendSubdecisionAxes.
+static bool LackeyCastAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_LACKEY_CAST_AXIS", true);
+    return heurarm::Flag(heurarm::LACKEY_CAST_AXIS, on);
+}
+// Does this definition GRANT HASTE to another creature? Every *haste* param in cards.json that reaches another
+// creature (the lord / equipment / temp grants, Dragon Tempest, the sac-outlet and team-pump grants, Generator
+// Servant's {C}, Incandescent Soulstoke's put) and the Haste template. Shared by the cast routes of the Tectonic,
+// Flinger and Lackey axes: an over-inclusion costs a variant that folds after combat, a miss would cost the line.
+static bool GrantsHasteToOther(const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    const CardParams& q = d->params;
+    return d->tmpl == CardTemplate::Haste || q.grants_haste || q.equip_grants_haste || q.grants_temp_haste
+        || q.haste_on_flying_enter || q.sac_outlet_grants_haste || q.team_pump_grants_haste
+        || q.sac_for_mana_grants_haste || q.tap_put_grants_haste;
 }
 // Tectonic Giant's modal attack trigger ("3 damage to each opponent" vs "exile two, play one").
 // Default ON: both modes are live every turn and the crossover moves with board and life, so a
@@ -75417,14 +75437,6 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         // The cast route's state facts: a Flinger in hand (staged included), and a haste source in play.
         const bool cast_axis = FlingCastAxisEnabled() && is_pre_combat;
-        auto fling_haste_def = [](const CardDefinition* d)   // the Tectonic cast route's haste list
-        {
-            if (d == nullptr) { return false; }
-            const CardParams& q = d->params;
-            return d->tmpl == CardTemplate::Haste || q.grants_haste || q.equip_grants_haste || q.grants_temp_haste
-                || q.haste_on_flying_enter || q.sac_outlet_grants_haste || q.team_pump_grants_haste
-                || q.sac_for_mana_grants_haste || q.tap_put_grants_haste;
-        };
         bool fling_hand = false, fling_haste_bf = false;
         if (cast_axis)
         {
@@ -75439,7 +75451,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 for (const Permanent& p : state.battlefield)
                 {
                     if (p.controller_index != me || p.def_absent) { continue; }
-                    if (fling_haste_def(CardDatabase::Instance().LookupCached(p.card))) { fling_haste_bf = true; break; }
+                    if (GrantsHasteToOther(CardDatabase::Instance().LookupCached(p.card))) { fling_haste_bf = true; break; }
                 }
             }
         }
@@ -75475,7 +75487,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         if (a.kind != Action::Kind::CastFromHand) { continue; }
                         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
                         if (d == nullptr) { continue; }
-                        if (fling_haste_def(d) || (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste)))
+                        if (GrantsHasteToOther(d) || (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste)))
                         { c_haste = true; }
                         if (!d->card.IsCreature()) { continue; }
                         if (a.hand_index < 0 || a.hand_index >= static_cast<int>(fp.hand.size())
@@ -75578,16 +75590,6 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         // casts beside one is its own ordinal.
         auto modal_def = [](const CardDefinition* d)
         { return d != nullptr && d->params.attack_trigger_modal && d->card.IsCreature(); };
-        // Every param that grants haste to ANOTHER creature (cards.json's *haste* family) and the Haste
-        // template. Over-inclusion costs a variant that folds after combat; a miss would cost the line.
-        auto haste_def = [](const CardDefinition* d)
-        {
-            if (d == nullptr) { return false; }
-            const CardParams& q = d->params;
-            return d->tmpl == CardTemplate::Haste || q.grants_haste || q.equip_grants_haste || q.grants_temp_haste
-                || q.haste_on_flying_enter || q.sac_outlet_grants_haste || q.team_pump_grants_haste
-                || q.sac_for_mana_grants_haste || q.tap_put_grants_haste;
-        };
         bool cast_route = false;         // some plan from this state could bring a modal creature in
         bool haste_bf = false;           // a haste source already in play (or a haste-tagged {C} floating)
         bool modal_hand = false;         // a modal creature in hand (staged included)
@@ -75601,7 +75603,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 if (p.controller_index != me || p.def_absent) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (haste_def(d)) { haste_bf = true; }
+                if (GrantsHasteToOther(d)) { haste_bf = true; }
                 if (d != nullptr && d->params.tap_put_grants_haste) { put_bf = true; }
             }
             for (const Card& c : tp.hand)
@@ -75638,7 +75640,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     ++c_modal;
                     if (d->card.HasKeyword(Keyword::Haste)) { c_haste = true; }
                 }
-                if (haste_def(d)) { c_haste = true; }
+                if (GrantsHasteToOther(d)) { c_haste = true; }
                 if (d->params.tap_put_grants_haste) { c_put = true; }
             }
             int n = (c_modal > 0 && (haste_bf || c_haste)) ? c_modal : 0;
@@ -76414,35 +76416,222 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // SEARCHED GOBLIN LACKEY PUT -- the same post-dedup fan-out, keyed on the BOARD rather than on a
     // cast: the trigger belongs to a Lackey already in play, not to anything in `actions`. Only the
     // pre-combat plan can carry it, since the put resolves in that combat's damage step.
+    //
+    // A LACKEY THE PLAN BRINGS IN, AND EVERY DAMAGING LACKEY (MTG_LACKEY_CAST_AXIS / MTG_LACKEY_ORDINALS, DEFAULT ON;
+    // 2026-10-29 -- the Tectonic / Flinger fix's shape). The gate needed a Lackey able to attack from the
+    // battlefield, so a Lackey cast (or Vial-put) this turn and hasted by Goblin Warchief / Goblin Chieftain took
+    // CombatCheatCandidates' front -- a one-answer pick with search depth remaining (the NO-GREEDY rule) -- and every
+    // trigger read the one pin, so a SECOND damaging Lackey took the front too. Now, per base plan:
+    //   * ordinals = the Lackeys able to attack now + the plan's own Lackey casts / puts while a haste source is
+    //     reachable (in play, among the plan's casts, a hasty Lackey) + one for a plan that opens a breakpoint
+    //     beside a Lackey in hand or library (a continuation casts what the outer plan's pins must cover);
+    //   * the width = min(MTG_LACKEY_WIDTH, the matching permanents in hand + the plan's tutor-to-hand casts --
+    //     a Goblin Matron's find is a candidate at combat damage, which the hand as it stands never counted);
+    //   * one ordinal: the historical ranks (StatePinVariantRanks); more: the PRODUCT of ranks over the ordinals
+    //     (packed, SpellEffects.h LackeyPackRanks; capped at 27 variants per base plan, the latest ordinals left
+    //     on the front past it), minus the base plan's tuple (the inherited pin, decoded per ordinal).
+    // Over-counting only adds a rank or an ordinal no trigger reads: it clamps, or is spent unread at the end of
+    // combat damage, and lands on a sibling's post-combat state, which MTG_LACKEY_PIN_FOLD folds.
+    // NOT covered (disclosed): a Lackey that enters attacking without being declared (none in this pool).
     if (!cont_axes_only && LackeyAxisEnabled() && LackeyAxisWidth() > 1 && !HumanPlayActive() && is_pre_combat)
     {
         const std::size_t cands_now = LackeyCandidateCountNow(state);
-        const std::size_t k = std::min(cands_now, LackeyAxisWidth());
-        if (k > 1)
+        const bool lackey_cast   = LackeyCastAxisEnabled();
+        const bool lackey_ord    = LackeyOrdinalsOn();
+        if (!lackey_cast && !lackey_ord)
         {
-            const std::vector<int> lackey_ranks = StatePinVariantRanks(state.scripted_cheat_choice,
-                                                                       static_cast<int>(k));
-            pb_lazy_materialize_if([&](std::size_t bi)
+            // Exactly the pre-2026-10-29 shape (both levers =0).
+            const std::size_t k = std::min(cands_now, LackeyAxisWidth());
+            if (k > 1)
             {
-                const TurnSolver::Plan& p = all[bi];
-                return !(p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0);
-            });
-            std::vector<TurnSolver::Plan> extra;
-            for (const TurnSolver::Plan& p : all)
-            {
-                // Base plans only -- one axis at a time, so cost stays additive.
-                if (p.scry_choice >= 0 || p.bp_choice >= 0
-                    || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
-                for (const int c : lackey_ranks)   // a rank-valued state pin (StatePinVariantRanks)
+                const std::vector<int> lackey_ranks = StatePinVariantRanks(state.scripted_cheat_choice,
+                                                                           static_cast<int>(k));
+                pb_lazy_materialize_if([&](std::size_t bi)
                 {
-                    TurnSolver::Plan v = p;
-                    v.lackey_choice = c;
-                    extra.push_back(std::move(v));
+                    const TurnSolver::Plan& p = all[bi];
+                    return !(p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0);
+                });
+                std::vector<TurnSolver::Plan> extra;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    // Base plans only -- one axis at a time, so cost stays additive.
+                    if (p.scry_choice >= 0 || p.bp_choice >= 0
+                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
+                    for (const int c : lackey_ranks)   // a rank-valued state pin (StatePinVariantRanks)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.lackey_choice = c;
+                        extra.push_back(std::move(v));
+                    }
+                }
+                TRACE("lackey", "T%d cands_now=%zu -> %zu variants/plan", state.turn_number, cands_now, k - 1);
+                all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                      std::make_move_iterator(extra.end()));
+            }
+        }
+        else
+        {
+            const int me = state.active_player_index;
+            const Player& lp = state.players[static_cast<std::size_t>(me)];
+            auto source_def = [](const CardDefinition* d)
+            { return d != nullptr && d->card.IsCreature() && !d->params.combat_damage_puts_subtype_from_hand.empty(); };
+            // State facts: the Lackeys able to attack now, the put's subtypes, haste in play, a Lackey in hand /
+            // library, and the matching permanents in hand (LackeyCandidateCountNow's count, without its need
+            // for a source in play).
+            int n_bf = 0, n_bf_sick = 0;
+            std::vector<std::string> want;
+            bool haste_bf = state.floating_haste_c > 0, src_hand = false, src_lib = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != me) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr) { continue; }
+                if (GrantsHasteToOther(d)) { haste_bf = true; }
+                if (d->params.combat_damage_puts_subtype_from_hand.empty()) { continue; }
+                if (want.empty()) { want = d->params.combat_damage_puts_subtype_from_hand; }
+                if (CanAttackFull(p, state.battlefield, me)) { ++n_bf; }
+                else if (!p.tapped && p.card.IsCreature()) { ++n_bf_sick; }   // can attack once a haste source lands
+            }
+            if (lackey_cast)
+            {
+                for (const Card& c : lp.hand)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (!source_def(d)) { continue; }
+                    src_hand = true;
+                    if (want.empty()) { want = d->params.combat_damage_puts_subtype_from_hand; }
+                }
+                if (!src_hand && state.deck_has_combat_put)
+                {
+                    for (std::size_t li = 0, ln = lp.library.size(); li < ln; ++li)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(lp.library.RawAt(li));
+                        if (!source_def(d)) { continue; }
+                        src_lib = true;
+                        if (want.empty()) { want = d->params.combat_damage_puts_subtype_from_hand; }
+                        break;
+                    }
                 }
             }
-            TRACE("lackey", "T%d cands_now=%zu -> %zu variants/plan", state.turn_number, cands_now, k - 1);
-            all.insert(all.end(), std::make_move_iterator(extra.begin()),
-                                  std::make_move_iterator(extra.end()));
+            if (!lackey_cast) { n_bf = cands_now > 0 ? n_bf : 0; }   // the historical gate: a source able to attack
+            std::size_t cands_hand = 0;
+            for (const Card& c : lp.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                const Card& hc = hd ? hd->card : c;
+                if (hc.IsInstant() || hc.IsSorcery()) { continue; }
+                for (const std::string& sub : want) { if (CardHasSubtype(hc, sub)) { ++cands_hand; break; } }
+            }
+            if (!lackey_cast) { cands_hand = cands_now; }
+            const bool any_route = n_bf > 0 || src_hand || src_lib || (lackey_cast && n_bf_sick > 0);
+            const std::size_t w_cap = std::min<std::size_t>(LackeyAxisWidth(), static_cast<std::size_t>(kLackeyMaxRank));
+            // This plan's ordinals and its width (see above).
+            auto plan_shape = [&](const TurnSolver::Plan& p, int& n_ord, int& width)
+            {
+                int c_src = 0, c_tutor = 0, c_match = 0;
+                bool c_haste = false, c_bp = false;
+                if (lackey_cast)
+                {
+                    for (const Action& a : p.actions)
+                    {
+                        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                        if (d == nullptr) { continue; }
+                        if (GrantsHasteToOther(d) || (d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste)))
+                        { c_haste = true; }
+                        if (source_def(d)) { ++c_src; }
+                        if (a.kind == Action::Kind::CastFromHand && d->params.tutor_to_hand) { ++c_tutor; }
+                        // A matching permanent the plan casts or Vial-puts leaves the hand before combat damage.
+                        if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial)
+                            && !d->card.IsInstant() && !d->card.IsSorcery())
+                        {
+                            for (const std::string& sub : want)
+                            { if (CardHasSubtype(d->card, sub)) { ++c_match; break; } }
+                        }
+                    }
+                    c_bp = (src_hand || src_lib || n_bf > 0 || n_bf_sick > 0) && PlanOpensBreakpoint(state, p) != 0;
+                }
+                n_ord = n_bf + ((c_src > 0 && (haste_bf || c_haste)) ? c_src : 0)
+                      + ((lackey_cast && c_haste) ? n_bf_sick : 0);   // a sick Lackey in play the plan's haste frees
+                if (c_bp && (src_hand || src_lib)) { ++n_ord; }
+                if (!lackey_ord) { n_ord = std::min(n_ord, 1); }
+                // The candidates left in hand at combat damage: the hand now, minus the matching permanents the
+                // plan casts, plus what its tutors-to-hand (or a breakpoint continuation's draw) can add -- an
+                // upper bound (a continuation may cast more), so an extra rank only clamps and folds.
+                long long cands = static_cast<long long>(cands_hand);
+                if (lackey_cast) { cands += std::max(c_tutor, c_bp ? 1 : 0) - c_match; }
+                width = static_cast<int>(std::min<long long>(static_cast<long long>(w_cap), std::max(0LL, cands)));
+            };
+            // Materialize the lazy put-back clones only when some base plan will really fan (the historical
+            // gate materialized on `k > 1`; a clone shares its base's actions, hence its shape).
+            bool will_fan = false;
+            if (any_route)
+            {
+                for (const TurnSolver::Plan& p : all)
+                {
+                    if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
+                    int n_ord = 0, width = 0;
+                    plan_shape(p, n_ord, width);
+                    if (n_ord > 0 && width > 1) { will_fan = true; break; }
+                }
+            }
+            if (will_fan)
+            {
+                pb_lazy_materialize_if([&](std::size_t bi)
+                {
+                    const TurnSolver::Plan& p = all[bi];
+                    return !(p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0);
+                });
+                constexpr int kLackeyProductCap = 27;
+                const int inherited = state.scripted_cheat_choice;
+                std::vector<TurnSolver::Plan> extra;
+                std::size_t n_fanned = 0;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    // Base plans only -- one axis at a time, so cost stays additive.
+                    if (p.scry_choice >= 0 || p.bp_choice >= 0
+                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
+                    int n_ord = 0, width = 0;
+                    plan_shape(p, n_ord, width);
+                    if (n_ord <= 0 || width <= 1) { continue; }
+                    ++n_fanned;
+                    if (n_ord == 1)
+                    {
+                        // One damaging Lackey: the historical single-rank pin (StatePinVariantRanks). Under
+                        // ordinals the inherited value's ordinal 0 is the base's rank.
+                        const int inh0 = lackey_ord ? LackeyRankAt(inherited, 0) : inherited;
+                        for (const int c : StatePinVariantRanks(inh0, width))
+                        {
+                            TurnSolver::Plan v = p;
+                            v.lackey_choice = c;
+                            extra.push_back(std::move(v));
+                        }
+                        continue;
+                    }
+                    // Several: the product over the ordinals that fit the cap.
+                    n_ord = std::min(n_ord, kLackeyMaxOrdinals);
+                    int combos = 1, fit = 0;
+                    while (fit < n_ord && combos * width <= kLackeyProductCap) { combos *= width; ++fit; }
+                    int base[kLackeyMaxOrdinals], r[kLackeyMaxOrdinals];
+                    for (int k = 0; k < fit; ++k) { base[k] = std::max(0, LackeyRankAt(inherited, k)); }
+                    for (int code = 0; code < combos; ++code)
+                    {
+                        int c = code;
+                        bool is_base = true;
+                        for (int k = 0; k < fit; ++k) { r[k] = c % width; c /= width; if (r[k] != base[k]) { is_base = false; } }
+                        if (is_base) { continue; }
+                        TurnSolver::Plan v = p;
+                        v.lackey_choice = LackeyPackRanks(r, fit);
+                        extra.push_back(std::move(v));
+                    }
+                }
+                if (n_fanned > 0)
+                {
+                    TRACE("lackey", "T%d n_bf=%d cands_hand=%zu -> %zu variant(s) over %zu plan(s)",
+                          state.turn_number, n_bf, cands_hand, extra.size(), n_fanned);
+                    all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                          std::make_move_iterator(extra.end()));
+                }
+            }
         }
     }
 

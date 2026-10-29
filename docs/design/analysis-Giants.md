@@ -2072,9 +2072,8 @@ base binary, and at defaults so are the 38 other suite decks (a 10-60 game sampl
 
 ### Open: the same gate shape elsewhere (survey, not fixed here)
 
-* **Goblin Lackey** (`LackeyCandidateCountNow`, Goblins). Its put axis needs a Lackey that can attack
-  from the battlefield. A Lackey cast with Goblin Warchief / Chieftain haste takes the provider's top put.
-  This is a combat-damage trigger, so it is outside this change; it needs its own Goblins A/B.
+* ~~**Goblin Lackey**~~ (`LackeyCandidateCountNow`, Goblins). FIXED in a later commit, the same shape
+  (`MTG_LACKEY_CAST_AXIS` / `_ORDINALS` / `_PIN_FOLD`). See `docs/design/analysis-goblins.md`, last section.
 * **Primeval Titan's attack pick** (Landfall). Battlefield-only too, but Landfall holds no haste source, so
   nothing is live today.
 * **A second attacking Surtland Flinger** still resolves on the default: the victim pin is one card

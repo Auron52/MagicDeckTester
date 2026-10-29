@@ -549,6 +549,9 @@ static_assert(sizeof(Player) == 200,
 // Classification: the bool is a DECK CONSTANT stamped once in StampDeckTraits that only skips the echo axis's
 // provably-empty plan walk -- nothing to fold; the pin is FUTURE-DETERMINING (set by the turn's plan apply,
 // consumed at the NEXT upkeep), FOLDED in Build() value-gated (and in BuildDedupKey's pending pins).
+// +0 bytes (2026-10-29, the Lackey cast route): `deck_has_combat_put` (a bool, the last byte of the deck_has_attack_modal hole).
+// Classification: DECK CONSTANT, nothing to fold. (scripted_cheat_choice is now PACKED per damaging-Lackey
+// trigger -- SpellEffects.h LackeyRankAt; same int, still FOLDED raw in Build().)
 static_assert(sizeof(GameState) == 1152,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

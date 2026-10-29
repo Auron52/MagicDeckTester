@@ -747,6 +747,9 @@ enum Slot : int
     FLING_PIN_FOLD,           // MTG_FLING_PIN_FOLD  Surtland Flinger's victim pin is a COMBAT pin (the MTG_TECTONIC_PIN_FOLD shape): spent at declare-attackers whether or not a fling fired, joined to PlanHasCombatPin so MTG_COMBAT_PIN_FOLD folds a variant whose post-combat state a sibling reached, charged its node unit only when not folded, and not emitted on a post-combat list. IDENTITY folds; DEFAULT ON; =0 restores the pre-fold behaviour byte-identically
     FLING_CAST_AXIS,          // MTG_FLING_CAST_AXIS  the Flinger victim axis fans for a Flinger the PLAN casts with a haste source reachable (not only one on the battlefield), and every route's victim list adds the creatures the plan itself casts. Without it a Flinger cast and attacking the same turn (Lightning Greaves) took FlingVictimCandidates' front -- which never declines -- an in-window greedy. DEFAULT ON; =0 -> the battlefield-only gate and battlefield-only victims
     ECHO_AXIS,                // MTG_ECHO_AXIS  echo's pay-vs-decline is SEARCHED (Plan::echo_choice -> GameState::scripted_echo, consumed at the next upkeep in both worlds): every searched plan that leaves an echo obligation the state's pin does not cover gets a clone per inverted subset, and the provider's PayEchoToKeep only orders the two answers. Obligations an apply itself created (a continuation's cast, a Muxus reveal) are fanned where the boundary is crossed. It was an in-window greedy pick at the executor's upkeep and at every simulated turn boundary (Goblins s1350001 gi640, s1360001 gi405 / gi3725: a turn slower at d8 b0 with the definition cost read, because the answer depends on the turn's draw and land drop). Held-out d7 b60: Goblins 5 faster / 0 slower in 8,000, goblins2hg 4 / 0 in 4,000, units 1.022x / 1.014x (docs/design/searched-echo.md). DEFAULT ON; =0 -> the provider's pick everywhere (an A/B arm only)
+    LACKEY_PIN_FOLD,          // MTG_LACKEY_PIN_FOLD  Goblin Lackey's put pin is a COMBAT pin (the MTG_TECTONIC_PIN_FOLD shape): spent at the end of combat damage whether or not a put fired (ResolveCombatDamage, both worlds), joined to PlanHasCombatPin so MTG_COMBAT_PIN_FOLD folds a variant whose post-combat state a sibling reached (an unread pin, a clamped rank, the rank equal to the front), and charged its node unit only when not folded. IDENTITY folds; DEFAULT ON; =0 restores the pre-fold behaviour byte-identically
+    LACKEY_ORDINALS,          // MTG_LACKEY_ORDINALS  Goblin Lackey's put pin is PACKED per damaging-Lackey trigger (SpellEffects.h LackeyRankAt), and the axis fans the PRODUCT of ranks over every Lackey that can deal damage this combat, so a SECOND damaging Lackey's put is searched instead of taking CombatCheatCandidates' front. DEFAULT ON; =0 -> each trigger reads (and the first one with a candidate consumes) the one pin
+    LACKEY_CAST_AXIS,         // MTG_LACKEY_CAST_AXIS  the Lackey put axis fans for a Lackey the PLAN brings in (a hand cast, a Vial put, a breakpoint continuation) with a haste source reachable (Goblin Warchief / Chieftain), not only one already able to attack; the put width counts the candidates the plan's own tutors-to-hand add (Goblin Matron). DEFAULT ON; =0 -> the battlefield-only gate and the hand-as-it-stands width
     COUNT
 };
 
@@ -1438,6 +1441,9 @@ inline const char* Name(int slot)
         "MTG_FLING_PIN_FOLD",
         "MTG_FLING_CAST_AXIS",
         "MTG_ECHO_AXIS",
+        "MTG_LACKEY_PIN_FOLD",
+        "MTG_LACKEY_ORDINALS",
+        "MTG_LACKEY_CAST_AXIS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

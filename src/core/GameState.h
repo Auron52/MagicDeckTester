@@ -1004,6 +1004,10 @@ struct GameState
     // of padding before m1_hand_turn (a bool beside the deck_has_* run before m_provider cost
     // sizeof(GameState) +8, measured). A deck constant: never folded into any key.
     bool                          deck_has_attack_modal = true;
+    // ...and a COMBAT-DAMAGE PUT trigger (CardParams::combat_damage_puts_subtype_from_hand, Goblin Lackey), the
+    // last byte of the same hole: gates the Lackey axis's cast route's library scan (a Lackey a breakpoint
+    // continuation could draw and cast). Same DEFAULT TRUE rule; a deck constant, never folded.
+    bool                          deck_has_combat_put = true;
     int                           m1_hand_turn = -1;
     // COMBAT HAND ARRIVALS -- card numbers that entered the active player's hand DURING COMBAT this
     // turn (today: Adaptive Omnitool's attack_dig_hand_count, fired at declare-attackers). These are
@@ -1088,7 +1092,10 @@ struct GameState
     // would be destroyed before the trigger ever fires. Living on the state also means it rides
     // every rollout deep-copy for free, so each plan variant carries its own pick.
     // Consumed by the first cheat trigger and reset at the start of each turn, so it cannot leak
-    // into a later combat.
+    // into a later combat. PACKED PER DAMAGING-LACKEY TRIGGER under MTG_LACKEY_ORDINALS (SpellEffects.h
+    // LackeyRankAt; ordinal 0 keeps the historical rank, so a single-trigger value reads exactly as before):
+    // each trigger reads ordinal 0 and shifts the rest down; MTG_LACKEY_PIN_FOLD spends whatever is left at
+    // the end of combat damage.
     int                      scripted_cheat_choice = -1;
     // Searched SURTLAND FLINGER victim (Plan::fling_victim_choice): the CARD NUMBER of the
     // creature this turn's first fling sacrifices, -2 = DECLINE ("you may sacrifice"), -1 = the

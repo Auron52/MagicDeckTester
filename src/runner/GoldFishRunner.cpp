@@ -1394,6 +1394,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool endstep_reanimate = false;
         // Tectonic Giant's modal attack trigger: the Tectonic axis's cast route (GameState::deck_has_attack_modal).
         bool attack_modal = false;
+        // Goblin Lackey's combat-damage put: the Lackey axis's cast route (GameState::deck_has_combat_put).
+        bool combat_put = false;
         // Emeria, the Sky Ruin's upkeep return (GameState::deck_has_upkeep_reanimate).
         bool upkeep_reanimate = false;
         // An echo card (GameState::deck_has_echo): the searched-echo axis's plan walk.
@@ -1470,6 +1472,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.remove_counter_ping_damage > 0) { counter_ping = true; }
                 if (d->params.endstep_modal_reanimate_mv >= 0) { endstep_reanimate = true; }
                 if (d->params.attack_trigger_modal)            { attack_modal = true; }
+                if (!d->params.combat_damage_puts_subtype_from_hand.empty()) { combat_put = true; }
                 if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
                 if (d->params.echo_cost.has_value())          { echo = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
@@ -1549,6 +1552,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no modal attack trigger can exist, so the Tectonic
         // axis's cast-route scan is dead code for that deck.
         state.deck_has_attack_modal        = garth || attack_modal;
+        state.deck_has_combat_put          = garth || combat_put;
         // Same reasoning, no lever: a clear bit proves no upkeep graveyard reanimator (Emeria) can exist,
         // so the upkeep walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
         state.deck_has_upkeep_reanimate    = garth || upkeep_reanimate;

@@ -132,6 +132,57 @@ inline bool FlingPinFoldOn()
     static const bool e = EnvOn("MTG_FLING_PIN_FOLD", true);
     return heurarm::Flag(heurarm::FLING_PIN_FOLD, e);
 }
+// MTG_LACKEY_PIN_FOLD (HeuristicArm.h LACKEY_PIN_FOLD; DEFAULT ON, =0 byte-identical to before): Goblin Lackey's
+// put pin (scripted_cheat_choice) is a COMBAT pin, the Tectonic shape. Read by ResolveCombatDamage (Combat.cpp,
+// both worlds), which spends it at the end of combat damage whether or not a put fired, and by the search's
+// combat-pin fold.
+inline bool LackeyPinFoldOn()
+{
+    static const bool e = EnvOn("MTG_LACKEY_PIN_FOLD", true);
+    return heurarm::Flag(heurarm::LACKEY_PIN_FOLD, e);
+}
+// MTG_LACKEY_ORDINALS (HeuristicArm.h LACKEY_ORDINALS; DEFAULT ON, =0 byte-identical to before): the put pin is
+// PACKED per damaging-Lackey trigger, ordinal 0 in bits 0-3 as the historical rank (15 = unpinned), ordinal
+// k >= 1 in bits 4k..4k+3 as rank + 1 (0 = unpinned); -1 = nothing pinned. So every value the single-trigger
+// axis ever wrote reads exactly as before. Each trigger reads ordinal 0 and SHIFTS the rest down
+// (LackeyPinShift) -- the two damage steps of a first-strike combat then need no shared counter. Read by
+// FireCombatDamageCheatIntoPlay (both worlds) and the search's fan-out.
+constexpr int kLackeyMaxOrdinals = 4;
+constexpr int kLackeyMaxRank     = 14;
+inline bool LackeyOrdinalsOn()
+{
+    static const bool e = EnvOn("MTG_LACKEY_ORDINALS", true);
+    return heurarm::Flag(heurarm::LACKEY_ORDINALS, e);
+}
+// The pinned rank of ordinal `k`, or -1 = unpinned (CombatCheatCandidates' front).
+inline int LackeyRankAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kLackeyMaxOrdinals) { return -1; }
+    const int f = (packed >> (4 * k)) & 15;
+    if (k == 0) { return f == 15 ? -1 : f; }
+    return f - 1;
+}
+// Pack per-ordinal ranks (each -1 = unpinned, else <= kLackeyMaxRank); all-unpinned packs to -1.
+inline int LackeyPackRanks(const int* ranks, int n)
+{
+    int v = 0; bool any = false;
+    for (int k = 0; k < n && k < kLackeyMaxOrdinals; ++k)
+    {
+        const int r = ranks[k];
+        if (r >= 0) { any = true; }
+        const int f = (k == 0) ? (r >= 0 ? r : 15) : (r >= 0 ? r + 1 : 0);
+        v |= f << (4 * k);
+    }
+    return any ? v : -1;
+}
+// After ordinal 0's trigger: ordinals 1.. move down one.
+inline int LackeyPinShift(int packed)
+{
+    int r[kLackeyMaxOrdinals];
+    for (int k = 0; k + 1 < kLackeyMaxOrdinals; ++k) { r[k] = LackeyRankAt(packed, k + 1); }
+    r[kLackeyMaxOrdinals - 1] = -1;
+    return LackeyPackRanks(r, kLackeyMaxOrdinals);
+}
 
 // A/B opt-out (default ON): retain leftover / over-produced mana (depletion + filter
 // lands forced to over-tap) into the turn-scoped reserve state.floating_mana, so a later
@@ -19144,6 +19195,15 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                          pd ? pd->card.m_name.str().c_str() : "-",
                          pd ? pd->card.m_mana_cost.ManaValue() : -1);
         }
+        // MTG_LACKEY_ORDINALS: THIS trigger's rank is ordinal 0 of the packed pin, and the rest move down for the
+        // next damaging Lackey -- taken before the empty-list decline, so ordinal k is always the k-th trigger.
+        int ord_rank = -1;
+        const bool lackey_ordinals = LackeyOrdinalsOn();
+        if (lackey_ordinals)
+        {
+            ord_rank = LackeyRankAt(state.scripted_cheat_choice, 0);
+            state.scripted_cheat_choice = LackeyPinShift(state.scripted_cheat_choice);
+        }
         if (ranked.empty()) { continue; }   // "may": nothing matching to put -> decline
         int best = ranked.front();
         // SEARCHED pick: the main-phase plan may have pinned an index into `ranked`
@@ -19152,12 +19212,19 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         // same plan can shrink it, leaving a pinned index past the end. Clamping makes that variant
         // a duplicate of the last (identical state -> the search tie-breaks to the first, which is
         // the provider's pick) instead of a silent decline.
-        if (state.scripted_cheat_choice >= 0)
+        if (lackey_ordinals)
         {
-            const std::size_t k = static_cast<std::size_t>(state.scripted_cheat_choice);
-            best = ranked[std::min(k, ranked.size() - 1)];
+            if (ord_rank >= 0) { best = ranked[std::min(static_cast<std::size_t>(ord_rank), ranked.size() - 1)]; }
         }
-        state.scripted_cheat_choice = -1;   // consumed by this trigger
+        else
+        {
+            if (state.scripted_cheat_choice >= 0)
+            {
+                const std::size_t k = static_cast<std::size_t>(state.scripted_cheat_choice);
+                best = ranked[std::min(k, ranked.size() - 1)];
+            }
+            state.scripted_cheat_choice = -1;   // consumed by this trigger
+        }
         // MTG_LACKEY_PREF: DIAGNOSTIC (no play change). Logs the REVEALED PREFERENCE of the search --
         // the candidate set that was actually available and the card the chosen plan actually put --
         // for REAL resolutions only (g_real_resolution; every rollout scope clears it). Run with a
