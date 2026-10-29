@@ -9,6 +9,8 @@
  "frozen": "19e4afba9f50d0654214d893649ac0f451052a8f",
  "heartbeat": "2026-10-29T21:47:16Z",
  "host": "58199181d02e",
+ "landed": "8673e4a57e57ea207c3ec3d9d2eb23cd5bd00468",
+ "landed_at": "2026-10-29T22:12:36Z",
  "result_branch": "artifact-refresh/pirates-20261029-2157",
  "run_id": "pirates-artifact-queue-tool-647f24-20261029T214701",
  "score": 0.0777,
