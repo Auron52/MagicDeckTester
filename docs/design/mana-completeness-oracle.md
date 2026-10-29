@@ -894,6 +894,86 @@ Growth on Adarkar Wastes -- the USER's catch: *"With Adarkar Wastes and Brushlan
 ... I see no need to change the order for that case"*. The oracle should compare against siblings that differ only
 in an Aura's host).
 
+**The oracle's false positives, fixed (2026-10-29; oracle-only, play byte-identical).** The ENUM-GAP pass's per-plan
+check is now `EnumGapPlan` (ManaOracle.cpp; `manaoracle::EnumGapVerdict` is its unit-test hook). The first full
+outcome still ends an order's search, and when the menu reaches its board that is still the order's answer. Only an
+outcome that would be REPORTED is asked the costlier questions. If it fails one, the search goes on to the next payment
+(`Realize`'s `accept` test). The rules:
+* *An action the realisation did not perform* (`PerformedPlan`). Remove each of the plan's actions in turn and replay
+  the same payment script. If the end board is identical (exact key, every resource, the floating pools, the whole
+  script consumed), that action did nothing in this realisation. When the plan without it is on the menu, or is a plan
+  of the observe-mode enumeration (checked on its own), the outcome is not this plan's hit. This covers Slivers 34 (a
+  TapForTokenPay / AnimateLand skipped on a tapped source), Hammer 4 (an equip the Equipment's entry trigger already
+  made), and the Niv continuation artefacts (a cast that a breakpoint's continuation replaced). It is general: any
+  silent skip in ApplyPlanDirect's trailing pass is caught the same way.
+* *The hand cards a line USED* (`UsedFromHand`). A card put back on the library (Brainstorm) is no longer counted as
+  cast.
+* *A land drop the plan did not make* (`TapsContinuationLand`). A breakpoint's continuation may play a land from hand
+  in a `no land` plan, and that land can then pay for the plan's own casts. If the plan with that land drop is on the
+  menu or enumerated, the outcome belongs to that plan. NivMizzetCombo seed 1100005 gi4 T3: once the Servant could no
+  longer be cracked mid-payment, Island #19 paid for Curiosity.
+* *No SacAction route in the ENUM-GAP pass* (`t_no_sac_action`, read in `BuildSources`). Generator Servant and an
+  on-board Lotus make their mana only through a plan's own SacForMana action. The plan WITH the crack is in the
+  observe-mode enumeration and is checked on its own. Otherwise it is structurally folded, or it cannot be emitted at
+  all (a Servant cast this turn); both are dominated lines. AuditPlan keeps the route, because that is how it finds a
+  better crack timing. Fixes Niv 95.
+* *Hidden information* (`TapsHiddenCard`, a new quiet class **HIDDEN-INFO**, not a MISS). The top block of the library
+  is the root library's leading cards that are gone by the end of the line, i.e. a reveal, a dig or a draw; a search
+  takes its card from anywhere. A payment that taps one of those cards spent mana the player could not have planned on.
+  A top card that Courser of Kruphix reveals is exempt. Applies to Selesnya 5 and Landfall 6 (Genesis Wave). They are
+  reported as HIDDEN-INFO only when no other payment pays.
+* *A subtype restriction* (`OracleCreatureTap`, `BuildSources`). The frontier now records the spell being paid for
+  (`Hook::f_spell`, from the cast site's `PayingSpellCard()` scope, ManaPayment.cpp `ScriptedPay`). `MinimalPayments`
+  sets that scope, so Giada's {W} is offered only to an Angel spell. Fixes Angels 2. The "subtype-restricted mana"
+  UNMODELED note is now kept only for the ability half (Smokebraider).
+* *A land Aura's host is a choice of the plan, not a resource* (`HostBlindCore` / `HostBlindRes`). The menu covers a hit
+  when it reaches the same board with every mana land Aura's host set aside and at least the same resources, where each
+  Aura whose host is still untapped counts as its own resource (`AU:`). Fixes EDF 2. It also covers three that the
+  triage had filed as real walk misses (classes F and G), because the menu holds the same casts with the Aura on another
+  land and reaches the same board or a better one. Seed 1100030 gi29 T3: Overgrowth on Conservatory #13 instead of #15,
+  an identical board. Seed 1100005 gi4 T3: Overgrowth on Kitchen instead of Mariposa, identical. Seed 1100023 gi22 T4:
+  Trace of Abundance on Mariposa instead of Conservatory, which ends with two lands more untapped and 2 life more. The
+  greedy walk's miss on the rejected host is still there; it just costs no option on these boards.
+* *An untapped land's age is no resource* (`ResClassKey`). In the resource tables, a land that can never be a creature
+  no longer records whether it entered this turn: an untapped new Mountain equals an untapped old Mountain. A manland
+  keeps the marker. Precision for all classes. On the census it also removed one false Fungus ORACLE-GAP (the engine
+  left the new Forest up, the oracle left the old one).
+
+The census, re-run on the same 11 decks x 30 games at seed 1100001, compares the tree before the fix (56a28d38d, which
+already has Garth's crack) with the tree after it:
+
+| deck | ENUM-GAP before | after | what is left |
+|---|---|---|---|
+| NivMizzetCombo | 106 | 6 | rock funds rock (4) and {C} through Izzet Signet (2): real |
+| Slivers | 34 | 0 | |
+| EDF | 24 | 19 | the rescue-walk classes A-G (proposal X): real |
+| Fungus | 11 | 11 | F1 / F2: real |
+| FiveColour | 9 | 9 | A / B: real |
+| Selesnya | 5 | 0 | (5 HIDDEN-INFO) |
+| Landfall | 6 | 0 | (6 HIDDEN-INFO) |
+| Hammer | 4 | 0 | |
+| Giants | 2 | 2 | the walk refuses Equip {0}: real |
+| Angels | 2 | 0 | |
+| Goblins | 1 | 1 | the outlet half of `MTG_SUBSET_SAC_COLOR` (blocked): real |
+| **total** | **204** | **48** | |
+
+Every flag that went away belongs to one of the classes above, and no new ENUM-GAP appeared. Niv flag 25 (`no land +
+Izzet Signet x2 + Sol Ring + Preordain`) went with them: its only paying lines tap the Island that the post-Preordain
+continuation played (`TapsContinuationLand`). The `land=Island` version of the same plan is still reported, and so is
+its no-Preordain twin.
+
+The other classes moved through the same rules, most of it through `ResClassKey`:
+* Slivers DOMINATED-LAND 5 -> 3 (the ENUM-GAP pass's DOMINATED-* for a fizzled TapForTokenPay).
+* Fungus ORACLE-GAP 4 -> 3, from 13 -> 12 overall (a false gap: new against old Forest).
+* The frontier prune now folds a new land against an old one. Plans that hit the 2,000-apply cap before now finish:
+  CAPPED 2445 -> 2185 (niv gi7 388 -> 147, gi29 51 -> 39, Landfall 847 -> 843), and oracle applies fell from 17.3 M to
+  16.6 M. Those plans now get verdicts they never had. APPLY-DROP rose 171 -> 196, DROP-COVERED 470 -> 487 and
+  DOMINATED-LAND 1474 -> 1522, all of it in NivMizzetCombo (gi7, gi29, and gi27 +8). At gi27, outcomes that differed
+  only in a land's age used to be incomparable, and are now compared.
+
+Play with the oracle off is byte-identical (39 decks x 12 games, digests and units). With the oracle on, play is
+identical to the oracle-off run (all 11 census decks).
+
 **Fix 1: Garth's conjure-and-crack (`MTG_GARTH_LOTUS_CRACK`, DEFAULT ON).** USER: *"We should be allowing garth to
 produce black lotus for mana for sure."* The conjured Lotus is a noncreature artifact, so it can pay its own {T} the
 moment it lands, but a SacForMana is only ever emitted for a Lotus already on the battlefield, so {Garth -> Lotus,

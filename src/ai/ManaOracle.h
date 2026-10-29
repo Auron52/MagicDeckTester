@@ -78,6 +78,10 @@ namespace manaoracle
         ManaCost               f_cost;
         bool                   f_for_creature = false;
         bool                   f_creature_ability = false;  // paying a creature's activated ability
+        // The SPELL being paid for (PayingSpellCard() at the frontier; the cast site's scope), so the payment table
+        // can apply a subtype restriction -- Giada, Font of Hope's {W} "only to cast an Angel spell".
+        bool                   f_has_spell = false;
+        Card                   f_spell;
         int                    f_tapahead = 0;          // > 0: the frontier is a TAP-AHEAD (up to N sources)
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
@@ -176,9 +180,11 @@ namespace manaoracle
     // enumeration could not drive (e.g. a restricted-mana source the manual-tap routes refuse).
     // `whole_float` (the refine's fast form): no set-aside enumeration -- the payment drains the floating pool as
     // the payer does, so each tap set is one option.
+    // `spell` (optional): the spell being paid for, set as the paying-spell scope (SpellSubtypePayScope) for the
+    // table and every verification -- a subtype-restricted source (Giada) is offered only to a spell of its subtype.
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
-                                           bool whole_float = false);
+                                           bool whole_float = false, const Card* spell = nullptr);
 
     // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
     // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead
@@ -265,4 +271,13 @@ namespace manaoracle
     // ORACLE-GAP): does the oracle's own payment search reach an outcome on the engine's line that covers the
     // engine's end board? For the unit tests that pin the shapes the search once missed. Quiet; copies only.
     bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan);
+
+    // THE ENUM-GAP VERDICT for one plan a mana gate kept off `menu` (AuditDecision's per-plan check), for the unit
+    // tests that pin its false-positive rules: the class it would report ("ENUM-GAP", "HIDDEN-INFO", a
+    // "DOMINATED-*"), or "" for none. `observed` (optional): the rest of the observe-mode enumeration -- the plans
+    // a realisation that skipped one of this plan's actions may stand for. `detail` (optional): the flag's text.
+    // Quiet; copies only.
+    std::string EnumGapVerdict(const GameState& state, bool pre, const TurnSolver::Plan& plan,
+                               const std::vector<TurnSolver::Plan>& menu,
+                               const std::vector<TurnSolver::Plan>* observed = nullptr, std::string* detail = nullptr);
 }

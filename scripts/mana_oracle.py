@@ -37,7 +37,7 @@ from engine_bin import engine_bin  # noqa: E402
 MISS = ["ENUM-GAP", "APPLY-DROP", "APPLY-DROP-ORDER", "DOMINATED-CREATURE", "DOMINATED-ONESHOT",
         "DOMINATED-HASTE", "DOMINATED-LIFE", "DOMINATED-OTHER"]
 ORDER = MISS + ["ORACLE-GAP", "UNMODELED", "CAPPED", "PHANTOM", "CONTINUATION-DIFFERS", "DROP-COVERED",
-                "DOMINATED-LAND"]
+                "DOMINATED-LAND", "HIDDEN-INFO"]
 WHAT = {
     "ENUM-GAP": "a mana gate kept this plan off the menu, yet an order and payment realise it, reaching a board no menu entry reaches",
     "DROP-COVERED": "the engine drops an action of this entry, but another entry with the same actions realises them all (no option lost)",
@@ -54,6 +54,8 @@ WHAT = {
     "PHANTOM": "the menu offers a plan no order or payment realises (search noise, not a miss)",
     "CONTINUATION-DIFFERS": "the engine dropped a continuation cast; the oracle's payable lines continued differently",
     "DOMINATED-LAND": "another payment leaves a land untapped -- matters only if something could use it (Stage 3)",
+    "HIDDEN-INFO": "a mana gate kept this plan off the menu, and the only payments found tap a card the plan took off "
+                   "the top of the library (Genesis Wave, a draw) -- clairvoyant, so no gate could know (not a miss)",
 }
 
 LINE = re.compile(r"^\[mana-oracle\] (?P<cls>[A-Z-]+) seed=(?P<seed>\d+) job=(?P<job>\S+) gi=(?P<gi>-?\d+) "

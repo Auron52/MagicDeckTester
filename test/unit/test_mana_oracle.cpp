@@ -531,3 +531,209 @@ TEST_CASE("mana oracle: an enchanted land is not its bare twin's equal in the fr
     plan.land_decided = true;
     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
 }
+
+// ---- THE ENUM-GAP PASS'S FALSE POSITIVES (eg1 triage, 2026-10-29; docs/design/mana-completeness-oracle.md 13.5) ------
+namespace
+{
+// Hand cards with distinct ids from 100 on, as a game holds them (costs stripped).
+void Hand(GameState& s, const std::vector<std::string>& names)
+{
+    int n = 100 + static_cast<int>(s.players[0].hand.size());
+    for (const std::string& nm : names)
+    {
+        Card c = CardDatabase::Instance().Lookup(nm)->card;
+        c.m_number    = n++;
+        c.m_mana_cost = ManaCost{};
+        s.players[0].hand.push_back(c);
+    }
+}
+void SetLibrary(GameState& s, const std::vector<std::string>& names)
+{
+    int n = 200;
+    for (const std::string& nm : names)
+    { Card c = CardDatabase::Instance().Lookup(nm)->card; c.m_number = n++; s.players[0].library.push_back(c); }
+}
+int HandNum(const GameState& s, const char* nm)
+{
+    for (const Card& c : s.players[0].hand) { if (c.m_name.str() == nm) { return c.m_number; } }
+    FAIL("not in hand: ", nm);
+    return 0;
+}
+TurnSolver::Plan PlanOf(std::vector<Action> actions)
+{
+    TurnSolver::Plan p;
+    p.actions      = std::move(actions);
+    p.land_decided = true;
+    return p;
+}
+} // namespace
+
+// Giada, Font of Hope: "{T}: Add {W}. Spend this mana only to cast an Angel spell." The oracle's restricted route once
+// offered it to ANY creature spell, and paid Bishop of Wings (a Human Cleric) with it -- Angels eg1, two ENUM-GAPs no
+// legal payment realises. The paying spell (the frontier's PayingSpellCard) now rides into the table.
+TEST_CASE("mana oracle: Giada's Angel-only {W} pays an Angel spell, never another creature spell")
+{
+    EnsureOracleCards();
+    const GameState s = Board({ "Plains", "Giada, Font of Hope" });
+    const Card bishop   = CardDatabase::Instance().Lookup("Bishop of Wings")->card;     // {W}{W}, Human Cleric
+    const Card valkyrie = CardDatabase::Instance().Lookup("Youthful Valkyrie")->card;   // {1}{W}, Angel
+    CHECK(manaoracle::MinimalPayments(s, Cost(0, 2), /*for_creature=*/true, nullptr, false, false, &bishop).empty());
+    const auto for_angel = manaoracle::MinimalPayments(s, Cost(1, 1), /*for_creature=*/true, nullptr, false, false, &valkyrie);
+    CHECK(HasOption(for_angel, { "Plains:W", "Giada, Font of Hope:W" }));
+}
+
+// Generator Servant makes its {C}{C} only through a plan's own SacForMana action (both apply worlds crack it in the
+// pre-pass; the payer never does). NivMizzetCombo eg1: 95 of 106 ENUM-GAPs cracked it mid-payment for a plan that
+// does not hold the action. The plan WITH the action is the executable form, and is checked on its own.
+TEST_CASE("ENUM-GAP: a plan payable only by cracking Generator Servant mid-payment is no gap; the plan with the crack is")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Island", "Generator Servant" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Tandem Lookout" });
+    const TurnSolver::Plan bare = PlanOf({ CastAction(s, "Tandem Lookout") });
+    Action sac;
+    sac.kind               = Action::Kind::SacForMana;
+    sac.card_name          = CardDatabase::Instance().Lookup("Generator Servant")->card.m_name;
+    sac.hand_index         = -1;
+    sac.ritual_float       = 2;
+    sac.chosen_float_color = "C";
+    sac.sac_source_id      = 2;
+    sac.is_noncreature     = true;
+    const TurnSolver::Plan twin = PlanOf({ sac, CastAction(s, "Tandem Lookout") });
+    const std::vector<TurnSolver::Plan> none;
+    const std::vector<TurnSolver::Plan> observed{ twin };
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, bare, none, &observed).empty());
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, twin, none) == "ENUM-GAP");
+}
+
+// Sliver Hive's {5},{T}: create a Sliver. A payment that taps the Hive for the cast strands the activation, and the
+// apply's trailing pass skips it without a drop (its source is tapped). Slivers eg1, 34 ENUM-GAPs: "cast Plated Sliver
+// + make a token" realised as "cast Plated Sliver" -- a plan on the menu.
+TEST_CASE("ENUM-GAP: a realisation that skipped a stale activation stands for the plan without it")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Sliver Hive", "Sliver Hive", "Plated Sliver" });
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Plated Sliver" });
+    const CardDefinition* hive = CardDatabase::Instance().Lookup("Sliver Hive");
+    Action tok;
+    tok.kind           = Action::Kind::TapForTokenPay;
+    tok.card_name      = hive->card.m_name;
+    tok.hand_index     = -1;
+    tok.sac_source_id  = 1;
+    tok.cost           = hive->params.tap_token_cost.value();
+    tok.is_noncreature = true;
+    const TurnSolver::Plan cast = PlanOf({ CastAction(s, "Plated Sliver") });
+    const TurnSolver::Plan both = PlanOf({ CastAction(s, "Plated Sliver"), tok });
+    // The token's {5} is unpayable off two Hives: every paying realisation is "the Hive paid the cast, the token
+    // fizzled" -- the cast-only plan, which the enumeration holds (it is checked on its own, or is on the menu).
+    const std::vector<TurnSolver::Plan> observed{ cast };
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, both, {}, &observed).empty());
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, both, { cast }).empty());
+    // ...and only that: with the cast-only plan nowhere (not on the menu, not enumerated) it IS a lost option.
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, both, {}) == "ENUM-GAP");
+}
+
+// Genesis Wave: "reveal the top X, put the permanents onto the battlefield". Selesnya / Landfall eg1, 11 ENUM-GAPs:
+// the follow-up cast paid with lands the Wave put onto the battlefield from the library -- payable only because the
+// oracle knows the library's order. Five Forests pay the Wave for X = 2; Rampant Growth then needs the two it reveals.
+TEST_CASE("ENUM-GAP: a follow-up paid by lands Genesis Wave revealed is HIDDEN-INFO, not a gap")
+{
+    EnsureOracleCards();
+    auto make = [](int forests)
+    {
+        std::vector<std::string> bf(static_cast<std::size_t>(forests), "Forest");
+        GameState s = Board(bf);
+        s.players[0].life = 20;
+        s.players[1].life = 20;
+        Hand(s, { "Genesis Wave", "Rampant Growth" });
+        std::vector<std::string> lib{ "Forest", "Forest" };
+        for (int i = 0; i < 20; ++i) { lib.push_back(i % 2 ? "Forest" : "Plains"); }
+        SetLibrary(s, lib);
+        return s;
+    };
+    auto plan_of = [](const GameState& s)
+    {
+        Action wave = CastAction(s, "Genesis Wave");
+        wave.chosen_x     = 2;
+        wave.cost.generic = 2;
+        return PlanOf({ wave, CastAction(s, "Rampant Growth") });
+    };
+    const GameState five = make(5);
+    std::string why;
+    CHECK(manaoracle::EnumGapVerdict(five, /*pre=*/true, plan_of(five), {}, nullptr, &why) == "HIDDEN-INFO");
+    CHECK(why.find("Forest#200") != std::string::npos);
+    // With two Forests more on the board the plan pays without the revealed ones: the search goes on past the
+    // clairvoyant payments to that one, and it is a gap (nothing on the menu here).
+    const GameState seven = make(7);
+    CHECK(manaoracle::EnumGapVerdict(seven, /*pre=*/true, plan_of(seven), {}) == "ENUM-GAP");
+}
+
+// EDF seed 1100009 gi8 T2 (2 ENUM-GAPs): Wild Growth on the new Brushland, then Cloud of Faeries, pays only Cloud-first.
+// The menu holds the same casts with Wild Growth on Adarkar Wastes, which ends with a land more untapped: Brushland's
+// {G} pays the Aura, the Wastes' {U} plus its {G} pay Cloud, and Cloud untaps both. USER: "With Adarkar Wastes and
+// Brushland you would play Wild Growth first ... I see no need to change the order for that case".
+TEST_CASE("ENUM-GAP: a sibling with the land Aura on another host that ends with at least the resources covers the plan")
+{
+    EnsureOracleCards();
+    static const EldraziFlickerProvider prov;
+    GameState s = Board({ "Adarkar Wastes", "Brushland" });
+    s.battlefield[1].entered_this_turn = true;
+    s.players[0].lands_played_this_turn = 1;
+    s.deck_has_land_aura = true;
+    s.m_provider = &prov;
+    s.turn_number = 2;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Wild Growth", "Cloud of Faeries" });
+    SetLibrary(s, std::vector<std::string>(20, "Island"));
+    auto plan_on = [&](int host)
+    {
+        Action wg = CastAction(s, "Wild Growth");
+        wg.enchant_target = host;
+        return PlanOf({ wg, CastAction(s, "Cloud of Faeries") });
+    };
+    const TurnSolver::Plan on_brushland = plan_on(2);
+    std::string why;
+    REQUIRE(manaoracle::EnumGapVerdict(s, /*pre=*/true, on_brushland, {}, nullptr, &why) == "ENUM-GAP");
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, on_brushland, { plan_on(1) }).empty());
+}
+
+// Colossus Hammer eg1 (4 ENUM-GAPs): Sigarda's Aid, then the Hammer -- whose entry trigger attaches it to the board's
+// only creature -- then "equip {8}" onto that creature, which the apply skips as already done and never pays. The
+// gate is right that {8} cannot be paid; the realisation is the menu's Aid + Hammer, paid another way.
+TEST_CASE("ENUM-GAP: an equip the Equipment's own entry trigger already made stands for the plan without it")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Mountain", "Plains", "Kor Duelist" });
+    s.turn_number = 3;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Sigarda's Aid", "Colossus Hammer" });
+    SetLibrary(s, std::vector<std::string>(20, "Plains"));
+    Action eq;
+    eq.kind          = Action::Kind::Equip;
+    eq.card_name     = CardDatabase::Instance().Lookup("Colossus Hammer")->card.m_name;
+    eq.hand_index    = -1;
+    eq.cost.generic  = 8;
+    eq.sac_source_id = HandNum(s, "Colossus Hammer");
+    eq.sac_victim_id = 3;
+    const TurnSolver::Plan casts = PlanOf({ CastAction(s, "Sigarda's Aid"), CastAction(s, "Colossus Hammer") });
+    const TurnSolver::Plan with_equip = PlanOf({ CastAction(s, "Sigarda's Aid"), CastAction(s, "Colossus Hammer"), eq });
+    {
+        // (the premise: the Aid really attaches the Hammer on its own)
+        GameState g = s;
+        TurnSolver::ApplyPlan(g, casts, /*is_pre_combat=*/true);
+        bool attached = false;
+        for (const Permanent& p : g.battlefield)
+        { if (p.card.m_name.str() == "Colossus Hammer" && p.equipped_to == 3) { attached = true; } }
+        REQUIRE(attached);
+    }
+    const std::vector<TurnSolver::Plan> observed{ casts };
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, {}, &observed).empty());
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, { casts }).empty());
+    CHECK(manaoracle::EnumGapVerdict(s, /*pre=*/true, with_equip, {}) == "ENUM-GAP");
+}

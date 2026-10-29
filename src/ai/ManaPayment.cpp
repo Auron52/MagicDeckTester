@@ -7172,6 +7172,9 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         h.f_cost         = cost_in;
         h.f_for_creature = for_creature;
         h.f_creature_ability = PayingCreatureAbility();
+        // ...and the spell it pays for (the cast site's scope), so the table can keep a subtype restriction.
+        h.f_has_spell = PayingSpellCard() != nullptr;
+        if (h.f_has_spell) { h.f_spell = *PayingSpellCard(); }
         return false;
     }
     const PayOption& opt = h.script[h.next++];

@@ -60,6 +60,13 @@ std::string OracleCreatureTap(GameState& state, const TurnSolver::PreTap& t)
         // Paying a CREATURE'S ACTIVATED ABILITY (Secluded Courtyard's clause, colored_creature_ability_ok):
         // that payment never reads the creature-only pool, so the unit goes where it is about to be spent.
         const bool ability = q.colored_creature_ability_ok && PayingCreatureAbility();
+        // A SUBTYPE restriction (Giada, Font of Hope: "Spend this mana only to cast an Angel spell"). The creature-only
+        // pool the unit lands in would spend it on ANY creature spell, so the tap itself is refused for a spell
+        // outside the subtype -- the engine's own predicate on the paying spell's scope (permissive when unset,
+        // exactly as the engine's payer is). Angels seed 1100020 gi19 T3: the oracle paid Bishop of Wings (a Human
+        // Cleric) with Giada's {W} and reported a plan no legal payment realises as an ENUM-GAP.
+        if (!ability && !q.mana_only_subtype.empty() && !SubtypeManaOk(q))
+        { return "'" + t.name + "' makes mana only for " + q.mana_only_subtype + " spells"; }
         TapSourceIntoFloat(state, a, p, *d, c, ability ? state.floating_mana : state.floating_creature_mana,
                            /*available=*/nullptr, /*for_creature=*/!ability);
         return std::string();
@@ -193,12 +200,12 @@ enum Cls
 {
     C_ORACLE_GAP, C_ENUM_GAP, C_APPLY_DROP, C_APPLY_DROP_ORDER, C_PHANTOM,
     C_DOM_CREATURE, C_DOM_ONESHOT, C_DOM_HASTE, C_DOM_LIFE, C_DOM_OTHER, C_DOM_LAND,
-    C_CONT_DIFFERS, C_DROP_COVERED, C_UNMODELED, C_CAPPED, C_N
+    C_CONT_DIFFERS, C_DROP_COVERED, C_UNMODELED, C_CAPPED, C_HIDDEN_INFO, C_N
 };
 const char* const kClsName[C_N] = {
     "ORACLE-GAP", "ENUM-GAP", "APPLY-DROP", "APPLY-DROP-ORDER", "PHANTOM",
     "DOMINATED-CREATURE", "DOMINATED-ONESHOT", "DOMINATED-HASTE", "DOMINATED-LIFE", "DOMINATED-OTHER",
-    "DOMINATED-LAND", "CONTINUATION-DIFFERS", "DROP-COVERED", "UNMODELED", "CAPPED"
+    "DOMINATED-LAND", "CONTINUATION-DIFFERS", "DROP-COVERED", "UNMODELED", "CAPPED", "HIDDEN-INFO"
 };
 // A MISS is a class the ENGINE owes a fix for (I2). DOMINATED-LAND is only a potential one -- whether
 // the land mattered is the follow-up question (Stage 3) -- so it is counted, and printed at level 2.
@@ -207,13 +214,20 @@ bool IsMiss(Cls c)
     return c == C_ENUM_GAP || c == C_APPLY_DROP || c == C_APPLY_DROP_ORDER || c == C_DOM_CREATURE
         || c == C_DOM_ONESHOT || c == C_DOM_HASTE || c == C_DOM_LIFE || c == C_DOM_OTHER;
 }
+// HIDDEN-INFO: a gate-rejected plan whose only paying realisations spend mana from cards taken off the top of the
+// library during the plan (Genesis Wave's reveal, a cantrip's draw) -- clairvoyant, so no gate could have known.
 bool QuietClass(Cls c)
-{ return c == C_DOM_LAND || c == C_PHANTOM || c == C_CONT_DIFFERS || c == C_DROP_COVERED; }
+{ return c == C_DOM_LAND || c == C_PHANTOM || c == C_CONT_DIFFERS || c == C_DROP_COVERED || c == C_HIDDEN_INFO; }
 
 std::atomic<long long> g_cls[C_N];
 std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies{0}, g_frontiers{0},
                        g_pruned{0}, g_options{0}, g_engine_drop{0}, g_ms{0},
                        g_gate_rejects{0}, g_gate_rejects_checked{0}, g_gate_rejects_skipped{0};
+// The ENUM-GAP pass's rejections of a paying realisation (EnumGapPlan): it skipped one of the plan's actions and the
+// plan without it is on the menu or checked on its own (noop); it tapped a card taken off the top of the library
+// (hidden); the menu reaches its board with every land Aura's host aside and at least its resources (host_blind).
+// (cont_land): a land drop the plan did not make paid for it.
+std::atomic<long long> g_eg_noop{0}, g_eg_hidden{0}, g_eg_host_blind{0}, g_eg_cont_land{0};
 // ROLLBACK CENSUS (USER 2026-10-27: "how many lines are fully inaccessible and which are accessible only
 // with rollbacks to the previous line"). One bucket per LOST line -- a plan the oracle realises in full that
 // the search cannot reach. DEPTH k = how many of the engine's mana decisions before the one that failed
@@ -259,6 +273,8 @@ struct Reporter
             by += std::string(" ") + kClsName[c] + "=" + std::to_string(g_cls[c].load());
         }
         std::fprintf(stderr, "=== MANA ORACLE classes:%s ===\n", by.empty() ? " (none)" : by.c_str());
+        std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld ===\n",
+                     g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load());
         for (const auto& kv : g_unmodeled_reasons)
         { std::fprintf(stderr, "=== MANA ORACLE unmodeled: %lld x %s ===\n", kv.second, kv.first.c_str()); }
         long long lost = 0;
@@ -396,15 +412,31 @@ bool IsPaySacPermanent(const Permanent& p)
 
 // A permanent's interchangeability class: what makes two copies the same resource for every purpose
 // the oracle compares (its tapped flag and temp haste are the resource, so they are NOT in it).
-std::string ClassKey(const Permanent& p)
+std::string ClassKey(const Permanent& p, bool age = true)
 {
     std::string k = p.card.m_name.str();
     k += "|"; k += p.card.IsLand() ? "L" : (p.card.IsCreature() ? "C" : "O");
     k += "|"; k += p.counters.KeyFragment();
     k += "|"; k += std::to_string(p.storage_counters) + "," + std::to_string(p.charge_counters);
-    k += "|"; k += p.entered_this_turn ? "new" : "old";
+    if (age) { k += "|"; k += p.entered_this_turn ? "new" : "old"; }
     k += "|"; k += p.is_token ? "tok" : "card";
     return k;
+}
+
+// The class of a permanent as a RESOURCE (an untapped source, a hasted body): ClassKey, except that a land which can
+// never be a creature forgets whether it entered this turn. The marker only matters to summoning sickness (CR 302.6),
+// so an untapped new Mountain is an untapped old Mountain -- but the resource tables read them as two keys, and a
+// realisation leaving the other copy up compared as INCOMPARABLE with the menu's board instead of reaching it
+// (Colossus Hammer eg1, `U:Mountain|L||0,0|old|card 1>0`; Slivers, the new against the old Sliver Hive). A manland
+// (Mutavault, can_animate) keeps it: an animated Mutavault that entered this turn cannot attack.
+std::string ResClassKey(const Permanent& p)
+{
+    if (p.card.IsLand() && !p.card.IsCreature() && !p.is_animated)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && !d->params.can_animate) { return ClassKey(p, /*age=*/false); }
+    }
+    return ClassKey(p);
 }
 
 // Everything but the resources: a COPY with the resources cleared, folded by the engine's own full
@@ -529,7 +561,7 @@ Res Resources(const GameState& s, bool with_float)
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != a) { continue; }
-        const std::string k = ClassKey(p) + AttachedKey(s, p);
+        const std::string k = ResClassKey(p) + AttachedKey(s, p);
         if (!p.tapped)    { ++r["U:" + k]; }
         if (p.temp_haste) { ++r["H:" + k]; }
     }
@@ -862,6 +894,25 @@ int UsefulColorMask(const GameState& s, const ManaCost& cost)
 // painless line the engine pays with #14 (an ORACLE-GAP, "life engine 20 oracle 19").
 thread_local const std::set<int>* t_plan_srcs = nullptr;
 
+// THE ENUM-GAP PASS PAYS AS THE ENGINE CAN. A SacAction source -- Generator Servant, an on-board Lotus Bloom or Black
+// Lotus -- makes its mana only through a plan's own SacForMana action (both apply worlds crack it in their pre-pass;
+// the payer never does, ManaPayment.cpp "SAC ACTION"). The viewer's pre-tap offers it at payment time, so a realisation
+// of a gate-rejected plan WITHOUT the action could crack it mid-payment and "pay" a line the engine cannot express:
+// NivMizzetCombo eg1, 95 of 106 ENUM-GAPs (Tandem Lookout off Servant's {C}{C}; Curiosity cast onto the Servant the
+// payment then cracked; a second Servant cast with the first's haste {C} and cracked the same turn). The executable
+// form is the plan WITH the sac action, which the observe-mode enumeration holds and checks on its own -- or
+// rejects structurally (SubsetHasHostSacrificedForMana) or cannot emit (a Servant cast this turn), each a dominated
+// line. So the pass leaves the route out (AuditPlan keeps it: it is how the oracle finds a better crack timing).
+thread_local bool t_no_sac_action = false;
+struct NoSacActionScope
+{
+    bool saved;
+    NoSacActionScope() : saved(t_no_sac_action) { t_no_sac_action = true; }
+    ~NoSacActionScope() { t_no_sac_action = saved; }
+    NoSacActionScope(const NoSacActionScope&)            = delete;
+    NoSacActionScope& operator=(const NoSacActionScope&) = delete;
+};
+
 // Do the first two Aura colour picks on `land` commute? They do when the first two Auras LandAuraAddToPoolOfLand
 // credits a pick to (attached, controlled alike, adding one mana of any colour on this board) add the same amount.
 bool AuraPicksSymmetric(const GameState& s, const Permanent& land)
@@ -891,12 +942,16 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
     {
         if (p.controller_index != a || p.tapped) { continue; }
         const HumanPreTapOffer o = HumanPreTapOfferFor(state, p);
+        if (t_no_sac_action && o.route == HumanPreTapOffer::Route::SacAction) { continue; }   // see t_no_sac_action
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        // RESTRICTED sources: offered to a creature spell through the oracle's own route.
+        // RESTRICTED sources: offered to a creature spell through the oracle's own route -- a subtype-restricted one
+        // (Giada) only to a spell of that subtype (the paying-spell scope: MinimalPayments sets it from the frontier).
         std::string restricted;   // the coloured faces the creature route adds ("" = none)
         const bool ability_ok = d != nullptr && d->params.colored_creature_ability_ok && PayingCreatureAbility();
+        const bool subtype_ok = d == nullptr || d->params.mana_only_subtype.empty() || SubtypeManaOk(d->params);
         if (d != nullptr && CanTapNow(p, state.battlefield)
-            && ((for_creature && (d->params.creature_mana_only || d->params.colored_creature_only)) || ability_ok))
+            && ((for_creature && subtype_ok && (d->params.creature_mana_only || d->params.colored_creature_only))
+                || ability_ok))
         {
             for (Color c : EffectiveProducesFor(state, a, *d, &p))
             {
@@ -907,12 +962,16 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         }
         if (o.free_faces.empty() && o.fed_faces.empty() && restricted.empty())
         {
-            // Restricted mana for a noncreature spell is simply not supply -- not a gap.
-            if (unmodeled != nullptr && for_creature && o.why_not.find("may be spent only") != std::string::npos)
+            // Restricted mana for a noncreature spell is simply not supply -- not a gap; nor is a subtype-restricted
+            // source's for a creature spell outside its subtype.
+            if (unmodeled != nullptr && for_creature && subtype_ok && o.why_not.find("may be spent only") != std::string::npos)
             { unmodeled->push_back("restricted-mana source " + p.card.m_name.str()); }
             continue;
         }
-        if (d != nullptr && !d->params.mana_only_subtype.empty() && unmodeled != nullptr)
+        // The spell half of a subtype restriction is modelled (above, and OracleCreatureTap); the ABILITY half
+        // (Smokebraider: "...or activate abilities of Elementals") is not.
+        if (d != nullptr && !d->params.mana_only_subtype.empty() && d->params.mana_only_subtype_abilities
+            && unmodeled != nullptr)
         { unmodeled->push_back("subtype-restricted mana from " + p.card.m_name.str()); }
         const std::size_t n_auras = HumanPreTapAuraFaces(state, p, o).size();
         // THE SAME TAP, SPELLED TWICE. The Auras' colours multiply the faces (Brushland under two Fertile Grounds:
@@ -1325,12 +1384,16 @@ std::vector<PayOption> StashChoices(const GameState& s, std::vector<std::string>
 } // namespace
 
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
-                                       std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float)
+                                       std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float,
+                                       const Card* spell)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
-    // Secluded Courtyard clause). Replayed around every measure and verification below.
+    // Secluded Courtyard clause), the spell being paid for (a subtype restriction). Replayed around every
+    // measure and verification below.
     std::optional<CreatureAbilityPayScope> _cap;
     if (creature_ability) { _cap.emplace(); }
+    std::optional<SpellSubtypePayScope> _ssp;
+    if (spell != nullptr) { _ssp.emplace(spell); }
     std::vector<PayOption> out;
     const std::vector<SrcClass> srcs = BuildSources(state, for_creature, unmodeled, UsefulColorMask(state, cost));
     if (Level() >= 4)
@@ -1853,7 +1916,10 @@ struct Realization
     std::vector<Outcome>     outcomes;
     std::vector<std::string> unmodeled;
     bool                     capped = false;
+    int                      hit = -1;    // stop_at_full: the index of the outcome the search stopped at
 };
+// A caller's further test of a full outcome (Realize's `accept`): false = not this caller's hit, search on.
+using OutcomeTest = std::function<bool(const Outcome&)>;
 
 bool IsManaSourceNow(const GameState& s, const Permanent& p)
 {
@@ -1871,6 +1937,8 @@ struct FrontierRec
     int                    tapahead = 0;
     bool                   lands_only = true;
     bool                   creature_ability = false;
+    bool                   has_spell = false;   // the spell the frontier payment is for (Hook::f_spell)
+    Card                   spell;
 };
 
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
@@ -1882,9 +1950,10 @@ struct FrontierRec
 // the engine's first k mana decisions, enumerate the rest); `all_engine` -- one apply whose every step is
 // the engine's, i.e. the engine's own line replayed through the hook.
 // `want` (with stop_at_full): stop only at a full outcome that used at least these hand cards.
+// `accept` (with stop_at_full): ...and that this test passes (Realization::hit names the one it stopped at).
 Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pre, bool stop_at_full,
                     const std::vector<PayOption>& prefix = {}, bool all_engine = false,
-                    const std::multiset<std::string>* want = nullptr)
+                    const std::multiset<std::string>* want = nullptr, const OutcomeTest* accept = nullptr)
 {
     Realization r;
     std::vector<std::vector<PayOption>> layer(1, prefix);
@@ -1951,6 +2020,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 fr.tapahead     = h.f_tapahead;
                 fr.lands_only   = h.f_lands_only;
                 fr.creature_ability = h.f_creature_ability;
+                fr.has_spell    = h.f_has_spell;
+                if (h.f_has_spell) { fr.spell = h.f_spell; }
                 fronts.push_back(std::move(fr));
                 continue;
             }
@@ -1985,9 +2056,10 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             o.st = std::move(copy);
             // (An outcome resting on a mana choice the engine made on its own is no caller's hit, so it does
             // not end the search either: a scripted payment further on may still realise the line.)
-            const bool full = o.Clean() && o.unscripted.empty() && (want == nullptr || Includes(o.left, *want));
+            const bool full = stop_at_full && o.Clean() && o.unscripted.empty()
+                           && (want == nullptr || Includes(o.left, *want)) && (accept == nullptr || (*accept)(o));
             r.outcomes.push_back(std::move(o));
-            if (stop_at_full && full) { return r; }
+            if (full) { r.hit = static_cast<int>(r.outcomes.size()) - 1; return r; }
         }
         if (r.capped) { break; }
         // ---- Pareto-prune the frontier boards of this layer -----------------------------------
@@ -1999,7 +2071,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             keys[i] = CoreKey(fronts[i].st, /*canonical=*/false) ^ (0x9e3779b97f4a7c15ULL * (fronts[i].index + 1))
                     ^ std::hash<std::string>{}(fronts[i].cost.ToString() + (fronts[i].for_creature ? "c" : "n")
                                                + (fronts[i].creature_ability ? "a" : "s")
-                                               + "t" + std::to_string(fronts[i].tapahead));
+                                               + "t" + std::to_string(fronts[i].tapahead)
+                                               + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : ""));
             res[i]  = Resources(fronts[i].st, /*with_float=*/true);
         }
         std::vector<char> keep(n, 1);
@@ -2019,7 +2092,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             FrontierRec& f = fronts[i];
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
-                : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability);
+                : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,
+                                  f.has_spell ? &f.spell : nullptr);
             g_options.fetch_add(static_cast<long long>(opts.size()), std::memory_order_relaxed);
             if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
             {
@@ -2263,6 +2337,206 @@ std::multiset<std::string> PlanHandCards(const TurnSolver::Plan& p)
         { m.insert(x.card_name.str()); }
     }
     return m;
+}
+
+// ---- ENUM-GAP: what a paying realisation of a gate-rejected plan must show (EnumGapPlan) ----------------------------
+// The hand cards a line really USED -- cast, put, pitched: LeftHand less any card that went back to the LIBRARY.
+// NivMizzetCombo seed 1100005 gi4 T3: Brainstorm put the plan's Generator Servant back, its breakpoint continuation cast
+// Izzet Signet instead, and "left the hand" read the Servant as cast.
+std::multiset<std::string> UsedFromHand(const GameState& root, const GameState& fin)
+{
+    const int a = fin.active_player_index;
+    std::multiset<int> now, lib;
+    for (const Card& c : fin.players[a].hand) { now.insert(c.m_number); }
+    // (RawAt: identities only, and the oracle is no game decision -- see Library.h's index-carry note.)
+    const Library& fl = fin.players[a].library;
+    for (std::size_t i = 0; i < fl.size(); ++i) { lib.insert(fl.RawAt(i).m_number); }
+    std::multiset<std::string> out;
+    for (const Card& c : root.players[root.active_player_index].hand)
+    {
+        auto it = now.find(c.m_number);
+        if (it != now.end()) { now.erase(it); continue; }
+        auto jt = lib.find(c.m_number);
+        if (jt != lib.end()) { lib.erase(jt); continue; }
+        out.insert(c.m_name.str());
+    }
+    return out;
+}
+
+// HIDDEN INFORMATION. The cards a realisation took off the TOP of the library -- the root library's leading cards
+// that are gone at the end, up to the first one still there: a reveal, a dig or a draw takes them in order, a search
+// (a fetch land, Rampant Growth) takes its card from anywhere. A payment that taps one of those spent mana no player
+// could plan on when the plan was chosen, because the library's ORDER is hidden (a top card Courser of Kruphix
+// reveals is not). Selesnya / Landfall eg1, 11 ENUM-GAPs: Genesis Wave, then Feed the Clan / Rampant Growth off the
+// lands the Wave put onto the battlefield (Forest #21, Brushland #19, Wirewood Lodge #60...). `what`: the card.
+bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
+{
+    const int a = root.active_player_index;
+    const Library& lib0 = root.players[a].library;
+    const Library& lib1 = o.st.players[a].library;
+    if (lib1.size() >= lib0.size()) { return false; }
+    std::set<int> still;
+    for (std::size_t i = 0; i < lib1.size(); ++i) { still.insert(lib1.RawAt(i).m_number); }
+    std::set<int> top;
+    for (std::size_t i = 0; i < lib0.size() && still.count(lib0.RawAt(i).m_number) == 0; ++i)
+    { top.insert(lib0.RawAt(i).m_number); }
+    if (!top.empty() && LibraryTopVisible(root)) { top.erase(lib0.RawAt(0).m_number); }
+    if (top.empty()) { return false; }
+    for (const PayOption& p : o.script)
+    {
+        for (const TurnSolver::PreTap& t : p.taps)
+        {
+            if (top.count(t.num) == 0) { continue; }
+            if (what != nullptr) { *what = t.name + "#" + std::to_string(t.num); }
+            return true;
+        }
+    }
+    return false;
+}
+
+// A LAND DROP THE PLAN DID NOT MAKE. A plan decides its land (`land=X`, or `no land`); a breakpoint's continuation,
+// re-solved inside the apply, may then play a land from hand itself. Mana from that land is the continuation's, not
+// the plan's: the plan with that land drop is its own entry of the observe-mode enumeration, checked on its own.
+// NivMizzetCombo seed 1100005 gi4 T3, "no land + Izzet Signet + crack Generator Servant + Servant + Curiosity +
+// Brainstorm": after Brainstorm the continuation played Island #19, and the Island paid for the plan's own Curiosity.
+// True (and `what` = the land, `land` = its name) when the script taps a land card from the root hand other than the
+// plan's own drop. A plan whose land is left to the heuristic (`land_decided` false) is not asked.
+bool TapsContinuationLand(const GameState& root, const TurnSolver::Plan& plan, const Outcome& o, std::string* what,
+                          std::string* land)
+{
+    if (!plan.land_decided) { return false; }
+    std::map<int, std::string> hand_lands;
+    for (const Card& c : root.players[root.active_player_index].hand)
+    {
+        if (PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { hand_lands[c.m_number] = c.m_name.str(); }
+    }
+    if (hand_lands.empty()) { return false; }
+    int own = plan.land_to_play.empty() ? 0 : 1;   // copies of the plan's own land the script may tap
+    std::set<int> seen;
+    for (const PayOption& p : o.script)
+    {
+        for (const TurnSolver::PreTap& t : p.taps)
+        {
+            const auto it = hand_lands.find(t.num);
+            if (it == hand_lands.end() || !seen.insert(t.num).second) { continue; }
+            if (own > 0 && it->second == plan.land_to_play) { --own; continue; }
+            if (what != nullptr) { *what = t.name + "#" + std::to_string(t.num); }
+            if (land != nullptr) { *land = it->second; }
+            return true;
+        }
+    }
+    return false;
+}
+
+// One apply of `plan` on a copy of `root` with exactly this payment script and nothing past it. True when it ran to
+// the end -- no frontier, no refused tap, every entry consumed, no drop -- with `out` the board it ended on.
+bool ReplayScript(const GameState& root, bool pre, const TurnSolver::Plan& plan, const std::vector<PayOption>& script,
+                  GameState& out)
+{
+    out = root;
+    Hook h;
+    h.target = &out;
+    h.script = script;
+    std::vector<std::string> cast_drops, act_drops;
+    std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
+    std::vector<std::string>* saved_act  = g_act_drop_sink;
+    g_play_dropped_cast_sink = &cast_drops;
+    g_act_drop_sink          = &act_drops;
+    Hook* const saved_hook = t_hook;
+    t_hook = &h;
+    TurnSolver::ApplyPlan(out, plan, pre);
+    t_hook = saved_hook;
+    g_play_dropped_cast_sink = saved_cast;
+    g_act_drop_sink          = saved_act;
+    g_applies.fetch_add(1, std::memory_order_relaxed);
+    return h.tap_error.empty() && !h.frontier && h.next == script.size() && cast_drops.empty() && act_drops.empty();
+}
+
+// THE ACTIONS A REALISATION REALLY PERFORMED. An apply can skip an action and report no drop: a TapForTokenPay or an
+// AnimateLand whose source a scripted payment had tapped (ApplyPlanDirect's trailing pass `break`s on a stale source --
+// Slivers eg1, 34 ENUM-GAPs: Sliver Hive's {5},{T} after the Hive paid Plated Sliver), an equip onto the creature the
+// Equipment's own entry trigger attached it to (Sigarda's Aid -- Colossus Hammer, 4), a cast a breakpoint's
+// continuation replaced (Brainstorm put the card back -- NivMizzetCombo, 2). Such an outcome realises the plan WITHOUT
+// that action, paid this way. Test: an action whose removal, replayed with the same payment script, ends on the same
+// board -- exact identity, every resource, the floating pools, the whole script consumed -- did nothing here. Returns
+// the plan less every such action (the plan itself when it performed them all).
+TurnSolver::Plan PerformedPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const Outcome& o)
+{
+    TurnSolver::Plan cur = plan;
+    const std::uint64_t k0 = CoreKey(o.st, /*canonical=*/false);
+    const Res           r0 = Resources(o.st, /*with_float=*/true);
+    GameState out;
+    for (std::size_t i = 0; i < cur.actions.size();)
+    {
+        const Action& a = cur.actions[i];
+        if (a.kind == Action::Kind::PlayLand || a.sacrifice_land) { ++i; continue; }
+        TurnSolver::Plan t = cur;
+        t.actions.erase(t.actions.begin() + static_cast<std::ptrdiff_t>(i));
+        if (ReplayScript(root, pre, t, o.script, out) && CoreKey(out, /*canonical=*/false) == k0
+            && Resources(out, /*with_float=*/true) == r0)
+        { cur = std::move(t); continue; }
+        ++i;
+    }
+    return cur;
+}
+
+// A LAND AURA'S HOST IS A CHOICE OF THE PLAN, NOT A RESOURCE. A mana land Aura (Wild Growth, Fertile Ground, Trace of
+// Abundance, Overgrowth) adds its bonus whenever its host is tapped for mana, so two boards that differ only in which
+// land carries it make the same mana from the next untap on; this turn, what differs is whether the bonus is still
+// available -- its host untapped. EDF seed 1100009 gi8 T2 (2 ENUM-GAPs): "Wild Growth on Brushland, then Cloud of
+// Faeries" pays only Cloud-first, while the menu's Wild Growth on Adarkar Wastes pays Wild Growth off Brushland's {G}
+// and Cloud off the Wastes' {U}+{G} and ends with a land more untapped. USER: "With Adarkar Wastes and Brushland you
+// would play Wild Growth first ... I see no need to change the order for that case".
+bool IsManaLandAura(const Permanent& q)
+{
+    if (q.aura_attached_to <= 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+    return d != nullptr && d->params.is_land_aura && d->params.land_aura_extra_mana > 0;
+}
+bool HasManaLandAura(const GameState& s)
+{
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == s.active_player_index && IsManaLandAura(q)) { return true; } }
+    return false;
+}
+// CoreKey with every mana land Aura's host forgotten.
+std::uint64_t HostBlindCore(const GameState& s)
+{
+    GameState n = s;
+    for (Permanent& q : n.battlefield) { if (IsManaLandAura(q)) { q.aura_attached_to = 0; } }
+    return CoreKey(n);
+}
+// Resources with every mana land Aura's host forgotten: a land is keyed without those Auras, and each Aura whose host
+// is untapped counts as a resource of its own ("AU:"), the bonus still to be had.
+Res HostBlindRes(const GameState& s)
+{
+    Res r;
+    const int a = s.active_player_index;
+    std::map<int, const Permanent*> by_num;
+    for (const Permanent& p : s.battlefield) { by_num[p.card.m_number] = &p; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != a) { continue; }
+        std::vector<std::string> on;
+        for (const Permanent& q : s.battlefield)
+        {
+            if ((q.aura_attached_to == p.card.m_number && !IsManaLandAura(q)) || q.equipped_to == p.card.m_number)
+            { on.push_back(q.card.m_name.str()); }
+        }
+        std::sort(on.begin(), on.end());
+        std::string k = ResClassKey(p);
+        if (!on.empty()) { k += "|on:"; for (const std::string& x : on) { k += x + ";"; } }
+        if (!p.tapped)    { ++r["U:" + k]; }
+        if (p.temp_haste) { ++r["H:" + k]; }
+        if (IsManaLandAura(p))
+        {
+            const auto it = by_num.find(p.aura_attached_to);
+            if (it != by_num.end() && !it->second->tapped) { ++r["AU:" + p.card.m_name.str()]; }
+        }
+    }
+    r["L:life"]   = s.players[a].life;
+    r["E:energy"] = s.players[a].energy_counters;
+    return r;
 }
 
 // ---- the ROLLBACK CENSUS for one lost line (an APPLY-DROP) ------------------------------------------
@@ -2587,6 +2861,197 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                                  + BoardText(e));
     }
 }
+
+// ---- ENUM-GAP: one plan a MANA GATE kept off the menu ---------------------------------------------------------------
+// What the menu offers, as the per-plan check reads it.
+struct MenuView
+{
+    std::set<std::string>              on_menu;    // SiblingKey of every menu entry
+    std::set<std::string>              observed;   // ...of every plan the observe-mode enumeration holds
+    std::multimap<std::uint64_t, Res>  cores;      // every menu entry's engine end board: CoreKey -> resources
+    std::vector<const GameState*>      boards;     // ...the boards themselves
+    // The same, every mana land Aura's host forgotten (HostBlindCore / HostBlindRes; the entry's index in `boards`):
+    // built on first use.
+    mutable bool                                                        hb_built = false;
+    mutable std::multimap<std::uint64_t, std::pair<Res, std::size_t>>   hb_cores;
+};
+
+// Level-3 trace of the ENUM-GAP pass's rejections (which rule set a paying realisation aside, and why).
+void EgTrace(const GameState& root, bool pre, const TurnSolver::Plan& t, const std::string& what)
+{
+    if (Level() < 3 || (TraceTurn() != 0 && TraceTurn() != root.turn_number)) { return; }
+    std::lock_guard<std::mutex> lk(g_print_mu);
+    std::fprintf(stderr, "[mana-oracle]   enum-gap %s plan={%s}: %s\n", Ctx(root, pre).c_str(), PlanText(t).c_str(),
+                 what.c_str());
+}
+MenuView MakeMenuView(const std::vector<std::string>& keys, const std::vector<EngineReal>& real,
+                      const std::vector<TurnSolver::Plan>& observed)
+{
+    MenuView mv;
+    mv.on_menu.insert(keys.begin(), keys.end());
+    for (const TurnSolver::Plan& p : observed) { mv.observed.insert(SiblingKey(p)); }
+    for (const EngineReal& e : real)
+    {
+        mv.cores.emplace(CoreKey(e.st), Resources(e.st, /*with_float=*/false));
+        mv.boards.push_back(&e.st);
+    }
+    return mv;
+}
+
+struct GapVerdict
+{
+    Cls         cls = C_N;    // C_N: nothing to report
+    std::string detail;
+};
+
+// The verdict on one paying realisation `o` of `t` (an order of the gate-rejected plan `p`; `reordered`: not p's own
+// order): C_N when it is no missing option -- it did not use the plan's cards or cast its spells, or the menu reaches
+// its board with at least its resources (exactly, or with the land Auras' hosts aside) -- else the class and text.
+GapVerdict JudgeHit(const GameState& state, bool pre, const TurnSolver::Plan& t, bool reordered, const Outcome& o,
+                    const std::multiset<std::string>& want, int n_casts, const MenuView& mv)
+{
+    GapVerdict v;
+    // Every hand card the plan names really used (not put back on the library), and every cast really cast (an
+    // action can also be skipped silently -- its card no longer in hand -- which no drop sink reports).
+    if (!Includes(UsedFromHand(state, o.st), want)) { return v; }
+    if (o.st.spells_cast_this_turn - state.spells_cast_this_turn < n_casts) { return v; }
+    const auto range = mv.cores.equal_range(CoreKey(o.st));
+    const Res hr = Resources(o.st, /*with_float=*/false);
+    // The menu reaches this board already, with at least the resources.
+    for (auto it = range.first; it != range.second; ++it) { if (Covers(it->second, hr, nullptr)) { return v; } }
+    // ...or reaches it with a land Aura on another host and still at least the resources (see IsManaLandAura).
+    if (HasManaLandAura(o.st))
+    {
+        if (!mv.hb_built)
+        {
+            for (std::size_t i = 0; i < mv.boards.size(); ++i)
+            { mv.hb_cores.emplace(HostBlindCore(*mv.boards[i]), std::make_pair(HostBlindRes(*mv.boards[i]), i)); }
+            mv.hb_built = true;
+        }
+        const auto hb = mv.hb_cores.equal_range(HostBlindCore(o.st));
+        const Res hbr = HostBlindRes(o.st);
+        for (auto it = hb.first; it != hb.second; ++it)
+        {
+            if (!Covers(it->second.first, hbr, nullptr)) { continue; }
+            g_eg_host_blind.fetch_add(1, std::memory_order_relaxed);
+            EgTrace(state, pre, t, "host-blind: paying it with " + ScriptText(o.script) + " ends " + BoardText(o.st)
+                                   + "; menu entry #" + std::to_string(it->second.second) + " ends "
+                                   + BoardText(*mv.boards[it->second.second]));
+            return v;
+        }
+    }
+    // The menu reaches this board but with LESS of something, and nothing more: that is a payment dominating a menu
+    // entry's -- the same finding, and the same class, as a DOMINATED-* on the entry itself (an extra untapped land
+    // stays DOMINATED-LAND, counted, not flagged).
+    for (auto it = range.first; it != range.second; ++it)
+    {
+        if (!Covers(hr, it->second, nullptr)) { continue; }
+        std::string what;
+        v.cls    = DominanceClass(hr, it->second, pre, &what);
+        v.detail = what + " -- a mana gate kept this plan off the menu, and paying it with " + ScriptText(o.script)
+                 + " reaches a menu entry's board with more";
+        return v;
+    }
+    std::string order;
+    if (reordered)
+    {
+        for (const Action& a : t.actions)
+        { if (a.kind == Action::Kind::CastFromHand) { order += (order.empty() ? "" : " > ") + a.card_name.str(); } }
+    }
+    v.cls    = C_ENUM_GAP;
+    v.detail = "a mana gate kept this plan off the menu, but " + (order.empty() ? std::string("it") : "casting " + order)
+             + " pays every action with " + ScriptText(o.script)
+             + (range.first != range.second
+                    ? " (the menu reaches this board only with fewer resources: " + MoreText(hr, range.first->second) + ")"
+                    : "");
+    return v;
+}
+
+// Is the gate-rejected plan `p` an option the menu lacks? Each order of it is realised, every payment, until one pays
+// every action; that realisation is then judged (JudgeHit). A paying realisation that is no realisation of `p` itself
+// does not stop the search: one that skipped an action of the plan (PerformedPlan) is the plan without it -- on the
+// menu, or a plan of the observe-mode enumeration checked on its own; one that tapped a land a continuation played
+// (TapsContinuationLand) is the plan with that land drop, checked on its own too; one that tapped a card it took off
+// the top of the library (TapsHiddenCard) is clairvoyant, and reported as HIDDEN-INFO when nothing else pays.
+GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan& p, const MenuView& mv)
+{
+    GapVerdict v;
+    // Combo machinery the oracle does not drive: a combo-route macro, or a LOOP-COUNT variant (a chosen_x on a spell
+    // with no {X} -- AccomplishedAlchemist's Galvanic Alchemist untap loops carry their iteration count there,
+    // x1000000 meaning "until done").
+    for (const Action& a : p.actions)
+    {
+        const bool combo = a.kind == Action::Kind::ComboRoute
+                        || (a.chosen_x > 0 && a.def != nullptr && !a.def->card.m_mana_cost.has_x
+                            && a.def->card.m_mana_cost.x_pips == 0);
+        if (combo) { NoteUnmodeled("gate-rejected loop / combo variant (not driven)"); return v; }
+    }
+    const std::multiset<std::string> want = PlanHandCards(p);
+    int n_casts = 0;
+    for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { ++n_casts; } }
+    NoSacActionScope _no_sac_route;
+    GapVerdict hidden;   // the first clairvoyant realisation that would otherwise have been reported
+    std::vector<TurnSolver::Plan> tries{ p };
+    for (const TurnSolver::Plan& alt : OtherOrders(p)) { tries.push_back(alt); }
+    for (std::size_t ti = 0; ti < tries.size(); ++ti)
+    {
+        const TurnSolver::Plan& t = tries[ti];
+        // The first full outcome ends this order's search, as it always has -- and when its verdict is nothing to
+        // report (the menu reaches it), that is the order's answer. Only an outcome that WOULD be reported is
+        // asked the costlier questions (a replay per action), and one that fails them lets the search go on.
+        GapVerdict w;
+        const OutcomeTest accept = [&](const Outcome& o) -> bool
+        {
+            w = JudgeHit(state, pre, t, ti > 0, o, want, n_casts, mv);
+            if (w.cls == C_N) { return true; }
+            const TurnSolver::Plan done = PerformedPlan(state, pre, t, o);
+            if (done.actions.size() < t.actions.size())
+            {
+                const std::string dk = SiblingKey(done);
+                if (mv.on_menu.count(dk) != 0 || mv.observed.count(dk) != 0)
+                {
+                    g_eg_noop.fetch_add(1, std::memory_order_relaxed);
+                    EgTrace(state, pre, t, "noop: paying it with " + ScriptText(o.script) + " realises {" + PlanText(done)
+                                           + "}, which is " + (mv.on_menu.count(dk) != 0 ? "on the menu" : "enumerated"));
+                    return false;
+                }
+            }
+            std::string card, land;
+            if (TapsContinuationLand(state, t, o, &card, &land))
+            {
+                TurnSolver::Plan with_land = t;
+                with_land.land_to_play = land;
+                const std::string lk = SiblingKey(with_land);
+                if (mv.on_menu.count(lk) != 0 || mv.observed.count(lk) != 0)
+                {
+                    g_eg_cont_land.fetch_add(1, std::memory_order_relaxed);
+                    EgTrace(state, pre, t, "cont-land: paying it with " + ScriptText(o.script) + " taps " + card
+                                           + ", a land from hand the plan did not play; the plan playing it is "
+                                           + (mv.on_menu.count(lk) != 0 ? "on the menu" : "enumerated"));
+                    return false;
+                }
+            }
+            if (TapsHiddenCard(state, o, &card))
+            {
+                g_eg_hidden.fetch_add(1, std::memory_order_relaxed);
+                EgTrace(state, pre, t, "hidden: paying it with " + ScriptText(o.script) + " taps " + card);
+                if (hidden.cls == C_N)
+                {
+                    hidden.cls    = C_HIDDEN_INFO;
+                    hidden.detail = "the only payments found tap " + card + ", a card the plan took off the top of "
+                                    "the library (hidden information, not a gate's to know): " + w.detail;
+                }
+                return false;
+            }
+            return true;
+        };
+        const Realization r = Realize(state, t, pre, /*stop_at_full=*/true, {}, false, nullptr, &accept);
+        if (r.hit < 0 || w.cls == C_N) { continue; }   // another order may reach a board the menu does not
+        if (w.cls == C_ENUM_GAP) { g_rb[RB_OFF_MENU].fetch_add(1, std::memory_order_relaxed); }
+        return w;
+    }
+    return hidden;
+}
 } // namespace
 
 bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan)
@@ -2774,98 +3239,32 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     // ---- ENUM-GAP: the plans a MANA GATE kept off the menu ----------------------------------------
     // The same enumeration with every mana gate in observe mode is "every plan the non-mana rules
     // allow"; what it holds that the menu does not was refused on mana. Each is realised (every order,
-    // every payment): one that pays in full is an option the search never had.
+    // every payment): one that pays in full is an option the search never had (EnumGapPlan).
     std::vector<TurnSolver::Plan> observed;
     {
         t_gate_observe = true;
         observed = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
         t_gate_observe = false;
     }
-    std::set<std::string> on_menu(keys.begin(), keys.end());
     // The OPTIONS the menu really offers are outcomes, not action lists: a gate-rejected plan whose
     // payable outcome is a board some menu entry already reaches (Ghalta, Stampede Tyrant cast alone
-    // puts the Hulk and the Craterhoof it would otherwise have cast) is no missing option.
-    // ...reached with at least the resources (life, energy, haste, sources left untapped): the same
-    // board with less is still an option the menu does not have.
-    std::multimap<std::uint64_t, Res> menu_cores;
-    for (const EngineReal& e : real) { menu_cores.emplace(CoreKey(e.st), Resources(e.st, /*with_float=*/false)); }
+    // puts the Hulk and the Craterhoof it would otherwise have cast) is no missing option -- if it is
+    // reached with at least the resources (life, energy, haste, sources left untapped): the same board
+    // with less is still an option the menu does not have.
+    const MenuView mv = MakeMenuView(keys, real, observed);
     std::set<std::string> done;
     int checked = 0;
     for (const TurnSolver::Plan& p : observed)
     {
         const std::string k = SiblingKey(p);
-        if (on_menu.count(k) != 0 || !done.insert(k).second) { continue; }
+        if (mv.on_menu.count(k) != 0 || !done.insert(k).second) { continue; }
         g_gate_rejects.fetch_add(1, std::memory_order_relaxed);
         if (MaxGateChecks() > 0 && checked >= MaxGateChecks())
         { g_gate_rejects_skipped.fetch_add(1, std::memory_order_relaxed); continue; }
         ++checked;
         g_gate_rejects_checked.fetch_add(1, std::memory_order_relaxed);
-        // Combo machinery the oracle does not drive: a combo-route macro, or a LOOP-COUNT variant (a
-        // chosen_x on a spell with no {X} -- AccomplishedAlchemist's Galvanic Alchemist untap loops
-        // carry their iteration count there, x1000000 meaning "until done").
-        bool combo = false;
-        for (const Action& a : p.actions)
-        {
-            if (a.kind == Action::Kind::ComboRoute) { combo = true; }
-            if (a.chosen_x > 0 && a.def != nullptr && !a.def->card.m_mana_cost.has_x
-                && a.def->card.m_mana_cost.x_pips == 0) { combo = true; }
-        }
-        if (combo) { NoteUnmodeled("gate-rejected loop / combo variant (not driven)"); continue; }
-        const std::multiset<std::string> want = PlanHandCards(p);
-        int n_casts = 0;
-        for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { ++n_casts; } }
-        std::vector<TurnSolver::Plan> tries{ p };
-        for (const TurnSolver::Plan& alt : OtherOrders(p)) { tries.push_back(alt); }
-        for (const TurnSolver::Plan& t : tries)
-        {
-            Realization r = Realize(state, t, is_pre_combat, /*stop_at_full=*/true);
-            const Outcome* hit = nullptr;
-            for (const Outcome& o : r.outcomes)
-            {
-                if (!o.Clean() || !o.unscripted.empty() || !Includes(o.left, want)) { continue; }
-                // Every cast really cast (an action can also be skipped silently -- its card no longer
-                // in hand -- which no drop sink reports).
-                if (o.st.spells_cast_this_turn - state.spells_cast_this_turn < n_casts) { continue; }
-                hit = &o;
-                break;
-            }
-            if (hit == nullptr) { continue; }
-            const auto range = menu_cores.equal_range(CoreKey(hit->st));
-            const Res hr = Resources(hit->st, /*with_float=*/false);
-            bool reached = false;
-            for (auto it = range.first; it != range.second && !reached; ++it) { reached = Covers(it->second, hr, nullptr); }
-            // The menu reaches this board already, with at least the resources -- but another order may
-            // reach one it does not, so keep trying.
-            if (reached) { continue; }
-            // The menu reaches this board but with LESS of something, and nothing more: that is a payment
-            // dominating a menu entry's -- the same finding, and the same class, as a DOMINATED-* on the
-            // entry itself (an extra untapped land stays DOMINATED-LAND, counted, not flagged).
-            const Res* dominated = nullptr;
-            for (auto it = range.first; it != range.second && dominated == nullptr; ++it)
-            { if (Covers(hr, it->second, nullptr)) { dominated = &it->second; } }
-            if (dominated != nullptr)
-            {
-                std::string what;
-                const Cls c = DominanceClass(hr, *dominated, is_pre_combat, &what);
-                Emit(c, state, is_pre_combat, p, what + " -- a mana gate kept this plan off the menu, and paying it "
-                                                 "with " + ScriptText(hit->script) + " reaches a menu entry's board with more");
-                break;
-            }
-            std::string order;
-            if (&t != &tries.front())
-            {
-                for (const Action& a : t.actions)
-                { if (a.kind == Action::Kind::CastFromHand) { order += (order.empty() ? "" : " > ") + a.card_name.str(); } }
-            }
-            g_rb[RB_OFF_MENU].fetch_add(1, std::memory_order_relaxed);
-            Emit(C_ENUM_GAP, state, is_pre_combat, p,
-                 "a mana gate kept this plan off the menu, but " + (order.empty() ? std::string("it") : "casting " + order)
-                 + " pays every action with " + ScriptText(hit->script)
-                 + (range.first != range.second
-                        ? " (the menu reaches this board only with fewer resources: " + MoreText(hr, range.first->second) + ")"
-                        : ""));
-            break;
-        }
+        const GapVerdict v = EnumGapPlan(state, is_pre_combat, p, mv);
+        if (v.cls != C_N) { Emit(v.cls, state, is_pre_combat, p, v.detail); }
     }
     g_ms.fetch_add(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count(),
                    std::memory_order_relaxed);
@@ -2991,5 +3390,27 @@ LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& pl
         return a;
     }
     return a;
+}
+
+std::string EnumGapVerdict(const GameState& state, bool pre, const TurnSolver::Plan& plan,
+                           const std::vector<TurnSolver::Plan>& menu, const std::vector<TurnSolver::Plan>* observed,
+                           std::string* detail)
+{
+    RevealLogPause pause;
+    std::vector<EngineReal> real;
+    std::vector<std::string> keys;
+    real.reserve(menu.size());
+    for (const TurnSolver::Plan& m : menu)
+    {
+        real.push_back(EngineApply(state, pre, m));
+        keys.push_back(SiblingKey(m));
+    }
+    std::vector<TurnSolver::Plan> obs;
+    if (observed != nullptr) { obs = *observed; }
+    obs.push_back(plan);
+    const MenuView mv = MakeMenuView(keys, real, obs);
+    const GapVerdict v = EnumGapPlan(state, pre, plan, mv);
+    if (detail != nullptr) { *detail = v.detail; }
+    return v.cls == C_N ? std::string() : std::string(kClsName[v.cls]);
 }
 } // namespace manaoracle
