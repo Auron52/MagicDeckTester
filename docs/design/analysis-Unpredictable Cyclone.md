@@ -1568,6 +1568,160 @@ question for the USER (Q57; Q54 on cyclone-mem), not a settings one.
 Regression tier: not run (my thread share; the A/B above is 1,300 games on the three decks the change can move, and
 smoke covers every deck).
 
+## Cast order + cycle order levers (2026-10-29)
+USER review of the draft (`docs/design/cyclone-cast-order.md`), 2026-10-29: *"The order looks reasonable, though we should
+also specify the cycle order. Maybe from cheapest to most expensive? Arguably Cyclone cycling should go earlier, but I suppose
+it doesn't matter all that much because of breakpoints and re-solves."* Then, on draft 2 of the cycle order: *"Okay, then the
+other order is probably also fine. Realistically the order and what spells you cast are kind of different things anyway."*
+Branch `cyclone-castorder` (worktree `.claude/worktrees/cyclone-castorder`, cut from `cyclone-int` 638586e91, local).
+Scratch `build/scratch/cyclone/castorder/`; summaries `logs/cyclone/castorder/`. **Every lever DEFAULT OFF; nothing
+adopted** (the USER decides).
+
+### What was built
+All four are per-job heurarm slots (`HeuristicArm.h`), so every arm pools in one batch.
+- **`MTG_CYCLONE_CAST_ORDER`** -- `CycloneProvider::CastOrderRank / CastOrderTierName / CastOrderTotalByName`, the draft's
+  order read from PARAMS (`CycloneCastOrderRankOf`): `tutor_library_position` 10 (Long-Term Plans) < `cast_reorder` 20
+  (Ponder) < `put_back_from_hand` 30 + mana value (Brainstorm 31 < Brainsurge 33) < `counters_target_spell_to_hand` 50
+  (Remand) < `ritual_floating_mana` 60 (Seething Song) < `cycle_draw_exile_shared_type_freecast` 70 (Cyclone) < creature with
+  `cycling_cost` 80 + mana value (Curator 84 < Street Wraith 85) < creature of mana value 7+ 100 + mana value (Ulamog CH 110 <
+  Ulamog IG 111 < Emrakul 115); `goldfish_inert` 200 (Toxic Deluge, never cast); an unnamed card 300 + the generic rank. No
+  name list: the params separate every card, and the by-name tie rule only decides a card the order does not name. The land
+  drop and cycling keep their structural positions. `--cast-order-report` with the lever on reads like the draft, tier by
+  tier (`logs/cyclone/castorder/cast_order_report.txt`).
+- **The ranges.** The existing range ladder (`ApplyCastOrderRangeLadder`) walks a rung only while the line CANNOT BE PAID,
+  so it carries the draft's FUNDING ranges, as `CastOrderFallbackRanks`: Brainstorm 31 -> 71 (after Song / Cyclone when its
+  {U} cannot otherwise be paid), Brainsurge 33 -> 65 (after Song, Song's red float paying its {2}), Remand 50 -> 72 (after
+  Cyclone), Seething Song 60 -> 32 -> 5 (before Brainsurge, then before Long-Term Plans, its float paying their {2}). The
+  ladder runs only with `MTG_ORDER_RANGE` or `OrderOpaqueCastsByRank`, so these are inert under the order alone and live in
+  the DRAW arm. **Not expressible:** the two INFORMATION ranges -- Long-Term Plans after the put-backs and Ponder after
+  Brainstorm (the shuffle line). They are not payability questions, so a payability walk never reaches them; they need a
+  SEARCHED second position (the `CastOrderingCandidates` dual-slot shape Landfall uses). Not built (Q60).
+- **`MTG_CYCLONE_ORDER_DRAW_TURNS`** (the draft's item D) -- `OrderOpaqueCastsByRank`: a set holding a draw spell is
+  rank-sorted too, and the range ladder runs for every set (scoped to the deck and the arm through the provider hook, so
+  `MTG_ORDER_RANGE` stays untouched). Inert without the order.
+- **`MTG_CYCLONE_CYCLE_ORDER`** (env value 1 / 2; slots `CYCLONE_CYCLE_ORDER` = mode 1, `CYCLONE_CYCLE_CHEAP` = mode 2) --
+  one key (`CycloneCycleOrderKey`) read in BOTH places: the SEARCHED cycle sources' order (`SearchedCycleSources`; the
+  CYCLER rule's order-only mode is superseded, its plan-level prunes are untouched; an ORDER, the same names) and the
+  PLAYOUT pick (`SelectDigSource`, beyond the horizon: the first PAYABLE cycler in the key). Mode 1 = draft 2: Cyclone OUT --
+  Curator while a {U} is spare (the CYCLER rule's own test, now one shared function `CycloneCuratorSpare`), Street Wraith,
+  Curator with no spare {U}, Xander's Lounge, a surplus Cyclone; NOT out -- a surplus Cyclone (2+ held), Xander's Lounge
+  (not this turn's land drop), Curator, Street Wraith, a Lounge that IS the land drop (drop open, no other land), the only
+  Cyclone. Mode 2 = cheapest first (effective cycling cost). Mode 2 is built but not measured (USER, above).
+- Tests: `test_cyclone_cast_order.cpp` (the rank table on and off, the fallback ranks, the draw-turn opt-in, every
+  cycle-order case in both places, mode 2); scenario `cyclone_cycle_surplus_before_cast` (item 4 below). All 26 Cyclone
+  scenarios pass with every new lever on too (the one failure with all levers on, `cyclone_putback_unusable_before_redraw`,
+  is `MTG_CYCLONE_PB_PLANS`'s, pre-existing).
+
+### Item 4: cycling the SURPLUS Cyclone before casting the other one
+**Search: expressible.** A cycle seed runs after its plan's casts (the dig loop's position), so the line is a SEED-ONLY plan
+(cycle Cyclone #1, a plain draw) whose site-4 re-solve casts Cyclone #2 and cycles the next cycler. Scenario
+`cyclone_cycle_surplus_before_cast` (T3, two Cyclones in hand, library Street Wraith, Emrakul; 4 Mountains + 3 Islands):
+cycle Cyclone -> draw Wraith -> cast Cyclone -> cycle Wraith -> Emrakul, round 3, under the default order and mode 1.
+**But a payment defect makes it unfindable on some boards (Q61).** With 3 Mountains + 4 Islands (or 2 + 5, or 3 + 6) the same
+line is NOT found (3 + 4 checked at b20, b200 and b0; the others at b20), while 4 + 3 and 5 + 2 find it: the seed's {2} is paid before the continuation
+exists, and the payer spends Mountains on the generic, so the continuation cannot pay the second Cyclone's {R}{R}.
+**Playout: not expressible.** The horizon leaf's dig loop also runs after the leaf plan's casts, so a castable Cyclone is cast
+first and the surplus one then cycles with a Cyclone out (mode 1 orders it last there). Only a leaf plan that does NOT cast
+the Cyclone cycles the surplus copy first (mode 1's not-out order).
+
+### The A/B (2026-10-29): CO is worse at d3 RAW, and the loss is clairvoyance
+One pooled batch, 6 threads, arms interleaved in blocks (`build/scratch/cyclone/castorder/ab/`; summary copied to
+`logs/cyclone/castorder/`). Every arm carries **plain** `MTG_CYCLONE_PB_PLANS=1` + `MTG_CYCLONE_CYCLER_RULE=1` (the
+integrator's set at launch; PB_PLANS has since been kept OFF after d5 gi179, so the order is measured on that base).
+Held-out seeds 131000 (d3 b10 x200) and 132000 (d5 b20 x100). CO+CYC2 (cheapest first) dropped by the USER.
+
+| arm | d3 b10 delta (se) | faster / slower | units | kept-game units | d5 b20 delta (se) | faster / slower | units | kept |
+|---|---|---|---|---|---|---|---|---|
+| base | 5.190 | | | | 5.280 | | | |
+| CO | **+0.060 (0.023)** | 1 / 9 | x1.021 | x1.005 | -0.010 (0.017) | 2 / 1 | x1.006 | x1.012 |
+| CO+CYC1 | +0.055 (0.025) | 3 / 10 | x1.025 | x1.006 | 0.000 (0.020) | 2 / 2 | x1.010 | x1.015 |
+| CO+CYC1+DRAW | +0.055 (0.035) | 11 / 20 | x1.001 | x0.990 | 0.000 (0.038) | 7 / 7 | x1.028 | x1.029 |
+
+- Digests identical to base: CO 172/200 (d3), 86/100 (d5); CO+CYC1 166 / 80; DRAW 97 / 42. CYC1 barely moves play on top of
+  CO (the same slower games, mostly the same digests). DRAW moves half the games, both ways.
+- **First divergent moves** (per-game traces, `firstdiv.txt`): T1-T2 choices -- which land, Ponder vs a creature-cycler plain
+  draw, Ponder keep vs shuffle -- never a cast SEQUENCE. The rank reaches the root only through the horizon playout's cast
+  ordering, which re-prices the leaf. In several base wins the T1-T2 move is a plain-draw cycle of Street Wraith / Curator
+  into exactly Emrakul or Ponder.
+- **Blind classification** (known-top blind, salts 1-4, both arms, every slower game; `blind/classification.txt`):
+  - CO d3: 8 of 9 tie or favour CO under the blind; the blind delta over the 9 games sums to **-1.50** (raw +13). The one
+    residual, gi110 (raw 4 -> 5), is 8.00 -> 8.50 (one salt of four; T1 Watery Grave + Ponder vs Scalding Tarn holding
+    Ponder). CO d5 gi34: a blind tie. => **clairvoyance**.
+  - CO+CYC1: CO's games (identical digests) plus gi134 (8.00 -> 8.25, one salt) and gi106 / d5 gi88 (ties).
+  - DRAW d3: 20 slower, 10 still slower under the blind, but the blind sum is only +0.75 over the 20 (raw +24); d5: 7
+    slower, blind sum -2.00. Mostly clairvoyance; a small, noisy residual.
+  - Caveat (Q51's): only the SLOWER games were blind-replayed; the faster games' gains were not blind-checked.
+- **Why CO shows almost no FASTER games (the USER's question), the agent's read.** (1) The effect is small and confined: 28
+  of 200 d3 games move at all. (2) Under a clairvoyant search, whichever order the engine was tuned under looks better on
+  the raw metric: the search, its scorers and the GT were all accepted under the generic order, so a perturbation of the leaf
+  pricing moves the root off lines that the clairvoyant leaf had priced around the KNOWN library (the base's T1-T2 cycles that
+  draw exactly Emrakul), and rarely onto better ones. The blind replays say those base wins do not survive without the
+  knowledge. (3) At d5 the root leans less on the leaf, and CO is flat (2 faster / 1 slower). The honest number is the
+  blind-in-both-arms net A/B (below), not the raw faster/slower count.
+- **Tier attribution, gi110 only** (the one residual; `MTG_CYCLONE_CO_REV_*`, commit 6e887cbe5, same settings as the raw
+  A/B): reverting the CREATURE CYCLERS to the generic position (first, before every noncreature) restores the base game
+  EXACTLY (T4, digest 653d1e563ca32ba1 = base); reverting the Eldrazi, Seething Song, the flat LTP/cantrip/Remand/Cyclone tier
+  or the name tie-break leaves CO's game unchanged (T5, digest c7441c7eb2d0addd). So the hard-cast Curator / Street Wraith
+  rank (84 / 85, after Cyclone, where the generic order has them FIRST) is the whole of CO's effect on this game. It reaches
+  the root through the horizon playout's casts: which of a hard-cast creature cycler and the Song / Cyclone line the
+  greedy playout funds first (not traced cast by cast before the stop). Candidate amendment for the USER, unmeasured: the
+  creature cyclers hard-cast BEFORE Seething Song and Cyclone (`MTG_CYCLONE_CO_REV_CYCLERS=1` is exactly that arm) --
+  measure it in the blind net A/B before proposing it; on one game whose blind residual is one salt of four, it is not
+  evidence by itself.
+
+### The honest net: known-top blind ON in BOTH arms on EVERY game (2026-10-29)
+One pooled batch (`next/`, binary 6e887cbe5), arms interleaved, `blind_salt` 1 on every game, PB_PLANS + CYCLER_RULE as in the
+raw A/B, fresh seeds 135000 (d3 b10 x200) / 136000 (d5 b20 x100). Blind play on this deck is weak (base wins 107/200 d3 and
+54/100 d5 by T8; an unwon game scores 9), so the se is wide.
+
+| arm | d3 delta (se) | faster / slower | units | kept | d5 delta (se) | faster / slower | units | kept |
+|---|---|---|---|---|---|---|---|---|
+| base | 7.905 | | | | 7.840 | | | |
+| CO | +0.010 (0.040) | 10 / 12 | x0.977 | x0.994 | +0.050 (0.080) | 6 / 8 | x1.002 | x1.014 |
+| CO+CYC1 | -0.030 (0.049) | 15 / 14 | x0.970 | x0.992 | +0.040 (0.088) | 8 / 9 | x1.000 | x1.012 |
+| CO+CYC1+DRAW | -0.145 (0.082) | 49 / 33 | x0.960 | x0.969 | +0.070 (0.121) | 23 / 22 | x1.022 | x1.006 |
+
+- **Read: every arm is within noise of base at both depths without clairvoyance**; the raw d3 +0.060 does not survive the
+  blind. The faster / slower counts are now symmetric (CO 10 / 12, 6 / 8), unlike the raw 1 / 9.
+- **The games CO is still slower on under this blind** (12 d3, 8 d5; `blind_net_firstdiv_CO.txt`): 19 of 20 first diverge
+  on a SEARCH choice the order does not make -- the land, Ponder keep vs shuffle, a Brainstorm / Brainsurge put-back, when to
+  cycle -- with the mirror image among the faster games: BUTTERFLY (the rank re-prices the playout leaf). One diverges on a
+  CAST SEQUENCE: d3 gi94 T4, base hard-casts Curator of Mysteries before two Seething Songs, CO casts the Songs first (Curator
+  ranks 84) -- base wins T8, CO does not win. The same tier as gi110's attribution (the creature cyclers' hard-cast rank): a
+  CANDIDATE lost line, not verified at a large budget (the box was handed over).
+
+### Q61 built: the searched payment split (`MTG_CYCLE_SEED_PAY_SPLIT`, DEFAULT OFF)
+Commit 9066f252d. `Action::seed_pay_split` = a packed multiset of source colour signatures paying a seed's ALL-GENERIC
+cycling cost, a searched pin like the Curator scry and free-cast pins. `SeedPaySplits` (ManaPayment): one split per distinct
+signature multiset; a plain source tapped while a plain source with a strict subset of its colours stays untapped is DOMINATED
+and dropped; specials (filter lands, Myriad's search, non-lands) never swap; a single undominated split, a coloured cost or a
+float -> no pin. Split 0 is the hand-demand rule's (the leftover that best covers the per-colour max pips of the cards still
+in hand, the cycled copy excluded). Realised by `SeedPaySplitHoldMask` + `SeedPaySplitScope` as a reserved-first hold OR'd
+into TapForCost's rmask (unrestricted retry, so a split never makes a payable seed unpayable), installed at the rollout's
+`cycle_chain_step` and the executor's `PerformDigFull` (the recorded DigDraw carries the pin). Human play carries no pin.
+Folded into the plan keys beside `devour_count` only when non-zero; `sizeof(Action)` unchanged (520: the field sits in
+padding), so the byte-priced caches are unchanged too.
+- **Proof (`splitscen/results.txt`):** 3+4, 2+5, 3+6 FOUND at d3 b0, d3 b20 and d5 b20 with the lever on, NOT found with it
+  off; 4+3 and 5+2 found both ways. Unit 2127/2127 (4 new cases), scenarios 341/341 (new
+  `cyclone_cycle_seed_pay_split_keeps_red`, the 3+4 board with the lever on).
+- **A/B (partial, stopped at the 13:30 box hand-over):** CYCLER_RULE on, PB off, seeds 133000 / 134000, paired:
+  d3 b10 36 games -- 0.000 (se 0.040), 1 faster / 1 slower, 30/36 digests identical, units x1.036 (kept x1.070);
+  d5 b20 20 games -- 0.000, 20/20 digests identical, units **x1.074**. So far it changes almost no play and costs ~4-7%
+  units (the fan). The full shape and the fan census (how often a seed fans) are owed.
+- **Smoke for this commit: NOT run** (owed). The full smoke was run on the CO commit (149/149 byte-identical); the split
+  commit is byte-identical by construction (no fold or behaviour without a pin, sizeof unchanged) but that is not a run.
+
+### State at the stop (13:05 UTC 2026-10-29, the box handed to the Hinata2 generation) + resume commands
+Commits (local, branch `cyclone-castorder`): 03baf1a73 (CO / DRAW / CYCLE order), 9066f252d (Q61 split), 6e887cbe5 (tier
+handles). All levers DEFAULT OFF. Scratch: `/workspaces/MagicDeckTester2/build/scratch/cyclone/castorder/`.
+1. **Blind net A/B: DONE** (above; the gi110 tier attribution too). Owed: the amendment arm (CO with
+   `MTG_CYCLONE_CO_REV_CYCLERS=1`, the creature cyclers hard-cast first) in the same blind shape, and d3 gi94 at a large
+   budget (`--depth 8 --budget-ms 0`) both ways to settle "lost line or not".
+2. **Q61 split A/B, full shape** (`split_ab/manifest.json`, 40 jobs, binary `mtg.split` = 9066f252d; the partial run's
+   completed jobs are in `split_ab/batch.out`): the same filter-and-rerun as above, then `python3 $S/ana.py
+   $S/split_ab/batch.err off`. Add the fan census (how often a seed fans) before it -- not built.
+3. Smoke on the split binary: `MTG_PGO=0 MTG_BIN=$S/mtg.rev THREADS=6 bash test/regression.sh --smoke` (expect byte-identical).
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1877,6 +2031,52 @@ smoke covers every deck).
   cycles (Cyclone); elsewhere a cycle stays a standalone plan, but the viewer badge now QUEUES it as its own segment instead
   of firing at once. Extend plan-item cycling to every deck? Default: Cyclone-style decks only.
 - QR2. The four tied reference games (s1, s5, s8, s10, T5): a large-budget hunt for a T4 line? Default: no (bar met).
+
+- Q60. (cast order 2026-10-29) The draft's two INFORMATION ranges -- Long-Term Plans after the put-back cantrips and Ponder
+  after Brainstorm (the shuffle line) -- are NOT expressible through the range ladder, which walks a card only while the
+  line cannot be PAID. They need a SEARCHED second position (the Landfall `CastOrderingCandidates` dual-slot shape: the
+  ideal order first, the shuffle-line order second, both searched). Not built (no new machinery without the USER). Default:
+  leave them to the search (the draw turns keep their search-owned order unless MTG_CYCLONE_ORDER_DRAW_TURNS is on).
+- Q61. (item 4, 2026-10-29) THE CYCLE SEED'S PAYMENT LOSES A LINE -- a COMPLETENESS defect, found at b0. Board: T3 main 1, land
+  drop used, two Unpredictable Cyclones in hand, library Street Wraith, Emrakul, then Islands; opponent at 15. The only
+  round-3 kill: cycle Cyclone #1 (plain draw: Wraith), cast Cyclone #2, cycle the Wraith -> walk -> Emrakul. Lands and result
+  (`mtg --scenario`, d3): 4 Mountains + 3 Islands FOUND (b20); 5 + 2 FOUND (b20); 3 + 4 NOT found at b20, b200 AND b0;
+  2 + 5 and 3 + 6 (nine lands, two to spare) NOT found at b20.
+  Mechanism: the cycle seed is the first step of the plan's cycle chain and pays its {2} (`cycle_chain_step` ->
+  `TapForCostDirect`) BEFORE the site-4 continuation exists, and the payer spends Mountains on the generic, so the
+  continuation cannot pay the second Cyclone's {R}{R}. The executor replays the search, so play loses the line too. The
+  committed scenario `cyclone_cycle_surplus_before_cast` uses the 4 + 3 board (it passes); the 3 + 4 board is the repro.
+  Fix designs (not built, after the A/B, for the USER):
+  (a) A HAND-DEMAND HOLD on the seed's generic (the payer's job, the mana-payment exemption): when a cycle seed pays generic,
+      rank the untapped sources by how much the castable cards still in HAND need their colours (here the held Cyclone's
+      {R}{R}), and pay from the least-needed colour first. This is the same reasoning as the existing seed-pip hold
+      (`PlanTraits::cycle_seed_pips`, which protects the seed's colour from the plan's casts), pointed the other way. Cheap,
+      lockstep (one function the rollout's `cycle_chain_step` and the executor's seed payment both call). Not complete in
+      general: a continuation's needs are not known at payment.
+  (b) A SEARCHED payment pin on the seed (complete): when the seed's cost has generic and the untapped sources differ in
+      colour, branch the seed over the distinct colour SPLITS of its generic (for {2} over Mountains and Islands: RR / RU /
+      UU, at most 3), carried on the Action like the Curator scry pin and replayed by the executor. Only Cyclone's {2} and
+      Xander's Lounge's {3} have generic in this list. A seed fan of up to 3, so the cost question goes through the USER's
+      collapse rules (splits whose leftover pools are identical fold).
+  Recommendation was (a) first; the coordinator asked for the COMPLETE version (b), with (a) as its order -- BUILT
+  2026-10-29 (commit 9066f252d, `MTG_CYCLE_SEED_PAY_SPLIT`, DEFAULT OFF; section "Q61 built" above). Open: its full A/B and
+  the fan census, then the USER's adoption call.
+- Q63. (cast order, for the USER) ADOPT the drafted order? Raw: CO d3 +0.060 (se 0.023), d5 -0.010 (0.017); the blind replay
+  of every slower game says the d3 loss is clairvoyance (8/9; blind sum -1.50 vs raw +13). The honest number -- blind ON in
+  both arms on every game -- is the queued `next/` run (partial at the stop). CYC1 adds nothing measurable on top of CO; DRAW
+  moves half the games for a net 0. The blind net (both arms blind, every game): CO +0.010 (se 0.040) d3, +0.050 (0.080) d5;
+  CO+CYC1 -0.030 (0.049) / +0.040 (0.088); DRAW -0.145 (0.082) / +0.070 (0.121) -- all within noise. Agent's recommendation:
+  CO + CYC1 is play-neutral without clairvoyance and is the USER's order, so adopting it is the USER's call on preference;
+  before adopting, measure the creature-cycler amendment (Q64). Keep DRAW off (a restriction with no measured gain).
+- Q64. (cast order) The creature cyclers' hard-cast rank is the one tier the data points at: gi110 (raw) is restored exactly by
+  reverting it, and d3 gi94 (blind net) diverges on "Curator before the Songs" (base) vs "Songs first" (CO). Amendment to
+  measure: Curator / Street Wraith hard-cast BEFORE Seething Song and Cyclone (`MTG_CYCLONE_CO_REV_CYCLERS=1`). The draft's
+  reason for placing them late ("a Brainstorm may want to keep it as a cycler or put it back") is about the draws, not the
+  ritual, so "after the draws, before Song" is the natural middle position if the measurement favours earlier.
+- Q62. (cast order) Display only: `--cast-order-report` labels every `CastOrderFallbackRanks` card "FUNDING ladder: prefers
+  the late slot, walks earlier". That reads right for Seething Song (60 -> 32 -> 5) but backwards for Brainstorm / Brainsurge /
+  Remand, whose rungs walk LATER (the ladder handles both directions). Fix the label? Default: no (the report is the USER's
+  review artifact, so flagged here instead).
 
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
