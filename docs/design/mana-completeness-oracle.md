@@ -876,7 +876,7 @@ the bound cut from the real menu prints no line before `DECISION` but an `early-
 | Fungus | 3 | a same-plan mana GRANT (Brightcap Badger) is not credited | the rock/grant credit | credit the granted bodies | open |
 | Fungus, FiveColour | 8 | Concordant Crossroads' blanket haste does not unlock the plan's own dorks | the rock-credit stamp | credit them | open |
 | Giants | 2 | `SubsetPayableSequentialImpl` refuses any non-cast action (an Equip {0}) | the sequential walk's kind filter, `SubsetHasUnmodelledSeqKind`, `OrderPaysSequentiallyImpl` | skip zero-cost non-mana activations | **fixed below** |
-| Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **blocked** (below) |
+| Goblins | 1 | the colour-presence gate misses a planned sac outlet's colour | `WidenHaveWithSubsetRocks` | the outlet half of `MTG_SUBSET_SAC_COLOR` | **fixed below** (`MTG_SUBSET_SAC_OUTLETS`, after three exposed defects) |
 | NivMizzetCombo | 5 | a mana rock that pays for another rock: the rock credit applies only when the board alone pays every rock | the `pool.CanPay(rock_costs)` guard (both walkers) | an exact sequential rock check from the credited pool | **fixed below** |
 | NivMizzetCombo | 2 | Generator Servant's {C} through Izzet Signet: a {1}-fed ramp filter turns a {C} into coloured mana, under-counted by one per fed filter | the per-subset credits | relabel up to one {C} per fed filter as wild | open |
 | EDF | 6 | the rescue's scalar ceiling omits the ETB-untap refund (Cloud of Faeries, Peregrine Drake) | `ef-scalar` pre-filter | add the refund | open |
@@ -1020,7 +1020,8 @@ summoning-sick host whose {T} it enables, which stays refused. Giants seed 11000
 out (seed 1310001 every suite deck, plus Giants seed 1320001 4,000 games; `MTG_PAY_REFINE` on in both arms):
 52,020 paired games, 0 slower / 0 faster; Giants 87 and Dragons decision streams move; units +0.3%.
 
-**The outlet half is blocked.** The same credit for a creature sac OUTLET (Skirk Prospector's {R}, Utopia Mycon's any
+**Fix 5: the outlet half (`MTG_SUBSET_SAC_OUTLETS`, DEFAULT ON, 2026-10-29) -- held out until the three defects it
+exposed were fixed.** The same credit for a creature sac OUTLET (Skirk Prospector's {R}, Utopia Mycon's any
 colour) is just as valid, and measured Goblins 32 faster / 3 slower and Fungus 2 / 1 (seed 1230001, 4,000 games
 each). Fungus gi1040 and Goblins gi1914 recover at d8 b0; Goblins gi3401 (T3 -> T4) and gi691 (T4 -> T5) do not,
 and both win on the base turn under the non-clairvoyant search, so neither is clairvoyance:
@@ -1047,9 +1048,24 @@ and both win on the base turn under the non-clairvoyant search, so neither is cl
   every slot is reached. gi691 at d8 b0: T5 -> T4. Held-out (seed 1390001, every suite deck, 34,154 games,
   `MTG_PAY_REFINE` on): 15 faster / 0 slower, units +0.41% (EDF -9.2%, Goblins +29.8%, Minotaur +10.9% with an
   identical digest).
-* A third, found on the re-measure (seed 1330145 gi144, T3 -> T4 at d8 b0, T3 on both arms under the non-clairvoyant
-  search): with the outlets credited the T1 search only finds a turn-4 win. Open.
-`SubsetSacColorSource` leaves the outlets out until gi144 is fixed.
+* gi144 (seed 1330145, T3 -> T4 at d8 b0; T3 on both arms under the non-clairvoyant search), found on the
+  re-measure, and gi3447 (seed 1343448, the same mechanism). The T3 kill's main 2 {Skirk Prospector, Siege-Gang}
+  needs NON-FRONT continuations at two site-9 occurrences of one apply: Skirk's sacrifice burst at the post-entry
+  occurrence, then Siege-Gang activations at its re-open. `Plan::bp_choice` / `bp_at` carry ONE deviation per apply,
+  and an untargeted site-9 re-open applies nothing at all (not the canon), so a deviation at the first occurrence
+  could reach no continuation at the second. The line was reachable only through the uniform arm (`bp_all`, rank 1
+  at both), by luck; the outlets admitted more continuations ahead of the three-sacrifice burst (rank 1 -> rank 8)
+  and the uniform arm no longer expressed it. **Fixed (`MTG_BP_DEV_SEQ`, DEFAULT ON):** breakpoint deviation
+  SEQUENCES (`Plan::bp_pre`), opened at LATENT occurrences (reachable only by targeting them), one wave per deviation
+  count; a full-line search runs them as a second pass bounded by the first pass's answer (bp-empty-arm-deferred-site.md
+  6.1). At d8 b0 gi144 and gi3447 both win T3 again.
+`SubsetSacColorSource` now credits the outlets (`MTG_SUBSET_SAC_OUTLETS`). Held out together with `MTG_BP_DEV_SEQ` (seed
+1440001, every suite deck, EDF / Landfall / Fungus / Goblins 4,000 games each, 60,202 paired games against both levers
+off): 36 faster / 3 slower -- Goblins 28 / 0 (3.7680 -> 3.7610), AccomplishedAlchemist 3 / 1, EDF 4 / 2, Landfall 1 / 0,
+every other deck's win turns identical -- and every slower game wins on the base turn at d8 b0 (EDF gi1851, gi3772,
+Alchemist gi69). On Melira the outlets alone are byte-identical to both off, so its movement is `MTG_BP_DEV_SEQ`'s.
+Units 1.049x overall (Goblins 1.34x, Melira 1.20x: the second pass's cost; see bp-empty-arm-deferred-site.md 6.1). Measured on upstream 6b5ec5346; the
+re-run on the rebased tree and what it still owes are in that section.
 
 **Also found: the sac-colour fold is a guess.** `MTG_SAC_COLOR_FOLD` (on-board Lotus / Lotus Bloom) resolves the
 colour at apply from a scarcity score over the accounting pool, which counts a dual land toward both its colours; the

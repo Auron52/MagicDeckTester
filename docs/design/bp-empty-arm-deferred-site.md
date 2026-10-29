@@ -396,7 +396,7 @@ the search lost the T3 kill at `--depth 8 --budget-ms 0` (seed 1343448 gi3447 is
   d8 b0: gi2586 1,469 units (0.85 s, T3), gi144 13,049 (T3; the one-pass search 2,731 -- its compound kill is
   found early and cuts the rest, where pass 1 must first prove the one-deviation tree only reaches T4), gi3447
   9,787 (T3; lever off T4).
-* **Why `_ALL` is off (measured 2026-10-29, partial pooled run, outlets on).** It is the whole cross product,
+* **Why `_ALL` was off (measured 2026-10-29 on the ONE-pass search, partial pooled run, outlets on).** It is the whole cross product,
   and without a breakpoint-level TRANSPOSITION it is intractable on a long chain: the regression tier's
   unbudgeted backstop abandoned Fluctuator games at the 2,000,000-unit ceiling at d3 AND d5 (seeds 30009,
   30018; ~5-9 min each, every other backstop row finished), Hinata's backstop units rose 2.4x, and Goblins at
@@ -404,23 +404,52 @@ the search lost the T3 kill at `--depth 8 --budget-ms 0` (seed 1343448 gi3447 is
   4,000 games: 3.7780 -> 3.7773, 3.7765 -> 3.7753). The
   transposition has to key a decision on the apply's whole RESUME context, not the board: the dig loop's
   counters and drawn lands, the deferred-site flags, the pin cursors, `g_line_unpaid_cost` -- i.e. a
-  `BpPrefixSnap` at every site, which today exists only at the deferred ones. That is what `_ALL` needs
-  before it can be the default; the one-deviation gap at counted occurrences stays open until then.
+  `BpPrefixSnap` at every site, which today exists only at the deferred ones. (Superseded by the two passes:
+  see "What `_ALL` costs now" below. Until the USER turns `_ALL` on, the one-deviation gap at counted
+  occurrences stays open.)
 * The `SolveWithLookahead` host seeds its own wave-0 variants too (2026-10-29; `la_dvs_seeds`, read off each
   variant's own apply and handed to its walker like the FSLine hosts' seeds). A variant whose apply is shared or
   folded (a combat-pin share, the put-bounce / ETB / ETB-counter folds) is not read: it repeats a sibling's apply,
   whose seed already covers it.
 * Unit test: `test/unit/test_bp_dev_seq.cpp` (the reader, the compound waves and their order, the latent
   route, a seeded variant).
-* **Measured (2026-10-29, pooled held-out A/B, play settings, `MTG_PAY_REFINE` on; every suite deck at seed
-  1370001 + Goblins / Fungus 4,000 each at 1380001; arms: c = outlets off, a = `MTG_SUBSET_SAC_OUTLETS` on,
-  p = outlets on + this lever, priced).** a -> p: 11 faster / 6 slower; Melira and LHC moved digests
-  with no win-turn change, every other deck's outcomes are identical. AccomplishedAlchemist 4 / 0
-  (4.8594 -> 4.8281), FiveColour 1 / 0, Goblins 1 / 1, Goblins 4,000 5 / 3, Landfall 0 / 1, EDF 0 / 1
-  (gi452 5 -> 7, the price's budget churn).
-  c -> p: 52 / 11. Every slower game of p vs c wins on c's turn at `--depth 8 --budget-ms 0`. p's units
-  include the new price (Goblins 2.1-5.0x a's, which never bills derivations); wall a -> p 1.1-2.1x on
-  Goblins, flat elsewhere. The unbudgeted backstop moved no row (units +0-2.5%, Melira +34-53%).
+* **Measured (2026-10-29, the shipped stack: two passes, rebased on the billed canon wave and the LHC keep table +
+  sidecar).** Pooled held-out A/B at play settings, seed 1440001: every suite deck (EDF, Landfall, Fungus and Goblins
+  4,000 games each, the rest sized to ~600 core-s, up to 1,500) plus the regression tier's unbudgeted backstop rows;
+  arms c = `MTG_SUBSET_SAC_OUTLETS` and this lever both off (the upstream tree), b = both on; `MTG_PGO=0`, 12 threads.
+  c -> b over 60,202 paired games: **36 faster / 3 slower**. Goblins 28 / 0 (3.7680 -> 3.7610), AccomplishedAlchemist
+  3 / 1 (5.0781 -> 5.0625), EDF 4 / 2 (4.0643 -> 4.0637), Landfall 1 / 0; every other deck's win turns are identical
+  (FiveColour, Fungus, Melira move digests only). Every slower game wins on c's turn at `--depth 8 --budget-ms 0`
+  (EDF gi1851 T7 and gi3772 T5, Alchemist gi69 T7; both arms the same game), i.e. budget churn. Units b / c: Goblins
+  1.34x, Melira 1.20x, Landfall 1.07x, LHC / Minotaur / Vampires / Fungus 1.01-1.02x, EDF 0.985x, Alchemist 0.90x,
+  the rest 1.00x; 1.049x overall. The unbudgeted backstop moved no outcome and abandoned nothing (units: Melira
+  1.41x / 1.68x at d3 / d5, EDF 1.08x / 1.17x, Goblins 1.05x / 1.08x, the rest <= 1.06x). Over the run, 83,626
+  top-level full-line searches ran pass 1, 9,029 met a latent occurrence, 7,045 ran pass 2 (the rest won this turn
+  or ran out of budget) and 27 found a strictly earlier win. `MTG_DEV_SEQ_VERIFY` over the backstop rows and the
+  three repro games (2,751 decisions at an unlimited budget): `TWO_PASS_LATER=0`. The first stack's numbers (one
+  pass, its own price, seed 1370001) are superseded; its Melira and EDF slower games were the first version of the
+  game-line cache rule (above).
+  These numbers are on upstream 6b5ec5346 (branch `g144rc-devseq-measured`). **Re-run on the rebased tree** (upstream
+  6a3370e71: the placeholder split, the oracle false-positive pass, the Tectonic / Flinger / Lackey axes, the searched
+  echo; same seed and manifest), stopped at 216 of 230 jobs when the box was handed to the overnight pipeline: Goblins
+  27 faster / 1 slower (gi2129 4 -> 5, T4 in both arms at d8 b0), EDF 4 / 2 (the same two games), Landfall 1 / 0,
+  Fungus, FiveColour, Melira digest-only, 23 more decks and every finished backstop row identical in win turns; units
+  as above. **Owed:** that run's last eight decks on the rebased tree -- Snow, AccomplishedAlchemist, KittyV3, Giants,
+  TH, Soldiers, Slivers, WhiteKnights, both arms (`build/scratch/g144rc/abn3/manifest.json`, jobs not in its
+  `out.txt`). Alchemist (3 / 1 above) and Giants (the new Tectonic axes) are the ones that can move.
+* **Open for the USER.** (1) `MTG_BP_DEV_SEQ_ALL`: tractable now (below); turn it on or not. (2) The budget ORDER the
+  two passes impose: under a finite budget a multi-deviation line is reached only after the whole one-deviation ladder
+  (pass 2 spends what pass 1 left), a deviation-count wave over every turn rather than the turn-complete order the USER
+  prefers when a budget binds. Nothing is refused at a large budget, and the inline alternative cost gi2586 19-29 min
+  at d8 b0. (3) The price: units +34% on Goblins and +20% on Melira at play settings (Melira's unbudgeted backstop
+  +41% / +68%), almost all of it pass 2 finding nothing (27 strictly earlier wins in 7,045 second passes).
+* **What `_ALL` costs now (2026-10-29, two passes; still DEFAULT OFF -- the USER's call).** Tractable: the second
+  pass's cut removes the cross product's work wherever the first pass already holds the answer. Seed 1440001, `_ALL`
+  on top of the shipped arm b, compared with b game for game: the unbudgeted backstop rows +0-5% units with nothing
+  abandoned (Fluctuator's d3 / d5 rows, which abandoned 2 of 20 games at the 2,000,000-unit ceiling under the one-pass
+  search, now spend exactly b's units), Goblins 4,000 games +3.4% units for 1 faster / 0 slower, Fluctuator 1,500
+  +0.9%, Hinata +0.7%, Alchemist +1.4%, FiveColour 0%, EDF and Landfall 1,000 each with no win turn moved -- 10,112
+  games, no slower game. A transposition on the resume context is no longer needed to make it affordable.
 
 ### 6.2 Smaller things seen, not changed
 
