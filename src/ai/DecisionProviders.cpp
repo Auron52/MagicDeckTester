@@ -53745,6 +53745,8 @@ void LifegainHeliodComboProvider::GraceOptions(const GameState& s, int controlle
     LifegainGraceFolds(s, controller, opts);
 }
 
+namespace { bool LhcBallistaWaitOn(); }   // MTG_LHC_BALLISTA_WAIT, defined with the deck's other levers below
+
 // ---- LifegainHeliodComboProvider::CounterPingCounts (MTG_LHC_PING_PRUNE) ---------
 // THE DECK-POOL NARROWING of Walking Ballista's main-phase FACE pings. The engine already offers only
 // sound targets (CollectCounterPingOffers): every creature target it asks about is a kill whose death
@@ -53766,6 +53768,20 @@ std::vector<int> LifegainHeliodComboProvider::CounterPingCounts(const GameState&
 {
     static const bool on = EnvOn("MTG_LHC_PING_PRUNE", true);
     const std::vector<int> base = DecisionProvider::CounterPingCounts(s, source, target, max_counters);
+    // MTG_LHC_BALLISTA_WAIT (USER 2026-10-28: "The activations may as well wait until they would make lethal or
+    // we are comboing"): a main-phase ping only when the pings alone kill now -- the smallest such count; every
+    // other ping waits (the post-combat finish fires the lethal ones, the loop is the PingLoop action). A LIFELINKED
+    // face ping whose gain something reads keeps the generic range: this pool's only lifelink is Heliod's grant, so
+    // that ping IS the combo, and its gain event can make lethal through a Pridemate / Voice / Heliod counter.
+    if (LhcBallistaWaitOn())
+    {
+        if (target == 0 && CreatureHasLifelink(source, s) && SacOutletLifegainRead(s, source.controller_index))
+        { return base; }
+        if (target != 0) { return {}; }
+        const int opp = s.players[1 - source.controller_index].life;
+        for (int k : base) { if (k >= opp) { return { k }; } }
+        return {};
+    }
     if (!on || target != 0) { return base; }
     if (CreatureHasLifelink(source, s) && SacOutletLifegainRead(s, source.controller_index)) { return base; }
     return {};
@@ -53793,9 +53809,705 @@ std::vector<int> LifegainHeliodComboProvider::CounterPingCounts(const GameState&
 //     only have come from Heliod's grant (this pool's sole lifelink source), paid this turn -- so the mana
 //     sources that paid it untap for next turn's grant.
 // MTG_LHC_BUMP_TARGET=0 restores the generic pick.
+// MTG_LHC_HELIOD_ON_BALLISTA (USER 2026-10-29: "Heliod naturally should also go first and target the Ballista if
+// it can"): with no loop-live bump, the counter still goes on our Walking Ballista -- the one with the FEWEST
+// counters that is ALIVE (>= 1: a 0/0 entrant is already dead to the SBA), tie-break lowest m_number -- a one-counter
+// Ballista dies to its own lifelinked ping, a second counter is what keeps it alive through the loop. =0 -> the loop-live bump only, else the generic pick.
 int LifegainHeliodComboProvider::LifegainCounterTarget(const GameState& s, int controller) const
 {
     static const bool on = EnvOn("MTG_LHC_BUMP_TARGET", true);
     if (!on || controller != s.active_player_index) { return -1; }
-    return PingLoopBumpTarget(s, controller);
+    const int bump = PingLoopBumpTarget(s, controller);
+    if (bump >= 0) { return bump; }
+    static const bool on_ballista = EnvOn("MTG_LHC_HELIOD_ON_BALLISTA", true);
+    if (!heurarm::Flag(heurarm::LHC_HELIOD_ON_BALLISTA, on_ballista)) { return -1; }
+    int pick = -1, pick_counters = 0;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || d->params.remove_counter_ping_damage <= 0) { continue; }
+        const int c = PlusCountersOn(q);
+        if (c < 1) { continue; }   // a 0/0 entrant dies to the toughness SBA before the trigger can target it (CR 704.5f)
+        if (pick < 0 || c < pick_counters
+            || (c == pick_counters && q.card.m_number < s.battlefield[static_cast<std::size_t>(pick)].card.m_number))
+        { pick = i; pick_counters = c; }
+    }
+    return pick;
+}
+
+// MTG_LHC_PING_LAST (USER 2026-10-29: "The Ballista entering and ping ability should be separated. The ping ability
+// should go last. The Martyr lifegain should always happen before."). Walking Ballista's counter ping and the Heliod
+// loop rank after every other trailing activation -- Martyr's reveal, Heliod's grant, the {4} counter -- in both
+// worlds (OrderTrailingActivations is called from the search's and the executor's trailing passes). Its ENTRY is a
+// cast and keeps its place in the order above. =0 -> the inherited (base) rank.
+int LifegainHeliodComboProvider::ActivationOrderRankForAction(const GameState& s, const CardDefinition& d,
+                                                              const Action& a) const
+{
+    static const bool on = EnvOn("MTG_LHC_PING_LAST", true);
+    if (a.kind == Action::Kind::ActivatePermAbility
+        && (a.ability_mode == Action::AbilityMode::CounterPing || a.ability_mode == Action::AbilityMode::PingLoop)
+        && heurarm::Flag(heurarm::LHC_PING_LAST, on))
+    { return 1000; }
+    return CritterLifegainProvider::ActivationOrderRankForAction(s, d, a);
+}
+
+// =====================================================================================================
+// LifegainHeliodCombo's OWN cast order, Martyr pin, Walking Ballista rules and discard rule
+// (USER-reviewed 2026-10-28: docs/design/lifegainheliodcombo-order-and-discard-proposal.md). Each rule
+// has its own lever; every one at =0 restores the inherited CritterLifegain behaviour exactly.
+// =====================================================================================================
+namespace
+{
+bool LhcOrderOn()
+{ static const bool on = EnvOn("MTG_LHC_ORDER", true);          return heurarm::Flag(heurarm::LHC_ORDER, on); }
+bool LhcMartyrPinOn()
+{ static const bool on = EnvOn("MTG_LHC_MARTYR_PIN", true);     return heurarm::Flag(heurarm::LHC_MARTYR_PIN, on); }
+bool LhcMartyrSerraOn()
+{ static const bool on = EnvOn("MTG_LHC_MARTYR_SERRA", true);   return heurarm::Flag(heurarm::LHC_MARTYR_SERRA, on); }
+bool LhcMartyrLateArm()
+{ static const bool on = EnvOn("MTG_LHC_MARTYR_LATE", false);   return heurarm::Flag(heurarm::LHC_MARTYR_LATE, on); }
+bool LhcMartyrCastLateArm()   // the CAST half only (the activation pin keeps LhcMartyrEarly)
+{ static const bool on = EnvOn("MTG_LHC_MARTYR_CAST_LATE", true); return heurarm::Flag(heurarm::LHC_MARTYR_CAST_LATE, on); }
+bool LhcPayoffsFirstArm()
+{ static const bool on = EnvOn("MTG_LHC_PAYOFFS_FIRST", false); return heurarm::Flag(heurarm::LHC_PAYOFFS_FIRST, on); }
+bool LhcHeliodBeforePayoffsArm()
+{ static const bool on = EnvOn("MTG_LHC_HELIOD_BEFORE_PAYOFFS", false);
+  return heurarm::Flag(heurarm::LHC_HELIOD_BEFORE_PAYOFFS, on); }
+bool LhcBallistaXOn()
+{ static const bool on = EnvOn("MTG_LHC_BALLISTA_X", true);     return heurarm::Flag(heurarm::LHC_BALLISTA_X, on); }
+bool LhcBallistaWaitOn()
+{ static const bool on = EnvOn("MTG_LHC_BALLISTA_WAIT", true);  return heurarm::Flag(heurarm::LHC_BALLISTA_WAIT, on); }
+bool LhcBallistaSinkWaitOn()   // the {4} counter half (MTG_LHC_BALLISTA_SINK_WAIT); needs MTG_LHC_BALLISTA_WAIT
+{ static const bool on = EnvOn("MTG_LHC_BALLISTA_SINK_WAIT", false);
+  return LhcBallistaWaitOn() && heurarm::Flag(heurarm::LHC_BALLISTA_SINK_WAIT, on); }
+bool LhcBucketDiscardOn()
+{ static const bool on = EnvOn("MTG_LHC_BUCKET_DISCARD", true); return heurarm::Flag(heurarm::LHC_BUCKET_DISCARD, on); }
+
+// The roles, read off card params (never names).
+bool LhcIsMartyr(const CardDefinition& d)    { return TurnSolver::IsRevealOutletDef(&d); }   // Martyr of Sands
+bool LhcIsGrace(const CardDefinition& d)                                                       // Abiding Grace
+{ return !d.card.IsCreature() && (d.params.endstep_modal_lifegain > 0 || d.params.endstep_modal_reanimate_mv > 0); }
+bool LhcIsTutorBody(const CardDefinition& d) { return d.card.IsCreature() && d.params.tutor_to_hand; }   // Ranger-Captain
+bool LhcIsPinger(const CardDefinition& d)                                                      // Walking Ballista
+{ return d.card.IsCreature() && d.params.remove_counter_ping_damage > 0; }
+bool LhcIsSerra(const CardDefinition& d)     { return d.params.life_threshold_pump_life > 0; }   // Serra Ascendant
+
+// Slots (rank = slot * kCritScale + sub), on top of CritterLifegain's 4..17.
+constexpr int kLhcMartyrEarly = 1;   // ArrangeCastOrder's hoist; the rank itself is the late slot below
+constexpr int kLhcGrace       = 2;
+// Inside CritterLifegain's body slot (kCritBody): Martyr (late) 0, Ranger-Captain 1, Ballista 2, the rest 8 + mv.
+constexpr int kLhcSubMartyr = 0, kLhcSubTutor = 1, kLhcSubPinger = 2, kLhcSubOtherBody = 8;
+
+// Martyr EARLY (USER: "It really depends on whether you are enabling Serra Ascendant or just gaining life for
+// the triggers"): a Serra Ascendant ours on the battlefield or cast in `acts`, with life under its threshold.
+// Early = the biggest reveal (every white card cast first is 3 life fewer); late = after the watchers and
+// payoffs, so its entry and its gain feed the triggers.
+bool LhcMartyrEarly(const GameState& s, const std::vector<Action>& acts)
+{
+    if (LhcMartyrLateArm()) { return false; }
+    if (!LhcMartyrSerraOn()) { return true; }
+    const int me = s.active_player_index;
+    const int life = s.players[me].life;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && LhcIsSerra(*d) && life < d->params.life_threshold_pump_life) { return true; }
+    }
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = CritDefOf(a);
+        if (d != nullptr && LhcIsSerra(*d) && life < d->params.life_threshold_pump_life) { return true; }
+    }
+    return false;
+}
+
+// The deck's placements on top of CritterLifegain's sort + Heliod placement, over one ordered list:
+//   1. Martyr EARLY -> every Martyr cast to the front; then Abiding Grace right after (its rank already puts it
+//      first; this keeps it ahead of a Heliod the two-way FIRST variant moved to the front).
+//   2. (A/B arm MTG_LHC_HELIOD_BEFORE_PAYOFFS) with a Ballista in the list, Heliod ahead of the unit payoffs.
+//   3. Walking Ballista never before Heliod: a Ballista ahead of the first devotion god moves right after it
+//      (it adds no devotion, so Heliod's creature-ness is unchanged).
+void LhcFixups(const GameState& s, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    auto def_at = [&](int i) { return CritDefOf(acts[static_cast<std::size_t>(i)]); };
+    auto is = [&](int i, bool (*pred)(const CardDefinition&)) { const CardDefinition* d = def_at(i); return d != nullptr && pred(*d); };
+    {
+        // MTG_LHC_MARTYR_CAST_LATE: the cast stays at its rank (after the enter watchers, which then see its
+        // entry -- s975001 gi1638: hoisted ahead of Auriok Champion it costs the gain that reaches Serra's 30)
+        // while the activation is still pinned early for Serra (RevealOutletPin reads LhcMartyrEarly itself).
+        const bool early = LhcMartyrEarly(s, acts) && !LhcMartyrCastLateArm();
+        std::vector<int> head, rest;
+        for (int i : order) { if (early && is(i, LhcIsMartyr)) { head.push_back(i); } }
+        for (int i : order) { if (is(i, LhcIsGrace)) { head.push_back(i); } }
+        for (int i : order) { if (!(early && is(i, LhcIsMartyr)) && !is(i, LhcIsGrace)) { rest.push_back(i); } }
+        head.insert(head.end(), rest.begin(), rest.end());
+        order.swap(head);
+    }
+    auto god_pos = [&]() -> int
+    {
+        for (int k = 0; k < static_cast<int>(order.size()); ++k) { if (is(order[static_cast<std::size_t>(k)], CritIsDevotionGod)) { return k; } }
+        return -1;
+    };
+    bool has_pinger = false;
+    for (int i : order) { if (is(i, LhcIsPinger)) { has_pinger = true; break; } }
+    if (LhcHeliodBeforePayoffsArm() && has_pinger)
+    {
+        const int g = god_pos();
+        int u = -1;
+        for (int k = 0; k < static_cast<int>(order.size()); ++k)
+        {
+            const CardDefinition* d = def_at(order[static_cast<std::size_t>(k)]);
+            if (d != nullptr && d->card.IsCreature() && d->params.lifegain_self_counters > 0) { u = k; break; }
+        }
+        if (g > 0 && u >= 0 && u < g)
+        {
+            const int god = order[static_cast<std::size_t>(g)];
+            order.erase(order.begin() + g);
+            order.insert(order.begin() + u, god);
+        }
+    }
+    if (has_pinger)
+    {
+        const int g = god_pos();
+        if (g > 0)
+        {
+            std::vector<int> moved, out;
+            for (int k = 0; k < g; ++k)
+            { const int i = order[static_cast<std::size_t>(k)]; if (is(i, LhcIsPinger)) { moved.push_back(i); } else { out.push_back(i); } }
+            if (!moved.empty())
+            {
+                out.push_back(order[static_cast<std::size_t>(g)]);
+                out.insert(out.end(), moved.begin(), moved.end());
+                for (int k = g + 1; k < static_cast<int>(order.size()); ++k) { out.push_back(order[static_cast<std::size_t>(k)]); }
+                order.swap(out);
+            }
+        }
+    }
+}
+
+// An own-side attack UPPER bound for this turn (the passive goldfish opponent never blocks): every untapped
+// creature that can attack now, at CombatPowerOf, `skip` excluded. Used only to keep a Ballista activation
+// that MIGHT be lethal -- an over-estimate keeps more lines, never fewer.
+int LhcAttackUpperBound(const GameState& s, int me, const Permanent* skip)
+{
+    int dmg = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if ((skip != nullptr && p.card.m_number == skip->card.m_number) || p.controller_index != me
+            || !p.card.IsCreature() || p.tapped) { continue; }
+        if (!CanAttackFull(p, s.battlefield, me)) { continue; }
+        dmg += std::max(0, CombatPowerOf(p, s));
+    }
+    return dmg;
+}
+}   // namespace
+
+// ---- LifegainHeliodComboProvider: the cast order (MTG_LHC_ORDER) --------------------------------------------
+//
+// slot 2  Abiding Grace -- its trigger is at the END STEP, so in main 1 its position only adds devotion toward
+//         Heliod's 5 (no watcher fires on a non-creature): first is never worse when the plan casts it.
+// (1)     Martyr of Sands EARLY -- hoisted to the front by ArrangeCastOrder when it enables Serra Ascendant.
+// 4..14   CritterLifegain's watchers / payoffs / Ajani -2 / Heliod, flip included (unchanged).
+// 15      the bodies: Martyr (late) 0, Ranger-Captain 1 (its tutor is information: whatever it finds can still
+//         be cast after it), Walking Ballista 2 (right after Heliod -- never before it, see LhcFixups -- so
+//         later bodies' gain events can bump it into a live loop), then the rest by mana value and name.
+// 16, 17  Ajani +1, Unexpectedly Absent (unchanged).
+int LifegainHeliodComboProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!LhcOrderOn()) { return CritterLifegainProvider::CastOrderRank(s, def); }
+    if (LhcIsGrace(def))     { return kLhcGrace * kCritScale + CritMv(def); }
+    if (LhcIsMartyr(def))    { return kCritBody * kCritScale + kLhcSubMartyr; }
+    if (LhcIsTutorBody(def)) { return kCritBody * kCritScale + kLhcSubTutor; }
+    if (LhcIsPinger(def))    { return kCritBody * kCritScale + kLhcSubPinger; }
+    int r = CritterLifegainProvider::CastOrderRank(s, def);
+    if (r / kCritScale == kCritBody) { return kCritBody * kCritScale + kLhcSubOtherBody + CritMv(def); }
+    if (LhcPayoffsFirstArm())   // A/B arm: CritterLifegain's flip slots unconditionally
+    {
+        switch (r / kCritScale)
+        {
+            case kCritWatcher:   return kCritFlipWatcher * kCritScale + r % kCritScale;
+            case kCritTeam:      return kCritFlipTeam * kCritScale + r % kCritScale;
+            case kCritUnit:      return kCritFlipUnit * kCritScale + r % kCritScale;
+            case kCritDevotion:  return kCritFlipDevotion * kCritScale + r % kCritScale;
+            default: break;
+        }
+    }
+    return r;
+}
+
+int LifegainHeliodComboProvider::CastOrderRankLatest(const GameState& s, const CardDefinition& def) const
+{
+    // The Ballista follows Heliod wherever Heliod's placement walks it: to the end of the creature block.
+    if (LhcOrderOn() && LhcIsPinger(def)) { return kCritBody * kCritScale + (kCritScale - 1); }
+    return CritterLifegainProvider::CastOrderRankLatest(s, def);
+}
+
+int LifegainHeliodComboProvider::CastOrderActionRank(const GameState& s, const Action& a, int rank) const
+{
+    const int r = CritterLifegainProvider::CastOrderActionRank(s, a, rank);
+    if (LhcOrderOn() && LhcPayoffsFirstArm() && r / kCritScale == kCritAjaniToken)
+    { return kCritFlipAjaniToken * kCritScale + r % kCritScale; }
+    return r;
+}
+
+void LifegainHeliodComboProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                                   std::vector<int>& order) const
+{
+    CritterLifegainProvider::ArrangeCastOrder(s, acts, order);
+    if (!LhcOrderOn() || order.size() < 2) { return; }
+    LhcFixups(s, acts, order);
+}
+
+bool LifegainHeliodComboProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                                         const std::vector<Action>& reorder,
+                                                         std::vector<std::vector<int>>& out) const
+{
+    const bool r = CritterLifegainProvider::CastOrderingCandidates(s, plan_actions, reorder, out);
+    if (!LhcOrderOn()) { return r; }
+    for (std::vector<int>& o : out) { LhcFixups(s, reorder, o); }
+    // Two orders the placements made identical are one line.
+    for (std::size_t k = 1; k < out.size();)
+    {
+        if (std::find(out.begin(), out.begin() + static_cast<std::ptrdiff_t>(k), out[k]) != out.begin() + static_cast<std::ptrdiff_t>(k))
+        { out.erase(out.begin() + static_cast<std::ptrdiff_t>(k)); }
+        else { ++k; }
+    }
+    return r;
+}
+
+const char* LifegainHeliodComboProvider::CastOrderTierName(int rank) const
+{
+    if (LhcOrderOn())
+    {
+        if (rank / kCritScale == kLhcGrace) { return "ABIDING GRACE: first of every cast (end-step trigger; in main 1 only devotion for Heliod)"; }
+        if (rank / kCritScale == kCritBody)
+        {
+            switch (rank % kCritScale)
+            {
+                case kLhcSubMartyr: return "MARTYR OF SANDS (late): head of the bodies; hoisted to the very front when it enables Serra Ascendant";
+                case kLhcSubTutor:  return "RANGER-CAPTAIN: first of the bodies (its tutor finds what the rest of the turn casts)";
+                case kLhcSubPinger: return "WALKING BALLISTA: right after Heliod, never before it, ahead of the other bodies";
+                default:            return "OTHER CREATURE: after every watcher and payoff (cheapest, then name)";
+            }
+        }
+    }
+    return CritterLifegainProvider::CastOrderTierName(rank);
+}
+
+// ---- LifegainHeliodComboProvider: Martyr of Sands PINNED (MTG_LHC_MARTYR_PIN) ------------------------------
+// USER 2026-10-28: "Martyr's activation timing should be as early as possible to get maximum value, not
+// searched" and "It really depends on whether you are enabling Serra Ascendant or just gaining life for the
+// triggers". Before every cast when it enables Serra (0), else right after the plan's last "whenever you gain
+// life" cast (1). A Martyr the plan CASTS enters at a site-9 breakpoint, and its continuation is pinned the same
+// way -- so with Serra to enable it is activated right after its own cast (where the cast sits is the order
+// above); otherwise after that continuation's casts (a continuation's later positions run trailing).
+// Pinned only with the deck's order on: the late position counts on the order's watcher/payoff block.
+bool LifegainHeliodComboProvider::RevealOutletPinned() const { return LhcMartyrPinOn() && LhcOrderOn(); }
+
+int LifegainHeliodComboProvider::RevealOutletPin(const GameState& s, const std::vector<Action>& plan_actions) const
+{ return LhcMartyrEarly(s, plan_actions) ? 0 : 1; }
+
+// ---- LifegainHeliodComboProvider::XCastBelowMax (MTG_LHC_BALLISTA_X) -----------------------------------------
+// USER 2026-10-28: "Ballista's X should be maximum or less to ensure the combo can go off. Unless we have reason
+// to believe we need more mana in the turn I would just max it." The plan's OTHER actions are its "need more
+// mana in the turn"; what they leave is X's to take. So a Walking Ballista cast is WASTED when the plan leaves
+// enough mana unspent for one more X step, UNLESS that mana is exactly the Heliod loop's reserve: Heliod ours
+// on the battlefield or cast by the plan, the {1}{W} grant still unpaid in what is left (and less than one more
+// X step beyond it), and a Ballista that can go live (X >= 1: any later gain event this turn bumps a 1-counter one). A
+// wasted subset is dropped unless its projection wins this turn (the engine's lethal exemption).
+bool LifegainHeliodComboProvider::XCastBelowMax(const GameState& s, const std::vector<Action>& cands,
+                                                const std::vector<int>& sel, int j, int pool_total) const
+{
+    if (!LhcBallistaXOn()) { return false; }
+    const Action& c = cands[static_cast<std::size_t>(j)];
+    const CardDefinition* d = CritDefOf(c);
+    if (d == nullptr || !d->params.enters_with_x_plus_counters) { return false; }
+    int spent = 0;
+    for (int k : sel) { spent += static_cast<int>(cands[static_cast<std::size_t>(k)].cost.ManaValue()); }
+    const int left = pool_total - spent;
+    const int pips = std::max(1, static_cast<int>(d->card.m_mana_cost.x_pips));
+    if (left < pips) { return false; }   // X already takes what the plan leaves
+    const int me = s.active_player_index;
+    int grant = -1;
+    auto note = [&](const CardDefinition& q)
+    {
+        if (q.params.lifegain_target_own_counter && q.params.lifelink_grant_cost.has_value())
+        { grant = static_cast<int>(q.params.lifelink_grant_cost->ManaValue()); }
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (const CardDefinition* q = CardDatabase::Instance().LookupCached(p.card)) { note(*q); }
+    }
+    for (int k : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(k)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (const CardDefinition* q = CritDefOf(a)) { note(*q); }
+    }
+    // X = 1 goes live with ANY later gain event this turn, not only an enter watcher: Ajani's +1, a Martyr reveal,
+    // a lifelinked attacker (confirm A/B 2026-10-28, seed 967001 gi1347: Ballista X = 1, Ajani +1 bumps it to 2,
+    // grant, loop -- dropped when this required a watcher, unfindable at any budget). So any X >= 1 keeps the reserve.
+    const bool can_go_live = c.chosen_x >= 1;
+    if (grant >= 0 && can_go_live && left >= grant && left - grant < pips) { return false; }   // the loop's reserve
+    return true;
+}
+
+// ---- LifegainHeliodComboProvider: Walking Ballista's activations WAIT (MTG_LHC_BALLISTA_WAIT) ----------------
+// USER 2026-10-28: "The activations may as well wait until they would make lethal or we are comboing." The loop
+// is the PingLoop action (it carries the {4} it needs). So the {4} "+1/+1 counter" is offered only at the
+// smallest count that can make lethal THIS turn -- the pings after combat (CounterPingFinish fires every lethal
+// ping) plus this Ballista's own attack when it can swing plus every other attacker (an upper bound: the
+// passive opponent never blocks) -- and a ping only when the pings alone are lethal now. The {4} half has its own
+// lever (MTG_LHC_BALLISTA_SINK_WAIT): unlike a ping, a counter bought with idle mana is permanent attack power
+// (smoke 2026-10-28, lhc d5 gi5: waiting cost a turn), so its ruling is measured separately.
+std::vector<int> LifegainHeliodComboProvider::ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                                                       PermAbilityMode mode, int max_affordable) const
+{
+    if (!LhcBallistaSinkWaitOn() || mode != PermAbilityMode::PayCounterSelf)
+    { return CritterLifegainProvider::ManaSinkActivationCounts(s, source, mode, max_affordable); }
+    const int me   = source.controller_index;
+    const int opp  = s.players[1 - me].life;
+    const int c    = PlusCountersOn(source);
+    const int rest = LhcAttackUpperBound(s, me, &source);
+    const bool swings = !source.tapped && CanAttackFull(source, s.battlefield, me);
+    for (int k = 1; k <= max_affordable; ++k)
+    {
+        if (rest + (swings ? 2 : 1) * (c + k) >= opp) { return { k }; }
+    }
+    return {};
+}
+
+// ---- LifegainHeliodComboProvider::CleanupDiscardCandidates (MTG_LHC_BUCKET_DISCARD) --------------------------
+//
+// THE USER-REVIEWED RULE (2026-10-28; docs/design/lifegainheliodcombo-order-and-discard-proposal.md): CritterLifegain's
+// SETTLED ladder with a partner-gated COMBO bucket and this list's cards placed. USER: "Your discard rule is probably
+// fine"; "Abiding Grace low is correct in Goldfish"; "A second Ballista is better than a second Heliod, but not
+// particularly strong since its main usage is combo I would rank it lower for sure"; "Heliod on its own is pretty
+// solid and I would keep it sometimes, though it may be discardable if there are better payoffs".
+//
+//   MANA      3 lands counting the board; 4 while the kept hand holds a 4+ mana card (Ajani) OR the combo is in
+//             reach (Heliod ours on the battlefield or kept, AND a Ballista kept: X = 1 plus the {1}{W} grant).
+//             Plains before Emeria (enters tapped).
+//   WATCHERS  Soul Warden / Soul's Attendant > Auriok Champion; 2 counting the board.
+//   COMBO     protected above the payoffs, each only with its partner: the first Heliod while a Ballista or a
+//             Ranger-Captain is ours (hand or battlefield); the first Ballista while a Heliod is; a Ranger-Captain
+//             while a Heliod is and no Ballista is (it finds one).
+//   PAYOFFS   Voice / Pridemate > Heliod > Serra (Serra first at 30+), from the hand.
+//   FILL      variety, then 4+ drops last (Ajani), then value: Serra at 30+ > Voice / Pridemate > Heliod > Serra >
+//             Martyr (raised above Serra while a Serra is ours and life is under 30) > Ranger-Captain > a first
+//             Ballista with no Heliod around > Abiding Grace > Ajani > a second Ballista (a repeat, so after every
+//             first copy anyway).
+//   KEEP      land -> watcher -> COMBO -> payoff -> land -> payoff -> 2nd watcher -> land -> fill -> 4th land
+//   SHED      Unexpectedly Absent -> duplicate legends (2nd Heliod / Ajani) -> surplus lands (Emeria first) ->
+//             fill overflow -> spare watchers -> protected (the KEEP ladder backwards).
+// Distance to castable (MTG_DISCARD_DIST_MODEL) orders inside the payoff slots and the fill exactly as
+// CritterLifegain's does.
+std::vector<int> LifegainHeliodComboProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!LhcBucketDiscardOn()) { return CritterLifegainProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    auto at = [](int i) { return static_cast<std::size_t>(i); };
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    constexpr int kHandLimit = 7;
+
+    auto is_watcher = [](const CardParams& p) { return p.any_creature_enters_lifegain > 0 || p.own_creature_enters_lifegain > 0; };
+    auto is_payoff = [](const CardParams& p)
+    {
+        return p.lifegain_self_counters > 0 || p.lifegain_each_own_creature_counters > 0
+            || p.lifegain_target_own_counter || p.life_threshold_pump_life > 0;
+    };
+    auto is_heliod = [](const CardDefinition& d) { return d.params.lifegain_target_own_counter; };
+
+    // ---- board census --------------------------------------------------------------------------
+    int board_lands = 0, board_watchers = 0;
+    bool bf_heliod = false, bf_pinger = false, bf_tutor = false, bf_serra = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.card.IsLand()) { ++board_lands; continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        if (is_watcher(d->params)) { ++board_watchers; }
+        if (is_heliod(*d))       { bf_heliod = true; }
+        if (LhcIsPinger(*d))     { bf_pinger = true; }
+        if (LhcIsTutorBody(*d))  { bf_tutor = true; }
+        if (LhcIsSerra(*d))      { bf_serra = true; }
+    }
+
+    // ---- partition the hand --------------------------------------------------------------------
+    std::vector<const CardDefinition*> defs(at(n), nullptr);
+    for (int i = 0; i < n; ++i) { if (!ap.hand[at(i)].m_is_staged) { defs[at(i)] = def_of(ap.hand[at(i)]); } }
+    std::vector<char> dup(at(n), 0);
+    MarkDuplicateLegendsInHand(s, defs, dup);
+    std::vector<int> lands, removal, other, dead, watchers, creatures;   // `creatures` = the fill pool (Grace too)
+    bool hand_heliod = false, hand_pinger = false, hand_tutor = false, hand_serra = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[at(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = defs[at(i)];
+        if (CleanupDiscardIsLand(hc)) { lands.push_back(i); continue; }
+        if (d == nullptr)             { other.push_back(i); continue; }
+        if (BucketShedIsRemoval(d))   { removal.push_back(i); continue; }
+        if (dup[at(i)])               { dead.push_back(i); continue; }
+        if (is_heliod(*d))      { hand_heliod = true; }
+        if (LhcIsPinger(*d))    { hand_pinger = true; }
+        if (LhcIsTutorBody(*d)) { hand_tutor = true; }
+        if (LhcIsSerra(*d))     { hand_serra = true; }
+        if (is_watcher(d->params)) { watchers.push_back(i); continue; }
+        if (d->card.IsCreature() || d->params.loyalty_start > 0 || LhcIsGrace(*d)) { creatures.push_back(i); continue; }
+        other.push_back(i);
+    }
+    const bool heliod_ours = bf_heliod || hand_heliod;
+    const bool pinger_ours = bf_pinger || hand_pinger;
+    const bool tutor_ours  = bf_tutor || hand_tutor;
+    const bool serra_ours  = bf_serra || hand_serra;
+
+    std::vector<int> watcher_order = watchers;
+    std::sort(watcher_order.begin(), watcher_order.end(), [&](int a, int b)
+    {
+        const int ga = defs[at(a)]->params.any_creature_enters_lifegain > 0 ? 0 : 1;
+        const int gb = defs[at(b)]->params.any_creature_enters_lifegain > 0 ? 0 : 1;
+        if (ga != gb) { return ga < gb; }
+        const int ma = CleanupDiscardManaValue(ap.hand[at(a)]), mb = CleanupDiscardManaValue(ap.hand[at(b)]);
+        if (ma != mb) { return ma < mb; }
+        return a < b;
+    });
+    auto serra_online = [&](const CardParams& p) { return p.life_threshold_pump_life > 0 && ap.life >= p.life_threshold_pump_life; };
+    auto payoff_rank = [&](int i) -> int
+    {
+        const CardParams& p = defs[at(i)]->params;
+        if (p.life_threshold_pump_life > 0)            { return serra_online(p) ? -1 : 3; }
+        if (p.lifegain_self_counters > 0)              { return 0; }
+        if (p.lifegain_each_own_creature_counters > 0) { return 1; }
+        if (p.lifegain_target_own_counter)             { return 2; }
+        return 4;
+    };
+    const bool martyr_up = serra_ours && [&]{
+        for (int i : creatures) { if (LhcIsSerra(*defs[at(i)]) && ap.life < defs[at(i)]->params.life_threshold_pump_life) { return true; } }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = def_of(p.card);
+            if (d != nullptr && LhcIsSerra(*d) && ap.life < d->params.life_threshold_pump_life) { return true; }
+        }
+        return false; }();
+    auto fill_value = [&](int i, bool repeat) -> int   // best first
+    {
+        const CardDefinition& d = *defs[at(i)];
+        const CardParams& p = d.params;
+        if (LhcIsSerra(d))                 { return serra_online(p) ? -1 : 3; }
+        if (p.lifegain_self_counters > 0)  { return 0; }
+        if (is_heliod(d))                  { return 1; }
+        if (LhcIsMartyr(d))                { return martyr_up ? 2 : 4; }
+        if (LhcIsTutorBody(d))             { return 5; }
+        if (LhcIsPinger(d))                { return repeat ? 9 : 6; }
+        if (LhcIsGrace(d))                 { return 7; }
+        if (p.loyalty_start > 0)           { return 8; }
+        return 10;
+    };
+
+    // ---- the core keep ladder ------------------------------------------------------------------
+    std::vector<char> keep(at(n), 0);
+    std::vector<int> taken;
+    taken.reserve(at(n));
+    auto take = [&](int i) { keep[at(i)] = 1; taken.push_back(i); };
+    auto name_kept = [&](int i)
+    {
+        for (int j : taken) { if (ap.hand[at(j)].m_name == ap.hand[at(i)].m_name) { return true; } }
+        return false;
+    };
+    auto pick_land = [&]() -> int
+    {
+        int best = -1;
+        for (int i : lands)
+        {
+            if (keep[at(i)]) { continue; }
+            const bool ti = defs[at(i)] != nullptr && defs[at(i)]->params.enters_tapped;
+            const bool tb = best >= 0 && defs[at(best)] != nullptr && defs[at(best)]->params.enters_tapped;
+            if (best < 0 || (tb && !ti)) { best = i; }
+        }
+        return best;
+    };
+    int lands_n = board_lands, watchers_n = board_watchers, payoffs_n = 0;
+    auto top_up_lands = [&](int target)
+    { while (lands_n < target) { const int i = pick_land(); if (i < 0) { break; } take(i); ++lands_n; } };
+    auto top_up_watchers = [&](int target)
+    {
+        for (int i : watcher_order)
+        {
+            if (watchers_n >= target) { break; }
+            if (keep[at(i)]) { continue; }
+            take(i); ++watchers_n;
+        }
+    };
+    const bool dist_model = LifegainBucketsDistModel();
+    const discard_dist::Census census = dist_model ? discard_dist::BuildCensus(s, me) : discard_dist::Census{};
+    std::vector<discard_dist::LandDrop> core_drops;
+    if (dist_model)
+    {
+        std::vector<int> by_pick = lands;
+        std::stable_sort(by_pick.begin(), by_pick.end(), [&](int a, int b)
+        {
+            const bool ta = defs[at(a)] != nullptr && defs[at(a)]->params.enters_tapped;
+            const bool tb = defs[at(b)] != nullptr && defs[at(b)]->params.enters_tapped;
+            return !ta && tb;
+        });
+        const std::size_t k = static_cast<std::size_t>(std::max(0, 3 - board_lands));
+        for (std::size_t j = 0; j < by_pick.size() && j < k; ++j)
+        { core_drops.push_back(discard_dist::LandDropOf(defs[at(by_pick[j])])); }
+    }
+    auto ev_of = [&](int i, int value_pos, int copies_ahead) -> double
+    {
+        const double value = LifegainBucketsValue(value_pos);
+        if (!dist_model) { return value; }
+        const int mana = CleanupDiscardManaValue(ap.hand[at(i)]) * (1 + copies_ahead);
+        return discard_dist::CastFactorFor(census, *defs[at(i)], core_drops, mana) * value;
+    };
+    auto copies_taken = [&](int i)
+    {
+        int c = 0;
+        for (int j : taken) { if (ap.hand[at(j)].m_name == ap.hand[at(i)].m_name) { ++c; } }
+        return c;
+    };
+    auto top_up_payoffs = [&](int target)
+    {
+        while (payoffs_n < target)
+        {
+            int best = -1;
+            bool best_rep = false;
+            double best_ev = 0.0;
+            for (int i : creatures)
+            {
+                if (keep[at(i)] || !is_payoff(defs[at(i)]->params)) { continue; }
+                const int copies = copies_taken(i);
+                const bool rep = copies > 0;
+                const double e = ev_of(i, payoff_rank(i) + 1, copies);
+                if (best < 0 || (rep != best_rep ? !rep : e > best_ev)) { best = i; best_rep = rep; best_ev = e; }
+            }
+            if (best < 0) { break; }
+            take(best); ++payoffs_n;
+        }
+    };
+    // COMBO: the first copy of each piece, partner-gated (the hand's first copy in hand order).
+    auto take_first = [&](bool (*pred)(const CardDefinition&)) -> bool
+    {
+        for (int i : creatures) { if (!keep[at(i)] && pred(*defs[at(i)])) { take(i); return true; } }
+        return false;
+    };
+    auto take_combo = [&]()
+    {
+        if (pinger_ours || tutor_ours)
+        {
+            for (int i : creatures)
+            {
+                if (!keep[at(i)] && is_heliod(*defs[at(i)])) { take(i); if (is_payoff(defs[at(i)]->params)) { ++payoffs_n; } break; }
+            }
+        }
+        if (heliod_ours) { take_first(LhcIsPinger); }
+        if (heliod_ours && !pinger_ours) { take_first(LhcIsTutorBody); }
+    };
+
+    top_up_lands(1);       // land
+    top_up_watchers(1);    // watcher
+    take_combo();          // COMBO
+    top_up_payoffs(1);     // payoff
+    top_up_lands(2);       // land
+    top_up_payoffs(2);     // payoff
+    top_up_watchers(2);    // 2nd watcher
+    top_up_lands(3);       // land
+
+    // ---- fill, and the 4th land -----------------------------------------------------------------
+    const int core_hand = static_cast<int>(taken.size());
+    std::vector<int> fill_order;
+    for (int i : creatures) { if (!keep[at(i)]) { fill_order.push_back(i); } }
+    std::vector<int> copy_ordinal(at(n), 0);
+    std::vector<double> fill_ev(at(n), 0.0);
+    for (std::size_t a = 0; a < fill_order.size(); ++a)
+    {
+        const int i = fill_order[a];
+        int ahead = 0;
+        for (std::size_t b = 0; b < a; ++b)
+        { if (ap.hand[at(fill_order[b])].m_name == ap.hand[at(i)].m_name) { ++ahead; } }
+        copy_ordinal[at(i)] = (name_kept(i) ? 1 : 0) + ahead;
+        const bool repeat = copy_ordinal[at(i)] > 0;
+        fill_ev[at(i)] = ev_of(i, fill_value(i, repeat) + 1, copies_taken(i) + ahead);
+    }
+    std::sort(fill_order.begin(), fill_order.end(), [&](int a, int b)
+    {
+        if (copy_ordinal[at(a)] != copy_ordinal[at(b)]) { return copy_ordinal[at(a)] < copy_ordinal[at(b)]; }
+        const bool ba = CleanupDiscardManaValue(ap.hand[at(a)]) >= 4;
+        const bool bb = CleanupDiscardManaValue(ap.hand[at(b)]) >= 4;
+        if (ba != bb) { return !ba; }
+        if (fill_ev[at(a)] != fill_ev[at(b)]) { return fill_ev[at(a)] > fill_ev[at(b)]; }
+        return a < b;
+    });
+    auto big = [&](int i) { return CleanupDiscardManaValue(ap.hand[at(i)]) >= 4; };
+    auto combo_in_reach = [&](const std::vector<int>& kept)
+    {
+        bool heliod = bf_heliod, pinger = false;
+        for (int i : kept)
+        {
+            const CardDefinition* d = defs[at(i)];
+            if (d == nullptr) { continue; }
+            if (is_heliod(*d))   { heliod = true; }
+            if (LhcIsPinger(*d)) { pinger = true; }
+        }
+        return heliod && pinger;
+    };
+    int fourth = -1;
+    if (const int spare_land = lands_n < 4 ? pick_land() : -1; spare_land >= 0)
+    {
+        const std::size_t room_r = static_cast<std::size_t>(std::max(0, kHandLimit - core_hand - 1));
+        std::vector<int> kept = taken;
+        for (std::size_t k = 0; k < fill_order.size() && k < room_r; ++k) { kept.push_back(fill_order[k]); }
+        if (std::any_of(kept.begin(), kept.end(), big) || combo_in_reach(kept)) { fourth = spare_land; }
+    }
+    const int room = std::max(0, kHandLimit - core_hand - (fourth >= 0 ? 1 : 0));
+    const std::size_t fill_n = std::min(fill_order.size(), static_cast<std::size_t>(room));
+    for (std::size_t k = 0; k < fill_n; ++k) { take(fill_order[k]); }
+    if (fourth >= 0) { take(fourth); }
+
+    // ---- emit the shed order --------------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(at(n));
+    std::vector<char> listed(at(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[at(i)] || ap.hand[at(i)].m_is_staged) { return; }
+        listed[at(i)] = 1;
+        shed.push_back(i);
+    };
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (int i : removal) { if ((defs[at(i)]->params.tuck_to_library ? 0 : 1) == pass) { put(i); } }
+    }
+    for (int i : other) { put(i); }
+    for (int i : dead) { put(i); }
+    {
+        std::vector<int> rest;
+        for (int i : lands) { if (!keep[at(i)]) { rest.push_back(i); } }
+        std::sort(rest.begin(), rest.end(), [&](int a, int b)
+        {
+            const bool ta = defs[at(a)] != nullptr && defs[at(a)]->params.enters_tapped;
+            const bool tb = defs[at(b)] != nullptr && defs[at(b)]->params.enters_tapped;
+            if (ta != tb) { return ta; }
+            return a > b;
+        });
+        for (int i : rest) { put(i); }
+    }
+    for (std::size_t k = fill_order.size(); k > fill_n; --k) { put(fill_order[k - 1]); }
+    for (auto it = watcher_order.rbegin(); it != watcher_order.rend(); ++it) { if (!keep[at(*it)]) { put(*it); } }
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }
+    for (int i = 0; i < n; ++i) { put(i); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }

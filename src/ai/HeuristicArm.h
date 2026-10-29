@@ -705,6 +705,22 @@ enum Slot : int
     SUBSET_SAC_COLOR,         // MTG_SUBSET_SAC_COLOR  the colour-presence gate credits a same-subset sac float's colour (a sac_for_mana_amount source's SacForMana -- Lotus Bloom, Black Lotus -- and Garth's conjure-and-crack; the creature sac outlets not yet): its pinned colour, every colour when it is resolved at apply. The MTG_SUBSET_ROCK_COLOR shape: the flat gate already credits the float, the presence gate saw only board colours. =0 -> board colours only
     ROCK_SEQ_CREDIT,          // MTG_ROCK_SEQ_CREDIT  the same-subset mana-rock credit is SEQUENCED: a rock is credited once the board plus the rocks credited before it can pay for it (Sol Ring funds an Izzet Signet). It was all-or-nothing -- no rock credited unless the board alone paid every rock -- so a subset whose rocks fund each other read unpayable (NivMizzetCombo seed 1100014 gi13 T3 {Signet, Signet, Sol Ring}, ENUM-GAP). =0 -> the all-or-nothing guard
     SEQ_FREE_ATTACH,          // MTG_SEQ_FREE_ATTACH  the subset cast walks (SubsetPayableSequential, OrderPaysSequentially, the range rescue's kind gate) skip a FREE attach -- an Equip costing {0} (Lightning Greaves) or the human's attach-every-free-Equipment bundle -- as they skip a Vial put, instead of refusing the subset as an unmodelled kind. Not when it moves Greaves off a summoning-sick host whose {T} it enables. Giants seed 1100023 T6 {Stinkdrinker Daredevil, Sunrise Sovereign, equip Greaves}: ENUM-GAP. =0 -> refused, as before
+    LHC_ORDER,                // MTG_LHC_ORDER  LifegainHeliodCombo's USER-reviewed total cast order (2026-10-28, docs/design/lifegainheliodcombo-order-and-discard-proposal.md): Abiding Grace first (devotion only), Martyr of Sands first when it enables Serra Ascendant else at the head of the bodies, Ranger-Captain first body, Walking Ballista right after Heliod and never before it, the rest CritterLifegain's order. Default ON; =0 -> the inherited CritterLifegain order exactly
+    LHC_MARTYR_PIN,           // MTG_LHC_MARTYR_PIN  Martyr of Sands' reveal is PINNED, not searched (USER 2026-10-28): right after its own cast; already on the battlefield, before every cast when it enables Serra Ascendant, else right after the plan's last 'whenever you gain life' cast. Default ON; =0 -> the searched position fan
+    LHC_MARTYR_SERRA,         // MTG_LHC_MARTYR_SERRA  Martyr early vs late keys on Serra Ascendant (USER: 'It really depends on whether you are enabling Serra Ascendant or just gaining life for the triggers'): early only while a Serra is out or cast this turn and life is under its threshold. Default ON; =0 -> always early (the first ruling)
+    LHC_MARTYR_LATE,          // MTG_LHC_MARTYR_LATE  A/B arm only: Martyr ALWAYS late (after the gain block). Default OFF
+    LHC_PAYOFFS_FIRST,        // MTG_LHC_PAYOFFS_FIRST  A/B arm only (USER 2026-10-28: 'It is actually questionable whether voice and ajani should go after or before the life gainers'): the payoff block ALWAYS ahead of the enter watchers (CritterLifegain flips only at board watchers >= payoffs + 2). Default OFF
+    LHC_HELIOD_BEFORE_PAYOFFS,// MTG_LHC_HELIOD_BEFORE_PAYOFFS  A/B arm only (proposal Q1): Heliod ahead of Voice / Pridemate when a Walking Ballista is in the same cast list. Default OFF
+    LHC_BALLISTA_X,           // MTG_LHC_BALLISTA_X  Walking Ballista's X is the MAXIMUM the plan leaves (USER 2026-10-28: 'Ballista's X should be maximum or less to ensure the combo can go off'): a plan casting it with mana left over that X could have used is dropped unless it wins this turn or that mana is exactly the Heliod loop's {1}{W} reserve. Default ON; =0 -> every X kept
+    LHC_BALLISTA_WAIT,        // MTG_LHC_BALLISTA_WAIT  Walking Ballista's activations wait (USER 2026-10-28: 'The activations may as well wait until they would make lethal or we are comboing'): counter pings and the {4} counter only when they can make lethal this turn; the loop itself is the PingLoop action. Default ON; =0 -> MTG_LHC_PING_PRUNE's set and every {4} count
+    LHC_BALLISTA_SINK_WAIT,   // MTG_LHC_BALLISTA_SINK_WAIT  The {4} '+1/+1 counter' half of MTG_LHC_BALLISTA_WAIT (smoke 2026-10-28: lhc d5 gi5 T6->T7, the counter is permanent attack power bought with idle mana, unlike a ping). Default OFF (USER adoption 2026-10-29, measured: the {4} counter is permanent attack power); =1 -> the counter waits for lethal like the pings
+    LHC_PING_LAST,            // MTG_LHC_PING_LAST  USER 2026-10-29: 'The Ballista entering and ping ability should be separated. The ping ability should go last. The Martyr lifegain should always happen before.' Walking Ballista's counter ping and the Heliod loop rank after every other trailing activation (both worlds, ActivationOrderRankForAction). Default ON; =0 -> the inherited order
+    LHC_HELIOD_ON_BALLISTA,   // MTG_LHC_HELIOD_ON_BALLISTA  USER 2026-10-29: 'Heliod ... target the Ballista if it can.' Heliod's gain counter goes on our Walking Ballista whenever one is out (the loop-live bump first, else the fewest counters). Default ON; =0 -> only the loop-live bump (MTG_LHC_BUMP_TARGET)
+    LHC_MARTYR_THREE,         // MTG_LHC_MARTYR_THREE  (2026-10-29, USER: Martyr may be right EARLY for Serra, LATE to force a gain trigger, or BEFORE THE LAST WHITE CARD so the reveal still counts something): the search chooses among those three positions (twin plans) instead of one fixed slot. Default ON (USER adoption 2026-10-29); =0 -> the one pinned slot
+    LHC_MARTYR_THREE_NO_EARLY,// MTG_LHC_MARTYR_THREE_NO_EARLY  A/B arm on top of MTG_LHC_MARTYR_THREE (USER 2026-10-29: 'We might even be able to chuck the early option if there is no Serra Ascendant around, but that is arguably a bit riskier'): no 'before every cast' twin unless the Serra rule calls for early. Default OFF
+    LHC_MARTYR_CAST_LATE,     // MTG_LHC_MARTYR_CAST_LATE  (2026-10-29, std s975001 gi1638): split Martyr of Sands' two placements -- its CAST is never hoisted ahead of the enter watchers (they see its entry), while its ACTIVATION keeps the USER's Serra-keyed early/late pin. MTG_LHC_MARTYR_LATE moves both. Default ON (USER adoption 2026-10-29); =0 -> the cast is hoisted with the activation
+    LHC_MARTYR_AFTER_PINGER,  // MTG_LHC_MARTYR_AFTER_PINGER  A/B arm (2026-10-29, 2HG s971001 gi231): a Walking Ballista cast is a Martyr of Sands position boundary (TurnSolver::RevealSlotCounts), so the pinned late slot can follow it -- a one-counter Ballista dies to its own lifelinked ping unless a gain AFTER it lands bumps it with Heliod's counter. USER 2026-10-29 ('The Martyr lifegain should always happen before' the ping, after the Ballista enters): Default ON; =0 -> a Ballista is not a boundary
+    LHC_BUCKET_DISCARD,       // MTG_LHC_BUCKET_DISCARD  LifegainHeliodCombo's USER-reviewed cleanup-discard rule (CritterLifegain's ladder + the partner-gated COMBO bucket, Abiding Grace in the fill, a second Ballista at the bottom of it). Default ON; =0 -> the inherited CritterLifegain rule exactly
     COUNT
 };
 
@@ -1360,6 +1376,22 @@ inline const char* Name(int slot)
         "MTG_SUBSET_SAC_COLOR",
         "MTG_ROCK_SEQ_CREDIT",
         "MTG_SEQ_FREE_ATTACH",
+        "MTG_LHC_ORDER",
+        "MTG_LHC_MARTYR_PIN",
+        "MTG_LHC_MARTYR_SERRA",
+        "MTG_LHC_MARTYR_LATE",
+        "MTG_LHC_PAYOFFS_FIRST",
+        "MTG_LHC_HELIOD_BEFORE_PAYOFFS",
+        "MTG_LHC_BALLISTA_X",
+        "MTG_LHC_BALLISTA_WAIT",
+        "MTG_LHC_BALLISTA_SINK_WAIT",
+        "MTG_LHC_PING_LAST",
+        "MTG_LHC_HELIOD_ON_BALLISTA",
+        "MTG_LHC_MARTYR_THREE",
+        "MTG_LHC_MARTYR_THREE_NO_EARLY",
+        "MTG_LHC_MARTYR_CAST_LATE",
+        "MTG_LHC_MARTYR_AFTER_PINGER",
+        "MTG_LHC_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -5179,6 +5179,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : acts)
         { if (TurnSolver::IsTrailingActivation(a.kind)) { pending_cont_acts.push_back(a); } }
     };
+    // A live continuation's reveal outlets PINNED BEFORE ITS CASTS (position 0; LifegainHeliodCombo's Martyr
+    // of Sands -- its site-9 continuation starts right after its own cast): run right before the cast loop,
+    // after the land and precasts. Lockstep twin of ApplyPlanDirect's apply_continuation_plan pre-run; the
+    // continuation's trailing dispatch then skips the spent outlet. A plan without one: a field test per action.
+    auto exec_cont_reveal_precast = [&](const TurnSolver::Plan& cp)
+    {
+        if (cp.cont_canon) { return; }
+        for (const Action& ra : cp.actions)
+        {
+            if (TurnSolver::RevealOutletSlot(ra) != 0 || TurnSolver::PositionedRevealOutletSpent(state, ra)) { continue; }
+            exec_trailing_activations(std::vector<Action>{ ra });
+        }
+    };
     std::function<void(const std::vector<Action>&)> replay_recorded =
         [&](const std::vector<Action>& recs)
     {
@@ -5341,6 +5354,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                                  : "combo route: no-op");
                 }
             }
+            // A reveal outlet pinned BEFORE its continuation's casts (position 0): recorded ahead of them by
+            // apply_continuation_plan, so it is dispatched here, where it stands.
+            else if (TurnSolver::RevealOutletSlot(a) == 0) { exec_trailing_activations(std::vector<Action>{ a }); }
             // A continuation's board activation: the rollout applied it AFTER the continuation's
             // casts, so it is dispatched as one trailing pass once the casts are replayed.
             else if (TurnSolver::IsTrailingActivation(a.kind)) { rec_acts.push_back(a); }
@@ -5872,6 +5888,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                extra.searched_order ? "cont-searched" : (bp_searched_here ? "cont-bp" : "cont"),
                                is_pre_combat_main);
         }
+        exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
         for (std::size_t cpos = 0; cpos < cont_order.size(); ++cpos)
         {
             const int ci = cont_order[cpos];
@@ -6370,6 +6387,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         ApplyDeckCastArrangement(state, extra.actions, pod_cont_order);   // lockstep: apply_plan_actions
                         ApplyPayableCastOrder(state, extra.actions, pod_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
                     }
+                    exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
                     for (int ci : pod_cont_order)
                     {
                         const Action& ca = extra.actions[ci];
@@ -8101,6 +8119,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (!fd_plan_committed && paid && m_lookahead_depth > 0) { arm_acq_deferred(ca.card_name); }
                     return true;
                 };
+                exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
                 for (int ci : pe_cont_order)
                 {
                     pe_cast(extra.actions[ci]);

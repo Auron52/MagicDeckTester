@@ -1,0 +1,28 @@
+{
+  "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 16,
+  "opponent_life": 6,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "lands_played_this_turn": 1,
+  "_comment": "LifegainHeliodCombo (2026-10-28), Martyr of Sands ({W}) activated RIGHT AFTER ITS OWN CAST, before a later cast (TurnSolver::kRevealAfterOwnCastCode; USER: 'Martyr's activation timing should be as early as possible'). Plains x4 (+ the draw), Soul Warden + Serra Ascendant (not sick); hand Martyr, Soul's Attendant, 2 Ajani, Heliod; life 16, opponent 6. The only kill: cast Martyr (Warden -> 17), activate revealing 4 white cards (Attendant, Ajani x2, Heliod: +12 -> 29), THEN Soul's Attendant (Warden -> 30): Serra 6/6 lifelink swings. A TRAILING activation (Martyr, Attendant, then reveal 3) ends at 27; Attendant first at 28 -- neither turns Serra on. BINDING: win T4, active life 36 = 30 + 6 (Serra's lifelink).",
+  "battlefield": [
+    { "name": "Plains" }, { "name": "Plains" }, { "name": "Plains" }, { "name": "Plains" },
+    { "name": "Soul Warden" },
+    { "name": "Serra Ascendant" }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Soul's Attendant",
+    "Ajani, Strength of the Pride",
+    "Ajani, Strength of the Pride",
+    "Heliod, Sun-Crowned"
+  ],
+  "expect_win_turn": 4,
+  "expect_active_life": 36
+}

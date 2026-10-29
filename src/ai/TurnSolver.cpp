@@ -29420,6 +29420,18 @@ bool TurnSolver::RevealSlotCounts(const Action& a)
     // every cast of it, whichever ability the cast carries: an extra position is never a lost line.
     for (const CardParams::LoyaltyAbilityParam& ab : qp.loyalty_abilities)
     { if (ab.effect == "pridemate_token") { return true; } }
+    // A COUNTER PINGER (Walking Ballista; MTG_LHC_MARTYR_AFTER_PINGER, default ON -- USER 2026-10-29: the Ballista
+    // enters, then Martyr's gain, then the ping last). A gain that lands
+    // AFTER it enters can put Heliod's counter on it, and that bump is what turns the loop on: a one-counter
+    // Ballista that pings with lifelink removes its last counter and dies (SBA) before Heliod's trigger can
+    // target it. So "Martyr before the Ballista" and "Martyr after it" are different lines, and the position
+    // fan's "a non-white non-watcher cast changes nothing" does not hold for it (2HG s971001 gi231: Ballista
+    // X=1, Martyr X=1 -> Heliod's counter on the Ballista, grant, loop -- the T5 kill; Martyr first, T6).
+    // Counting it adds a position (the fan) and lets the pinned late slot follow it (the pin). Read in both
+    // worlds through this one function (the search's slot hook and the pin, the executor's exec_slot_hook).
+    static const bool s_after_pinger = EnvOn("MTG_LHC_MARTYR_AFTER_PINGER", true);
+    if (qp.remove_counter_ping_damage > 0 && heurarm::Flag(heurarm::LHC_MARTYR_AFTER_PINGER, s_after_pinger))
+    { return true; }
     return false;
 }
 
@@ -49593,6 +49605,20 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                                                  arranged))
             { iren_waste = true; }
         }
+        // ...and an {X} cast whose X leaves mana the plan does not use (DecisionProvider::XCastBelowMax;
+        // LifegainHeliodCombo's Walking Ballista rule), on the restrictor's lethal-exempt flag: dropped at
+        // the win projection below unless the plan wins this turn. A field test first, so every subset
+        // without an {X} cast pays one compare per selected action. Lockstep twin: EnumeratePlans.
+        if (!iren_waste)
+        {
+            for (int j : sel)
+            {
+                const Action& c = cands[j];
+                if (c.kind != Action::Kind::CastFromHand || !c.cost.has_x) { continue; }
+                if (ResolveProvider(state).XCastBelowMax(state, cands, sel, j, static_cast<int>(pool.Total())))
+                { iren_waste = true; break; }
+            }
+        }
         // REALISABLE IN THE DECK'S OWN ORDER (DecisionProvider::OrderedSubsetRealisable; default
         // true). Asked only for a subset holding a cast restrictor or a SPLICED cast -- the two
         // shapes whose payability the totals above cannot see (Dragonstorm: an Apex payable only
@@ -56562,7 +56588,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (recorded && !sink_stack.empty())
         {
             for (const Action& a : sp.actions)
-            { if (TurnSolver::IsTrailingActivation(a.kind)) { sink_stack.back()->push_back(a); } }
+            {
+                // a position-0 reveal outlet was recorded (and run) by apply_continuation_plan, before the casts
+                if (TurnSolver::IsTrailingActivation(a.kind) && TurnSolver::RevealOutletSlot(a) != 0)
+                { sink_stack.back()->push_back(a); }
+            }
         }
         if (!main_trailing_done)
         {
@@ -56619,6 +56649,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // came. Executor twin: exec_cont_land_* in AIEngine::TakeTurn's continuation loops.
         const bool owns_land = cont_land.pending && cont_land.owner == &cp;
         if (owns_land) { cont_land.armed = true; }
+        // This continuation's reveal outlets PINNED BEFORE ITS CASTS (position 0; DecisionProvider::
+        // RevealOutletPinned -- LifegainHeliodCombo's Martyr of Sands, whose site-9 continuation starts right
+        // after its own cast). RECORDED here, ahead of the casts, so the committed-line replay dispatches it at
+        // the same point (replay_recorded's inline branch); apply_continuation_activations then neither records
+        // nor re-applies it (the trailing pass skips a spent positioned outlet). Executor twins:
+        // exec_cont_reveal_precast at resolve_draw_breakpoint / the pod chain / site 9. Every plan without a
+        // positioned outlet pays one field test per action.
+        if (!cp.cont_canon && !s_human_play)
+        {
+            for (const Action& ra : cp.actions)
+            {
+                if (TurnSolver::RevealOutletSlot(ra) != 0 || TurnSolver::PositionedRevealOutletSpent(state, ra))
+                { continue; }
+                if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(ra); }
+                apply_trailing_activations(std::vector<Action>{ ra });
+            }
+        }
         apply_plan_actions(cp.actions, cp.searched_order);
         if (owns_land && cont_land.pending && cont_land.owner == &cp) { play_cont_land(); }
         cont_canon_cast_section = saved_canon;
@@ -67536,6 +67583,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                                                  arranged))
             { iren_waste = true; }
         }
+        // ...and an {X} cast whose X leaves mana the plan does not use (DecisionProvider::XCastBelowMax;
+        // LifegainHeliodCombo's Walking Ballista rule), on the restrictor's lethal-exempt flag: dropped at
+        // the win projection below unless the plan wins this turn. A field test first, so every subset
+        // without an {X} cast pays one compare per selected action. Lockstep twin: Solve's consider.
+        if (!iren_waste)
+        {
+            for (int j : sel)
+            {
+                const Action& c = cands[j];
+                if (c.kind != Action::Kind::CastFromHand || !c.cost.has_x) { continue; }
+                if (ResolveProvider(state).XCastBelowMax(state, cands, sel, j, static_cast<int>(pool.Total())))
+                { iren_waste = true; break; }
+            }
+        }
         // Realisable in the deck's own order (lockstep twin of Solve's consider -- see there).
         if (order_check_cands)
         {
@@ -74111,7 +74172,115 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // human sequences the activation anywhere in the line), and not inside a narrowed tail rollout (the
     // playout beyond the horizon may be greedy). Every deck without a reveal outlet on the battlefield
     // pays one battlefield walk and appends nothing (byte-identical).
-    if (!HumanPlayActive() && !cont_axes_only && !t_rollout_narrow && !idle_pass)
+    //
+    // PINNED INSTEAD (DecisionProvider::RevealOutletPinned; LifegainHeliodCombo, USER 2026-10-28: "Martyr's
+    // activation timing should be as early as possible to get maximum value, not searched", then "It really
+    // depends on whether you are enabling Serra Ascendant or just gaining life for the triggers"). No twins:
+    // each outlet of each plan gets ONE position, in place: the provider's RevealOutletPin -- before every
+    // cast (code 1) or right after the plan's last "whenever you gain life" cast (code W + 1; with W = 0 that
+    // is before every cast too). Runs on every outer plan the fan would see, the narrowed tail / idle-pass
+    // lists AND breakpoint continuations (a placement adds no plan). A Martyr the plan CASTS has no outlet in
+    // that plan (only a source on the battlefield offers one); its entry is a site-9 breakpoint, and the
+    // continuation derived there pins its outlet like this -- so "before every cast" of that continuation is
+    // RIGHT AFTER MARTYR'S OWN CAST (apply_continuation_plan and the executor's continuation sites run a
+    // continuation's position-0 outlets before its casts). A continuation's later positions run trailing,
+    // in both worlds (only the top-level section counts watcher casts).
+    if (!HumanPlayActive() && ResolveProvider(state).RevealOutletPinned())
+    {
+        const int me = state.active_player_index;
+        // MTG_LHC_MARTYR_THREE (default ON, USER adoption 2026-10-29: "it might be right to play and activate it
+        // early to get more life for Serra's Ascendant or ... relatively late in a way that forces a lifegain
+        // trigger. Even worse, you can empty your hand of white cards and then it makes sense to consider playing
+        // and activating it before the last white card is played"). The pinned slot stays in place; the plan gets
+        // TWINS at the other two of {before every cast (1), after the last counted cast (W + 1), right before the
+        // plan's last cast of the outlet's colour (k + 1, k = counted casts ahead of it in the deck's realised
+        // order)} and the search chooses. Outer base plans with ONE positionable outlet only -- never a
+        // continuation, a narrowed tail, an idle pass or a breakpoint rank variant (its base is twinned).
+        static const bool s_three_env = EnvOn("MTG_LHC_MARTYR_THREE", true);
+        const bool three = heurarm::Flag(heurarm::LHC_MARTYR_THREE, s_three_env)
+                        && !cont_axes_only && !t_rollout_narrow && !idle_pass;
+        std::vector<TurnSolver::Plan> three_twins;
+        for (TurnSolver::Plan& p : all)
+        {
+            int pin = -1, counted = -1, n_pos = 0;
+            std::size_t pos_idx = 0;
+            for (std::size_t ai = 0; ai < p.actions.size(); ++ai)
+            {
+                Action& a = p.actions[ai];
+                if (a.kind != Action::Kind::SacCreatureOutlet || a.chosen_x != 0 || a.sac_count > 1) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (!TurnSolver::IsRevealOutletDef(d)) { continue; }
+                bool on_board = false;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index == me && q.card.m_number == a.sac_source_id) { on_board = true; break; }
+                }
+                if (!on_board) { continue; }
+                ++n_pos; pos_idx = ai;
+                if (pin < 0) { pin = ResolveProvider(state).RevealOutletPin(state, p.actions); }
+                if (pin == 0) { a.chosen_x = 1; continue; }
+                if (counted < 0)
+                {
+                    counted = 0;
+                    for (const Action& c : p.actions) { if (TurnSolver::RevealSlotCounts(c)) { ++counted; } }
+                }
+                a.chosen_x = counted + 1;
+            }
+            if (!three || n_pos != 1 || p.bp_choice >= 0) { continue; }
+            const Action& o = p.actions[pos_idx];
+            const CardDefinition* od = o.def ? o.def : CardDatabase::Instance().LookupInterned(o.card_name);
+            const std::string& col = od->params.sac_outlet_lifegain_per_revealed_color;
+            // The casts in the deck's realised order (the cast sort + the deck's arrangement, as the apply).
+            std::vector<int> ord;
+            for (int i = 0; i < static_cast<int>(p.actions.size()); ++i)
+            { if (p.actions[static_cast<std::size_t>(i)].kind == Action::Kind::CastFromHand) { ord.push_back(i); } }
+            std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+            { return CastOrderLess(state, p.actions[static_cast<std::size_t>(x)], p.actions[static_cast<std::size_t>(y)]); });
+            ApplyDeckCastArrangement(state, p.actions, ord);
+            // PRUNED BY RELEVANCE (USER 2026-10-29: "If there are no things to respond to triggers we don't need to
+            // play it late. If we aren't running out of white cards we don't need to consider that option.").
+            //   * LATE only when the plan CASTS a responder (a counted cast: a gain watcher, or a pinger for
+            //     Heliod's bump) -- one already out sees the gain at any position. With none, late IS early.
+            //   * BEFORE THE LAST WHITE CARD only when the late slot would reveal NONE: the hand's cards of the
+            //     colour minus those the plan casts at or before its last counted cast.
+            int total = 0, before_last_col = -1, last_counted_at = -1;
+            std::vector<int> col_casts_at;   // ord positions of the plan's casts of the colour
+            for (std::size_t oi = 0; oi < ord.size(); ++oi)
+            {
+                const Action& c = p.actions[static_cast<std::size_t>(ord[oi])];
+                const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
+                if (cd != nullptr && CardHasColorNamed(cd->card, col))
+                { before_last_col = total; col_casts_at.push_back(static_cast<int>(oi)); }
+                if (TurnSolver::RevealSlotCounts(c)) { ++total; last_counted_at = static_cast<int>(oi); }
+            }
+            int gone_by_late = 0;
+            for (int at : col_casts_at) { if (at <= last_counted_at) { ++gone_by_late; } }
+            const int x_late = CountHandCardsOfColor(state, me, col) - gone_by_late;
+            // MTG_LHC_MARTYR_THREE_NO_EARLY (A/B arm): no Serra to enable (the provider's pin is not early) ->
+            // no early twin. The pinned slot itself stays, and with no responder cast it IS the early slot.
+            static const bool s_no_early_env = EnvOn("MTG_LHC_MARTYR_THREE_NO_EARLY", false);
+            const bool no_early = pin != 0 && heurarm::Flag(heurarm::LHC_MARTYR_THREE_NO_EARLY, s_no_early_env);
+            std::vector<int> codes;
+            if (!no_early) { codes.push_back(1); }
+            if (total > 0) { codes.push_back(total + 1); }
+            if (before_last_col >= 0 && x_late <= 0) { codes.push_back(before_last_col + 1); }
+            std::vector<int> seen = { o.chosen_x };
+            for (int c : codes)
+            {
+                if (std::find(seen.begin(), seen.end(), c) != seen.end()) { continue; }
+                seen.push_back(c);
+                TurnSolver::Plan v = p;
+                v.actions[pos_idx].chosen_x = c;
+                three_twins.push_back(std::move(v));
+            }
+        }
+        if (!three_twins.empty())
+        {
+            all.insert(all.end(), std::make_move_iterator(three_twins.begin()), std::make_move_iterator(three_twins.end()));
+            plan_tr.clear();
+        }
+    }
+    else if (!HumanPlayActive() && !cont_axes_only && !t_rollout_narrow && !idle_pass)
     {
         const int me = state.active_player_index;
         bool board_has_outlet = false;

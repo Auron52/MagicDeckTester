@@ -427,6 +427,7 @@ add_executable(mtg-test
     test/unit/test_angels_discard.cpp
     test/unit/test_angels_cast_order.cpp
     test/unit/test_critterlifegain_discard.cpp
+    test/unit/test_lhc_rules.cpp
     test/unit/test_critterlifegain_cast_order.cpp
     test/unit/test_fungus_discard.cpp
     test/unit/test_selesnyalifegain_discard.cpp

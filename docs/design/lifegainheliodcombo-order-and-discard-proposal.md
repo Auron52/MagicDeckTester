@@ -200,3 +200,194 @@ by 3 life. That is too small and too indirect to bucket on.
 - Held-out A/B on lhc and lhc2hg at shipped, d3 b10 and d0; every slower game classified at `--depth 8 --budget-ms 0`;
   numbers reported to the USER. If the USER's order measures worse, root-cause it and bring an amended version.
 - CritterLifegain is unchanged by all of this (the overrides live in `LifegainHeliodComboProvider`).
+
+## MEASURED (2026-10-28) -- the rules as coded, root causes, and the proposed amendments (USER to decide)
+
+Implemented as above, each rule behind its own lever (`MTG_LHC_ORDER`, `_MARTYR_PIN`, `_MARTYR_SERRA`, `_BALLISTA_X`,
+`_BALLISTA_WAIT` + `_BALLISTA_SINK_WAIT`, `_BUCKET_DISCARD`; A/B arms `_MARTYR_LATE`, `_PAYOFFS_FIRST`,
+`_HELIOD_BEFORE_PAYOFFS`). Unit cover `test/unit/test_lhc_rules.cpp`; apply-level cover
+`test/scenarios/lhc_martyr_after_own_cast.json`. With every lever off the engine reproduces the committed smoke GT
+digests exactly (d3, d5, 2HG d5).
+
+**Engine finding (Martyr).** A Martyr of Sands cast this turn has no outlet in the plan that casts it; its entry is a site-9
+breakpoint, and the continuation derived there kept the outlet TRAILING (the searched position fan never ran in
+continuations). So "cast Martyr, activate it, then cast more" was unfindable at any budget before this work. The pin now
+runs in continuations, and both worlds run a continuation's position-0 outlet before its casts. The scenario passes pinned
+and fails with `MTG_LHC_MARTYR_PIN=0`.
+
+**A/B 1** (held-out seeds 961001/963001, 2000 games each, d5 b20, std and 2HG, one pooled batch; delta vs the rules as
+coded, negative = faster; games better / worse):
+
+| arm | std | 2HG |
+|---|---|---|
+| all rules off (= committed play) | -0.0055 (37/16) | -0.0057 (32/9) |
+| Ballista waits off / {4} counter wait off | -0.0055 (21/0) / identical | -0.0068 (27/0) / identical |
+| Martyr always late | -0.0030 (13/1, the 1 = bottoming variance) | 0 |
+| Martyr always early | +0.0070 (1/29) | +0.0125 (5/55) |
+| payoffs (Voice / Ajani) before the gainers | +0.0063 (0/25) | +0.0088 (1/36) |
+| Martyr searched (pin off) | +0.0033 (2/15) | +0.0010 (3/7) |
+| Ballista X rule off | +0.0008 (0/3) | +0.0008 (1/4) |
+| order off | -0.0002 (15/14) | +0.0010 (3/7) |
+| discard rule off; Heliod before payoffs | 0 (never binds) | 0 |
+
+Root causes of the two rules that cost: (1) the {4} "+1/+1 counter" waiting for lethal -- unlike a ping, a counter bought
+with idle mana is permanent attack power (smoke lhc d5 gi5 T6 -> T7; every one of the 21/27 games); the pings waiting is
+neutral. (2) Martyr hoisted first while a Serra is out casts it ahead of the enter watchers, so the watchers miss its entry
+and Heliod / Pridemate get fewer gain EVENTS (smoke lhc d5 gi142: Martyr before Auriok Champion, T4 -> T5). Late wins
+everywhere it differs.
+
+A Ballista X-rule defect surfaced on the confirm seeds and is fixed: X = 1 was kept as "the loop's reserve" only with an
+enter watcher out, but any later gain event bumps a 1-counter Ballista (seed 967001 gi1347: X = 1, Ajani +1, grant, loop --
+dropped, unfindable at any budget). Now any X >= 1 keeps the reserve.
+
+**PROPOSED AMENDMENTS (the candidate): the {4} counter does not wait (pings still do), and Martyr goes late (after the
+watchers) even with Serra out.** Final A/B on a third seed set (969001/971001, same shape), after the X fix:
+
+| arm | std | 2HG |
+|---|---|---|
+| committed play (all off) | 4.7918 | 5.0057 |
+| the rules as coded | 4.7992 | 5.0103 |
+| **candidate** | **4.7903** (vs committed 8 better / 2 worse) | **5.0047** (7 better / 3 worse) |
+| candidate without the X rule | 4.7900 | 5.0053 |
+
+The candidate's 5 slower games at d8 b0: 4 recover (budget churn); 1 persists (2HG s971001 gi231, identical draws): the
+Martyr pin changes the T3 evaluation (Heliod vs Voice) through lookahead turns that draw the second Martyr, and the T5
+Ballista kill is lost -- pin off recovers it. Not root-caused further.
+
+The same three arms at the tiers' other settings (seeds 969001/971001, 4000 games per cell, one pooled batch):
+
+| setting | committed | rules as coded | candidate |
+|---|---|---|---|
+| d3 b10 std | 4.8000 | 4.8090 | **4.7995** |
+| d3 b10 2HG | 5.0190 | 5.0213 | **5.0165** |
+| d0 std | 5.2328 | 5.2455 | **5.2320** |
+| d0 2HG | 5.4530 | 5.4600 | **5.4520** |
+
+Open for the USER: adopt the two amendments (or not); keep the pin despite gi231; whether to keep the X rule (net 0 here).
+
+## MEASURED 2 (2026-10-29) -- the two persisting games root-caused; candidate 2 (USER to decide)
+
+**gi231 (2HG s971001) -- the pin cost a Ballista kill, and the cause is a position the rule never names.** A Walking
+Ballista cast with X = 1 cannot loop alone: its first lifelinked ping removes its only counter and it dies (SBA) before
+Heliod's trigger can target it, so the counter lands elsewhere (verified by forcing Ballista + grant: T8). The kill on
+that board is Ballista X = 1, THEN Martyr (the gain puts Heliod's counter on the Ballista -> two counters), grant, loop:
+2 + 1 + 2 = all five lands, T5. With the pin, "late" = after the plan's last "whenever you gain life" cast; a Ballista
+is not one, so on a plan with no watcher cast "late" degenerates to "before every cast", the Martyr fires before the
+Ballista exists, and the kill is unexpressible (the FS root scan held no breakpoint plan; unpinned, the base keeps
+Martyr trailing, its gain opens a site-9 breakpoint after the Ballista, and the continuation list offers the loop).
+The engine's searched position fan carries the same assumption ("moving it past a non-white non-watcher cast changes
+nothing"), which is false for a Ballista beside Heliod.
+-> lever **`MTG_LHC_MARTYR_AFTER_PINGER`** (A/B arm, default OFF): `TurnSolver::RevealSlotCounts` counts a counter
+pinger's cast, so the pinned late slot (and a fan position) follows it. Read in both worlds through that one function.
+Only this deck holds Martyr or Ballista.
+
+**gi1638 (std s975001) -- "Martyr always late" loses the Serra case.** Committed play activates Martyr before casting
+Heliod (Heliod still in hand: X = 2, +6 -> 29), Heliod enters as a creature (devotion 6), Auriok Champion +1 -> 30:
+Serra Ascendant online, T4 kill. Always-late activates after Heliod (X = 1, 27, T5). The USER's Serra rule activates
+early (right) but also HOISTS the Martyr CAST ahead of Auriok Champion on T3, which then misses Martyr's entry (one life
+short of 30 -> T5) -- the gi142 mechanism. The two placements want different answers.
+-> lever **`MTG_LHC_MARTYR_CAST_LATE`** (A/B arm, default OFF): the cast is never hoisted (watchers see its entry); the
+activation keeps the USER's Serra-keyed pin. (`MTG_LHC_MARTYR_LATE` moves both.)
+
+Both games recover under cast-late + after-pinger at d8 b0 (gi231 T6 -> T5, gi1638 T5 -> T4, = committed play).
+
+**Fourth seed set (973001/975001, d5 b20, 4000 games per cell):** candidate (sink-wait off + Martyr late) vs committed
+std -0.0028 (12 better / 1 worse), 2HG -0.0020 (9 / 1); + after-pinger: std +0.0003 (0 / 1, recovers at d8), 2HG 0.
+
+**Fifth seed set (977001/979001, d5 b20), CANDIDATE 2 = sink-wait off + Martyr cast late + after-pinger:**
+
+| arm | std | 2HG |
+|---|---|---|
+| committed play | 4.7598 | 5.0072 |
+| old candidate (Martyr always late) | 4.7572 | 5.0053 |
+| cast late | 4.7568 | 5.0053 |
+| **candidate 2** | **4.7568** (vs committed 15 better / 3 worse; vs old candidate 2 / 0) | **5.0053** (9 / 1) |
+
+All four of candidate 2's slower games recover at d8 b0 (budget churn) -- it passes the adoption bar on this set.
+
+The same seeds at the tiers' other settings (4000 games per cell, one pooled batch):
+
+| setting | committed | old candidate | candidate 2 |
+|---|---|---|---|
+| d3 b10 std | 4.7665 | 4.7642 | **4.7635** (18 better / 6 worse) |
+| d3 b10 2HG | 5.0190 | 5.0155 | **5.0157** (14 / 2) |
+| d0 std | 5.1893 | 5.1893 | 5.1893 (1 / 1) |
+| d0 2HG | 5.4153 | 5.4147 | **5.4147** (3 / 2) |
+
+Every one of the 11 slower games recovers at d8 b0. **Candidate 2 meets the adoption bar at every tier setting.**
+
+Open for the USER: adopt candidate 2 (= the USER's rules + `MTG_LHC_BALLISTA_SINK_WAIT=0` + `MTG_LHC_MARTYR_CAST_LATE=1` +
+`MTG_LHC_MARTYR_AFTER_PINGER=1` as defaults), or any subset; keep the X rule (net 0 throughout).
+
+## USER RULING 2026-10-29 + MEASURED 3 -- Ballista entry / Martyr gain / ping last; Heliod on the Ballista
+
+USER: *"The Ballista entering and ping ability should be separated. The ping ability should go last. The Martyr
+lifegain should always happen before."* and *"Heliod naturally should also go first and target the Ballista if it
+can."* Implemented (all default ON, the USER's rules):
+- `MTG_LHC_MARTYR_AFTER_PINGER` -- the Ballista's ENTRY is a cast in the order (right after Heliod); a Ballista cast is
+  a Martyr position boundary, so the late slot follows it (Martyr's gain after the entry, before the ping).
+- `MTG_LHC_PING_LAST` -- the Ballista's counter ping and the Heliod loop rank after every other trailing activation
+  (`ActivationOrderRankForAction`, both worlds). Measured: changes no game (the engine already ran them last); it
+  now guarantees it.
+- `MTG_LHC_HELIOD_ON_BALLISTA` -- Heliod's gain counter goes on our Ballista whenever one is out (the loop-live bump
+  first, else the fewest counters). Heliod's lifelink grant needed nothing: the loop action pays the grant itself and
+  targets the Ballista; a standalone grant still goes to the best attacker (a just-cast Ballista cannot attack).
+
+**Sixth seed set (981001/983001, d5 b20, 4000 games per cell); candidate 3 = the USER's rules incl. the above +
+`MTG_LHC_BALLISTA_SINK_WAIT=0` + `MTG_LHC_MARTYR_CAST_LATE=1`:**
+
+| arm | std | 2HG |
+|---|---|---|
+| committed play | 4.7740 | 5.0202 |
+| candidate 2 | 4.7707 | 5.0183 |
+| + ping last | 4.7707 | 5.0183 |
+| **candidate 3** | **4.7657** (35 better / 2 worse) | **5.0135** (33 / 6) |
+| candidate 3, Martyr SEARCHED (pin off) | 4.7687 (23 / 2) | 5.0150 (25 / 4) |
+| candidate 3, Martyr always early | 4.7665 (35 / 5) | 5.0135 (33 / 6) |
+
+Six of candidate 3's eight slower games recover at d8 b0; two persist (std s981001 gi1452, 2HG s983001 gi1833), and
+both recover with the pin off or Martyr always early: the late slot makes the search spend Martyr on an earlier turn
+after that turn's watchers, where holding it and revealing BEFORE casting Heliod / the second Voice (they count in X)
+wins a turn sooner. No single pinned slot is right in every game (gi231 needs Martyr after the Ballista, these two
+before Heliod / Voice), and SEARCHING the position is worse overall at the shipped budget (+0.0030 std, +0.0015 2HG).
+So these two are the pin's measured price. Open for the USER: keep the pin with that price (recommended); adopt
+`MTG_LHC_BALLISTA_SINK_WAIT=0` and `MTG_LHC_MARTYR_CAST_LATE=1` as defaults; keep the X rule (net 0).
+
+## USER 2026-10-29 -- Martyr timing is three-way; MEASURED 4
+
+USER: *"it might be right to play and activate it early to get more life for Serra's Ascendant or it might be right to
+play and activate it relatively late in a way that forces a lifegain trigger. Even worse, you can empty your hand of
+white cards and then it makes sense to consider playing and activating it before the last white card is played."*
+Then: *"If there are no things to respond to triggers we don't need to play it late. If we aren't running out of
+white cards we don't need to consider that option."* and *"We might even be able to chuck the early option if there
+is no Serra Ascendant around, but that is arguably a bit riskier. It could be worth testing."*
+
+`MTG_LHC_MARTYR_THREE` (A/B arm, default OFF): the pinned slot stays and the plan gets TWINS at the other relevant
+positions, searched: before every cast (always); after the last counted cast (only when the plan CASTS a responder --
+watchers already out see the gain anywhere); right before the plan's last white cast (only when the late slot would
+reveal no white card). Outer base plans with one positionable Martyr only. `MTG_LHC_MARTYR_THREE_NO_EARLY` (arm on
+top): no early twin unless the Serra rule calls for early.
+
+**Seventh seed set (985001/987001, d5 b20, 4000 games per cell), all arms = candidate 3 + the arm:**
+
+| arm | std | 2HG | work units |
+|---|---|---|---|
+| committed play | 4.7670 | 4.9895 | 1.086x |
+| candidate 3 (pinned slot) | **4.7598** (30 better / 1 worse) | **4.9825** (29 / 1) | 1.000x |
+| + three positions | 4.7598 (identical) | 4.9825 (identical) | 1.007x |
+| + three, no early without Serra | 4.7598 (identical) | 4.9825 (identical) | 1.001x |
+
+At the shipped budget the three-way choice moves no game on this set; at d8 b0 it recovers the pin's two persisting
+games (std s981001 gi1452 5 -> 4, 2HG s983001 gi1833 6 -> 5), so all four hard games (gi231, gi1638, gi1452, gi1833)
+now equal committed play. The set's two slower games (std s985001 gi590, 2HG gi756) recover at d8 b0 under every arm.
+**Candidate 3 + three positions meets the adoption bar** -- and it is the completeness-safe shape: it adds findable
+lines, removes none; no-early removes the early twin at every budget (riskier, as the USER said) for 0.6% of work.
+
+## ADOPTED (USER 2026-10-29: "adopt your recommendations as long as they are measuring well and not removing any relevant lines")
+
+Defaults now: the USER's rules (`MTG_LHC_ORDER`, `_MARTYR_PIN` + `_MARTYR_SERRA`, `_BALLISTA_X`, `_BALLISTA_WAIT`,
+`_BUCKET_DISCARD`, `_MARTYR_AFTER_PINGER`, `_PING_LAST`, `_HELIOD_ON_BALLISTA`) + `MTG_LHC_BALLISTA_SINK_WAIT=0` +
+`MTG_LHC_MARTYR_CAST_LATE=1` + `MTG_LHC_MARTYR_THREE=1`; `_MARTYR_THREE_NO_EARLY`, `_MARTYR_LATE`, `_PAYOFFS_FIRST`,
+`_HELIOD_BEFORE_PAYOFFS` stay A/B arms (OFF). None of the adopted levers removes a line: THREE and AFTER_PINGER add
+positions, SINK_WAIT=0 removes a restriction, CAST_LATE / PING_LAST only order, HELIOD_ON_BALLISTA is a resolution pick
+(never a searched branch). The X rule is the USER's prune; its one lossy case (X = 1 with a later gain) was fixed.

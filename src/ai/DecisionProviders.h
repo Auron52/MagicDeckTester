@@ -3049,9 +3049,10 @@ public:
 // two-way placement) is inherited byte-for-byte; the cast order and the discard buckets are the USER's to
 // settle for THIS deck (disclosed in docs/design/analysis-LifegainHeliodCombo.md, not decided here).
 // USER on the combo: "the deck often wins without the combo. It is not that reliant on it" -- "(but when
-// the combo is the right line we should take it nonetheless)". Hence NOTHING here ranks Heliod or Ballista
-// up or narrows toward the combo; the combo is found by the search as an execution-verified PingLoop action
-// (SpellEffects.h) that exists only while the loop is live.
+// the combo is the right line we should take it nonetheless)". The combo is found by the search as an
+// execution-verified PingLoop action (SpellEffects.h) that exists only while the loop is live. The deck's own
+// cast order, Martyr placement, Ballista X / activation rules and discard rule are the USER's (reviewed
+// 2026-10-28; docs/design/lifegainheliodcombo-order-and-discard-proposal.md).
 // Its own hooks: Abiding Grace's dominance folds (LifegainGraceFolds, MTG_GRACE_RETURN_DOMINATES).
 class LifegainHeliodComboProvider : public CritterLifegainProvider
 {
@@ -3073,6 +3074,31 @@ public:
     // Heliod's counter onto a one-counter Ballista whose loop it turns on (MTG_LHC_BUMP_TARGET, default
     // ON); -1 (the generic pick) otherwise.
     int LifegainCounterTarget(const GameState& s, int controller) const override;
+    // ---- The USER-reviewed rules of 2026-10-28 (docs/design/lifegainheliodcombo-order-and-discard-proposal.md),
+    // one lever each, every one =0 -> the inherited CritterLifegain behaviour.
+    // The cast order (MTG_LHC_ORDER): Abiding Grace first, Martyr first when it enables Serra Ascendant else at
+    // the head of the bodies, Ranger-Captain first body, Walking Ballista right after Heliod and never before it.
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    int  CastOrderRankLatest(const GameState&, const CardDefinition&) const override;
+    int  CastOrderActionRank(const GameState&, const Action&, int rank) const override;
+    void ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
+    bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                const std::vector<Action>& reorder,
+                                std::vector<std::vector<int>>& out) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // Martyr of Sands' reveal PINNED, not searched (MTG_LHC_MARTYR_PIN / MTG_LHC_MARTYR_SERRA).
+    bool RevealOutletPinned() const override;
+    int  RevealOutletPin(const GameState& s, const std::vector<Action>& plan_actions) const override;
+    int  ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const override;
+    // Walking Ballista: X is the max the plan leaves, or the loop's reserve (MTG_LHC_BALLISTA_X); its {4} and
+    // its pings wait until they can make lethal (MTG_LHC_BALLISTA_WAIT; pings: CounterPingCounts above).
+    bool XCastBelowMax(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel,
+                       int j, int pool_total) const override;
+    std::vector<int> ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                              PermAbilityMode mode, int max_affordable) const override;
+    // The cleanup-discard rule (MTG_LHC_BUCKET_DISCARD): CritterLifegain's ladder + the partner-gated COMBO bucket.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // SelesnyaLifegain (GW "whenever you gain life" ramp-into-fatties: Wellwisher / Blighted Steppe /

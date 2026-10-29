@@ -3074,6 +3074,26 @@ public:
                                         const std::vector<int>* /*arranged*/) const
     { return false; }
 
+    // XCastBelowMax -- the deck's prune on an {X} cast (cands[j]) whose X leaves mana the plan does not
+    // use. Asked by BOTH subset walks for each selected X cast of a subset that is already legal; true
+    // drops the subset unless its projection wins this turn (a winning plan is never dropped).
+    // pool_total = the mana the walk paid from. Base false -> every deck byte-identical.
+    // LifegainHeliodComboProvider: the USER's Walking Ballista rule (MTG_LHC_BALLISTA_X).
+    virtual bool XCastBelowMax(const GameState& /*s*/, const std::vector<Action>& /*cands*/,
+                               const std::vector<int>& /*sel*/, int /*j*/, int /*pool_total*/) const
+    { return false; }
+
+    // RevealOutletPinned / RevealOutletPin -- a deck that PLACES its reveal outlet's activation (Martyr of
+    // Sands) instead of searching its position (TurnSolver::RevealOutletSlot's fan). Pinned: every outlet
+    // of every enumerated plan (breakpoint continuations included) gets ONE position, in place --
+    // RevealOutletPin's choice: 0 = before every cast, 1 = right after the plan's last "whenever you gain
+    // life" cast. A source the plan CASTS enters at a site-9 breakpoint, so position 0 of the continuation
+    // derived there is right after that cast. Base: not pinned (the fan). LifegainHeliodComboProvider:
+    // MTG_LHC_MARTYR_PIN.
+    virtual bool RevealOutletPinned() const { return false; }
+    virtual int  RevealOutletPin(const GameState& /*s*/, const std::vector<Action>& /*plan_actions*/) const
+    { return 0; }
+
     // RestrictorFollowsArrangement -- does this deck's ArrangeCastOrder PLACE its cast restrictor (a set-level
     // position rather than a rank)? Then both subset walks count the restrictor's followers -- the
     // max_casts_after legality, RestrictorPrePayable's pre-set and RestrictorSubsetWasted's follower -- in the
