@@ -13,6 +13,9 @@
 #include "core/HandEntry.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "ai/SearchBudget.h"
+
+#include <algorithm>
 
 #include <map>
 #include <string>
@@ -227,4 +230,115 @@ TEST_CASE("Sound fold F2: a ritual ahead of the put-back counts as still in hand
         }
     }
     if (fan > 0) { CHECK(fan == with_song); }
+}
+
+// ======================================================================================================================
+//   * F3  MTG_PB_MIRROR_FOLD -- when the put-back's next library event is a shuffle blind to the swap, (a, b) and (b, a)
+//         reach one state (ShuffleByKey keys on card numbers): the mirror of an applied rank is declined.
+//   * F4  MTG_PB_STRAND_FOLD (DEFAULT OFF, measured not exact) -- a rank that puts back the last copy of a card cast
+//         later realises the smaller plan's same-pair member, up to the payment allocation.
+//   * F5  MTG_PB_XBASE_FOLD -- at a breakpoint-node host, a base whose prefix collapsed onto an earlier base's has
+//         every rank collapse there too: declined unbuilt.
+//   * Q36 MTG_CYCLE_SEED_WALK_FOLD -- a seed-only plan with Cyclone out: seed variants whose scry + walk give the same
+//         (hit, library after, bottomed set) as an earlier sibling with the same free-cast pin are not emitted.
+namespace
+{
+// A plan's OUTCOME by card number: the whole library order, the hand, the battlefield names (taps ignored).
+std::string OutcomeSf(const GameState& r)
+{
+    std::string o = "lib=";
+    for (std::size_t i = 0; i < r.players[0].library.size(); ++i) { o += std::to_string(r.players[0].library[i].m_number) + ","; }
+    std::vector<int> h;
+    for (const Card& c : r.players[0].hand) { h.push_back(c.m_number); }
+    std::sort(h.begin(), h.end());
+    o += " hand=";
+    for (int n : h) { o += std::to_string(n) + ","; }
+    std::vector<std::string> bf;
+    for (const Permanent& p : r.battlefield) { bf.push_back(p.card.m_name.str()); }
+    std::sort(bf.begin(), bf.end());
+    o += " bf=";
+    for (const std::string& n : bf) { o += n + ","; }
+    return o;
+}
+long long FoldCounterSf(int which)
+{
+    long long c[5];
+    TurnSolver::SoundFoldCounters(c);
+    return c[which];
+}
+// Every member of the fan of the first base of `shape`, applied: its outcomes (with multiplicity).
+std::map<std::string, int> FanOutcomesSf(const GameState& s, const std::vector<TurnSolver::Plan>& plans, const std::string& shape,
+                                         int* fan_size = nullptr)
+{
+    int group = 0;
+    for (const TurnSolver::Plan& p : plans)
+    { if (p.putback_choice < 0 && p.putback_group != 0 && ShapeSf(p) == shape && p.bp_choice < 0) { group = p.putback_group; break; } }
+    std::map<std::string, int> out;
+    int n = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (group == 0 || p.putback_group != group) { continue; }
+        ++n;
+        GameState r = s;
+        TurnSolver::ApplyPlan(r, p, true);
+        ++out[OutcomeSf(r)];
+    }
+    if (fan_size != nullptr) { *fan_size = n; }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Sound fold F4 (default OFF): a rank that strands a later cast realises the smaller plan's same put-back")
+{
+    // Brainstorm then Goblin Guide (the only copy). A put-back of Goblin Guide strands its cast: the apply realises
+    // "Brainstorm" with the same two cards on top.
+    GameState s = BoardSf(1, true, { "Goblin Guide", "Lightning Bolt" }, { "Lightning Bolt", "Birds of Paradise", "Sol Ring" });
+    PutSf(s, "Mountain", 60);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const std::map<std::string, int> b1 = FanOutcomesSf(s, plans, "land=;Brainstorm,Goblin Guide,");
+    const std::map<std::string, int> b2 = FanOutcomesSf(s, plans, "land=;Brainstorm,");
+    REQUIRE_FALSE(b1.empty());
+    REQUIRE_FALSE(b2.empty());
+    // Every B1 outcome with Goblin Guide still in the library (stranded) is a B2 outcome (taps are not in it).
+    int stranded = 0;
+    for (const auto& [o, k] : b1)
+    {
+        if (o.find("Goblin Guide") != std::string::npos) { continue; }   // cast: on the battlefield
+        ++stranded;
+        CHECK(b2.count(o) == 1);
+    }
+    CHECK(stranded > 0);
+    // The lever is OFF by default; on, a lookahead solve declines the stranding ranks.
+    const long long f0 = FoldCounterSf(2);
+    { const TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, true, 2, 8, nullptr, false, false, nullptr); (void)p; }
+    CHECK(FoldCounterSf(2) == f0);
+    {
+        ArmScopeSf _a(heurarm::PB_STRAND_FOLD, 1);
+        const TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, true, 2, 8, nullptr, false, false, nullptr);
+        (void)p;
+    }
+    CHECK(FoldCounterSf(2) > f0);
+}
+
+TEST_CASE("Sound fold F5: at a breakpoint-node host, a base whose prefix collapsed has its whole fan declined")
+{
+    // Brainstorm with two different tails (Goblin Guide / Lightning Bolt): the node host truncates both at the
+    // Brainstorm, so their prefixes pend at one state and every rank of the second fan collapses onto the first's.
+    GameState s = BoardSf(1, true, { "Goblin Guide", "Lightning Bolt" }, { "Lightning Bolt", "Birds of Paradise", "Sol Ring" });
+    PutSf(s, "Mountain", 60);
+    PutSf(s, "Mountain", 61);
+    auto run = [&](int on) -> int
+    {
+        ArmScopeSf _a(heurarm::PB_XBASE_FOLD, on);
+        SearchBudget u(0);   // unlimited
+        const TurnSolver::SearchLine line = TurnSolver::FullSearchLine(s, 2, 8, false, nullptr, &u);
+        return line.win_turn;
+    };
+    const long long f0 = FoldCounterSf(3);
+    const int wt_on = run(1);
+    const long long f1 = FoldCounterSf(3);
+    const int wt_off = run(0);
+    CHECK(FoldCounterSf(3) == f1);
+    CHECK(f1 > f0);
+    CHECK(wt_on == wt_off);
 }

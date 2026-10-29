@@ -2387,6 +2387,10 @@ public:
     // Work units the Brainstorm put-back price (MTG_PUTBACK_PRICE) has charged on THIS thread so far --
     // a running total, so a caller diffs it around a game to report that game's units net of the price.
     static long long         PutBackPriceCharged();
+    // The sound cantrip folds' process-wide counters (docs/design/cantrip-search-optimization.md §2), for tests and
+    // reports: [0] F2 exactly sized fans, [1] F3 mirror ranks declined, [2] F4 stranding ranks declined, [3] F5
+    // cross-base ranks declined, [4] Q36 seed variants not emitted. Monotonic; a caller diffs around its work.
+    static void              SoundFoldCounters(long long out[5]);
     // True inside a horizon playout -- beyond the search window, where a greedy policy is permitted.
     static bool              InRolloutPlayout();
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
