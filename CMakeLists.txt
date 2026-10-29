@@ -464,6 +464,7 @@ add_executable(mtg-test
     test/unit/test_th_held_drop.cpp
     test/unit/test_freecast_x_zero.cpp
     test/unit/test_bp_wave_empty.cpp
+    test/unit/test_bp_dev_seq.cpp
     test/unit/test_edf_cast_order.cpp
     test/unit/test_speaker_of_the_heavens.cpp
     test/unit/test_path_to_exile.cpp
