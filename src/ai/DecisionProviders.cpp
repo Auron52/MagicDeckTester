@@ -40537,6 +40537,10 @@ static int RunSearchRec(GameState& s, int me, int iters_left, DfsBounds& b, Seen
 enum class RunMode { Trial, Apply };
 static int RunSearch(GameState& s, int me, RunMode mode)
 {
+    // MTG_CACHE_HIT_CHARGE: whether this walk runs, what it costs and what it finds depend on the decision
+    // context (root open or not, the budget, the per-decision board memo), so a cacheable computation that
+    // reached it -- even one that then skipped -- is not stored.
+    TurnSolver::NoteChargingSubsearch();
     Scope _guard;                       // no nested route emission for the whole search
     DfsScope _dfs;                      // EMPTY breakpoint continuations inside the DFS (not the certificate)
     DfsBounds   b;
@@ -40885,6 +40889,9 @@ namespace equiproute
 // PayloadFirst retry was built with.
 int TrialPolicy(const GameState& s, int me)
 {
+    // MTG_CACHE_HIT_CHARGE: the verdict is memoised per DECISION and its walk charges the decision budget,
+    // so a cacheable computation reaching here costs what it costs only in this decision -- not stored.
+    TurnSolver::NoteChargingSubsearch();
     // SCOPED TO THE DECISION (TurnSolver::DecisionEpoch), keyed on RouteStateKey. A verdict is a
     // function of the board AND the library below it, and only within one decision does "same
     // key" imply "same library": across decisions (and across the games a batch worker plays) the
@@ -47605,6 +47612,7 @@ static const Verdict& Trial(const GameState& s, int me, bool priced)
 // ONE PASS of the walk, in whatever pass scope the caller set (MainPassScope).
 static Verdict WalkPass(const GameState& s, int me, bool priced)
 {
+    TurnSolver::NoteChargingSubsearch();   // MTG_CACHE_HIT_CHARGE (see the equip route's RunSearch)
     Verdict v;
     v.main_pass = t_main_pass != 0;
     {
