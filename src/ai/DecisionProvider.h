@@ -644,6 +644,46 @@ public:
     virtual bool CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const
     { (void)s; (void)controller; (void)key; return false; }
 
+    // ---- PLAN-LEVEL CANTRIP BRANCHING (USER 2026-10-28; Cyclone ledger "Hard prunes + known-top blind test") ----
+    // USER: "search options that are vastly different when needed. So for example, putting junk on top when we plan
+    // to throw away those cards vs setting up a big creature to cycle into, but the heuristic would choose how to
+    // fulfil those options. Similarly Ponder shuffle vs reorder, but the heuristic would choose the order of the
+    // reorder. Naturally, even for these we may be able to prune the second or third plan depending on the
+    // situation." A HARD PRUNE of the scored fan (a provider RESTRICTION, lossy, the USER's call to adopt): every
+    // candidate is assigned to a PLAN; the engine keeps, per plan, only its best-scored candidate (the scored
+    // order's first member of that plan = the heuristic's fulfilment), so the search still branches over the PLANS.
+    // CantripPlanOf -- the plan of ONE scored candidate (same arguments as ScoreTopDisposition, called after it):
+    // >= 0 a plan id (the engine keeps that plan's best-scored candidate), kCantripPlanKeep (-2) keep this candidate
+    // ungrouped, kCantripPlanDrop (-1) drop it (a situational prune). FALSE for any candidate = no plan-level
+    // admission for this resolution. The engine never leaves a fan empty (an all-dropped fan keeps its rank 0).
+    // Applied inside the shared PutBackPickAt / PutBackCandidates / ScoredReorderCandidates, so the executor, the
+    // rollout and the blind chooser read the same (shorter) list; must be a pure function of the resolution
+    // state (and, like the scorer, of what the player knows). Default false.
+    static constexpr int kCantripPlanDrop = -1;
+    static constexpr int kCantripPlanKeep = -2;
+    virtual bool CantripPlanOf(const GameState& s, int controller, const CantripReadiness& r,
+                               const TopDispositionView& view, int& plan_out) const
+    { (void)s; (void)controller; (void)r; (void)view; (void)plan_out; return false; }
+    // CantripFanCap -- the most candidates the plan-level admission can leave in ONE put-back (putback = true) /
+    // reorder (false) resolution, i.e. the search fan's width cap at enumeration (the resolution list is never
+    // longer, so a wider fan's extra ranks would only clamp onto its last member). -1 = no cap (default).
+    virtual int CantripFanCap(const GameState& s, bool putback) const { (void)s; (void)putback; return -1; }
+    // CantripPlansActive -- is the plan-level admission on for this kind of resolution at all? The cheap gate the
+    // engine reads before asking CantripPlanOf per candidate (false => byte-identical, nothing computed). Default false.
+    virtual bool CantripPlansActive(const GameState& s, bool putback) const { (void)s; (void)putback; return false; }
+    // CycleScryPinHeuristic -- a searched cycle seed normally carries the "whenever you cycle ... scry 1" watchers'
+    // disposition as a pin (j = 0..N: bottom the top j). TRUE = no pin: the seed is emitted once, unpinned, and the
+    // provider's ScryKeepOnTop decides each scry at resolution, after the reveal (a provider HARD PRUNE of the j fan
+    // to its heuristic, the rule-as-prune shape: lossy, the USER's call). Default false -> every j is searched.
+    virtual bool CycleScryPinHeuristic(const GameState& s) const { (void)s; return false; }
+    // CycleSeedAdmissionSets -- a provider HARD PRUNE of WHICH cycler a plan's cycle seed may use, judged at PLAN level
+    // (EnumeratePlans' emission) because the seed cycles AFTER the plan's casts: `if_replacer_out` = the admitted cycler
+    // names when a cycle-draw replacer (Unpredictable Cyclone) is on the battlefield or cast by the plan before the cycle;
+    // `if_not` = when none will be out. TRUE = filter; false (default) = every seed stays. Human play is never filtered.
+    virtual bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
+                                        std::vector<std::string>& if_not) const
+    { (void)s; (void)if_replacer_out; (void)if_not; return false; }
+
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
     // order? When true (the default, and true of every bucket rule in the suite -- they choose which
