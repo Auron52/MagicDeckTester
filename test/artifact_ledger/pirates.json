@@ -1,0 +1,25 @@
+{
+ "deck": "pirates",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "pirates-artifact-queue-tool-647f24-20261029T214701",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:1bcfd094a124d99f0072",
+   "frozen": "19e4afba9f50d0654214d893649ac0f451052a8f",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_pirates/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d6b20 adopt=0 delta=+0.00000 t=+0.00 cost=0.992x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=byte-identical to the baseline: the arm is not engaging",
+    "    VERDICT arm=d6b30 adopt=0 delta=-0.00075 t=-2.39 cost=1.051x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.05x) with quality better (-0.00075) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.00125 t=-2.24 cost=1.109x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.11x) with quality better (-0.00125) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-29T21:57:55  PHASE E.6: no allowance for pirates -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
