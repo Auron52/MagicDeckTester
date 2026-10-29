@@ -59,6 +59,54 @@ inline const Card& ZoneCard(const Card& c)
     return d ? d->card : c;
 }
 
+// The 2026-10-29 placeholder audit's levers (HeuristicArm.h PLACEHOLDER_*; docs/design/placeholder-card-reads.md):
+// every site it found reading a hand / library / graveyard card's own (empty) characteristics reads
+// ZoneCard instead when its lever is on, one lever per logical group so an A/B can isolate each; =0 is
+// always the historical placeholder read. Each reader is the ONE reader of its lever, and every site it
+// gates is a single function both worlds call (a provider hook, a SpellEffects primitive) or a
+// search-shape gate the executor does not have, so the executor and the rollout cannot disagree.
+//
+// DEFAULT ON -- met the adoption bar on held-out seeds (no slower game that does not recover):
+inline bool PlaceholderProviderOn()   // Mirrorwing / Landfall / Stompy cleanup discard, Prevent Damage quake X
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_PROVIDER", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_PROVIDER, e);
+}
+inline bool PlaceholderSearchOn()     // search-shape gates (m2 land arrival, Karoo bounce "land in hand")
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_SEARCH", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_SEARCH, e);
+}
+inline bool PlaceholderSnowOn()       // Snow winless certificate's gain bound sees the snow permanents
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_SNOW", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_SNOW, e);
+}
+// DEFAULT OFF -- each corrects a read, but the heuristic the correct read switches on loses games in an
+// UNSEARCHED decision, so the slower games do not recover at d8 b0. Each read site says what unblocks it.
+inline bool PlaceholderEchoOn()       // Goblins echo "no gas" cost read (blocked on a SEARCHED echo)
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_ECHO", false);
+    return heurarm::Flag(heurarm::PLACEHOLDER_ECHO, e);
+}
+inline bool PlaceholderTectonicOn()   // Tectonic Giant default-keep MV (blocked on the keep axis for a cast Giant)
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_TECTONIC", false);
+    return heurarm::Flag(heurarm::PLACEHOLDER_TECTONIC, e);
+}
+inline bool PlaceholderManaOn()       // float-colour commit weighs the hand's real pips (blocked on a sequence-aware commit)
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_MANA", false);
+    return heurarm::Flag(heurarm::PLACEHOLDER_MANA, e);
+}
+inline bool PlaceholderFeaturesOn()   // learned-model featurizers -- a USER decision: the shipped models were fitted on the placeholder read
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_FEATURES", false);
+    return heurarm::Flag(heurarm::PLACEHOLDER_FEATURES, e);
+}
+// ZoneCard when the group's lever is on, else the card itself (the historical placeholder read).
+inline const Card& ZoneCardIf(bool on, const Card& c) { return on ? ZoneCard(c) : c; }
+
 // A/B opt-out (default ON): retain leftover / over-produced mana (depletion + filter
 // lands forced to over-tap) into the turn-scoped reserve state.floating_mana, so a later
 // same-(main-)phase cast can spend it (CR 500.4). MTG_NO_FLOAT_LEFTOVER=1 disables the
@@ -18560,14 +18608,41 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
         // DISCLOSED NARROWING: unlike the MODE, which card to keep is not yet a searched axis --
         // see docs/design/analysis-Giants.md. The human path DOES surface it (the `dig` chooser
         // below), so this default binds only the autonomous search.
+        // THE MV READ (MTG_PLACEHOLDER_TECTONIC, DEFAULT OFF). An exiled library card is a name-only
+        // placeholder whose own m_mana_cost is {0}, so the historical read ties every card at 0 and keeps the
+        // lower card number. The definition MV makes "highest MV" real -- and on held-out seed 1350001 it
+        // lost 4 Giants games / won none, NONE recovering at d8 b0: the searched keep (TECTONIC_KEEP_AXIS)
+        // is only fanned out when a Tectonic Giant is on the battlefield at the plan's root, so a Giant CAST
+        // this turn (hasted by Lightning Greaves) attacks under this default alone, and highest-MV keeps a
+        // Stinkdrinker Daredevil over the Mountain the turn needs (seed 1350104 gi103, T5 -> T6). OFF until
+        // the keep/mode axis also covers a modal Giant the plan casts; then this is just the branch default.
+        // docs/design/placeholder-card-reads.md.
+        const bool def_cost = PlaceholderTectonicOn();
         std::size_t best = 0;
         for (std::size_t k = 1; k < examined.size(); ++k)
         {
-            const int mv_k = examined[k].m_mana_cost.ManaValue();
-            const int mv_b = examined[best].m_mana_cost.ManaValue();
+            const int mv_k = ZoneCardIf(def_cost, examined[k]).m_mana_cost.ManaValue();
+            const int mv_b = ZoneCardIf(def_cost, examined[best]).m_mana_cost.ManaValue();
             if (mv_k > mv_b
                 || (mv_k == mv_b && examined[k].m_number < examined[best].m_number))
             { best = k; }
+        }
+        // MTG_TECTONIC_KEEP_LAND (DEFAULT OFF; a measured amendment for the USER; reads nothing unless
+        // MTG_PLACEHOLDER_TECTONIC is on): with NO land in hand, the default keeps an exiled LAND instead --
+        // a guaranteed land drop this turn's second main or next turn. Recovers gi103; over seed 1350001
+        // it measured 3 slower / 2 faster (one no-win became a T7 win), two of the three not recovering at
+        // d8 b0 -- an interim default, not a substitute for searching the keep.
+        static const bool s_keep_land = EnvOn("MTG_TECTONIC_KEEP_LAND", false);
+        if (def_cost && heurarm::Flag(heurarm::TECTONIC_KEEP_LAND, s_keep_land))
+        {
+            bool hand_land = false;
+            for (const Card& h : ap.hand)
+            { if (!h.m_is_staged && ZoneCard(h).IsLand()) { hand_land = true; break; } }
+            if (!hand_land)
+            {
+                for (std::size_t k = 0; k < examined.size(); ++k)
+                { if (ZoneCard(examined[k]).IsLand()) { best = k; break; } }
+            }
         }
         // SEARCHED KEEP (Plan::tectonic_keep_choice): overrules the ranked default above. Range
         // is checked against `examined`, not against attack_trigger_impulse_exile: a library with
@@ -20032,8 +20107,9 @@ inline bool DigSecondMainLive(const GameState& state)
         for (const Card& c : ap.hand)
         {
             if (c.m_number != num) { continue; }
-            // case 2 / case 3: a land is only worth a phase while the drop is still open.
-            if (c.IsLand()) { if (drop_open) { return true; } break; }
+            // case 2 / case 3: a land is only worth a phase while the drop is still open. Land-ness
+            // off the DEFINITION (MTG_PLACEHOLDER_SEARCH; the arrival is a name-only placeholder).
+            if (ZoneCardIf(PlaceholderSearchOn(), c).IsLand()) { if (drop_open) { return true; } break; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             // case 1. NOTE the deliberate absence of an AFFORDABILITY test: an unaffordable
             // Equipment opens a phase that enumerates nothing and costs only the empty harvest. The
@@ -23894,13 +23970,29 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
                                    : EffectiveProduces(state, active, d, false);
     if (amt == 1 && prod.size() > 1 && prod.size() < 5)
     {
-        Color best = prod[0]; int best_need = -1;
+        // THE PIP READ (MTG_PLACEHOLDER_MANA, DEFAULT OFF). A hand card's own m_mana_cost is a placeholder
+        // {0}, so the historical read weighs every colour at 0 and prod[0] always wins -- the "need-aware"
+        // commit below has never run. With the definition pips it commits every tap-ahead Mystic Monastery
+        // / Cascade Bluffs to the hand's biggest colour ({R}: Soulfire, Crackle), starving the next Reality
+        // Spasm's {U}{U}: Hinata on seed 1350001 lost 6 games / won 1, four not recovering at d8 b0 -- this
+        // colour is a payment-time choice the search never branches on. OFF until the commit is
+        // SEQUENCE-aware (the colours the rest of the line will spend, in order), not a pip total.
+        // docs/design/placeholder-card-reads.md.
+        const bool def_pips = PlaceholderManaOn();
+        // MTG_FLOAT_COMMIT_NET (DEFAULT OFF; a measured amendment; reads nothing unless MTG_PLACEHOLDER_MANA
+        // is on): the demand is NET of what already floats in that colour, so successive tap-ahead sources
+        // SPREAD across the colours the hand wants instead of every one committing the single biggest
+        // colour. Recovers Hinata seed 1350204 gi203 (T4 -> T5), but over seed 1350001 Hinata was still 5
+        // slower / 2 faster, four not recovering at d8 b0: a pip total, netted or not, is not the sequence.
+        static const bool s_net = EnvOn("MTG_FLOAT_COMMIT_NET", false);
+        const bool net = def_pips && heurarm::Flag(heurarm::FLOAT_COMMIT_NET, s_net);
+        Color best = prod[0]; int best_need = net ? INT_MIN : -1;
         for (Color c : prod)
         {
             int need = 0;
             for (const Card& hc : state.players[active].hand)
             {
-                const ManaCost& mc = hc.m_mana_cost;
+                const ManaCost& mc = ZoneCardIf(def_pips, hc).m_mana_cost;
                 switch (c)
                 {
                     case Color::White: need += mc.white; break;
@@ -23908,6 +24000,19 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
                     case Color::Black: need += mc.black; break;
                     case Color::Red:   need += mc.red;   break;
                     case Color::Green: need += mc.green; break;
+                    default: break;
+                }
+            }
+            if (net)
+            {
+                const ManaPool& fl = state.floating_mana;
+                switch (c)
+                {
+                    case Color::White: need -= fl.white; break;
+                    case Color::Blue:  need -= fl.blue;  break;
+                    case Color::Black: need -= fl.black; break;
+                    case Color::Red:   need -= fl.red;   break;
+                    case Color::Green: need -= fl.green; break;
                     default: break;
                 }
             }
@@ -31333,9 +31438,12 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                 if (need_model) { n = need[static_cast<int>(c)]; }
                 else
                 {
+                    // Hand pips off the DEFINITION under MTG_PLACEHOLDER_MANA (DEFAULT OFF -- see
+                    // FloatSourceTapCommitted for why, and what unblocks it).
+                    const bool def_pips = PlaceholderManaOn();
                     for (const Card& hc : state.players[controller].hand)
                     {
-                        const ManaCost& mc = hc.m_mana_cost;
+                        const ManaCost& mc = ZoneCardIf(def_pips, hc).m_mana_cost;
                         switch (c)
                         {
                             case Color::White: n += mc.white; break;

@@ -3138,11 +3138,14 @@ static bool M2DropLive(const GameState& s)
     if (!M2ReconsiderEnabled()) { return false; }
     const Player& p = s.ActivePlayer();
     if (p.lands_played_this_turn >= p.LandDropsAvailable()) { return false; }
+    const bool def_type = PlaceholderSearchOn();
     for (const Card& c : p.hand)
     {
         // A staged land is here NOW (arrived after main-1 -- e.g. a post-combat Light Up the
-        // Stage already resolved at this state).
-        if (c.m_is_staged && !c.m_impulse_no_land && c.IsLand()
+        // Stage already resolved at this state). Land-ness off the DEFINITION: a staged card is a
+        // name-only placeholder (library DrawTop), so the historical read (MTG_PLACEHOLDER_SEARCH=0)
+        // never saw a staged land here.
+        if (c.m_is_staged && !c.m_impulse_no_land && ZoneCardIf(def_type, c).IsLand()
             && s.turn_number <= c.m_staged_expiry) { return true; }
         // A STAGER is in hand: a land may arrive MID-PLAN (cast LUTS -> staged Mountain ->
         // play it -> its mana casts the next spell). The searched-continuation fan that finds
@@ -42546,11 +42549,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         bool land_arrival_open = false;
         if (ap.lands_played_this_turn < ap.LandDropsAvailable())
         {
+            // Land-ness off the DEFINITION: a card drawn in combat is a name-only placeholder, so the
+            // historical read (MTG_PLACEHOLDER_SEARCH=0) never opened the phase for an arriving land.
+            const bool def_type = PlaceholderSearchOn();
             for (std::uint8_t slot : state.combat_hand)
             {
                 if (slot == 0) { continue; }
                 for (const Card& c : ap.hand)
-                { if (c.m_number == static_cast<int>(slot) && c.IsLand()) { land_arrival_open = true; break; } }
+                { if (c.m_number == static_cast<int>(slot) && ZoneCardIf(def_type, c).IsLand()) { land_arrival_open = true; break; } }
                 if (land_arrival_open) { break; }
             }
         }
@@ -60234,7 +60240,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int hi = 0; hi < static_cast<int>(le_ap.hand.size()); ++hi)
                 {
                     const Card& hc = le_ap.hand[static_cast<std::size_t>(hi)];
-                    if (hc.m_name == a.discard_name && !hc.m_is_staged && hc.IsLand())
+                    if (hc.m_name == a.discard_name && !hc.m_is_staged && ZoneCard(hc).IsLand())   // placeholder masks are empty
                     { le_pitch.push_back(hi); break; }
                 }
                 if (le_pitch.empty())
@@ -76902,7 +76908,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                      || (!producer && !z.uncertain_mana && spend > z.nonclean_capacity))
             {
                 bool land_in_hand = may_draw;
-                for (const Card& c : hand) { if (c.IsLand()) { land_in_hand = true; break; } }
+                // Land-ness off the DEFINITION (MTG_PLACEHOLDER_SEARCH; a hand card is a placeholder).
+                const bool def_type = PlaceholderSearchOn();
+                for (const Card& c : hand) { if (ZoneCardIf(def_type, c).IsLand()) { land_in_hand = true; break; } }
                 w = (land_in_hand ? std::max<std::size_t>(z.clean_names, 1) : 1) + z.depletion;
             }
             return std::min({ w, z.distinct, DecisionProvider::kBounceSearchWidth });
@@ -99997,8 +100005,11 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         auto gy_has = [&](bool want_creature) {
             for (const Player& pl : s.players)
             {
-                for (const Card& c : pl.graveyard)
-                { if (want_creature ? c.IsCreature() : (c.IsInstant() || c.IsSorcery())) { return true; } }
+                for (const Card& gc : pl.graveyard)   // ZoneCard: a graveyard card's own type mask is empty
+                {
+                    const Card& c = ZoneCard(gc);
+                    if (want_creature ? c.IsCreature() : (c.IsInstant() || c.IsSorcery())) { return true; }
+                }
             }
             return false;
         };

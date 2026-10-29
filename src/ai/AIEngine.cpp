@@ -403,8 +403,8 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
             for (const std::string& d : drops_v)
             {
                 std::string cost;
-                for (const Card& c : state.ActivePlayer().hand)
-                { if (c.m_name == d) { cost = c.m_mana_cost.ToString(); break; } }
+                for (const Card& c : state.ActivePlayer().hand)   // ZoneCard: a hand card's own cost is a placeholder {0}
+                { if (c.m_name == d) { cost = ZoneCard(c).m_mana_cost.ToDisplayString(); break; } }
                 pv.errors.push_back("cast " + d + ": it cannot be paid at its position in your order -- "
                                     + (cost.empty() ? std::string("its cost") : cost)
                                     + " is more than the steps queued before it leave available"
@@ -4405,7 +4405,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     const Player& lap = state.ActivePlayer();
                     bool playable = lap.lands_played_this_turn < lap.LandDropsAvailable()
                         && std::any_of(lap.hand.begin(), lap.hand.end(), [](const Card& c)
-                           { return !c.m_impulse_no_land && c.IsLand(); });
+                           { return !c.m_impulse_no_land && ZoneCard(c).IsLand(); });   // placeholder masks are empty
                     if (playable) { s_greedy.fetch_add(1, std::memory_order_relaxed); }
                 }
             }

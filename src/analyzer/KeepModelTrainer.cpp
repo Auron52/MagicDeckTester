@@ -4,6 +4,7 @@
 #include "../cards/CardDatabase.h"
 #include "../core/GameEngine.h"
 #include "../core/HardwareConcurrency.h"
+#include "../core/SpellEffects.h"     // ZoneCardIf / PlaceholderFeaturesOn (DeckDominantSubtype)
 #include "../runner/GoldFishRunner.h"
 #include <algorithm>
 #include <array>
@@ -183,9 +184,14 @@ std::vector<std::string> KeyPieces(const MulliganProfile& base_profile,
 // Empty if no subtype is shared widely -- then no SubtypeDensity feature is constructed.
 std::string DeckDominantSubtype(const Decklist& deck)
 {
+    // Characteristics off the DEFINITION: a decklist card is a name-only placeholder (no type, no
+    // subtypes), so the historical read (MTG_PLACEHOLDER_FEATURES=0) counted nothing and no
+    // SubtypeDensity feature was ever constructed.
+    const bool def_chars = PlaceholderFeaturesOn();
     std::map<std::string, int> counts;
-    for (const Card& c : deck.mainboard)
+    for (const Card& raw : deck.mainboard)
     {
+        const Card& c = ZoneCardIf(def_chars, raw);
         if (c.IsLand()) { continue; }
         for (const std::string& st : c.m_subtypes) { ++counts[st]; }
     }

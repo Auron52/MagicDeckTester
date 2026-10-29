@@ -65,10 +65,13 @@ int EvalFeatureSpec(const FeatureSpec& spec, const std::vector<Card>& hand,
         }
         case FeatureKind::SubtypeDensity:
         {
+            // Subtypes off the DEFINITION: a hand card is a name-only placeholder with no subtypes, so the
+            // historical read (MTG_PLACEHOLDER_FEATURES=0) counted 0 for every hand.
+            const bool def_subs = PlaceholderFeaturesOn();
             int c = 0;
             for (const Card& card : hand)
             {
-                for (const std::string& st : card.m_subtypes) { if (st == spec.s) { ++c; break; } }
+                for (const std::string& st : ZoneCardIf(def_subs, card).m_subtypes) { if (st == spec.s) { ++c; break; } }
             }
             return c;
         }
@@ -400,10 +403,18 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     // Treasure Hunt refills them, so hand land-count is a load-bearing signal this model was blind to.
     // v7 also categorises the rest of the hand (the most immediate driver of a shallow decision). MVs of
     // nonland cards are collected for HandCastableNow, computed once untapped sources are known below.
+    // Types off the DEFINITION: a hand / library card is a name-only placeholder with an empty type mask,
+    // so the historical read (MTG_PLACEHOLDER_FEATURES=0) counted only the cards that reached the zone
+    // carrying real masks (a bounced land, a def-built stage), and passed every other hand LAND on as a
+    // castable MV-0 nonland (hand_castable_now). The shipped value leaves were FITTED on that read, so the
+    // definition read (MTG_PLACEHOLDER_FEATURES) is DEFAULT OFF: turning it on is the USER's call and goes
+    // with refitting the leaves (docs/design/placeholder-card-reads.md).
+    const bool def_types = PlaceholderFeaturesOn();
     int lands_in_hand = 0, hand_creatures = 0, hand_damage = 0, hand_draw = 0;
     std::vector<int> hand_nonland_mv;
-    for (const Card& c : ap.hand)
+    for (const Card& hc : ap.hand)
     {
+        const Card& c = ZoneCardIf(def_types, hc);
         if (c.IsLand()) { ++lands_in_hand; continue; }
         if (c.IsCreature()) { ++hand_creatures; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -512,7 +523,7 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     // trusting this comment.
     for (std::size_t li = 0, ln = ap.library.size(); li < ln; ++li)
     {
-        const Card& c = ap.library.RawAt(li);
+        const Card& c = ZoneCardIf(def_types, ap.library.RawAt(li));
         if (c.IsLand())     { ++lib_lands; }
         if (c.IsCreature()) { ++lib_creatures; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);

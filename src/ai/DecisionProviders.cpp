@@ -3717,10 +3717,15 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
     // USER 2026-10-16: "no more than 1 titan because Titan does not have the kill potential in the current
     // list". A per-card cap, net of board: a copy beyond it is no threat and sheds right after a dead legend.
     static const std::pair<const char*, int> kThreatCap[] = { {"Primeval Titan", 1} };
+    // LEGENDARY comes off the DEFINITION (ZoneCard): a hand card is a name-only placeholder with an empty
+    // supertype mask, so the historical read (MTG_PLACEHOLDER_PROVIDER=0) saw no legend -- neither the cap
+    // nor the dead-legend bucket below ever fired.
+    const bool def_super = PlaceholderProviderOn();
+    auto is_legend = [&](const Card& c) { return ZoneCardIf(def_super, c).HasSupertype(Supertype::Legendary); };
     auto threat_cap = [&](const Card& c)
     {
         for (const auto& [name, cap] : kThreatCap) { if (c.m_name == name) { return cap; } }
-        return c.HasSupertype(Supertype::Legendary) ? 1 : -1;   // the legend rule: a 2nd copy is a blank here
+        return is_legend(c) ? 1 : -1;   // the legend rule: a 2nd copy is a blank here
     };
     std::vector<std::pair<std::string, int>> capped_seen;   // name -> copies counted (board first)
     auto over_cap = [&](const Card& c)
@@ -3748,7 +3753,7 @@ std::vector<int> LandfallProvider::CleanupDiscardCandidates(
         if (c.m_is_staged) { continue; }
         const CardDefinition* d = def_of(c);
         if (CleanupDiscardIsLand(c)) { lands.push_back(i); continue; }
-        if (c.HasSupertype(Supertype::Legendary)
+        if (is_legend(c)
             && std::find(board_legends.begin(), board_legends.end(), c.m_name.str()) != board_legends.end())
         { dead.push_back(i); continue; }
         if (over_cap(c)) { capped.push_back(i); continue; }
@@ -4263,9 +4268,13 @@ std::vector<int> DecisionProvider::BounceSearchCandidates(
         if (pick >= 0) { set_why(kBounceUserRule); return { pick }; }
     }
 
+    // Land-ness off the DEFINITION: a hand card is a name-only placeholder, so the historical read
+    // (MTG_PLACEHOLDER_SEARCH=0) never saw a land in hand and the replay fold below always applied --
+    // collapsing tapped lands a held land makes genuinely different.
     bool hand_land = false;
+    const bool def_type = PlaceholderSearchOn();
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
-    { if (c.IsLand()) { hand_land = true; break; } }
+    { if (ZoneCardIf(def_type, c).IsLand()) { hand_land = true; break; } }
     bool any_free_clean = false, any_tapped = false;
     for (const Info& f : info)
     {
@@ -16002,12 +16011,63 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     // historical hand-only scan.
     static const bool s_staged_gas_env = EnvOn("MTG_ECHO_STAGED_GAS", true);
     const bool s_staged_gas = heurarm::Flag(heurarm::ECHO_STAGED_GAS, s_staged_gas_env);
-    const ManaPool pool = AvailableManaPool(s);
+    ManaPool pool = AvailableManaPool(s);
+    // THE COST READ (MTG_PLACEHOLDER_ECHO, DEFAULT OFF). Every hand / staged card is a name-only
+    // placeholder whose own m_mana_cost is {0}, so the historical read found every nonland "castable" and
+    // this clause could fire only on a hand with no spell at all. The definition cost makes the clause do
+    // what it says -- and measured WORSE in every reading of "castable this turn" (held-out seeds
+    // 1350001 / 1360001, 5,500 Goblins games): the upkeep pool alone 10 slower / 1 faster; plus the turn's
+    // land drop from hand (MTG_GOBLIN_ECHO_LAND_DROP) 4 / 1; plus an assumed land draw
+    // (MTG_GOBLIN_ECHO_DRAW_LAND) 1 / 0 -- and NONE of those slower games recovers at d8 b0, because the
+    // echo is never searched: both worlds take this function's one answer (AIEngine::ResolveEchoUpkeep,
+    // TurnSolver's SimulateEndAndStartNextTurn). OFF until echo is a SEARCHED decision; then the cost read
+    // (and the land-drop credit) is what makes this function a sound DEFAULT for the branch.
+    // docs/design/placeholder-card-reads.md.
+    const bool def_cost = PlaceholderEchoOn();
+    // "Castable THIS TURN" includes the turn's land drop, which echo (an UPKEEP trigger) comes before:
+    // credit one untapped-entering land from hand when the drop is open (MTG_GOBLIN_ECHO_LAND_DROP; its
+    // own default ON, but it reads nothing unless MTG_PLACEHOLDER_ECHO is on -- under the placeholder cost
+    // every spell is already castable at {0}). Seeds 1350641 gi640 / 1360791 gi790: the upkeep pool alone
+    // read a Goblin Chieftain ({1}{R}{R}, two lands out, a Mountain in hand) as uncastable, PAID the echo
+    // with two of the three lands and stranded the T3 Chieftain.
+    // MTG_GOBLIN_ECHO_DRAW_LAND (DEFAULT OFF; a measured variant): with NO land in hand, credit the open
+    // drop anyway as one any-colour mana -- the upkeep echo also precedes the DRAW (gi640: T3 draw
+    // Mountain). Reads "castable this turn" as "castable if this turn's drop is a land".
+    static const bool s_land_drop = EnvOn("MTG_GOBLIN_ECHO_LAND_DROP", true);
+    static const bool s_draw_land = EnvOn("MTG_GOBLIN_ECHO_DRAW_LAND", false);
+    if (def_cost && heurarm::Flag(heurarm::GOBLIN_ECHO_LAND_DROP, s_land_drop))
+    {
+        const Player& me = s.players[active];
+        if (me.lands_played_this_turn < me.LandDropsAvailable())
+        {
+            bool credited = false;
+            for (const Card& h : me.hand)
+            {
+                if (h.m_is_staged) { continue; }
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(h);
+                if (!ld || !ld->card.IsLand()) { continue; }
+                if (ld->params.enters_tapped || ld->params.enters_tapped_with_depletion > 0) { continue; }
+                const std::vector<Color>& prod = ld->params.produces;
+                if (prod.empty()) { continue; }
+                if (prod.size() == 1) { pool.Add(prod[0]); } else { ++pool.wild; }
+                credited = true;
+                break;   // one land drop
+            }
+            bool land_in_hand = false;
+            for (const Card& h : me.hand)
+            {
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(h);
+                if (!h.m_is_staged && ld && ld->card.IsLand()) { land_in_hand = true; break; }
+            }
+            if (!credited && !land_in_hand && heurarm::Flag(heurarm::GOBLIN_ECHO_DRAW_LAND, s_draw_land))
+            { ++pool.wild; }
+        }
+    }
     auto castable_spell = [&](const Card& h) -> bool
     {
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
         if (!hd || hd->card.IsLand()) { return false; }
-        return pool.CanPay(h.m_mana_cost);
+        return pool.CanPay(def_cost ? hd->card.m_mana_cost : h.m_mana_cost);
     };
     const Player& ap = s.players[active];
     for (const Card& h : ap.hand)
@@ -20880,8 +20940,13 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
         pool.AddPool(s.floating_mana);
         const int spare = pool.Total() - def.card.m_mana_cost.ManaValue();
         int hand_ceil = board_ceil;
-        for (const auto& c : s.players[me].hand)
+        // Characteristics off the DEFINITION: a hand card is a name-only placeholder (no creature type,
+        // no toughness, cost {0}), so the historical read (MTG_PLACEHOLDER_PROVIDER=0) never saw a hand
+        // creature and hand_ceil stayed board_ceil.
+        const bool def_chars = PlaceholderProviderOn();
+        for (const auto& hc : s.players[me].hand)
         {
+            const Card& c = ZoneCardIf(def_chars, hc);
             if (!c.IsCreature() || !c.m_toughness.has_value()) { continue; }
             if (c.m_mana_cost.ManaValue() > spare) { continue; }
             if (c.HasKeyword(Keyword::Indestructible)) { continue; }
@@ -20911,7 +20976,7 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
             {
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
                 if (hd != nullptr && hd->params.x_damage_each_creature_and_player) { ++quakes; }
-                if (c.IsLand()) { land = true; }
+                if (ZoneCardIf(def_chars, c).IsLand()) { land = true; }   // placeholder: never a land
             }
             const int next_x = pool.Total() + (land ? 1 : 0) - def.card.m_mana_cost.ManaValue();
             if (quakes >= 2 && (top + next_x) * heads >= opp_life) { two_x = top; }
@@ -26119,10 +26184,15 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         ++hand_mana_n;
         if (produces(ap.hand[i], Color::Red)) { ++hand_red; }
     }
+    // Costs come off the DEFINITION (zc): a hand card is a name-only placeholder whose own m_mana_cost is
+    // {0}, so the historical read (MTG_PLACEHOLDER_PROVIDER=0) gave every magnet cast turn 0, made the
+    // tie-break 0 vs 0 and the kept enabler's MV 0.
+    const bool def_cost = PlaceholderProviderOn();
+    auto zc = [&](const Card& c) -> const Card& { return ZoneCardIf(def_cost, c); };
     auto cast_turns = [&](const Card& c) -> int
     {
-        const int mv      = c.m_mana_cost.ManaValue();
-        const int red_req = c.m_mana_cost.red;
+        const int mv      = zc(c).m_mana_cost.ManaValue();
+        const int red_req = zc(c).m_mana_cost.red;
         const int deficit = std::max(0, mv - board_sources);
         if (deficit > hand_mana_n)              { return 1000; }   // mana not coverable
         if (board_red + hand_red < red_req)     { return 1000; }   // red pips not coverable
@@ -26132,11 +26202,11 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
     {
         const int ta = cast_turns(ap.hand[a]), tb = cast_turns(ap.hand[b]);
         if (ta != tb) { return ta < tb; }                                   // castable sooner wins
-        return ap.hand[a].m_mana_cost.ManaValue() > ap.hand[b].m_mana_cost.ManaValue();   // tie: bigger body
+        return zc(ap.hand[a]).m_mana_cost.ManaValue() > zc(ap.hand[b]).m_mana_cost.ManaValue();   // tie: bigger body
     });
     const int kept_magnet = (!magnet_board && !magnets.empty()) ? magnets.front() : -1;
     const int enabler_mv  = kept_magnet >= 0
-        ? ap.hand[kept_magnet].m_mana_cost.ManaValue()
+        ? zc(ap.hand[kept_magnet]).m_mana_cost.ManaValue()
         : (magnet_board ? 2 : 4);   // magnet down -> trick mana; none anywhere -> assume Zada
 
     std::vector<int> shed;
@@ -31639,10 +31709,14 @@ std::vector<int> StompyProvider::CleanupDiscardCandidates(
         { if (is_rock(ap.hand[accel_pool[k]])) { used[k] = 1; accel_seq.push_back(accel_pool[k]); break; } }
         if (!board_cheap_dork)                                       // one 1-mana dork
         {
+            // The MV comes off the DEFINITION: a hand card's own m_mana_cost is a placeholder {0}, so the
+            // historical read (MTG_PLACEHOLDER_PROVIDER=0) took the first dork of ANY cost as the 1-drop.
+            const bool def_cost = PlaceholderProviderOn();
             for (std::size_t k = 0; k < accel_pool.size(); ++k)
             {
                 const int i = accel_pool[k];
-                if (!used[k] && is_dork(ap.hand[i]) && ap.hand[i].m_mana_cost.ManaValue() <= 1)
+                if (!used[k] && is_dork(ap.hand[i])
+                    && ZoneCardIf(def_cost, ap.hand[i]).m_mana_cost.ManaValue() <= 1)
                 { used[k] = 1; accel_seq.push_back(i); break; }
             }
         }
@@ -41575,10 +41649,16 @@ long long SnowCertGainBound(const GameState& s, int me, long long max_mana, bool
     const Player&       ap = s.players[me];
 
     std::vector<int> costs;   // mana values of snow NONLAND permanents we could deploy
+    // Characteristics off the DEFINITION: hand and graveyard cards are name-only placeholders (no
+    // supertype, no type, cost {0}), so the historical read (MTG_PLACEHOLDER_SNOW=0) found NO snow
+    // permanent here and priced every one at the leftover rate of 2 -- an UNDER-stated bound, the unsound
+    // direction for a winless certificate (a {1} Astrolabe / Frost Augur is 1 mana, not 2).
+    const bool def_chars = PlaceholderSnowOn();
     auto scan = [&](const std::vector<Card>& zone)
     {
-        for (const Card& c : zone)
+        for (const Card& zc : zone)
         {
+            const Card& c = ZoneCardIf(def_chars, zc);
             if (!c.HasSupertype(Supertype::Snow)) { continue; }
             if (c.IsInstant() || c.IsSorcery())   { continue; }   // Skred is a snow INSTANT
             if (c.IsLand())                       { continue; }   // the land drop is its own term
@@ -41900,8 +41980,10 @@ bool SnowProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
                 // and count how many declines would flip to `fired`.
                 long long land_slot = 0;
                 std::vector<int> costs;
-                for (const Card& c : ap.hand)
+                const bool def_chars = PlaceholderSnowOn();   // see SnowCertGainBound
+                for (const Card& hc : ap.hand)
                 {
+                    const Card& c = ZoneCardIf(def_chars, hc);
                     if (!c.HasSupertype(Supertype::Snow))  { continue; }
                     if (c.IsInstant() || c.IsSorcery())    { continue; }   // Skred is a snow INSTANT
                     if (c.IsLand()) { land_slot = 1; continue; }

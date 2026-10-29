@@ -724,6 +724,23 @@ enum Slot : int
     LHC_BUCKET_DISCARD,       // MTG_LHC_BUCKET_DISCARD  LifegainHeliodCombo's USER-reviewed cleanup-discard rule (CritterLifegain's ladder + the partner-gated COMBO bucket, Abiding Grace in the fill, a second Ballista at the bottom of it). Default ON; =0 -> the inherited CritterLifegain rule exactly
     ECHO_STAGED_GAS,          // MTG_ECHO_STAGED_GAS  GoblinsProvider::PayEchoToKeep's "no gas" clause reads the castable-exile zone too (unexpired staged cards: a Rundvelt impulse), from BOTH representations -- the executor holds them out of hand in Player::staged_cards at upkeep, the rollout in hand flagged m_is_staged -- so the search and the real game decide echo on the same cards. Goblins seed 1233402 gi3401 T3: the search declined Mogg War Marshal's echo, the executor paid it and could not cast the committed Muxus. =0 -> the hand-only scan
     BP_CANON_WAVE,            // MTG_BP_CANON_WAVE  a base plan whose own apply in a walker host's loop took MTG_BP_BASE_CANON's one-option default (the front of a non-empty continuation list) becomes a wave-walker base, so its other ranks and its EMPTY arm are scored after everything the node scored before: a breakpoint opened by a CASCADE (Muxus's reveal -> Goblin Matron's ETB tutor -> site 10) is invisible to the pre-apply PlanOpensBreakpoint and its alternatives were unreachable at any budget. Goblins seed 1230692 gi691. Its slots come after the walker's others, and under a finite budget each of its variants is billed one unit per MTG_BP_CANON_WAVE_W (default 1) enumeration visits (continuation derivations charge no unit; EDF seed 1330259 gi258 ran for hours at b20 unbilled). Inert at an unlimited budget. =0 -> walker bases by PlanOpensBreakpoint alone
+    // NAME-ONLY PLACEHOLDER reads (2026-10-29; docs/design/placeholder-card-reads.md). Every hand / library /
+    // graveyard / exile Card is built by DeckLoader::MakePlaceholder from its NAME alone, so its own
+    // m_mana_cost, type / supertype / colour / keyword masks, m_subtypes and P/T are EMPTY; the real fields
+    // live on CardDatabase::LookupCached(c)->card (ZoneCard, SpellEffects.h). An audit found the sites below
+    // reading the empty fields. One lever per logical group so an A/B can isolate it; =0 -> the placeholder
+    // read. The readers are in SpellEffects.h (Placeholder*On).
+    PLACEHOLDER_PROVIDER,     // MTG_PLACEHOLDER_PROVIDER  DEFAULT ON. Provider heuristics: the Mirrorwing / Landfall / Stompy cleanup-discard rankings (magnet cast turn + tie + enabler MV; the legend rule's dead / capped copies; the one 1-mana dork) and Prevent Damage's quake X hand ceiling + two-turn land (both behind default-OFF levers). Held-out seed 1350001: no slower game
+    PLACEHOLDER_SEARCH,       // MTG_PLACEHOLDER_SEARCH  DEFAULT ON. Search-shape gates that test a hand card's type: a staged land opening the second-main drop (M2DropLive), a land arriving in combat opening the dig second main (DigSecondMainLive) and the Omnitool phase, and the Karoo bounce's "a land is in hand" (BounceSearchCandidates' replay fold, the bounce width). Seed 1350001: 0 slower / 1 faster
+    PLACEHOLDER_MANA,         // MTG_PLACEHOLDER_MANA  DEFAULT OFF. The float-colour commit of a multi-colour source tapped ahead (FloatSourceTapCommitted, EtbUntapTapAheadIntoFloat) weighs each colour by the HAND's pips -- every pip read 0, so the first colour always won. With real pips Hinata lost 6 / won 1 on seed 1350001, four not recovering at d8 b0 (the commit is never searched). Blocked on a SEQUENCE-aware commit
+    PLACEHOLDER_SNOW,         // MTG_PLACEHOLDER_SNOW  DEFAULT ON. SnowCertGainBound (the Snow winless certificate's snow-permanent gain bound) found no snow permanent in hand or graveyard, so a 1-mana snow permanent was priced at the 2-mana leftover rate -- an UNDER-stated bound, i.e. the certificate could call a winnable turn winless. Also the diagnostic rescue census beside it. Play-identical on seed 1350001
+    PLACEHOLDER_FEATURES,     // MTG_PLACEHOLDER_FEATURES  DEFAULT OFF -- a USER decision. Learned-model featurizers: ExtractMidGameFeatures' lands_in_hand / hand_creatures / lib_lands / lib_creatures and hand_castable_now (a placeholder land counted as a castable MV-0 spell), the keep model's subtype_density and the trainer's dominant subtype. The shipped value leaves and keep models were FITTED on the placeholder values, so turning it on moves their inputs without a refit (seed 1350001: 26 slower / 31 faster, every slower game recovering at d8 b0)
+    GOBLIN_ECHO_LAND_DROP,    // MTG_GOBLIN_ECHO_LAND_DROP  sub-lever of MTG_PLACEHOLDER_ECHO (reads nothing while it is off; own default ON): GoblinsProvider::PayEchoToKeep's "castable THIS turn" credits the turn's land drop (one untapped-entering land in hand, drop open), which the upkeep echo comes before. Without it the definition cost read a T3 Goblin Chieftain as uncastable off two lands, paid the echo and stranded it
+    GOBLIN_ECHO_DRAW_LAND,    // MTG_GOBLIN_ECHO_DRAW_LAND  ...and with NO land in hand the open drop is credited anyway (one any-colour mana): the upkeep echo also precedes the draw. A measured variant; DEFAULT OFF
+    TECTONIC_KEEP_LAND,       // MTG_TECTONIC_KEEP_LAND  sub-lever of MTG_PLACEHOLDER_TECTONIC (reads nothing while it is off): Tectonic Giant's DEFAULT kept card is an exiled LAND when no land is in hand (highest MV otherwise). A measured variant; DEFAULT OFF
+    FLOAT_COMMIT_NET,         // MTG_FLOAT_COMMIT_NET  sub-lever of MTG_PLACEHOLDER_MANA (reads nothing while it is off): FloatSourceTapCommitted's colour demand is net of what already floats, so a tap-ahead spreads its commits across the hand's colours. A measured variant; DEFAULT OFF
+    PLACEHOLDER_ECHO,         // MTG_PLACEHOLDER_ECHO  DEFAULT OFF. GoblinsProvider::PayEchoToKeep's "no gas" clause reads hand / staged costs off the definition (the placeholder {0} made every spell "castable", so the clause fired only on a spell-less hand). Live, it lost 10 / won 1 on 5,500 held-out Goblins games (4 / 1 with the land-drop credit, 1 / 0 with the draw-land variant), none recovering at d8 b0: the echo is never searched. Blocked on making echo a SEARCHED decision
+    PLACEHOLDER_TECTONIC,     // MTG_PLACEHOLDER_TECTONIC  DEFAULT OFF. Tectonic Giant's mode-B DEFAULT keep (highest MV) reads the exiled cards' MV off the definition (the placeholder tied them all at 0 -> lowest card number). Live, Giants lost 4 / won 0 on seed 1350001, none recovering at d8 b0: the keep axis is only fanned out for a Giant on the battlefield at the plan root, so a Giant cast this turn attacks under the default alone. Blocked on extending the keep/mode axis to a Giant the plan casts
     COUNT
 };
 
@@ -1398,6 +1415,17 @@ inline const char* Name(int slot)
         "MTG_LHC_BUCKET_DISCARD",
         "MTG_ECHO_STAGED_GAS",
         "MTG_BP_CANON_WAVE",
+        "MTG_PLACEHOLDER_PROVIDER",
+        "MTG_PLACEHOLDER_SEARCH",
+        "MTG_PLACEHOLDER_MANA",
+        "MTG_PLACEHOLDER_SNOW",
+        "MTG_PLACEHOLDER_FEATURES",
+        "MTG_GOBLIN_ECHO_LAND_DROP",
+        "MTG_GOBLIN_ECHO_DRAW_LAND",
+        "MTG_TECTONIC_KEEP_LAND",
+        "MTG_FLOAT_COMMIT_NET",
+        "MTG_PLACEHOLDER_ECHO",
+        "MTG_PLACEHOLDER_TECTONIC",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
