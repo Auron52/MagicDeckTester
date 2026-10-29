@@ -3578,6 +3578,16 @@ public:
     // The per-fan ranking cache's key (design item 8): everything CycloneGoOff / CycloneShortOnRed / the scorer
     // read -- our permanents (name, tapped, def_absent), the hand (name, P/T), life, the land drop, the flags.
     bool CantripOrderKey(const GameState& s, int controller, std::vector<std::uint64_t>& key) const override;
+    bool CantripPlanOf(const GameState& s, int controller, const CantripReadiness& r,
+                       const TopDispositionView& view, int& plan_out) const override;
+    int  CantripFanCap(const GameState& s, bool putback) const override;
+    bool CantripPlansActive(const GameState& s, bool putback) const override;
+    // MTG_CYCLONE_SEED_PLANS (DEFAULT OFF): the cycle seeds' Curator scry pin -> the walk-aware scry below.
+    bool CycleScryPinHeuristic(const GameState& s) const override;
+    // MTG_CYCLONE_CYCLER_RULE (DEFAULT OFF): which creature cycler a plan's cycle seed uses (CycloneCyclerRuleApply).
+    bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
+                                std::vector<std::string>& if_not) const override;
+    bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
     // CANTRIP PROPOSALS (DEFAULT OFF pending the USER, Q33): MTG_CYCLONE_PUTBACK_RULE = rank 0 of the scored
     // order is the put-back rule (it turns the scorer on for the put-back by itself); MTG_CYCLONE_PUTBACK_SINGLE
     // prunes the put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.

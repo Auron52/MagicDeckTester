@@ -525,6 +525,14 @@ private:
     int RolloutWinTurnFrom(GameState trial, int max_turns, GameEngine::ResumeAt from,
                            int* lands_out = nullptr);
 
+public:
+    // THE BLIND RESOLUTION CHOOSER's evaluation (blind mode only; see blindsearch in AIEngine.cpp and
+    // BlindDrawSpellChooser): the rank of this put-back / Ponder resolution a blind search from each
+    // candidate's resulting state values best (ties to the lower rank), or -1 to keep the plan's pin.
+    int BlindChooseDrawSpell(const GameState& state, const StackEntry& entry, const CardDefinition& def,
+                             bool is_pre_combat);
+private:
+
     // Discards up to `count` lands from hand to Land's Edge at `rate` damage each.
     // Used by ActivateLandsEdge for both the real game path and rollout comparisons.
     // `log` is false for throwaway trial copies so their projected pings do not leak
