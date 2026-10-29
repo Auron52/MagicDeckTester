@@ -706,6 +706,18 @@ struct Action
                                        // any number"); declining is often right, since the bodies are
                                        // usually worth more attacking.
                                        // SENTINEL -1 = not a devour cast.
+    std::int32_t seed_pay_split  = 0;
+                                       // A searched CYCLE SEED's PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT,
+                                       // ledger Q61): WHICH sources pay the seed's all-generic cycling
+                                       // cost, as a packed multiset of source colour SIGNATURES
+                                       // (SeedPaySplits / SeedPaySplitHoldMask, ManaPayment.h). A seed
+                                       // pays BEFORE its site-4 continuation exists, so the payer alone
+                                       // could spend the colours the continuation needs (two Cyclones,
+                                       // three Mountains: the {2} took two Mountains and the other
+                                       // Cyclone's {R}{R} was unpayable at ANY budget). 0 = the payer
+                                       // decides (every non-seed action, human play, the lever off).
+                                       // Folded beside devour_count only when non-zero, so every key is
+                                       // byte-identical with the lever off.
     int         replicate_count  = -1;
                                        // REPLICATE (CR 702.56, Hatchery Sliver + every Sliver spell it
                                        // grants it to): how many EXTRA token copies this cast pays for.

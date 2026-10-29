@@ -3399,6 +3399,7 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         // limiter silently picks a winner among real alternatives. Gated on the sentinel, so no
         // existing deck's signature moves.
         if (a.devour_count >= 0)      { k += "/D" + std::to_string(a.devour_count); }
+        if (a.seed_pay_split != 0)    { k += "/PS" + std::to_string(a.seed_pay_split); }   // Q61, set only when on
         // Magnetic Theft's (Equipment, creature) pair -- two pairs are a substitution, not a subset.
         if (a.attach_equip_id != 0)
         { k += "/MT" + std::to_string(a.attach_equip_id) + ">" + std::to_string(a.enchant_target); }
@@ -17675,6 +17676,8 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
+    // A seed's payment split (ledger Q61): folded only when set, so every other signature is byte-identical.
+    if (a.seed_pay_split != 0) { FoldMix(h, 0x5053ull + (static_cast<std::uint64_t>(static_cast<std::uint32_t>(a.seed_pay_split)) << 16)); }
     // "Target player gains N life": the searched player target (folded only when set, so every
     // other action's signature -- the self-target cast included -- is byte-identical).
     if (a.player_target != 0) { FoldMix(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }
@@ -25973,6 +25976,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         // devour count be reused for another. main.cpp's viewer identity key already folded it,
         // with the note "THE COUNT AXES BELONG IN THE IDENTITY ... genuinely different plays".
         fold(static_cast<uint64_t>(a.devour_count + 2) * 97);
+        if (a.seed_pay_split != 0) { fold(0x5053ull + static_cast<uint64_t>(static_cast<std::uint32_t>(a.seed_pay_split)) * 193); }   // Q61
         fold(static_cast<uint64_t>(a.soulfire_own_targets + 3) * 13
              + static_cast<uint64_t>(a.enchant_target));
         // Magnetic Theft's Equipment target: a must-fold like devour_count (two pairs are two plays).
@@ -27782,6 +27786,7 @@ inline std::uint64_t LineHash(const TurnSolver::Plan& p, const std::vector<std::
         mix(std::hash<std::string>{}(a.card_name.str()));
         mix(static_cast<std::uint64_t>(a.hand_index + 2));
         mix(static_cast<std::uint64_t>(a.devour_count + 2) * 31 + static_cast<std::uint64_t>(a.ponder_keep + 2));
+        if (a.seed_pay_split != 0) { mix(0x5053ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(a.seed_pay_split))); }   // Q61
     }
     return h;
 }
@@ -44408,6 +44413,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (remand_chain_ok && any_hit) { fcs.push_back(kCycFcTakeRemandChain); }
                     }
                     else { fcs.push_back(kCycFcDefault); }
+                    // THE PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT, DEFAULT OFF; ledger Q61): which sources pay an
+                    // all-generic cycling cost, searched -- the seed pays before its continuation exists. Split 0
+                    // first (the hand-demand order). Human play answers its own taps: no split. Off -> { 0 }.
+                    std::vector<std::int32_t> pay_splits;
+                    if (!human_seeds) { pay_splits = SeedPaySplits(state, me, cc, *cd); }
+                    if (pay_splits.empty()) { pay_splits.push_back(0); }
+                    for (std::int32_t ps : pay_splits)
                     for (int j : js)
                     {
                         for (int fc : fcs)
@@ -44421,6 +44433,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             a.cost           = cc;
                             a.devour_count   = j;
                             a.ponder_keep    = fc;
+                            a.seed_pay_split = ps;
                             a.eval           = 0;
                             a.is_noncreature = true;
                             actions.push_back(std::move(a));
@@ -49712,6 +49725,7 @@ namespace solvememo
             if (x.kind != y.kind || !(x.card_name == y.card_name) || x.hand_index != y.hand_index
                 || x.chosen_x != y.chosen_x || x.splice_count != y.splice_count
                 || x.replicate_count != y.replicate_count || x.devour_count != y.devour_count
+                || x.seed_pay_split != y.seed_pay_split
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
                 || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored
                 || x.attach_equip_id != y.attach_equip_id || x.draw_target != y.draw_target)
@@ -63050,6 +63064,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!CyclingLifePayable(state, me, *sd)) { return; }
         {
             const CycleSeedPayScope _csp;   // the hold must not hold back this payment's own pips
+            // THE PAYMENT SPLIT (seed.seed_pay_split; 0 -> no hold): lockstep with the executor's PerformDigFull.
+            const SeedPaySplitScope _sps(SeedPaySplitHoldMask(state, me, seed.seed_pay_split));
             if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { return; }
         }
         std::vector<Card>::iterator it = find_copy();   // the payment may have moved the hand
@@ -63075,6 +63091,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.card_name     = seed.card_name;
             rec.dig_sacrifice = false;
             rec.devour_count  = seed.devour_count;   // the scry pin the executor's PerformDig replays
+            rec.seed_pay_split = seed.seed_pay_split;   // ...and the payment split (ledger Q61)
             rec.ponder_keep   = seed.ponder_keep;    // overwritten with the REALISED free-cast choice
             if (rec_sink == out_breakpoint) { rec.rec_bp_ord = main_bp_ord + 1; }
             rec_sink->push_back(rec);
@@ -68503,7 +68520,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (!act.dig_sacrifice)
                 {
                     w.Begin(kSigS); w.Put("CYCLE#"); w.Put(act.card_name); w.Put('#'); w.Int(act.ponder_keep);
-                    w.Put('#'); w.Int(act.devour_count); w.End();
+                    w.Put('#'); w.Int(act.devour_count);
+                    if (act.seed_pay_split != 0) { w.Put("#PS"); w.Int(act.seed_pay_split); }   // Q61, set only when on
+                    w.End();
                 }
                 break;
             case Action::Kind::PlayLand: break;
@@ -73198,7 +73217,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     if (!act.dig_sacrifice)
                     {
                         s.push_back("CYCLE#" + act.card_name.str() + "#" + std::to_string(act.ponder_keep)
-                                    + "#" + std::to_string(act.devour_count));
+                                    + "#" + std::to_string(act.devour_count)
+                                    + (act.seed_pay_split != 0 ? "#PS" + std::to_string(act.seed_pay_split) : std::string()));
                     }
                     break;
                 case Action::Kind::PlayLand: break;  // never appears in plan.actions
@@ -77700,7 +77720,7 @@ static void AxisTrace(const char* stage, const GameState& state, const std::vect
             for (const Action& a : p.actions)
             {
                 o += " " + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str();
-                if (a.kind == Action::Kind::DigDraw) { o += "[j" + std::to_string(a.devour_count) + ",fc" + std::to_string(a.ponder_keep) + "]"; }
+                if (a.kind == Action::Kind::DigDraw) { o += "[j" + std::to_string(a.devour_count) + ",fc" + std::to_string(a.ponder_keep) + (a.seed_pay_split != 0 ? ",ps" + std::to_string(a.seed_pay_split) : std::string()) + "]"; }
                 if (!a.tutor_target.str().empty()) { o += ">" + a.tutor_target.str(); }
                 if (!a.remand_by.empty()) { o += "#RM"; }
                 if (!a.remand_chain_by.empty()) { o += "#RC"; }
@@ -109180,6 +109200,7 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
                               a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other, a.draw_target };
             for (int v : f) { k += "|" + std::to_string(v); }
+            if (a.seed_pay_split != 0) { k += "|ps" + std::to_string(a.seed_pay_split); }   // Q61, set only when on
             ks.push_back(std::move(k));
         }
         std::sort(ks.begin(), ks.end());

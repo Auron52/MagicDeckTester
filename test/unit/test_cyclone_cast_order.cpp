@@ -234,3 +234,64 @@ TEST_CASE("Cyclone cycle order mode 2: the USER's cheapest first")
     arm.Set(heurarm::CYCLONE_CYCLE_ORDER, 1);   // mode 1 wins when both are set
     CHECK(CycloneCycleOrderMode() == 1);
 }
+
+// ---- THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT, ledger Q61) ------------------------------------------------
+namespace
+{
+std::vector<int> SplitUnitsO(std::int32_t v)
+{
+    std::vector<int> u;
+    for (int b = 0; b < 4; ++b) { const int x = ((v >> (8 * b)) & 0xFF) - 1; if (x < 0) { break; } u.push_back(x); }
+    return u;
+}
+constexpr int kSigU = 1 << static_cast<int>(Color::Blue);
+constexpr int kSigR = 1 << static_cast<int>(Color::Red);
+int CountO(const std::vector<int>& u, int sig) { return static_cast<int>(std::count(u.begin(), u.end(), sig)); }
+}   // namespace
+
+TEST_CASE("Seed payment split: off by default; on, one split per colour multiset, the hand-demand one first")
+{
+    const NamesO lands = { "Mountain", "Mountain", "Mountain", "Island", "Island", "Island", "Island" };
+    const GameState s = StateO(lands, { kCycO, kCycO });
+    const ManaCost two = DefO(kCycO).params.cycling_cost.value();
+    SUBCASE("lever off: no split")
+    {
+        ArmO arm;
+        arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 0);
+        CHECK(SeedPaySplits(s, 0, two, DefO(kCycO)).empty());
+    }
+    SUBCASE("three Mountains + four Islands, the other Cyclone held: RR / RU / UU, and RR (it strands {R}{R}) LAST")
+    {
+        ArmO arm;
+        arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+        const std::vector<std::int32_t> sp = SeedPaySplits(s, 0, two, DefO(kCycO));
+        REQUIRE(sp.size() == 3);
+        CHECK(CountO(SplitUnitsO(sp[0]), kSigR) <= 1);   // split 0 leaves the held Cyclone's {R}{R}
+        CHECK(CountO(SplitUnitsO(sp[2]), kSigR) == 2);
+        // Realised: every untapped source but the split's is HELD.
+        const std::uint64_t hold = SeedPaySplitHoldMask(s, 0, sp[2]);
+        CHECK(hold == ((1ull << 2) | (1ull << 3) | (1ull << 4) | (1ull << 5) | (1ull << 6)));   // Mountains 0, 1 pay
+        // A split this board cannot realise -> 0 (the payer decides).
+        GameState t = s;
+        t.battlefield[0].tapped = true;
+        t.battlefield[1].tapped = true;
+        CHECK(SeedPaySplitHoldMask(t, 0, sp[2]) == 0);
+    }
+    SUBCASE("DOMINANCE: a dual is never tapped while a mono with a subset of its colours is left -> one split, no fan")
+    {
+        ArmO arm;
+        arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+        const GameState v = StateO({ "Mountain", "Mountain", "Steam Vents" }, { kCycO, kCycO });
+        CHECK(SeedPaySplits(v, 0, two, DefO(kCycO)).empty());
+        const GameState w = StateO({ "Mountain", "Island", "Steam Vents" }, { kCycO, kCycO });
+        CHECK(SeedPaySplits(w, 0, two, DefO(kCycO)).empty());   // only {Mountain, Island} is undominated
+    }
+    SUBCASE("a coloured cost (Curator's {U}) and a single source class never fan")
+    {
+        ArmO arm;
+        arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+        CHECK(SeedPaySplits(s, 0, DefO(kCurO).params.cycling_cost.value(), DefO(kCurO)).empty());
+        const GameState m = StateO({ "Mountain", "Mountain", "Mountain" }, { kCycO, kCycO });
+        CHECK(SeedPaySplits(m, 0, two, DefO(kCycO)).empty());
+    }
+}
