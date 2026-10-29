@@ -3595,7 +3595,7 @@ public:
     bool ReorderKeepShuffleOnly(const GameState& s) const override;
     // THE BUCKETED CLEANUP DISCARD (MTG_CYCLONE_BUCKET_DISCARD, DEFAULT OFF until the USER adopts it;
     // docs/design/cyclone-discard-buckets.md). The shed is the last card of the bucket keep order
-    // (CycloneExpendabilityRank below), routed through CleanupDiscardRankingWithOrder so the staged-card and
+    // (CycloneBucketRankOf below), routed through CleanupDiscardRankingWithOrder so the staged-card and
     // required-piece protections stay engine-enforced, returned as ONE index (two under
     // MTG_CYCLONE_DISCARD_SHUFFLE_PLAN with a known top). The quotas move after every shed, so the rule is
     // asked again per shed (ShedStable false). The SHED ORDER is the whole ranking, which is what the put-back
@@ -3608,10 +3608,13 @@ public:
     std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
 };
 
-// ---- THE CYCLONE EXPENDABILITY MODEL (shared by the cleanup discard and, under MTG_CYCLONE_BUCKET_KEEPNEED, the
-// scored put-back's keep needs: "one model, two consumers", docs/design/cyclone-discard-buckets.md). A pure
-// function of the hand, our battlefield, life and the LEGITIMATELY known top (never the library order). Exposed
-// (not file-static) so the cantrip scorer and the unit tests read the same ranking.
+// ---- THE CYCLONE BUCKET MODEL, the USER's expendability rank (shared by the cleanup discard and, under
+// MTG_CYCLONE_BUCKET_KEEPNEED, the scored put-back's keep needs: "one model, two consumers",
+// docs/design/cyclone-discard-buckets.md). A pure function of the hand, our battlefield, life and the LEGITIMATELY
+// known top (never the library order). Exposed (not file-static) so the cantrip scorer, the put-back plans and the
+// unit tests read the same ranking. MERGE NOTE: the put-back plans' own keep-need rank (the cyclone-prunes branch's
+// CycloneExpendability(readiness, def, hand index), the kCyc tiers) is the other half of "one model"; when both land,
+// CycloneBucketKeepNeed(CycloneBucketRankOf(...).tier[i]) is the bucket reading of the same per-card need.
 //
 // Bucket TIERS, in shed order (lower = shed first). The overflow tiers come first; the quota ("crucial") tiers
 // follow, shed only when the hand holds nothing else, and the engine (the last Cyclone, or Long-Term Plans
@@ -3638,25 +3641,25 @@ enum CycShedTier : int
     kCycTierEngine         = 200,   // the last Cyclone, or Long-Term Plans standing in while none is found
 };
 enum class CycloneKnownTop : std::uint8_t { Unknown, Setup, Junk };
-struct CycloneExpendabilityOpts
+struct CycloneBucketOpts
 {
     bool dig_putback_first_after_cyclone = false;   // MTG_CYCLONE_DISCARD_DIG_PUTBACK_FIRST
     bool eldrazi2_over_remand            = false;   // MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND
     CycloneKnownTop top                  = CycloneKnownTop::Unknown;
 };
-struct CycloneExpendability
+struct CycloneBucketRank
 {
     std::vector<int>  shed_order;   // every hand index, most expendable first
     std::vector<int>  tier;         // per hand index: its CycShedTier
     std::vector<char> shuffles;     // per hand index: discarding it shuffles the graveyard into the library
 };
-CycloneExpendability CycloneExpendabilityRank(const GameState& s, int me, const CycloneExpendabilityOpts& o);
+CycloneBucketRank CycloneBucketRankOf(const GameState& s, int me, const CycloneBucketOpts& o);
 // What we LEGITIMATELY know about the top. Today's proxy (until the known-top tracking lands): a deliberate top
 // stack THIS turn (top_stacked_turn == TurnSeq) whose card is still on top -- a creature there is a SETUP, any
 // other card JUNK. Unknown otherwise.
 CycloneKnownTop CycloneKnownTopOf(const GameState& s, int me);
 // The bucket model's options as the per-job flags set them (the discard's and the scorer's shared reading).
-CycloneExpendabilityOpts CycloneExpendabilityOptsNow(const GameState& s, int me);
+CycloneBucketOpts CycloneBucketOptsNow(const GameState& s, int me);
 bool CycloneBucketDiscardOn();
 bool CycloneBucketKeepNeedOn();
 
