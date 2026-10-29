@@ -1422,7 +1422,8 @@ diffing per-decision units (`MTG_TURN_CENSUS`):
 | t1 | 1 | shipped | 0 | 168 / 168 identical |
 | tiny6 | 6 | 20 MB (833 KB / thread) | 382,776 | 168 / 168 identical |
 | unb6 | 6 | unbounded (`MTG_PLAN_CACHE_KB=0`) | 0 | 168 / 168 identical |
-| t12, tiny12 | 12 | shipped / 20 MB | -- | **PENDING** (t12 was paused by the coordinator at 161 / 168 games when the box load reached 75; tiny12 not started) |
+| t12 | 12 | shipped | 0 | 168 / 168 identical |
+| tiny12 | 12 | 20 MB | -- | **PENDING** (box over the thread cap; `build/scratch/cyclone/mem/deferred12.sh` launches it, then the 12-thread shapes, when other batches total <= 12 threads) |
 Per-game peak plan-cache holding (the quota's question): 158 games of that manifest max 330 MB, p99 268 MB, p95 128 MB,
 median 9.7 MB; the 1,300-game A/B below max 512 MB (ONE game reached the quota: 4 refused stores -- a refusal is now a
 fact about that game alone and changes nothing, see tiny6), p99 218 MB, p95 100 MB, median 1.3 MB. Default quota kept at
@@ -1616,9 +1617,9 @@ smoke covers every deck).
   across thread counts / interleavings (the batch's [determinism] WARNING). **RESOLVED 2026-10-29 BY CONSTRUCTION**
   ("Thread-count determinism by construction"): the plan caches now serve exactly what a recompute would (exact keys,
   isolated derivation channels) at exactly its cost (hit-equals-miss, mode 1), and the pools admit per thread. Proved on a
-  168-game Cyclone / Hinata / Kitty manifest: 1 and 6 threads, a 20 MB pool (382,776 refusals) and an unbounded pool --
-  all byte-identical (digests, win turns, units), and 1 / 6 threads with tiny and unbounded pools are proved; the 12-thread
-  runs (t12, tiny12, the 107000 / 108000 shapes at 12) are PENDING -- Q34 closes when they pass. The 2026-10-28 M2 fix alone was not enough (USER: *"We don't
+  168-game Cyclone / Hinata / Kitty manifest: 1, 6 and 12 threads, a 20 MB pool (382,776 refusals) and an unbounded pool --
+  all byte-identical (digests, win turns, units): 1 / 6 / 12 threads and tiny / unbounded pools proved; tiny12 and the
+  107000 / 108000 shapes at 12 threads are PENDING -- Q34 closes when they pass. The 2026-10-28 M2 fix alone was not enough (USER: *"We don't
   want any non-determinism regarding thread-count"*): it only stopped the pool binding at the shipped size.
 - Q35. LTP measured neutral (+0.005, se 0.037) and 8% cheaper; its 11 losses are shuffle luck by the salt ensemble (still
   slower in 1 of 11 under four other search shuffles). The Tarn rule is the only USER rule with a clear gain (-0.06 turns);
