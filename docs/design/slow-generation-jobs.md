@@ -197,3 +197,8 @@ hands (worst single rollout 1,994 s); the breakpoint subset-derive cost above is
 ~77.5k distinct hands. USER 2026-10-29: *"Yes, Soul Warden and Soul's Attendant should merge."* -- the discovered merge is APPROVED. No `buckets.json` written mid-run (a policy enters bucket_fp); write one after this run lands if a regeneration should pin it. Voice of the Blessed / Ajani's Pridemate (dist 0.0175, the nearest unmerged pair) stay APART -- USER agreed 2026-10-29: Voice's {W}{W} is 2 devotion for Heliod's 5 vs Pridemate's 1, the only goldfish difference and the measured deviation. The value leaf follows
 when this validates. Melira Pod's paused value leaf stays paused until then (stages are serial).
 - 2026-10-29 06:32 UTC: PGO build stage (first step of the run).
+- 2026-10-29 07:07 UTC: mulligan DONE, **VALIDATION PASSED** (48,866 entries): keep -0.2337 t vs static (4/4,
+  mean/se -26.95), confounded bottoming -0.0350 t (4/4). Landed af14097d9 + GT b8b87b27a (only lhc/lhc2hg rows moved,
+  every key faster; references 0 drift). Overnight lhc rows were resized to 500 b20 first (aba9d4340).
+- 2026-10-29 08:26 UTC: **value leaf started** -- `bash scripts/valueleaf.sh run decks/LifegainHeliodCombo`
+  in lhc-gen at b8b87b27a, alone on the box; queue `logs/vlq_lifegainheliodcombo`. Melira's value leaf stays paused.
