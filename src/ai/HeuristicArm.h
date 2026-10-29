@@ -712,6 +712,7 @@ enum Slot : int
     CYCLONE_DISCARD_SHUFFLE_PLAN, // MTG_CYCLONE_DISCARD_SHUFFLE_PLAN  sub-lever of the bucket discard (the design's "Width" exception): with the top of the library LEGITIMATELY known (today's proxy: a deliberate top stack this turn, top_stacked_turn + the stacked card still on top), the candidate list holds TWO entries -- the bucket rule's pick and the best shed of the other kind (a graveyard-shuffling Eldrazi vs a non-shuffle card) -- so the executor's cleanup trial searches the shuffle against the non-shuffle. DEFAULT OFF; inert unless MTG_CYCLONE_BUCKET_DISCARD is on
     CYCLONE_BUCKET_KEEPNEED,  // MTG_CYCLONE_BUCKET_KEEPNEED  sub-lever ("one model, two consumers"): the scored put-back's per-card KEEP NEEDS (CycloneGoOff's keep_need) are re-derived from the bucket model (CycloneBucketKeepNeed over CycloneBucketRankOf) instead of the kCyc tiers -- Remand below the 2 extra lands, the extra lands below the cyclers and dig, the dig quota of 2 after Cyclone, the land keep order, one Eldrazi above every non-crucial card, LTP standing in for a missing Cyclone. An ORDER only. DEFAULT OFF; inert unless MTG_CYCLONE_BUCKET_DISCARD is on
     CYCLONE_BUCKET_PUTBACK_TIEBREAK, // MTG_CYCLONE_BUCKET_PUTBACK_TIEBREAK  decomposition switch of the bucket discard: the put-back's tie-break order (PutBackRanking, which reads the deck's shed order) follows the bucket order. DEFAULT ON under MTG_CYCLONE_BUCKET_DISCARD (the design's "lockstep comes for free"); =0 keeps the GENERIC shed order for the put-back while the discard uses the buckets, to measure how much of the change is the put-back. Inert unless MTG_CYCLONE_BUCKET_DISCARD is on
+    CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY, // MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY  sub-lever of the bucket discard (USER 2026-10-29, "a bit arguable"): with no put-back effect (Brainstorm / Brainsurge) in hand and two or more live creature cyclers, a SECOND Eldrazi that shuffles the graveyard into the library (Emrakul, the Infinite Gyre) sheds with the Eldrazi beyond two -- the shed reshuffles it into the library, raising the odds of a blind cycle hitting an Eldrazi. DEFAULT OFF (an A/B arm); inert unless MTG_CYCLONE_BUCKET_DISCARD is on
     COUNT
 };
 
@@ -1374,6 +1375,7 @@ inline const char* Name(int slot)
         "MTG_CYCLONE_DISCARD_SHUFFLE_PLAN",
         "MTG_CYCLONE_BUCKET_KEEPNEED",
         "MTG_CYCLONE_BUCKET_PUTBACK_TIEBREAK",
+        "MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
