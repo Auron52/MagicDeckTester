@@ -720,6 +720,7 @@ enum Slot : int
     LHC_MARTYR_THREE_NO_EARLY,// MTG_LHC_MARTYR_THREE_NO_EARLY  A/B arm on top of MTG_LHC_MARTYR_THREE (USER 2026-10-29: 'We might even be able to chuck the early option if there is no Serra Ascendant around, but that is arguably a bit riskier'): no 'before every cast' twin unless the Serra rule calls for early. Default OFF
     LHC_MARTYR_CAST_LATE,     // MTG_LHC_MARTYR_CAST_LATE  (2026-10-29, std s975001 gi1638): split Martyr of Sands' two placements -- its CAST is never hoisted ahead of the enter watchers (they see its entry), while its ACTIVATION keeps the USER's Serra-keyed early/late pin. MTG_LHC_MARTYR_LATE moves both. Default ON (USER adoption 2026-10-29); =0 -> the cast is hoisted with the activation
     LHC_MARTYR_AFTER_PINGER,  // MTG_LHC_MARTYR_AFTER_PINGER  A/B arm (2026-10-29, 2HG s971001 gi231): a Walking Ballista cast is a Martyr of Sands position boundary (TurnSolver::RevealSlotCounts), so the pinned late slot can follow it -- a one-counter Ballista dies to its own lifelinked ping unless a gain AFTER it lands bumps it with Heliod's counter. USER 2026-10-29 ('The Martyr lifegain should always happen before' the ping, after the Ballista enters): Default ON; =0 -> a Ballista is not a boundary
+    LHC_HELIOD_UNSICK_LIFELINK, // MTG_LHC_HELIOD_UNSICK_LIFELINK  USER 2026-10-29 ('For Heliod Targets we should prioritize things without summoning sickness followed by ones with Lifelink like Serra Ascendant'; 'Serra Ascendant can quickly make itself larger if it has counters put on it'): with no Ballista target, Heliod's counter goes to a creature without summoning sickness first, then a lifelinker, then combat power. ADOPTED DEFAULT ON (held-out 4,000 paired games per format, seeds 993001/995001, d5 b20: std 4.7555 -> 4.7555 (0/0), 2HG 4.9737 -> 4.9735 (1 better / 0 worse); play changed in 37 of 160 jobs; units x1.004 / x0.998); =0 -> the generic DefaultLifegainCounterTarget
     LHC_BUCKET_DISCARD,       // MTG_LHC_BUCKET_DISCARD  LifegainHeliodCombo's USER-reviewed cleanup-discard rule (CritterLifegain's ladder + the partner-gated COMBO bucket, Abiding Grace in the fill, a second Ballista at the bottom of it). Default ON; =0 -> the inherited CritterLifegain rule exactly
     COUNT
 };
@@ -1391,6 +1392,7 @@ inline const char* Name(int slot)
         "MTG_LHC_MARTYR_THREE_NO_EARLY",
         "MTG_LHC_MARTYR_CAST_LATE",
         "MTG_LHC_MARTYR_AFTER_PINGER",
+        "MTG_LHC_HELIOD_UNSICK_LIFELINK",
         "MTG_LHC_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

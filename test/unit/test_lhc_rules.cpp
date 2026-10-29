@@ -322,6 +322,43 @@ TEST_CASE("LHC Heliod's counter goes on the Ballista whenever one is out")
     }
 }
 
+TEST_CASE("LHC Heliod's counter: no summoning sickness first, then lifelink, then power (USER 2026-10-29)")
+{
+    // No Ballista: Voice of the Blessed (2/2), Serra Ascendant (1/1 lifelink at 20 life), Soul Warden (1/1).
+    GameState s = BoardLhc(0, { kHeliod, kVoice, kSerra, kWarden }, {}, 20);
+    auto at = [&](const char* n)
+    {
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        { if (s.battlefield[static_cast<std::size_t>(i)].card.m_name.str() == n) { return i; } }
+        return -1;
+    };
+    const int heliod = at(kHeliod), voice = at(kVoice), serra = at(kSerra), warden = at(kWarden);
+    REQUIRE((heliod >= 0 && voice >= 0 && serra >= 0 && warden >= 0));
+    // Devotion 5 (Heliod 1, Voice 2, Serra 1, Warden 1): Heliod is a 5/5 creature too.
+    // All unsick: the lifelinker beats the bigger Heliod and Voice.
+    CHECK(ProvLhc().LifegainCounterTarget(s, s.active_player_index) == serra);
+    // A TAPPED Serra (it attacked) is not summoning-sick: still Serra.
+    s.battlefield[static_cast<std::size_t>(serra)].tapped = true;
+    CHECK(ProvLhc().LifegainCounterTarget(s, s.active_player_index) == serra);
+    s.battlefield[static_cast<std::size_t>(serra)].tapped = false;
+    // A summoning-sick Serra loses to the unsick bodies; among those, power decides (Heliod 5 > Voice 2 > Warden 1).
+    s.battlefield[static_cast<std::size_t>(serra)].entered_this_turn = true;
+    CHECK(ProvLhc().LifegainCounterTarget(s, s.active_player_index) == heliod);
+    s.battlefield[static_cast<std::size_t>(heliod)].entered_this_turn = true;
+    CHECK(ProvLhc().LifegainCounterTarget(s, s.active_player_index) == voice);
+    // Everything sick: lifelink decides again.
+    s.battlefield[static_cast<std::size_t>(voice)].entered_this_turn = true;
+    s.battlefield[static_cast<std::size_t>(warden)].entered_this_turn = true;
+    CHECK(ProvLhc().LifegainCounterTarget(s, s.active_player_index) == serra);
+    // Off our turn the same rule applies.
+    s.active_player_index = 1;
+    CHECK(ProvLhc().LifegainCounterTarget(s, 0) == serra);
+    {
+        LhcArm off(heurarm::LHC_HELIOD_UNSICK_LIFELINK, 0);
+        CHECK(ProvLhc().LifegainCounterTarget(s, 0) == -1);   // the generic pick
+    }
+}
+
 TEST_CASE("LHC Ballista X: the maximum the plan leaves, or exactly the Heliod loop's {1}{W} reserve")
 {
     LhcArm on(heurarm::LHC_BALLISTA_X, 1);

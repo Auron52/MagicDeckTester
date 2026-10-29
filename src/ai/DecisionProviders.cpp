@@ -53813,14 +53813,43 @@ std::vector<int> LifegainHeliodComboProvider::CounterPingCounts(const GameState&
 // it can"): with no loop-live bump, the counter still goes on our Walking Ballista -- the one with the FEWEST
 // counters that is ALIVE (>= 1: a 0/0 entrant is already dead to the SBA), tie-break lowest m_number -- a one-counter
 // Ballista dies to its own lifelinked ping, a second counter is what keeps it alive through the loop. =0 -> the loop-live bump only, else the generic pick.
+// MTG_LHC_HELIOD_UNSICK_LIFELINK (USER 2026-10-29: "For Heliod Targets we should prioritize things without summoning
+// sickness followed by ones with Lifelink like Serra Ascendant" -- "Serra Ascendant can quickly make itself larger if it
+// has counters put on it"): with no Ballista target (or off our turn), the counter goes to a creature WITHOUT summoning
+// sickness first, then to a LIFELINKER (its own damage gains life, which feeds Heliod again), then by combat power;
+// ties to the lowest battlefield index, as DefaultLifegainCounterTarget. A doomed entrant is skipped; with no live own
+// creature, -1 = the generic pick (its enchantment fallback). =0 -> the generic pick.
+static int LhcUnsickLifelinkTarget(const GameState& s, int controller)
+{
+    static const bool on = EnvOn("MTG_LHC_HELIOD_UNSICK_LIFELINK", true);
+    if (!heurarm::Flag(heurarm::LHC_HELIOD_UNSICK_LIFELINK, on)) { return -1; }
+    int best = -1, best_key = -1;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller || !q.card.IsCreature() || DoomedEntrant(q, s)) { continue; }
+        bool sick = false;
+        if (q.entered_this_turn || q.gained_control_this_turn)
+        {   // sickness only: being tapped (it already attacked) is not summoning sickness
+            Permanent u = q;
+            u.tapped = false;
+            u.etb_tap_pending = false;
+            sick = !CanAttackFull(u, s.battlefield, controller);
+        }
+        const int key = (sick ? 0 : 2000000) + (CreatureHasLifelink(q, s) ? 1000000 : 0) + std::max(0, CombatPowerOf(q, s));
+        if (key > best_key) { best_key = key; best = i; }
+    }
+    return best;
+}
+
 int LifegainHeliodComboProvider::LifegainCounterTarget(const GameState& s, int controller) const
 {
     static const bool on = EnvOn("MTG_LHC_BUMP_TARGET", true);
-    if (!on || controller != s.active_player_index) { return -1; }
+    if (!on || controller != s.active_player_index) { return LhcUnsickLifelinkTarget(s, controller); }
     const int bump = PingLoopBumpTarget(s, controller);
     if (bump >= 0) { return bump; }
     static const bool on_ballista = EnvOn("MTG_LHC_HELIOD_ON_BALLISTA", true);
-    if (!heurarm::Flag(heurarm::LHC_HELIOD_ON_BALLISTA, on_ballista)) { return -1; }
+    if (!heurarm::Flag(heurarm::LHC_HELIOD_ON_BALLISTA, on_ballista)) { return LhcUnsickLifelinkTarget(s, controller); }
     int pick = -1, pick_counters = 0;
     for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
     {
@@ -53834,7 +53863,7 @@ int LifegainHeliodComboProvider::LifegainCounterTarget(const GameState& s, int c
             || (c == pick_counters && q.card.m_number < s.battlefield[static_cast<std::size_t>(pick)].card.m_number))
         { pick = i; pick_counters = c; }
     }
-    return pick;
+    return pick >= 0 ? pick : LhcUnsickLifelinkTarget(s, controller);
 }
 
 // MTG_LHC_PING_LAST (USER 2026-10-29: "The Ballista entering and ping ability should be separated. The ping ability

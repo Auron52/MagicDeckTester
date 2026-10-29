@@ -391,3 +391,24 @@ Defaults now: the USER's rules (`MTG_LHC_ORDER`, `_MARTYR_PIN` + `_MARTYR_SERRA`
 `_HELIOD_BEFORE_PAYOFFS` stay A/B arms (OFF). None of the adopted levers removes a line: THREE and AFTER_PINGER add
 positions, SINK_WAIT=0 removes a restriction, CAST_LATE / PING_LAST only order, HELIOD_ON_BALLISTA is a resolution pick
 (never a searched branch). The X rule is the USER's prune; its one lossy case (X = 1 with a later gain) was fixed.
+
+## USER 2026-10-29 -- Heliod's counter: no summoning sickness, then lifelink (ADOPTED)
+
+USER: *"For Heliod Targets we should prioritize things without summoning sickness followed by ones with Lifelink like
+Serra Ascendant."* -- *"That is an important distinction because Serra Ascendant can quickly make itself larger if it
+has counters put on it."* -- and, on keeping the Ballista ahead of both: *"Walking Ballista is even more important."*
+
+`MTG_LHC_HELIOD_UNSICK_LIFELINK` (default ON). Heliod's counter target, in order: the Walking Ballista (the loop-live
+bump, then `MTG_LHC_HELIOD_ON_BALLISTA`); otherwise a creature WITHOUT summoning sickness (a tapped attacker is not
+sick); then a LIFELINKER; then combat power; ties to the lowest battlefield index. It also decides gains off our turn
+(the generic pick used to). A devotion-5 Heliod is itself an unsick 5/5 and takes the counter over a sick Serra.
+
+Measured (ninth held-out set 993001/995001, 2,000 games per seed per format, d5 b20, one pooled batch, arms innermost):
+
+| format | rule off | rule on | better / worse | units |
+|---|---|---|---|---|
+| std | 4.7555 | 4.7555 | 0 / 0 | x1.004 |
+| 2HG | 4.9737 | 4.9735 | 1 / 0 | x0.998 |
+
+Play changed in 37 of 160 jobs (28 std, 9 2HG) without moving a win turn except one 2HG game faster: the rule is live,
+cost-neutral and never slower, so it meets the adoption bar.
