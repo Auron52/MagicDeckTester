@@ -1,0 +1,49 @@
+{
+ "deck": "minotaur",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "minotaur-artifact-queue-tool-647f24-20261029T124046",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "b4448f1d9cfa38d83ef7d0e97d76db6a8b2fe45c",
+   "frozen": "fa6d49c60e8c01c790aa70c653fbca8e329c3ed1",
+   "src_tree": "45a795fc1f8bc7e1b96b0e7ecc759a4e83d2a074",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": 0.000354,
+   "cost": [
+    0.9996313899190677,
+    0.0014762979734915293,
+    96
+   ],
+   "trade": false,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.000354 t, cost 1.000x (se 0.001, 96 seeds)); incumbent restored"
+  },
+  {
+   "run_id": "minotaur-artifact-queue-tool-647f24-20261029T124046",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:28279dc567a07a7dd8c9",
+   "frozen": "fa6d49c60e8c01c790aa70c653fbca8e329c3ed1",
+   "src_tree": "45a795fc1f8bc7e1b96b0e7ecc759a4e83d2a074",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_minotaur/DECISIONS.txt)",
+   "decisions": [
+    "=== 2026-10-29T14:34:04  PHASE E.7b: minotaur -- trust REJECTED at d5 -> value_trust_depth unset (was 5; installed in this tree, NOT committed); play moved d5/20 -> d6/30 after phase E decided trust",
+    "      trust candidate d5: ON-OFF +0.00000 turns (se 0.00000, one-sided 95% upper +0.00062) over 8 seeds x 1000 games; cost 311 vs 283 core-s (1.10x); 8/8 seeds byte-identical; se 0.00000 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: REJECTED -- the lever NEVER ENGAGED: play is byte-identical on every seed AND cost is 1.10x (>= 0.98), so trusting at d5 changed nothing at all. A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence of safety. Usual cause: a staged sidecar carrying value_play leaf:none, which swaps the model for a Constant() so it can never be consulted. Shipping UNSET (always eligible to escalate).",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T14:34:06  PHASE E.6: no allowance for minotaur -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
