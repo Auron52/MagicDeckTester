@@ -22,6 +22,7 @@
 #include "../core/EffectHandler.h"   // PushCastTriggers (real-stack cascade/demonstrate)
 #include "../core/SpellEffects.h"
 #include "../core/RolloutTouch.h"
+#include "../core/GameSetup.h"   // gamesetup::BlindSearchSalt (the known-respecting blind search)
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -1803,6 +1804,201 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
     std::cerr << os.str();
 }
 
+// ---- THE KNOWN-RESPECTING BLIND SEARCH (gamesetup::BlindSearchSalt; default OFF => byte-identical) ----------
+// The Cyclone hard-prune clairvoyance test (2026-10-28; USER: "any testing or inference about whether something is
+// clairvoyant should take in to account known information about the top of the library, since this deck manipulates
+// it a lot"). Every REAL decision searches a COPY of the game whose libraries have only the positions their owner
+// does not know re-randomised (Library::BlindUnknownOrder keeps the known top positions and the placed bottom
+// block), and whose mid-game shuffles are salted apart from the real ones, so the search can neither read an undrawn
+// card nor a post-shuffle order. The plan is executed on the REAL game. Everything the plan decided against the
+// sampled library that a real player decides only after a reveal is re-decided against the reveal: a breakpoint
+// continuation is re-solved (blind) instead of replayed by index, a committed line is never kept past this phase,
+// and the put-back pair / Ponder order are chosen at the real resolution (BlindDrawChooser below). A trial game
+// (the London bottomer, the searched discard) is played on a blinded copy too: its outcome would otherwise read the
+// real future. Several salts per game = a blind ENSEMBLE (manifest "blind_salt").
+namespace blindsearch
+{
+inline bool On() { return gamesetup::BlindSearchSalt() >= 0; }
+inline std::uint64_t Mix(std::uint64_t h, std::uint64_t v)
+{
+    h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+    h *= 0x100000001b3ull;
+    return h ^ (h >> 29);
+}
+// The sample key of one decision: the blind salt, the game, the turn, the phase, a site tag and the visible state
+// that distinguishes two decisions of one turn (hand, library size, the shuffle ordinal). Deterministic.
+inline std::uint64_t Key(const GameState& s, std::uint64_t tag, bool with_hand)
+{
+    std::uint64_t h = Mix(0xB11D5EEDull, static_cast<std::uint64_t>(gamesetup::BlindSearchSalt()));
+    h = Mix(h, s.game_seed);
+    h = Mix(h, static_cast<std::uint64_t>(s.TurnSeq()));
+    h = Mix(h, tag);
+    if (with_hand)
+    {
+        const Player& p = s.players[static_cast<std::size_t>(s.active_player_index)];
+        h = Mix(h, static_cast<std::uint64_t>(p.library.size()));
+        h = Mix(h, s.search_count);
+        for (const Card& c : p.hand) { h = Mix(h, static_cast<std::uint64_t>(c.m_number)); }
+        h = Mix(h, static_cast<std::uint64_t>(s.battlefield.size()));
+    }
+    return h;
+}
+// MTG_SEARCH_BLIND_NOOP=1 (DIAGNOSTIC, default off): run every piece of the blind machinery -- the re-solved
+// breakpoints, the resolution chooser, no committed line past this phase, the trial-game copies -- with NOTHING
+// blinded (the libraries and salts untouched). Its play quality is the machinery's own ceiling: it should match
+// clairvoyant play, so a gap there is a defect in the machinery, not blindness.
+inline bool NoopOn() { static const bool v = EnvOn("MTG_SEARCH_BLIND_NOOP"); return v; }
+// Decomposition levers for the machinery (DIAGNOSTIC): MTG_SEARCH_BLIND_CHOOSER=0 keeps the plan's put-back / Ponder pin
+// (no resolution chooser); MTG_SEARCH_BLIND_REPLAY=1 replays breakpoint continuations and keeps committed lines as the
+// clairvoyant executor does. Both are wrong under real blinding; they exist to price each piece under NOOP.
+inline bool ChooserOn() { static const bool v = EnvOn("MTG_SEARCH_BLIND_CHOOSER", true); return v; }
+inline bool ReplayOn()  { static const bool v = EnvOn("MTG_SEARCH_BLIND_REPLAY"); return v; }
+// The chooser's evaluator: MTG_SEARCH_BLIND_EVAL_LA=1 (diagnostic) = a SolveWithLookahead per candidate (win turn, then
+// the graded leaf); default = the executor's own decision engine, FullSearchLineHybrid, per candidate (its line's win
+// turn) -- measured the closer match to the search's own pin choice (ledger, "the blind machinery").
+inline bool EvalLaOn() { static const bool v = EnvOn("MTG_SEARCH_BLIND_EVAL_LA"); return v; }
+// The executor's replay / commit stand-downs: on only for a real blind run without the replay diagnostic.
+inline bool NoReplay();
+inline void BlindInPlace(GameState& s, std::uint64_t h)
+{
+    if (NoopOn()) { return; }
+    for (std::size_t pi = 0; pi < s.players.size(); ++pi)
+    { s.players[pi].library.BlindUnknownOrder(Mix(h, 0x51ull + pi)); }
+    const std::uint64_t salt = Mix(h, 0x5A17ull) | (1ull << 62);   // never the real (small) salts
+    s.shuffle_salt        = salt;
+    s.shuffle_salt_search = salt;
+}
+// The state a real decision's search reads: the real one (mode off) or a blinded copy held in `scratch`.
+inline const GameState& View(const GameState& real, std::optional<GameState>& scratch, std::uint64_t tag)
+{
+    if (!On()) { return real; }
+    scratch.emplace(real);
+    BlindInPlace(*scratch, Key(real, tag, true));
+    return *scratch;
+}
+// The executor's chooser object: forwards to the engine's evaluation for the phase being played.
+struct DrawChooser final : BlindDrawSpellChooser
+{
+    AIEngine& eng;
+    bool      is_pre;
+    DrawChooser(AIEngine& e, bool pre) : eng(e), is_pre(pre) {}
+    int Choose(const GameState& state, const StackEntry& entry, const CardDefinition& def) override
+    { return eng.BlindChooseDrawSpell(state, entry, def, is_pre); }
+};
+struct ChooserScope
+{
+    BlindDrawSpellChooser* saved;
+    explicit ChooserScope(BlindDrawSpellChooser* c) : saved(g_blind_draw_chooser) { g_blind_draw_chooser = c; }
+    ~ChooserScope() { g_blind_draw_chooser = saved; }
+    ChooserScope(const ChooserScope&) = delete;
+    ChooserScope& operator=(const ChooserScope&) = delete;
+};
+// MTG_BLIND_TRACE=1 (diagnostic, print-only): every blind chooser decision (the candidate values).
+inline bool TraceOn() { static const bool v = EnvOn("MTG_BLIND_TRACE"); return v; }
+inline bool NoReplay() { return On() && !ReplayOn(); }
+}   // namespace blindsearch
+
+int AIEngine::BlindChooseDrawSpell(const GameState& state, const StackEntry& entry, const CardDefinition& def,
+                                   bool is_pre_combat)
+{
+    if (m_lookahead_depth <= 0 || m_in_rollout) { return -1; }
+    const bool pb = def.params.put_back_from_hand > 0;
+    // ONE blind sample for every candidate (common random numbers: the keyed refill keeps the unknown cards'
+    // relative order, so candidates differ by what they place, not by sample noise).
+    const std::uint64_t key = blindsearch::Key(state, pb ? 0xB7ull : 0xB9ull, true);
+    int count = -1;
+    if (!pb)
+    {
+        // Ponder: the candidate list over the real look (what the player sees when he chooses).
+        const Player& ap = state.ActivePlayer();
+        const int look = std::min(def.params.cast_reorder, static_cast<int>(ap.library.size()));
+        if (look <= 0) { return -1; }
+        std::vector<Card> looked;
+        for (int i = 0; i < look; ++i) { looked.push_back(ap.library.RawAt(static_cast<std::size_t>(i))); }
+        const int saved_da = g_reorder_draw_after;
+        g_reorder_draw_after = def.params.draw;
+        count = static_cast<int>(TopDispositionCandidates(state, looked, LookKind::Reorder,
+                                                          entry.ponder_keep.value_or(-1)).size());
+        g_reorder_draw_after = saved_da;
+        if (count <= 1) { return -1; }
+    }
+    // The value of candidate r: resolve the spell on a copy with r pinned (the real draw / look -- the player
+    // sees it before he chooses), then a blind search from the state it leaves.
+    // A candidate's value: (win turn, the search's graded no-win tie-break) -- the coarse win turn alone ties almost
+    // every candidate on this deck (its greedy leaf rarely wins by the horizon), the comparison the search itself
+    // refines with the graded leaf.
+    long long cur_tb = 0;
+    auto eval = [&](int r, int* width_out) -> int
+    {
+        GameState c = state;
+        {
+            RevealLogPause _rlp;
+            ScriptedPutBack _spb(pb ? r : g_scripted_putback_choice);
+            ScriptedReorder _sro(pb ? g_scripted_reorder_choice : r);
+            g_putback_resolved_w = -1;
+            EffectHandler::Resolve(c, entry, def);
+            if (width_out != nullptr) { *width_out = g_putback_resolved_w; }
+        }
+        cur_tb = std::numeric_limits<long long>::min();
+        if (OpponentHasLost(c)) { return c.turn_number; }
+        blindsearch::BlindInPlace(c, key);
+        SearchBudget b = DecisionBudget();
+        int win = m_max_turns + 1, sub = 0;
+        if (blindsearch::EvalLaOn() || !is_pre_combat)
+        {
+            (void)TurnSolver::SolveWithLookahead(c, is_pre_combat, m_lookahead_depth, m_max_turns, &b, true,
+                                                 m_search_post_combat, nullptr, &win, &sub);
+            cur_tb = TurnSolver::LastCommittedTieBreak();
+            return win;
+        }
+        // The executor's own engine (TakeTurn's FullSearchLineHybrid call, value-play levers off: the deck plays no
+        // value block), so a candidate is valued the way the real decision values a line.
+        static const int s_vmd_env = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
+                                         return (e && *e) ? std::atoi(e) : -1; }();
+        const int vmd = (valuearm::t_arm.value_min_depth >= -1) ? valuearm::t_arm.value_min_depth : s_vmd_env;
+        const int escalate_below = (vmd >= 0) ? vmd
+                                 : (m_profile.value_trust_depth > 0) ? m_profile.value_trust_depth : m_lookahead_depth + 1;
+        TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth, m_profile.search_leaf_first_turn_depth);
+        int searched_depth = m_lookahead_depth;
+        const TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
+            c, m_lookahead_depth, m_max_turns, m_search_post_combat, nullptr, &b, &searched_depth, escalate_below,
+            m_budget_ms, m_profile.value_no_fallback, m_profile.value_fallback_take_at, -1, 2, 0, -1.0);
+        cur_tb = 0;
+        return line.win_turn > 0 ? line.win_turn : m_max_turns + 1;
+    };
+    int best_r = 0;
+    int best_v = 0;
+    long long best_tb = 0;
+    std::string trace;
+    if (pb)
+    {
+        int w = -1;
+        best_v = eval(0, &w);
+        best_tb = cur_tb;
+        count = w;
+        if (count <= 1) { return -1; }
+    }
+    else
+    {
+        best_v = eval(0, nullptr);
+        best_tb = cur_tb;
+    }
+    if (blindsearch::TraceOn()) { trace = std::to_string(best_v); }
+    for (int r = 1; r < count; ++r)
+    {
+        const int v = eval(r, nullptr);
+        if (blindsearch::TraceOn()) { trace += "," + std::to_string(v); }
+        if (v < best_v || (v == best_v && cur_tb < best_tb)) { best_v = v; best_r = r; best_tb = cur_tb; }
+    }
+    if (blindsearch::TraceOn())
+    {
+        std::fprintf(stderr, "[blind-choose] seed=%llu T%d %s count=%d pick=%d win=%d values=%s\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                     def.card.m_name.c_str(), count, best_r, best_v, trace.c_str());
+    }
+    return best_r;
+}
+
 int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
 {
     return RolloutWinTurnFrom(std::move(trial), max_turns, GameEngine::ResumeAt::NewTurn, lands_out);
@@ -1852,6 +2048,10 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     trial.m_model_feat_mask = dominance::ModelFeatureMask(trial.m_evaluator)
                             | dominance::ModelFeatureMask(trial.m_value_model);
     ShuffleEvalGuard  _seg(true);   // decoupling instrument: rollout shuffles use shuffle_salt_search
+    // BLIND SEARCH (blindsearch; off => untouched): a trial game played on the REAL library would read the real
+    // future, so it is played on a blinded copy. One sample per (game, turn) -- not per trial hand -- so the
+    // candidates of one decision (each bottom) share it (common random numbers).
+    if (blindsearch::On()) { blindsearch::BlindInPlace(trial, blindsearch::Key(trial, 0x7121A1ull, /*with_hand=*/false)); }
     // The rollout PlayOut shares this AIEngine by reference, so isolate its committed
     // full-depth line: stash the real game's line, run the rollout on a fresh empty
     // line, then restore. Otherwise the rollout would consume/overwrite the line the
@@ -2776,8 +2976,9 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
         {
             SearchBudget resolve_budget = DecisionBudget();
             turncensus::SiteTag _tcs(turncensus::kSiteM2);   // census: mode-2 post-draw re-solve
+            std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
             TurnSolver::Plan p2 = TurnSolver::SolveWithLookahead(
-                state, /*is_pre_combat=*/false, m_lookahead_depth, m_max_turns,
+                blindsearch::View(state, _bsv, 0x4D32ull), /*is_pre_combat=*/false, m_lookahead_depth, m_max_turns,
                 &resolve_budget, true, m_search_post_combat, m_shared_tt);
             if (!p2.actions.empty() || !p2.land_to_play.empty())
             {
@@ -4027,8 +4228,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                             valuearm::t_deck_esc_skip_r = prev_sr; valuearm::t_deck_emul_r = prev_er; }
                     } _shape(m_profile);
                     const unsigned long long proof_trunc0 = TurnSolver::TruncEvents();
+                    std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
-                        state, m_lookahead_depth, m_max_turns, m_search_post_combat,
+                        blindsearch::View(state, _bsv, is_pre_combat_main ? 0x46531ull : 0x46532ull),
+                        m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
                         m_profile.value_no_fallback, m_profile.value_fallback_take_at,
                         // Per-deck escalation beam; fires whenever the block drives (depth-adaptive inside the
@@ -4131,7 +4334,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     static const bool s_fd_always_research =
                         EnvOn("MTG_FD_ALWAYS_RESEARCH");
                     const bool verified_win =
-                        !s_fd_always_research
+                        !s_fd_always_research && !blindsearch::NoReplay()
                         && line.win_turn <= state.turn_number + searched_depth - 1;
                     if (s_fd_trace)
                     {
@@ -4145,8 +4348,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                         // Keep the current turn only: its pre-combat phase plus any
                         // immediate second main (everything before the next pre-combat).
+                        // BLIND SEARCH: only THIS phase (a later main was planned on a sampled library).
                         size_t keep = 1;
-                        while (keep < line.phases.size()
+                        while (!blindsearch::NoReplay() && keep < line.phases.size()
                                && !line.phases[keep].is_pre_combat) { ++keep; }
                         line.phases.resize(keep);
                     }
@@ -4194,7 +4398,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (s_fd_trace)
                     { std::fprintf(stderr, "[fd] T%d pre=%d FALLBACK lookahead\n", state.turn_number, is_pre_combat_main ? 1 : 0); }
                     SearchBudget fallback_budget = DecisionBudget();
-                    plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                    std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                    plan = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, is_pre_combat_main ? 0x4C41ull : 0x4C42ull),
+                                                          is_pre_combat_main,
                                                           m_lookahead_depth, m_max_turns,
                                                           &fallback_budget, true,
                                                           m_search_post_combat, m_shared_tt,
@@ -4204,7 +4410,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             else
             {
-                plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                plan = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, is_pre_combat_main ? 0x4C47ull : 0x4C48ull),
+                                                      is_pre_combat_main,
                                                       m_lookahead_depth, m_max_turns,
                                                       &budget, true, m_search_post_combat,
                                                       m_shared_tt,
@@ -4546,6 +4754,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedSagaCh1 _ssc1_exec(plan.saga_ch1_choice);
     ScriptedReorder _sr_exec(plan.ponder_choice);   // executor/rollout lockstep for the Ponder disposition
     ScriptedPutBack _sputback_exec(plan.putback_choice);   // executor/rollout lockstep for the Brainstorm put-back
+    // BLIND SEARCH (blindsearch; off => null => byte-identical): the real game's put-back / Ponder choice is made
+    // at the resolution, after the reveal, by the blind chooser (never inside a trial game).
+    blindsearch::DrawChooser _bdc_obj(*this, is_pre_combat_main);
+    blindsearch::ChooserScope _bdc((blindsearch::On() && blindsearch::ChooserOn() && !m_in_rollout && m_lookahead_depth > 0) ? &_bdc_obj : nullptr);
     ScriptedEtbCounter _sec_exec(plan.etbcounter_choice);   // lockstep: optional ETB counter payment
     ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
                                                     // pick (index resolved at the true state); -1 inert
@@ -5532,7 +5744,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // bp_all -> candidate k at EVERY breakpoint (Plan::bp_all). The search scored the turn
         // that way, so the executor must realise it that way or the committed line is not the
         // line that was ranked -- the same divergence class the comment above guards against.
-        if (bp_idx >= 0 && (plan.bp_all || bp_idx == plan.bp_at))
+        // BLIND SEARCH: the plan's continuation index was chosen against a sampled library; after the real
+        // draw it names an arbitrary continuation, so it is re-solved (blind) below instead of replayed.
+        if (bp_idx >= 0 && (plan.bp_all || bp_idx == plan.bp_at) && !blindsearch::NoReplay())
         {
             const std::vector<TurnSolver::Plan> cands =
                 TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
@@ -5618,7 +5832,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Ice-Fang Coatl / Arcum's Astrolabe draw found no continuation). Up to the target the line is
         // the scored one, so it is mirrored; after it the estimate re-solve resumes.
         const TurnSolver::BpOccurrence rdb_occ = TurnSolver::ClassifyBpOccurrence(plan, bp_idx);
-        if (!bp_searched_here && TurnSolver::ExecMirrorsUnreplayedBp(rdb_occ, fd_plan_committed, fd_plan_verified))
+        if (!bp_searched_here && !blindsearch::NoReplay()
+            && TurnSolver::ExecMirrorsUnreplayedBp(rdb_occ, fd_plan_committed, fd_plan_verified))
         {
             extra              = TurnSolver::Plan{};
             extra.land_decided = true;
@@ -5684,7 +5899,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // it carries a full fresh DecisionBudget() -- so the turn's cost is the sum over
                 // these and the `root`/host column cannot tell them apart. See TurnCensus.h.
                 turncensus::SiteTag _tcs(turncensus::kSiteBpResolve);
-                extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                extra = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, 0x4250ull + static_cast<std::uint64_t>(bp_depth)),
+                                                       is_pre_combat_main,
                                                        m_lookahead_depth, m_max_turns,
                                                        &bp_budget, true,
                                                        m_search_post_combat, m_shared_tt);
@@ -6224,7 +6441,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // own index, fell through to the committed mirror's canon or the re-solve while
                     // the rollout had applied the variant's continuation: the committed line was not
                     // the line the search scored.
-                    if (pod_bp_idx >= 0 && (plan.bp_all || pod_bp_idx == plan.bp_at))
+                    if (pod_bp_idx >= 0 && (plan.bp_all || pod_bp_idx == plan.bp_at) && !blindsearch::NoReplay())
                     {
                         const std::vector<TurnSolver::Plan> cands =
                             TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
@@ -6272,7 +6489,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // ...and an occurrence BEFORE the plan's targeted one, on an unverified line too: the
                     // main site's PRE-TARGET rule (lockstep up to the plan's own searched decision).
                     const TurnSolver::BpOccurrence pod_occ = TurnSolver::ClassifyBpOccurrence(plan, pod_bp_idx);
-                    if (!pod_bp_searched
+                    if (!pod_bp_searched && !blindsearch::NoReplay()
                         && TurnSolver::ExecMirrorsUnreplayedBp(pod_occ, fd_plan_committed, fd_plan_verified))
                     {
                         if (!TurnSolver::BpUnbranchedCanon(state, is_pre_combat_main, plan, pod_bp_idx,
@@ -6308,7 +6525,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
                             SearchBudget bp_budget = DecisionBudget();
                             turncensus::SiteTag _tcs(turncensus::kSitePodBp);   // census: pod twin
-                            extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                            std::optional<GameState> _bsv;   // the blind search's view (blindsearch; off => `state`)
+                            extra = TurnSolver::SolveWithLookahead(blindsearch::View(state, _bsv, 0x504Full),
+                                                                   is_pre_combat_main,
                                                                    m_lookahead_depth, m_max_turns,
                                                                    &bp_budget, true,
                                                                    m_search_post_combat, m_shared_tt);

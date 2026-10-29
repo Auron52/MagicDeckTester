@@ -3370,6 +3370,9 @@ public:
     // can detect non-convergence (a later turn's verified win exceeding an earlier
     // one). A win-this-turn reports (turn, depth-1); an empty / depth<=0 decision
     // reports (max_turns+1, 0) i.e. "no verified win".
+    // The graded no-win leaf quantity of the line the last enforcing SolveWithLookahead on this thread committed
+    // (LOWER = better; LLONG_MAX = none). Read by the blind resolution chooser only.
+    static long long LastCommittedTieBreak();
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,

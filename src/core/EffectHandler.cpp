@@ -897,6 +897,22 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     Player& controller = state.players[entry.controller_index];
     int n = def.params.draw;
 
+    // THE BLIND RESOLUTION CHOOSER (blind mode only; null otherwise => byte-identical): the put-back's pair /
+    // Ponder's order is decided here, after the draw / the look, against what the resolution reveals.
+    if (g_blind_draw_chooser != nullptr && !def.params.expressive_iteration && !def.params.stages_cards
+        && (def.params.put_back_from_hand > 0 || def.params.cast_reorder > 0))
+    {
+        BlindDrawSpellChooser* ch = g_blind_draw_chooser;
+        g_blind_draw_chooser = nullptr;   // the chooser's own trial resolutions take their pins
+        const int r = ch->Choose(state, entry, def);
+        g_blind_draw_chooser = ch;
+        if (r >= 0)
+        {
+            if (def.params.put_back_from_hand > 0) { g_scripted_putback_choice = r; }
+            else                                   { g_scripted_reorder_choice = r; }
+        }
+    }
+
     // Expressive Iteration: look 3 -> 1 hand / 1 exiled-staged-this-turn / 1 bottom (its own model,
     // not the normal draw/scry path). Mirrors the rollout's apply_one DrawSpell branch (lockstep).
     if (def.params.expressive_iteration)
