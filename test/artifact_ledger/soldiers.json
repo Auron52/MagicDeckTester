@@ -1,0 +1,25 @@
+{
+ "deck": "soldiers",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "soldiers-artifact-queue-tool-647f24-20261029T221354",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:8e0bad0bb01c0bd8b26a",
+   "frozen": "8673e4a57e57ea207c3ec3d9d2eb23cd5bd00468",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-tool-647f24",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_soldiers/DECISIONS.txt)",
+   "decisions": [
+    "=== 2026-10-29T22:20:37  PHASE E.7b: soldiers -- trust REJECTED at d5 -> value_trust_depth unset (was 5; installed in this tree, NOT committed); play moved d5/20 -> d6/30 after phase E decided trust",
+    "      trust candidate d5: ON-OFF +0.00000 turns (se 0.00000, one-sided 95% upper +0.00062) over 8 seeds x 1000 games; cost 193 vs 180 core-s (1.07x); 8/8 seeds byte-identical; se 0.00000 -> 0.00038 after the 3/n floor; tol 0.0020",
+    "      trust: REJECTED -- the lever NEVER ENGAGED: play is byte-identical on every seed AND cost is 1.07x (>= 0.98), so trusting at d5 changed nothing at all. A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence of safety. Usual cause: a staged sidecar carrying value_play leaf:none, which swaps the model for a Constant() so it can never be consulted. Shipping UNSET (always eligible to escalate).",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T22:20:41  PHASE E.6: no allowance for soldiers -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
