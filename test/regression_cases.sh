@@ -349,7 +349,7 @@ SMOKE_CASES=(
   # and fluctuator (1.67 / 3.10). Full record: docs/design/analysis-Melira Pod.md SESSION 2026-09-08.
   "melira 0 1001 1000 0"
   "melira     3  1001    25 10"
-  "melira     5  1001    100 60"
+  "melira     5  1001    100 120"
   # angels: ADDED 2026-09-18 (mono-white Angels tribal; analysis-Angels.md). Full kitty/critter
   # shape because it is one of the CHEAPEST decks in the matrix -- measured single-threaded at the
   # tier's own budgets: d0 ~0 s, d3 b10 0.066 s/game, d5 b20 0.060 s/game (cf. dragons 0.98 / 2.00).
@@ -421,7 +421,7 @@ SMOKE_CASES=(
   "breaching2hg 5  1001    50 20"
   "critter2hg 5  1001    50 20"
   "lhc2hg     5  1001    50 20"
-  "melira2hg  5  1001    25 60"
+  "melira2hg  5  1001    25 120"
   "pirates2hg 5  1001    50 20"
   "soldiers2hg 5  1001    50 20"
   # colossus2hg: a canary for Speaker of the Heavens' "at least 7 life more than your STARTING life
@@ -841,8 +841,8 @@ REGRESSION_CASES=(
   # melira: restored 2026-09-08 (see the SMOKE block).
   "melira 0 2002 1000 0"
   "melira     3  2002    25 10"
-  "melira     5  2002    150 60"
-  "melira     5  3003    150 60"
+  "melira     5  2002    150 120"
+  "melira     5  3003    150 120"
   # angels: ADDED 2026-09-18 (see the SMOKE block). ~77 core-s for this tier.
   "angels 0 2002 1000 0"
   "angels     3  2002   100 10"
@@ -1362,10 +1362,10 @@ OVERNIGHT_CASES=(
   "melira 0 8008 2000 0"
   "melira 0 10010 2000 0"
   "melira     3  4004    75 10"
-  "melira     5  4004   425 60"
-  "melira     5  5005   425 60"
-  "melira     5  6006   425 60"
-  "melira     5  7007   425 60"
+  "melira     5  4004   425 120"
+  "melira     5  5005   425 120"
+  "melira     5  6006   425 120"
+  "melira     5  7007   425 120"
   # angels: ADDED 2026-09-18 (see the SMOKE block). Full kitty/critter overnight shape -- it
   # projects to ~11 core-minutes against an 8 h tier budget, so there is nothing to trim for.
   "angels 0  4004 2000 0"
