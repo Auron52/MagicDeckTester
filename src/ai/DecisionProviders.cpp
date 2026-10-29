@@ -31599,6 +31599,47 @@ bool CycAvailableKnown(const GameState& s, int me, const TopDispositionView* loo
 // Lever off -> the generic rule (byte-identical).
 bool CycloneProvider::CycleScryPinHeuristic(const GameState& s) const { (void)s; return CycloneSeedPlansOn(); }
 
+// THE CYCLER RULE PER PLAN with the Cyclone out (or cast by the plan first): "So if you have no mana you use street
+// wraith." The {U} the Curator's cycle needs is judged AFTER the plan's own casts: spare = an untapped blue source the
+// plan's blue pips do not take, and mana left over after the plan's spend (rituals' net output counted). A plan casting
+// Seething Song + the Cyclone has nothing left, so its cycle is the Wraith (d5 gi141: the state-level reading admitted
+// only the Curator, whose cycle then failed for want of {U}, and the Wraith-into-Emrakul line was lost).
+bool CycloneProvider::CycleSeedAdmitOut(const GameState& s, const std::string& cycler, int plan_mana, int plan_blue,
+                                        bool* decided) const
+{
+    if (decided) { *decided = false; }
+    if (!CycloneCyclerRuleOn() || HumanPlayActive()) { return true; }
+    const int me = s.active_player_index;
+    const CardDefinition* cd = CardDatabase::Instance().Lookup(cycler);
+    if (cd == nullptr || !CycIsCreatureCycler(*cd)) { return true; }
+    bool has_free = false, has_mana = false;
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || c.m_is_staged || !CycIsCreatureCycler(*d)) { continue; }
+        if (CycIsFreeCycler(*d)) { has_free = has_free || CyclingLifePayable(s, me, *d); } else { has_mana = true; }
+    }
+    if (decided) { *decided = true; }
+    if (!(has_free && has_mana)) { return true; }   // one kind held: nothing to choose between
+    int untapped = 0, blue = 0, setup_need = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent || q.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->card.IsLand() || d->params.produces.empty() || !d->params.fetch_land_types.empty()) { continue; }
+        ++untapped;
+        if (std::find(d->params.produces.begin(), d->params.produces.end(), Color::Blue) != d->params.produces.end()) { ++blue; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.put_back_from_hand > 0)
+        { const int mv = d->card.m_mana_cost.ManaValue(); setup_need = setup_need == 0 ? mv : std::min(setup_need, mv); }
+    }
+    const bool curator_spare = blue - plan_blue >= 1 && untapped - plan_mana - 1 >= setup_need;
+    return curator_spare ? !CycIsFreeCycler(*cd) : CycIsFreeCycler(*cd);
+}
+
 bool CycloneProvider::CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
                                              std::vector<std::string>& if_not) const
 {

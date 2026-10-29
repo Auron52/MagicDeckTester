@@ -683,6 +683,12 @@ public:
     virtual bool CycleSeedAdmissionSets(const GameState& s, std::vector<std::string>& if_replacer_out,
                                         std::vector<std::string>& if_not) const
     { (void)s; (void)if_replacer_out; (void)if_not; return false; }
+    // ...and the PER-PLAN refinement when the replacer is (or will be) out: is `cycler` admitted for a plan whose own
+    // casts spend `plan_mana` (mana value, rituals' net output already subtracted) and `plan_blue` {U} pips before the
+    // cycle? Called only when CycleSeedAdmissionSets returned true. Default: the if_replacer_out list decides.
+    virtual bool CycleSeedAdmitOut(const GameState& s, const std::string& cycler, int plan_mana, int plan_blue,
+                                   bool* decided) const
+    { (void)s; (void)cycler; (void)plan_mana; (void)plan_blue; if (decided) { *decided = false; } return true; }
 
     // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
     // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
