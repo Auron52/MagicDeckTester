@@ -30912,10 +30912,11 @@ static bool CycloneReplacerOut(const GameState& s, int controller)
 
 bool CycloneProvider::CyclesAreSearched() const { return true; }
 
-// THE CYCLER RULE (MTG_CYCLONE_CYCLER_RULE, DEFAULT OFF; HeuristicArm.h for the USER's words). Lossy where it prunes.
+// THE CYCLER RULE (MTG_CYCLONE_CYCLER_RULE, DEFAULT ON since 2026-10-29 -- the adoption bar read clean, ledger "Hard prunes +
+// known-top blind test"; HeuristicArm.h for the USER's words). Lossy where it prunes; MTG_CYCLONE_CYCLER_RULE=0 is the old play.
 static bool CycloneCyclerRuleOn()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_CYCLER_RULE");
+    static const bool on = EnvOn("MTG_CYCLONE_CYCLER_RULE", true);
     return heurarm::Flag(heurarm::CYCLONE_CYCLER_RULE, on);
 }
 static void CycloneCyclerRuleApply(const GameState& s, int me, std::vector<std::string>& names, int cyc_out_mode);   // defined below
@@ -31423,7 +31424,8 @@ bool CycloneCantripOrderOn()
     return heurarm::Flag(heurarm::CYCLONE_CANTRIP_ORDER, on);
 }
 // THE PLAN-LEVEL HARD PRUNES (USER design 2026-10-28; HeuristicArm.h for the statements). All DEFAULT OFF: lossy,
-// the USER adopts. Each needs the scored order (MTG_CYCLONE_CANTRIP_ORDER, or the put-back RULE) to have a fan to cut.
+// the USER adopts (the cycler rule, adopted 2026-10-29, is read further up). Each needs the scored order
+// (MTG_CYCLONE_CANTRIP_ORDER, or the put-back RULE) to have a fan to cut.
 // MTG_CYCLONE_PB_PLANS stays DEFAULT OFF (2026-10-29): bar (2) holds for d5 gi179 (clairvoyance, isolated T1 test) but
 // NOT for d3 gi92 -- with two Eldrazi and no go-off this turn, JUNK's Emrakul-first order is worse given what the player
 // knows (the lesser Eldrazi on top measured -0.44, se 0.22). The order amendment is owed (ledger "Hard prunes + known-top
