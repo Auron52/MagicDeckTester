@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "11f26ebe4ff857c2e02f21c99717026d7ca1d60b",
+  "valueleaf": "em:8e0bad0bb01c0bd8b26a"
+ },
+ "deck": "soldiers",
+ "frozen": "8673e4a57e57ea207c3ec3d9d2eb23cd5bd00468",
+ "heartbeat": "2026-10-29T22:13:54Z",
+ "host": "58199181d02e",
+ "run_id": "soldiers-artifact-queue-tool-647f24-20261029T221354",
+ "score": 0.0669,
+ "stage": "valueleaf",
+ "stages": [
+  "valueleaf"
+ ],
+ "started": "2026-10-29T22:13:54Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
