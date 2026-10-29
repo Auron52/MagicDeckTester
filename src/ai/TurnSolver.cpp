@@ -60014,7 +60014,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // adventure card is never also a self-exiler, but the adventure destination is the
             // more specific rule. Falls through to the graveyard if the link is broken.
             if (StageAdventureParent(state, state.active_player_index, def, cast_number)) { }
-            else if (def.params.exiles_self_on_resolve) { state.exile.push_back(def.card); }
+            // The CAST COPY (its m_number), not the template: SpellCopyIdOn (GameLogger.h, Cyclone ledger Q53).
+            else if (def.params.exiles_self_on_resolve)
+            {
+                Card self = def.card;
+                if (SpellCopyIdOn()) { self.m_number = cast_number; }
+                state.exile.push_back(std::move(self));
+            }
             // Green Sun's Zenith: "Shuffle Green Sun's Zenith into its owner's library." LOCKSTEP
             // with EffectHandler::MoveToGraveyard (the shared ShuffleSelfIntoLibrary).
             // The CAST COPY goes in, not the definition's template: Library::ShuffleByKey ranks every
@@ -60032,7 +60038,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // KICKER (CR 702.33): `def` is the "(Kicked)" face the cast swapped in, but the card
             // filed is the printed spell card (CR 608.2m). LOCKSTEP with EffectHandler's
             // MoveToGraveyard. Identity -- and so byte-identical -- for every non-kicked cast.
-            else { ap.graveyard.push_back(UnkickedSpellCard(def, def.card)); }
+            // ...and the graveyard gets the CAST COPY too (SpellCopyIdOn, Q53): the template's m_number 0 came back
+            // through an Eldrazi's graveyard shuffle as duplicate-number cards, so the shuffle tied them and a later
+            // cast's by-number re-find erased the wrong card -- the search predicted a hand the game did not deal.
+            else
+            {
+                Card self = def.card;
+                if (SpellCopyIdOn()) { self.m_number = cast_number; }
+                ap.graveyard.push_back(UnkickedSpellCard(def, self));
+            }
         }
 
         if (is_sacrifice && !def.params.tutor_land_to_battlefield && !sac_before_land_search)
