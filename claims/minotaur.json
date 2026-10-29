@@ -4,9 +4,12 @@
   "valueleaf": "em:28279dc567a07a7dd8c9"
  },
  "deck": "minotaur",
+ "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.000354 t, cost 1.000x (se 0.001, 96 seeds)); incumbent restored; valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_minotaur/DECISIONS.txt)",
+ "finished": "2026-10-29T14:34:19Z",
  "frozen": "fa6d49c60e8c01c790aa70c653fbca8e329c3ed1",
  "heartbeat": "2026-10-29T14:31:42Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/minotaur-20261029-1434",
  "run_id": "minotaur-artifact-queue-tool-647f24-20261029T124046",
  "score": 0.3604,
  "stage": "valueleaf",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-29T12:40:46Z",
- "state": "running",
+ "state": "rejected",
  "worker": "artifact-queue-tool-647f24"
 }
