@@ -199,6 +199,7 @@ status_report(){
   echo "quarantine: $([ -e "$DIS" ] && echo PRESENT || echo absent)  $DIS"
   echo "previous  : $([ -e "$PREV" ] && echo PRESENT || echo absent)"
   echo "journal   : $([ -e "$RAW.journal" ] && echo "PRESENT (gen incomplete/resumable)" || echo "absent (gen complete or not started)")"
+  echo "side jrnl : $([ -e "$RAW.journal.spec" ] && echo "PRESENT ($(($(wc -l <"$RAW.journal.spec") - 1)) completed rollouts not yet in the journal)" || echo absent)"
   if [ -e "$REPORT" ]; then echo "--- last validation ---"; tail -20 "$REPORT"; fi
 }
 
@@ -585,6 +586,21 @@ HAVESET
     # which now preserves rather than truncates (ExhaustiveKeep.cpp). This catches the case that
     # actually happened, at the only moment where catching it is free.
     JOURNAL="$DECKDIR/$STEM.keepmodel.exhaustive.raw.json.journal"
+    # The SIDE journal (<journal>.spec) holds every rollout the generator finished but had not yet
+    # committed to the main journal -- speculative sub rollouts, split-batch pieces, precompute values,
+    # size-7 lookahead (ExhaustiveKeep.cpp "ROLLOUT SIDE JOURNAL"). It is the same kind of artifact (the
+    # only copy of finished games, gitignored) and gets the same protection, whether or not the main
+    # journal exists.
+    if [ -e "$JOURNAL.spec" ]; then
+      SSZ=$(stat -c%s "$JOURNAL.spec")
+      SBAK="$JOURNAL.spec.backup-$(date -u +%Y%m%dT%H%M%SZ)"
+      cp --reflink=auto "$JOURNAL.spec" "$SBAK" || {
+        echo "REFUSING TO RUN: a side journal exists at $JOURNAL.spec ($((SSZ/1024/1024)) MB) and it could" >&2
+        echo "not be copied to $SBAK. Free some space or move it yourself, then re-run." >&2
+        exit 3
+      }
+      log "side journal BACKED UP before anything ran: $SBAK ($((SSZ/1024/1024)) MB)"
+    fi
     if [ -e "$JOURNAL" ]; then
       JSZ=$(stat -c%s "$JOURNAL")
       BAK="$JOURNAL.backup-$(date -u +%Y%m%dT%H%M%SZ)"

@@ -3,6 +3,7 @@
 #include "../core/MemBudget.h"
 #include "ExhaustiveKeep.h"
 #include "BucketPolicy.h"
+#include "RolloutSideJournal.h"
 #include "../deck/DeckLoader.h"
 
 #include <algorithm>
@@ -22,12 +23,15 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <set>
 #include <sstream>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "EquivalenceDiscovery.h"
@@ -39,6 +43,7 @@
 #include "../core/GameLogger.h"
 #include "../core/HardwareConcurrency.h"
 #include "../runner/GoldFishRunner.h"
+#include <csignal>
 #include <cstdio>
 #include <ctime>
 
@@ -2016,6 +2021,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return;
     }
 
+    // ROLLOUT SIDE JOURNAL (MTG_KEEP_SPEC_JOURNAL; DEFAULT ON, =0 disables -- the side journal AND the
+    // signal drain, restoring the old behaviour exactly). See the "ROLLOUT SIDE JOURNAL" block below and
+    // RolloutSideJournal.h. The TERM SENTINEL is constructed HERE, before the first thread of this function
+    // (the slow monitor, just below), because it works by blocking SIGTERM/SIGINT/SIGHUP in this thread and
+    // every thread is created with its creator's mask: a thread started earlier could receive a pause's
+    // SIGTERM itself and die by the default action before the writer's last flush is drained.
+    const bool spec_journal_on = EnvOn("MTG_KEEP_SPEC_JOURNAL", true) && !cfg.out_raw.empty();
+    std::optional<rollj::TermSentinel> term_sentinel;
+    if (spec_journal_on) { term_sentinel.emplace(); }
+
     // Slow-rollout evidence goes to a sidecar next to the raw as well as to stderr, so an INTERRUPTED
     // run still leaves the degenerate-cell list behind (a killed run prints no end-of-run table, and
     // stderr is routinely a log nobody kept). Set before the first rollout of any phase.
@@ -2074,6 +2089,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::atomic<long long> sspec_levels{ 0 };// speculated waves folded from the memo to plan one further
         std::atomic<long long> split_batches{ 0 };  // sub batches split into per-rollout tasks
         std::atomic<long long> split_rolls{ 0 };    // ...rollouts they carried
+        // ROLLOUT SIDE JOURNAL: games actually played vs completed rollouts served from the side journal a
+        // killed run left behind (a resume's saving; must be 0 hits on a fresh run).
+        std::atomic<long long> rolled_live{ 0 };    // rollouts PLAYED by this process (every path)
+        std::atomic<long long> rj_loaded{ 0 };      // banked rollouts loaded from the side journal
+        std::atomic<long long> rj_hit{ 0 };         // ...served instead of being played again
+        std::atomic<long long> rj_bad{ 0 };         // MTG_KEEP_SPEC_JOURNAL_VERIFY mismatches (must be 0)
         // WORKER IDLE: microseconds workers spent waiting on an EMPTY queue while the producer was
         // still running. This is the direct measurement of a barrier -- a core with nothing it is
         // allowed to do -- and the number every schedule change here is judged on.
@@ -2209,6 +2230,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                       { std::cerr << " MISMATCH=" << sb; } }
                     if (const long long sb = gp.split_batches.load(std::memory_order_relaxed); sb > 0)
                     { std::cerr << "  split=" << sb << "/" << gp.split_rolls.load(std::memory_order_relaxed); }
+                    if (const long long rl = gp.rj_loaded.load(std::memory_order_relaxed); rl > 0)
+                    { std::cerr << "  sidej=" << gp.rj_hit.load(std::memory_order_relaxed) << "/" << rl << " served";
+                      if (const long long rb = gp.rj_bad.load(std::memory_order_relaxed); rb > 0)
+                      { std::cerr << " MISMATCH=" << rb; } }
                     // IDLE share of the worker capacity since the last wake: the barrier read-out.
                     {
                         const long long iu = gp.idle_us.load(std::memory_order_relaxed);
@@ -2681,6 +2706,34 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return true;
     };
 
+    // ---- ROLLOUT SIDE JOURNAL: what the MAIN journal durably covers --------------------------------
+    // rj_jdone[HAND-H][idx*2+pd] = the count n of the highest record for that cell-side that the MAIN
+    // journal holds ON DISK (replayed at resume, or written by journal_append with a confirmed flush);
+    // LLONG_MAX once a terminal (f=1) size-7 record is on disk -- a frozen cell-side never asks for another
+    // rollout. Rollout r of a cell-side is covered once r < rj_jdone, and only then may the side journal
+    // forget it (its compaction keep-test). Deliberately NOT t.cnt: cnt runs ahead of the disk (commit_sub
+    // bumps it before journal_append writes, and a probe/raw carry fills cells the journal never saw), so
+    // compacting on cnt could drop a rollout in the instant before its cell's record lands. Monotone (CAS
+    // max): two records for one cell can reach journal_append out of order.
+    std::vector<std::vector<std::atomic<long long>>> rj_jdone;
+    if (spec_journal_on)
+    {
+        rj_jdone.resize(tables.size());
+        for (std::size_t s = 0; s < tables.size(); ++s)
+        { rj_jdone[s] = std::vector<std::atomic<long long>>(tables[s].comps.size() * 2); }
+    }
+    auto rj_note_committed = [&](int H, int idx, int pd, long long n, bool terminal)
+    {
+        if (rj_jdone.empty() || H > HAND || H < min_size) { return; }
+        std::vector<std::atomic<long long>>& v = rj_jdone[static_cast<std::size_t>(HAND - H)];
+        const std::size_t k = static_cast<std::size_t>(idx) * 2 + static_cast<std::size_t>(pd);
+        if (k >= v.size()) { return; }
+        const long long want = terminal ? std::numeric_limits<long long>::max() : n;
+        long long cur = v[k].load(std::memory_order_relaxed);
+        while (cur < want && !v[k].compare_exchange_weak(cur, want, std::memory_order_release,
+                                                         std::memory_order_relaxed)) {}
+    };
+
     // ---- Per-cell JOURNAL (crash-recovery for the continuous pool) --------------------------------
     // Instead of periodically snapshotting the whole raw (a fold-blocking multi-MB write every sweep --
     // the last idle source), append one compact record the moment a cell-side completes: its floor
@@ -2829,6 +2882,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         jr << "}\n";
         // flush inside -> the OS page cache, so a process kill (not power loss) keeps it
         if (!journal_emit_locked(jr.str())) { return; }   // held; no backup of a journal we cannot write
+        // ON DISK now (flushed): the side journal may forget this cell-side's rollouts below n. A HELD
+        // record (failed write) deliberately does not count -- see rj_jdone.
+        rj_note_committed(H, idx, pd, n, H == HAND && f == 1);
         // ---- AUTOMATIC ROLLING BACKUP (MTG_JOURNAL_BACKUP_S, default 900s; 0 disables) ------------
         // USER DIRECTIVE 2026-10-02, after a 350 MB / 5.58M-record journal -- days of compute -- was
         // destroyed: *"We need automatic updates ... Disk space is cheap. Losing work like this is
@@ -2909,9 +2965,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         return v;
     }();
-    auto run_one = [&](AIEngine& ai, int w, int pd, long long r,
-                       std::vector<char>* hit = nullptr) -> double
+    // The ROLL itself (run_one below wraps it with the side journal). `played` reports whether a game was
+    // actually played -- false only on the fail-out bail, whose NaN is "no work", not a result.
+    auto roll_live = [&](AIEngine& ai, int w, int pd, long long r, std::vector<char>* hit,
+                         bool* played) -> double
     {
+        *played = false;
         // FAILED OUT => do no more work. Breaking the PRODUCER alone is not enough: the queue holds up
         // to QCAP (8 x threads = 256) already-dispatched tasks, and draining those normally would keep
         // abandoning rollouts at a full cap each -- at 1800 s that is hours of pointless work after the
@@ -2949,6 +3008,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         { std::lock_guard<std::mutex> lk(flight_mtx); flight[std::this_thread::get_id()] = { t_roll, H, comp, pd, r, rs }; }
         if (hit) { std::fill(hit->begin(), hit->end(), 0); wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, hit); }
         else     { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
+        *played = true;
         { std::lock_guard<std::mutex> lk(flight_mtx); flight.erase(std::this_thread::get_id()); }
         capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
@@ -2961,6 +3021,159 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             if ((d.w < 0 || d.w == w) && (d.pd < 0 || d.pd == pd) && (d.r < 0 || d.r == r))
             { std::this_thread::sleep_for(std::chrono::milliseconds(d.ms)); }
         }
+        return wt;
+    };
+
+    // ---- ROLLOUT SIDE JOURNAL (MTG_KEEP_SPEC_JOURNAL, DEFAULT ON; =0 disables) -----------------------
+    // USER 2026-10-29: "the only wasted work that is allowed is games in progress" -- "with no exceptions".
+    // The main journal banks CELL state at commit points, so every rollout that had finished but whose
+    // cell had not committed yet lived only in memory and died with a pause: the speculative next-wave
+    // sub rollouts (sub_memo, kind -2), the finished pieces of a split sub batch (kind 3), PRECOMPUTE
+    // values (pre_val, kind -1, floor-tail and refine-tail), size-7 rollouts parked in `slot` above the
+    // fold (lookahead + floor speculation), the up-to-kJournalStride-1 folded rollouts between two
+    // progress records, and the head of a serial run_batch interrupted mid-batch. 633ea811b and the
+    // floor `sv` carry covered only the last few of those for size-7 floor speculation.
+    //
+    // ONE hook covers every one of them, because every rollout of every kind is played by run_one: the
+    // moment a game finishes, run_one appends (w, pd, r, value, us[, touched cards]) to <journal>.spec.
+    // On resume the records the main journal does not already cover are loaded into rj_bank, and run_one
+    // serves a banked value instead of playing the game again. A value is a pure function of (seed_base,
+    // r, w, pd) -- the property the PRECOMPUTE and SUB-SPEC memos already rest on, and that
+    // MTG_KEEP_SPEC_JOURNAL_VERIFY=1 checks on a run -- so whichever path asks (floor, refine, split
+    // piece, speculative task, precompute) gets the number the killed run computed, and the finished
+    // table is byte-identical to an uninterrupted run. Nothing upstream of run_one changes: the memos,
+    // slots and folds simply find their rollouts come back instantly.
+    //
+    // The bank is built before the pool starts and never mutated afterwards, so lookups take no lock; a
+    // hit is not erased (a duplicate request -- a verify, a claimed-back speculation -- reads it again).
+    // The file is compacted against rj_jdone, so it holds the uncommitted frontier, not every rollout.
+    struct RjBankEnt { double v; long long us; bool has_hits; std::vector<int> hits; };
+    std::unordered_map<std::uint64_t, RjBankEnt> rj_bank;
+    std::unique_ptr<rollj::Writer> rj_writer;
+    // Cleared before rj_writer (declared after it => destroyed first), so a signal arriving during
+    // teardown can never drain into a destroyed writer.
+    struct RjDrainGuard { rollj::TermSentinel* s = nullptr; ~RjDrainGuard() { if (s) { s->ClearDrain(); } } } rj_drain_guard;
+    // End of the side journal's life. disp: 0 KEEP the file (the run did not finish -- it is resume input),
+    // 1 remove it (superseded by a written raw, exactly when the main journal is removed), 2 rename it
+    // <spec>.done (MTG_KEEP_JOURNAL_KEEP). Closing first and clearing the drain second leaves no window in
+    // which a pause could miss the final flush. retry: keep trying a failing mount for ~30 s (disp 0).
+    auto rj_finish = [&](bool retry, int disp)
+    {
+        if (rj_writer) { rj_writer->Close(retry); }
+        if (term_sentinel) { term_sentinel->ClearDrain(); }
+        rj_drain_guard.s = nullptr;
+        rj_writer.reset();
+        if (disp == 0 || !spec_journal_on || journal_path.empty()) { return; }
+        std::error_code ec;
+        const std::string sp = journal_path + ".spec";
+        if (disp == 2) { std::filesystem::rename(sp, sp + ".done", ec); }
+        else           { std::filesystem::remove(sp, ec); }
+    };
+    // MTG_KEEP_SPEC_JOURNAL_VERIFY=1 (DIAGNOSTIC ONLY): on every bank hit, play the game anyway and assert
+    // it equals the banked value -- the purity claim above, checked on a real resume. Costs the saving.
+    const bool rj_verify = EnvOn("MTG_KEEP_SPEC_JOURNAL_VERIFY");
+    // MTG_KEEP_DIAG_KILL_AFTER="roll:<N>[:<sig>]" | "spec:<N>[:<sig>]" (DIAGNOSTIC ONLY, default unset):
+    // send this process <sig> (default 15 = SIGTERM, i.e. a pause) right after the N-th rollout played
+    // (roll) or the N-th speculative sub rollout parked in the sub memo (spec). Keyed on a count, never on
+    // time, so a resume test can interrupt a run MID-SPECULATION on purpose. Never set on a shipped run.
+    struct DiagKill { int what = 0; long long n = 0; int sig = 15; };
+    static const DiagKill diag_kill = []{
+        DiagKill d;
+        const char* e = std::getenv("MTG_KEEP_DIAG_KILL_AFTER");
+        if (!e || !*e) { return d; }
+        char kind[16] = { 0 };
+        long long n = 0; int sig = 15;
+        const int got = std::sscanf(e, "%15[a-z]:%lld:%d", kind, &n, &sig);
+        if (got >= 2 && n > 0)
+        {
+            d.what = std::string(kind) == "roll" ? 1 : std::string(kind) == "spec" ? 2 : 0;
+            d.n = n; d.sig = sig;
+        }
+        if (d.what == 0) { std::cerr << "[keepgen] MTG_KEEP_DIAG_KILL_AFTER='" << e << "' not understood -- ignored\n"; }
+        return d;
+    }();
+    std::atomic<long long> diag_kill_cnt{ 0 };
+    auto diag_kill_tick = [&](int what)
+    {
+        if (diag_kill.what != what) { return; }
+        if (diag_kill_cnt.fetch_add(1) + 1 != diag_kill.n) { return; }
+        std::cerr << "[keepgen] DIAG KILL: signal " << diag_kill.sig << " after " << diag_kill.n
+                  << (what == 1 ? " rollouts played" : " speculative sub rollouts") << "\n" << std::flush;
+#if defined(__linux__)
+        ::kill(::getpid(), diag_kill.sig);   // PROCESS-directed, as a pause is (std::raise targets this thread only)
+#else
+        std::raise(diag_kill.sig);
+#endif
+    };
+    // One rollout, served from the side journal's bank when a killed run already played it, else played
+    // and recorded. `us_out` gets the rollout's cost (the banked one on a hit, so wave ordering sees the
+    // real cost of a cell). `bank_ok=false` is for the VERIFY re-rolls, which must play the game and must
+    // not record a duplicate.
+    auto run_one = [&](AIEngine& ai, int w, int pd, long long r, std::vector<char>* hit = nullptr,
+                       long long* us_out = nullptr, bool bank_ok = true) -> double
+    {
+        if (bank_ok && !rj_bank.empty() && !abandon_failed.load())
+        {
+            const auto it = rj_bank.find(rollj::Key(w, pd, r));
+            if (it != rj_bank.end() && (hit == nullptr || it->second.has_hits))
+            {
+                const RjBankEnt& b = it->second;
+                if (hit)
+                {
+                    std::fill(hit->begin(), hit->end(), 0);
+                    for (const int k : b.hits) { if (k >= 0 && static_cast<std::size_t>(k) < hit->size()) { (*hit)[k] = 1; } }
+                }
+                if (us_out) { *us_out = b.us; }
+                gen_prog.rj_hit.fetch_add(1, std::memory_order_relaxed);
+                double v = b.v;
+                if (rj_verify)
+                {
+                    bool pl = false;
+                    std::vector<char> vh;
+                    if (hit) { vh.assign(hit->size(), 0); }
+                    const double live = roll_live(ai, w, pd, r, hit ? &vh : nullptr, &pl);
+                    if (pl && !(live == v || (std::isnan(live) && std::isnan(v))))
+                    {
+                        gen_prog.rj_bad.fetch_add(1, std::memory_order_relaxed);
+                        std::cerr << "[keepgen] SPEC-JOURNAL MISMATCH w=" << w << " pd=" << pd << " r=" << r
+                                  << ": banked=" << v << " live=" << live << " -- run_one is NOT pure in"
+                                     " (seed_base, r, w, pd); the side journal is unsound\n" << std::flush;
+                        v = live;
+                    }
+                }
+                // A banked ABANDONMENT (only loaded when this run has a wall too) counts toward the
+                // fail-out exactly as it did in the killed run, so the resume trips at the same total.
+                if (std::isnan(v))
+                {
+                    const long long n = abandoned_rollouts.fetch_add(1) + 1;
+                    std::cerr << "[keepgen] ABANDONED-WALL rollout #" << n << "/" << abandon_fail_at
+                              << " (banked by the interrupted run) -- LEFT OUT of its cell: w=" << w
+                              << " pd=" << pd << " r=" << r << "\n" << std::flush;
+                    if (n >= abandon_fail_at) { abandon_failed.store(true); }
+                }
+                return v;
+            }
+        }
+        bool played = false;
+        const auto t0 = std::chrono::steady_clock::now();
+        const double wt = roll_live(ai, w, pd, r, hit, &played);
+        const long long us = static_cast<long long>(std::chrono::duration<double, std::micro>(
+                                 std::chrono::steady_clock::now() - t0).count());
+        if (us_out) { *us_out = us; }
+        if (!played) { return wt; }
+        gen_prog.rolled_live.fetch_add(1, std::memory_order_relaxed);
+        if (bank_ok && rj_writer && r <= rollj::kMaxR)
+        {
+            rollj::Rec rec;
+            rec.w = w; rec.pd = pd; rec.r = r; rec.v = wt; rec.us = us;
+            if (hit)
+            {
+                rec.has_hits = true;
+                for (std::size_t k = 0; k < hit->size(); ++k) { if ((*hit)[k]) { rec.hits.push_back(static_cast<int>(k)); } }
+            }
+            rj_writer->Append(rec);
+        }
+        if (bank_ok) { diag_kill_tick(1); }
         return wt;
     };
 
@@ -3014,7 +3227,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 gen_prog.sspec_hit.fetch_add(1, std::memory_order_relaxed);
                 if (sub_spec_verify)   // MTG_KEEP_SUB_SPEC_VERIFY: prove the purity claim on THIS run
                 {
-                    const double live = run_one(ai, w, pd, r, nullptr);
+                    const double live = run_one(ai, w, pd, r, nullptr, nullptr, false);
                     if (!(live == v || (std::isnan(live) && std::isnan(v))))
                     {
                         gen_prog.sspec_bad.fetch_add(1, std::memory_order_relaxed);
@@ -3028,10 +3241,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 return v;
             }
         }
-        const auto t0 = std::chrono::steady_clock::now();
-        const double wt = run_one(ai, w, pd, r, hit);
-        *us = static_cast<long long>(std::chrono::duration<double, std::micro>(
-                                         std::chrono::steady_clock::now() - t0).count());
+        long long u = 0;
+        const double wt = run_one(ai, w, pd, r, hit, &u);   // a side-journal hit reports the BANKED cost
+        *us = u;
         return wt;
     };
     // Commit one sub-table batch: fold its per-rollout values IN r ORDER into a batch-local sum (the
@@ -3902,6 +4114,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 t.sumsq[i][pd] = e.value("q", 0.0);
                 t.cnt[i][pd]   = n;
                 if (terminal) { prune.frozen7[i][pd] = true; }
+                rj_note_committed(H, i, pd, n, terminal);   // this record is on disk: see rj_jdone
                 // Per-cell-side provenance. A single pooled `n` would hide the ratio that decides the
                 // pooled mean's bias (n_old/(n_old+n_new) x (mean_old - mean_new)), so the mix is tracked
                 // per cell-side and reported, not inferred from totals.
@@ -4390,6 +4603,166 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 std::cerr << "[keepgen] journal: declared provenance id " << journal_prov << " = play "
                           << play_digest << " (commit " << cfg.commit << "); records from the retained"
                           << " engine keep id 0\n" << std::flush;
+            }
+        }
+    }
+
+    // ---- ROLLOUT SIDE JOURNAL: load what an interrupted run PLAYED but never committed, then open -----
+    // Runs after every other resume source (journal replay, raw checkpoint, probe carry, prune set), so
+    // t.cnt / frozen7 are final, and before the first rollout of the generation proper (Pass A only
+    // enqueues; the pool starts below), so nothing can miss the bank or the writer.
+    //
+    // ITS OWN GATE, independent of the main journal's: a record is a pure function of the run identity,
+    // so it is valid whenever that identity matches -- whether or not the main journal resumed. Every
+    // field the value depends on is compared STRICTLY (absent = mismatch; there are no legacy side
+    // journals to stay compatible with): bucket_fp/deck_fp/K/equiv_seed/max_mull fix the cell
+    // enumeration, nwork/work_fp pin the w -> (H, idx) map the seed uses, seed_base the stream,
+    // depth/budget/max_turns/start_life/opp_heads and play_digest the engine. NOT R, the refinement
+    // schedule or the commit: those decide how many rollouts a cell gets, never what one is worth (the
+    // main gate's 2026-10-19 R-carry argument), and a generator-only change must not strand the file.
+    // No MTG_KEEP_RETAIN_FOREIGN analogue: a foreign engine's rollouts are not this engine's.
+    // A mismatched or unreadable file is RENAMED aside (never truncated, never deleted) with the reason
+    // printed; it cannot affect the main journal's resume in any way.
+    if (spec_journal_on && journal_on && !journal_path.empty())
+    {
+        const std::string sj_path = journal_path + ".spec";
+        std::uint64_t work_fp = 1469598103934665603ULL;   // FNV-1a over the w -> (H, idx, comp) map
+        auto fnv = [&work_fp](long long x)
+        { for (int b = 0; b < 8; ++b) { work_fp ^= static_cast<std::uint64_t>((x >> (8 * b)) & 0xFF); work_fp *= 1099511628211ULL; } };
+        for (const Work& wk : work)
+        {
+            fnv(wk.H); fnv(wk.idx);
+            for (const int c : tables[HAND - wk.H].comps[wk.idx]) { fnv(c); }
+        }
+        const PoolFp sfp = ComputePoolFp(deck, eq, K);
+        nlohmann::json sm = { { "format", 1 }, { "bucket_fp", sfp.bucket }, { "deck_fp", sfp.deck },
+            { "seed_base", cfg.seed }, { "K", K }, { "max_mull", cfg.max_mull }, { "equiv_seed", cfg.equiv_seed },
+            { "play_digest", play_digest }, { "nwork", static_cast<long long>(work.size()) },
+            { "work_fp", work_fp }, { "commit", cfg.commit } };
+        StampRolloutCfg(sm, RolloutCfgOf(cfg));
+        const std::string sj_header = nlohmann::json({ { "specjournal", sm } }).dump();
+        static const char* const kSjGate[] = { "format", "bucket_fp", "deck_fp", "seed_base", "K", "max_mull",
+            "equiv_seed", "play_digest", "nwork", "work_fp", "depth", "budget_ms", "max_turns", "start_life",
+            "opp_heads" };
+        std::vector<rollj::Rec> carry;          // the FILE frontier: everything the main journal does not cover
+        std::unordered_set<std::uint64_t> seen;
+        long long n_committed = 0, n_dup = 0, n_nan = 0, n_badw = 0, n_unneeded = 0;
+        bool sj_writable = true;                // false only when a rejected file could not be moved aside
+        std::error_code fec;
+        if (std::filesystem::exists(sj_path, fec))
+        {
+            std::string why;
+            {
+                std::ifstream hf(sj_path, std::ios::binary);
+                std::string h;
+                nlohmann::json hm;
+                if (!std::getline(hf, h)) { why = "no header line"; }
+                else
+                {
+                    try { hm = nlohmann::json::parse(h); } catch (...) { why = "header is not JSON"; }
+                    if (why.empty() && !hm.contains("specjournal")) { why = "header has no specjournal block"; }
+                    if (why.empty())
+                    {
+                        const nlohmann::json& fm = hm["specjournal"];
+                        for (const char* g : kSjGate)
+                        {
+                            const bool mine = sm.contains(g), theirs = fm.contains(g);
+                            if (!mine && !theirs) { continue; }   // e.g. start_life on a build that never stamps it
+                            if (mine != theirs || fm.at(g) != sm.at(g))
+                            { why += (why.empty() ? "" : ", "); why += g; }
+                        }
+                        if (!why.empty()) { why = "identity differs: " + why; }
+                    }
+                }
+            }
+            if (!why.empty())
+            {
+                const std::string aside = rollj::RenameAside(sj_path);
+                if (!aside.empty())
+                {
+                    std::cerr << "[keepgen] SPEC-JOURNAL: " << sj_path << " cannot be used by this run (" << why
+                              << ") -- PRESERVED as " << aside << ", not deleted; its rollouts will be played"
+                                 " again. The main journal is unaffected.\n" << std::flush;
+                }
+                else
+                {
+                    std::cerr << "[keepgen] SPEC-JOURNAL: " << sj_path << " cannot be used by this run (" << why
+                              << ") and could NOT be moved aside -- leaving it untouched and running WITHOUT a"
+                                 " side journal (completed-but-uncommitted rollouts are NOT durable this run)."
+                                 " Move it yourself and restart to restore that.\n" << std::flush;
+                    sj_writable = false;
+                }
+            }
+            else
+            {
+                const rollj::ReadStats rst = rollj::ReadFile(sj_path, [&](const rollj::Rec& x)
+                {
+                    if (x.w < 0 || x.w >= static_cast<long long>(work.size())) { ++n_badw; return; }
+                    // A wall-abandoned rollout is a WALL-CLOCK outcome, not a value: without a wall this run
+                    // plays the game to completion, so it is not carried.
+                    if (std::isnan(x.v) && rollout_wall_sec <= 0.0) { ++n_nan; return; }
+                    const Work& wk = work[static_cast<std::size_t>(x.w)];
+                    const std::size_t k = static_cast<std::size_t>(wk.idx) * 2 + static_cast<std::size_t>(x.pd);
+                    if (x.r < rj_jdone[static_cast<std::size_t>(HAND - wk.H)][k].load()) { ++n_committed; return; }
+                    if (!seen.insert(rollj::Key(x.w, x.pd, x.r)).second) { ++n_dup; return; }
+                    carry.push_back(x);
+                    // The BANK is what THIS run will ask for: below cnt (a probe/raw carry may run ahead of
+                    // the journal) or on a frozen cell nothing will. Those stay in the FILE regardless.
+                    const SizeTable& t = tables[HAND - wk.H];
+                    if (x.r < t.cnt[wk.idx][x.pd] || (wk.H == HAND && prune.frozen7[wk.idx][x.pd]))
+                    { ++n_unneeded; return; }
+                    rj_bank.emplace(rollj::Key(x.w, x.pd, x.r), RjBankEnt{ x.v, x.us, x.has_hits, x.hits });
+                });
+                gen_prog.rj_loaded.store(static_cast<long long>(rj_bank.size()), std::memory_order_relaxed);
+                std::cerr << "[keepgen] SPEC-JOURNAL: " << sj_path << ": " << rst.records << " records -> "
+                          << rj_bank.size() << " completed rollouts BANKED for this run (" << n_committed
+                          << " already in the main journal, " << n_unneeded << " not needed by this run but kept, "
+                          << n_dup << " duplicate, " << n_nan << " wall-abandoned dropped, " << n_badw
+                          << " out of range, " << rst.bad << " unparsable line(s)"
+                          << (rst.torn_tail ? ", 1 torn last record dropped" : "") << ")\n" << std::flush;
+            }
+        }
+        if (sj_writable)
+        {
+            rollj::Writer::Opts wo;
+            wo.path = sj_path;
+            wo.header = sj_header;
+            // Durability bound for SIGKILL/a crash: completions in the last flush_ms. A pause (SIGTERM) and
+            // Ctrl-C drain immediately through the TERM SENTINEL, so they lose nothing that finished.
+            wo.flush_ms = std::max(10, EnvInt("MTG_KEEP_SPEC_JOURNAL_FLUSH_MS", 100));
+            wo.backup_s = journal_backup_s;   // the same MTG_JOURNAL_BACKUP_S rotation as the main journal
+            wo.compact_bytes = static_cast<long long>(std::max(1, EnvInt("MTG_KEEP_SPEC_JOURNAL_COMPACT_MB", 64))) << 20;
+            auto keep = [&](const rollj::Rec& x) -> bool
+            {
+                if (x.w < 0 || x.w >= static_cast<long long>(work.size())) { return false; }
+                const Work& wk = work[static_cast<std::size_t>(x.w)];
+                const std::size_t k = static_cast<std::size_t>(wk.idx) * 2 + static_cast<std::size_t>(x.pd);
+                return x.r >= rj_jdone[static_cast<std::size_t>(HAND - wk.H)][k].load(std::memory_order_acquire);
+            };
+            rj_writer = std::make_unique<rollj::Writer>(wo, keep);
+            std::string err;
+            if (!rj_writer->Open(carry, &err))
+            {
+                rj_writer.reset();
+                std::cerr << "[keepgen] SPEC-JOURNAL: could NOT open " << sj_path << " (" << err << ") -- running"
+                             " without a side journal (completed-but-uncommitted rollouts are NOT durable this"
+                             " run); the bank loaded above is still served\n" << std::flush;
+            }
+            else if (term_sentinel)
+            {
+                // The pause drain: the side journal's buffer, plus any main-journal records a failing mount
+                // is holding (normally none -- the main journal flushes every record).
+                term_sentinel->SetDrain([&]()
+                {
+                    // 10 s: long enough to wait out a compaction holding the file (it reads <= ~64 MB), far
+                    // inside the 120 s the artifact queue allows a paused worker to exit.
+                    if (rj_writer) { rj_writer->TryDrain(10000); }
+                    std::unique_lock<std::mutex> jl(journal_mtx, std::defer_lock);
+                    for (int k = 0; k < 2000 && !jl.try_lock(); ++k) { std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+                    if (jl.owns_lock() && journal_failed && !journal_pending.empty())
+                    { journal_retry_last = {}; journal_emit_locked(std::string()); }
+                });
+                rj_drain_guard.s = &*term_sentinel;
             }
         }
     }
@@ -5070,10 +5443,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         it->second.state = 3;                                         // rolling: a consumer waits
                     }
                     gen_prog.sspec_rolled.fetch_add(1, std::memory_order_relaxed);
-                    const auto t0 = std::chrono::steady_clock::now();
-                    const double v = run_one(ai, sw, spd, sr, nullptr);
-                    const long long us = static_cast<long long>(std::chrono::duration<double, std::micro>(
-                                             std::chrono::steady_clock::now() - t0).count());
+                    long long us = 0;
+                    const double v = run_one(ai, sw, spd, sr, nullptr, &us);   // recorded in the side journal
                     {
                         std::lock_guard<std::mutex> lk(sh.mx);
                         auto it = sh.m.find(key);
@@ -5081,6 +5452,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     }   // (gone => the sub-refine converged and the memo was retired: drop ours)
                     sh.cv.notify_all();
                     sub_spec_outstanding.fetch_sub(1);
+                    diag_kill_tick(2);
                     continue;
                 }
                 if (task[0] == 3)   // SPLIT sub-batch rollout: one slot of a SplitBatch; last one commits
@@ -5177,7 +5549,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     gen_prog.prehit.fetch_add(1, std::memory_order_relaxed);
                     if (pre_verify)   // see MTG_KEEP_PRECOMPUTE_VERIFY
                     {
-                        const double live = run_one(ai, work_idx[0][i], pd, r, nullptr);
+                        const double live = run_one(ai, work_idx[0][i], pd, r, nullptr, nullptr, false);
                         if (live != wt)
                         {
                             gen_prog.prebad.fetch_add(1, std::memory_order_relaxed);
@@ -6316,6 +6688,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         {
                             journal_f.close();
                             std::remove(journal_path.c_str());
+                            rj_finish(false, 1);   // its side journal goes with it
                             std::cerr << "[keepgen] recommend: journal removed (an R=1 scout must not be"
                                          " resumed by a later full generation)\n" << std::flush;
                         }
@@ -6410,6 +6783,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                       << " workers x " << pool_s << " s pool wall)\n" << std::flush;
             std::cerr.unsetf(std::ios::floatfield);
         }
+        // ROLLOUT SIDE JOURNAL read-out: games actually played by THIS process vs completed rollouts a killed
+        // run left behind and this one consumed instead of replaying. A resume's saving, stated, so "nothing
+        // finished was played twice" is a number and not a belief. (stderr only; scheduling-dependent.)
+        // Printed with the side journal OFF too, so an =0 control arm reports what it played.
+        {
+            std::cerr << "[keepgen] spec-journal: " << gen_prog.rolled_live.load() << " rollouts played live, "
+                      << gen_prog.rj_hit.load() << " served from the side journal (of "
+                      << gen_prog.rj_loaded.load() << " banked)";
+            if (rj_writer)
+            { std::cerr << "; " << rj_writer->Records() << " records written, " << rj_writer->Compactions()
+                        << " compaction(s)"; }
+            if (gen_prog.rj_bad.load() > 0) { std::cerr << "; " << gen_prog.rj_bad.load() << " VERIFY MISMATCH"; }
+            std::cerr << "\n" << std::flush;
+        }
         recompute();
         // recompute() derives V from the fresh accumulators, so it clobbers the change-detection carry on
         // resolved cells -- re-assert it before the raw/profile/report are written off these tables.
@@ -6452,6 +6839,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 std::error_code ec;
                 if (EnvOn("MTG_KEEP_JOURNAL_KEEP")) { std::filesystem::rename(journal_path, journal_path + ".done", ec); }
                 else                                { std::filesystem::remove(journal_path, ec); }
+                rj_finish(false, EnvOn("MTG_KEEP_JOURNAL_KEEP") ? 2 : 1);
             }
             else if (raw_ok)
             {
@@ -6461,6 +6849,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // rule this file never bends is that nothing deletes one that still has work in it.)
                 { std::lock_guard<std::mutex> jl(journal_mtx); journal_emit_locked(std::string()); }
                 journal_f.close();
+                rj_finish(true, 0);   // KEPT with it: its banked rollouts are resume input
                 std::cerr << "[keepgen] journal KEPT (" << journal_path
                           << ") -- the run failed out, it did not finish\n" << std::flush;
             }
@@ -6468,6 +6857,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 { std::lock_guard<std::mutex> jl(journal_mtx); journal_emit_locked(std::string()); }
                 journal_f.close();
+                rj_finish(true, 0);
                 std::cerr << "[keepgen] FATAL: the final raw could not be written after 2 h of retries. The journal"
                              " is KEPT (" << journal_path << "); re-run the same command to finish from it.\n"
                           << std::flush;
