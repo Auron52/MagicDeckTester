@@ -3501,14 +3501,14 @@ public:
 // standing in for it) is shed last of all.
 enum CycShedTier : int
 {
-    kCycTierDead           = 10,    // Toxic Deluge (goldfish_inert), a surplus Cyclone, a second Song, an uncyclable Wraith
-    kCycTierEldraziBeyond  = 20,    // the third Eldrazi and beyond
+    kCycTierDead           = 10,    // Toxic Deluge (goldfish_inert), a surplus Cyclone, a second Song (every Song once Cyclone is out), an uncyclable Wraith
+    kCycTierEldraziBeyond  = 20,    // the third Eldrazi and beyond (and, under MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY, a shuffling second)
     kCycTierLandFar        = 30,    // lands beyond the quota + 2
     kCycTierEldrazi2       = 40,    // the second Eldrazi (default: below Remand in keep priority)
     kCycTierShuffleSetup   = 45,    // known SETUP top: a shuffling Eldrazi from the tiers above, after every non-shuffle card in them
     kCycTierRemand         = 50,    // Remand (and any card the model does not name)
     kCycTierEldrazi2Over   = 55,    // the second Eldrazi under MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND
-    kCycTierExtraLand      = 60,    // the 2 extra lands; the one Song once Cyclone is out
+    kCycTierExtraLand      = 60,    // the 2 extra lands
     kCycTierCyclerSurplus  = 70,    // creature cyclers beyond three (Curator before Wraith)
     kCycTierDigSurplus     = 80,    // dig beyond its quota of 2 (the reverse of the fill order)
     kCycTierEldrazi1       = 90,    // the first Eldrazi (Emrakul when held): the last non-crucial card
@@ -3525,6 +3525,7 @@ struct CycloneBucketOpts
 {
     bool dig_putback_first_after_cyclone = false;   // MTG_CYCLONE_DISCARD_DIG_PUTBACK_FIRST
     bool eldrazi2_over_remand            = false;   // MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND
+    bool eldrazi2_shuffle_early          = false;   // MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY
     CycloneKnownTop top                  = CycloneKnownTop::Unknown;
 };
 struct CycloneBucketRank

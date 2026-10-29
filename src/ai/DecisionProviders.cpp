@@ -31239,7 +31239,8 @@ bool CycloneProvider::CantripOrderKey(const GameState& s, int controller, std::v
     {
         // The bucket model's sub-levers move the keep needs (MTG_CYCLONE_BUCKET_KEEPNEED); the known top is not read.
         const CycloneBucketOpts o = CycloneBucketOptsNow(s, controller);
-        key.push_back(0xB0C70000ull | (o.dig_putback_first_after_cyclone ? 1u : 0u) | (o.eldrazi2_over_remand ? 2u : 0u));
+        key.push_back(0xB0C70000ull | (o.dig_putback_first_after_cyclone ? 1u : 0u) | (o.eldrazi2_over_remand ? 2u : 0u)
+                      | (o.eldrazi2_shuffle_early ? 8u : 0u));
     }
     key.push_back(static_cast<std::uint64_t>(controller));
     key.push_back(static_cast<std::uint64_t>(static_cast<std::int64_t>(pl.life)));
@@ -31391,7 +31392,7 @@ bool CycloneProvider::ReorderKeepShuffleOnly(const GameState& s) const
 //            tapped) > a second Myriad ("I wouldn't keep 2 Myriad"); red covered first. Then 2 EXTRA lands, kept
 //            below the cyclers and the dig but above Remand; a third extra land sheds before Remand.
 //   SONG     one Seething Song while Cyclone is not out ("a big help for keeping mana up"); a second is DEAD; once
-//            Cyclone is out the one Song ranks with the extra lands.
+//            Cyclone is out EVERY Song is DEAD ("Let's rank all Seething Song where the 2nd copy is.").
 //   CYCLERS  three creature cyclers, Street Wraith before Curator ALWAYS; a Wraith that cannot pay its life is DEAD.
 //   DIG      ALWAYS two: slot 1 the best of Brainstorm > Brainsurge > LTP, slot 2 the best remaining of Brainstorm >
 //            Ponder > Brainsurge > LTP (MTG_CYCLONE_DISCARD_DIG_PUTBACK_FIRST: after Cyclone, Brainstorm > Brainsurge >
@@ -31415,6 +31416,11 @@ bool CycloneDiscardEldrazi2OverRemandOn()
 {
     static const bool on = EnvOn("MTG_CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND");   // DEFAULT OFF (an A/B arm)
     return heurarm::Flag(heurarm::CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND, on);
+}
+bool CycloneDiscardEldrazi2ShuffleEarlyOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY");   // DEFAULT OFF (an A/B arm, USER "arguable")
+    return heurarm::Flag(heurarm::CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY, on);
 }
 bool CycloneDiscardShufflePlanOn()
 {
@@ -31466,6 +31472,7 @@ CycloneBucketOpts CycloneBucketOptsNow(const GameState& s, int me)
     CycloneBucketOpts o;
     o.dig_putback_first_after_cyclone = CycloneDiscardDigPutbackFirstOn();
     o.eldrazi2_over_remand            = CycloneDiscardEldrazi2OverRemandOn();
+    o.eldrazi2_shuffle_early          = CycloneDiscardEldrazi2ShuffleEarlyOn();
     o.top                             = CycloneKnownTopOf(s, me);
     return o;
 }
@@ -31529,10 +31536,12 @@ CycloneBucketRank CycloneBucketRankOf(const GameState& s, int me, const CycloneB
         if (CycIsLtp(*d) && ltp_engine && !engine_given) { set(i, kCycTierEngine, 0); engine_given = true; continue; }
         if (CycIsSong(*d))
         {
-            if (song_seen)    { set(i, kCycTierDead, 2); continue; }
+            // USER 2026-10-29: "Let's rank all Seething Song where the 2nd copy is." -- once Cyclone is out EVERY Song is
+            // dead-tier (right after Toxic Deluge and a surplus Cyclone); before it, one Song is kept, a second is dead.
+            if (song_seen || cyc_bf) { set(i, kCycTierDead, 2); continue; }
             song_seen = true;
-            if (!cyc_bf)      { set(i, kCycTierSong, 0); song_kept = true; }
-            else              { set(i, kCycTierExtraLand, -1000); }   // with the extra lands, shed first among them
+            set(i, kCycTierSong, 0);
+            song_kept = true;
             continue;
         }
         if (CycIsCreatureCycler(*d))
@@ -31606,11 +31615,19 @@ CycloneBucketRank CycloneBucketRankOf(const GameState& s, int me, const CycloneB
             return (d.params.cast_trigger_extra_turns > 0 ? 0 : 2) + (d.params.put_into_graveyard_shuffles_graveyard ? 1 : 0);
         };
         std::stable_sort(eldrazi.begin(), eldrazi.end(), [&](int a, int b) { return key(a) < key(b); });
+        // MTG_CYCLONE_DISCARD_ELDRAZI2_SHUFFLE_EARLY (USER 2026-10-29, "a bit arguable": "Maybe we could throw it if we
+        // have none of those but multiple cyclers and the Eldrazi is a type that shuffles to increase our odds of hitting
+        // when blind cycling"): with NO put-back effect in hand and TWO+ live creature cyclers, a second Eldrazi that
+        // shuffles the graveyard into the library sheds with the Eldrazi beyond two (the shed puts it back in the library).
+        bool putback_held = false;
+        for (int i : dig) { if (defs[static_cast<std::size_t>(i)]->params.put_back_from_hand > 0) { putback_held = true; } }
+        const bool shuffle_early = o.eldrazi2_shuffle_early && !putback_held && cyclers_free.size() + cyclers_mana.size() >= 2;
         for (std::size_t r = 0; r < eldrazi.size(); ++r)
         {
-            const int tier = r == 0 ? kCycTierEldrazi1
-                           : r == 1 ? (o.eldrazi2_over_remand ? kCycTierEldrazi2Over : kCycTierEldrazi2)
-                                    : kCycTierEldraziBeyond;
+            int tier = r == 0 ? kCycTierEldrazi1
+                     : r == 1 ? (o.eldrazi2_over_remand ? kCycTierEldrazi2Over : kCycTierEldrazi2)
+                              : kCycTierEldraziBeyond;
+            if (r == 1 && shuffle_early && out.shuffles[static_cast<std::size_t>(eldrazi[r])]) { tier = kCycTierEldraziBeyond; }
             set(eldrazi[r], tier, -static_cast<int>(r));
         }
     }
