@@ -217,6 +217,8 @@ TEST_CASE("Cyclone bucket discard: the global shed order, bucket by bucket")
     {
         const Names hand = { kCycD, kEmrD, kHunD, kGyrD, kRemD, kWraD, kBstD, kIslD };
         const GameState s = StateD({ kIslD, kIslD, kMtnD }, hand);
+        ArmD below;
+        below.Set(heurarm::CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND, 0);
         const Names o = ShedNames(s);
         CHECK(o[0] == kGyrD);                        // Eldrazi beyond two, unknown top: the Gyre first
         CHECK(PosOf(o, kHunD) < PosOf(o, kRemD));    // the second Eldrazi sheds before Remand
@@ -326,6 +328,7 @@ TEST_CASE("Cyclone bucket discard: the known-top rule for the shuffling Eldrazi,
 {
     ArmD arm;
     arm.Set(heurarm::CYCLONE_BUCKET_DISCARD, 1);
+    arm.Set(heurarm::CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND, 0);   // the base order: the second Eldrazi below Remand
     auto stack_top = [](GameState& s)
     {
         s.top_stacked_turn        = s.TurnSeq();
@@ -388,6 +391,7 @@ TEST_CASE("Cyclone bucket discard: the rule is asked again after every shed")
 {
     ArmD arm;
     arm.Set(heurarm::CYCLONE_BUCKET_DISCARD, 1);
+    arm.Set(heurarm::CYCLONE_DISCARD_ELDRAZI2_OVER_REMAND, 0);   // the base order: the second Eldrazi below Remand
     // Ten cards, two to shed. Before Cyclone with the Song kept the land quota is 5 - 2 - 2 = 1, so Tarn is quota,
     // Island + Mountain extra, the last Island beyond.
     const Names hand = { kCycD, kSongD, kTarnD, kIslD, kMtnD, kIslD, kEmrD, kHunD, kRemD, kWraD };
@@ -438,4 +442,16 @@ TEST_CASE("Cyclone bucket discard: MTG_CYCLONE_BUCKET_KEEPNEED puts the scored p
     CHECK(need_of(on, kMtnD, false) > need_of(on, kRemD, false));
     CHECK(need_of(on, kEmrD, false) > need_of(on, kMtnD, false));
     CHECK(need_of(on, kCycD, false) == 1000);
+}
+
+TEST_CASE("Cyclone bucket discard: the shipped defaults are the EL2 arm (buckets ON, the second Eldrazi over Remand)")
+{
+    ArmD arm;
+    heurarm::t_arm = heurarm::Unset();
+    CHECK(CycloneBucketDiscardOn());
+    const GameState s = StateD({ kIslD, kIslD, kMtnD }, { kCycD, kEmrD, kHunD, kGyrD, kRemD, kWraD, kBstD, kIslD });
+    CHECK_FALSE(ProvD().CleanupDiscardShedStable());
+    const Names o = ShedNames(s);
+    CHECK(o[0] == kGyrD);
+    CHECK(PosOf(o, kRemD) < PosOf(o, kHunD));   // EL2: the second Eldrazi is kept over Remand
 }
