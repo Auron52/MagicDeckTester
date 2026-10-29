@@ -498,16 +498,15 @@ inline bool AutoLineGenericOn()
     return heurarm::Flag(heurarm::AUTO_LINE_GENERIC, env_on);
 }
 
-// MTG_PAY_REFINE (2026-10-28; DEFAULT OFF pending the USER, =1 -> on): after an outermost payment that cost life,
-// energy or a haste-tagged {C} on a noncreature bill, or floated a surplus off two or more taps, the payer asks the
-// mana oracle for the cheapest payment of the same bill out of the same taps that dominates it (ManaOracle.h
-// RefinePayment) and makes that one instead. Shared payer: search, executor and human auto-tap alike.
-// OFF because one held-out slower game does not recover at d8 b0 (NivMizzetCombo seed 1180001 gi521: the refined
-// Ponder payment leaves the greedy payer a different next choice) -- the adoption call is the USER's
-// (docs/design/mana-completeness-oracle.md section 13).
+// MTG_PAY_REFINE (2026-10-28; DEFAULT ON since 2026-10-29, the USER's adoption; =0 -> the payment as made): after an
+// outermost payment that cost life, energy or a haste-tagged {C} on a noncreature bill, or floated a surplus off two
+// or more taps, the payer asks the mana oracle for the cheapest payment of the same bill out of the same taps that
+// dominates it (ManaOracle.h RefinePayment) and makes that one instead. Shared payer: search, executor and human
+// auto-tap alike. Held out on every seed since MTG_LINE_FLOAT_COVERED, every slower game recovers at d8 b0 or is
+// clear clairvoyance (docs/design/mana-completeness-oracle.md section 13.3).
 inline bool PayRefineOn()
 {
-    static const bool env_on = EnvOn("MTG_PAY_REFINE", false);
+    static const bool env_on = EnvOn("MTG_PAY_REFINE", true);
     return heurarm::Flag(heurarm::PAY_REFINE, env_on);
 }
 

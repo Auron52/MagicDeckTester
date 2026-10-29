@@ -678,7 +678,7 @@ is one, is made of the engine's own taps -- fewer of them (Remote Farm alone for
 tapped the Plains beside it and floated a {W} away), or the same ones on cheaper faces (Llanowar Wastes' {C} for a
 generic pip instead of its painful {G}). That makes "is this payment dominated?" a small, exact question.
 
-* **The per-payment refine (`MTG_PAY_REFINE`, default OFF -- the adoption call is the USER's, see 13.3).** After every OUTERMOST payment (not the oracle's own
+* **The per-payment refine (`MTG_PAY_REFINE`, DEFAULT ON since 2026-10-29 -- the USER's adoption, see 13.3).** After every OUTERMOST payment (not the oracle's own
   copy, not a float-only probe, not an armed damage board) that spent life, energy or a haste-tagged {C} on a
   noncreature bill, or left mana floating off two or more taps, `RefinePayment` (ManaOracle.cpp) enumerates the
   minimal payments of the same bill on a board where ONLY the payment's own taps are untapped, replays each on the
@@ -828,6 +828,13 @@ bar:
   bar, now recovers (T3).
 * Against: the wall cost is +6-10% (EDF 1.6x; 1.07x over the suite on seed 1210001).
 * Recommendation: turn it on.
+
+**Adopted 2026-10-29 (USER):** *"I think that 7% might make sense, particularly if we are improving quality and
+reducing unrecoverable lines."* Re-measured first on the tree that lands it (Garth's crack, the sac-colour credit and
+the sequenced rock credit already in): seed 1300001, every suite deck at its play settings, 48,020 paired games, 1
+slower / 3 faster (FiveColour 0 / 1, Stompy 0 / 2, Niv 1 / 0), units 0.996x. The one slower game, Niv gi62 T4 -> T5,
+recovers (T4 in both arms at d8 b0, the identical game). Niv's pooled net over the final build's seeds stays
+negative (-1 / -7 / 0 / -1, then +1 on 300 games).
 
 ### 13.4 What is left
 
