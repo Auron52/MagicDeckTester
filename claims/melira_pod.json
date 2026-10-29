@@ -4,19 +4,17 @@
   "valueleaf": "em:0e526f28aba1418057fe"
  },
  "deck": "melira_pod",
- "detail": "paused by the USER: resumes when worker artifact-queue-d7d6a5 next starts; set aside for every other worker",
  "frozen": "99977194beb541fd50db5bd30b5a2d8f5fc150ee",
- "heartbeat": "2026-10-29T00:08:17Z",
+ "heartbeat": "2026-10-29T08:55:56Z",
  "host": "550a08fdc1f3",
- "paused": "2026-10-29T00:08:16Z",
- "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
+ "run_id": "melira_pod-artifact-queue-d7d6a5-20261029T085556",
  "score": 0.4147,
- "stage": "valueleaf",
+ "stage": "mulligan",
  "stages": [
   "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-28T10:59:39Z",
- "state": "paused",
+ "started": "2026-10-29T08:55:56Z",
+ "state": "running",
  "worker": "artifact-queue-d7d6a5"
 }
