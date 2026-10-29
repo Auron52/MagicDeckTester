@@ -181,3 +181,11 @@ Recruiter/Chord/Feeder hand entered the top-3.
 Status 22:18 UTC: refine **93.8%** frozen at 40,500 s, idle 0.0%, load 32/32, rollouts ~155/s, freezing ~5.7
 cell-sides/s (~27 rollouts per freeze, i.e. the remaining cells mostly run to the R=30 cap). 97k left: worst case
 97k x 30 / 155/s ~ 5.2 h, so ~03:30 UTC 2026-10-29. Top-3 slow list unchanged.
+
+**Melira Pod mulligan DONE 2026-10-28 23:27 UTC: VALIDATION PASSED** (refine finished between 22:18 and 23:20 UTC,
+much sooner than the worst case). Pooled A/B new vs old **-0.0126 t** (25/32 seeds better, mean/se -4.59); the
+visibility regression run moved GT net faster (searched faster 23 / slower 20). The table is live in the worker's
+frozen tree, not yet landed. The value leaf started 23:32 UTC and was **PAUSED by the USER 2026-10-29 00:08 UTC**
+(machine shutdown for a memory upgrade); `artifact_queue.py start` on the artifact-queue checkout resumes it.
+The mulligan's whole wall here was ~2 days of refine across three sessions, dominated by Carrion Feeder sac-loop
+hands (worst single rollout 1,994 s); the breakpoint subset-derive cost above is still owed as an engine fix.
