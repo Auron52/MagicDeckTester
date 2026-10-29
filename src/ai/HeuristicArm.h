@@ -798,6 +798,7 @@ enum Slot : int
     CYCLONE_ORDER_DRAW_TURNS, // MTG_CYCLONE_ORDER_DRAW_TURNS  Cyclone: the draft's item D -- opt the deck into OrderOpaqueCastsByRank, so a set holding a draw spell (Brainstorm / Ponder / Brainsurge / Remand) is ALSO rank-sorted and the range ladder (the FUNDING ranges above) runs for every set. A RESTRICTION of the search-owned order of draw turns. Inert unless MTG_CYCLONE_CAST_ORDER is on. DEFAULT OFF
     CYCLONE_CYCLE_ORDER,      // MTG_CYCLONE_CYCLE_ORDER=1  Cyclone: the draft-2 CYCLE ORDER (USER accepted 2026-10-29). Cyclone out: Curator while a {U} is spare, Street Wraith, Curator (no spare {U}), Xander's Lounge, a surplus Cyclone. Not out: a surplus Cyclone (2+ held), Xander's Lounge (not this turn's land drop), Curator, Street Wraith (kept for the Cyclone), a Lounge that is the land drop. Applied to the SEARCHED cycle sources' ORDER (no prune) and to the PLAYOUT pick (SelectDigSource, beyond the horizon). DEFAULT OFF (=0: today's order)
     CYCLONE_CYCLE_CHEAP,      // MTG_CYCLONE_CYCLE_ORDER=2  Cyclone: the USER's cheapest-first cycle order (effective cycling cost's mana value, then the existing order), same two places. DEFAULT OFF; mode 1 wins when both are set
+    CYCLE_SEED_PAY_SPLIT,     // MTG_CYCLE_SEED_PAY_SPLIT  a searched cycle seed's all-generic cycling cost gets a SEARCHED payment split (Action::seed_pay_split; ManaPayment.h SeedPaySplits): one variant per distinct multiset of source colour signatures, dominated splits dropped, split 0 = the hand-demand rule's. A COMPLETENESS fix (ledger Q61: the seed paid before its continuation existed and could spend the continuation's colours, unfindable at any budget). Only decks whose provider SEARCHES its cycles (Cyclone) have seeds. DEFAULT OFF (a play change, measured first)
     COUNT
 };
 
@@ -1540,6 +1541,7 @@ inline const char* Name(int slot)
         "MTG_CYCLONE_ORDER_DRAW_TURNS",
         "MTG_CYCLONE_CYCLE_ORDER",
         "MTG_CYCLONE_CYCLE_CHEAP",
+        "MTG_CYCLE_SEED_PAY_SPLIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
