@@ -475,6 +475,7 @@ add_executable(mtg-test
     test/unit/test_cyclone_sound_folds.cpp
     test/unit/test_known_library.cpp
     test/unit/test_cyclone_cantrip_plans.cpp
+    test/unit/test_cyclone_discard_buckets.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism
