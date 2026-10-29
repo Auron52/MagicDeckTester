@@ -1,0 +1,20 @@
+{
+ "merge": [
+  {
+   "cards": [
+    "Soul Warden",
+    "Soul's Attendant"
+   ],
+   "why": "USER RULING 2026-10-29: 'Soul Warden and Soul's Attendant should merge.' Same one-mana lifegain-per-creature effect. Discovery already merged them in the first keep table (af14097d9, K=14); this pins the merge so a re-discovery cannot split them."
+  }
+ ],
+ "keep_apart": [
+  {
+   "cards": [
+    "Voice of the Blessed",
+    "Ajani's Pridemate"
+   ],
+   "why": "USER RULING 2026-10-29: Voice of the Blessed and Ajani's Pridemate stay separate because their devotion differs (Heliod's devotion count). They were already apart in the first keep table; this pins it."
+  }
+ ]
+}
