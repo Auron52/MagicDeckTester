@@ -32449,6 +32449,38 @@ static int CycJunkPick(const GameState& s, int me, const CantripReadiness& r, in
     return 2;
 }
 
+// THE JUNK PICK, ONCE PER RESOLUTION (MTG_CYC_JUNK_MEMO, DEFAULT ON; =0 recomputes per candidate). CantripPlanOf
+// classifies every candidate of a put-back fan, and under MTG_CYCLONE_PB_PLANS each call derived the SAME junk pair:
+// CycJunkPick reads only the state's hand, the readiness and `take`, and the engine's plan loop passes one state and
+// one readiness for the whole fan (cantripbatch). Measured before this: CycJunkPick + its sorts were ~7% of a heavy
+// d5 game's wall (perf, seed 121021 gi 21), once per candidate of every derived fan. Exact: inside a batch the
+// inputs cannot differ, so the memoised pair IS the recomputed one. MTG_CYC_JUNK_MEMO_VERIFY=1 recomputes every hit
+// and aborts on a difference.
+static int CycJunkPickBatched(const GameState& s, int me, const CantripReadiness& r, int take, int out[2])
+{
+    static const bool on     = EnvOn("MTG_CYC_JUNK_MEMO", true);
+    static const bool verify = EnvOn("MTG_CYC_JUNK_MEMO_VERIFY");
+    struct Memo { unsigned long long id = 0; int me = -1, take = -1, n = 0; int pick[2] = { -1, -1 }; };
+    static thread_local Memo m;
+    if (on && cantripbatch::t_id != 0 && m.id == cantripbatch::t_id && m.me == me && m.take == take)
+    {
+        if (verify)
+        {
+            int fresh[2] = { -1, -1 };
+            const int fn = CycJunkPick(s, me, r, take, fresh);
+            if (fn != m.n || (fn > 0 && fresh[0] != m.pick[0]) || (fn > 1 && fresh[1] != m.pick[1]))
+            { std::fprintf(stderr, "[cyc-junk-memo] VERIFY MISMATCH\n"); std::abort(); }
+        }
+        out[0] = m.pick[0];
+        out[1] = m.pick[1];
+        return m.n;
+    }
+    const int n = CycJunkPick(s, me, r, take, out);
+    if (on && cantripbatch::t_id != 0)
+    { m.id = cantripbatch::t_id; m.me = me; m.take = take; m.n = n; m.pick[0] = n > 0 ? out[0] : -1; m.pick[1] = n > 1 ? out[1] : -1; }
+    return n;
+}
+
 bool CycloneProvider::CantripPlansActive(const GameState& s, bool putback) const
 {
     (void)s;
@@ -32487,7 +32519,7 @@ bool CycloneProvider::CantripPlanOf(const GameState& s, int controller, const Ca
             // fulfilment (Emrakul first; at k = 1 only one placed, Q43(b)). Everything else is dropped.
             const Player& pl = s.players[static_cast<std::size_t>(controller)];
             int junk[2] = { -1, -1 };
-            const int nj = CycJunkPick(s, controller, r, v.n_removed, junk);
+            const int nj = CycJunkPickBatched(s, controller, r, v.n_removed, junk);
             bool is_junk = nj == v.n_removed;
             for (int j = 0; j < v.n_removed && is_junk; ++j)
             {
