@@ -1913,6 +1913,13 @@ void TurnSolver::RecordCommittedDepth(int committed_sub_depth)
 // pass the start gate admitted and that ran on past its budget (the overrun ceiling is 25x). Counted only
 // under MTG_ROLLOUT_STATS; read-only.
 static std::atomic<long long> g_units_after_spent{0};
+// MTG_ROLLOUT_STATS: slack-0 rollout turns (see Slack0Scope in SimulateToEndImpl).
+static std::atomic<long long> g_nested_exh_skipped{0};   // MTG_NESTED_EXH_AXIS (see NestedExhAxisW)
+namespace slack0diag
+{
+inline std::atomic<long long> g_units[5], g_n[5];
+inline thread_local bool t_active = false;
+}
 // HIT-EQUALS-MISS PRICING (MTG_CACHE_HIT_CHARGE; see cachecharge below): while a cacheable computation
 // runs, every unit charged is also attributed to it (and to every computation enclosing it).
 namespace cachecharge { struct Rec; inline thread_local Rec* t_rec = nullptr; }
@@ -2725,6 +2732,13 @@ namespace
             for (int i = 0; i < unitsite::kSiteCount; ++i)
             { if (i != unitsite::kMeterRolloutStep && i != unitsite::kMeterGreedyWalk) { site_tot += unitsite::g_units[i].load(); } }
             std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
+            std::cerr << "[rollout-stats] nested_exh_axis skipped=" << g_nested_exh_skipped.load() << "\n";
+            {
+                static const char* kR[5] = { "kill-only ARMED", "off: extra-turn deck", "off: no searched m2", "off: m2 fixpoint", "off: other" };
+                for (int r = 0; r < 5; ++r)
+                { std::cerr << "[rollout-stats] slack0_turns " << kR[r] << ": n=" << slack0diag::g_n[r].load()
+                            << " units=" << slack0diag::g_units[r].load() << " share=" << (site_tot ? static_cast<double>(slack0diag::g_units[r].load()) / site_tot : 0.0) << "\n"; }
+            }
             std::cerr << "[rollout-stats] units_after_budget_spent=" << g_units_after_spent.load()
                       << " share=" << (site_tot ? static_cast<double>(g_units_after_spent.load()) / site_tot : 0.0) << "\n";
             {
@@ -27121,7 +27135,11 @@ static const char* kNames[kN] = { "outside(executor/root/leaf)", "putback-varian
     "cleanup-discard-variant", "other(base casts/lands/pass)", "bp-node-child" };
 inline bool On() { static const bool v = EnvOn("MTG_NODE_KIND_ATTRIB"); return v; }
 inline std::atomic<long long> g_units[kN][2], g_ns[kN][2], g_nodes[kN][2];
+// ...and the same three by WHERE the node was opened: g_rollout_nest at the node's open (0 = the search window's own
+// loops, 1 = the horizon leaf's per-turn solve inside the outermost rollout, 2+ = deeper), real + trial games pooled.
+inline std::atomic<long long> g_wunits[kN][3], g_wns[kN][3], g_wnodes[kN][3];
 inline thread_local int  t_stack[256];
+inline thread_local int  t_where[256];
 inline thread_local int  t_top = 0;
 inline thread_local long long t_umark = 0;
 inline thread_local std::chrono::steady_clock::time_point t_wmark;
@@ -27130,12 +27148,15 @@ inline void Credit()
 {
     const long long now = gamework::t_used;
     const auto wnow = std::chrono::steady_clock::now();
-    if (!t_init) { t_init = true; t_umark = now; t_wmark = wnow; t_stack[0] = kOutside; return; }
+    if (!t_init) { t_init = true; t_umark = now; t_wmark = wnow; t_stack[0] = kOutside; t_where[0] = 0; return; }
     const int k = t_stack[t_top];
     const int pr = turncensus::t_probe > 0 ? 1 : 0;
-    if (now >= t_umark) { g_units[k][pr].fetch_add(now - t_umark, std::memory_order_relaxed); }
-    g_ns[k][pr].fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(wnow - t_wmark).count(),
-                          std::memory_order_relaxed);
+    const int wh = t_where[t_top];
+    const long long dns = std::chrono::duration_cast<std::chrono::nanoseconds>(wnow - t_wmark).count();
+    if (now >= t_umark) { g_units[k][pr].fetch_add(now - t_umark, std::memory_order_relaxed);
+                          g_wunits[k][wh].fetch_add(now - t_umark, std::memory_order_relaxed); }
+    g_ns[k][pr].fetch_add(dns, std::memory_order_relaxed);
+    g_wns[k][wh].fetch_add(dns, std::memory_order_relaxed);
     t_umark = now;
     t_wmark = wnow;
 }
@@ -27176,7 +27197,9 @@ struct Scope
         if (t_top + 1 >= 256) { return; }
         on = true;
         t_stack[++t_top] = kind;
+        t_where[t_top] = g_rollout_nest <= 0 ? 0 : (g_rollout_nest == 1 ? 1 : 2);
         g_nodes[kind][turncensus::t_probe > 0 ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+        g_wnodes[kind][t_where[t_top]].fetch_add(1, std::memory_order_relaxed);
     }
     explicit Scope(const TurnSolver::Plan& p) : Scope(On() ? KindOf(p) : -1) {}
     ~Scope() { if (on) { Credit(); --t_top; } }
@@ -27206,6 +27229,24 @@ struct Report
                              kNames[k], n, tn[pr] ? 100.0 * n / tn[pr] : 0.0, u, tu[pr] ? 100.0 * u / tu[pr] : 0.0,
                              w, tw[pr] > 0 ? 100.0 * w / tw[pr] : 0.0, n ? static_cast<double>(u) / n : 0.0,
                              n ? 1e6 * w / n : 0.0);
+            }
+        }
+        static const char* kWhere[3] = { "window(rollout nest 0)", "leaf(rollout nest 1)", "deeper(nest 2+)" };
+        long long wu = 0; double ww = 0;
+        for (int k = 0; k < kN; ++k) { for (int h = 0; h < 3; ++h) { wu += g_wunits[k][h].load(); ww += g_wns[k][h].load() / 1e9; } }
+        for (int h = 0; h < 3; ++h)
+        {
+            long long hu = 0, hn = 0; double hw = 0;
+            for (int k = 0; k < kN; ++k) { hu += g_wunits[k][h].load(); hn += g_wnodes[k][h].load(); hw += g_wns[k][h].load() / 1e9; }
+            std::fprintf(stderr, "[node-where] === %s: nodes=%lld units=%lld (%.1f%%) wall=%.1fs (%.1f%%) ===\n", kWhere[h],
+                         hn, hu, wu ? 100.0 * hu / wu : 0.0, hw, ww > 0 ? 100.0 * hw / ww : 0.0);
+            for (int k = 0; k < kN; ++k)
+            {
+                const long long u = g_wunits[k][h].load(), n = g_wnodes[k][h].load();
+                const double w = g_wns[k][h].load() / 1e9;
+                if (n == 0 && u == 0) { continue; }
+                std::fprintf(stderr, "[node-where]   %-36s nodes=%11lld units=%12lld (%5.1f%%) wall=%9.1fs (%5.1f%%) us/node=%8.2f\n",
+                             kNames[k], n, u, wu ? 100.0 * u / wu : 0.0, w, ww > 0 ? 100.0 * w / ww : 0.0, n ? 1e6 * w / n : 0.0);
             }
         }
     }
@@ -86743,6 +86784,54 @@ inline bool LeafKillOnlyVerifyOn()
     static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_VERIFY");
     return v;
 }
+// MTG_LEAF_KILL_ONLY_EXTRA -- DEFAULT ON; =0 keeps the kill-only turn OFF for an extra-turn deck (the Q13 default).
+//
+// WHY IT WAS OFF. The identity above rests on "a candidate that does not kill this turn hands the rollout to the NEXT
+// ROUND, past the cutoff". An extra turn breaks that: Emrakul's cast trigger grants another turn of the SAME round
+// (turn_number counts rounds -- GameState::AdvanceTurnCounter), where a kill still scores the cutoff. So the whole
+// identity was switched off for deck_has_extra_turn (ledger Q13: "a sound refinement later").
+//
+// THE REFINEMENT. The break is per CANDIDATE, not per deck: a candidate whose turn (main 1, combat, the searched
+// main 2 -- the skip sites are after all three) ends with NO extra turn pending is exactly the case the identity
+// covers, and is skipped; a candidate that leaves `pending_extra_turns > 0` is scored exactly as the full solve
+// scores it (its end-of-turn + rollout run, cutoff and all). In the extra turn the rollout's loop head finds the
+// turn still equal to the cutoff and arms the kill-only scope again (keyed by TurnSeq, so a fresh scope), so the
+// recursion is the same rule one turn later. The returned plan: the first killer (as before), else the best of the
+// candidates that were scored -- every candidate that could still win inside the round was scored, so the
+// "does this turn's round end in a win" answer the enclosing rollout reads is the full solve's. Deeper passes: a pass
+// that scored an extra-turn candidate is no longer "no rollout reads its sub_depth", so the pass-0 break holds only
+// when pass 0 scored none (ko_rolled below).
+// BUDGET: like the identity it extends, exact in what each leaf returns at an unlimited budget and a re-spend of the
+// freed units under a finite one (a play change under a budget, tested as one). MTG_LEAF_KILL_ONLY_VERIFY checks it.
+inline bool LeafKillOnlyExtraOn()
+{
+    static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_EXTRA", true);
+    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_EXTRA, v);
+}
+// MTG_LEAF_KILL_ONLY_NOM2 -- DEFAULT OFF pending the fleet A/B; =1 extends the kill-only turn to decks that never play
+// a second main. SOUND (the verify below is 0 mismatches), but it reaches every such deck, and under a budget the units it
+// frees are re-spent: smoke (2026-10-29) moved 21 of 149 configs (searched: 1 slower / 4 faster / 39 same-score digest
+// changes). Adopting it fleet-wide is a play change measured per moving deck -- the USER's call (ledger QC2).
+// The identity's one parity requirement is that a candidate's own evaluation and the rollout's replay of the pick run
+// the same turn: the same apply, the same combat and the same post-combat main. The gate asked for a SEARCHED second
+// main because then both worlds solve it through the same memoised solve (the rollout's Dig-only m2 would have no
+// twin). A deck on which NO post-combat main can ever open meets the requirement trivially -- neither world runs one:
+// not searched (`second_main` / uses_second_main false), no Jorn untap, no Omnitool dig, no extra-combat source, and
+// a provider without a restricted main 2 (MayOpenRestrictedSecondMain). Deck constants only, so the answer cannot
+// differ between the two worlds of one game.
+inline bool LeafKillOnlyNoM2On()
+{
+    static const bool v = EnvOn("MTG_LEAF_KILL_ONLY_NOM2", false);
+    return heurarm::Flag(heurarm::LEAF_KILL_ONLY_NOM2, v);
+}
+inline bool KillOnlyNoM2Parity(const GameState& s, bool second_main)
+{
+    return !second_main && !s.uses_second_main && !s.deck_has_attack_untap && !s.deck_has_attack_dig_hand
+        && !s.deck_has_extra_combat && !ResolveProvider(s).MayOpenRestrictedSecondMain() && LeafKillOnlyNoM2On();
+}
+// At a kill-only skip site, after the candidate's whole turn: true = it cannot change the rollout's answer.
+inline bool KillOnlySkippable(const GameState& after_turn)
+{ return !(after_turn.deck_has_extra_turn && after_turn.pending_extra_turns > 0); }
 // The turn at which the innermost rollout can still score only a this-turn kill (-1 = none). Every
 // SimulateToEndImpl iteration sets it (to -1 when not armed), so a nested rollout never inherits it.
 inline thread_local int t_ko_turn = -1;
@@ -87205,12 +87294,26 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // Not for an EXTRA-TURN deck (Q13): a cast this turn can grant an extra turn of this same round,
         // where a kill still scores cutoff_turn -- "only a this-turn kill matters" is false there.
         const bool ko_turn = LeafKillOnlyOn() && !t_ko_suppress && depth > 0
-                          && !state.deck_has_extra_turn
+                          && (!state.deck_has_extra_turn || LeafKillOnlyExtraOn())
                           && state.turn_number == cutoff_turn && cutoff_turn < max_turns
-                          && second_main && !g_honest_teacher
+                          && (second_main || KillOnlyNoM2Parity(state, second_main)) && !g_honest_teacher
                           && M2FixModeFor(state) == 0 && !HumanPlayActive();
         KillOnlyScope _ko_scope(ko_turn ? state.TurnSeq() : -1);
         if (ko_turn) { ++t_ko_armed_n; if (s_rollout_stats) { g_ko_turns.fetch_add(1, std::memory_order_relaxed); } }
+        // MTG_ROLLOUT_STATS (diagnostic): units spent on a rollout's SLACK-0 turn (turn == its cutoff, before the
+        // horizon), the kill-only identity's domain, split by what keeps the identity off; outermost such turn only.
+        struct Slack0Scope
+        {
+            int r = -1; long long u0 = 0;
+            ~Slack0Scope() { if (r >= 0) { slack0diag::g_units[r].fetch_add(gamework::t_used - u0, std::memory_order_relaxed);
+                                           slack0diag::g_n[r].fetch_add(1, std::memory_order_relaxed); slack0diag::t_active = false; } }
+        } _s0;
+        if (s_rollout_stats && depth > 0 && state.turn_number == cutoff_turn && cutoff_turn < max_turns && !slack0diag::t_active)
+        {
+            _s0.r = ko_turn ? 0 : state.deck_has_extra_turn ? 1 : !second_main ? 2 : M2FixModeFor(state) != 0 ? 3 : 4;
+            _s0.u0 = gamework::t_used;
+            slack0diag::t_active = true;
+        }
         // This turn's plan depth: the first-turn override on the rollout's first simulated turn
         // (outermost rollout only), else the leaf depth. -1 override => `depth` => byte-identical.
         // EXTRA TURNS (depth counts ROUNDS; see DepthAcrossTurn): a rollout ENTERED at the start of an
@@ -98988,6 +99091,24 @@ static bool LaPassCeilingOn()
 // discovery sample (d5 x60 seed 81000, d3 x60 seed 82000) 120/120 identical, 0.848x / 0.712x, its worst
 // game (d3 seed 82021 gi 21) 11.79M -> 1.66M units. No game was slower, so there is nothing to recover
 // at --budget-ms 0 (where the bail is not even read). =0 restores the unbailed nested loop.
+// THE NESTED EXHAUSTED-BUDGET AXIS WIDTH (MTG_NESTED_EXH_AXIS, per-job; DEFAULT OFF; the design's B2, Ponder form --
+// docs/design/cantrip-search-optimization.md section 3.4). The decision's first pass is never cut (it must leave a
+// complete ranking), so once its budget is spent every rollout turn under it still solves its WHOLE candidate list:
+// on Unpredictable Cyclone a Ponder's seven ORDER variants (m! + the shuffle) at every leaf turn holding one -- 20% of
+// the search's wall in the 2026-10-29 census, applied, then mostly deduped or tie-pruned. Past exhaustion a nested solve
+// admits only the order variants below rank W (MTG_NESTED_EXH_AXIS_W, default 2, never below 2: the scored fan's best
+// keep order and its next member, the shuffle where it ranks there); rank >= W waits for a budget that is not spent.
+// SHAPE: a budget-staged admission, never a gate. Inert at an unlimited budget (Exhausted() is never true) and before
+// exhaustion; a larger budget exhausts later and so reaches every rank -- the turn-complete order the USER prefers (this
+// turn's root frames finish before the next turns' order variants). It never collapses a fan to one option. Under a
+// finite budget it re-prices the leaf, so it is a play change measured as one.
+static int NestedExhAxisW()
+{
+    static const bool env = EnvOn("MTG_NESTED_EXH_AXIS", false);
+    if (!heurarm::Flag(heurarm::NESTED_EXH_AXIS, env)) { return 0; }
+    static const int w = std::max(2, EnvInt("MTG_NESTED_EXH_AXIS_W", 2));
+    return w;
+}
 static bool LaNestedBailOn()
 {
     static const bool env = EnvOn("MTG_LA_NESTED_BAIL", true);
@@ -99183,6 +99304,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // MTG_LEAF_KILL_ONLY (see LeafKillOnlyOn): only a this-turn kill matters to the enclosing rollout,
     // so no candidate's next-turn rollout is run. Never at an enforcing root (it IS the decision).
     const bool ko = !enforce_budget && KillOnlyHere(state);
+    bool ko_rolled = false;   // a kill-only pass scored an extra-turn candidate (MTG_LEAF_KILL_ONLY_EXTRA)
 
     // Candidate set is land-folded: when a land drop is available this enumerates
     // every (land choice x spell subset) plus a defer option, each plan tagged with
@@ -99322,6 +99444,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     const bool   gate         = enforce_budget && budget != nullptr;
     // A nested solve under a finite budget honours a tripped overrun ceiling (see LaNestedBailOn).
     const bool   nested_bail  = !gate && budget != nullptr && !budget->Unlimited() && LaNestedBailOn();
+    // MTG_NESTED_EXH_AXIS (see NestedExhAxisW): 0 = off here (the enforcing root, no / an unlimited budget, lever off).
+    const int    nested_exh_w = (!gate && budget != nullptr && !budget->Unlimited()) ? NestedExhAxisW() : 0;
     long long    c_prev       = 0;       // cost of pass k-1 (work units)
     long long    c_prev2      = 0;       // cost of pass k-2
     bool         have_prev    = false;
@@ -99445,7 +99569,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     {
         // Kill-only: a deeper pass would re-run the identical this-turn tests (no rollout reads its
         // sub_depth), so pass 0 is the answer.
-        if (ko && sub_depth > 0) { break; }
+        if (ko && sub_depth > 0 && !ko_rolled) { break; }
         long long remaining_at_start = budget ? budget->Remaining() : LLONG_MAX;
         // The combat-pin share's per-pass cache: a base candidate's post-apply state, by index.
         std::unordered_map<int, GameState> cp_cache;
@@ -100199,6 +100323,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
             }
             const Plan& plan = cands.At(ci, pb_syn);
+            // MTG_NESTED_EXH_AXIS: a Ponder order variant at rank >= W, once the decision budget is spent.
+            if (nested_exh_w > 0 && plan.ponder_choice >= nested_exh_w && budget->Exhausted())
+            {
+                if (s_rollout_stats) { g_nested_exh_skipped.fetch_add(1, std::memory_order_relaxed); }
+                ++candidates_done;
+                continue;
+            }
 
             // WAVE-0 NOBP SKIP (MTG_BP_W0_NOBP). The base plan this variant was cloned from reached
             // no breakpoint occurrence of ANY class, and a variant differs from its base plan only
@@ -101009,12 +101140,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // play happens here.
             // Kill-only (see LeafKillOnlyOn): this candidate did not kill this turn, and nothing after
             // this turn can change the enclosing rollout's answer.
-            if (ko)
+            if (ko && KillOnlySkippable(copy))
             {
                 ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                 ++candidates_done;
                 continue;
             }
+            if (ko) { ko_rolled = true; }   // an extra turn pending: scored as the full solve scores it
             // THE BOUNDARY FAN (BoundaryChooseByRollout): an echo obligation this candidate's apply created, or a
             // Defense of the Heart trigger at the next upkeep, is decided here, and the chosen pins ride the plan
             // if it is adopted.
@@ -101311,11 +101443,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                     }
-                    if (ko)   // kill-only: the variant did not kill this turn (see LeafKillOnlyOn)
+                    if (ko && KillOnlySkippable(copy))   // kill-only: the variant did not kill this turn (see LeafKillOnlyOn)
                     {
                         ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                         continue;
                     }
+                    if (ko) { ko_rolled = true; }
                     const BoundaryChoice wave_bc = BoundaryChooseByRollout(copy, sub_depth, max_turns, budget,
                                                                            pass_has_best ? pass_best_win : max_turns + 1,
                                                                            second_main, tt);
@@ -101432,11 +101565,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
                     if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                 }
-                if (ko)   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
+                if (ko && KillOnlySkippable(copy))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
                 {
                     ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
                     return true;
                 }
+                if (ko) { ko_rolled = true; }
                 if (!SimulateEndAndStartNextTurn(copy)) { return true; }
                 if (tie_prune_here && pass_has_best && pass_best_win <= copy.turn_number)
                 { if (s_rollout_stats) { g_la_wave_pruned.fetch_add(1, std::memory_order_relaxed); } return true; }

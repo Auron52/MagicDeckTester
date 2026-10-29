@@ -579,6 +579,7 @@ public:
     // her Angel-only {W} but not without it; admits only such Angel casts (two are never payable: her
     // one {W} can fund one of them, and neither is payable without it). Everything else stays main 1.
     bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
     // PROPOSED (MTG_ANGELS_GIADA_SEARCH, default OFF -- the order is the USER's): when Giada and an Angel
     // the USER's order puts ahead of her (Righteous Valkyrie, Archangel of Thune, Lyra AoD) are cast in
@@ -694,6 +695,7 @@ public:
     // that TapForTokenPay activation. The main-1 activation stays enumerated (no main-1 prune).
     // Implementation + soundness argument: DecisionProviders.cpp, "ColossusHammerProvider".
     bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
     // PATH TO EXILE: the autonomous search offers only the SELF-target casts (exile our own creature,
     // fetch a tapped basic); the opponent-target cast is refused -- it exiles a spawn that never
