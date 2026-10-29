@@ -78,6 +78,24 @@ enum class LookKind;     // core/GameLogger.h
 // THE SCORED CANTRIP ORDER's inputs (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; design:
 // docs/design/cantrip-search-optimization.md §3.3). Computed ONCE per resolution, before the candidates
 // are scored.
+// ONE BATCH of DecisionProvider::CantripPlanOf calls: the engine's plan-admission loops (PutBackPickAt's derivation,
+// PutBackCandidates) ask the plan of every candidate of ONE resolution with the SAME state and the SAME readiness
+// object. A provider may memoise per-resolution facts its plan hook derives from those two alone for the lifetime of
+// the batch (t_id != 0; ids are per-thread, unique per batch). Outside a batch t_id is 0 and nothing may be reused.
+namespace cantripbatch
+{
+inline thread_local unsigned long long t_id   = 0;
+inline thread_local unsigned long long t_next = 0;
+struct Scope
+{
+    unsigned long long prev;
+    Scope() : prev(t_id) { t_id = ++t_next; }
+    ~Scope() { t_id = prev; }
+    Scope(const Scope&) = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+}   // namespace cantripbatch
+
 struct CantripReadiness
 {
     int  k = -1;                 // our draw steps before the payoff turn (0 = this turn); -1 = unknown
@@ -2697,6 +2715,10 @@ public:
     // Read through ProviderSecondMainLive (DecisionProviders.h), which never opens one on a deck that
     // already plays a full second main.
     virtual bool RestrictedSecondMainLive(const GameState& s) const { (void)s; return false; }
+    // MayOpenRestrictedSecondMain -- DECK-LEVEL: can RestrictedSecondMainLive ever return true for this provider? A
+    // provider that overrides it says so (true). Read where a proof needs "no post-combat main ever opens" without a
+    // state to ask (the rollout kill-only turn's no-m2 parity, TurnSolver KillOnlyNoM2Parity).
+    virtual bool MayOpenRestrictedSecondMain() const { return false; }
     virtual bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
     { (void)s; (void)a; return true; }
 
