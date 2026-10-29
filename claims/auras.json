@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "mulligan": "c636616c0eea2698312292deff701fcebd7622e1",
+  "valueleaf": "em:8f9467f9f125c2b4d1b1"
+ },
+ "deck": "auras",
+ "frozen": "ce02942e3353c17147a1dbea6ab343593ef700be",
+ "heartbeat": "2026-10-29T22:31:09Z",
+ "host": "58199181d02e",
+ "run_id": "auras-artifact-queue-tool-647f24-20261029T223109",
+ "score": 0.0651,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan",
+  "valueleaf"
+ ],
+ "started": "2026-10-29T22:31:09Z",
+ "state": "running",
+ "worker": "artifact-queue-tool-647f24"
+}
