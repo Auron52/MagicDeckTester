@@ -9,6 +9,7 @@
  "frozen": "99977194beb541fd50db5bd30b5a2d8f5fc150ee",
  "heartbeat": "2026-10-29T11:37:06Z",
  "host": "550a08fdc1f3",
+ "land_note": "cherry-pick onto phase-1-2-deck-analyzer conflicts (error: could not apply 592b897b8... artifact-refresh(melira_pod): done\nhint: After resolving the conflicts, mark them with\nhint: \"git add/rm <pathspec>\", then run\nhint: \"git cherry-pick --continue\".\nh) -- left for an agent",
  "result_branch": "artifact-refresh/melira_pod-20261029-1154",
  "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
  "score": 0.4147,
