@@ -3,9 +3,12 @@
   "mulligan": "c869d047be6d6a92fcaf7d6f0cba27c9ff3c4f99"
  },
  "deck": "galadriel",
+ "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.00825 t, cost 1.094x (se 0.009, 32 seeds)); incumbent restored",
+ "finished": "2026-10-29T15:36:57Z",
  "frozen": "dc35363d4841f70a7b4e649f9132b65ef82fce15",
  "heartbeat": "2026-10-29T15:34:55Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/galadriel-20261029-1536",
  "run_id": "galadriel-artifact-queue-d7d6a5-20261029T151448",
  "score": 0.2808,
  "stage": "mulligan",
@@ -13,6 +16,6 @@
   "mulligan"
  ],
  "started": "2026-10-29T15:14:48Z",
- "state": "running",
+ "state": "rejected",
  "worker": "artifact-queue-d7d6a5"
 }
