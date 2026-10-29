@@ -560,7 +560,9 @@ ORDER). Measured first: on the 8-game probe the bp cache was 100% of the pool's 
 20.1 GB -> 0.92 GB. M2 BUILT and ADOPTED DEFAULT ON (`MTG_PLAN_CACHE_STORED_PRICE`; =0 restores the
 materialised price): on held-out Cyclone seeds (d3 x200 + d5 x100, the shipped 2.4 GB pool) 300 / 300 games identical,
 refusals 4,458 -> 0 and the `[determinism] WARNING` gone; the same manifest at 6 and 12 threads is byte-identical. The
-probe's pool peak 1.77 GB -> 0.16 GB.
+probe's pool peak 1.77 GB -> 0.16 GB. 2026-10-29: the thread-count determinism the M2 note promised is now by
+construction (exact plan-cache keys, isolated derivation channels, hit-equals-miss pricing, per-thread pools) -- ledger,
+"Thread-count determinism by construction".
 NOT lazy (and why): the Ponder keep-vs-shuffle pair and the tutor fan -- later axes clone those clones.
 
 **Fixes:**
