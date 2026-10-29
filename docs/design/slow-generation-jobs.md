@@ -189,3 +189,11 @@ frozen tree, not yet landed. The value leaf started 23:32 UTC and was **PAUSED b
 (machine shutdown for a memory upgrade); `artifact_queue.py start` on the artifact-queue checkout resumes it.
 The mulligan's whole wall here was ~2 days of refine across three sessions, dominated by Carrion Feeder sac-loop
 hands (worst single rollout 1,994 s); the breakpoint subset-derive cost above is still owed as an engine fix.
+
+## LifegainHeliodCombo -- first mulligan profile (started 2026-10-29 06:30 UTC)
+
+`bash scripts/mullgen.sh run decks/LifegainHeliodCombo fast` in `.claude/worktrees/lhc-gen`, frozen at 1d78d3511
+(src 07c4ce01d). Discovery (400 probes, threshold 0.01): one merge, Soul Warden + Soul's Attendant -> K=14,
+~77.5k distinct hands. No bucket policy installed (USER sign-off pending on the one merge). The value leaf follows
+when this validates. Melira Pod's paused value leaf stays paused until then (stages are serial).
+- 2026-10-29 06:32 UTC: PGO build stage (first step of the run).
