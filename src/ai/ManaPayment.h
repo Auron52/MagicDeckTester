@@ -797,6 +797,12 @@ ManaCost SinkCostWithLineHold(const ManaCost& own);
 // their holds cannot drift apart.
 ManaCost LineCastCostTotal(const std::vector<Action>& acts);
 
+// ...and the same casts IN LINE ORDER, one entry each (g_line_seq, SpellEffects.h; MTG_FLOAT_COMMIT_SEQ).
+// Defined beside LineCastCostTotal with the identical filter, so the sequence and the hold always hold
+// the same casts. `ord` (optional) walks `acts` in that order instead (SubsetPayableSequential's walk).
+struct LineSeq;   // SpellEffects.h
+void BuildLineSeq(LineSeq& out, const std::vector<Action>& acts, const std::vector<int>* ord = nullptr);
+
 // MTG_LINE_FLOAT_UNSEEN_GUARD: true while the applying line casts a card whose resolution reveals NEW
 // castables this turn -- TurnSolver::ParamKeyedDrawClass, the engine's own breakpoint-opener classifier
 // (Apex of Power's impulse exile, a cantrip, a tutor to hand, cascade, ...). g_line_unpaid_cost holds

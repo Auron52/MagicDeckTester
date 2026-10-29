@@ -229,6 +229,7 @@ TEST_CASE("Placeholder: shipped lever defaults (ON where the bar was met, OFF wh
     CHECK(PlaceholderSnowOn());
     CHECK(PlaceholderTectonicOn());         // unblocked by the keep axis for a Giant the plan casts
     CHECK(PlaceholderEchoOn());             // unblocked by the searched echo (MTG_ECHO_AXIS)
-    CHECK_FALSE(PlaceholderManaOn());       // blocked on a sequence-aware float commit
+    CHECK(PlaceholderManaOn());             // unblocked by the sequence-aware float commit (MTG_FLOAT_COMMIT_SEQ)
+    CHECK_FALSE(PlaceholderManaEtbOn());    // the ETB-untap site: EDF s1470011 gi10 does not recover at d8 b0
     CHECK_FALSE(PlaceholderFeaturesOn());   // the USER's call: the shipped models were fitted on the placeholder read
 }

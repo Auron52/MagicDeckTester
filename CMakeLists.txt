@@ -468,6 +468,7 @@ add_executable(mtg-test
     test/unit/test_echo_staged_gas.cpp
     test/unit/test_echo_axis.cpp
     test/unit/test_placeholder_reads.cpp
+    test/unit/test_float_commit_seq.cpp
     test/unit/test_manual_tap_sources.cpp
     test/unit/test_niv_payment_holes.cpp
     test/unit/test_brainstorm.cpp

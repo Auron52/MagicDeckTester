@@ -3801,6 +3801,41 @@ bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
     return CastOrderLessRanked(state, a, CastOrderKeyOf(state, a), b, CastOrderKeyOf(state, b));
 }
 
+// The line sequence's later casts in realised order (SpellEffects.h LineSeqLaterOrder, MTG_FLOAT_COMMIT_SEQ):
+// the two steps every apply site orders a cast section by, over the entries still unpaid. The range ladder
+// and the payable-order walk can still move a cast when paying requires it; the commit reads the deck's
+// order, which is what those adjustments start from. Called only when a float commit actually has a choice
+// to make, so a line with none never pays for it. The same function on the same board in both worlds.
+void LineSeqLaterOrder(const GameState& state, const LineSeq& seq, int skip, std::vector<int>& out)
+{
+    out.clear();
+    std::vector<int> ord;          // action indices
+    for (int i = 0; i < seq.n; ++i)
+    {
+        if (i == skip || seq.e[i].idx < 0) { continue; }
+        ord.push_back(seq.e[i].idx);
+    }
+    if (!seq.ordered && seq.acts != nullptr && ord.size() > 1)
+    {
+        const std::vector<Action>& acts = *seq.acts;
+        std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+        { return CastOrderLess(state, acts[static_cast<std::size_t>(x)], acts[static_cast<std::size_t>(y)]); });
+        ApplyDeckCastArrangement(state, acts, ord);
+    }
+    // Back to entry indices (an action index names one entry; copies of a card are distinct actions).
+    std::vector<char> used(static_cast<std::size_t>(seq.n), 0);
+    for (int ai : ord)
+    {
+        for (int i = 0; i < seq.n; ++i)
+        {
+            if (i == skip || used[static_cast<std::size_t>(i)] || seq.e[i].idx != ai) { continue; }
+            used[static_cast<std::size_t>(i)] = 1;
+            out.push_back(i);
+            break;
+        }
+    }
+}
+
 void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
 {
     // The one shared entry, so the executor and the rollout apply cannot drift (see the header).

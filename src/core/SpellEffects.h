@@ -98,12 +98,28 @@ inline bool PlaceholderEchoOn()
     static const bool e = EnvOn("MTG_PLACEHOLDER_ECHO", true);
     return heurarm::Flag(heurarm::PLACEHOLDER_ECHO, e);
 }
+// The float-colour commit's hand-pip read (HandPipCommitColor: the ritual tap-ahead and the Karoo tap-in-response).
+// ON since that commit is SEQUENCE-aware while a line applies (MTG_FLOAT_COMMIT_SEQ, CommitFloatChoicesBySeq): the
+// hand's pips now pick only the colour of a source the line has no use for, or of a commit outside any line. As the
+// whole commit it lost Hinata 6 / won 1 (Reality Spasm's own {U}{U} committed {R}); with the sequence commit in, on
+// held-out seed 1470001 (39 decks, 51,744 games) every slower game outside EDF's ETB-untap site recovers at d8 b0
+// (docs/design/placeholder-card-reads.md, MANA).
+inline bool PlaceholderManaOn()
+{
+    static const bool e = EnvOn("MTG_PLACEHOLDER_MANA", true);
+    return heurarm::Flag(heurarm::PLACEHOLDER_MANA, e);
+}
 // DEFAULT OFF -- each corrects a read, but the heuristic the correct read switches on loses games in an
 // UNSEARCHED decision, so the slower games do not recover at d8 b0. Each read site says what unblocks it.
-inline bool PlaceholderManaOn()       // float-colour commit weighs the hand's real pips (blocked on a sequence-aware commit)
+// The ETB-untap tap-ahead's leftover-land commit (EtbUntapTapAheadIntoFloat) weighing the hand's real pips -- the
+// second site of the MANA read, split out (2026-10-29) because it fails where the first passes: EDF s1470011 gi10
+// (held-out seed 1470001) is T3 -> T4 and stays T4 at d8 b0. Conservatory's banked unit goes {W} (the hand: Displacer,
+// Emiel) instead of the first-listed {G}, and the search no longer finds the two-Cloud T3 kill. A sequence rule picks
+// {W} there too (Displacer's), so it is not what unblocks this site; see the doc.
+inline bool PlaceholderManaEtbOn()
 {
-    static const bool e = EnvOn("MTG_PLACEHOLDER_MANA", false);
-    return heurarm::Flag(heurarm::PLACEHOLDER_MANA, e);
+    static const bool e = EnvOn("MTG_PLACEHOLDER_MANA_ETB", false);
+    return heurarm::Flag(heurarm::PLACEHOLDER_MANA_ETB, e);
 }
 inline bool PlaceholderFeaturesOn()   // learned-model featurizers -- a USER decision: the shipped models were fitted on the placeholder read
 {
@@ -1214,6 +1230,85 @@ inline thread_local const int* g_generic_spend_budget = nullptr;
 // paths and by the payability walks). Redeclared here so SpendFloatingTowardCost's surplus order
 // below can read it -- see the MTG_LINE_SURPLUS_GENERIC note at the drain site.
 extern thread_local ManaCost g_line_unpaid_cost;
+
+// ---- THE LINE'S UNPAID CASTS, IN ORDER (MTG_FLOAT_COMMIT_SEQ) ----------------------------------------
+// g_line_unpaid_cost above is the line's remaining bill as a TOTAL. The float-colour commit of a source
+// tapped ahead needs the ORDER as well: Reality Spasm's tap-ahead floats every Mystic Monastery / Cascade
+// Bluffs, and the Spasm's own {U}{U} is paid out of that float a moment later, before anything untaps --
+// a total over the hand (Soulfire Eruption, Crackle with Power, Irencrag Feat: {R} everywhere) commits
+// them all {R} and the Spasm that the float exists for cannot be paid (docs/design/placeholder-card-
+// reads.md, MANA). This is the same set of casts the hold holds (LineCastCostTotal's filter: hand /
+// graveyard casts that pay mana), one entry each with its coloured pips, in line order. Bound by
+// LineSeqScope at EVERY site that binds the hold from an action list (both apply worlds, the payability
+// walks), and an entry leaves at the same point the hold is decremented (LineSeqPaid, beside every
+// SubManaCost(g_line_unpaid_cost, ...)). Null outside a line, and null everywhere when the lever is off --
+// that null IS the historical commit (CommitFloatChoicesBySeq is never reached), so =0 is byte-identical.
+struct LineSeqEntry
+{
+    InternedName  name;
+    std::uint8_t  pip[5] = { 0, 0, 0, 0, 0 };   // W U B R G coloured pips of the cast's line cost
+    std::int16_t  idx = -1;                     // the cast's index in LineSeq::acts
+};
+struct Action;   // ai/TurnSolver.h
+struct LineSeq
+{
+    static constexpr int kMax = 16;   // a longer line keeps its first 16 casts (the later ones matter least)
+    int          n = 0;
+    // The action list the entries index (the bound plan's actions / the walk's candidates); it outlives
+    // the binding scope. `ordered`: the entries are already in the order they will be cast (the walk's
+    // own fixed order). Otherwise they are in PLAN order, and the commit asks for the realised order of
+    // whatever is left (LineSeqLaterOrder: the comparator and the deck's arrangement both apply worlds
+    // order their casts by) when -- and only when -- it needs it.
+    const std::vector<Action>* acts = nullptr;
+    bool         ordered = false;
+    LineSeqEntry e[kMax];
+    void Push(const InternedName& nm, const ManaCost& c, int idx)
+    {
+        if (n >= kMax) { return; }
+        LineSeqEntry& x = e[n++];
+        x.name = nm;
+        x.idx  = static_cast<std::int16_t>(idx);
+        const int v[5] = { c.white, c.blue, c.black, c.red, c.green };
+        for (int i = 0; i < 5; ++i) { x.pip[i] = static_cast<std::uint8_t>(std::clamp(v[i], 0, 255)); }
+    }
+    // The cast `nm` has paid: its FIRST unpaid entry leaves (two copies of one card are cast in line
+    // order, so the earliest is the one paying). A cast the line does not name changes nothing.
+    void Paid(const std::string& nm)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (e[i].name.str() != nm) { continue; }
+            for (int k = i + 1; k < n; ++k) { e[k - 1] = e[k]; }
+            --n;
+            return;
+        }
+    }
+};
+// The entries of `seq` other than `skip` (an entry index, or -1), in the order the apply worlds will cast
+// them: their actions stable-sorted by CastOrderLess and arranged by the deck (ApplyDeckCastArrangement),
+// on the board as it is now. Defined in ManaPayment.cpp beside CastOrderLess.
+void LineSeqLaterOrder(const GameState& state, const LineSeq& seq, int skip, std::vector<int>& out);
+inline thread_local LineSeq* g_line_seq = nullptr;
+// RAII binding, the LineUnpaidCostScope nesting contract: a nested apply (a breakpoint continuation)
+// binds its own sequence and the outer one comes back on exit. `on` false binds nothing at all (the
+// lever is off): g_line_seq keeps whatever it was, which is null everywhere the lever is off.
+class LineSeqScope
+{
+public:
+    explicit LineSeqScope(bool on) : m_prev(g_line_seq), m_on(on) { if (m_on) { g_line_seq = &m_seq; } }
+    ~LineSeqScope() { if (m_on) { g_line_seq = m_prev; } }
+    LineSeq& Seq() { return m_seq; }
+    bool On() const { return m_on; }
+    LineSeqScope(const LineSeqScope&)            = delete;
+    LineSeqScope& operator=(const LineSeqScope&) = delete;
+private:
+    LineSeq  m_seq;
+    LineSeq* m_prev;
+    bool     m_on;
+};
+// Beside every SubManaCost(g_line_unpaid_cost, ...) of a cast payment.
+inline void LineSeqPaid(const std::string& name) { if (g_line_seq != nullptr) { g_line_seq->Paid(name); } }
+inline void LineSeqPaid(const InternedName& name) { if (g_line_seq != nullptr) { g_line_seq->Paid(name.str()); } }
 
 // THE PAYMENT'S OWN COLOURED PIPS, as the line hold still counts them (W,U,B,R,G). Every cast site
 // that binds g_line_unpaid_cost (both plan-apply paths, SubsetPayableSequential, CheckLine's walk)
@@ -24253,6 +24348,71 @@ inline void RitualUntapSources(GameState& state, int count)
     }
 }
 
+// The HISTORICAL colour pick of a choice-limited source's float unit: the colour the HAND's coloured
+// pips weigh most (MTG_PLACEHOLDER_MANA reads them off the definition; MTG_FLOAT_COMMIT_NET nets the
+// float), first-listed on a tie. Lifted out of FloatSourceTapCommitted unchanged so the sequence-aware
+// commit's leftover sources (CommitFloatChoicesBySeq) fall back to exactly this rule.
+inline Color HandPipCommitColor(const GameState& state, int active, const std::vector<Color>& prod)
+{
+    // THE PIP READ (MTG_PLACEHOLDER_MANA, DEFAULT ON since MTG_FLOAT_COMMIT_SEQ). A hand card's own
+    // m_mana_cost is a placeholder {0}, so the historical read weighs every colour at 0 and prod[0] always
+    // wins. With the definition pips, and THIS rule deciding every tap-ahead, it committed every Mystic
+    // Monastery / Cascade Bluffs to the hand's biggest colour ({R}: Soulfire, Crackle) and Reality Spasm's
+    // own {U}{U} could not be paid: Hinata on seed 1350001 lost 6 games / won 1, four not recovering at
+    // d8 b0. While a line applies the commit is now sequence-aware (CommitFloatChoicesBySeq) and this pick
+    // decides only a source the line has no use for (or a commit outside any line).
+    // docs/design/placeholder-card-reads.md (MANA).
+    const bool def_pips = PlaceholderManaOn();
+    // MTG_FLOAT_COMMIT_NET (DEFAULT OFF; a measured amendment; reads nothing unless MTG_PLACEHOLDER_MANA
+    // is on): the demand is NET of what already floats in that colour, so successive tap-ahead sources
+    // SPREAD across the colours the hand wants instead of every one committing the single biggest
+    // colour. Recovers Hinata seed 1350204 gi203 (T4 -> T5), but over seed 1350001 Hinata was still 5
+    // slower / 2 faster, four not recovering at d8 b0: a pip total, netted or not, is not the sequence.
+    static const bool s_net = EnvOn("MTG_FLOAT_COMMIT_NET", false);
+    const bool net = def_pips && heurarm::Flag(heurarm::FLOAT_COMMIT_NET, s_net);
+    Color best = prod[0]; int best_need = net ? INT_MIN : -1;
+    for (Color c : prod)
+    {
+        int need = 0;
+        for (const Card& hc : state.players[active].hand)
+        {
+            const ManaCost& mc = ZoneCardIf(def_pips, hc).m_mana_cost;
+            switch (c)
+            {
+                case Color::White: need += mc.white; break;
+                case Color::Blue:  need += mc.blue;  break;
+                case Color::Black: need += mc.black; break;
+                case Color::Red:   need += mc.red;   break;
+                case Color::Green: need += mc.green; break;
+                default: break;
+            }
+        }
+        if (net)
+        {
+            const ManaPool& fl = state.floating_mana;
+            switch (c)
+            {
+                case Color::White: need -= fl.white; break;
+                case Color::Blue:  need -= fl.blue;  break;
+                case Color::Black: need -= fl.black; break;
+                case Color::Red:   need -= fl.red;   break;
+                case Color::Green: need -= fl.green; break;
+                default: break;
+            }
+        }
+        if (need > best_need) { best_need = need; best = c; }
+    }
+    return best;
+}
+
+// Does one tap of this source float a CHOICE -- one unit of 2-4 colours, which the float must commit to
+// one colour (a dual land, a Signet's or a filter's net unit)? Everything else books itself
+// (AddRefloatContribution): a single colour, a Karoo's one-of-each, a rainbow source's `wild`.
+inline bool IsFloatCommitChoice(int amt, const std::vector<Color>& prod)
+{
+    return amt == 1 && prod.size() > 1 && prod.size() < 5;
+}
+
 // ONE REAL TAP of a mana source into the turn-scoped float (state.floating_mana), with the colour
 // rule every REAL float shares. The caller has already tapped the permanent; this only books its
 // output. Shared by the ritual TAP-AHEAD (RitualTapAheadIntoFloat, below) and the Karoo
@@ -24268,6 +24428,8 @@ inline void RitualUntapSources(GameState& state, int count)
 // wanted {R}). Ties keep list order. A FULL-rainbow source (Forbidden Orchard) stays WILD: there the
 // controller genuinely chooses any colour, and wild cannot pay a {C} pip the source could not make
 // either. A lumpy multi-colour source (a Karoo's one-of-each) gives one of each colour.
+// While a line is applying (g_line_seq, MTG_FLOAT_COMMIT_SEQ) both callers commit a choice source
+// through CommitFloatChoicesBySeq instead, which falls back to this rule's pick.
 inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefinition& d,
                                     const Permanent* perm)
 {
@@ -24275,62 +24437,239 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
     const std::vector<Color>& prod = (perm != nullptr)
                                    ? EffectiveProducesFor(state, active, d, perm)
                                    : EffectiveProduces(state, active, d, false);
-    if (amt == 1 && prod.size() > 1 && prod.size() < 5)
+    if (IsFloatCommitChoice(amt, prod))
     {
-        // THE PIP READ (MTG_PLACEHOLDER_MANA, DEFAULT OFF). A hand card's own m_mana_cost is a placeholder
-        // {0}, so the historical read weighs every colour at 0 and prod[0] always wins -- the "need-aware"
-        // commit below has never run. With the definition pips it commits every tap-ahead Mystic Monastery
-        // / Cascade Bluffs to the hand's biggest colour ({R}: Soulfire, Crackle), starving the next Reality
-        // Spasm's {U}{U}: Hinata on seed 1350001 lost 6 games / won 1, four not recovering at d8 b0 -- this
-        // colour is a payment-time choice the search never branches on. OFF until the commit is
-        // SEQUENCE-aware (the colours the rest of the line will spend, in order), not a pip total.
-        // docs/design/placeholder-card-reads.md.
-        const bool def_pips = PlaceholderManaOn();
-        // MTG_FLOAT_COMMIT_NET (DEFAULT OFF; a measured amendment; reads nothing unless MTG_PLACEHOLDER_MANA
-        // is on): the demand is NET of what already floats in that colour, so successive tap-ahead sources
-        // SPREAD across the colours the hand wants instead of every one committing the single biggest
-        // colour. Recovers Hinata seed 1350204 gi203 (T4 -> T5), but over seed 1350001 Hinata was still 5
-        // slower / 2 faster, four not recovering at d8 b0: a pip total, netted or not, is not the sequence.
-        static const bool s_net = EnvOn("MTG_FLOAT_COMMIT_NET", false);
-        const bool net = def_pips && heurarm::Flag(heurarm::FLOAT_COMMIT_NET, s_net);
-        Color best = prod[0]; int best_need = net ? INT_MIN : -1;
-        for (Color c : prod)
-        {
-            int need = 0;
-            for (const Card& hc : state.players[active].hand)
-            {
-                const ManaCost& mc = ZoneCardIf(def_pips, hc).m_mana_cost;
-                switch (c)
-                {
-                    case Color::White: need += mc.white; break;
-                    case Color::Blue:  need += mc.blue;  break;
-                    case Color::Black: need += mc.black; break;
-                    case Color::Red:   need += mc.red;   break;
-                    case Color::Green: need += mc.green; break;
-                    default: break;
-                }
-            }
-            if (net)
-            {
-                const ManaPool& fl = state.floating_mana;
-                switch (c)
-                {
-                    case Color::White: need -= fl.white; break;
-                    case Color::Blue:  need -= fl.blue;  break;
-                    case Color::Black: need -= fl.black; break;
-                    case Color::Red:   need -= fl.red;   break;
-                    case Color::Green: need -= fl.green; break;
-                    default: break;
-                }
-            }
-            if (need > best_need) { best_need = need; best = c; }
-        }
-        state.floating_mana.Add(best, 1);
+        state.floating_mana.Add(HandPipCommitColor(state, active, prod), 1);
     }
     else
     {
         AddRefloatContribution(state.floating_mana, amt, prod,
                                /*constrain_partial_choice=*/true);
+    }
+}
+
+// ---- THE SEQUENCE-AWARE FLOAT COMMIT (MTG_FLOAT_COMMIT_SEQ, DEFAULT ON) ------------------------------
+// A choice source tapped ahead (a Mystic Monastery's {U}/{R}/{W}, a Cascade Bluffs' net unit) floats ONE
+// unit that must be committed to a colour, and nothing searches that colour: it is a payment-time choice.
+// The historical commit weighed the HAND's pips as a total, and with the hand's real pips
+// (MTG_PLACEHOLDER_MANA) that is wrong in the most common Hinata shape: Reality Spasm's tap-ahead floats
+// the whole board and the Spasm's own {U}{U} is paid out of that float straight away, with every source
+// tapped -- but the hand is Irencrag Feat {1}{R}{R}{R}, Crackle with Power {X}{X}{X}{R}{R}, Soulfire
+// Eruption {6}{R}{R}{R}, so every Monastery / Bluffs committed {R} and the Spasm the float was made for
+// could not be paid (docs/design/placeholder-card-reads.md, MANA).
+//
+// The rule: the colours the REST OF THE LINE spends, in the order it spends them.
+//   tier 0 -- the PENDING cast's coloured pips (the cast this tap-ahead pays for, paid before anything
+//             untaps), net of the fixed float and of the sources the tap-ahead left untapped;
+//   tier 1 -- the later casts' pips (line order, LineSeq) that the fixed float leftover does not cover
+//             AND the board the step leaves behind cannot make (a matching over its sources: the
+//             sources the ritual untaps, plus those untapped and not spent on tier 0);
+//   tier 2 -- the later casts' remaining pips, line order: the board could make them, but a float unit
+//             spent on a pip the line WILL pay frees a board source, which keeps every colour it makes --
+//             so among commits that all leave the line payable this is the one that keeps the most
+//             options (a deterministic tie-break, nothing more).
+// The choice sources are MATCHED to that pip list (augmenting paths, pips in tier-then-line order): a
+// pip is covered whenever ANY assignment of the sources can cover it together with every earlier pip,
+// so a two-colour source is never spent on a pip a three-colour one could take while the two-colour one
+// was the only cover for a later pip. A source the line has no use for falls back to the historical
+// hand-pip pick (HandPipCommitColor), committed after the matched ones (FLOAT_COMMIT_NET sees them).
+//
+// Why a rule and not a branch: the line is KNOWN here -- it is the plan being applied, and the search
+// branches over lines, cast orders and X -- so every colour this commit could pick is either needed by
+// a named cast or by none. A colour no named cast needs cannot make the line pay where the matched one
+// did not; the only freedom left is among sources nothing in the line wants (tier "none"), and there
+// the historical pick stands. A branch would multiply every Spasm apply by |colours|^|sources| to
+// re-discover what the matching already knows.
+//
+// Pip colour index 0..4 = W U B R G (static_cast<int>(Color)); {C} pips are not a choice source's to pay.
+inline int MatchPipAugment(int pip, const std::uint8_t* pip_col, const std::vector<std::uint8_t>& slot_mask,
+                           std::vector<int>& slot_pip, std::vector<char>& seen)
+{
+    for (int s = 0; s < static_cast<int>(slot_mask.size()); ++s)
+    {
+        if (seen[s] || (slot_mask[s] & (1u << pip_col[pip])) == 0) { continue; }
+        seen[s] = 1;
+        if (slot_pip[s] < 0 || MatchPipAugment(slot_pip[s], pip_col, slot_mask, slot_pip, seen) >= 0)
+        { slot_pip[s] = pip; return s; }
+    }
+    return -1;
+}
+// Match `pips` (in priority order) to `slot_mask` sources; returns per slot the pip it covers (-1 none).
+// An augmenting path never uncovers a covered pip, so processing pips in order covers the
+// lexicographically earliest coverable set (the greedy on a transversal matroid).
+inline std::vector<int> MatchPipsToSlots(const std::vector<std::uint8_t>& pips,
+                                         const std::vector<std::uint8_t>& slot_mask)
+{
+    std::vector<int> slot_pip(slot_mask.size(), -1);
+    std::vector<char> seen(slot_mask.size(), 0);
+    for (int i = 0; i < static_cast<int>(pips.size()); ++i)
+    {
+        std::fill(seen.begin(), seen.end(), 0);
+        MatchPipAugment(i, pips.data(), slot_mask, slot_pip, seen);
+    }
+    return slot_pip;
+}
+// The colour mask(s) one tap of `p` can make, as slots for the board matching: one slot per unit, a
+// lumpy multi-colour source (a Karoo) one slot per colour it gives, a colourless-only source none.
+inline void AppendSourceSlots(const GameState& state, int controller, const Permanent& p,
+                              const CardDefinition& d, std::vector<std::uint8_t>& slots)
+{
+    const int amt = ManaProducedPerTap(d);
+    const std::vector<Color>& prod = EffectiveProducesFor(state, controller, d, &p);
+    std::uint8_t mask = 0;
+    for (Color c : prod)
+    { if (c != Color::Colorless) { mask = static_cast<std::uint8_t>(mask | (1u << static_cast<int>(c))); } }
+    if (mask == 0) { return; }
+    if (amt > 1 && prod.size() > 1 && prod.size() < 5)
+    {
+        for (Color c : prod)
+        { if (c != Color::Colorless) { slots.push_back(static_cast<std::uint8_t>(1u << static_cast<int>(c))); } }
+        return;
+    }
+    for (int k = 0; k < amt; ++k) { slots.push_back(mask); }
+}
+// Is `p` a mana source the payer may tap for an ordinary cast (the tap-ahead's own source test)?
+inline bool FloatSeqBoardSource(const GameState& state, const Permanent& p, const CardDefinition& d)
+{
+    if (d.params.colored_creature_only) { return false; }
+    return d.card.IsLand()
+        || (d.tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+        || d.params.mana_rock;
+}
+// MTG_FLOAT_COMMIT_TRACE (diagnosis only, default off): one stderr line per sequence-aware commit --
+// =1 the executor's (g_reveal_logger set) only, =2 every world.
+inline int FloatCommitTraceLevel()
+{
+    static const int v = EnvInt("MTG_FLOAT_COMMIT_TRACE", 0);
+    return v;
+}
+// Commit the choice sources `choice_bi` (battlefield indices, already tapped; `choice_prod` their
+// colours, copied) by the sequence rule above, then add every unit to the float. `pending` = the cast
+// this float pays next (null: none -- the Karoo tap-in-response); `pending_name` skips that cast's own
+// entry in the line sequence. `back_bi` = the sources the step gives back for the later casts (the
+// ritual untaps everything it tapped; empty for a Karoo, whose land leaves). The untapped own sources
+// are read off the board: they pay the pending cast's pips first, and whatever they do not spend there
+// is board for the later casts.
+inline void CommitFloatChoicesBySeq(GameState& state, int active, const std::vector<int>& choice_bi,
+                                    const std::vector<std::vector<Color>>& choice_prod,
+                                    const ManaCost* pending, const std::string* pending_name,
+                                    const std::vector<int>& back_bi)
+{
+    const LineSeq* seq = g_line_seq;
+    // The fixed float: everything already floating, the fixed-colour taps of this step included.
+    const ManaPool& fl = state.floating_mana;
+    int avail[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
+    int wild = fl.wild;
+    auto cover = [&](int c) -> bool
+    {
+        if (avail[c] > 0) { --avail[c]; return true; }
+        if (wild > 0)     { --wild;     return true; }
+        return false;
+    };
+    // Untapped own sources: the payer's other options for the pending cast, then board for later casts.
+    std::vector<std::uint8_t> untapped_slots;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && FloatSeqBoardSource(state, p, *d)) { AppendSourceSlots(state, active, p, *d, untapped_slots); }
+    }
+    std::vector<std::uint8_t> tier0, later;
+    if (pending != nullptr)
+    {
+        std::vector<std::uint8_t> pend;
+        const int pv[5] = { pending->white, pending->blue, pending->black, pending->red, pending->green };
+        for (int c = 0; c < 5; ++c) { for (int k = 0; k < pv[c]; ++k) { if (!cover(c)) { pend.push_back(static_cast<std::uint8_t>(c)); } } }
+        if (!pend.empty())
+        {
+            const std::vector<int> sp = MatchPipsToSlots(pend, untapped_slots);
+            std::vector<char> by_board(pend.size(), 0);
+            std::vector<std::uint8_t> left_slots;
+            for (std::size_t s = 0; s < sp.size(); ++s)
+            {
+                if (sp[s] >= 0) { by_board[static_cast<std::size_t>(sp[s])] = 1; }
+                else            { left_slots.push_back(untapped_slots[s]); }
+            }
+            for (std::size_t i = 0; i < pend.size(); ++i) { if (!by_board[i]) { tier0.push_back(pend[i]); } }
+            untapped_slots.swap(left_slots);
+        }
+    }
+    // The later casts, in the order they will be cast: the pending cast's own entry (its first unpaid
+    // entry by name -- it is still unpaid while its tap-ahead runs) is the pending bill above.
+    std::vector<int> later_order;
+    if (seq != nullptr)
+    {
+        int skip = -1;
+        for (int i = 0; pending_name != nullptr && i < seq->n; ++i)
+        { if (seq->e[i].name.str() == *pending_name) { skip = i; break; } }
+        LineSeqLaterOrder(state, *seq, skip, later_order);
+    }
+    for (int i : later_order)
+    {
+        const LineSeqEntry& e = seq->e[i];
+        for (int c = 0; c < 5; ++c) { for (int k = 0; k < e.pip[c]; ++k) { if (!cover(c)) { later.push_back(static_cast<std::uint8_t>(c)); } } }
+    }
+    std::vector<std::uint8_t> tier1, tier2;
+    if (!later.empty())
+    {
+        std::vector<std::uint8_t> board = untapped_slots;
+        for (int bi : back_bi)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(bi)];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr) { AppendSourceSlots(state, active, p, *d, board); }
+        }
+        const std::vector<int> sp = MatchPipsToSlots(later, board);
+        std::vector<char> by_board(later.size(), 0);
+        for (int x : sp) { if (x >= 0) { by_board[static_cast<std::size_t>(x)] = 1; } }
+        for (std::size_t i = 0; i < later.size(); ++i) { (by_board[i] ? tier2 : tier1).push_back(later[i]); }
+    }
+    std::vector<std::uint8_t> pips;
+    pips.reserve(tier0.size() + tier1.size() + tier2.size());
+    pips.insert(pips.end(), tier0.begin(), tier0.end());
+    pips.insert(pips.end(), tier1.begin(), tier1.end());
+    pips.insert(pips.end(), tier2.begin(), tier2.end());
+    std::vector<std::uint8_t> src_mask(choice_prod.size(), 0);
+    for (std::size_t i = 0; i < choice_prod.size(); ++i)
+    {
+        for (Color c : choice_prod[i])
+        { if (c != Color::Colorless) { src_mask[i] = static_cast<std::uint8_t>(src_mask[i] | (1u << static_cast<int>(c))); } }
+    }
+    const std::vector<int> sp = MatchPipsToSlots(pips, src_mask);
+    const int tr = FloatCommitTraceLevel();
+    const bool trace = tr >= 2 || (tr == 1 && g_reveal_logger != nullptr);
+    std::string tline;
+    for (std::size_t i = 0; i < choice_prod.size(); ++i)
+    {
+        if (sp[i] < 0) { continue; }
+        const Color c = static_cast<Color>(pips[static_cast<std::size_t>(sp[i])]);
+        state.floating_mana.Add(c, 1);
+        if (trace)
+        {
+            const int t = sp[i] < static_cast<int>(tier0.size()) ? 0
+                        : sp[i] < static_cast<int>(tier0.size() + tier1.size()) ? 1 : 2;
+            tline += " " + state.battlefield[static_cast<std::size_t>(choice_bi[i])].card.m_name.str()
+                   + "->" + ColorName(c) + "(t" + std::to_string(t) + ")";
+        }
+    }
+    for (std::size_t i = 0; i < choice_prod.size(); ++i)
+    {
+        if (sp[i] >= 0) { continue; }
+        const Color c = HandPipCommitColor(state, active, choice_prod[i]);
+        state.floating_mana.Add(c, 1);
+        if (trace)
+        { tline += " " + state.battlefield[static_cast<std::size_t>(choice_bi[i])].card.m_name.str() + "->" + ColorName(c) + "(hand)"; }
+    }
+    if (trace)
+    {
+        const ManaPool& f = state.floating_mana;
+        std::string ls;
+        for (std::size_t i = 0; i < later_order.size(); ++i) { ls += (i ? "," : "") + seq->e[later_order[i]].name.str(); }
+        std::fprintf(stderr, "[float-seq] %s T%d pending=%s later=[%s] tiers=%zu/%zu/%zu:%s -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
+                     g_reveal_logger != nullptr ? "exec" : "sim", state.turn_number,
+                     pending != nullptr ? pending->ToString().c_str() : "-", ls.c_str(),
+                     tier0.size(), tier1.size(), tier2.size(), tline.c_str(),
+                     f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild);
     }
 }
 
@@ -24353,7 +24692,15 @@ inline void FloatSourceTapCommitted(GameState& state, int active, const CardDefi
 // creature-only mana, depletion counters) are skipped: no untap-ritual deck runs one, so the
 // skip is byte-inert today and safe-by-construction if that ever changes. Caps at `chosen_x`
 // TOTAL tapped sources so the resolution's min(X, #tapped) always covers everything tapped here.
-inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
+//
+// `pending` / `pending_name`: the ritual's own cost (the live effective cost the caller is about to
+// pay, X and Hinata's discount applied) and card name -- every caller passes them (executor, rollout
+// apply, SubsetPayableSequential: lockstep). While a line is applying (MTG_FLOAT_COMMIT_SEQ) the choice
+// sources are committed AFTER every fixed-colour tap, by CommitFloatChoicesBySeq: the Spasm's own
+// {U}{U} first, then the rest of the line in order. Unbound (no line, or the lever off) -> the
+// historical per-source commit, in battlefield order, byte-identical.
+inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x, const ManaCost* pending = nullptr,
+                                    const std::string* pending_name = nullptr)
 {
     if (!SpasmUntapLiteralOn() || chosen_x <= 0) { return; }
     ++g_tap_ahead_calls;   // diagnostic (the mana oracle's unscripted-tap check)
@@ -24364,15 +24711,24 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
             || (d.tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
             || d.params.mana_rock;
     };
+    const bool seq = g_line_seq != nullptr;
+    std::vector<int> choice_bi, back_bi;
+    std::vector<std::vector<Color>> choice_prod;
     int tapped_n = 0;
-    for (const Permanent& p : state.battlefield)
+    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
     {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(bi)];
         if (p.controller_index != active || !p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && is_src(p, *d)) { ++tapped_n; }
+        if (d != nullptr && is_src(p, *d))
+        {
+            ++tapped_n;
+            if (seq && FloatSeqBoardSource(state, p, *d)) { back_bi.push_back(bi); }   // untapped by the ritual
+        }
     }
-    for (Permanent& p : state.battlefield)
+    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
     {
+        Permanent& p = state.battlefield[static_cast<std::size_t>(bi)];
         if (tapped_n >= chosen_x) { break; }
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
@@ -24388,7 +24744,30 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
         { continue; }
         p.tapped = true;
         ++tapped_n;
+        if (seq)
+        {
+            back_bi.push_back(bi);
+            const std::vector<Color>& prod = EffectiveProduces(state, active, *d, false);
+            if (IsFloatCommitChoice(ManaProducedPerTap(*d), prod))
+            {
+                choice_bi.push_back(bi);
+                choice_prod.push_back(prod);
+                continue;
+            }
+        }
         FloatSourceTapCommitted(state, active, *d, nullptr);
+    }
+    if (!choice_bi.empty())
+    { CommitFloatChoicesBySeq(state, active, choice_bi, choice_prod, pending, pending_name, back_bi); }
+    // MTG_FLOAT_COMMIT_TRACE on the historical path: the float the hand-pip commit left, and whether the
+    // ritual's own bill can come out of it (every eligible source is tapped by now).
+    else if (!seq && pending != nullptr && FloatCommitTraceLevel() > 0
+             && (FloatCommitTraceLevel() >= 2 || g_reveal_logger != nullptr))
+    {
+        const ManaPool& f = state.floating_mana;
+        std::fprintf(stderr, "[float-hand] %s T%d pending=%s -> float{w%d u%d b%d r%d g%d c%d *%d} pays-own=%d\n",
+                     g_reveal_logger != nullptr ? "exec" : "sim", state.turn_number, pending->ToString().c_str(),
+                     f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild, f.CanPay(*pending) ? 1 : 0);
     }
 }
 
@@ -31745,9 +32124,9 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                 if (need_model) { n = need[static_cast<int>(c)]; }
                 else
                 {
-                    // Hand pips off the DEFINITION under MTG_PLACEHOLDER_MANA (DEFAULT OFF -- see
-                    // FloatSourceTapCommitted for why, and what unblocks it).
-                    const bool def_pips = PlaceholderManaOn();
+                    // Hand pips off the DEFINITION under MTG_PLACEHOLDER_MANA_ETB (DEFAULT OFF -- see its
+                    // reader for the EDF game it loses; the ritual / Karoo site, MTG_PLACEHOLDER_MANA, is ON).
+                    const bool def_pips = PlaceholderManaEtbOn();
                     for (const Card& hc : state.players[controller].hand)
                     {
                         const ManaCost& mc = ZoneCardIf(def_pips, hc).m_mana_cost;
@@ -38354,7 +38733,17 @@ inline bool FloatKarooBouncedLand(GameState& state, int controller, int idx)
     if (d == nullptr || !KarooBounceFloatable(state, p, *d)) { return false; }
     p.tapped = true;
     const ManaPool before = state.floating_mana;
-    FloatSourceTapCommitted(state, controller, *d, &p);
+    // While a line is applying (MTG_FLOAT_COMMIT_SEQ) a choice land commits by the line's sequence, the
+    // ritual tap-ahead's rule (CommitFloatChoicesBySeq): no cast is pending at a land drop, and the land
+    // leaves, so nothing is given back -- the later casts are paid by the untapped board alone.
+    std::vector<Color> kprod;
+    if (g_line_seq != nullptr) { kprod = EffectiveProducesFor(state, controller, *d, &p); }
+    if (g_line_seq != nullptr && IsFloatCommitChoice(ManaProducedPerTap(*d), kprod))
+    {
+        CommitFloatChoicesBySeq(state, controller, std::vector<int>{ idx },
+                                std::vector<std::vector<Color>>{ kprod }, nullptr, nullptr, std::vector<int>{});
+    }
+    else { FloatSourceTapCommitted(state, controller, *d, &p); }
     if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
     if (g_play_event_sink)   // nulled by RevealLogPause for search/rollout -> real play only
     {

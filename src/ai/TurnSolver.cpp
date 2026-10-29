@@ -9015,6 +9015,10 @@ struct Ctx
     ManaCost    act_current{};
     int         untap_need = 0;
     std::vector<int> reserved;
+    // The line sequence (MTG_FLOAT_COMMIT_SEQ): only ever shortened in place (LineSeqPaid), so the bound
+    // object plus its length identifies its state. Every probe binds its own, so this is belt-and-braces.
+    const void* line_seq = nullptr;
+    int         line_seq_n = 0;
     void Capture()
     {
         plan_ctx    = CurrentPlanContext();
@@ -9024,13 +9028,16 @@ struct Ctx
         act_current = g_act_line_current;
         untap_need  = g_human_untap_need;
         reserved    = g_plan_reserved_sources;
+        line_seq    = g_line_seq;
+        line_seq_n  = g_line_seq != nullptr ? g_line_seq->n : 0;
     }
     bool Same() const
     {
         return plan_ctx == CurrentPlanContext() && plan_traits == CurrentPlanTraits()
             && line_unpaid == g_line_unpaid_cost && act_paid == g_act_line_paid
             && act_current == g_act_line_current && untap_need == g_human_untap_need
-            && reserved == g_plan_reserved_sources;
+            && reserved == g_plan_reserved_sources
+            && line_seq == g_line_seq && line_seq_n == (g_line_seq != nullptr ? g_line_seq->n : 0);
     }
 };
 // An answered question: the probe, its verdict, and the EXACT asked id sequence (compared on every hit,
@@ -9630,6 +9637,8 @@ static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vecto
     PayScratch _scratch(state);
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(acts));
+    LineSeqScope _lsq(FloatCommitSeqOn());   // the hold's casts in order (MTG_FLOAT_COMMIT_SEQ)
+    if (_lsq.On()) { BuildLineSeq(_lsq.Seq(), acts); }
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, acts));
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, acts); }
@@ -9966,6 +9975,9 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         if (!a.free_cast && !a.alt_cost) { AddManaCost(_walk_total, a.cost); }
     }
     LineUnpaidCostScope _luc(_walk_total);
+    // ...and the same casts in the walked order (MTG_FLOAT_COMMIT_SEQ), decremented beside the hold.
+    LineSeqScope _lsq(FloatCommitSeqOn());
+    if (_lsq.On()) { BuildLineSeq(_lsq.Seq(), cands, &ord); }
     // ...and whether the walked order casts a breakpoint opener (the twin of both apply paths' scope).
     LineOpensUnseenScope _lou([&]
     {
@@ -10057,7 +10069,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             AddRemandRiderCost(ec, cp, a.remand_by.str());
             // MTG_SPASM_UNTAP_LITERAL phase 3: same tap-ahead as the apply/executor twins, so
             // this sequential-payability answer prices the chain the way it will really be paid.
-            if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
+            if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x, &ec, &a.card_name.str()); }
             if (def.params.etb_untap_lands > 0)
             {
                 // The line's still-owed coloured pips steer which colour a banked unit commits to
@@ -10115,6 +10127,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             }
             // Paid -> the walk no longer owes it (mirrors apply_one's decrement; clamped).
             SubManaCost(g_line_unpaid_cost, ec);
+            LineSeqPaid(a.card_name);   // ...nor names it (MTG_FLOAT_COMMIT_SEQ; null when off)
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
         // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
@@ -10497,6 +10510,8 @@ static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<
     PayScratch _scratch(state);
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(sub));
+    LineSeqScope _lsq(FloatCommitSeqOn());   // the hold's casts in order (MTG_FLOAT_COMMIT_SEQ)
+    if (_lsq.On()) { BuildLineSeq(_lsq.Seq(), sub); }
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, sub));
     PlanTraits traits;
     if (PlanTraitsWanted()) { traits = TurnSolver::ComputePlanTraits(cp, sub); }
@@ -54661,6 +54676,8 @@ struct BpPrefixSnap
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
     ManaCost              line_unpaid;               // g_line_unpaid_cost as the prefix left it (MTG_BP_RESUME_LINE_HOLD)
+    LineSeq               line_seq;                  // *g_line_seq as the prefix left it (MTG_FLOAT_COMMIT_SEQ)
+    bool                  line_seq_bound = false;    // ...and whether one was bound at all (the lever on)
 };
 // The hold a resumed apply runs its continuation under, as last set by the resume branch (this thread).
 // Written there unconditionally (one copy, resume-only), read by nothing but BpResumeLineHoldForTest.
@@ -54719,6 +54736,25 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
         AddManaCost(total, a.cost);
     }
     return total;
+}
+
+// The line's casts in order (g_line_seq; MTG_FLOAT_COMMIT_SEQ) -- LineCastCostTotal's cast filter, so the
+// sequence names exactly the casts whose bill the hold holds. (The blink activation's {C} pip the hold
+// also carries is not a choice source's to pay, so the sequence leaves it out.)
+void BuildLineSeq(LineSeq& out, const std::vector<Action>& acts, const std::vector<int>* ord)
+{
+    out.n       = 0;
+    out.acts    = &acts;
+    out.ordered = ord != nullptr;   // the walk's order IS its cast order; a plan's is re-derived on demand
+    const int n = ord != nullptr ? static_cast<int>(ord->size()) : static_cast<int>(acts.size());
+    for (int k = 0; k < n; ++k)
+    {
+        const int i = ord != nullptr ? (*ord)[static_cast<std::size_t>(k)] : k;
+        const Action& a = acts[static_cast<std::size_t>(i)];
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+        if (a.free_cast || a.alt_cost) { continue; }
+        out.Push(a.card_name, a.cost, i);
+    }
 }
 
 // Does the line cast a breakpoint opener -- a card whose resolution reveals NEW castables this turn, so
@@ -56003,6 +56039,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // cast pays. Scoped, so a nested breakpoint re-solve gets its own hold and restores this one.
     // Empty (zero) for every plan without a hand cast, and inert for every deck with no mid-line sink.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // ...and the same casts in line order, for the float-colour commit (MTG_FLOAT_COMMIT_SEQ): an entry
+    // leaves in apply_one beside the hold's decrement. The executor binds the identical sequence at the
+    // same point (AIEngine::TakeTurn). Unbound when the lever is off -> the historical commit.
+    LineSeqScope _lsq(FloatCommitSeqOn());
+    if (_lsq.On()) { BuildLineSeq(_lsq.Seq(), plan.actions); }
     // ...and whether this line casts a breakpoint opener, so the hold above is incomplete (see
     // g_line_opens_unseen). Same scope, same nesting: a continuation's nested apply binds its own.
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
@@ -57846,7 +57887,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (oracle_owns && !manaoracle::TakeEngineStep(state, chosen_x))
                 { manaoracle::ScriptedTapAhead(state, chosen_x, /*lands_only=*/false); }
                 else
-                { manaoracle::EngineStepScope _es(state, oracle_owns); RitualTapAheadIntoFloat(state, chosen_x); }
+                { manaoracle::EngineStepScope _es(state, oracle_owns); RitualTapAheadIntoFloat(state, chosen_x, &ec, &name); }
             }
             if (def.params.etb_untap_lands > 0)
             {
@@ -57969,6 +58010,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // downstream may now spend it. Clamped at zero per field (see SubManaCost) -- the hold is
             // an upper bound built from the plan's costs, and an alt-cost / free cast owes less.
             SubManaCost(g_line_unpaid_cost, ec);
+            LineSeqPaid(name);   // ...and it leaves the line's sequence (MTG_FLOAT_COMMIT_SEQ; null when off)
             // ... and a PINNED replicate count is part of THIS cast's bill, not a later cast's. The
             // hold is summed from Action::cost, which for a replicate variant is `effective + k x
             // printed`, but the payment above spends only the effective half -- so without this the
@@ -62119,6 +62161,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // already paid -- a payment the executor's full apply never makes (EngineFlags.h has the repro). The
         // entry scope still restores the outer hold on exit.
         if (BpResumeLineHoldOn()) { g_line_unpaid_cost = bp_resume->line_unpaid; }
+        // ...and the line's unpaid SEQUENCE (MTG_FLOAT_COMMIT_SEQ), for the same reason and under the same lever:
+        // the entry bound the whole plan's casts, and the prefix that paid some of them is not re-applied.
+        if (BpResumeLineHoldOn() && g_line_seq != nullptr && bp_resume->line_seq_bound)
+        {
+            // The entries index the plan's actions; the resumed plan's list is THIS apply's (the captured
+            // one may be gone), with the identical prefix the cache keys on -- keep the live pointer.
+            const std::vector<Action>* live = g_line_seq->acts;
+            *g_line_seq = bp_resume->line_seq;
+            g_line_seq->acts = live;
+        }
         g_bp_resume_line_seen = g_line_unpaid_cost;   // BpResumeLineHoldForTest's read-back (write-only in play)
     }
     else
@@ -62528,6 +62580,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
             bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
+            bp_capture->line_seq_bound = g_line_seq != nullptr;   // ...and the sequence beside it (MTG_FLOAT_COMMIT_SEQ)
+            if (g_line_seq != nullptr) { bp_capture->line_seq = *g_line_seq; }
         }
         // MTG_BP_NODE pend (see BpNodeEnabled): a BASE plan applied by a node-hosting caller stops
         // HERE -- the partition point, post-draw and post-Karoo, its blind tail already truncated
@@ -62565,6 +62619,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
             bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
+            bp_capture->line_seq_bound = g_line_seq != nullptr;   // ...and the sequence beside it (MTG_FLOAT_COMMIT_SEQ)
+            if (g_line_seq != nullptr) { bp_capture->line_seq = *g_line_seq; }
             return;
         }
         deferred_cantrip_resolve = false;

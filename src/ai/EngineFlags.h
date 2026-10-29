@@ -498,6 +498,16 @@ inline bool AutoLineGenericOn()
     return heurarm::Flag(heurarm::AUTO_LINE_GENERIC, env_on);
 }
 
+// MTG_FLOAT_COMMIT_SEQ (2026-10-29; DEFAULT ON, =0 -> the hand-pip commit, byte-identical): the float-colour commit of a
+// choice source tapped ahead is SEQUENCE-aware while a line is applying (CommitFloatChoicesBySeq, SpellEffects.h). Read
+// at the binding sites (LineSeqScope: both apply worlds and the payability walks) -- an unbound sequence is what turns
+// the commit back into the historical one -- so the executor and the rollout cannot disagree.
+inline bool FloatCommitSeqOn()
+{
+    static const bool env_on = EnvOn("MTG_FLOAT_COMMIT_SEQ", true);
+    return heurarm::Flag(heurarm::FLOAT_COMMIT_SEQ, env_on);
+}
+
 // MTG_PAY_REFINE (2026-10-28; DEFAULT ON since 2026-10-29, the USER's adoption; =0 -> the payment as made): after an
 // outermost payment that cost life, energy or a haste-tagged {C} on a noncreature bill, or floated a surplus off two
 // or more taps, the payer asks the mana oracle for the cheapest payment of the same bill out of the same taps that

@@ -7401,6 +7401,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
     // every default-flag game; it is what makes that lever's executor half exist at all.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // ...and the same casts in line order, for the float-colour commit (MTG_FLOAT_COMMIT_SEQ; lockstep twin
+    // of ApplyPlanDirect's binding, same point, same builder). Unbound when the lever is off.
+    LineSeqScope _lsq(FloatCommitSeqOn());
+    if (_lsq.On()) { BuildLineSeq(_lsq.Seq(), plan.actions); }
     // ...and whether the line casts a breakpoint opener (g_line_opens_unseen), seeded at the same point
     // and from the same actions as ApplyPlanDirect's scope (lockstep).
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
@@ -8822,6 +8826,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     m_last_cast_remanded = false;
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
+    const InternedName seq_name = hand_card.m_name;   // the line sequence's key (LineSeqPaid, below)
     if (!def) { return; }
     // ADVENTURE (Brightcap Badger // Fungus Frolic, CR 715): swap in the adventure face's def for
     // the whole cast -- its cost is paid and its text resolves. The hand card is still `hand_card`
@@ -9217,7 +9222,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // just-tapped sources for the remainder of this one payment; re-derive it.
         if (def->params.untap_x_mana_sources && SpasmUntapLiteralOn())
         {
-            RitualTapAheadIntoFloat(state, chosen_x);
+            RitualTapAheadIntoFloat(state, chosen_x, &effective, &seq_name.str());
             {   // MTG_EXEC_TAP_TRACE: the tap-ahead's float (diagnosis only, default off)
                 static const bool s_tr = EnvOn("MTG_EXEC_TAP_TRACE");
                 if (s_tr)
@@ -9352,6 +9357,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // Paid, so the line no longer owes it -- the executor half of ApplyPlanDirect's identical
         // decrement, keeping the mid-line replicate gate below in lockstep with the rollout's.
         SubManaCost(g_line_unpaid_cost, effective);
+        LineSeqPaid(seq_name);   // ...and leaves the line's sequence (MTG_FLOAT_COMMIT_SEQ; null when off)
         // A PINNED replicate count is part of THIS cast's bill (Action::cost = effective + k x
         // printed) while the payment above spends only the effective half -- so the k x printed must
         // come off the hold here or the sink gate below can never clear it. Lockstep twin of
