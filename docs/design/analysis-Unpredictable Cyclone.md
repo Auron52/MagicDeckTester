@@ -1645,6 +1645,387 @@ question for the USER (Q57; Q54 on cyclone-mem), not a settings one.
 Regression tier: not run (my thread share; the A/B above is 1,300 games on the three decks the change can move, and
 smoke covers every deck).
 
+## Hard prunes + known-top blind test (2026-10-28)
+USER 2026-10-28: *"Hard prunes are what I would like to focus on first. In some cases we may need to accept some
+clairvoyance loss, but we need to be careful not to lose actual lines. We should also make sure that any testing or
+inference about whether something is clairvoyant should take in to account known information about the top of the
+library, since this deck manipulates it a lot."* Then: *"We will also want to work out where the cost is originating at the
+moment in terms of branching and per-node. The prunes should be focused on those areas ... We should generally be able
+to reduce the choices to a small number like 1-3."* And the design: *"search options that are vastly different when
+needed. So for example, putting junk on top when we plan to throw away those cards vs setting up a big creature to cycle
+into, but the heuristic would choose how to fulfil those options. Similarly Ponder shuffle vs reorder, but the heuristic
+would choose the order of the reorder. Naturally, even for these we may be able to prune the second or third plan
+depending on the situation. For example, if we have no Cyclone we need to be aggressive about searching for it.
+(shuffling with ponder, setting up junk to be shuffled with brainstorm and brainsurge)"*
+Branch `cyclone-prunes` (worktree `.claude/worktrees/cyclone-prunes`, cut from `cyclone-analysis` 330cc85bf, local).
+Scratch: `build/scratch/cyclone/prunes/`; summaries `logs/cyclone/prunes/`.
+
+### Where the cost is (2026-10-28)
+**Instrument.** `MTG_NODE_KIND_ATTRIB=1` (new, diagnostic; TurnSolver.cpp `nodekind`): every candidate a plan loop
+evaluates (the SolveWithLookahead root loop, FullSearchLine's pre-combat / second-main loops, the breakpoint-node
+children, the bp / group / tranche wave walkers) is ONE NODE, classified into exactly one decision kind; units and thread
+wall are credited to the INNERMOST open node (the node's own unit + its rollout steps until a nested node opens), so the
+rows partition the run. Split real game vs bottoming trial game (`turncensus::t_probe`). With `MTG_CANTRIP_ATTRIB=1` (fan
+widths) and `MTG_ROLLOUT_STATS=1` (units by site, budget discipline).
+**Shape** = the cost gate's worst cells: d5 b20 s3003 x20 + d5 b20 s2002 x20 (profile settings) + 2HG d3 b10 s2002 x40,
+one pooled batch, 12 threads, cyclone-analysis HEAD + the instrument (`build/scratch/cyclone/prunes/p0/`).
+
+| decision kind (node) | real game: nodes | units | thread wall | units/node | us/node | trial games: nodes | units | wall |
+|---|---|---|---|---|---|---|---|---|
+| Brainstorm / Brainsurge put-back variant (rank >= 1) | **56.4%** | 28.0% | **52.6%** | 0.7 | 31.6 | **59.3%** | 22.9% | **56.3%** |
+| Ponder order variant (order >= 1) | 5.8% | 3.8% | 6.0% | 1.0 | 35.2 | 7.3% | 3.7% | 7.0% |
+| cycle seed, default pin (which cycler) | 13.0% | 10.3% | 15.1% | 1.2 | 39.4 | 13.7% | 9.0% | 16.2% |
+| cycle seed pin (Curator j > 0, decline, Remand) | 11.8% | 2.6% | 6.4% | 0.3 | 18.3 | 10.5% | 1.7% | 5.7% |
+| breakpoint-node continuation child | 9.8% | **42.3%** | 12.9% | 6.3 | 44.4 | 6.0% | **47.2%** | 8.3% |
+| other base plans (casts / lands / pass) | 1.3% | 7.5% | 2.8% | 8.2 | 71.6 | 1.3% | 10.1% | 2.7% |
+| put-back cast at rank 0 / Ponder cast at order 0 | 0.8% | 2.0% | 1.9% | 3-4 | 86-91 | 0.8% | 2.1% | 1.9% |
+| fetch / land search | 0.3% | 2.0% | 0.7% | 9.4 | 76.5 | 0.2% | 2.2% | 0.5% |
+| Remand rider | 0.8% | 0.3% | 0.9% | 0.5 | 38.7 | 0.8% | 0.2% | 1.0% |
+| tutor (Long-Term Plans) variant | 0.1% | 0.2% | 0.2% | 1.7 | 51.4 | 0.1% | 0.2% | 0.2% |
+| outside any node (executor, roots, leaf) | -- | 0.9% | 0.5% | | | -- | 0.6% | 0.1% |
+| **total** | 26.6M nodes | 38.7M units | 900 s | | | 92.2M nodes | 127.9M units | 3,036 s |
+
+- **77% of all units are mulligan-bottoming TRIAL games** (no keep table; Q32, parked by the USER), and the mix inside
+  them is the same as in real games.
+- **Fan widths.** Brainstorm / Brainsurge resolutions: mean width 47.2 (default) / 50.3 (pinned), median 44, p90 72, max
+  132; 84.2 variants per fanned base plan (the enumeration's upper bound). Ponder: 7 at every resolution.
+- **Branching vs per-node.** The put-back fan is BOTH: it is the widest decision (about 50) and the most numerous node
+  (56-59%), and each member costs ~31 us of wall at only 0.5-0.7 units (a prefix re-apply, the put-back resolution and the
+  post-apply dedup, usually no rollout) -- so the unit budget under-prices it against every other node kind
+  (bp-node children cost ~7 us per unit, put-back variants ~45-60 us per unit). The breakpoint-node children hold the
+  rollouts (42-47% of units at 6-11 units per node). The cycle seeds are the second node mass (24-25% of nodes,
+  ~21% of wall).
+- **Budget discipline** (`[rollout-stats]`): 83.8% of all units are spent AFTER the decision budget is exhausted (nested
+  non-enforcing solves -- every in-window rollout turn's SolveWithLookahead runs its whole candidate list); 35.7% of units
+  are wasted in iterative-deepening passes that were aborted; 1,824 of 1,874 decisions commit at searched depth 1.
+- **Per node: perf** (Profile build, the heaviest cost-gate game -- d5 b20 seed 3005 gi 2, 214 s / 7.4M units -- the
+  WHOLE game, single thread, 60K samples; `/tmp/cyc_p0.perf.data`). A flat profile, no hotspot over 4.1%:
+  plan-object churn (Plan / vector<Action> copies, new / delete, the plan pool's size accounting) **15%**; state keys,
+  dedup and transposition tables (BuildSimKeyBase 5.1%) **10.7%**; mana payment (TapForCost*, ManaSourceRank, prepay)
+  **8.7%**; plan apply **8.2%**; enumeration (CollectActions, EnumeratePlans, the sub-decision axes, bp continuation
+  derivation, plan traits) **7.8%**; the cantrip scorer and fan lists (PutBackPickAt, ScoreTopDisposition,
+  ScoredReorderCandidates) **6.7%**; state copies **4.1%**; the rest a long tail. So per-node cost is generic per-node
+  overhead multiplied by the node count; the lever is the node count, and the put-back fan is most of it.
+
+**Three findings for the USER (play settings the USER owns; NOT changed here, each with its mechanism and a candidate
+fix):**
+1. *A put-back variant is under-priced 5-10x.* Mechanism: a fan member is charged one candidate unit
+   (`unitsite::kLookaheadCand` / `kFsPre`) like any node, but a member that is deduped or folded after its apply runs no
+   rollout, so it costs ~31 us of prefix re-apply and resolution for 0.5-0.7 units, against ~7 us per unit for a node that
+   rolls out. The start gate and overrun guard count units, so a budget spent on put-back members buys far more wall than
+   its units say. Candidate fix: charge a put-back member its measured apply cost (the existing `MTG_PUTBACK_PRICE` lever,
+   `kPutBackPrice`, sized to ~5 units), or remove the re-apply (design item 8's prefix snapshot). Both re-price play: a
+   held-out A/B, the USER's call.
+2. *83.8% of units are spent after the decision budget is exhausted.* Mechanism: a nested in-window rollout turn is a
+   NON-enforcing SolveWithLookahead (`gate = enforce_budget && budget`), which "runs every pass to completion and merely
+   consumes", so every rollout turn holding a Brainstorm evaluates its whole fan whether or not the decision has budget
+   left. Candidate fix: design §3.4 B2 -- a nested solve admits fan ranks beyond the first W only while the decision
+   budget is not exhausted (inert at unlimited budget by construction; turn-complete order preserved).
+3. *35.7% of units go to aborted deepening passes; 1,824 / 1,874 decisions commit at depth 1.* Mechanism: the first
+   iterative-deepening pass already overruns (median ~43K units against ~9K), so the d2 pass starts on the remaining
+   budget and is rolled back. Candidate fix: (a) shrink the first pass (the prunes below do that by ~4-10x); (b) do not
+   start a pass the overrun projection says cannot finish (the start gate's projection uses the previous pass's cost per
+   candidate -- with the put-back members priced honestly, finding 1, it would refuse those passes); (c) a settings change
+   (the d5 b20 play setting reaches depth 1 almost always, so its depth is nominal on this deck). All three are settings /
+   pricing, the USER's.
+
+### The known-library tracker and the known-respecting blind test (Phase A)
+**Why the old blind methods were wrong for this deck.** `shuffle_salt_search` re-salting (the Remand / Q44 blind replays)
+hides only the post-shuffle orders, so the opening library order stays visible to the search (UNDER-blinds). The
+honest-teacher reshuffle (`g_honest_teacher`) reshuffles the WHOLE library, destroying what the player legitimately
+knows -- Brainstorm / Brainsurge put-backs, Ponder's keep, a scry keep, Long-Term Plans' third-from-the-top (OVER-blinds:
+it would brand real set-up lines clairvoyant).
+**The tracker** (`Library`, src/core/Library.h; commit below). The library keeps what its owner KNOWS, maintained by the
+mutation primitives themselves, so no effect site has to remember: a known-POSITION mask over the top 32 live positions
+(every `insert()` is a placement the owner saw -- the put-back, Ponder / scry keep-on-top, Long-Term Plans' position, a
+tuck; a draw shifts the mask, an erase closes its gap) and the PLACED BOTTOM block (every `push_back`: a scry / mulligan
+bottom, the Cyclone walk's random-order bottom -- a known SET, possibly in unknown order). Any shuffle forgets both. Packed
+into the 8 bytes the old 32-bit `m_top` + `m_bottom_known` held: sizeof(Library) stays 32 (Player 200, GameState 1160).
+Nothing reads it unless the blind mode is on.
+**The blind mode** (`MTG_SEARCH_BLIND_UNKNOWN=1` + `MTG_SEARCH_BLIND_SALT=<k>`, or the manifest's per-job `"blind_salt"`;
+AIEngine `blindsearch`). Every REAL decision's search runs on a copy whose libraries have only the UNKNOWN positions
+re-randomised (`Library::BlindUnknownOrder`: known positions keep their card, the placed bottom block is permuted among
+itself, the rest refilled in a salt-keyed order -- common random numbers, so removing one card keeps every other unknown
+card's relative order), with the search's mid-game shuffle salts moved off the real ones. The real future is unchanged.
+What a real player decides only AFTER a reveal is re-decided against the reveal: a breakpoint continuation is re-solved
+(blind) instead of replayed by index; no committed line is kept past this phase; and the put-back pair / Ponder order is
+chosen at the REAL resolution by a chooser that evaluates every candidate the resolution offers (the provider's list,
+prunes included) with a blind search from the state the candidate leaves and takes the best (win turn, then the search's
+graded no-win leaf; ties to the provider's rank). A trial game (the London bottomer, the searched discard) is played on a
+blinded copy too. Several salts per game = a blind ENSEMBLE.
+**Known limitation (both arms alike):** the cycle seed's Curator scry j and Cyclone's free-cast take / decline pins are
+still chosen by the blind search and replayed against the real reveal (no chooser for them).
+**Validation.**
+- Byte-identity with the mode OFF: 100 Cyclone games (d3 b10 x60 seed 105000, d5 b20 x40 seed 106000; single-thread
+  processes, so deterministic despite the pool's refusals) -- the tracker build and the prune build each against the
+  HEAD binary: **100 / 100 per-game digests, win turns and job units identical**. Smoke: below.
+- Unit (`test_known_library.cpp`, 6 cases): every primitive; Brainstorm's put-back, Ponder keep / shuffle and a scry
+  through their REAL resolvers; Long-Term Plans' known third position under an unknown top; the walk's bottom block; the
+  blind reshuffle keeps known positions and the bottom SET, moves the rest, is deterministic per salt, and keeps the
+  unknown cards' relative order when one is removed; the mode is off by default.
+- What blindness costs on this deck (d3 b10, seed 105000 x16): clairvoyant 5.06; the blind MACHINERY with nothing blinded
+  (`MTG_SEARCH_BLIND_NOOP=1`, diagnostic) 5.50; blind salts 1 / 2: 7.75 / 7.75 (6 and 5 of 16 unwon by turn 8). Blind play
+  on this deck is a single-sample determinisation: the search plans every turn against ONE sampled library, so its
+  walks hit Street Wraiths and Curators the real library holds where the sample held an Eldrazi. The USER's own reference
+  games (non-clairvoyant, 10 games) averaged 6.20. So per-game blind outcomes are NOISY; the ensemble (4 salts, both
+  arms) is read per arm in aggregate as well as per game.
+
+### The hard prunes (Phase B): plan-level cantrips, the seed scry, the cycler rule
+Commit 4ec5a0957. The brief's prune list (PB-KEEP, PB-ELDRAZI, PB-NOCREATURE-ABOVE, PB-SHUFFLE, PONDER-GOOFF) was
+SUPERSEDED the same day by the USER's plan-level design (quoted above) and the rulings below. Its pieces live on in the plan
+fulfilment and in the situational layer. Every lever:
+- is a per-job heurarm slot, DEFAULT OFF (lossy: the USER adopts);
+- never prunes human play;
+- is lockstep by construction: the restriction lives in the shared candidate functions every world reads, so the
+  executor, the rollout and the blind chooser see the same, shorter list.
+
+**The generic hooks.**
+- `DecisionProvider::CantripPlanOf`, `CantripFanCap`, `CantripPlansActive`: each scored candidate is assigned to a plan
+  (or dropped). The engine keeps each plan's best-scored member (`CantripPlanFilter`, inside `PutBackPickAt`, its
+  reference twin `PutBackCandidates`, and `ScoredReorderCandidates`). The search fan is capped at enumeration
+  (`PutBackAxisWidth`, the Ponder order axis).
+- `CycleScryPinHeuristic`: the Curator scry is decided at resolution.
+- `CycleSeedAdmissionSets`: which cycler a plan may cycle, judged at PLAN level in EnumeratePlans' emission.
+- `CycloneExpendability`: ONE expendability rank (the go-off estimate's keep-need tiers). The scorer, the JUNK pick and
+  Ponder's keep-vs-shuffle all read it. USER: *"the discard heuristic should be useful for telling us which these are"*.
+  The bucket discard (not built; the coordinator's) can replace the tiers in that one function.
+
+**`MTG_CYCLONE_PB_PLANS` -- the put-back has at most TWO plans.** USER: *"We either choose the least useful from the
+discard heuristic or we set it up with Eldrazi."*
+- **JUNK** = `CycJunkPick`, fixed (not searched).
+  - THE CORE KEEP SET, held in hand when the hand has it (USER: *"keep at least 1 cycler, 1 cyclone, 2 land, 1 seething
+    song and 2 cantrips in hand"*): 1 Cyclone (kept in hand rather than reasoning about the shuffle risk); 1 creature
+    cycler (Street Wraith first); 2 lands; 1 Seething Song; 2 cantrips (Brainstorm and Ponder first).
+  - The 2 lands are 1 fetch + 1 non-fetch (USER: *"Maybe we keep 1 fetch and 1 non-fetch by default?"*). Myriad
+    Landscape takes the fetch slot only with no fetchland and its activation affordable next turn. In the non-fetch slot
+    it comes last (USER: *"Myriad is okay in the non-shuffle land if we don't have any others"*).
+  - Everything outside the core goes back first, least useful by the shared rank. A core card goes back only when too
+    few cards are outside the core.
+  - In the REDRAW case (no shuffle reachable after the cantrip), a card that cannot be used before its redraw counts a
+    sixteenth of its rank (the Q44(1) idea with the Q52 residual).
+  - The MORE useful card goes on top, the less useful second (USER: *"we should always put the less useful card 2 down
+    when we aren't setting up Eldrazi, because we may shuffle before we get to it"*).
+- **SETUP** = the scorer's best Eldrazi-placing candidate (Emrakul first; dead noncreatures above; two Eldrazi with two
+  cycles; at k = 1 only one placed, Q43(b)). It EXISTS only when an Eldrazi is held and a walk can reach it before the
+  redraw (go-off this turn or next, no piece missing). Otherwise the put-back is ONE plan (the rule-as-prune shape).
+- `MTG_CYCLONE_PB_PLAIN_RANK`: the measurement handle (JUNK by the plain shared rank, no core).
+- Realised Brainstorm / Brainsurge width (census below): median 2, p90 2. It was median 44, p90 72.
+
+**`MTG_CYCLONE_PONDER_PLANS` -- Ponder = KEEP (the scorer's best order: the most useful revealed card drawn now, junk
+below) vs SHUFFLE.** These are the scored fan's ranks 0-1, so the width is 2.
+
+**`MTG_CYCLONE_CANTRIP_SITUATIONAL` -- the situational layer.** It reads Library::KnownAt, never an undrawn card.
+- Put-back:
+  - no Cyclone available (hand, battlefield, a known library position) -> JUNK only. USER: *"we should focus on getting
+    the pieces we are missing if we don't have a way to get them. That means shuffling away the least useful cards."*
+  - ready to go off (k <= 1, a cycle payable, an Eldrazi held, a Cyclone available) -> SETUP only.
+- Ponder (USER: *"Sometimes you want to draw that useful card and then fetch-shuffle the rest away ... I'm fine with it
+  being searched a chunk of the time"*):
+  - every revealed card expendable while a piece is missing -> SHUFFLE only;
+  - a useful card revealed and no later shuffle this turn or next (a fetch / Myriad in hand or out, Long-Term Plans) ->
+    KEEP only;
+  - otherwise both. Per-resolution counts: `[cyclone-ponder-case]` under MTG_CANTRIP_ATTRIB.
+- These are one-option cuts in their situations.
+
+**`MTG_CYCLONE_SEED_PLANS` -- Curator's scry is not a pin.** `CycloneProvider::ScryKeepOnTop` decides each scry at
+resolution:
+- Cyclone out: bottom a non-Eldrazi creature (it would stop the walk), keep an Eldrazi or a noncreature.
+- No Cyclone out: keep a card with expendability >= 50.
+- One option for that sub-decision.
+
+**`MTG_CYCLONE_CYCLER_RULE` -- which creature cycler** (USER 2026-10-28; HeuristicArm.h quotes it). Judged PER PLAN,
+because the seed cycles after the plan's casts: a plan that casts the Cyclone first cycles with it out.
+- Cyclone out: one creature cycler. Street Wraith when no {U} is spare (no untapped blue source, or the mana is needed
+  for a Brainstorm / Brainsurge in hand); else Curator first, which keeps the free Wraith cycle.
+- Before the Cyclone is out:
+  - the Wraith is kept for a Cyclone in hand or KNOWN on top;
+  - the LAST creature cycler is never cycled when a Cyclone is in hand / known on top AND the mana is in reach. USER: *"a
+    desperation play"*; *"No we do need a Cyclone. That is the most common case where you may need to go all in."*
+- No Cyclone available: both cyclers stay searched, ORDER only, Curator before Wraith (USER ruling: *"I usually wouldn't
+  use my last cycler, but there are hands where you don't have that luxury"*).
+- A first build judged the rule at the enumeration state (before the plan's casts). It pruned "Seething Song, Cyclone,
+  cycle the last Wraith into Emrakul" (d5 gi70, T4 -> T5) and measured d5 +0.34. It was fixed before the measurement
+  below, and gi70 is T4 again.
+- A second defect, also fixed before the flip decision: the Cyclone-out branch judged "spare {U}" before the plan's own
+  casts. d5 gi141 (base T5 -> T7): Seething Song + Cyclone spent the blue, the Curator-only admission then had no {U}, and
+  the plan "Song, Cyclone, cycle Wraith into Emrakul" was pruned. Now the provider judges it PER PLAN
+  (`DecisionProvider::CycleSeedAdmitOut(state, cycler, plan_mana, plan_blue)`, called from TurnSolver's
+  `CycleSeedAdmitted` with the plan's mana and blue spent net of rituals): Curator only when `blue - plan_blue >= 1` and
+  `untapped - plan_mana - 1 >=` the cheapest put-back cantrip's cost, else Wraith only. gi141 is T5 again (= base).
+- Agent readings for the USER to confirm: "spare {U}" = a blue source left after the plan's casts beyond the cheapest
+  put-back cantrip in hand (per plan, above); "enough mana" = the go-off projection reaches {3}{R}{R} by turn 3 with red
+  not short.
+
+**Not built (ORDER items from the stash discussion):** "a fetch crack that would shuffle a known-useful stash away is
+ordered after the alternatives". Ponder's KEEP-first on a stashed top already holds through the scorer, whose shuffle goes
+second when the look holds a needed card.
+
+**Tests.**
+- `test_cyclone_cantrip_plans.cpp`:
+  - the put-back plans: JUNK only at k >= 2 (core kept; the more useful on top); JUNK + SETUP at k = 0 (rank 0 unchanged,
+    fast path == reference); the core vs the plain-rank handle;
+  - the USER's go-off rules as SETUP's fulfilment;
+  - every situational case, including a KNOWN vs an UNKNOWN Cyclone on top;
+  - Ponder plans and Ponder's three situational cases;
+  - the seed scry rule;
+  - every cycler-rule case, including the plan casting the Cyclone and the last-cycler prune.
+- Scenarios (each a USER exception still found with the levers ON): `cyclone_plans_dead_above_emrakul`,
+  `cyclone_plans_two_eldrazi_emrakul_first`, `cyclone_plans_dump_then_fetch_shuffle` (the shuffle line),
+  `cyclone_plans_ponder_keeps_a_revealed_cyclone`, `cyclone_seed_plans_scry_bottoms_wraith`,
+  `cyclone_cycler_rule_spends_curator_first`.
+
+### The measurement (Phase C) and the adoption bar (2026-10-28/29)
+**Shape.** One pooled batch per binary, per-job heurarm flags, FRESH seeds: d3 b10 `ignore_play_profile` x400 (seed
+109000) and d5 b20 with the profile x200 (seed 110000); `MTG_SLOW_GAME_MS=1` for per-game units, game logs and traces.
+Arms that were re-run after a fix (CYCLER and PBCYC on the per-plan cycler build) pair across batches: the engine is
+deterministic per game (a re-run PB_d5 is byte-identical between batches; the wall-check games below match Phase C's
+win turns 100%). Scratch `build/scratch/cyclone/prunes/pc/`, `pc3/`; the delta is avg win turn vs the all-OFF base
+(unwon = 9, + = slower).
+
+| arm (levers ON) | d3 delta (se) | d3 slower / faster | d5 delta (se) | d5 slower / faster | units x base d3 / d5 | kept-game units x base d3 / d5 |
+|---|---|---|---|---|---|---|
+| base (all OFF): avg 5.2250 / 5.2550 | | | | | 1 / 1 | 402K / 587K per game |
+| PB (`PB_PLANS`) | **-0.125 (0.038)** | 50 / 78 | -0.010 (0.050) | 32 / 30 | x0.241 / x0.234 | x0.219 / x0.208 |
+| PBPLAIN (PB + `PB_PLAIN_RANK`) | -0.105 (0.036) | 46 / 70 | +0.030 (0.049) | 33 / 26 | x0.239 / x0.237 | x0.214 / x0.211 |
+| POND (`PONDER_PLANS`) | 0.000 (0.018) | 12 / 14 | 0.000 (0.016) | 4 / 3 | x0.919 / x0.895 | x0.947 / x0.902 |
+| SITU (`CANTRIP_SITUATIONAL`) | +0.048 (0.031) | 49 / 30 | +0.020 (0.039) | 20 / 16 | x0.883 / x0.838 | x0.877 / x0.890 |
+| SEED (`SEED_PLANS`) | -0.020 (0.019) | 11 / 16 | +0.020 (0.026) | 8 / 7 | x0.949 / x0.951 | x0.928 / x0.974 |
+| CYCLER (`CYCLER_RULE`, per plan) | **-0.053 (0.028)** | 25 / 41 | **-0.035 (0.038)** | 12 / 17 | x0.861 / x0.793 | x0.809 / x0.796 |
+| PBCYC (PB + CYCLER) | **-0.140 (0.040)** | 53 / 91 | **-0.070 (0.050)** | 25 / 32 | x0.197 / x0.181 | x0.163 / x0.162 |
+| ALL (PB+POND+SITU+SEED, old cycler) | -- | | +0.050 (0.047) | 38 / 26 | -- / x0.204 | -- / x0.176 |
+| SINGLE (the rule's single pick) | -- | | +0.020 (0.049) | 29 / 24 | -- / x0.227 | -- / x0.203 |
+
+**Memory and per-arm cost** (node-kind census, d5 b20 s3003 x20, single thread, UNBOUNDED plan cache): base 41.3M units,
+14:55, **16.2 GB RSS**; PB 10.2M, 5:42, 0.86 GB; PBCYC 7.6M, 4:35, 0.62 GB; ALL (all levers) 5.7M, 3:29, 0.26 GB.
+After PB the Brainstorm / Brainsurge width is median 2, p90 2 (from 44 / 72), and the node mass moves to the cycle seeds
+(default pin ~30%, pins ~35% of nodes) and Ponder's order variants (20% of nodes, width still 7 without POND).
+
+**Wall, same batch (the CYCLER cost check, 2026-10-29).** The Phase C thread-wall of the re-run CYCLER arm read x1.4-1.6
+against units x0.79-0.86 -- but it ran in a later, far more loaded batch than base. Re-measured interleaved in ONE batch
+(the same Release binary, base and CYCLER alternating per game, `MTG_PGO=0`): **d5 30 pairs wall x0.827, units x0.830
+(CYCLER faster in 22); d3 25 pairs wall x0.866, units x0.833 (18 faster).** Units and wall move together; perf on two
+games shows a flat profile with no rule function in the top 30. The x1.4 was load, not a unit mis-pricing.
+
+**Classification of the slower games (first divergence from base, then the known-top blind ensemble).** Most slower
+games diverge BEFORE any pruned decision -- a land, a cast, a mulligan bottom (the bottomer's trial games): budget
+butterflies, since a prune re-prices the search everywhere. Per arm (slower games' first-divergence kind, d3 | d5):
+PB putback 3, ponder 4, cycle 8, mulligan 9, other 26 | putback 2, ponder 3, cycle 8, mulligan 5, other 14; CYCLER
+putback 1, ponder 1, cycle 5, mulligan 4, other 14 | putback 2, ponder 1, cycle 3, other 6. The games whose first
+difference IS the pruned decision, each read with the known-top blind (4-20 salts per arm) and, for put-backs, a
+real-future ensemble (8-16 re-salted shuffle futures, same knowledge):
+
+| game | lever | the move that differs (base vs arm) | known-top blind (arm - base) | real futures | reading |
+|---|---|---|---|---|---|
+| **d3 gi92** | PB | put back [Ulamog Gyre top, Emrakul] vs [Emrakul top, Gyre] (the USER's Emrakul-first rule) | +0.50 (unwon pairs) | +0.125 | first read as noise; **REAL LOST LINE** in the isolated T1 test (below) |
+| d3 gi96 | PB | put back [Cyclone, Cyclone], keep Ulamog vs [Ulamog, Cyclone], keep a Cyclone | +0.50 (unwon pairs) | -- | butterfly: same hand by name after the T2 draw |
+| d3 gi315 | PB | T2: [Mountain, Ulamog CH], keep Myriad vs [Myriad, Ulamog CH], keep Mountain | -0.25 | -- | clairvoyance |
+| d5 gi95 | PB | [Brainsurge, Emrakul], keep Tarn vs [Tarn, Emrakul], keep Brainsurge | -2.00 | +0.25 (one unwon future) | clairvoyance |
+| **d5 gi179** | PB, PBCYC | [Emrakul top, Ponder] (Emrakul redrawn, Ponder shuffled away by a T2 Tarn) vs JUNK [Myriad top, Emrakul] | **PB +0.68 (se 0.43), PBCYC +1.16 (se 0.46), n = 19** | PB -0.75 (se 0.43, n = 16) | first read as a lost line; **CLAIRVOYANCE** after the isolated T1 test (below) |
+| d3 gi382 | PBCYC | [Brainsurge, Remand], keep LTP vs [LTP, Remand], keep Brainsurge | +0.50 | -- | noise (PB alone took another T1 line and tied base) |
+| d3 gi10 | CYCLER | T2 cycle Curator, the LAST cycler, with a Cyclone in hand vs hold it (USER rule) | 0.00 | -- | clairvoyance |
+| d3 gi393 | CYCLER | cycle Wraith before the Tarn crack (an unknown top) vs Tarn first | -2.00 | -- | clairvoyance |
+| d3 gi395 | CYCLER | T1 cycle Curator + both Wraiths, Cyclone in hand vs Brainstorm, Wraiths kept for the Cyclone | -1.00 | -- | clairvoyance |
+| d5 gi61 | CYCLER | T3 cycle Curator vs play Myriad | -1.00 | -- | clairvoyance |
+| d5 gi151 | CYCLER | Cyclone out: cycle Wraith vs Curator (spare {U}: the rule) | -1.33 | -- | clairvoyance |
+| d5 gi141 | CYCLER | (first build) Song + Cyclone took the {U}: "cycle Wraith into Emrakul" pruned | -- | -- | FIXED (per-plan spare {U}); now T5 = base |
+| d3 gi80, gi360; d5 gi27 | PBCYC | base cycles on T1, the arm holds; that cycle is admitted under CYCLER (CYCLER alone plays it) | +1.25 / +0.75 / 0.00 | -- | butterfly |
+
+**d5 gi179 -- from "lost line" to clairvoyance.** The full side by side (the exact T1 state, the scorer's readout, every
+turn) is `logs/cyclone/prunes/gi179/README.md`.
+- **First reading.** The two blind tests disagreed. The known-top blind (20 salts) favoured base: PB +0.70 (se 0.41),
+  PBCYC +1.15. The real-future ensemble (16 futures) favoured PB: -0.75 (se 0.43). The bar judges with the known-top
+  blind, so PB was held OFF.
+- **What the blind traces showed.** The blind base puts Emrakul on top in 11/20 salts. In the 5 salts where base and PB
+  make the identical T1 put-back, PB is still +0.8 worse. Those games diverge later, at decisions PB does not prune.
+- **A searched third plan did not help.** STASH (the JUNK pair reversed) read +0.60 and was deleted.
+- **The real game.** Base's T4 kill goes through two shuffles whose outcome the search can see (Q51): a T2 Tarn crack,
+  then the T3 cleanup discard of Emrakul, whose graveyard shuffle re-randomises the top. The T4 walk then hits Curator,
+  and then Emrakul.
+- **THE ISOLATED T1 TEST (USER: "Is the decision truly the wrong one given limited information?").** From gi179's T1
+  state, each order was forced and the rest played with the same PB search, 40 known-top blind salts, paired by salt.
+  The diagnostic was `MTG_DIAG_PB_T1_ORDER=2`, turn 1 only, which printed the scorer's k=3 c=0 missing=1
+  shuffle_after=0.
+
+  | salts | n | [Myriad top, Emrakul] (JUNK) | [Emrakul top, Myriad] | delta (Emrakul-top - JUNK) |
+  |---|---|---|---|---|
+  | the order actually forced (both cast the T1 Brainstorm) | 19 | 7.21 | 7.84 | +0.63 (se 0.43); 6 better, 11 worse |
+  | all salts | 40 | 7.50 | 7.95 | +0.45 (se 0.23) |
+
+  The JUNK order is NOT worse given what the player knows. Emrakul on top is, if anything, slower: with no Cyclone (a
+  piece missing, k = 3), no shuffle this turn and a Brainsurge held, the land redrawn first is worth more than the
+  Eldrazi redrawn first. The USER's ruling ("If not we should list it as clairvoyance and move on"): **gi179 =
+  CLAIRVOYANCE**, STASH deleted, and PB_PLANS passes bar (2).
+- **The USER's rule review of the same case** gave the AMENDED KEEP PRIORITY (QP3, below). It changes WHICH cards go
+  back. The ORDER stays the USER's go-off rule.
+
+**d3 gi92 -- the same isolated test finds a real lost line.** Side by side: `logs/cyclone/prunes/gi92/README.md`. On
+the play, T1 Brainstorm; no Cyclone; k = 3, no shuffle this turn. JUNK is the two Eldrazi, "more useful on top":
+[Emrakul, Ulamog Gyre]. Base played [Gyre, Emrakul].
+
+| salts | n | [Emrakul top, Gyre] (JUNK) | [Gyre top, Emrakul] | delta (Gyre-top - JUNK) |
+|---|---|---|---|---|
+| the order actually forced | 27 | 8.44 | 8.00 | **-0.44 (se 0.22)**; 11 better, 4 worse, 12 tied |
+| all salts | 40 | 8.43 | 8.13 | -0.30 (se 0.15) |
+
+- Mechanism: the top card is redrawn next turn, so Emrakul first redraws the best walk target into hand, where it is
+  dead. The USER's go-off ORDER rule ("Otherwise you may want it second or third from the top ... so that you don't
+  draw it and can drop it instead") applies to two Eldrazi as well. Emrakul-first is SETUP's rule, not JUNK's.
+- **PB_PLANS stays OFF** until JUNK's order puts the lesser Eldrazi on top and Emrakul second when not going off this
+  turn, and gi92 re-measures clean (QP2).
+
+**THE AMENDED KEEP PRIORITY, measured (2026-10-29; binary b14, one pooled batch, the Phase C seeds, pinned flags).**
+The b14 controls with explicit pins (base / PB / PBCYC, 20 games each) are byte-identical to Phase C.
+
+| arm | d3 vs base | d3 vs PB / PBCYC | d5 vs base | d5 vs PB / PBCYC | units vs PB / PBCYC |
+|---|---|---|---|---|---|
+| PB + KEEP_AMEND + KEEP_MYRIAD | -0.1225 (0.038) | **+0.0025 (0.019)**, 22 / 19 | -0.055 (0.048) | **-0.045 (0.030)**, 11 / 18 | x1.01 / x1.02 |
+| PB + KEEP_AMEND (no Myriad sub-lever) | -0.120 (0.038) | +0.005 (0.019) | -0.060 (0.048) | -0.050 (0.030) | x1.01 / x1.02 |
+| PB + CYCLER + KEEP_AMEND + KEEP_MYRIAD | -0.135 (0.040) | **+0.005 (0.017)** vs PBCYC, 21 / 18 | -0.125 (0.051) | **-0.055 (0.025)** vs PBCYC, 5 / 14 | x1.00 / x1.02 |
+
+- The Myriad sub-lever on its own (AMEND with vs without it) moves ONE game per depth: d3 Myriad better by 0.0025,
+  d5 worse by 0.005.
+- Bar (1) at d3: the amendment is +1 / +2 games against PB / PBCYC. That is "+1 is not neutral", so by the letter it is
+  not adopted. In aggregate it is better: d5 -0.045 / -0.055, about 1.5-2.2 se. The USER's call (QP3).
+- Bar (2): the direct put-back divergences among its slower games (d5 gi3, gi106; d3 gi108, gi113), 4 known-top blind
+  salts per arm: -0.25, +0.25, +0.25, -1.00. No lost line shows.
+- gi179 in the real game (PBA, d5): T4 = base. gi95, gi96 and gi315: = base. gi92: = PB, T6; that is the two-Eldrazi
+  order, which this amendment does not touch.
+
+**The blind test's own weakness, stated plainly.** Blind play on this deck is a single-sample determinisation: every
+turn is planned against ONE sampled library, so many blind games go unwon (the noop machinery alone: 5.50 / 5.56 vs the
+clairvoyant 5.06 with the first, weaker chooser; 5.125 with the FullSearchLine chooser that replaced it). Per-game blind
+deltas on 4 salts are mostly unwon-vs-unwon pairs; only a game with 15-20 salts (gi179) reads with a usable se.
+
+**Verdicts against the USER's adoption bar** ((1) held-out paired net <= 0 at d3 AND d5 and better in aggregate; (2) no
+slower game a lost line not recognisable as clairvoyance; (3) it helps performance):
+- **CYCLER_RULE: passes all three** -> flipped DEFAULT ON (cd8bd730b). (1) -0.053 / -0.035; (2) every direct game
+  clairvoyance or fixed; (3) units x0.86 / x0.79, same-batch wall x0.87 / x0.83.
+- **PB_PLANS: (1) and (3) pass; (2) FAILS on d3 gi92** (the two-Eldrazi JUNK order, isolated test -0.44 se 0.22;
+  gi179 is clairvoyance) -> stays DEFAULT OFF; the order amendment is owed (QP2). (1) -0.125 / -0.010; (3) units x0.24,
+  unbounded RSS 16.2 GB -> 0.86 GB.
+- PBCYC: -0.140 / -0.070, units x0.20 / x0.18; the same gi92 hold.
+- POND: (1) exactly neutral (0.000 / 0.000, "0 is neutral" -- not better), (3) x0.92 / x0.90 -> not adopted (QP4).
+- SITU (+0.048 / +0.020), SEED (-0.020 / +0.020), PBPLAIN (+0.030 at d5), ALL, SINGLE: fail (1) -> OFF.
+
+### State at the handover (2026-10-29, the Hinata2 generation)
+Commits on `cyclone-prunes` (local):
+- 4ec5a0957: the tracker, the blind test, the plan-level prunes (all default OFF), the census;
+- a6766244f: the per-plan spare {U};
+- e672a8f73: KEEP_AMEND / KEEP_MYRIAD + the T1 order diagnostic, default OFF;
+- cd8bd730b: **CYCLER_RULE default ON**;
+- this ledger.
+
+Gates for the last two: unit 2112/2112, scenarios 339/339, smoke ALL PASS (149/149, play-changed 0).
+
+OWED, in order:
+1. The two-Eldrazi JUNK order (QP2) -> gi92 isolated re-test -> the PB A/B -> the PB flip with its test pins and the
+   `cyclone_putback_unusable_before_redraw` scenario pin.
+2. QP5 (SITU / SEED root cause).
+3. The aggregate blind ensemble over the slower / faster games (UN-RUN; pc3 batch7 killed as superseded).
+
+Exact commands: `logs/cyclone/prunes/RESUME.md` in the worktree. Run summaries: `logs/cyclone/prunes/summaries/`. Side
+by sides: `logs/cyclone/prunes/gi179/`, `gi92/`.
+
 ## Open questions for the user (collected, never blocking)
 - Q1. Win-turn metric with extra turns -- ANSWERED 2026-10-26: extra turns do not count (rounds).
 - Q2. Shock lands always paid untapped while life > 2 (not searched) -- ANSWERED 2026-10-27: leave as is
@@ -1956,6 +2337,42 @@ smoke covers every deck).
   cycles (Cyclone); elsewhere a cycle stays a standalone plan, but the viewer badge now QUEUES it as its own segment instead
   of firing at once. Extend plan-item cycling to every deck? Default: Cyclone-style decks only.
 - QR2. The four tied reference games (s1, s5, s8, s10, T5): a large-budget hunt for a T4 line? Default: no (bar met).
+- QP1. (Hard prunes 2026-10-28/29) `MTG_CYCLONE_CYCLER_RULE` is FLIPPED DEFAULT ON: the USER's adoption bar read clean at
+  both depths (d3 -0.053, d5 -0.035; every direct game clairvoyance or fixed; units x0.86 / x0.79, same-batch wall
+  x0.87 / x0.83). Two agent readings inside it still want the USER's confirmation: "spare {U}" = a blue source left after
+  the PLAN's casts beyond the cheapest put-back cantrip in hand; "enough mana" = the go-off projection reaches {3}{R}{R}
+  by turn 3 with red not short. `MTG_CYCLONE_CYCLER_RULE=0` restores the old play. Default: ON.
+- QP2. `MTG_CYCLONE_PB_PLANS` stays DEFAULT OFF (2026-10-29). It passes bar (1) (d3 -0.125, d5 -0.010) and bar (3)
+  (units x0.24; 16.2 GB -> 0.86 GB RSS unbounded). Bar (2): d5 gi179 is clairvoyance (isolated T1 test). d3 gi92 is a
+  REAL lost line: with two Eldrazi and no go-off this turn, the lesser Eldrazi on top measured -0.44 (se 0.22) against
+  JUNK's Emrakul-first. OWED, first: JUNK's order puts the lesser Eldrazi on top and Emrakul second when not going off
+  this turn (the USER's go-off order rule, applied to PB_PLANS itself); then re-run the gi92 isolated test, the PB A/B
+  and the gate. Default: OFF.
+- QP3. THE AMENDED KEEP PRIORITY (`MTG_CYCLONE_KEEP_AMEND` + sub-lever `MTG_CYCLONE_KEEP_MYRIAD`, built, default OFF;
+  the USER's review of gi179). It is the shared expendability rank, so the scorer, JUNK and Ponder all read it.
+  - (a) The land need fills in this order: fetchlands, untapped non-basics, basics (a red one first when short on red),
+    enters-tapped lands. The LAST needed land, if a plain land, drops to the surplus tier when
+    E = (k + the kept cantrips' looks + 1 per creature cycler) x L / N >= 1. L / N is the library's land density, taken
+    from its composition (never its order).
+  - (b) A Myriad whose line (play next drop, crack the turn after, the basics usable the turn after that) reaches the
+    Cyclone's mana STRICTLY earlier is kept above a plain land, outside the need, and its +1 land enters the mana
+    projection.
+  - (c) An Eldrazi ranks above the surplus lands while a Brainstorm / Brainsurge is held.
+  - The pair's ORDER is the USER's go-off rule: the Eldrazi goes on top only when going off this turn.
+  - gi179 becomes [Island top, Emrakul], Myriad kept.
+  - Measurement: the section's amendment table. Adopt? The USER's call.
+- QP4. `MTG_CYCLONE_PONDER_PLANS` is exactly quality-neutral (0.000 at both depths, 12 / 14 and 4 / 3 games moved) at
+  units x0.92 / x0.90. The bar asks for "better in aggregate", so it is not adopted. Adopt it as a collapse anyway (it is
+  LOSSY, so the collapse directive does not cover it)? Default: OFF.
+- QP5. `MTG_CYCLONE_CANTRIP_SITUATIONAL` (+0.048 / +0.020) and `MTG_CYCLONE_SEED_PLANS` (-0.020 / +0.020) are the
+  USER's situational and scry rules and measured worse / mixed. A root-cause pass on their slower games (as CLAUDE.md asks
+  for a USER rule that measures worse) is OWED and not done in this pass (PB was the critical path). Default: OFF.
+- QP6. The three Phase 0 findings (a put-back variant under-priced 5-10x; 83.8% of units after the budget is exhausted;
+  35.7% in aborted passes with 1,824 / 1,874 decisions at depth 1) are pricing / budget, the USER's: proposals only.
+- QP7. The known-top blind has no chooser for the cycle seed's Curator scry j or Cyclone's free-cast pins (both arms
+  alike). Default: disclosed limitation.
+- QP8. The stash discussion's ORDER items ("a fetch crack that would shuffle a known-useful stash away is ordered after
+  the alternatives") are not built; STASH (QP3) is the put-back half of the same idea. Default: not built.
 
 ## Approved deferrals
 - Instant timing collapsed to main phase (Brainsurge, Long-Term Plans, Curator / Wraith cycling): USER-approved 2026-10-27 ("All spells are cast at sorcery speed here").
