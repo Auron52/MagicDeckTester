@@ -1,0 +1,30 @@
+{
+ "deck": "galadriel",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "galadriel-artifact-queue-d7d6a5-20261029T151448",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "c869d047be6d6a92fcaf7d6f0cba27c9ff3c4f99",
+   "frozen": "dc35363d4841f70a7b4e649f9132b65ef82fce15",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": 0.00825,
+   "cost": [
+    1.0942331981506639,
+    0.009088872956971547,
+    32
+   ],
+   "trade": false,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.00825 t, cost 1.094x (se 0.009, 32 seeds)); incumbent restored"
+  }
+ ]
+}
