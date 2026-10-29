@@ -182,7 +182,7 @@ SMOKE_CASES=(
   "burn       5  1001   450 20"
   "th      0 1001 1000 0"
   "th         3  1001    50 10"
-  "th         5  1001   175 20"
+  "th         5  1001   175 40"
   "knights 0 1001 1000 0"
   "knights    3  1001    75 10"
   "knights    5  1001   325 20"
@@ -404,13 +404,13 @@ SMOKE_CASES=(
   # both sides of the "each opponent x heads" class sit in one deck. ~4 core-s.
   "whiteknights2hg 5  1001    75 20"
   "fivecolour2hg 5  1001    50 20"
-  "fluctuator2hg 5  1001    75 20"
+  "fluctuator2hg 5  1001    75 40"
   # angels2hg: antilife/minotaur sizing. Angels is one of the cheapest decks in the matrix
   # (d3 b10 ~0.066 s/game), so the whole relevant-tier treatment costs ~7 core-s here.
   "angels2hg  5  1001   100 20"
   "slivers2hg 5  1001    50 20"
   "burn2hg    5  1001    50 20"
-  "th2hg      5  1001    50 20"
+  "th2hg      5  1001    50 40"
   "dragonstorm2hg 5  1001    50 20"
   "auras2hg   5  1001    50 20"
   "creature_giving2hg 5  1001    50 20"
@@ -439,7 +439,7 @@ SMOKE_CASES=(
   # counts => ~7 core-min added to the pooled batch.
   "fluctuator 0 1001 1000 0"
   "fluctuator 3  1001    50 10"
-  "fluctuator 5  1001   175 20"
+  "fluctuator 5  1001   175 40"
   # giants: mono-red Giant tribal (Stinkdrinker cost reduction into Inferno Titan / Surtland
   # Flinger fling / Tectonic Giant modal). Measured single-thread at the GATE budgets 2026-09-22,
   # post-rebase: d0 1000 games in 2 ms (free), d3 b10 0.521 s/game, d5 b20 1.098 s/game, and NO
@@ -746,8 +746,8 @@ REGRESSION_CASES=(
   "burn       5  3003   900 20"
   "th      0 2002 1000 0"
   "th         3  2002   175 10"
-  "th         5  2002   600 20"
-  "th         5  3003   600 20"
+  "th         5  2002   600 40"
+  "th         5  3003   600 40"
   "knights 0 2002 1000 0"
   "knights    3  2002   100 10"
   "knights    5  2002   500 20"
@@ -859,7 +859,7 @@ REGRESSION_CASES=(
   "knights2hg 5  2002   100 20"
   "whiteknights2hg 5  2002   100 20"
   "fivecolour2hg 5  2002    75 20"
-  "fluctuator2hg 5  2002   100 20"
+  "fluctuator2hg 5  2002   100 40"
   # angels2hg: antilife/minotaur sizing again (~10 core-s at 0.066 s/game).
   "angels2hg  5  2002   150 20"
   # pd2hg: see the pd SMOKE block (a 2HG-relevant deck).
@@ -867,8 +867,8 @@ REGRESSION_CASES=(
   # fluctuator: gate budgets at both seeds (~14 core-min). See the SMOKE block for measured costs.
   "fluctuator 0 2002 1000 0"
   "fluctuator 3  2002    50 10"
-  "fluctuator 5  2002   200 20"
-  "fluctuator 5  3003   200 20"
+  "fluctuator 5  2002   200 40"
+  "fluctuator 5  3003   200 40"
   # giants: see the SMOKE block. Unlike Snow, this deck is NOT seed-sensitive -- the regression
   # seeds are actually CHEAPER than the smoke seed, so the smoke counts carry across unchanged.
   # MEASURED IN THE TIER'S OWN SEEDS 2026-09-22: d3 b10 63.3/61.0 core-s at s2002/s3003
@@ -1124,10 +1124,10 @@ OVERNIGHT_CASES=(
   "th      0  8008 2000 0"
   "th      0 10010 2000 0"
   "th         3  4004   325 10"
-  "th         5  4004  1925 20"
-  "th         5  5005  1925 20"
-  "th         5  6006  1925 20"
-  "th         5  7007  1925 20"
+  "th         5  4004  1925 40"
+  "th         5  5005  1925 40"
+  "th         5  6006  1925 40"
+  "th         5  7007  1925 40"
   "knights 0 4004 2000 0"
   "knights 0  6006 2000 0"
   "knights 0  8008 2000 0"
@@ -1512,10 +1512,10 @@ OVERNIGHT_CASES=(
   "fivecolour2hg 5  5005   100 20"
   "fivecolour2hg 5  6006   100 20"
   "fivecolour2hg 5  7007   100 20"
-  "fluctuator2hg 5  4004    100 20"
-  "fluctuator2hg 5  5005    100 20"
-  "fluctuator2hg 5  6006    100 20"
-  "fluctuator2hg 5  7007    100 20"
+  "fluctuator2hg 5  4004    100 40"
+  "fluctuator2hg 5  5005    100 40"
+  "fluctuator2hg 5  6006    100 40"
+  "fluctuator2hg 5  7007    100 40"
   # angels2hg: minotaur2hg's exact shape -- 150 games against the deck's own 500-game d5 rows,
   # at the same b40. This is the tier that actually exercises Righteous Valkyrie's anthem under
   # a 37-life threshold over a full game, rather than just tripping a digest. ~1 core-min.
@@ -1543,10 +1543,10 @@ OVERNIGHT_CASES=(
   "fluctuator 0  8008 2000 0"
   "fluctuator 0 10010 2000 0"
   "fluctuator 3  4004   175 10"
-  "fluctuator 5  4004   700 20"
-  "fluctuator 5  5005   700 20"
-  "fluctuator 5  6006   700 20"
-  "fluctuator 5  7007   700 20"
+  "fluctuator 5  4004   700 40"
+  "fluctuator 5  5005   700 40"
+  "fluctuator 5  6006   700 40"
+  "fluctuator 5  7007   700 40"
   # snow: see the SMOKE block. This is the tier with room -- the whole Snow block is ~5,400 core-s
   # (1.5 core-h, doubling the bare-probe figure for --lookahead-bottoming as the smoke block
   # explains), i.e. ~170 s of makespan on 32 cores against an 8 h budget, so the deck gets its real
