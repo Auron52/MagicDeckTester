@@ -13849,10 +13849,13 @@
   "rows": 11275,
   "note": "eval_model retrained on rows dumped at SHIPPED play WITH the deck profile, so the exhaustive keep model was live. Labels are searched K=3 for every deck (a pooled dump forces one label mode). value_leaf_table/crossover here are the OLD ones until the regenerated matrix lands."
  },
- "value_trust_depth": 5,
  "value_play": {
   "expected_buckets": 13,
   "mull_gen_depth": 1,
-  "mull_gen_budget_ms": 3
+  "mull_gen_budget_ms": 3,
+  "target_depth": 5,
+  "budget_ms": 40,
+  "enabled": true,
+  "note": "E.7 play-setting stage 2026-10-29: d5b40 adopted over the built-in default (no enabled block) (d5/20); the cheapest of 4 passing arm(s) (0.99x vs live, delta +0.00000)"
  }
 }
