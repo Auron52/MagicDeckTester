@@ -4,9 +4,12 @@
   "valueleaf": "em:2550e4f625f80f336c21"
  },
  "deck": "fluctuator",
+ "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.010969 t, cost 1.009x (se 0.009, 32 seeds)); incumbent restored; valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fluctuator/DECISIONS.txt)",
+ "finished": "2026-10-29T16:57:37Z",
  "frozen": "97fc2c2371beb7bb1101ea14a70d4dfc2f777dd2",
  "heartbeat": "2026-10-29T16:43:23Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/fluctuator-20261029-1657",
  "run_id": "fluctuator-artifact-queue-d7d6a5-20261029T153818",
  "score": 0.2304,
  "stage": "valueleaf",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-29T15:38:18Z",
- "state": "running",
+ "state": "rejected",
  "worker": "artifact-queue-d7d6a5"
 }
