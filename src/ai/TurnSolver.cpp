@@ -493,6 +493,27 @@ static std::atomic<long long> g_axis_dup_skips{0};
 static std::atomic<long long> g_m2_variant_dup_skips{0};   // main-2 post-apply variant dedup (see m2_seen_states)
 static std::atomic<long long> g_m2_stillborn_skips{0};    // main-2 pre-apply overrun-rank skip (see m2_known_n)
 static std::atomic<long long> g_axis_le_vars{0};   // Land's Edge fire-count variants emitted
+// MTG_LACKEY_PRUNE_STATS (DIAGNOSTIC only, default OFF, no play change; printed at exit): the Lackey decline prune's
+// census -- every decline digit it judged, by verdict: pruned by Rule A / Rule B, or kept because the deck gate
+// failed, the candidate set can grow (a feeder or a breakpoint with a non-plain card in the library), the ordinals
+// are not exact, no plain card is guaranteed, or the non-plain cards can fill the searched ranks.
+static std::atomic<long long> g_lkdp_census[11] = {};
+namespace
+{
+struct LkdpCensusPrinter
+{
+    ~LkdpCensusPrinter()
+    {
+        if (!EnvOn("MTG_LACKEY_PRUNE_STATS")) { return; }
+        std::fprintf(stderr, "[lackey-decline-prune] pruned_A=%lld pruned_B=%lld kept_gate=%lld kept_grows=%lld "
+                     "kept_inexact=%lld kept_noplain=%lld kept_width=%lld (grows: bp_cont=%lld feeds=%lld feeder_put=%lld; inexact_bp=%lld)\n",
+                     g_lkdp_census[0].load(), g_lkdp_census[1].load(), g_lkdp_census[2].load(),
+                     g_lkdp_census[3].load(), g_lkdp_census[4].load(), g_lkdp_census[5].load(),
+                     g_lkdp_census[6].load(), g_lkdp_census[7].load(), g_lkdp_census[8].load(),
+                     g_lkdp_census[9].load(), g_lkdp_census[10].load());
+    }
+} g_lkdp_census_printer;
+}   // namespace
 // MTG_DIG_CENSUS (diagnostic only, default OFF; printed at exit). The cycle / sac-to-draw dig loop in
 // ApplyPlanDirect, counted per apply that DUG, split by who decided it -- the instrument for "the dig is
 // never automatic inside the search window" (MTG_DIG_SEARCHED_CHOICE). `auto` = a -1 plan that is not
@@ -24328,6 +24349,14 @@ static std::size_t LackeyAxisWidth()
         return n < 1 ? 1 : static_cast<std::size_t>(n);
     }();
     return w;
+}
+// MTG_LACKEY_DECLINE_PRUNE (HeuristicArm.h LACKEY_DECLINE_PRUNE; DEFAULT ON, =0 -> every decline MTG_LACKEY_DECLINE
+// emits): the SOUND restriction of the searched Lackey decline -- see "THE DECLINE PRUNE" in AppendSubdecisionAxes.
+// A search-shape gate (the executor enumerates nothing), so its one reader lives here.
+static bool LackeyDeclinePruneOn()
+{
+    static const bool e = EnvOn("MTG_LACKEY_DECLINE_PRUNE", true);
+    return heurarm::Flag(heurarm::LACKEY_DECLINE_PRUNE, e);
 }
 
 // (MTG_M2_AXES deleted 2026-09-30, USER HARD RULE docs/design/no-greedy-in-search-window.md: the
@@ -76445,8 +76474,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     //   * the put's timing is forced: Muxus's ETB reveals the top six NOW and bottoms the rest, Goblin Matron's tutor
     //     shuffles NOW -- a later cast reads a different library;
     //   * echo (Mogg War Marshal, Stingscourger): the put starts the echo clock this turn.
-    // Declining is dominated whenever SOME candidate's put dominates holding it; restricting the decline to the
-    // other case is a provider prune that needs that per-card proof, and is not done here. The decline was never
+    // Declining is dominated whenever SOME candidate's put dominates holding it; MTG_LACKEY_DECLINE_PRUNE (below,
+    // "THE DECLINE PRUNE") restricts the decline to the other case on the provider's per-card proof. The decline was never
     // reachable as a searched choice: the 2026-10-29 no-win investigation (docs/design/canonical-nowin-order-
     // dependence.md, Goblins seed 1330145 gi144) only reached a "put one, keep the other" line when a stale
     // battlefield position silently dropped the second Lackey's trigger (fixed: MTG_COMBAT_STABLE_SOURCES).
@@ -76604,6 +76633,196 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 });
                 constexpr int kLackeyProductCap = 27;
                 const int inherited = state.scripted_cheat_choice;
+                // THE DECLINE PRUNE (MTG_LACKEY_DECLINE_PRUNE, DEFAULT ON; =0 every decline). A SOUND restriction:
+                // a decline is dropped only where a SEARCHED put provably does at least as well. The provider owns
+                // the card facts (DecisionProvider.h, CombatCheatPutDominatesHold -- the lemma: a PLAIN card put now
+                // weakly dominates holding it -- and CombatCheatDeclinePruneSound, the deck-level half); this site
+                // only counts. For the decline at ordinal k of a variant:
+                //   RULE A -- no NON-plain card can be a candidate at any trigger this combat: none left in hand at
+                //     combat damage (those in hand now, minus the ones the plan itself casts or Vial-puts), and nothing
+                //     that could join -- a tutor (CombatCheatHandFeed), a feeder a breakpoint continuation could still
+                //     cast, a feeder put by an earlier trigger -- unless the library holds no non-plain candidate.
+                //     A continuation only REMOVES cards otherwise (the deck gate admits no draw). Then put the front
+                //     instead: whatever the
+                //     declining line later puts, the putting line can put too (a card's rank only falls when another
+                //     card leaves the hand, so it stays inside the searched ranks), and every card it puts in
+                //     addition -- including at a trigger the ordinals did not count, which takes the front -- is
+                //     plain, so the lemma covers each one. By induction on the first dominated decline (it moves to
+                //     a strictly later ordinal at each step), some emitted variant is at least as good.
+                //   RULE B -- the ordinals are EXACT (every trigger this combat reads its own pin: no breakpoint, no
+                //     action that can bring a card in uncounted, no ordinal past the product cap), a plain card is
+                //     guaranteed in hand at trigger k (plain in hand - plain the plan casts - puts at earlier
+                //     ordinals >= 1), and fewer non-plain cards than searched ranks can be there (so a plain one is
+                //     inside the top `width` of the provider's ranking). Then put that plain card at k and decline
+                //     wherever the declining line later put it: the same argument, with no unpinned trigger left to
+                //     take a front.
+                // Otherwise the decline stays: a non-plain card (Muxus's reveal, Goblin Matron's tutor and shuffle,
+                // echo, Rundvelt's impulse exile, a second legendary copy) is exactly where holding can win.
+                const bool dec_prune = lackey_dec && lackey_cast && LackeyDeclinePruneOn();
+                const DecisionProvider& dprov = ResolveProvider(state);
+                bool dp_sound = false, dp_lib_nonplain = false, dp_bf_stager = false;
+                int dp_plain_hand = 0, dp_nonplain_hand = 0;
+                // Per hand index: 1 = a non-staged NON-plain candidate, 2 = a non-staged plain candidate (0 otherwise);
+                // and the card's hand feed (CombatCheatHandFeed), staged or not.
+                std::vector<std::int8_t> dp_hand_kind, dp_hand_feed;
+                std::vector<std::pair<const CardDefinition*, bool>> dp_plain_memo;
+                auto dp_matches = [&](const CardDefinition* d)
+                {
+                    if (d == nullptr || d->card.IsInstant() || d->card.IsSorcery()) { return false; }
+                    for (const std::string& sub : want) { if (CardHasSubtype(d->card, sub)) { return true; } }
+                    return false;
+                };
+                auto dp_plain = [&](const CardDefinition* d)
+                {
+                    for (const auto& m : dp_plain_memo) { if (m.first == d) { return m.second; } }
+                    const bool r = dprov.CombatCheatPutDominatesHold(state, me, *d);
+                    dp_plain_memo.emplace_back(d, r);
+                    return r;
+                };
+                if (dec_prune)
+                {
+                    dp_sound = dprov.CombatCheatDeclinePruneSound(state, me);
+                    if (dp_sound)
+                    {
+                        // The non-plain candidate DEFINITIONS that can exist (hand + library): a plain card counts
+                        // toward the guaranteed-plain bound only if none of them could drop it from the provider's
+                        // ranking (CombatCheatCandidates' dominance prune needs the same cost and body -- so a
+                        // non-plain card sharing both "shadows" it, and Rule B does not lean on it).
+                        std::vector<const CardDefinition*> nonplain_defs;
+                        auto note_nonplain = [&](const CardDefinition* d)
+                        {
+                            if (std::find(nonplain_defs.begin(), nonplain_defs.end(), d) == nonplain_defs.end())
+                            { nonplain_defs.push_back(d); }
+                        };
+                        for (const Card& c : lp.hand)
+                        {
+                            if (c.m_is_staged) { continue; }   // impulse-exiled: never a candidate (FireCombatDamageCheatIntoPlay)
+                            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                            if (dp_matches(d) && !dp_plain(d)) { note_nonplain(d); }
+                        }
+                        // Library COMPOSITION only (a multiset the public zones determine), never an identity at a
+                        // position, so the non-recording RawAt cannot make an undrawn card outcome-relevant.
+                        for (std::size_t li = 0, ln = lp.library.size(); li < ln; ++li)
+                        {
+                            const CardDefinition* d = CardDatabase::Instance().LookupCached(lp.library.RawAt(li));
+                            if (dp_matches(d) && !dp_plain(d)) { dp_lib_nonplain = true; note_nonplain(d); }
+                        }
+                        auto shadowed = [&](const CardDefinition* d)
+                        {
+                            const ManaCost& a = d->card.m_mana_cost;
+                            for (const CardDefinition* n : nonplain_defs)
+                            {
+                                const ManaCost& b = n->card.m_mana_cost;
+                                if (a.generic == b.generic && a.white == b.white && a.blue == b.blue && a.black == b.black
+                                    && a.red == b.red && a.green == b.green && a.colorless == b.colorless
+                                    && a.has_x == b.has_x && d->card.m_power == n->card.m_power
+                                    && d->card.m_toughness == n->card.m_toughness) { return true; }
+                            }
+                            return false;
+                        };
+                        dp_hand_kind.assign(lp.hand.size(), 0);
+                        dp_hand_feed.assign(lp.hand.size(), 0);
+                        for (std::size_t hi = 0; hi < lp.hand.size(); ++hi)
+                        {
+                            const Card& c = lp.hand[hi];
+                            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                            if (d != nullptr) { dp_hand_feed[hi] = static_cast<std::int8_t>(dprov.CombatCheatHandFeed(*d)); }
+                            if (c.m_is_staged || !dp_matches(d)) { continue; }
+                            if (!dp_plain(d)) { ++dp_nonplain_hand; dp_hand_kind[hi] = 1; }
+                            else { dp_hand_kind[hi] = 2; if (!shadowed(d)) { ++dp_plain_hand; } }
+                        }
+                        // A permanent that stages library cards on a death (Rundvelt): a breakpoint continuation could
+                        // cast a staged Matron.
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != me || q.is_token) { continue; }
+                            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+                            if (d != nullptr && dprov.CombatCheatHandFeed(*d) == 3) { dp_bf_stager = true; break; }
+                        }
+                    }
+                }
+                // Per base plan, at combat damage: the plain cards it may have taken out of the hand, the non-plain
+                // candidates it can leave there, whether an uncounted card can join (`unbounded`; the library then
+                // decides whether it can be a non-plain one), whether a put feeder can add one between triggers, and
+                // whether its ordinals are exact.
+                struct DpPlan
+                {
+                    int plain_lb = 0, nonplain = 0;
+                    bool unbounded = false, feeder_left = false, exact = false, bp = false, feeds = false;
+                };
+                auto dp_plan = [&](const TurnSolver::Plan& p, int n_ord_raw, int fit) -> DpPlan
+                {
+                    DpPlan f;
+                    if (!dp_sound) { return f; }
+                    int removes_plain = 0, removes_nonplain = 0;
+                    bool feeds_now = false, stages = false;
+                    std::vector<char> removed(lp.hand.size(), 0);
+                    for (const Action& a : p.actions)
+                    {
+                        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                        if (d == nullptr) { continue; }
+                        const int feed = dprov.CombatCheatHandFeed(*d);
+                        if (feed == 1 || feed == 2) { feeds_now = true; }
+                        else if (feed == 3) { stages = true; }
+                        if (dp_matches(d) && dp_plain(d)) { ++removes_plain; }   // any kind: a cast, a Vial put, a channel
+                        // A non-plain hand card the plan takes out (by its enumeration-time hand index, and only when
+                        // that slot really holds it) is not there at combat damage.
+                        const int hi = a.hand_index;
+                        if (hi >= 0 && hi < static_cast<int>(lp.hand.size()) && !removed[static_cast<std::size_t>(hi)]
+                            && lp.hand[static_cast<std::size_t>(hi)].m_name == d->card.m_name)
+                        {
+                            removed[static_cast<std::size_t>(hi)] = 1;
+                            if (dp_hand_kind[static_cast<std::size_t>(hi)] == 1) { ++removes_nonplain; }
+                        }
+                    }
+                    const bool bp = PlanOpensBreakpoint(state, p) != 0;
+                    // A continuation can cast what is still in hand (staged included) -- a feeder there, or a stager
+                    // on the battlefield / cast by the plan, can bring an uncounted card.
+                    bool cont_feeder = dp_bf_stager || stages;
+                    bool feeder_left = false;
+                    for (std::size_t hi = 0; hi < lp.hand.size(); ++hi)
+                    {
+                        if (removed[hi] || dp_hand_feed[hi] == 0) { continue; }
+                        cont_feeder = true;
+                        if (dp_hand_kind[hi] != 0 && (dp_hand_feed[hi] == 1 || dp_hand_feed[hi] == 2)) { feeder_left = true; }
+                    }
+                    f.plain_lb    = dp_plain_hand - removes_plain;
+                    f.nonplain    = dp_nonplain_hand - removes_nonplain;
+                    f.unbounded   = feeds_now || (bp && cont_feeder);
+                    f.feeder_left = feeder_left;
+                    f.exact       = !feeds_now && !bp && n_ord_raw <= fit;
+                    f.bp          = bp;
+                    f.feeds       = feeds_now;
+                    return f;
+                };
+                // Is the decline at ordinal k dominated, `puts_before` put digits ahead of it in the same variant?
+                auto dp_verdict = [&](const DpPlan& f, int puts_before, int width) -> int   // g_lkdp_census slot
+                {
+                    if (!dp_sound) { return 2; }
+                    const bool grows = dp_lib_nonplain && (f.unbounded || (f.feeder_left && puts_before > 0));
+                    if (!grows && f.nonplain == 0) { return 0; }                                  // RULE A
+                    if (grows) { return 3; }
+                    if (!f.exact) { return 4; }
+                    if (f.plain_lb - puts_before < 1) { return 5; }
+                    if (f.nonplain >= width) { return 6; }
+                    return 1;                                                                     // RULE B
+                };
+                static const bool s_lkdp_stats = EnvOn("MTG_LACKEY_PRUNE_STATS");
+                auto dp_dominated = [&](const DpPlan& f, int puts_before, int width) -> bool
+                {
+                    const int v = dp_verdict(f, puts_before, width);
+                    if (s_lkdp_stats)
+                    {
+                        g_lkdp_census[v].fetch_add(1, std::memory_order_relaxed);
+                        if (v == 3)
+                        {
+                            const int sub = f.feeds ? 8 : (f.unbounded ? 7 : 9);
+                            g_lkdp_census[sub].fetch_add(1, std::memory_order_relaxed);
+                        }
+                        if (v == 4 && f.bp) { g_lkdp_census[10].fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    return v <= 1;
+                };
                 std::vector<TurnSolver::Plan> extra;
                 std::size_t n_fanned = 0;
                 for (const TurnSolver::Plan& p : all)
@@ -76626,7 +76845,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                             v.lackey_choice = c;
                             extra.push_back(std::move(v));
                         }
-                        if (lackey_dec && inh0 != kLackeyDeclineRank)   // the decline, last (an inherited one IS the base)
+                        if (lackey_dec && inh0 != kLackeyDeclineRank   // the decline, last (an inherited one IS the base)
+                            && !(dec_prune && dp_dominated(dp_plan(p, 1, 1), 0, width)))
                         {
                             TurnSolver::Plan v = p;
                             v.lackey_choice = kLackeyDeclineRank;
@@ -76636,10 +76856,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     }
                     // Several: the product over the ordinals that fit the cap. Each ordinal's options are its put
                     // ranks 0 .. width-1 and, under the decline, digit `width` = kLackeyDeclineRank (last).
+                    const int n_ord_raw = n_ord;
                     n_ord = std::min(n_ord, kLackeyMaxOrdinals);
                     const int opts = width + (lackey_dec ? 1 : 0);
                     int combos = 1, fit = 0;
                     while (fit < n_ord && combos * opts <= kLackeyProductCap) { combos *= opts; ++fit; }
+                    const DpPlan dpf = dec_prune ? dp_plan(p, n_ord_raw, fit) : DpPlan{};
                     int base[kLackeyMaxOrdinals], r[kLackeyMaxOrdinals];
                     for (int k = 0; k < fit; ++k)
                     {
@@ -76649,15 +76871,18 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     for (int code = 0; code < combos; ++code)
                     {
                         int c = code;
-                        bool is_base = true;
+                        bool is_base = true, dominated = false;
+                        int puts_before = 0;
                         for (int k = 0; k < fit; ++k)
                         {
                             const int digit = c % opts;
                             c /= opts;
                             if (digit != base[k]) { is_base = false; }
                             r[k] = digit == width ? kLackeyDeclineRank : digit;   // digit == width only under the decline
+                            if (r[k] != kLackeyDeclineRank) { ++puts_before; }
+                            else if (dec_prune && !dominated && dp_dominated(dpf, puts_before, width)) { dominated = true; }
                         }
-                        if (is_base) { continue; }
+                        if (is_base || dominated) { continue; }
                         TurnSolver::Plan v = p;
                         v.lackey_choice = LackeyPackRanks(r, fit);
                         extra.push_back(std::move(v));

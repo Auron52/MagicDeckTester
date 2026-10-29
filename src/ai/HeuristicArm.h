@@ -752,6 +752,7 @@ enum Slot : int
     LACKEY_CAST_AXIS,         // MTG_LACKEY_CAST_AXIS  the Lackey put axis fans for a Lackey the PLAN brings in (a hand cast, a Vial put, a breakpoint continuation) with a haste source reachable (Goblin Warchief / Chieftain), not only one already able to attack; the put width counts the candidates the plan's own tutors-to-hand add (Goblin Matron). DEFAULT ON; =0 -> the battlefield-only gate and the hand-as-it-stands width
     COMBAT_STABLE_SOURCES,    // MTG_COMBAT_STABLE_SOURCES  the combat-damage triggers resolve each damaging source by IDENTITY (m_number), not by a battlefield position captured before an earlier trigger could remove a permanent: Goblin Lackey's triggers are snapshotted before the first put (a Goblin Chainwhirler put killing an earlier opposing 1/1 no longer drops or misattributes a later Lackey's trigger), the put permanent is re-found for its own ETB and the legend rule, the later hooks (Shroofus tokens, Neheb) re-find their sources, and the two-step path re-finds its attackers and board sources for the regular step. A RULES fix; DEFAULT ON, the slot exists only for the paired A/B; =0 -> the stale positions, byte-identical to before
     LACKEY_DECLINE,           // MTG_LACKEY_DECLINE  the Lackey put axis also searches DECLINING the put ("you MAY put"), ordered after every put rank (rank kLackeyDeclineRank), per damaging-Lackey ordinal. DEFAULT ON; =0 -> puts only, byte-identical to before
+    LACKEY_DECLINE_PRUNE,     // MTG_LACKEY_DECLINE_PRUNE  a SOUND restriction of MTG_LACKEY_DECLINE: an ordinal's decline is not emitted where a searched put provably dominates it -- every candidate that can reach the trigger is "plain" (DecisionProvider::CombatCheatPutDominatesHold: its put weakly dominates holding it in the goldfish tree), or the ordinals are exact and a plain candidate is guaranteed within the searched ranks. Kept wherever a candidate's hand value or timing can matter (Muxus's reveal, Goblin Matron's tutor, echo, Rundvelt's impulse exile, a second legendary copy). Deck-gated by CombatCheatDeclinePruneSound (every owned card whitelisted). DEFAULT ON; =0 -> every decline, byte-identical to before
     COUNT
 };
 
@@ -1448,6 +1449,7 @@ inline const char* Name(int slot)
         "MTG_LACKEY_CAST_AXIS",
         "MTG_COMBAT_STABLE_SOURCES",
         "MTG_LACKEY_DECLINE",
+        "MTG_LACKEY_DECLINE_PRUNE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

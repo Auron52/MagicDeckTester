@@ -4497,6 +4497,22 @@ struct CardDefinition
     // would make every Bloodghast CAST a landfall-watcher cast (PutsLandfallWatcher) and spawn useless
     // land-position clones. FireLandfallTriggers walks the GRAVEYARD for this byte instead.
     bool gy_landfall_watcher = false;
+    // GOBLIN LACKEY DECLINE PRUNE (MTG_LACKEY_DECLINE_PRUNE; DecisionProvider::CombatCheatPutDominatesHold /
+    // CombatCheatDeclinePruneSound). Two DERIVED CONSTANTS of the raw cards.json entry, computed by LoadFromJson
+    // from a WHITELIST of keys (CombatPutWhitelist, CardDatabase.cpp), so they fail toward FALSE: a param invented
+    // tomorrow, an unlisted template or keyword makes the card "not proven", which only keeps a searched decline.
+    //   cheat_put_plain  -- every behaviour the card has is MONOTONE in being on the battlefield EARLIER (a body, a
+    //                       lord / haste / cost-reduction static, ETB tokens or damage, an optional activated
+    //                       ability, a death watcher that deals damage) and nothing reads the library or the hand
+    //                       (no tutor, reveal, echo, impulse exile, X cost). Legendary is allowed here; the
+    //                       provider adds the state-dependent "no other copy" test.
+    //   cheat_hold_inert -- the card, wherever it sits, never makes a Goblin card IN HAND worth more than the same
+    //                       card ON THE BATTLEFIELD: cheat_put_plain, or one of the listed non-plain keys (echo,
+    //                       tutor, reveal-put, impulse exile, Aether Vial's charge, burn, mana lands). The deck-level
+    //                       gate requires it of every card the player owns.
+    // 0 / false for a Register-built definition (no JSON) and for a kicked face -- "not proven", never a claim.
+    bool cheat_put_plain  = false;
+    bool cheat_hold_inert = false;
     // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
     // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
     // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).

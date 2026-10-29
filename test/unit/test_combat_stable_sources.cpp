@@ -222,6 +222,9 @@ TEST_CASE("Lackey decline: the axis carries the decline LAST, and fans a single 
         for (const TurnSolver::Plan& p : plans) { if (p.lackey_choice >= 0) { out.insert(p.lackey_choice); } }
         return out;
     };
+    // MTG_LACKEY_DECLINE_PRUNE off: the decline fan itself (King and Piledriver are both PLAIN, so the prune drops
+    // every decline here -- checked at the end).
+    arm.Set(heurarm::LACKEY_DECLINE_PRUNE, 0);
     // Two candidates (no mana to cast either): the second put rank, then the decline.
     GameState two = board({ "Goblin King", "Goblin Piledriver", "Lightning Bolt" });
     CHECK(pins(TurnSolver::EnumerateMainPlans(two, /*is_pre_combat=*/true)) == std::set<int>{ 1, kLackeyDeclineRank });
@@ -235,10 +238,17 @@ TEST_CASE("Lackey decline: the axis carries the decline LAST, and fans a single 
     arm.Set(heurarm::LACKEY_DECLINE, 0);
     CHECK(pins(TurnSolver::EnumerateMainPlans(two, /*is_pre_combat=*/true)) == std::set<int>{ 1 });
     CHECK(pins(TurnSolver::EnumerateMainPlans(one, /*is_pre_combat=*/true)).empty());
+    // MTG_LACKEY_DECLINE_PRUNE on (the default): every candidate is plain, so putting dominates declining.
+    arm.Set(heurarm::LACKEY_DECLINE, 1);
+    arm.Set(heurarm::LACKEY_DECLINE_PRUNE, 1);
+    CHECK(pins(TurnSolver::EnumerateMainPlans(two, /*is_pre_combat=*/true)) == std::set<int>{ 1 });
+    CHECK(pins(TurnSolver::EnumerateMainPlans(one, /*is_pre_combat=*/true)).empty());
 }
 
 TEST_CASE("Lackey decline: two Lackeys fan the product of (put ranks + decline), minus the base")
 {
+    ArmSs arm;
+    arm.Set(heurarm::LACKEY_DECLINE_PRUNE, 0);   // the fan itself; Chainwhirler + Siege-Gang are plain (pruned below)
     std::vector<int> lk;
     GameState s = WitnessBoard(lk);
     s.battlefield.erase(s.battlefield.begin());   // no opposing creature needed here
@@ -252,4 +262,13 @@ TEST_CASE("Lackey decline: two Lackeys fan the product of (put ranks + decline),
     const int D = kLackeyDeclineRank;
     CHECK(tuples == std::set<std::pair<int, int>>{ { 1, 0 }, { D, 0 }, { 0, 1 }, { 1, 1 }, { D, 1 },
                                                    { 0, D }, { 1, D }, { D, D } });
+    // MTG_LACKEY_DECLINE_PRUNE on: both candidates plain, so every variant with a decline goes (Rule A).
+    arm.Set(heurarm::LACKEY_DECLINE_PRUNE, 1);
+    tuples.clear();
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        if (p.lackey_choice < 0) { continue; }
+        tuples.emplace(LackeyRankAt(p.lackey_choice, 0), LackeyRankAt(p.lackey_choice, 1));
+    }
+    CHECK(tuples == std::set<std::pair<int, int>>{ { 1, 0 }, { 0, 1 }, { 1, 1 } });
 }

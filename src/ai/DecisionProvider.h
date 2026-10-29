@@ -3159,6 +3159,45 @@ public:
         const GameState& s, int controller, const CardDefinition& source,
         const std::vector<int>& hand_indices) const;
 
+    // THE LACKEY DECLINE PRUNE (MTG_LACKEY_DECLINE_PRUNE, DEFAULT ON) -- the provider-owned inputs of a SOUND
+    // restriction of the searched decline (MTG_LACKEY_DECLINE). The search asks these and then prunes a decline
+    // only where a searched put is proven at least as good (TurnSolver.cpp, "THE DECLINE PRUNE").
+    //
+    // CombatCheatPutDominatesHold(d): putting a card of definition `d` now weakly dominates holding it, in the
+    // goldfish game tree. LEMMA. Let A = the card X on the battlefield from this combat-damage step, B = X in hand,
+    // all else equal. For any line of B, A plays the same line, skipping whatever B does with X in hand (cast, Vial
+    // put, channel, a later Lackey put, a cleanup discard) and keeping the mana; from then on A's battlefield holds
+    // everything B's does, X having entered EARLIER in A. That line is at least as good iff nothing about X is worse
+    // for having entered earlier or for being out of the hand. CardDefinition::cheat_put_plain whitelists exactly the
+    // behaviours for which that holds -- a body (next turn it can attack exactly when B's main-2 cast could, and B's
+    // later cast is sick); a +N/+N lord, a haste grant, a Goblin cost reduction (all only add); ETB tokens and ETB
+    // damage (face, CardDatabase.h; damage earlier is never worse); a channel no stronger than the ETB; optional
+    // sac / tap abilities; attack pumps; a death watcher that pings (forced, only deals damage); the Lackey's own
+    // "may" -- and excludes everything that reads the library or the hand or starts a clock: Muxus's reveal and
+    // Goblin Matron's tutor + shuffle (a later ETB reads a different library), Rundvelt Hordemaster's forced
+    // impulse exile on each Goblin death, echo (Mogg War Marshal, Stingscourger), X costs. The legend rule
+    // (CR 704.5j) is the one state-dependent clause: a LEGENDARY card is plain only while no other card of its
+    // name exists in the controller's hand, library, battlefield or graveyard (a second copy put would bin one).
+    //
+    // CombatCheatDeclinePruneSound(s, controller): the deck-level half of the lemma -- no OTHER card can make X in
+    // hand worth more than X on the battlefield (a cast trigger, a hand-size or discard reader, a "play from hand"
+    // payoff, an enter watcher). True iff every card the controller owns (hand, library, graveyard, non-token
+    // permanents) is CardDefinition::cheat_hold_inert. The opponent is the goldfish's: it never interacts.
+    //
+    // CombatCheatHandFeed(d): can a card of definition `d` bring a NEW candidate into its controller's hand before
+    // a Lackey trigger resolves -- one the search did not count? 0 = never; 1 = it tutors a card to hand as it
+    // enters (Goblin Matron); 2 = its entering can lead to one by another route (Muxus's reveal can put a Matron);
+    // 3 = only through a breakpoint continuation (Rundvelt Hordemaster's impulse exile stages a library card, which
+    // is never a candidate itself -- FireCombatDamageCheatIntoPlay skips staged cards -- but a continuation could
+    // cast a staged Matron). Complete over the cheat_hold_inert whitelist, which is why the search consults it only
+    // under CombatCheatDeclinePruneSound.
+    //
+    // The base implementations are param-derived and fail toward "no claim" (false / false / 2 for anything the
+    // whitelist does not know): a provider that wants no prune returns false from CombatCheatDeclinePruneSound.
+    virtual bool CombatCheatDeclinePruneSound(const GameState& s, int controller) const;
+    virtual bool CombatCheatPutDominatesHold(const GameState& s, int controller, const CardDefinition& d) const;
+    virtual int  CombatCheatHandFeed(const CardDefinition& d) const;
+
     // EtbDigCandidates -- ETB "look at the top N, you may reveal a <subtype> card and put it into your
     // hand" (Acclaimed Contender). Returns indices INTO `examined` in PREFERENCE order, restricted to
     // `legal` (the subtype-matching looks); index 0 is what a non-branching caller takes. Empty ==

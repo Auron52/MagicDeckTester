@@ -145,8 +145,15 @@ TEST_CASE("Lackey cast axis: a Lackey the plan casts beside Goblin Warchief gets
     bool casts = false;
     for (const TurnSolver::Plan& p : plans) { if (CastsLk(p, kLk)) { casts = true; } }
     REQUIRE(casts);
-    // width 2: the front is the base plan, rank 1 a variant, and the DECLINE (MTG_LACKEY_DECLINE) last.
-    CHECK(LackeyPins(plans, kLk) == std::set<int>{ 1, kLackeyDeclineRank });
+    // width 2: the front is the base plan and rank 1 a variant. King and Piledriver are both PLAIN, so the DECLINE
+    // (MTG_LACKEY_DECLINE) is pruned (MTG_LACKEY_DECLINE_PRUNE); without the prune it comes last.
+    CHECK(LackeyPins(plans, kLk) == std::set<int>{ 1 });
+    {
+        ArmLk no_prune;
+        no_prune.Set(heurarm::LACKEY_DECLINE_PRUNE, 0);
+        CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), kLk)
+              == std::set<int>{ 1, kLackeyDeclineRank });
+    }
     // A plan that does not cast the Lackey cannot read the pin.
     for (const TurnSolver::Plan& p : plans) { if (!CastsLk(p, kLk)) { CHECK(p.lackey_choice == -1); } }
     // =0 hatches: the battlefield-only gate.
@@ -169,8 +176,12 @@ TEST_CASE("Lackey cast axis: the put width is the hand LEFT at combat damage")
     bool casts = false;
     for (const TurnSolver::Plan& p : plans) { if (CastsLk(p, kLk)) { casts = true; } }
     REQUIRE(casts);
-    CHECK(LackeyPins(plans, kLk) == std::set<int>{ kLackeyDeclineRank });
+    // ...which the prune drops: the one candidate (Goblin King) is plain, so the put dominates.
+    CHECK(LackeyPins(plans, kLk).empty());
     ArmLk arm;
+    arm.Set(heurarm::LACKEY_DECLINE_PRUNE, 0);
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), kLk)
+          == std::set<int>{ kLackeyDeclineRank });
     arm.Set(heurarm::LACKEY_DECLINE, 0);   // puts only: a forced put, no variant
     CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), kLk).empty());
 }
@@ -178,6 +189,7 @@ TEST_CASE("Lackey cast axis: the put width is the hand LEFT at combat damage")
 TEST_CASE("Lackey ordinals: two Lackeys able to attack get the PRODUCT of ranks, minus the base")
 {
     ArmLk arm;
+    arm.Set(heurarm::LACKEY_DECLINE_PRUNE, 0);   // the decline fan itself (both candidates are plain: see below)
     GameState s = FreshLk(1, { "Goblin King", "Goblin Piledriver", "Lightning Bolt" }, { kLk, kLk });
     const std::set<int> pins = LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), "");
     std::set<std::pair<int, int>> tuples;
@@ -193,6 +205,15 @@ TEST_CASE("Lackey ordinals: two Lackeys able to attack get the PRODUCT of ranks,
         for (int v : LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), ""))
         { t2.emplace(LackeyRankAt(v, 0), LackeyRankAt(v, 1)); }
         CHECK(t2 == std::set<std::pair<int, int>>{ { 1, 0 }, { 0, 1 }, { 1, 1 } });
+    }
+    // The prune: both candidates plain, so no decline survives (Rule A) -- the same set as puts only.
+    {
+        ArmLk prune;
+        prune.Set(heurarm::LACKEY_DECLINE_PRUNE, 1);
+        std::set<std::pair<int, int>> t3;
+        for (int v : LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), ""))
+        { t3.emplace(LackeyRankAt(v, 0), LackeyRankAt(v, 1)); }
+        CHECK(t3 == std::set<std::pair<int, int>>{ { 1, 0 }, { 0, 1 }, { 1, 1 } });
     }
     // =0 hatch: one rank, read by every trigger.
     arm.Set(heurarm::LACKEY_ORDINALS, 0);
@@ -230,4 +251,126 @@ TEST_CASE("Lackey triggers: each damaging Lackey reads its own ordinal; the pin 
     u.scripted_cheat_choice = 1;
     ResolveCombatDamage(u, std::vector<int>{}, 0, false);
     CHECK(u.scripted_cheat_choice == 1);
+}
+
+// ---- MTG_LACKEY_DECLINE_PRUNE: the SOUND restriction of the searched decline (TurnSolver.cpp "THE DECLINE PRUNE";
+// DecisionProvider::CombatCheatPutDominatesHold / CombatCheatDeclinePruneSound / CombatCheatFeedsHand).
+
+TEST_CASE("Lackey decline prune: the whitelist classifies the Goblins pool")
+{
+    EnsureCardsLk();
+    auto def = [](const char* n) { const CardDefinition* d = CardDatabase::Instance().Lookup(n); REQUIRE(d != nullptr); return d; };
+    // PLAIN: a put now weakly dominates holding the card.
+    for (const char* n : { "Goblin Lackey", "Goblin Piledriver", "Goblin King", "Goblin Chieftain", "Goblin Warchief",
+                           "Siege-Gang Commander", "Skirk Prospector", "Goblin Chainwhirler", "Twinshot Sniper",
+                           "Krenko, Mob Boss", "Pashalik Mons" })
+    { INFO(n); CHECK(def(n)->cheat_put_plain); CHECK(def(n)->cheat_hold_inert); }
+    // NOT plain -- the library, a clock, or an exile reads the timing -- but inert for the deck gate.
+    for (const char* n : { "Muxus, Goblin Grandee", "Goblin Matron", "Rundvelt Hordemaster", "Mogg War Marshal",
+                           "Stingscourger", "Aether Vial", "Lightning Bolt", "Mountain", "Cavern of Souls",
+                           "Three Tree City" })
+    { INFO(n); CHECK_FALSE(def(n)->cheat_put_plain); CHECK(def(n)->cheat_hold_inert); }
+    // A cast trigger (prowess) and a draw spell are neither.
+    for (const char* n : { "Monastery Swiftspear", "Ponder" })
+    { INFO(n); CHECK_FALSE(def(n)->cheat_put_plain); CHECK_FALSE(def(n)->cheat_hold_inert); }
+}
+
+TEST_CASE("Lackey decline prune: a non-plain candidate keeps the decline (Muxus's reveal, echo)")
+{
+    // One Lackey able to attack, one Mountain (nothing castable but the Bolt), library of Mountains.
+    for (const char* n : { "Muxus, Goblin Grandee", "Mogg War Marshal", "Goblin Matron", "Rundvelt Hordemaster" })
+    {
+        INFO(n);
+        GameState s = FreshLk(1, { n, "Lightning Bolt" }, { kLk });
+        CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), "")
+              == std::set<int>{ kLackeyDeclineRank });
+    }
+    // ...and Muxus with a Muxus already on the battlefield (the legend rule) keeps it too.
+    GameState m = FreshLk(1, { "Muxus, Goblin Grandee", "Lightning Bolt" }, { kLk, "Muxus, Goblin Grandee" });
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(m, /*is_pre_combat=*/true), "")
+          == std::set<int>{ kLackeyDeclineRank });
+}
+
+TEST_CASE("Lackey decline prune: a plain candidate drops the decline; a second legendary copy restores it")
+{
+    // Krenko is plain while it is the controller's only copy...
+    GameState one = FreshLk(1, { "Krenko, Mob Boss", "Lightning Bolt" }, { kLk });
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(one, /*is_pre_combat=*/true), "").empty());
+    // ...and not once a second one can arrive (CR 704.5j: putting it may bin a copy a held card would replace).
+    GameState two = FreshLk(1, { "Krenko, Mob Boss", "Lightning Bolt" }, { kLk },
+                            { "Mountain", "Krenko, Mob Boss", "Mountain" });
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(two, /*is_pre_combat=*/true), "")
+          == std::set<int>{ kLackeyDeclineRank });
+    // The deck gate: a cast trigger anywhere in the deck (Monastery Swiftspear's prowess) can make the held card
+    // worth more, so nothing is pruned.
+    GameState gate = FreshLk(1, { "Goblin Piledriver", "Lightning Bolt" }, { kLk },
+                             { "Mountain", "Monastery Swiftspear", "Mountain" });
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(gate, /*is_pre_combat=*/true), "")
+          == std::set<int>{ kLackeyDeclineRank });
+    ArmLk arm;
+    arm.Set(heurarm::LACKEY_DECLINE_PRUNE, 0);   // =0: every decline, as before
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(one, /*is_pre_combat=*/true), "")
+          == std::set<int>{ kLackeyDeclineRank });
+}
+
+TEST_CASE("Lackey decline prune: Rule B -- a guaranteed plain card inside the searched ranks beside a non-plain one")
+{
+    const int D = kLackeyDeclineRank;
+    // One Lackey: Muxus (rank 0) and Piledriver (rank 1). The decline is dominated by putting Piledriver.
+    GameState s = FreshLk(1, { "Muxus, Goblin Grandee", "Goblin Piledriver", "Lightning Bolt" }, { kLk });
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true), "") == std::set<int>{ 1 });
+    // Two Lackeys: a decline at ordinal 0 goes; at ordinal 1 after a put the plain card may be gone, so it stays.
+    GameState t = FreshLk(1, { "Muxus, Goblin Grandee", "Goblin Piledriver", "Lightning Bolt" }, { kLk, kLk });
+    std::set<std::pair<int, int>> tuples;
+    for (int v : LackeyPins(TurnSolver::EnumerateMainPlans(t, /*is_pre_combat=*/true), ""))
+    { tuples.emplace(LackeyRankAt(v, 0), LackeyRankAt(v, 1)); }
+    CHECK(tuples == std::set<std::pair<int, int>>{ { 1, 0 }, { 0, 1 }, { 1, 1 }, { 0, D }, { 1, D } });
+    // Two non-plain cards fill both searched ranks: no plain card is guaranteed inside them, so the decline stays.
+    GameState u = FreshLk(1, { "Muxus, Goblin Grandee", "Muxus, Goblin Grandee", "Goblin Piledriver",
+                               "Lightning Bolt" }, { kLk });
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(u, /*is_pre_combat=*/true), "") == std::set<int>{ 1, D });
+}
+
+TEST_CASE("Lackey decline prune: a plan that can ADD a candidate (Goblin Matron's tutor) keeps the decline")
+{
+    // Three Mountains: Matron is castable and tutors before combat; a Muxus is in the library to find.
+    GameState s = FreshLk(3, { "Goblin Matron", "Goblin Piledriver" }, { kLk },
+                          { "Mountain", "Muxus, Goblin Grandee", "Mountain" });
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    bool matron = false, neither = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.lackey_choice != kLackeyDeclineRank) { continue; }
+        if (CastsLk(p, "Goblin Matron")) { matron = true; }
+        else if (!CastsLk(p, "Goblin Piledriver")) { neither = true; }
+    }
+    // The Matron plan: its tutor can bring the Muxus, so a non-plain card may join the searched ranks -- kept.
+    CHECK(matron);
+    // A plan that casts neither: Piledriver is plain and stays in hand, Matron is the one non-plain card (Rule B).
+    CHECK_FALSE(neither);
+}
+
+TEST_CASE("Lackey decline prune: a non-plain card the plan casts is not in hand at combat damage")
+{
+    // Two Mountains: Rundvelt Hordemaster (non-plain: its death trigger exiles the library top) is castable. The
+    // plan that casts it leaves only Piledriver (plain) -- Rule A; a plan that holds both has Piledriver plain and
+    // guaranteed beside one non-plain card -- Rule B. Only the plan that casts PILEDRIVER keeps the decline: its one
+    // candidate left is Rundvelt.
+    GameState s = FreshLk(2, { "Rundvelt Hordemaster", "Goblin Piledriver" }, { kLk });
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    bool casts = false, piledriver_declines = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (CastsLk(p, "Rundvelt Hordemaster")) { casts = true; }
+        if (p.lackey_choice != kLackeyDeclineRank) { continue; }
+        CHECK_FALSE(CastsLk(p, "Rundvelt Hordemaster"));
+        CHECK(CastsLk(p, "Goblin Piledriver"));
+        piledriver_declines = true;
+    }
+    REQUIRE(casts);
+    CHECK(piledriver_declines);
+    // Rundvelt alone: the plan that holds it keeps the decline (its only candidate is non-plain).
+    GameState t = FreshLk(1, { "Rundvelt Hordemaster", "Lightning Bolt" }, { kLk });
+    CHECK(LackeyPins(TurnSolver::EnumerateMainPlans(t, /*is_pre_combat=*/true), "")
+          == std::set<int>{ kLackeyDeclineRank });
 }

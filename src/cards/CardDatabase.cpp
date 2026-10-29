@@ -3,6 +3,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <functional>
+#include <set>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -64,6 +65,100 @@ const char* CardTemplateToString(CardTemplate t)
     }
 }
 
+// GOBLIN LACKEY DECLINE PRUNE -- CardDefinition::cheat_put_plain / cheat_hold_inert, from WHITELISTS of the raw
+// entry's keys (MTG_LACKEY_DECLINE_PRUNE; the proof is at DecisionProvider::CombatCheatPutDominatesHold). The
+// direction is the load-bearing choice, as for behaviour_identity: an unlisted key, template, keyword, supertype
+// or type makes the card "not proven", which only keeps a searched decline -- a key invented tomorrow can never
+// license a prune. Every entry below is one this pool's cards.json actually carries; extend a list only with a
+// per-key argument in the proof.
+static void ClassifyCombatPut(const json& entry, CardDefinition& def)
+{
+    def.cheat_put_plain  = false;
+    def.cheat_hold_inert = false;
+    // Top level: identity, printed characteristics and the param object. Anything else is unknown behaviour.
+    static const std::set<std::string> kTop = {
+        "name", "oracle_text", "mana_cost", "types", "supertypes", "subtypes", "keywords", "power", "toughness",
+        "template", "parameters", "colors", "scryfall_name", "scryfall_image" };
+    for (auto it = entry.begin(); it != entry.end(); ++it) { if (!kTop.count(it.key())) { return; } }
+    // Keywords: static combat keywords only (no cast trigger -- prowess, storm, cascade -- no upkeep cost).
+    static const std::set<std::string> kKw = {
+        "Haste", "First Strike", "Double Strike", "Reach", "Flying", "Trample", "Vigilance", "Menace",
+        "Lifelink", "Deathtouch" };
+    if (entry.contains("keywords"))
+    {
+        for (const json& k : entry["keywords"]) { if (!k.is_string() || !kKw.count(k.get<std::string>())) { return; } }
+    }
+    const std::string tmpl = entry.value("template", std::string("custom"));
+    // PLAIN params: each is monotone in the card being on the battlefield earlier (DecisionProvider.h proof).
+    static const std::set<std::string> kPlain = {
+        "combat_damage_puts_subtype_from_hand",                                         // Goblin Lackey ("may")
+        "subtypes_affected", "power_bonus", "tough_bonus", "lord_excludes_self",        // +N/+N lord
+        "grants_haste", "reduces_spell_subtype",                                        // haste / cost reduction
+        "etb_self_creates_tokens", "etb_created_token_power", "etb_created_token_toughness",
+        "etb_created_token_subtypes",                                                   // ETB tokens
+        "etb_damage_any", "etb_damage_each_opponent", "targeting",                     // ETB damage
+        "channel_cost", "channel_damage",                                               // see the value test below
+        "sac_creature_outlet", "sac_creature_cost", "sac_creature_requires_subtype", "sac_outlet_damage",
+        "sac_outlet_add_mana_color", "sac_outlet_add_mana_amount", "sac_outlet_creates_tokens",
+        "sac_outlet_token_power", "sac_outlet_token_toughness", "sac_outlet_token_subtypes",  // optional sac outlet
+        "tap_creates_tokens_per_controlled_subtype", "tap_created_token_power", "tap_created_token_toughness",
+        "tap_created_token_subtypes",                                                   // optional tap ability
+        "attack_pump_power_per_other_matching", "attack_self_pump_per_other_subtype",
+        "attack_self_pump_power", "attack_self_pump_tough",                             // attack pumps
+        "dies_watch_subtype", "dies_watch_includes_self", "dies_trigger_damage" };      // death watcher -> damage
+    // HOLD-INERT extras: not plain (each reads the library, starts a clock or exiles), but none makes a card in
+    // HAND worth more than the same card on the battlefield.
+    static const std::set<std::string> kInert = {
+        "echo_cost",                                                                    // its own upkeep clock
+        "tutor_to_hand", "tutor_types", "tutor_shuffle_after",                          // library -> hand
+        "etb_reveal_count", "etb_reveal_put_subtypes", "etb_reveal_put_creatures_only",
+        "etb_reveal_put_max_mv",                                                        // library -> battlefield
+        "dies_trigger_impulse_exile", "dies_impulse_requires_subtype", "dies_impulse_expiry_next_turn",
+        "dies_trigger_creates_tokens", "dies_token_power", "dies_token_toughness", "dies_token_subtypes",
+        "upkeep_adds_charge",                                                           // Aether Vial
+        "damage",                                                                       // burn
+        "produces", "colored_creature_only", "mana_per_creature_subtype",
+        "mana_per_creature_feeder_generic" };                                           // lands
+    bool plain = true, inert = true;
+    if (entry.contains("parameters") && entry["parameters"].is_object())
+    {
+        for (auto it = entry["parameters"].begin(); it != entry["parameters"].end(); ++it)
+        {
+            if (kPlain.count(it.key())) { continue; }
+            plain = false;
+            if (!kInert.count(it.key())) { inert = false; break; }
+        }
+    }
+    static const std::set<std::string> kTmplPlain = { "custom", "vanilla_creature", "lord_effect" };
+    static const std::set<std::string> kTmplInert = { "custom", "vanilla_creature", "lord_effect",
+                                                      "basic_land", "direct_damage" };
+    if (!kTmplInert.count(tmpl)) { return; }
+    def.cheat_hold_inert = inert;
+    if (!plain || !inert || !kTmplPlain.count(tmpl)) { return; }
+    // Plain also needs: a creature / artifact (a permanent with a body or none), no X (a put enters with X = 0),
+    // only the Legendary supertype (its copy test is the provider's), and a channel no stronger than the ETB it
+    // replaces (the put's ETB already dealt what a later channel would).
+    if (def.card.m_mana_cost.has_x) { return; }
+    if (entry.contains("supertypes"))
+    {
+        for (const json& s : entry["supertypes"]) { if (!s.is_string() || s.get<std::string>() != "Legendary") { return; } }
+    }
+    bool creature = false;
+    if (entry.contains("types"))
+    {
+        for (const json& t : entry["types"])
+        {
+            if (!t.is_string()) { return; }
+            const std::string ts = t.get<std::string>();
+            if (ts == "Creature") { creature = true; }
+            else if (ts != "Artifact") { return; }
+        }
+    }
+    if (!creature) { return; }
+    if (def.params.channel_damage > def.params.etb_damage_any) { return; }
+    def.cheat_put_plain = true;
+}
+
 // ---- CardDatabase ----
 
 // Eager singleton storage. Instance() (inline in the header) just returns this, so the
@@ -122,6 +217,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             // 0 is reserved for "no identity" (Register-built definitions), so never hand it out.
             def.behaviour_identity = h ? h : 1ULL;
         }
+        // GOBLIN LACKEY DECLINE PRUNE: the two whitelist-derived constants (see CardDefinition::cheat_put_plain).
+        ClassifyCombatPut(entry, def);
         // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the worker
         // threads only ever do read-only id lookups (SubtypeSet::operator=) and never insert into
         // the shared SubtypeRegistry mid-search -- an insert there reallocates the registry's name
@@ -293,6 +390,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             // Unreachable today (no fold site can see a name that is never a hand card) -- set
             // because inheriting an identity that asserts interchangeability would be false.
             kicked.behaviour_identity = 0;
+            kicked.cheat_put_plain    = false;   // "not proven" (CardDefinition::cheat_put_plain)
+            kicked.cheat_hold_inert   = false;
             m_def_hash[kname] = CardDefHash(entry) ^ std::hash<std::string>{}(kname);
             m_cards[kname] = std::move(kicked);
         }

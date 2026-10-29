@@ -1269,6 +1269,57 @@ std::vector<int> DecisionProvider::CombatCheatCandidates(
     return out;
 }
 
+// THE LACKEY DECLINE PRUNE's provider inputs (MTG_LACKEY_DECLINE_PRUNE; proof at the DecisionProvider.h
+// declaration). Param-derived through CardDefinition's whitelist constants, so a card the whitelist does not know
+// is never claimed.
+bool DecisionProvider::CombatCheatDeclinePruneSound(const GameState& s, int controller) const
+{
+    const Player& p = s.players[static_cast<std::size_t>(controller)];
+    auto inert = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->cheat_hold_inert;
+    };
+    for (const Card& c : p.hand)      { if (!inert(c)) { return false; } }
+    for (const Card& c : p.graveyard)
+    {
+        // A dead TOKEN can sit in the graveyard vector (GameState::kFirstTokenNumber); it has no text but its body.
+        if (c.m_number >= GameState::kFirstTokenNumber) { continue; }
+        if (!inert(c)) { return false; }
+    }
+    for (std::size_t i = 0, n = p.library.size(); i < n; ++i) { if (!inert(p.library.RawAt(i))) { return false; } }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.is_token) { continue; }   // a token's only text is its body
+        if (!inert(q.card)) { return false; }
+    }
+    return true;
+}
+
+bool DecisionProvider::CombatCheatPutDominatesHold(const GameState& s, int controller, const CardDefinition& d) const
+{
+    if (!d.cheat_put_plain) { return false; }
+    if (!d.card.HasSupertype(Supertype::Legendary)) { return true; }
+    // CR 704.5j: plain only while this is the controller's ONLY card of the name (the one being put).
+    const Player& p = s.players[static_cast<std::size_t>(controller)];
+    int copies = 0;
+    for (const Card& c : p.hand)      { if (c.m_name == d.card.m_name) { ++copies; } }
+    for (const Card& c : p.graveyard) { if (c.m_name == d.card.m_name) { ++copies; } }
+    for (std::size_t i = 0, n = p.library.size(); i < n; ++i) { if (p.library.RawAt(i).m_name == d.card.m_name) { ++copies; } }
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == controller && q.card.m_name == d.card.m_name) { ++copies; } }
+    return copies <= 1;
+}
+
+int DecisionProvider::CombatCheatHandFeed(const CardDefinition& d) const
+{
+    if (!d.cheat_hold_inert) { return 2; }   // outside the whitelist: no claim
+    if (d.params.tutor_to_hand) { return 1; }
+    if (d.params.etb_reveal_count > 0) { return 2; }
+    if (d.params.dies_trigger_impulse_exile) { return 3; }
+    return 0;
+}
+
 // The BASE ETB-dig rule (see DecisionProvider::EtbDigCandidates): HEURISTIC FIRST, then the
 // alternatives. Index 0 is the FIRST legal match in look order -- exactly what PerformEtbDig took
 // inline before the hook existed -- so a non-branching caller (and MTG_ETBDIG_WIDTH=1) is
