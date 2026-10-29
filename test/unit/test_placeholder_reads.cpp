@@ -121,8 +121,8 @@ TEST_CASE("Placeholder: Goblins echo -- an uncastable hand is NO gas, so the Mar
     CHECK(WithArm(heurarm::PLACEHOLDER_ECHO, 1, [&] { return gob.PayEchoToKeep(s, marshal); }));
     // The historical read: Muxus's placeholder cost {0} is "castable" -> decline the echo.
     CHECK_FALSE(WithArm(heurarm::PLACEHOLDER_ECHO, 0, [&] { return gob.PayEchoToKeep(s, marshal); }));
-    // Unset == the default (OFF): the placeholder read, which declines.
-    CHECK_FALSE(gob.PayEchoToKeep(s, marshal));
+    // Unset == the default (ON, unblocked by the searched echo): the real read, which pays.
+    CHECK(gob.PayEchoToKeep(s, marshal));
 }
 
 TEST_CASE("Placeholder: Goblins echo -- a castable spell in hand is gas, so the echo is declined")
@@ -164,7 +164,7 @@ TEST_CASE("Placeholder: Goblins echo -- the turn's land drop counts toward 'cast
     };
     CHECK_FALSE(pay(1));   // castable after the drop -> decline the echo, cast the Chieftain
     CHECK(pay(0));         // upkeep pool alone: "no gas" -> pay
-    CHECK_FALSE(gob.PayEchoToKeep(s, marshal));   // the default (lever OFF: the placeholder read declines too)
+    CHECK_FALSE(gob.PayEchoToKeep(s, marshal));   // the defaults (both ON): castable after the drop -> decline
     // The drop already made: only the upkeep pool counts, and two mana do not cast the Chieftain.
     s.players[0].lands_played_this_turn = 1;
     CHECK(pay(1));
@@ -228,7 +228,7 @@ TEST_CASE("Placeholder: shipped lever defaults (ON where the bar was met, OFF wh
     CHECK(PlaceholderSearchOn());
     CHECK(PlaceholderSnowOn());
     CHECK(PlaceholderTectonicOn());         // unblocked by the keep axis for a Giant the plan casts
-    CHECK_FALSE(PlaceholderEchoOn());       // blocked on a searched echo
+    CHECK(PlaceholderEchoOn());             // unblocked by the searched echo (MTG_ECHO_AXIS)
     CHECK_FALSE(PlaceholderManaOn());       // blocked on a sequence-aware float commit
     CHECK_FALSE(PlaceholderFeaturesOn());   // the USER's call: the shipped models were fitted on the placeholder read
 }

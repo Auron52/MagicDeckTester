@@ -16012,17 +16012,16 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     static const bool s_staged_gas_env = EnvOn("MTG_ECHO_STAGED_GAS", true);
     const bool s_staged_gas = heurarm::Flag(heurarm::ECHO_STAGED_GAS, s_staged_gas_env);
     ManaPool pool = AvailableManaPool(s);
-    // THE COST READ (MTG_PLACEHOLDER_ECHO, DEFAULT OFF). Every hand / staged card is a name-only
-    // placeholder whose own m_mana_cost is {0}, so the historical read found every nonland "castable" and
-    // this clause could fire only on a hand with no spell at all. The definition cost makes the clause do
-    // what it says -- and measured WORSE in every reading of "castable this turn" (held-out seeds
-    // 1350001 / 1360001, 5,500 Goblins games): the upkeep pool alone 10 slower / 1 faster; plus the turn's
-    // land drop from hand (MTG_GOBLIN_ECHO_LAND_DROP) 4 / 1; plus an assumed land draw
-    // (MTG_GOBLIN_ECHO_DRAW_LAND) 1 / 0 -- and NONE of those slower games recovers at d8 b0, because the
-    // echo is never searched: both worlds take this function's one answer (AIEngine::ResolveEchoUpkeep,
-    // TurnSolver's SimulateEndAndStartNextTurn). OFF until echo is a SEARCHED decision; then the cost read
-    // (and the land-drop credit) is what makes this function a sound DEFAULT for the branch.
-    // docs/design/placeholder-card-reads.md.
+    // THE COST READ (MTG_PLACEHOLDER_ECHO, DEFAULT ON). Every hand / staged card is a name-only
+    // placeholder whose own m_mana_cost is {0}, so the historical read (=0) found every nonland "castable"
+    // and this clause could fire only on a hand with no spell at all. The definition cost makes the clause
+    // do what it says. It shipped OFF first: while echo was an unsearched one-answer pick it measured WORSE
+    // in every reading of "castable this turn" (held-out seeds 1350001 / 1360001, 5,500 Goblins games): the
+    // upkeep pool alone 10 slower / 1 faster; plus the turn's land drop from hand
+    // (MTG_GOBLIN_ECHO_LAND_DROP) 4 / 1; plus an assumed land draw (MTG_GOBLIN_ECHO_DRAW_LAND) 1 / 0 -- none
+    // recovering at d8 b0. Echo is now SEARCHED (MTG_ECHO_AXIS), so this answer only ORDERS pay vs decline:
+    // with the axis in, ON vs OFF measured 0 / 0 (seeds 1540001 / 1550001, 8,000 Goblins; 1560001, 4,000
+    // goblins2hg). docs/design/searched-echo.md, docs/design/placeholder-card-reads.md.
     const bool def_cost = PlaceholderEchoOn();
     // "Castable THIS TURN" includes the turn's land drop, which echo (an UPKEEP trigger) comes before:
     // credit one untapped-entering land from hand when the drop is open (MTG_GOBLIN_ECHO_LAND_DROP; its

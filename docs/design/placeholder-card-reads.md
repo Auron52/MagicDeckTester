@@ -82,11 +82,13 @@ Hinata gi148 / gi203 RECOVER. TWELVE DO NOT, and each is in a decision the searc
 
 * DEFAULT ON: `MTG_PLACEHOLDER_PROVIDER` (Mirrorwing / Landfall / Stompy / Prevent Damage),
   `MTG_PLACEHOLDER_SEARCH`, `MTG_PLACEHOLDER_SNOW`, the four non-play reads (no lever), and -- since the
-  keep / mode axis covers a Giant the plan casts (below) -- `MTG_PLACEHOLDER_TECTONIC`.
+  keep / mode axis covers a Giant the plan casts (below) -- `MTG_PLACEHOLDER_TECTONIC`, and -- since echo is
+  searched (`MTG_ECHO_AXIS`, below) -- `MTG_PLACEHOLDER_ECHO` with `MTG_GOBLIN_ECHO_LAND_DROP` (own default ON,
+  now live); `MTG_GOBLIN_ECHO_DRAW_LAND` stays OFF (not re-measured with the axis).
 * DEFAULT OFF, each with what unblocks it:
-  * `MTG_PLACEHOLDER_ECHO` (+ `MTG_GOBLIN_ECHO_LAND_DROP`, own default ON but inert while the parent is off,
-    and `MTG_GOBLIN_ECHO_DRAW_LAND`, OFF): unblocked when echo is a SEARCHED decision -- then the
-    definition cost and the land-drop credit make PayEchoToKeep a sound branch default.
+  * ~~`MTG_PLACEHOLDER_ECHO`~~: UNBLOCKED and ON (2026-10-29), with `MTG_GOBLIN_ECHO_LAND_DROP` (own default
+    ON, inert while the parent was off). Echo is now SEARCHED (`MTG_ECHO_AXIS`); the definition cost and the
+    land-drop credit make PayEchoToKeep the branch ORDER. Measured 0 / 0 with the axis in (below).
   * ~~`MTG_PLACEHOLDER_TECTONIC`~~: UNBLOCKED and ON (2026-10-29). The keep/mode axis now fans out for a
     modal Giant the plan casts that can attack this turn (`MTG_TECTONIC_CAST_AXIS`) and for every attacking
     copy (`MTG_TECTONIC_ORDINALS`), commit 3b93a11f2. With the axis in (base 513e27555, held-out s2910001
@@ -120,7 +122,8 @@ Defense of the Heart's put list (`SacTutorPutList`).
 games; 1560001, 4,000 goblins2hg), `MTG_PLACEHOLDER_ECHO=1` measured **0 better / 0 worse** against
 `MTG_PLACEHOLDER_ECHO=0` with the axis on. Without the axis the same lever lost 1 / 7 and 0 / 5. The
 witness games s1350001 gi640 and s1360001 gi405 / gi3725 recover at d8 b0 and at play settings. The
-block on that lever is lifted. Turning it on is the USER's call.
+block on that lever is lifted, and it ships ON (a correct read that now meets the bar; the USER's echo
+rule in `PayEchoToKeep` stays, as the branch order).
 
 Cumulative upkeep stays a one-option prune: paying is weakly dominant for Creature Giving's card pool
 against the passive opponent. The proof, and the conditions under which it breaks, are in that doc.

@@ -90,13 +90,16 @@ inline bool PlaceholderTectonicOn()
     static const bool e = EnvOn("MTG_PLACEHOLDER_TECTONIC", true);
     return heurarm::Flag(heurarm::PLACEHOLDER_TECTONIC, e);
 }
-// DEFAULT OFF -- each corrects a read, but the heuristic the correct read switches on loses games in an
-// UNSEARCHED decision, so the slower games do not recover at d8 b0. Each read site says what unblocks it.
-inline bool PlaceholderEchoOn()       // Goblins echo "no gas" cost read (blocked on a SEARCHED echo)
+// Goblins echo "no gas" cost read. ON since echo is a SEARCHED decision (MTG_ECHO_AXIS): PayEchoToKeep only
+// orders pay vs decline, and with the axis in, ON vs OFF measured 0 / 0 over 8,000 held-out Goblins games and
+// 4,000 goblins2hg (docs/design/searched-echo.md).
+inline bool PlaceholderEchoOn()
 {
-    static const bool e = EnvOn("MTG_PLACEHOLDER_ECHO", false);
+    static const bool e = EnvOn("MTG_PLACEHOLDER_ECHO", true);
     return heurarm::Flag(heurarm::PLACEHOLDER_ECHO, e);
 }
+// DEFAULT OFF -- each corrects a read, but the heuristic the correct read switches on loses games in an
+// UNSEARCHED decision, so the slower games do not recover at d8 b0. Each read site says what unblocks it.
 inline bool PlaceholderManaOn()       // float-colour commit weighs the hand's real pips (blocked on a sequence-aware commit)
 {
     static const bool e = EnvOn("MTG_PLACEHOLDER_MANA", false);
