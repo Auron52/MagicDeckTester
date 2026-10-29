@@ -24,6 +24,25 @@
     "budget": null
    },
    "detail": "mulligan: ADOPTED by USER direction 2026-10-29 (new-vs-old -0.012594 t, 25/32 seeds; cost 1.019x work units, se 0.008, 32 seeds -- a TRADE by the better-overall rule, computed by hand because versus_cost globbed the stem with its space; recipe fast)"
+  },
+  {
+   "run_id": "melira_pod-artifact-queue-d7d6a5-20261025T191545",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:0e526f28aba1418057fe",
+   "frozen": "99977194beb541fd50db5bd30b5a2d8f5fc150ee",
+   "src_tree": "fa79016e8b371054e9a0b60b7eae5f01a5e5a78c",
+   "date": "2026-10-29",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_melira_pod/DECISIONS.txt) | E.7's d4b60 pick NOT landed: play settings never go below depth 5 (USER 2026-10-29); the live d5/b60 emulated ladder stands.",
+   "decisions": [
+    "    VERDICT arm=d6b90 adopt=0 delta=-0.00188 t=-4.25 cost=1.136x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.14x) with quality better (-0.00188) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b120 adopt=0 delta=-0.00300 t=-5.29 cost=1.219x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.22x) with quality better (-0.00300) -- a TRADE, the user's call",
+    "    PICK arm=d4b60 why=the cheapest of 1 passing arm(s) (0.97x vs live, delta +0.00112)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-29T11:54:27  PHASE E.6: no allowance for melira_pod -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
