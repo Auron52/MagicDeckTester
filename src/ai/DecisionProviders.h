@@ -3585,7 +3585,7 @@ public:
     // prunes the put-back fan to that pick; MTG_CYCLONE_PONDER_KEEPSHUFFLE narrows Ponder to keep-vs-shuffle.
     bool PutBackSingleCandidate(const GameState& s) const override;
     bool ReorderKeepShuffleOnly(const GameState& s) const override;
-    // THE BUCKETED CLEANUP DISCARD (MTG_CYCLONE_BUCKET_DISCARD, DEFAULT OFF until the USER adopts it;
+    // THE BUCKETED CLEANUP DISCARD (MTG_CYCLONE_BUCKET_DISCARD, DEFAULT ON with the second Eldrazi over Remand -- the EL2 arm;
     // docs/design/cyclone-discard-buckets.md). The shed is the last card of the bucket keep order
     // (CycloneBucketRankOf below), routed through CleanupDiscardRankingWithOrder so the staged-card and
     // required-piece protections stay engine-enforced, returned as ONE index (two under
