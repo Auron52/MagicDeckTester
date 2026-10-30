@@ -2784,6 +2784,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // matches cont_lookahead, so a cell speculating to its bound is always captured at the bound.
     static constexpr long long kJournalStride = 4;
     bool journal_on = false;                 // set once continuous is known (below)
+    // Set when the run FINISHED and its raw is on disk: the journal (and side journal) are then removed at
+    // the very END, after the profile and raw sidecar are written -- see the end of this function.
+    bool journal_superseded = false;
     std::string journal_path;                // cfg.out_raw + ".journal"
     std::mutex journal_mtx;
     std::ofstream journal_f;
@@ -6907,16 +6910,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             if (raw_ok && !abandon_failed.load())
             {
-                // Superseded: close and remove it so a later invocation doesn't resume from a stale journal
-                // for an already-finished run.
+                // Superseded -- but NOT removed yet. It used to be deleted here, before the profile existed,
+                // so a pause in the seconds between left a finished raw, no journal and the OLD profile:
+                // the next run then read its own final raw as a floor checkpoint (no refs, no frozen cells)
+                // and refined on. It is removed at the very end, after the profile, the raw sidecar and the
+                // GENERATION COMPLETE marker; a kill before that resumes from it with nothing left to roll.
                 journal_f.close();
-                // MTG_KEEP_JOURNAL_KEEP=1 (DIAGNOSTIC ONLY): keep the superseded journal as
-                // <journal>.done instead of deleting it, so two runs' journal RECORDS can be diffed (sorted
-                // -- record order is commit order, which is scheduling). Never resumable under that name.
-                std::error_code ec;
-                if (EnvOn("MTG_KEEP_JOURNAL_KEEP")) { std::filesystem::rename(journal_path, journal_path + ".done", ec); }
-                else                                { std::filesystem::remove(journal_path, ec); }
-                rj_finish(false, EnvOn("MTG_KEEP_JOURNAL_KEEP") ? 2 : 1);
+                rj_finish(false, 0);
+                journal_superseded = true;
             }
             else if (raw_ok)
             {
@@ -7032,6 +7033,33 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     ReportNotableHands(os, cfg, tables, P, rep, bucket_of, ref_ai);
     os << std::flush;
+
+    // ---- FINISHED: marker, THEN retire the journal ------------------------------------------------
+    // "[keepgen] GENERATION COMPLETE fnv64=<hash of the written profile>" is what scripts/mullgen.sh's
+    // gen_finished() reads to send a restarted pipeline straight to VALIDATION instead of regenerating.
+    // Printed after the profile is on disk and BEFORE the journal goes, so there is no instant at which
+    // a kill leaves neither a resumable journal nor the marker.
+    if (!cfg.out_profile.empty() && std::filesystem::exists(cfg.out_profile))
+    {
+        std::ifstream pf(cfg.out_profile, std::ios::binary);
+        const std::string pb((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>());
+        std::uint64_t h = 1469598103934665603ULL;
+        for (const unsigned char c : pb) { h ^= c; h *= 1099511628211ULL; }
+        char hb[17];
+        std::snprintf(hb, sizeof hb, "%016llx", static_cast<unsigned long long>(h));
+        std::cerr << "[keepgen] GENERATION COMPLETE fnv64=" << hb << " " << cfg.out_profile << "\n" << std::flush;
+    }
+    if (journal_superseded && !journal_path.empty())
+    {
+        // MTG_KEEP_JOURNAL_KEEP=1 (DIAGNOSTIC ONLY): keep the superseded journal as <journal>.done instead
+        // of deleting it, so two runs' journal RECORDS can be diffed (sorted -- record order is commit
+        // order, which is scheduling). Never resumable under that name. The side journal follows it.
+        std::error_code ec;
+        const bool keepj = EnvOn("MTG_KEEP_JOURNAL_KEEP");
+        if (keepj) { std::filesystem::rename(journal_path, journal_path + ".done", ec); }
+        else       { std::filesystem::remove(journal_path, ec); }
+        rj_finish(false, keepj ? 2 : 1);
+    }
 }
 // Pooled per-(size,composition) accumulator. File scope so the regret simulator below can
 // take the pooled table by reference; it was a local struct inside RunKeepMerge.
