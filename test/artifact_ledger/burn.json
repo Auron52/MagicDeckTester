@@ -1,0 +1,30 @@
+{
+ "deck": "burn",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "burn-artifact-queue-d7d6a5-20261030T154152",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "461f92544b47277998e3057169a6bacb7a8fd559",
+   "frozen": "58dcb45053e9fa6aa62da85a92872d6eeff6cdff",
+   "src_tree": "bcf643fb8ae863d139677d266eacbe772d459dee",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": 0.002937,
+   "cost": [
+    1.0086877309083848,
+    0.0063031125368925005,
+    96
+   ],
+   "trade": false,
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.002937 t, cost 1.009x (se 0.006, 96 seeds)); incumbent restored"
+  }
+ ]
+}
