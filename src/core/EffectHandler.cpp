@@ -242,6 +242,9 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    // Own-death decks may pay their last life to activate a mana source. The
+    // game ends at the priority boundary, before the paid spell/trigger resolves.
+    if (state.own_death_live && SelfHasLost(state)) { return false; }
     // THE EXECUTOR'S SPELL-RESOLUTION FLUSH for the Niv draw/damage loop (SpellEffects.h, "NIV-MIZZET
     // DRAW/DAMAGE LOOP"): every draw this resolution made pings once it has FINISHED (CR 603.3) --
     // after Brainstorm's put-back, Ponder's reorder. Rollout twin: apply_one's flush. One bool test
@@ -707,6 +710,7 @@ void EffectHandler::ResolveManaDork(GameState& state, const StackEntry& entry,
 void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entry,
                                          const CardDefinition& def)
 {
+    NoncombatTriggerScope noncombat_scope(state);
     // An {X} burn deals its chosen X (carried on the stack entry; CR 202.3). A fixed-damage
     // burn uses params.damage, with the landfall boost if a land entered this turn.
     int damage;
@@ -752,11 +756,28 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         damage = entry.crackle_targets.value();
     }
 
-    for (const Target& t : entry.targets)
+    int chain_hit_controller = -1;
+    if (def.params.damage_per_nonbasic_land > 0)
+    { ResolveNonbasicLandDamage(state, entry.controller_index, def.params.damage_per_nonbasic_land); }
+    FixedBurnPin fixed_burn_pin;
+    if (FixedTargetedBurn(def) && DecodeFixedBurnPin(entry.tutor_target, fixed_burn_pin))
+    {
+        chain_hit_controller = BurnTargetController(state, entry.controller_index, fixed_burn_pin.first);
+        if (!ResolveFixedBurnPin(state, entry.controller_index, def, fixed_burn_pin, damage))
+        {
+            // CR 608.2b: with every target illegal, none of the spell resolves,
+            // including Magma Jet's scry. Casting still happened; the spell goes to graveyard.
+            MoveToGraveyard(state, entry);
+            return;
+        }
+    }
+    else for (const Target& t : entry.targets)
     {
         if (t.type == Target::Type::Player)
         {
+            chain_hit_controller = t.player_index;
             state.players[t.player_index].life -= damage;
+            RecordNoncombatDamageToPlayer(state, entry.controller_index, t.player_index, damage);
             if (t.player_index != entry.controller_index && damage > 0)
             {
                 state.opponent_lost_life_this_turn = true;
@@ -768,6 +789,14 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
                 && t.permanent_index < static_cast<int>(state.battlefield.size()))
             {
                 Permanent& target = state.battlefield[t.permanent_index];
+                chain_hit_controller = target.controller_index;
+                if (target.card.HasType(CardType::Planeswalker))
+                {
+                    target.loyalty -= damage;
+                    for (Counter& c : target.counters)
+                    { if (c.type == Counter::Type::Loyalty) { c.count = target.loyalty; } }
+                    continue;
+                }
                 const int before = target.damage;
                 target.damage += damage;
 
@@ -826,6 +855,9 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         }
     }
 
+    ContinueChainLightning(state, def, chain_hit_controller);
+    if (def.params.cast_scry > 0)
+    { ScryTop(state, def.params.cast_scry, def.card.m_name); }
     MoveToGraveyard(state, entry);
 }
 
@@ -1082,6 +1114,15 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     e.source           = def->card;
     e.source.m_number  = card.m_number;   // preserve per-copy ID
     e.controller_index = controller;
+    // Free targeted burn needs the same cast-time target selection as a hand cast.
+    // Otherwise its empty stack-entry targets resolve no damage while the rollout's
+    // recursive apply_one chooses a real target. Prepare before counting/firing CAST.
+    if (FixedTargetedBurn(*def))
+    {
+        FixedBurnPin pin;
+        if (!PrepareFixedBurnPin(state, controller, *def, "", pin)) { return false; }
+        e.tutor_target = EncodeFixedBurnPin(pin);
+    }
 
     // A free cast IS a cast (CR 601.2 / 702.85a): count it and fire cast-time abilities
     // exactly as CastSpellFromHand does -- lockstep with the rollout's apply_one free-cast
@@ -1099,8 +1140,11 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
                 : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
     }
     state.stack.push_back(std::move(e));
+    if (state.own_death_live && SelfHasLost(state)) { return true; }
     FireOnCastTriggers(state, *def);
     FireProwess(state, *def);
+    FlushNoncombatTriggersAtPriorityBoundary(state);
+    if (state.own_death_live && SelfHasLost(state)) { return true; }
     // ...including the free spell's OWN cast triggers, so cascade chains nest naturally.
     PushCastTriggers(state, *def, controller);
     return true;

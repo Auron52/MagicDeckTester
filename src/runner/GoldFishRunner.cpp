@@ -956,7 +956,8 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 int gi = next_game.fetch_add(1, std::memory_order_relaxed);
                 if (gi >= num_games) { break; }
 
-                GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi));
+                GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi),
+                                            base_game_index + gi);
                 GoldFishRunner::PopulateOpponentSpawns(state, base_game_index + gi);
 
                 if (logging || forced) { AssignCardNumbers(state, numbering); }
@@ -1367,6 +1368,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool landfall = false;
         // The scry-watcher walk (see GameState::deck_has_scry_watcher): the param FireScryWatchers tests.
         bool scry_watcher = false;
+        bool track_noncombat = false;
         // The look-top enter watcher (see GameState::deck_has_look_top_watcher): the param itself.
         bool look_top_watcher = false;
         // A same-phase mana untapper (see GameState::deck_has_mana_untapper): the params below.
@@ -1461,6 +1463,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                     || d->params.untap_target_creature_cost.has_value()
                     || d->params.soulbond_grants_untap_self_cost.has_value() || d->params.untap_pump_cost.has_value())
                 { mana_untapper = true; }
+                if (d->params.cost_less_per_opponent_noncombat_damage || d->params.incinerator_damage_trigger)
+                { track_noncombat = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
@@ -1517,6 +1521,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_landfall          = garth || landfall;
         // Same reasoning, no lever: a clear bit proves FireScryWatchers' walk finds no scry watcher.
         state.deck_has_scry_watcher      = garth || scry_watcher;
+        state.deck_tracks_noncombat_damage = garth || track_noncombat;
         // Same reasoning, no lever: a clear bit proves no look-top trigger (Risen Reef) can be recorded.
         state.deck_has_look_top_watcher  = garth || look_top_watcher;
         // Not a walk gate but a dominance premise (the payment refine's float-for-source trade). NOT held open
@@ -1636,20 +1641,21 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // VAMPIRES (A1, 2026-10-18; ledger open question 6 -- default ON, PROVISIONAL): Asylum Visitor's
         // MANDATORY upkeep life loss (hellbent_upkeep_life_loss) and Voldaren Estate's pay-1-life
         // coloured mana (tap_blood_cost marks the Estate; its pain is tap_self_damage) can take our
-        // own life to 0 in a long game, so our own death must be able to end it (CR 704.5a). Both
-        // params are carried by no other card in cards.json, so no other deck arms.
-        auto vamp_life = [](const std::vector<Card>& zone)
+        // own life to 0 in a long game, so our own death must be able to end it (CR 704.5a).
+        // Midrange Burn adds Fiery Islet's explicit life cost and Price of Progress's self damage.
+        auto life_cost_live = [](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (d && (d->params.hellbent_upkeep_life_loss > 0 || d->params.tap_blood_cost.has_value()))
+                if (d && (d->params.hellbent_upkeep_life_loss > 0 || d->params.tap_blood_cost.has_value()
+                          || d->params.tap_is_life_payment || d->params.damage_per_nonbasic_land > 0))
                 { return true; }
             }
             return false;
         };
         state.own_death_live = state.dmg_events_armed || s_own_death_all
-                            || vamp_life(deck.mainboard) || vamp_life(deck.sideboard);
+                            || life_cost_live(deck.mainboard) || life_cost_live(deck.sideboard);
     }
     // SPELL-COST REDUCERS (see GameState::deck_has_cost_reducer): can anything that ever reaches a
     // battlefield in this game reduce the cost of a spell we cast? EffectiveSpellCost walks the
@@ -1753,7 +1759,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 }
 
 
-GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
+GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int game_index)
 {
     GameState state;
 
@@ -1842,26 +1848,26 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // search/rollout state is a copy of this one, so the pointer reaches every node.
     state.m_provider = &SelectDecisionProvider(deck);
 
-    // Decks whose spells target the OPPONENT'S permanents for value (Hinata: Magma Opus taps
-    // them, the spread-damage / cost-reduction targeting points at them) get a realistic
-    // opponent board -- three lands (a realistic floor: most opponents have >=3 lands, and
-    // aggressive decks with fewer bring creatures = better targets anyway; see HinataProvider::
-    // OpponentPlaysLands). Pre-populated here (the single setup choke point) so every search
-    // deep copy and the real game agree, and present by the time the deck targets them (T4+).
-    if (state.m_provider->OpponentPlaysLands())
+    // Every passive opponent starts with three inert lands. Across ten game indices, two have
+    // 0 nonbasics, two have 1, three have 2, and three have 3. The extra slots go to buckets
+    // 2 and 3: the modal counts among three lands for the 40 unique regression-suite lists
+    // were 0:10, 1:6, 2:12, 3:12 (one vote per list). Both play/draw parity halves contain
+    // every bucket. Standalone analyzer probes use seed modulo ten as a deterministic fallback.
+    static constexpr int kNonbasics[10] = {0, 2, 1, 3, 2, 0, 3, 1, 2, 3};
+    const int pattern_index = game_index >= 0 ? game_index % 10 : static_cast<int>(seed % 10);
+    const int nonbasics = kNonbasics[pattern_index];
+    for (int i = 0; i < 3; ++i)
     {
-        for (int i = 0; i < 3; ++i)
-        {
-            Card land;
-            land.m_name = "Opponent Land";
-            land.RehashName();
-            land.AddType(CardType::Land);
-            Permanent perm;
-            perm.card             = land;
-            perm.controller_index = 1;
-            perm.owner_index      = 1;
-            state.battlefield.push_back(perm);
-        }
+        Card land;
+        land.m_name = i < nonbasics ? "Opponent Nonbasic Land" : "Opponent Basic Land";
+        land.RehashName();
+        land.AddType(CardType::Land);
+        if (i >= nonbasics) { land.AddSupertype(Supertype::Basic); }
+        Permanent perm;
+        perm.card             = land;
+        perm.controller_index = 1;
+        perm.owner_index      = 1;
+        state.battlefield.push_back(perm);
     }
 
     return state;

@@ -144,6 +144,9 @@ MANIFEST = {
     "grants_replicate_to_subtypes": ("replicate",     truthy),   # + grants it to Sliver spells
     "etb_bounce_land":       ("bounce",               truthy),
     "sacrifice_land":        ("sacrifice",            truthy),
+    "sacrifice_mountains_alternative": ("sacrifice", truthy),
+    "chain_lightning_copy": ("free_cast", truthy),
+    "incinerator_damage_trigger": ("target", truthy),
     "expressive_iteration":  ("expressive_iteration", truthy),
     # "pay a cost, or the land enters tapped" -- shock lands (pay life) + reveal lands (Frostboil
     # Snarl, reveal a matching land). One shared `land_entry` binary modal. SURFACED, but repetitive:
@@ -212,6 +215,7 @@ MANIFEST = {
     # Scavenging Ooze: WHICH graveyard card to exile (and how many activations) are independent
     # main_phase plan actions, one per distinct graveyard name (Action::GraveyardExileGrow).
     "gy_exile_grow_cost":    ("main_phase",           truthy),
+    "tap_graveyard_exile_damage": ("gy_return_one", positive),
     # Felidar Guardian: WHICH permanent to flicker (+ decline) rides the CastFromHand chosen_x
     # plan-variant axis on a cast; a PUT entry (Pod/Chord/Reveillark) surfaces its own `flicker`
     # board-pick chooser (g_play_flicker_chooser in FireOwnEtbTriggers' blink block, reply -1 =
@@ -677,6 +681,7 @@ BOARD_ACTIVATIONS = {
     # only once the piece is attached, so it is checked by test/unit/test_reconfigure.cpp, not here.)
     "reconfigure_cost":                          ("verb:equip",     truthy,   "reconfigure_cost"),
     "equip_combat_damage_charges":               ("verb:jittemode", truthy,   None),  # spends a counter
+    "tap_graveyard_exile_damage":               ("verb:gyexile",   positive, 3),
     "gy_exile_instant_sorcery_drain":            ("verb:gyexile",   positive, 1),     # "{B}, {T}"
     "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
     "gy_play_cost":                              ("verb:gyplay",    truthy,   None),  # Kaldring {T}
@@ -763,6 +768,9 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # Midrange Burn: fixed arithmetic/cost semantics; the existing cast/tap actions own timing.
+    "damage_per_nonbasic_land": "Price of Progress deals its printed multiple to EACH player from the live nonbasic count; no targets or chosen amount",
+    "tap_is_life_payment": "Fiery Islet's printed life payment is a mandatory mana-ability cost, not preventable damage; the mana activation is the existing tap action",
     # ---- LandfallElementals (2026-10-18) -- PROVISIONAL, pending the user's OK ----
     "landfall_self_pump_power": "Akoum Hellhound / Brushfire Elemental: 'this creature gets +2/+2 until end of turn' on each landfall -- MANDATORY, untargeted SELF pump, no choice (the land drop's timing is the decision and rides main_phase via Plan::land_slot)",
     "landfall_self_pump_toughness": "toughness half of the landfall self pump (rides landfall_self_pump_power) -- no choice",
@@ -1486,6 +1494,7 @@ INERT_PARAMS = {
     "tap_put_from_hand_types": "put-from-hand card-type filter detail (rides tap_put_from_hand_cost -> main_phase)",
     # --- Fluctuator (cycling combo) ---
     "reduces_cycling_activation": "Fluctuator: STATIC cycling-cost reduction, no choice of its own -- it only makes the existing cycling activations cheaper (often FREE), and those already surface as cycling_cost main_phase plays. Nothing is decided when it applies.",
+    "cost_less_per_opponent_noncombat_damage": "Static cost reduction from recorded actual noncombat damage to opponents this turn; existing main_phase spell plans reflect the live cost.",
     "cost_less_per_cycle_or_discard": "Hollow One: STATIC cost reduction scaled by a per-turn counter (cards cycled or discarded this turn). Like any cost reducer it creates no decision -- it only changes what the existing main_phase cast plans cost, and the cycling that drives the counter is itself already surfaced as cycling_cost main_phase plays.",
     "cycle_trigger_damage_each_opponent": "Drannith Stinger: MANDATORY triggered ability on every cycle ('deals 1 damage to each opponent'). Not a may-ability and it takes no target -- 'each opponent' is the whole set, which in a goldfish is one player. No choice.",
     # --- Pirates (2026-09-26; USER-APPROVED 2026-09-27: "3 is approved"). Each is a mandatory/
@@ -1730,6 +1739,9 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 # targeted seed-search cannot reach either: a forward driver can only cast cards, it cannot stock a
 # graveyard. Keep this list SHORT and every entry backed by a test that exercises the human chooser.
 STATE_GATED_TYPES = {
+    ("loyalty_abilities", "free_cast"): "Chandra's first +1 needs a payable nonland on top; deterministic paid/decline/unpayable fixtures cover the branches",
+    ("loyalty_abilities", "target"): "Chandra -3 needs a creature and the emblem needs seven loyalty; dedicated unit fixtures exercise both target paths",
+
     ("transform_back_name", "dig"):
         "Bloodline Keeper's in-combat transform window is asked only when the five-Vampire restriction holds "
         "at declare-attackers -- in this list only via Mavren Fein's attack token -- with {B} still open; a "
@@ -1797,6 +1809,15 @@ def expected_for_card(card):
             pass  # classified: inert / main_phase-ride / user-approved deferral
         else:
             unmapped.add(key)   # UNCLASSIFIED -> unmapped decision (wire it to surface) or new param -> guard trips
+    # Midrange Burn: the activation itself, any-target damage, and two non-targeting fuel costs.
+    if p.get("tap_graveyard_exile_damage", 0) > 0:
+        exp.update({"main_phase", "target", "gy_return_one"})
+    # Loyalty effect primitives can introduce additional decisions beyond the mode action.
+    loyalty_effects = {a.get("effect") for a in p.get("loyalty_abilities", [])}
+    if "exile_top_cast_or_damage" in loyalty_effects:
+        exp.add("free_cast")  # paid_cast=true; reuses the optional-cast protocol
+    if loyalty_effects & {"damage_target_creature", "emblem_spell_cast_damage"}:
+        exp.add("target")
     # X spells: {X} in the mana cost -> chosen_x plan variant (rides main_phase)
     if "{X}" in (card.get("mana_cost") or ""):
         exp.add("main_phase")
@@ -1846,6 +1867,11 @@ def modeled_tokens(card):
     """The choice tokens the card's PARAMS actually surface a decision for."""
     p = card.get("parameters", {}) or {}
     t = set()
+    if p.get("incinerator_damage_trigger") or p.get("tap_graveyard_exile_damage", 0) > 0 or any(
+        a.get("effect") in {"damage_target_creature", "emblem_spell_cast_damage"}
+        for a in p.get("loyalty_abilities", [])
+    ):
+        t.add("target")
     if real_target(p.get("targeting", "none")) or p.get("spectacle_cost"): t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
     if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")

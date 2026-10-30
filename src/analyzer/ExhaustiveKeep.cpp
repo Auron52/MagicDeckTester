@@ -837,7 +837,7 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
                 digests[gi] = TimedRollout("play-digest",
                     [&]{ return "game gi=" + std::to_string(gi) + " seed=" + std::to_string(seed); },
                     [&]() -> uint64_t {
-                        GameState state = GoldFishRunner::SetupGame(deck, seed);
+                        GameState state = GoldFishRunner::SetupGame(deck, seed, gi);
                         GoldFishRunner::PopulateOpponentSpawns(state, gi);
                         GameLogger dlog(/*digest_only=*/true);
                         dlog.StartGame(std::string(), gi, "d", seed, {});

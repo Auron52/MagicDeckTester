@@ -1,0 +1,33 @@
+{
+  "deck": "decks/Midrange Burn/Midrange Burn.cod",
+  "turn": 4,
+  "resume_at": "main1",
+  "active_life": 20,
+  "opponent_life": 10,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "tapped": true
+    },
+    {
+      "name": "Mountain",
+      "tapped": true
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    }
+  ],
+  "hand": [
+    "Fireblast",
+    "Chandra's Incinerator"
+  ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 20,
+  "depth": 5,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 5
+}

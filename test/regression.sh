@@ -49,7 +49,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Multi-config build layout: build/Release/mtg.exe on Windows (MSVC),
 # build/Release/mtg in the Linux dev container (Ninja Multi-Config).
 BIN=$(harness_bin) || exit 1
-GT=test/regression_gt.txt
+GT=${REGRESSION_GT:-test/regression_gt.txt}
+GTLOGS=${REGRESSION_GT_LOGS:-test/gt_logs}
 THREADS=${THREADS:-0}
 
 MODE=regression
@@ -206,7 +207,7 @@ if [ "$ACCEPT" = 1 ]; then
 
   # Promote this mode's per-game logs (from the last run) into the committed
   # ground-truth logs, so future runs diff against the accepted per-game outcomes.
-  mkdir -p test/gt_logs
+  mkdir -p "$GTLOGS"
   promoted=0
   for spec in "${CASES[@]}"; do
     # shellcheck disable=SC2086
@@ -219,7 +220,7 @@ if [ "$ACCEPT" = 1 ]; then
     # the pre-commit git diff). The RESULTS env is the inspected artifact -- it defines exactly
     # what "this run" covers, for both full and per-deck accepts.
     if [ -f "$LOGDIR/wins/${key}.wins" ] && grep -q "^${key}=" "$RESULTS"; then
-      cp "$LOGDIR/wins/${key}.wins" "test/gt_logs/${key}.wins"; promoted=$((promoted+1))
+      cp "$LOGDIR/wins/${key}.wins" "$GTLOGS/${key}.wins"; promoted=$((promoted+1))
     fi
   done
   # Save the binary that produced these accepted results as the per-mode BASELINE, so the next
@@ -235,7 +236,7 @@ if [ "$ACCEPT" = 1 ]; then
     echo "Saved baseline binary -> logs/snapshots/${MODE}-baseline (for next run's per-game diff)."
   fi
 
-  echo "Accepted $MODE results into $GT (and $promoted per-game log(s) into test/gt_logs/)."
+  echo "Accepted $MODE results into $GT (and $promoted per-game log(s) into $GTLOGS/)."
   # Record the accepted jobs' measured cost for the next run's scheduling (see JOB_COST_TABLE).
   if [ -f "$LOGDIR/batch.log" ] && command -v python3 >/dev/null 2>&1; then
     python3 "$HERE/lib/job_cost.py" update "$HERE/job_cost.tsv" "$LOGDIR/batch.log" "$RESULTS"
@@ -409,8 +410,19 @@ TOTAL_START=$(date +%s)
 # `tee` to batch.log so per-job results STREAM to the terminal live as each case
 # finishes (the binary flushes one line per completed job), instead of being buffered
 # inside $() until the whole batch ends. We then read the captured file for parsing.
+# Keep an independent copy of the streamed batch output. A container cost run
+# once finished with its live batch.log truncated to zero after the last job;
+# without this copy every result reads as "no output" and the cost gate loses a
+# completed 12-minute measurement. The backup has a unique name so another tier
+# process cannot clobber it; remove it after verifying the public log.
+BATCH_BACKUP="$LOGDIR/batch.$$.backup"
 "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$LOGDIR/wins" \
-    2>"$LOGDIR/batch.err" | tee "$LOGDIR/batch.log"
+    2>"$LOGDIR/batch.err" | tee "$LOGDIR/batch.log" "$BATCH_BACKUP"
+if ! cmp -s "$LOGDIR/batch.log" "$BATCH_BACKUP"; then
+  cp "$BATCH_BACKUP" "$LOGDIR/batch.log"
+  echo "Restored $LOGDIR/batch.log from the independent batch stream" >&2
+fi
+rm -f "$BATCH_BACKUP"
 TOTAL=$(( $(date +%s) - TOTAL_START ))
 BATCH_OUT=$(cat "$LOGDIR/batch.log")
 
@@ -418,7 +430,6 @@ BATCH_OUT=$(cat "$LOGDIR/batch.log")
 # run just wrote this run's per-game win turns to $LOGDIR/wins/<key>.wins. We diff
 # them so the report names EXACTLY which games changed -- the cheap built-in version
 # of the mandatory pre-accept per-game analysis (no rebuilding the old binary).
-GTLOGS=test/gt_logs
 
 # Parse one "<name>: played=P avg=A digest=D" line per job into the avg/digest fingerprint,
 # in matrix order, and compare to ground truth. avg = mean turn-to-win with an unwon game scored

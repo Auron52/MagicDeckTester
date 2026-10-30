@@ -47,6 +47,7 @@ struct ContPins
     int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
+    std::vector<int> incinerator_targets;
     std::vector<int> look_top;      // Plan::look_top_pins (the continuation's own Risen Reef looks / orders)
     int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
                            // casts; PutBouncePinOf -- -1 when its own drop is the Karoo)
@@ -55,7 +56,7 @@ struct ContPins
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
-            || putback >= 0 || !look_top.empty();
+            || putback >= 0 || !look_top.empty() || !incinerator_targets.empty();
     }
 };
 
@@ -1446,6 +1447,7 @@ public:
         // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key,
         // the dominance Xaxes key and (live) the breakpoint key.
         std::vector<int> look_top_pins;
+        std::vector<int> incinerator_targets; // stable target id per actual queued trigger ordinal
         //   combat_crack_choice -- crack Khalni Heart Expedition(s) IN COMBAT, after Primeval Titan's
         //     attack trigger filled them and before damage (a bitmask over the Expeditions eligible at
         //     that point, battlefield order; -1 = no crack). Rides GameState::
@@ -2690,6 +2692,11 @@ public:
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false,
                                      bool allow_partial = false);
+    // A face-targeted Lavamancer activation can be the sole source of a
+    // same-plan spectacle discount. Return its action index so both apply
+    // worlds can run it before the spectacle cast, rather than in the trailing
+    // activation pass. -1 when the special order is unnecessary.
+    static int SpectacleGraveyardDamageFirst(const GameState& state, const std::vector<Action>& acts);
     // The hold masks behind `hand_demand`, exposed for tests: one untapped source per coloured pip
     // the hand minus `acts`' casts still owes (scarcest colour first, narrowest source, tie lower
     // card number), written to `out` as PREFIX masks over battlefield indices, largest first --
@@ -2991,6 +2998,7 @@ public:
     // MTG_VAMP_RULE_PRE test hook: SubsetVampOutletInvalid on `sel` both ways -- `slow` the per-subset
     // rules, `fast` the per-enumeration VampRulePre path (built over `cands` on `state`). Equal by design.
     // The raw candidate list CollectActions emits for `state` (test hook; what both subset walkers index).
+    static Action ChandraNestedCastOption(const std::string& option);
     static std::vector<Action> CollectActionsForTest(const GameState& state, bool is_pre_combat);
     static void VampRulePreAgreeForTest(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel, bool fold_from_odometer,

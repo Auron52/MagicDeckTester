@@ -21,12 +21,13 @@ or the log is not the one that was accepted.
     python3 test/check_gt_logs.py --mode smoke
 """
 import argparse
+import os
 import pathlib
 import re
 import sys
 
-GT = pathlib.Path("test/regression_gt.txt")
-GT_LOGS = pathlib.Path("test/gt_logs")
+GT = pathlib.Path(os.environ.get("REGRESSION_GT", "test/regression_gt.txt"))
+GT_LOGS = pathlib.Path(os.environ.get("REGRESSION_GT_LOGS", "test/gt_logs"))
 FNV_OFFSET = 1469598103934665603
 FNV_PRIME = 1099511628211
 MASK = (1 << 64) - 1

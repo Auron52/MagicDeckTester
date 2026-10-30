@@ -128,6 +128,8 @@ def main():
                     help="cross-check at the suite's pinned d3/d5 instead of the deck's PLAY settings")
     ap.add_argument("--force", action="store_true",
                     help="re-validate a deck that already opts out (forces the provider gate open)")
+    ap.add_argument("--threads", type=int, default=0,
+                    help="batch worker threads (0 = affinity-based default)")
     args = ap.parse_args()
 
     decks = []
@@ -157,7 +159,8 @@ def main():
           "both arms in ONE pooled batch ...")
     env = dict(os.environ, MTG_DUMP_WINS="1")
     with open(out, "w") as fh:
-        rc = subprocess.call([binary, "--batch", manifest], stdout=fh, stderr=subprocess.STDOUT,
+        rc = subprocess.call([binary, "--batch", manifest, "--threads", str(args.threads)],
+                             stdout=fh, stderr=subprocess.STDOUT,
                              cwd=ROOT, env=env)
     if rc != 0:
         sys.exit(f"batch failed (exit {rc}); see {out}")

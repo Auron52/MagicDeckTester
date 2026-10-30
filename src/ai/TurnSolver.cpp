@@ -42,6 +42,7 @@
 #include <limits>
 #include <memory>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <fstream>
 #include <map>
@@ -10034,7 +10035,13 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // so the reduction applies to the summed cost (CR 601.2f order). Identity for every other
         // card and for an unkicked cast.
         const CardDefinition& def = *KickedFaceOr(a.def, a.kicked);
-        if (!a.free_cast && !a.alt_cost)
+        if (IsFireblastAlternative(def, a.tutor_target.str()))
+        {
+            RevealLogPause quiet; // a mana feasibility probe never asks a human or emits events
+            if (!PayFireblastAlternative(cp, cp.active_player_index, a.tutor_target.str())) { return false; }
+        }
+
+        if (!a.free_cast && !a.alt_cost && !IsFireblastAlternative(def, a.tutor_target.str()))
         {
             // Live cost -- the same recompute the rollout's apply_one performs at cast time.
             ManaCost ec = EffectiveCost(def, cp, a.splice_count + 1);
@@ -10098,7 +10105,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             // MTG_SPASM_UNTAP_LITERAL phase 3: same tap-ahead as the apply/executor twins, so
             // this sequential-payability answer prices the chain the way it will really be paid.
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
-            if (def.params.etb_untap_lands > 0)
+        if (def.params.etb_untap_lands > 0)
             {
                 // The line's still-owed coloured pips steer which colour a banked unit commits to
                 // (see the line_cost priority in EtbUntapTapAheadIntoFloat -- USER, EDF seed 9
@@ -10155,6 +10162,13 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             }
             // Paid -> the walk no longer owes it (mirrors apply_one's decrement; clamped).
             SubManaCost(g_line_unpaid_cost, ec);
+        }
+        if (a.direct_damage > 0 && def.tmpl == CardTemplate::DirectDamage
+            && cp.deck_tracks_noncombat_damage)
+        {
+            // Every resolved burn earns the resource, including Fireblast's sacrifice
+            // alternative and banked free casts. Payment never discounts its own spell.
+            cp.noncombat_damage_received_this_turn[1 - cp.active_player_index] += a.direct_damage;
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
         // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
@@ -10335,6 +10349,24 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     const bool r = SubsetPayableSequentialImpl(state, cands, sel);
     if (paycensus::On()) { paycensus::Record(paycensus::SPS, state, cands, sel, r, _pc_t0); }
     return r;
+}
+// A burn spell can lower a later Incinerator's bill inside the same line. The
+// flat cost sum prices Incinerator before that damage, so let the existing live
+// sequential payer adjudicate these subsets when the flat gate rejects them.
+static bool SubsetHasPendingNoncombatDiscount(const GameState& state,
+                                             const std::vector<Action>& cands,
+                                             const std::vector<int>& sel)
+{
+    if (!state.deck_tracks_noncombat_damage) { return false; }
+    bool damage = false, discounted_cast = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        damage |= a.direct_damage > 0;
+        discounted_cast |= a.kind == Action::Kind::CastFromHand && a.def != nullptr
+                        && a.def->params.cost_less_per_opponent_noncombat_damage > 0;
+    }
+    return damage && discounted_cast;
 }
 static bool SubsetPayableSequentialImpl(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel)
@@ -12649,7 +12681,10 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         // spell is still selected when it extends the total subset (e.g. Shard
         // Volley + Bolt beats Bolt alone).
         int penalty = def.params.sacrifice_land ? (DMG / 2) : 0;
-        return NetOpponentSwing(def, state, def.params.damage) * DMG - penalty;
+        const int damage = def.params.damage_per_nonbasic_land > 0
+            ? NonbasicLandDamage(state, 1 - state.active_player_index, def.params.damage_per_nonbasic_land)
+            : def.params.damage;
+        return NetOpponentSwing(def, state, damage) * DMG - penalty;
     }
 
     if (def.card.IsCreature())
@@ -19098,6 +19133,43 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     return false;
 }
 
+// Fixed-burn variants include creatures and planeswalkers still in hand so a
+// same-plan creature-then-Blaze line is reachable. Reject a subset that chose
+// one of those future targets without also selecting its cast. Otherwise the
+// viewer offers a Blaze-only plan that cannot legally be cast (CR 601.2c).
+static bool SubsetHasMissingFixedBurnTarget(const GameState& state,
+                                            const std::vector<Action>& cands,
+                                            const std::vector<int>& sel)
+{
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr
+            || a.def->params.targeting != Targeting::Multi) { continue; }
+        FixedBurnPin pin;
+        if (!DecodeFixedBurnPin(a.tutor_target.str(), pin)) { continue; }
+        for (int target : {pin.first, pin.second})
+        {
+            if (target <= 0) { continue; }
+            bool present = false;
+            for (const Permanent& p : state.battlefield)
+            { if (p.card.m_number == target) { present = true; break; } }
+            if (present) { continue; }
+            bool co_cast = false;
+            for (int k : sel)
+            {
+                const Action& b = cands[static_cast<std::size_t>(k)];
+                if (b.kind != Action::Kind::CastFromHand || b.hand_index < 0
+                    || b.hand_index >= static_cast<int>(state.ActivePlayer().hand.size())) { continue; }
+                if (state.ActivePlayer().hand[static_cast<std::size_t>(b.hand_index)].m_number == target)
+                { co_cast = true; break; }
+            }
+            if (!co_cast) { return true; }
+        }
+    }
+    return false;
+}
+
 // ---- ATTACH FOLDS: shared helpers -----------------------------------------------------------------
 // Every fold below drops a subset in which one ATTACH of a piece is undone by a later event of the same
 // plan -- a second attach of that piece, or its host ceasing to be a creature (CR 704.5n) -- or in which
@@ -19639,6 +19711,7 @@ struct SubsetFilterPre
     bool phyrexian         = true;   // SubsetPhyrexianDominated
     bool splice            = true;   // SubsetHasIllegalSplice
     bool trick_target      = true;   // SubsetHasMissingTrickTarget
+    bool fixed_burn_target = true;   // SubsetHasMissingFixedBurnTarget
     bool aura_target       = true;   // SubsetHasUnenabledRestrictedAura, SubsetHasAuraOnUncastCreature
     bool vial              = true;   // the per-charge Vial capacity loop in eval_and_push
     // The TreasurePaySource same-turn MINT-CREDIT block (both walkers). Its whole effect is guarded
@@ -20540,6 +20613,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     p = SubsetFilterPre{ false, false, false, false, false, false, false, false, false,
                          false, false, false, false, false, false, false, false, false };
     p.attach_spell = false;
+    p.fixed_burn_target = false;
     p.equip_onto_piece = false;
     p.vamp_outlet = false;
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
@@ -20572,6 +20646,9 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
                 p.dup_source = true;                      // one activation per source per plan
                 break;
             case Action::Kind::CastFromHand:
+                if (d != nullptr && d->params.targeting == Targeting::Multi
+                    && a.tutor_target.str().find("@burn/") != std::string::npos)
+                { p.fixed_burn_target = true; }
                 // A Magnetic Theft's creature target rides enchant_target too, but it is no Aura: every
                 // filter and plan sort behind this bit returns false on a non-Aura first, so leaving the
                 // bit down for it is exact (and spares the Theft deck those per-subset lookups).
@@ -25036,6 +25113,11 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     }
     // LOOK-TOP pins (Risen Reef land / trigger-order entries) -- same must-fold rule; value-gated so
     // every deck without a look-top watcher keeps its exact signature value.
+    if (!p.incinerator_targets.empty())
+    {
+        fold(0x1C1DE + p.incinerator_targets.size());
+        for (int id : p.incinerator_targets) { fold(static_cast<uint64_t>(id)); }
+    }
     if (!p.look_top_pins.empty())
     {
         fold(0x100C7000ull + static_cast<uint64_t>(p.look_top_pins.size()));
@@ -25350,7 +25432,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.combat_transform_choice == -1
         && p.land_search_act_slot == -1
-        && p.look_top_pins.empty()
+        && p.look_top_pins.empty() && p.incinerator_targets.empty()
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
@@ -25404,7 +25486,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // Look-top pins (Risen Reef): every variant is a clone of its base differing only in a land /
         // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
         // look that never happened) leaves it on its base plan's state -- the inert-duplicate shape.
-        || !p.look_top_pins.empty()
+        || !p.look_top_pins.empty() || !p.incinerator_targets.empty()
         // The cycle / sac-draw dig variants (0 = the no-dig twin / never, 1 = dig-while-affordable) --
         // NOT the 2 mark, which is a base plan. Missing from the 9d widening: a dig variant whose world
         // its base already reached (the gate refused, the source was unaffordable) paid a full rollout
@@ -26954,7 +27036,9 @@ enum : uint64_t {
     kActUntapLoopFunded = 204,
     // Walking Ballista (2026-10-27): the counter ping and the live Heliod loop.
     kActCounterPing  = 205,
-    kActPingLoopLive = 206
+    kActPingLoopLive = 206,
+    kActGraveyardDamage = 207,
+    kActLoyaltyManaContinuation = 208
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -26994,6 +27078,12 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if (pp.loyalty_start > 0 && !pp.loyalty_abilities.empty()
         && p.loyalty > 0 && !p.loyalty_activated_this_turn)
     { out.push_back(ActKey(num, kActLoyalty)); }
+
+    if (p.loyalty_activated_this_turn && state.floating_mana.red > 0)
+    {
+        for (const auto& ab : pp.loyalty_abilities)
+        { if (ab.effect == "add_red_mana") { out.push_back(ActKey(num, kActLoyaltyManaContinuation)); break; } }
+    }
 
     // The PermAbilityMode sinks (the ModeSpec table in CollectActions). {T} modes need an untapped,
     // non-sick source -- CanTap is the predicate that makes a haste grant register as a new option.
@@ -27050,6 +27140,25 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
             && !ActivationDiscardPayable(state, ctrl, std::string())) { continue; }
         if (ActAffordable(state, ctrl, p.card, *modes[i].cost, total_cache))
         { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
+    }
+
+    // Lavamancer may gain fuel when the plan's earlier spells resolve. The graveyard signature
+    // makes newly available fuel pairs visible even when an older pair was already available.
+    if (pp.tap_graveyard_exile_damage > 0 && !p.tapped && CanTapNow(p, state.battlefield)
+        && state.players[ctrl].graveyard.size() >= 2)
+    {
+        ManaCost red; red.red = 1;
+        if (ActAffordable(state, ctrl, p.card, std::optional<ManaCost>(red), total_cache))
+        {
+            std::vector<std::string> names;
+            for (const Card& c : state.players[ctrl].graveyard) { names.push_back(c.m_name.str()); }
+            std::sort(names.begin(), names.end());
+            uint64_t signature = 1469598103934665603ull;
+            for (const std::string& name : names)
+            { for (unsigned char c : name) { signature = (signature ^ c) * 1099511628211ull; }
+              signature = (signature ^ 0xffu) * 1099511628211ull; }
+            out.push_back(ActKey(num, kActGraveyardDamage) ^ ((signature & 0xFFFFFFu) << 40));
+        }
     }
 
     // Spore outlet (the Thallid family): the cost is COUNTERS, not mana, so it is not in the
@@ -30217,7 +30326,7 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // the T4 win casts Soulfire MAIN1 and plays Crackle+Spasms out of its exile across
             // both mains; deferred, the deploy no longer fits and the win slips to T5).
             if (p.power_bonus != 0 || p.tough_bonus != 0) { return MP::Main1; }
-            if (p.draw > 0 || p.cast_draw > 0 || p.stages_cards
+            if (p.draw > 0 || p.cast_draw > 0 || p.cast_scry > 0 || p.stages_cards
                 || p.damage_equals_top_mv)
             {
                 // Card-flow rider: BOTH -- but only when the deck HAS main-1 effects to dig
@@ -33217,6 +33326,83 @@ static bool PlanHasDeadOptionalEvoke(const GameState& state, const TurnSolver::P
     return false;
 }
 
+
+static std::string SerializeChandraNestedCast(const Action& a)
+{
+    std::ostringstream out;
+    out << std::quoted(a.card_name.str()) << ' ' << std::quoted(a.tutor_target.str())
+        << ' ' << std::quoted(a.chosen_float_color.str());
+    out << ' ' << a.sacrifice_land;
+    out << ' ' << a.discard_lands;
+    out << ' ' << a.alt_cost;
+    out << ' ' << a.alt_lifegain;
+    out << ' ' << a.chosen_x;
+    out << ' ' << a.soulfire_own_targets;
+    out << ' ' << a.ponder_keep;
+    out << ' ' << a.crackle_targets;
+    out << ' ' << a.splice_count;
+    out << ' ' << a.enchant_target;
+    out << ' ' << a.bestow;
+    out << ' ' << a.replicate_count;
+    out << ' ' << a.convoke_green;
+    out << ' ' << a.convoke_other;
+    out << ' ' << a.phyrexian_life;
+    out << ' ' << a.evoke;
+    out << ' ' << a.adventure;
+    out << ' ' << a.kicked;
+    out << ' ' << a.twobrid_colored;
+    out << ' ' << a.devour_count;
+    out << ' ' << a.cost.generic;
+    out << ' ' << a.cost.white;
+    out << ' ' << a.cost.blue;
+    out << ' ' << a.cost.black;
+    out << ' ' << a.cost.red;
+    out << ' ' << a.cost.green;
+    out << ' ' << a.cost.colorless;
+    out << ' ' << a.cost.has_x;
+    return out.str();
+}
+Action TurnSolver::ChandraNestedCastOption(const std::string& option)
+{
+    Action a;
+    std::istringstream in(option);
+    std::string name, tutor, color;
+    in >> std::quoted(name) >> std::quoted(tutor) >> std::quoted(color);
+    a.card_name = name; a.tutor_target = tutor; a.chosen_float_color = color;
+    in >> a.sacrifice_land;
+    in >> a.discard_lands;
+    in >> a.alt_cost;
+    in >> a.alt_lifegain;
+    in >> a.chosen_x;
+    in >> a.soulfire_own_targets;
+    in >> a.ponder_keep;
+    in >> a.crackle_targets;
+    in >> a.splice_count;
+    in >> a.enchant_target;
+    in >> a.bestow;
+    in >> a.replicate_count;
+    in >> a.convoke_green;
+    in >> a.convoke_other;
+    in >> a.phyrexian_life;
+    in >> a.evoke;
+    in >> a.adventure;
+    in >> a.kicked;
+    in >> a.twobrid_colored;
+    in >> a.devour_count;
+    in >> a.cost.generic;
+    in >> a.cost.white;
+    in >> a.cost.blue;
+    in >> a.cost.black;
+    in >> a.cost.red;
+    in >> a.cost.green;
+    in >> a.cost.colorless;
+    in >> a.cost.has_x;
+    if (!in) { return Action{}; }
+    a.kind = Action::Kind::CastFromHand; a.hand_index = 0;
+    a.def = CardDatabase::Instance().Lookup(a.card_name);
+    return a;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
@@ -33671,7 +33857,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // CONVOKE CREATURE EXEMPTION (Vampires A1, Markov Baron): its creatures pay part of the cost,
         // so the printed cost is no bound -- the convoke post-pass below gates each arm on its REDUCED
         // cost instead. Chord of Calling (not a creature) keeps the old gate byte-for-byte.
-        if (g_emit_prune && def.params.alt_lifegain_cost <= 0
+        if (g_emit_prune && !def.params.cost_less_per_opponent_noncombat_damage
+            && !def.params.sacrifice_mountains_alternative
+            && def.params.alt_lifegain_cost <= 0
             && def.params.alt_cost_requires_subtype.empty()
             && !def.params.spectacle_cost.has_value()
             && !(def.params.convoke && def.card.IsCreature())
@@ -33751,7 +33939,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
         else if ((t == Targeting::Creature || t == Targeting::Multi
-                  || t == Targeting::NonlandPermanent) && !has_creature_target
+                  || t == Targeting::NonlandPermanent) && !(FixedTargetedBurn(def) && FixedBurnSearchEnabled(state)) && !has_creature_target
                  && !def.params.controller_lifegain_equals_power)
         {
             // Unexpectedly Absent (nonland-permanent tuck): with no opponent creature the
@@ -34488,6 +34676,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(a));
             }
             continue;   // safe alts: auto-fired (not enumerated); risky alt handled above
+        }
+
+        // Fireblast: one zero-mana alternative per legal pair, PLUS the normal paid cast.
+        // The stable pair marker reaches both apply_one and CastSpellFromHand through tutor_target.
+        if (def.params.sacrifice_mountains_alternative)
+        {
+            const auto mountains = FireblastMountains(state, state.active_player_index);
+            for (std::size_t x = 0; x < mountains.size(); ++x)
+            for (std::size_t y = x + 1; y < mountains.size(); ++y)
+            {
+                Action a;
+                a.kind = Action::Kind::CastFromHand;
+                a.card_name = ap.hand[i].m_name;
+                a.hand_index = i;
+                a.tutor_target = "fireblast:" + std::to_string(state.battlefield[mountains[x]].card.m_number)
+                                + "," + std::to_string(state.battlefield[mountains[y]].card.m_number);
+                a.direct_damage = def.params.damage;
+                a.eval = EvalCard(def, state);
+                a.is_noncreature = true;
+                a.card_mv = def.card.m_mana_cost.ManaValue();
+                actions.push_back(std::move(a));
+            }
         }
 
         // Tutor: the heuristic (TutorCandidates) returns a NARROWED candidate set. One
@@ -35761,6 +35971,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             // Net the opponent-lifegain rider (see NetOpponentSwing): unbacked it is a gift, not
             // reach. subset_lethal_damage no longer adds the rider separately -- it is folded here.
+            if (def.params.damage_per_nonbasic_land > 0)
+            { direct = NonbasicLandDamage(state, 1 - state.active_player_index, def.params.damage_per_nonbasic_land); }
             direct = NetOpponentSwing(def, state, direct);
         }
         else if (def.tmpl == CardTemplate::DirectDamage
@@ -38154,7 +38366,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 else if (ab.effect == "destroy_own_noncreature")
                 {
                     // Fuel = ANY legal target. The opponent's noncreature permanents come first
-                    // (OpponentPlaysLands): destroying one is free, which is the whole point --
+                    // (shared passive-opponent setup): destroying one is free --
                     // without a target the +3 -> +3 -> -9 ramp cannot be walked at all.
                     bool opp_fuel = false, own_fuel = false;
                     for (const Permanent& q : state.battlefield)
@@ -38422,6 +38634,54 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (!HumanPlayActive()) { continue; }
                     ev = 1;
                 }
+                else if (ab.effect == "exile_top_cast_or_damage")
+                {
+                    Action a;
+                    a.kind = Action::Kind::ActivateLoyalty; a.card_name = p.card.m_name;
+                    a.hand_index = -1; a.sac_source_id = p.card.m_number; a.loyalty_ability = li;
+                    a.tutor_target = ""; a.ponder_keep = 0; a.eval = 2 * gamesetup::OpponentHeads() * DMG;
+                    a.is_noncreature = true;
+                    std::vector<std::string> options;
+                    if (!ap.library.empty())
+                    {
+                        GameState nested = state;
+                        Card top = nested.players[state.active_player_index].library.DrawTop();
+                        const CardDefinition* td = CardDatabase::Instance().LookupCached(top);
+                        if (td && !td->card.IsLand())
+                        {
+                            nested.players[state.active_player_index].hand.clear();
+                            nested.players[state.active_player_index].hand.push_back(top);
+                            for (Permanent& q : nested.battlefield) { q.loyalty_activated_this_turn = true; }
+                            for (const Action& ca : CollectActions(nested, is_pre_combat))
+                            {
+                                if (ca.kind != Action::Kind::CastFromHand) { continue; }
+                                const std::string option = SerializeChandraNestedCast(ca);
+                                if (ChandraPaidCastOptionPayable(state, state.active_player_index, top, option))
+                                { options.push_back(option); }
+                            }
+                        }
+                    }
+                    if (!options.empty()) { a.tutor_target = options.front(); }
+                    actions.push_back(a); // decline still exiles, then deals damage
+                    for (const std::string& option : options)
+                    { Action cast = a; cast.tutor_target = option; cast.ponder_keep = 1; cast.eval = DMG;
+                      actions.push_back(std::move(cast)); }
+                    continue;
+                }
+                else if (ab.effect == "add_red_mana") { ev = ab.amount * DMG; }
+                else if (ab.effect == "emblem_spell_cast_damage") { ev = ab.amount * 3 * DMG; }
+                else if (ab.effect == "damage_target_creature")
+                {
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+                        Action a; a.kind = Action::Kind::ActivateLoyalty; a.card_name = p.card.m_name;
+                        a.hand_index = -1; a.sac_source_id = p.card.m_number; a.loyalty_ability = li;
+                        a.enchant_target = q.card.m_number; a.eval = 1; a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
+                    continue;
+                }
                 else if (ab.effect == "face_damage") { ev = ab.amount * DMG; }
                 else if (ab.effect == "food_token") { ev = DMG / 3; }
                 else if (ab.effect == "elk_transform")
@@ -38532,9 +38792,36 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Cheap param check before the battlefield-scanning haste predicate: this loop only
             // ever emits for the two graveyard-exile modes.
             if (pd->params.gy_exile_instant_sorcery_drain <= 0
-                && pd->params.gy_exile_creature_lifegain <= 0) { continue; }
+                && pd->params.gy_exile_creature_lifegain <= 0
+                && pd->params.tap_graveyard_exile_damage <= 0) { continue; }
             if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
+            if (pd->params.tap_graveyard_exile_damage > 0)
+            {
+                std::vector<int> targets{0, kAbilitySelfTarget};
+                for (const Permanent& q : state.battlefield)
+                { if (q.card.IsCreature() || q.is_animated || q.card.HasType(CardType::Planeswalker)) { targets.push_back(q.card.m_number); } }
+                std::vector<std::string> pairs;
+                for (std::size_t i = 0; i < gy.size(); ++i)
+                { for (std::size_t j = i + 1; j < gy.size(); ++j)
+                    {
+                        const std::string spec = GraveyardDamageFuelSpec(gy[i].m_name.str(), gy[j].m_name.str());
+                        if (std::find(pairs.begin(), pairs.end(), spec) == pairs.end()) { pairs.push_back(spec); }
+                    }
+                }
+                for (const std::string& spec : pairs) { for (int target : targets)
+                    {
+                        Action a;
+                        a.kind = Action::Kind::GraveyardExileAbility;
+                        a.card_name = p.card.m_name; a.hand_index = -1;
+                        a.cost.red = 1; a.sac_source_id = p.card.m_number;
+                        a.gy_exile_mode = 3; a.tutor_target = spec; a.enchant_target = target;
+                        a.direct_damage = target == 0 ? pd->params.tap_graveyard_exile_damage : 0;
+                        a.eval = std::max(1, a.direct_damage * DMG); a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
+                }
+            }
             if (pd->params.gy_exile_instant_sorcery_drain > 0)
             {
                 bool fuel = false;
@@ -43338,6 +43625,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     FoldInterchangeableCreatureAuraHosts(state, actions);
     // LAST, after every post-pass that can append a variant (the phyrexian twins above are exactly
     // such a case: a second tagged action for one hand slot, which must un-fold that slot's class).
+    // Every legal target/pair is a real searched alternative. tutor_target participates in
+    // action/plan signatures, so no target is collapsed by a names-only dedup.
+    std::vector<Action> burn_targets;
+    for (Action& a : actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || !a.def || !FixedTargetedBurn(*a.def) || !FixedBurnSearchEnabled(state))
+        { burn_targets.push_back(std::move(a)); continue; }
+        for (const FixedBurnPin& pin : FixedBurnCandidates(state, state.active_player_index, *a.def, true))
+        {
+            Action v = a;
+            v.tutor_target = WithFixedBurnPin(a.tutor_target.str(), pin);
+            if (pin.first != 0) { v.direct_damage = 0; }
+            burn_targets.push_back(std::move(v));
+        }
+    }
+    actions.swap(burn_targets);
     FinalizeFoldTags(state, actions);
     return actions;
 }
@@ -45121,7 +45424,8 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // reads as 5 is really 0 after three free cycles. Bailing keeps the prune from dropping the
     // deck's actual line (cycle three times, then deploy a free 4/4).
     for (const Action& a : cands)
-    { if (a.def && a.def->params.cost_less_per_cycle_or_discard > 0)
+    { if (a.def && (a.def->params.cost_less_per_cycle_or_discard > 0
+                               || a.def->params.cost_less_per_opponent_noncombat_damage))
       { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total() + extra_credit;
     int gy = 0;
@@ -45299,7 +45603,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
                               // cycles, so the cost baked into a.cost at enumeration time is stale
                               // (printed {5} for a card that will be free after three cycles).
                               // Same treatment as ManaPruneBound's bail.
-                              || a.def->params.cost_less_per_cycle_or_discard > 0
+                              || (a.def->params.cost_less_per_cycle_or_discard > 0
+                               || a.def->params.cost_less_per_opponent_noncombat_damage)
                               || a.def->params.chooses_creature_type))
                    || ActionColoredReducerDef(a) != nullptr) ? 1 : 0;   // Ragemonger pip credit
     }
@@ -47288,7 +47593,7 @@ namespace solvememo
             || a.bounce_choice != b.bounce_choice
             || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
             || a.land_search_pins != b.land_search_pins
-            || a.look_top_pins != b.look_top_pins
+            || a.look_top_pins != b.look_top_pins || a.incinerator_targets != b.incinerator_targets
             || a.attack_land_search_choice != b.attack_land_search_choice
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
             || a.combat_crack_choice != b.combat_crack_choice
@@ -49081,6 +49386,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        if (pre.fixed_burn_target && SubsetHasMissingFixedBurnTarget(state, cands, sel)) { return; }
         // Reject a Magnetic Theft whose hand Equipment target is not cast by this subset, and a
         // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the
         // other walker. Inert without an attach-spell candidate -> byte-identical.
@@ -49506,7 +49812,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (rt_eff)  { enumstats::g_c_rt_eff.fetch_add(1, std::memory_order_relaxed); }
             if (rt_nc)   { enumstats::g_c_rt_nc.fetch_add(1, std::memory_order_relaxed); }
         }
-        if (resc_tot_short && rescue_total_gate) { mc_store_reject(); return; }
+        const bool pending_noncombat_discount = !mana_ok
+            && SubsetHasPendingNoncombatDiscount(state, cands, sel);
+        if (resc_tot_short && rescue_total_gate && !pending_noncombat_discount)
+        { mc_store_reject(); return; }
         // THE EDF LAND-AURA RANGE (MTG_EDF_AURA_RANGE; see EngineFlags.h). The filter payer pays every
         // land Aura FIRST (its producer pass), so a subset that pays only with an Aura moved behind an
         // untapper -- {Fertile Ground, Peregrine Drake} on five lands -- reads unpayable here although
@@ -49566,7 +49875,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // a full payment walk). Only then: without a filter the rescue is free to refuse, and scoring
         // every refused subset would cost more than asking.
         if (!mana_ok && any_filter && aura_payer_defer && s_rescue_defer) { rescue_pending = true; }
-        else if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel)) && !range_rescue())
+        else if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))
+                 && !range_rescue()
+                 && !(pending_noncombat_discount && SubsetPayableSequential(state, cands, sel)))
         { mc_store_reject(); return; }
         // Reached here on a !mana_ok subset => the real payment RESCUED it. If that subset was also
         // total-short the shortcut's argument is false; say so loudly rather than silently shipping.
@@ -51938,7 +52249,7 @@ namespace
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
                      PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_SUBTYPE_MANA,
-                     PP_AURA_PARTIAL, PP_N };
+                     PP_AURA_PARTIAL, PP_DYNAMIC_COST, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -51951,7 +52262,8 @@ const char* const kPrepayName[PP_N] = {
     "declined: an earlier cast grows the pain chain (MTG_PD_BATCH_TIMING)",
     "declined: a life-scaled source the batch's lifegain grows (LifeScaledManaInOrderWalk)",
     "declined: subtype-restricted mana live (Smokebraider)",
-    "partial: the held land Auras' bills (MTG_PREPAY_AURA_STAGE)" };
+    "partial: the held land Auras' bills (MTG_PREPAY_AURA_STAGE)",
+    "declined: a cast in the line can reduce a later cast's cost" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -52819,6 +53131,27 @@ int TurnSolver::HumanPrepayDemandHolds(const GameState& state, const std::vector
     return k;
 }
 
+int TurnSolver::SpectacleGraveyardDamageFirst(const GameState& state, const std::vector<Action>& acts)
+{
+    static const bool enabled = EnvOn("MTG_SPECTACLE_GY_FIRST", true);
+    if (!enabled || state.opponent_lost_life_this_turn) { return -1; }
+    bool spectacle = false;
+    int lavamancer = -1;
+    for (std::size_t i = 0; i < acts.size(); ++i)
+    {
+        const Action& a = acts[i];
+        if (a.kind == Action::Kind::CastFromHand && a.direct_damage > 0)
+        { return -1; } // a spell can enable spectacle in the canonical cast sequence
+        if (a.kind == Action::Kind::CastFromHand && !a.alt_cost && !a.free_cast
+            && (a.has_spectacle || (a.def && a.def->params.spectacle_cost.has_value())))
+        { spectacle = true; }
+        if (a.kind == Action::Kind::GraveyardExileAbility && a.gy_exile_mode == 3
+            && a.enchant_target == 0)
+        { lavamancer = static_cast<int>(i); }
+    }
+    return spectacle ? lavamancer : -1;
+}
+
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                       bool mint_prefix, bool hand_demand, bool allow_partial)
 {
@@ -53130,6 +53463,13 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (d->card.m_mana_cost.has_x && a.chosen_x > 0) { return Pp(PP_XSPELL); }
         if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return Pp(PP_SOULFIRE); }
         if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return Pp(PP_HINATA); }
+        // This line can change its own bill: Bolt lowers Incinerator's {5}{R},
+        // and face damage unlocks spectacle. Paying the printed total up front
+        // tapped extra lands (including life-cost Islets) and stranded activations.
+        // Both apply worlds call this function, so the per-cast fallback stays exact.
+        if (d->params.cost_less_per_opponent_noncombat_damage > 0
+            || (d->params.spectacle_cost.has_value() && !state.opponent_lost_life_this_turn))
+        { return Pp(PP_DYNAMIC_COST); }
         ManaCost ec = EffectiveCost(*d, state);
         // Evoke variant (Reveillark): the alternate cost IS the bill (lockstep with a.cost).
         if (a.evoke && d->params.evoke_cost.has_value()) { ec = *d->params.evoke_cost; }
@@ -53318,6 +53658,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     const int  la  = state.players[active].life;
     const int  lo  = state.players[1 - active].life;
     const bool oll = state.opponent_lost_life_this_turn;
+    auto oll_noncombat = NoncombatStateSnapshot(state);
     // ...and the ENERGY a coloured Aether Hub tap spends (MTG_PREPAY_ENERGY_RESTORE, DEFAULT ON; =0
     // restores the leak byte-identically). "{T}, Pay {E}: Add one mana of any color" -- the {E} is
     // part of the activation cost, so a payment this function rolls back never paid it (CR 601.2h:
@@ -53781,7 +54122,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.floating_mana                = fm_snap;
             state.players[active].life         = la;
             state.players[1 - active].life     = lo;
-            state.opponent_lost_life_this_turn = oll;
+            state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
             if (energy_restore) { state.players[active].energy_counters = ea; }
             produced = ManaPool{};
         }
@@ -53851,7 +54192,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.floating_mana                = fm_snap;
             state.players[active].life         = la;
             state.players[1 - active].life     = lo;
-            state.opponent_lost_life_this_turn = oll;
+            state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
             if (energy_restore) { state.players[active].energy_counters = ea; }
             produced = ManaPool{};
         };
@@ -53922,7 +54263,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.floating_mana                = fm_snap;
             state.players[active].life         = la;
             state.players[1 - active].life     = lo;
-            state.opponent_lost_life_this_turn = oll;
+            state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
             if (energy_restore) { state.players[active].energy_counters = ea; }
             produced = ManaPool{};
         };
@@ -54041,7 +54382,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 state.floating_mana                = fm_snap;
                 state.players[active].life         = la;
                 state.players[1 - active].life     = lo;
-                state.opponent_lost_life_this_turn = oll;
+                state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
                 if (energy_restore) { state.players[active].energy_counters = ea; }
                 produced = ManaPool{};
             };
@@ -54105,6 +54446,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 const int                    la1  = state.players[active].life;
                 const int                    lo1  = state.players[1 - active].life;
                 const bool                   oll1 = state.opponent_lost_life_this_turn;
+    auto oll1_noncombat = NoncombatStateSnapshot(state);
                 const int                    ea1  = state.players[active].energy_counters;
                 for (int k = 0; k < _aura_host_hold.n; ++k)
                 { SetPermTapped(state, active, _aura_host_hold.held[k], false); }
@@ -54127,7 +54469,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 state.battlefield                     = bf1;
                 state.players[active].life            = la1;
                 state.players[1 - active].life        = lo1;
-                state.opponent_lost_life_this_turn    = oll1;
+                state.opponent_lost_life_this_turn    = oll1; oll1_noncombat.Restore(state);
                 state.players[active].energy_counters = ea1;
                 return o2 && PrepayColoursFit(p2, c_rest, nullptr, nullptr);
             };
@@ -54144,6 +54486,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 const int                    lar  = state.players[active].life;
                 const int                    lor  = state.players[1 - active].life;
                 const bool                   ollr = state.opponent_lost_life_this_turn;
+    auto ollr_noncombat = NoncombatStateSnapshot(state);
                 const int                    ear  = state.players[active].energy_counters;
                 for (int k = 0; k < _aura_host_hold.n; ++k)
                 { SetPermTapped(state, active, _aura_host_hold.held[k], false); }
@@ -54159,7 +54502,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 state.battlefield                     = bfr;
                 state.players[active].life            = lar;
                 state.players[1 - active].life        = lor;
-                state.opponent_lost_life_this_turn    = ollr;
+                state.opponent_lost_life_this_turn    = ollr; ollr_noncombat.Restore(state);
                 state.players[active].energy_counters = ear;
                 return o;
             };
@@ -54212,6 +54555,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                         int                    b_la    = state.players[active].life;
                         int                    b_lo    = state.players[1 - active].life;
                         bool                   b_oll   = state.opponent_lost_life_this_turn;
+    auto b_oll_noncombat = NoncombatStateSnapshot(state);
                         int                    b_ea    = state.players[active].energy_counters;
                         ManaPool               b_p1    = p1;
                         int                    b_tn = 0, b_tf = 0;
@@ -54229,13 +54573,13 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                             b_tn = tn; b_tf = tf;
                             h1 = trial; best_bf = state.battlefield; b_p1 = pt; feas = true;
                             b_la = state.players[active].life; b_lo = state.players[1 - active].life;
-                            b_oll = state.opponent_lost_life_this_turn; b_ea = state.players[active].energy_counters;
+                            b_oll = state.opponent_lost_life_this_turn; b_oll_noncombat = NoncombatStateSnapshot(state); b_ea = state.players[active].energy_counters;
                         }
                         restore_st();
                         state.battlefield                     = best_bf;
                         state.players[active].life            = b_la;
                         state.players[1 - active].life        = b_lo;
-                        state.opponent_lost_life_this_turn    = b_oll;
+                        state.opponent_lost_life_this_turn    = b_oll; b_oll_noncombat.Restore(state);
                         state.players[active].energy_counters = b_ea;
                         p1 = b_p1;
                     }
@@ -54257,13 +54601,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                         const int                    la1  = state.players[active].life;
                         const int                    lo1  = state.players[1 - active].life;
                         const bool                   oll1 = state.opponent_lost_life_this_turn;
+    auto oll1_noncombat = NoncombatStateSnapshot(state);
                         const int                    ea1  = state.players[active].energy_counters;
                         restore_st();
                         const bool dec = rest_first_ok(ManaPool{}, hold);
                         state.battlefield                     = bf1;
                         state.players[active].life            = la1;
                         state.players[1 - active].life        = lo1;
-                        state.opponent_lost_life_this_turn    = oll1;
+                        state.opponent_lost_life_this_turn    = oll1; oll1_noncombat.Restore(state);
                         state.players[active].energy_counters = ea1;
                         if (dec) { continue; }   // the pre-load would break an order the decline pays
                     }
@@ -54286,7 +54631,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         state.floating_mana                = fm_snap;
         state.players[active].life         = la;
         state.players[1 - active].life     = lo;
-        state.opponent_lost_life_this_turn = oll;
+        state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
         if (energy_restore) { state.players[active].energy_counters = ea; }
         // ...the UNHELD rung (see the staged solve above): the same call with no host held.
         if (_aura_host_hold.n > 0 && PrepayAuraStageOn() && PrepayAuraUnheldOn())
@@ -54404,6 +54749,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             int                    best_la   = state.players[active].life;
             int                    best_lo   = state.players[1 - active].life;
             bool                   best_oll  = state.opponent_lost_life_this_turn;
+    auto best_oll_noncombat = NoncombatStateSnapshot(state);
             int                    best_ea   = state.players[active].energy_counters;
             ManaPool               best_produced = produced;
             int                    released = 0;
@@ -54415,7 +54761,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 state.floating_mana                = fm_snap;
                 state.players[active].life         = la;
                 state.players[1 - active].life     = lo;
-                state.opponent_lost_life_this_turn = oll;
+                state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
                 if (energy_restore) { state.players[active].energy_counters = ea; }
                 ManaPool p2;
                 const bool o2 = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures,
@@ -54432,7 +54778,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     best_fm       = state.floating_mana;
                     best_la       = state.players[active].life;
                     best_lo       = state.players[1 - active].life;
-                    best_oll      = state.opponent_lost_life_this_turn;
+                    best_oll      = state.opponent_lost_life_this_turn; best_oll_noncombat = NoncombatStateSnapshot(state);
                     best_ea       = state.players[active].energy_counters;
                     best_produced = p2;
                     ++released;
@@ -54443,7 +54789,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.floating_mana                = best_fm;
             state.players[active].life         = best_la;
             state.players[1 - active].life     = best_lo;
-            state.opponent_lost_life_this_turn = best_oll;
+            state.opponent_lost_life_this_turn = best_oll; best_oll_noncombat.Restore(state);
             if (energy_restore) { state.players[active].energy_counters = best_ea; }
             produced                           = best_produced;
             if (tapstats::Enabled() && released > 0)
@@ -54759,6 +55105,7 @@ struct BpPrefixSnap
                                      // sac_pins, re-installed by the resumed apply's entry guard;
                                      // only the cursor is prefix state)
     int  pin_land_search_cursor = 0; // the same for Plan::land_search_pins (core/LandSearch.h)
+    std::size_t pin_incinerator_cursor = 0;
     int  pin_look_top_land_cursor  = 0;   // ...and Plan::look_top_pins' two streams (Risen Reef):
     int  pin_look_top_order_cursor = 0;   // the list is re-installed by _slt, the cursors are prefix state
     int  pin_bounce = -1;            // the put-Karoo bounce pin (ScriptedPutBounce) as the prefix left it
@@ -56087,6 +56434,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                // empty inert
     ScriptedLandSearch _sls(plan.land_search_pins);   // searched land-search picks, one per land-search
                                                       // ordinal (core/LandSearch.h); empty inert
+    IncineratorPinScope _incinerator_pins(plan.incinerator_targets);
     ScriptedLookTop _slt(plan.look_top_pins);   // searched Risen Reef land / trigger-order entries (two
                                                 // per-ordinal streams, core/SpellEffects.h); empty inert
     // The put-Karoo bounce pin (Plan::bounce_choice on a plan whose drop is not a Karoo: Genesis Wave's
@@ -57756,6 +58104,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // (dump the whole exile) lines. Checked before any mutation. Inert (budget == -1) for every deck
         // without a max_casts_after card. See GameState::casts_remaining_this_turn.
         if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
+        FixedBurnPin fixed_burn_pin;
+        const bool fixed_burn_targeted = FixedTargetedBurn(def) && FixedBurnSearchEnabled(state);
+        if (fixed_burn_targeted
+            && !PrepareFixedBurnPin(state, state.active_player_index, def, tutor_target, fixed_burn_pin)) { return; }
 
         // Path to Exile: a targeted spell with no legal target cannot be cast (CR 601.2c) -- a
         // self-target variant whose creature left earlier in this plan, or no opponent creature for
@@ -57825,7 +58177,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // free_cast spending one banked Maelstrom Archangel charge. The charge is spent HERE, past
         // every early return, the executor's spend point (CastSpellFromHand's spend_free); with the
         // bank empty (the combat line diverged) the cast falls through to a paid attempt, as there.
-        bool free_cast = cascade_hit_free;
+        bool free_cast = cascade_hit_free || IsFireblastAlternative(def, tutor_target);
         if (!free_cast && riders.free_cast && state.free_casts_available > 0)
         {
             free_cast = true;
@@ -58103,6 +58455,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // of 0, so ResolveEnchantTarget returned 0 and AuraBonusFor matched every aura (att 0)
         // against every creature (m_number 0) -- a systematic aura over-count vs the executor.
         const int cast_number = it->m_number;
+        if (IsFireblastAlternative(def, tutor_target)
+            && !PayFireblastAlternative(state, state.active_player_index, tutor_target)) { return; }
+
         // REMAND: X goes back to its owner's hand if countered -- keep the physical card (its number:
         // the breakpoint diff reads it as the SAME card, not a new one).
         Card remand_x_card;
@@ -58540,8 +58895,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // not trigger on its own cast (Eidolon casting Eidolon deals 0, not 2). Firing
         // after the branch (the old position) placed the creature first, so Eidolon
         // self-triggered -- over-counting rollout self-damage by 2 per Eidolon cast.
+        // A life-cost payment to zero commits the cast but ends the game before
+        // cast triggers or the spell resolve (executor's identical boundary).
+        if (state.own_death_live && SelfHasLost(state)) { return; }
         FireOnCastTriggers(state, def);
         FireProwess(state, def);
+        FlushNoncombatTriggersAtPriorityBoundary(state);
+        if (state.own_death_live && SelfHasLost(state)) { return; }
 
         // THE CANTRIP BREAKPOINT -- what a draw spell's resolution does once it has drawn: stop for the
         // human, defer the re-solve until after the plan's casts (a plain cantrip at the main-plan
@@ -58636,6 +58996,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (remand_countered) { /* X is back in hand: nothing resolves (see the REMAND block) */ }
         else if (def.tmpl == CardTemplate::DirectDamage)
         {
+            NoncombatTriggerScope noncombat_scope(state);
             // Play-viewer event: opponent life BEFORE this burn spell's damage, so the history can
             // report "N to opponent (before->after)". Measured up to (not including) the
             // opponent_lifegain rider below, which OpponentGainsLife reports as its own life event.
@@ -58647,6 +59008,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // here while the win-check and the real engine both counted their damage —
             // a phantom-early-win source.
             Targeting t = def.params.targeting;
+            int chain_hit_controller = opp_idx;
+            bool direct_damage_resolved = true;
             // An {X} burn deals chosen X * x_damage_multiplier (Crackle = 5X; mirrors
             // EffectHandler::ResolveDirectDamage); a fixed-damage burn uses params.damage.
             int x_mult = def.params.x_damage_multiplier; if (x_mult < 1) { x_mult = 1; }
@@ -58681,7 +59044,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                   deferred_hand_before = deferred_snapshot(hand_at_cast); }
             }
 
-            if (t == Targeting::Any || t == Targeting::Player)
+            if (fixed_burn_targeted)
+            {
+                chain_hit_controller = BurnTargetController(state, state.active_player_index, fixed_burn_pin.first);
+                direct_damage_resolved = ResolveFixedBurnPin(state, state.active_player_index,
+                                                             def, fixed_burn_pin, dmg);
+            }
+            else if (t == Targeting::Any || t == Targeting::Player)
             {
                 // Human-play board-click targeting (claude-play): deal `dmg` to each chosen target
                 // (face or a creature) instead of always the opponent face. The chooser is nulled by
@@ -58776,12 +59145,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         if (amt <= 0) { continue; }
                         if (c.kind == 0)
                         {
+                            chain_hit_controller = c.index;
                             state.players[c.index].life -= amt;
+                            RecordNoncombatDamageToPlayer(state, state.active_player_index, c.index, amt);
                             if (c.index == opp_idx) { state.opponent_lost_life_this_turn = true; }
                         }
                         else if (c.index >= 0 && c.index < static_cast<int>(state.battlefield.size()))
                         {
                             Permanent& tp = state.battlefield[c.index];
+                            chain_hit_controller = tp.controller_index;
                             const int before = tp.damage;
                             tp.damage += amt;   // SBA sweep below removes the dead
                             // This spell has no death trigger of its own (Any/Player = Bolt/Crackle/
@@ -58815,6 +59187,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // == -1) deals its full dmg. Lockstep with ResolveDirectDamage + the committed cost.
                     int face = (def.params.damage_divided && crackle_targets >= 0) ? crackle_targets : dmg;
                     state.players[opp_idx].life -= face;
+                    RecordNoncombatDamageToPlayer(state, state.active_player_index, opp_idx, face);
                     if (face > 0) { state.opponent_lost_life_this_turn = true; }
                 }
             }
@@ -58884,6 +59257,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (t == Targeting::Multi)  // Searing Blaze also hits the player
                     {
                         state.players[tgt_ctrl].life -= dmg;
+                        RecordNoncombatDamageToPlayer(state, state.active_player_index, tgt_ctrl, dmg);
                         if (dmg > 0 && tgt_ctrl == opp_idx) { state.opponent_lost_life_this_turn = true; }
                     }
                     Permanent& tgt = state.battlefield[ci];
@@ -58902,6 +59276,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (lethal) { state.battlefield.erase(state.battlefield.begin() + ci); }
                 }
             }
+            // An all-illegal-target spell does not resolve any rider (CR 608.2b).
+            if (direct_damage_resolved)
+            {
             // Play-viewer history: one "burn" event for all of this spell's direct face damage
             // (Lightning Bolt, Searing Blaze's player hit, Searing Blood's death rider, Land's Edge,
             // Crackle's X-damage), coalescing the multiple internal subtractions into a single line.
@@ -58924,6 +59301,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 OpponentGainsLife(state, state.active_player_index, def.params.opponent_lifegain);
             }
+            if (def.params.damage_per_nonbasic_land > 0)
+            { ResolveNonbasicLandDamage(state, state.active_player_index, def.params.damage_per_nonbasic_land); }
+            ContinueChainLightning(state, def, chain_hit_controller);
+            if (def.params.cast_scry > 0)
+            { ScryTop(state, def.params.cast_scry, def.card.m_name); }
             // Magma Opus rider: "draw two cards." Mirrors EffectHandler (lockstep).
             if (def.params.cast_draw > 0)
             {
@@ -58938,6 +59320,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
                 }
             }
+            } // direct damage resolved: riders and scry
         }
         else if (is_creature)
         {
@@ -61881,7 +62264,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             // Deathrite abilities 2/3: pay the colored cost, then tap+exile+effect (no-op if the
             // source got tapped for mana or the fuel got exiled meanwhile -- stranded-outlet safe).
-            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            if (a.gy_exile_mode == 3)
+            {
+                const MadnessPayFn payer = [](GameState& s, const ManaCost& c) { return TapForCostDirect(s, c, false); };
+                ApplyGraveyardDamageAbility(state, state.active_player_index, a.sac_source_id,
+                                            a.tutor_target, a.enchant_target, payer);
+            }
+            else if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
         }
         else if (a.kind == Action::Kind::GraveyardReturnAbility)
@@ -62173,8 +62562,29 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (a.kind == Action::Kind::ActivateLoyalty)
         {
             // Planeswalker loyalty: no mana cost (the cost is the loyalty delta, paid inside).
+            const PaidExileCastFn chandra_cast = [&](GameState& live, int controller,
+                                                     const Card& card, const std::string& option, bool probe) {
+                const Action ca = TurnSolver::ChandraNestedCastOption(option);
+                if (ca.kind != Action::Kind::CastFromHand || ca.card_name != card.m_name) { return false; }
+                if (probe) { return ChandraPaidCastOptionPayable(live, controller, card, option); }
+                auto& hand = live.players[controller].hand;
+                hand.insert(hand.begin(), card);
+                const int before = live.spells_cast_this_turn;
+                cast_riders = CastRiders::Of(ca);
+                apply_one(ca.card_name, ca.sacrifice_land, false, ca.discard_lands, ca.alt_cost,
+                    ca.alt_lifegain, ca.tutor_target, ca.chosen_x, ca.soulfire_own_targets,
+                    ca.ponder_keep, ca.crackle_targets, ca.splice_count, ca.chosen_float_color,
+                    ca.enchant_target, ca.bestow, ca.replicate_count, ca.convoke_green,
+                    ca.convoke_other, ca.phyrexian_life, ca.evoke, ca.adventure, ca.kicked);
+                const bool cast = live.spells_cast_this_turn > before;
+                if (!cast)
+                { for (auto it = hand.begin(); it != hand.end(); ++it)
+                  { if (it->m_number == card.m_number && it->m_name == card.m_name) { hand.erase(it); break; } } }
+                return cast;
+            };
+            const PaidExileCastScope chandra_host(&chandra_cast);
             ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability,
-                                a.enchant_target);
+                                a.enchant_target, a.tutor_target, a.ponder_keep == 1);
         }
         else if (a.kind == Action::Kind::GarthActivate)
         {
@@ -62212,6 +62622,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_putback_choice= bp_resume->pin_putback;
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
         g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
+        g_incinerator_pin_cursor = bp_resume->pin_incinerator_cursor;
         g_scripted_look_top_land_cursor  = bp_resume->pin_look_top_land_cursor;    // ...and by _slt
         g_scripted_look_top_order_cursor = bp_resume->pin_look_top_order_cursor;
         // ...and the put-Karoo bounce pin (re-installed by _spb; a prefix that spent it stays spent).
@@ -62292,6 +62703,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (ActDropAuditOn()) { t_cont_act_srcs.clear(); }
     PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
     TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
+
+    // A Lavamancer activation in the trailing pass cannot enable a spectacle
+    // cast that has already happened. Run the one face-targeted activation now
+    // when it is this plan's only enabler. The existing activation dispatcher
+    // pays, prompts and resolves it; the executor makes the same call below.
+    int spectacle_hoisted_source = -1;
+    if (!human_seq)
+    {
+        const int first = TurnSolver::SpectacleGraveyardDamageFirst(state, plan.actions);
+        if (first >= 0)
+        {
+            const Action& a = plan.actions[static_cast<std::size_t>(first)];
+            apply_trailing_activations(std::vector<Action>{a});
+            for (const Permanent& q : state.battlefield)
+            { if (q.card.m_number == a.sac_source_id && q.tapped)
+              { spectacle_hoisted_source = a.sac_source_id; break; } }
+        }
+    }
 
     // Whole-turn batch pre-payment: tap for the combined cost of the main hand casts and pre-load
     // floating (see BatchPrepayMainCasts). The main casts below then drain the pool -- scarce colours
@@ -62388,11 +62817,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ? TurnSolver::LandSearchActsMasked(plan.actions, ls_act_first_mask, false)
                 : std::vector<Action>{};
         const std::vector<Action>& own_acts = (ls_act_done || ls_act_first_mask != 0) ? trail : plan.actions;
-        if (pending_cont_acts.empty()) { apply_trailing_activations(own_acts); }
+        std::vector<Action> spectacle_filtered;
+        if (spectacle_hoisted_source >= 0)
+        {
+            spectacle_filtered = own_acts;
+            spectacle_filtered.erase(std::remove_if(spectacle_filtered.begin(), spectacle_filtered.end(),
+                [&](const Action& a) { return a.kind == Action::Kind::GraveyardExileAbility
+                    && a.gy_exile_mode == 3 && a.sac_source_id == spectacle_hoisted_source; }),
+                spectacle_filtered.end());
+        }
+        const std::vector<Action>& own_final = spectacle_hoisted_source >= 0 ? spectacle_filtered : own_acts;
+        if (pending_cont_acts.empty()) { apply_trailing_activations(own_final); }
         else
         {
             // The plan's own activations, then every queued continuation's, as ONE trailing pass.
-            std::vector<Action> all = own_acts;
+            std::vector<Action> all = own_final;
             all.insert(all.end(), pending_cont_acts.begin(), pending_cont_acts.end());
             apply_trailing_activations(all);
         }
@@ -62626,6 +63065,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
             bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
             bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
@@ -62663,6 +63103,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
             bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
             bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
@@ -63705,6 +64146,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ++state.turn_number;
     if (state.deck_has_extra_combat) { state.phase = Phase::Beginning; }   // Moraug (see the head of this function)
     state.opponent_lost_life_this_turn = false;
+    state.noncombat_damage_received_this_turn = {};
+    state.pending_incinerator_damage.clear();
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.floating_creature_mana   = ManaPool{};   // creature-only reserve too (lockstep w/ UntapStep)
     state.floating_bigspell_mana   = ManaPool{};   // big-spell-only reserve too (lockstep w/ UntapStep)
@@ -65436,6 +65879,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.End(); break;
             case Action::Kind::GraveyardExileAbility:
                 w.Begin(kSigM); w.Put("DRE#"); w.Int(act.sac_source_id); w.Put('m'); w.Int(act.gy_exile_mode);
+                if (act.gy_exile_mode == 3) { w.Put('f'); w.Put(act.tutor_target); w.Put('>'); w.Int(act.enchant_target); }
                 w.End(); break;
             case Action::Kind::GraveyardReturnAbility:
                 w.Begin(kSigM); w.Put("GYR#"); w.Int(act.sac_source_id); w.Put('>'); w.Put(act.tutor_target);
@@ -65448,7 +65892,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.End(); break;
             case Action::Kind::ActivateLoyalty:
                 w.Begin(kSigM); w.Put("PW#"); w.Int(act.sac_source_id); w.Put('a'); w.Int(act.loyalty_ability);
-                w.Put('t'); w.Int(act.enchant_target); w.End(); break;
+                w.Put('t'); w.Int(act.enchant_target);
+                if (act.ponder_keep >= 0) { w.Put('c'); w.Put(act.tutor_target); w.Put('k'); w.Int(act.ponder_keep); }
+                w.End(); break;
             case Action::Kind::GarthActivate:
                 w.Begin(kSigM); w.Put("GARTH#"); w.Int(act.sac_source_id); w.Put('#'); w.Put(act.tutor_target);
                 // Conjure-and-crack vs conjure-and-keep are different plans (and a fanned crack's colour).
@@ -66869,6 +67315,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        if (pre.fixed_burn_target && SubsetHasMissingFixedBurnTarget(state, cands, sel)) { return; }
         // Reject a Magnetic Theft whose hand Equipment target is not cast by this subset, and a
         // redundant second attach of one battlefield Equipment (see the helper). Lockstep twin in the
         // other walker. Inert without an attach-spell candidate -> byte-identical.
@@ -67562,8 +68009,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             const bool ef_on  = ExecFeasEnabled();
             const bool seq_on_etb = SeqEtbUntapEnabled();
             const bool seq_on_aura = SeqLandAuraEnabled();
-            if (!ef_on && !seq_on_etb && !seq_on_aura) { return false; }
-            bool interacts = ef_on && any_hinata_credit;
+            const bool pending_noncombat_discount =
+                SubsetHasPendingNoncombatDiscount(state, cands, sel);
+            if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount)
+            { return false; }
+            bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding
@@ -69635,7 +70085,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Deathrite gy-exile outlet: which source AND which mode are distinct decisions.
                 case Action::Kind::GraveyardExileAbility:
                     msf.push_back("DRE#" + std::to_string(act.sac_source_id)
-                                  + "m" + std::to_string(act.gy_exile_mode)); break;
+                                  + "m" + std::to_string(act.gy_exile_mode)
+                                  + (act.gy_exile_mode == 3 ? "f" + act.tutor_target.str() + ">" + std::to_string(act.enchant_target) : std::string())); break;
                 // Haven gy-return: which source AND which card comes back are distinct decisions
                 // (core invariant -- the dedup must never collapse two different rebuy targets).
                 case Action::Kind::GraveyardReturnAbility:
@@ -69656,7 +70107,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     // two targets are two distinct decisions, so the dedup must not fold them.
                     msf.push_back("PW#" + std::to_string(act.sac_source_id)
                                   + "a" + std::to_string(act.loyalty_ability)
-                                  + "t" + std::to_string(act.enchant_target)); break;
+                                  + "t" + std::to_string(act.enchant_target)
+                                  + (act.ponder_keep >= 0 ? "c" + act.tutor_target.str() + "k" + std::to_string(act.ponder_keep) : std::string())); break;
                 // Garth: which name is a distinct decision (once-per-game each -- core invariant).
                 case Action::Kind::GarthActivate:
                     msf.push_back("GARTH#" + std::to_string(act.sac_source_id)
@@ -69783,7 +70235,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             std::vector<std::string> sub;
             for (const Action& act : p.actions)
             {
-                if (!act.tutor_target.empty())   { sub.push_back("t" + act.card_name + ">" + act.tutor_target); }
+                const std::string target_cost = FixedBurnCostPrefix(act.tutor_target.str());
+                if (!target_cost.empty()) { sub.push_back("t" + act.card_name + ">" + target_cost); }
                 if (act.chosen_x > 0)            { sub.push_back("x" + act.card_name + "=" + std::to_string(act.chosen_x)); }
                 if (act.ponder_keep >= 0)        { sub.push_back("p" + act.card_name + "=" + std::to_string(act.ponder_keep)); }
                 if (act.soulfire_own_targets > 0){ sub.push_back("f" + act.card_name + "=" + std::to_string(act.soulfire_own_targets)); }
@@ -71106,6 +71559,7 @@ static bool PostEntryPingAllClauseOn()
 static bool CardHasPostEntryActivation(const CardParams& pp)
 {
     if (pp.loyalty_start > 0 && !pp.loyalty_abilities.empty()) { return true; }
+    if (pp.tap_graveyard_exile_damage > 0) { return true; }
     if (pp.tap_damage_cost.has_value() || pp.tap_investigate_cost.has_value()
         || pp.tap_draw_cost.has_value() || pp.sac_draw_cost.has_value()
         || pp.drain_cost.has_value() || pp.exile_opponent_top_cost.has_value()
@@ -71186,6 +71640,24 @@ static bool PlanActionMayGainLife(const Action& a, bool enter_watch)
 static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p, bool look_top_route)
 {
     int mask = 0;
+    // Every resolved nonpermanent can add an exile-cost card to an established Lavamancer.
+    bool graveyard_damage_source = false;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != state.active_player_index || q.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d && d->params.tap_graveyard_exile_damage > 0)
+        { graveyard_damage_source = true; break; }
+    }
+    if (graveyard_damage_source)
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d && !d->card.IsPermanentCard()) { mask |= 1 << 9; break; }
+        }
+    }
     // Watcher on the battlefield already? (The plan-cast case is picked up in the loop below.)
     bool watcher = false;
     if (TurnSolver::EquipmentDrawBreakpointEnabled())
@@ -71370,6 +71842,12 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // costs a wider candidate set. See docs/design/canon-default-reachability.md.
     for (const Action& a : p.actions)
     {
+        if (a.kind == Action::Kind::ActivateLoyalty)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+            if (d && a.loyalty_ability >= 0 && a.loyalty_ability < static_cast<int>(d->params.loyalty_abilities.size())
+                && d->params.loyalty_abilities[a.loyalty_ability].effect == "add_red_mana") { mask |= 1 << 9; }
+        }
         // Site 7: a Pod activation with a REAL fetch while a second Pod stands by -- the fetch
         // is a new sac victim no pre-fetch enumeration could offer (see the header note at
         // TurnSolver::PodBreakpointClassOn).
@@ -78868,7 +79346,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
                 // a land-search position twin IS a base here (2026-10-19): a crack before the look
                 // changes the card it sees, so the land / order answer and the position interact
-                && p.look_top_pins.empty()
+                && p.look_top_pins.empty() && p.incinerator_targets.empty()
                 && p.sac_pins.empty() && p.rad_mode == -1
                 && p.saga_target_choice == -1 && p.grace_choice == -1 && p.upkeep_gy_reanimate_choice == -1 && p.saga_ch1_choice == -1
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
@@ -79092,6 +79570,61 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         all[t.first].dig_choice = 2;
         all[t.first].dig_group  = t.second;   // the dig fold's sibling identity (DigFoldMemo)
     }
+    if (state.deck_tracks_noncombat_damage && !HumanPlayActive()
+        && (!g_incinerator_target_probe || g_apd_depth > g_incinerator_probe_fan_depth))
+    {
+        bool has_watcher = false, has_target = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            const auto* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.incinerator_damage_trigger) { has_watcher = true; }
+            if (p.controller_index != state.active_player_index
+                && (p.card.IsCreature() || p.is_animated || p.card.HasType(CardType::Planeswalker)))
+            { has_target = true; }
+        }
+        if (!has_watcher)
+        {
+            for (const auto& p : all) for (const Action& a : p.actions)
+            {
+                const auto* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d && d->params.incinerator_damage_trigger) { has_watcher = true; break; }
+            }
+        }
+        if (has_watcher && has_target)
+        {
+            if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<TurnSolver::Plan> expanded;
+            std::vector<TurnSolver::Plan> work;
+            for (auto it = all.rbegin(); it != all.rend(); ++it) { work.push_back(std::move(*it)); }
+            while (!work.empty())
+            {
+                TurnSolver::Plan p = std::move(work.back()); work.pop_back();
+                std::vector<int> next;
+                std::size_t ordinal = 0;
+                IncineratorTargetProbe probe = [&](const std::vector<int>& legal) {
+                    if (ordinal++ == p.incinerator_targets.size()) { next = legal; }
+                };
+                GameState copy = state;
+                {
+                    RevealLogPause quiet;
+                    IncineratorTargetProbeScope probing(probe, p.incinerator_targets, g_apd_depth);
+                    ApplyPlanDirect(copy, p, is_pre_combat);
+                }
+                if (next.empty()) { expanded.push_back(std::move(p)); }
+                else
+                {
+                    for (auto it = next.rbegin(); it != next.rend(); ++it)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.incinerator_targets.push_back(*it);
+                        work.push_back(std::move(v));
+                    }
+                }
+            }
+            all = std::move(expanded);
+        }
+    }
+
 }
 
 // ---- THE IDLE PASS A PRE-COMBAT HOST APPENDS GETS EVERY SUB-DECISION AXIS (2026-10-17) ----------
@@ -79325,7 +79858,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 496;   // pinned; see the static_assert below (+24: Plan::look_top_pins (Risen Reef land / trigger-order entries), 2026-10-18, folded into the Xaxes key; +8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
+static constexpr std::size_t kPlanDomAssertedSize = 520;   // pinned; see the static_assert below (+24: Plan::look_top_pins (Risen Reef land / trigger-order entries), 2026-10-18, folded into the Xaxes key; +8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -79508,6 +80041,11 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.combat_transform_choice);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
+            if (!pl.incinerator_targets.empty())
+            {
+                add(0x1C1DE); add(static_cast<int>(pl.incinerator_targets.size()));
+                for (int id : pl.incinerator_targets) { add(id); }
+            }
             x += "|bpacts";
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
@@ -81051,6 +81589,7 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     b += p.sac_pins.capacity() * sizeof(int);
     b += p.land_search_pins.capacity() * sizeof(int);
     b += p.look_top_pins.capacity() * sizeof(int);
+    b += p.incinerator_targets.capacity() * sizeof(int);
     b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
     return b;
 }
@@ -82049,6 +82588,15 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     Fold(k, static_cast<uint64_t>(state.active_player_index));
     Fold(k, state.on_the_play ? 1u : 0u);
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
+    if (state.deck_tracks_noncombat_damage)
+    {
+        Fold(k, 0x1C1DE); Fold(k, state.noncombat_damage_received_this_turn[0]);
+        Fold(k, state.noncombat_damage_received_this_turn[1]);
+        for (const auto& e : state.pending_incinerator_damage)
+        { Fold(k, e.source.m_number); Fold(k, e.source.m_name_hash); Fold(k, e.controller); Fold(k, e.damaged_player); Fold(k, e.amount); }
+        Fold(k, state.noncombat_trigger_depth);
+    }
+
     // Moraug's queued ADDITIONAL combats: future-determining (an extra attack with the whole team) and flips
     // mid-turn, so in the key -- value-gated, so every deck that never queues one keeps its exact key.
     if (state.pending_extra_combats != 0)
@@ -82259,6 +82807,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // and load-bearing rather than cosmetic: it raises the power of every creature we control for
         // the rest of the game, so two states differing only in it reach lethal on different turns.
         // Tagged and gated on nonzero -> byte-identical for every deck with no emblem source.
+        if (p.emblem_spell_cast_damage > 0)
+        { Fold(k, 0xC4AD2); Fold(k, static_cast<uint64_t>(p.emblem_spell_cast_damage)); }
         if (p.emblem_team_pump > 0)
         { Fold(k, 0xE3B1E); Fold(k, static_cast<uint64_t>(p.emblem_team_pump)); }
         // Hollow One cycle/discard-count: identical shape and reasoning again -- future-determining
@@ -95489,6 +96039,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 mix(static_cast<std::uint64_t>(p.land_search_act_slot + 300));
                 mix(p.land_search_pins.size());
                 for (int v : p.land_search_pins) { mix(static_cast<std::uint64_t>(v + 7)); }
+                if (!p.incinerator_targets.empty())
+                { mix(0x1C1DE); for (int id : p.incinerator_targets) { mix(static_cast<std::uint64_t>(id)); } }
                 if (!p.look_top_pins.empty())   // value-gated: every other deck's bucket hash unchanged
                 {
                     mix(p.look_top_pins.size());
@@ -97740,6 +98292,36 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
         plans = EnumeratePlansWithLand(state, is_pre_combat);
         viewerplancap::Last() = viewerplancap::Acc();
     }
+    // A searched cast order can put a pinned burn spell before the creature it
+    // targets from this same hand. That order cannot resolve: the target is not
+    // on the battlefield yet, even though the reverse order is a legal plan.
+    // Reject only that impossible order in the human menu; the autonomous
+    // canonical ordering and every legal searched permutation remain available.
+    if (HumanPlayActive())
+    {
+        const auto& hand = state.players[state.active_player_index].hand;
+        plans.erase(std::remove_if(plans.begin(), plans.end(), [&](const Plan& plan) {
+            if (!plan.searched_order) { return false; }
+            std::vector<int> pending;
+            pending.reserve(hand.size());
+            for (const Card& card : hand) { pending.push_back(card.m_number); }
+            for (const Action& action : plan.actions)
+            {
+                if (action.kind != Action::Kind::CastFromHand) { continue; }
+                FixedBurnPin pin;
+                if (DecodeFixedBurnPin(action.tutor_target.str(), pin)
+                    && ((pin.first > 0 && std::find(pending.begin(), pending.end(), pin.first) != pending.end())
+                        || (pin.second > 0 && std::find(pending.begin(), pending.end(), pin.second) != pending.end())))
+                { return true; }
+                if (action.hand_index >= 0 && action.hand_index < static_cast<int>(hand.size()))
+                {
+                    const int id = hand[action.hand_index].m_number;
+                    pending.erase(std::remove(pending.begin(), pending.end(), id), pending.end());
+                }
+            }
+            return false;
+        }), plans.end());
+    }
     // ---- COMBO OFF gate (human play only; USER 2026-09-07) ---------------------------------------
     // "You either win or let the user do each required action. We shouldn't have weird mixed lines
     // that are halfway in-between." A recognized go-off count (ActivateBlink chosen_x > 3 -- the
@@ -98326,6 +98908,17 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // Generator Servant's haste-tagged {C} (see BuildSimKey). Nonzero-gated -> exact prior key elsewhere.
     if (HasteFloatUnits(state) > 0) { Fold(k, 0x4A57EC); Fold(k, static_cast<uint64_t>(HasteFloatUnits(state))); }
     Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn));
+    if (state.deck_tracks_noncombat_damage)
+    {
+        Fold(k, 0x1C1DE); Fold(k, state.noncombat_damage_received_this_turn[0]);
+        Fold(k, state.noncombat_damage_received_this_turn[1]);
+        for (const auto& e : state.pending_incinerator_damage)
+        { Fold(k, e.source.m_number); Fold(k, e.source.m_name_hash); Fold(k, e.controller); Fold(k, e.damaged_player); Fold(k, e.amount); }
+        Fold(k, state.noncombat_trigger_depth);
+        Fold(k, static_cast<uint64_t>(g_incinerator_pin_cursor));
+        if (g_incinerator_pins) { for (int id : *g_incinerator_pins) { Fold(k, id); } }
+    }
+
     Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset
     // MV-cast accumulator: same mid-turn-scalar rationale as the storm fold above it; deck-gated
     // so every existing deck keeps the exact prior key (see GameState::deck_reads_mv_cast).
@@ -102361,7 +102954,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // leaving exactly the two resolution frames. HumanPlayActive-gated inside the
             // predicate, and CheckLine is viewer-only (sole caller --validate-line) -> GT-neutral.
             const bool resolution_tutor =
-                a.kind == Action::Kind::ActivatePod
+                (a.kind == Action::Kind::GraveyardExileAbility && a.gy_exile_mode == 3)
+                || (a.kind == Action::Kind::ActivateLoyalty && a.ponder_keep >= 0)
+                || a.kind == Action::Kind::ActivatePod
                 || (a.kind == Action::Kind::CastFromHand && !a.tutor_target.empty()
                     && [&]() {
                            const CardDefinition* cd2 = a.def ? a.def
@@ -102369,7 +102964,12 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                            return cd2 && (cd2->params.tutor_mv_max_is_x
                                           || HumanPlayDefersTutorTarget(*cd2));
                        }());
-            if (!a.tutor_target.empty() && !resolution_tutor)
+            if (a.tutor_target.str().compare(0, 10, "fireblast:") == 0)
+            { addSub(a.card_name + " (sacrifice two Mountains)", a.card_name + " cost", "sacrifice two Mountains", "sacrifice two Mountains", "cost"); }
+            FixedBurnPin burn_pin;
+            if (!a.tutor_target.empty() && !resolution_tutor
+                && !DecodeFixedBurnPin(a.tutor_target.str(), burn_pin)
+                && a.tutor_target.str().compare(0, 10, "fireblast:") != 0)
             { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
             // Birthing Pod: the victim axis is resolution-picked too (see resolution_tutor above)
             // -- the board-click chooses it precisely by battlefield index, which supersedes the
@@ -102514,7 +103114,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             //
             // BOTH conditions are load-bearing and they were fixed independently (2026-09-03): widen
             // the HOST to any permanent, and keep loyalty OUT of this path entirely.
-            if (a.enchant_target > 0 && !is_trick && !is_attach_spell && a.kind != Action::Kind::ActivateLoyalty)
+            if (a.enchant_target > 0 && !is_trick && !is_attach_spell && a.kind != Action::Kind::ActivateLoyalty
+                && !(a.kind == Action::Kind::GraveyardExileAbility && a.gy_exile_mode == 3))
             {
                 std::string art;
                 for (const Permanent& perm : state.battlefield)
@@ -105349,6 +105950,53 @@ TurnSolver::SpentTwice TurnSolver::SimulateToEndSpentTwiceForTest(const GameStat
 }
 
 long long TurnSolver::FslEdgeNoReachCountForTest() { return t_fsl_edge_noreach_n; }
+bool ChandraPaidCastOptionPayable(const GameState& state, int controller, const Card& card,
+                                      const std::string& encoded)
+{
+    const Action ca = TurnSolver::ChandraNestedCastOption(encoded);
+    if (!ca.def || ca.card_name != card.m_name || state.casts_remaining_this_turn == 0) { return false; }
+    RevealLogPause pause;
+    GameState copy = state;
+    if (FixedTargetedBurn(*ca.def))
+    {
+        FixedBurnPin pin;
+        if (!PrepareFixedBurnPin(copy, controller, *ca.def, ca.tutor_target, pin)) { return false; }
+    }
+    else if (!FreeCastHasLegalTargets(copy, controller, *ca.def)) { return false; }
+    if (IsFireblastAlternative(*ca.def, ca.tutor_target)
+        && !PayFireblastAlternative(copy, controller, ca.tutor_target)) { return false; }
+    SpellSubtypePayScope subtype(&ca.def->card);
+    return TapForCostDirect(copy, ca.cost, ca.def->card.IsCreature() && !ca.bestow);
+}
+
+std::vector<PaidExileCastOption> CollectChandraPaidCastOptions(const GameState& state,
+                                                              int controller, const Card& card)
+{
+    GameState copy = state;
+    copy.players[controller].hand.clear();
+    copy.players[controller].hand.push_back(card);
+    for (Permanent& p : copy.battlefield) { p.loyalty_activated_this_turn = true; }
+    std::vector<PaidExileCastOption> out;
+    for (const Action& ca : CollectActions(copy, state.phase != Phase::PostCombatMain))
+    {
+        if (ca.kind != Action::Kind::CastFromHand) { continue; }
+        const std::string encoded = SerializeChandraNestedCast(ca);
+        if (!ChandraPaidCastOptionPayable(state, controller, card, encoded)) { continue; }
+        const CardDefinition* def = ca.def ? ca.def : CardDatabase::Instance().Lookup(ca.card_name);
+        std::string label = def && IsFireblastAlternative(*def, ca.tutor_target)
+            ? "Sacrifice two Mountains"
+            : "Pay " + (ca.cost.ManaValue() == 0 ? std::string("{0}") : ca.cost.ToDisplayString());
+        // Targets and WHICH Mountains are re-picked by their existing resolution choosers.
+        // Folding their identical cost rows prevents a second queue of redundant dialogs.
+        bool duplicate = false;
+        for (const auto& option : out) { if (option.cost_label == label) { duplicate = true; break; } }
+        if (duplicate) { continue; }
+        Card display = card; display.m_mana_cost = ca.cost;
+        out.push_back({display, encoded, label});
+    }
+    return out;
+}
+
 std::vector<Action> TurnSolver::CollectActionsForTest(const GameState& state, bool is_pre_combat)
 {
     return CollectActions(state, is_pre_combat);

@@ -793,6 +793,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tough_bonus = params.value("tough_bonus", 0);
     p.targeting      = TargetingFromString(params.value("targeting", std::string("none")));
     p.sacrifice_land = params.value("sacrifice_land", false);
+    p.cost_less_per_opponent_noncombat_damage = params.value("cost_less_per_opponent_noncombat_damage", false);
+    p.incinerator_damage_trigger = params.value("incinerator_damage_trigger", false);
+    p.damage_per_nonbasic_land = params.value("damage_per_nonbasic_land", 0);
+    p.chain_lightning_copy = params.value("chain_lightning_copy", false);
+    p.sacrifice_mountains_alternative = params.value("sacrifice_mountains_alternative", false);
     if (params.contains("spectacle_cost"))
     {
         p.spectacle_cost = ManaCostFromString(params["spectacle_cost"].get<std::string>());
@@ -991,6 +996,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_surveil      = params.value("etb_surveil", 0);
     p.scry_reveal_land_to_battlefield = params.value("scry_reveal_land_to_battlefield", false);
     p.tap_self_damage  = params.value("tap_self_damage", 0);
+    p.tap_is_life_payment = params.value("tap_is_life_payment", false);
     p.tap_self_damage_any_mode = params.value("tap_self_damage_any_mode", false);
     if (params.contains("cycling_cost"))
         p.cycling_cost = ManaCostFromString(params["cycling_cost"].get<std::string>());
@@ -1281,6 +1287,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tuck_to_library           = params.value("tuck_to_library", false);
     p.allow_self_target         = params.value("allow_self_target", false);
     p.gy_land_exile_mana        = params.value("gy_land_exile_mana", false);
+    p.tap_graveyard_exile_damage = params.value("tap_graveyard_exile_damage", 0);
     p.gy_exile_instant_sorcery_drain = params.value("gy_exile_instant_sorcery_drain", 0);
     p.gy_exile_creature_lifegain     = params.value("gy_exile_creature_lifegain", 0);
     if (params.contains("gy_exile_grow_cost"))

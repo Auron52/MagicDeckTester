@@ -89,7 +89,16 @@ static void JsonStr(std::ostream& os, const std::string& s)
     for (char c : s)
     {
         if (c == '"' || c == '\\') { os << '\\' << c; }
-        else                        { os << c; }
+        else if (c == '\n') { os << "\\n"; }
+        else if (c == '\r') { os << "\\r"; }
+        else if (c == '\t') { os << "\\t"; }
+        else if (static_cast<unsigned char>(c) < 0x20)
+        {
+            constexpr char hex[] = "0123456789abcdef";
+            os << "\\u00" << hex[(static_cast<unsigned char>(c) >> 4) & 15]
+               << hex[static_cast<unsigned char>(c) & 15];
+        }
+        else { os << c; }
     }
     os << '"';
 }
@@ -428,6 +437,22 @@ static std::vector<std::size_t> DisplayActionOrder(const GameState& s, const Tur
 {
     std::vector<std::size_t> ord(plan.actions.size());
     for (std::size_t i = 0; i < ord.size(); ++i) { ord[i] = i; }
+    // Midrange Burn's canonical cast ranks make Bolt precede spectacle and
+    // a newly cast creature precede Blaze targeting it. Display the same
+    // order the apply uses, while keeping explicitly searched/human orders.
+    if (!plan.searched_order && std::string(ResolveProvider(s).Name()) == "MidrangeBurn")
+    {
+        std::vector<std::size_t> casts, slots;
+        for (std::size_t i = 0; i < ord.size(); ++i)
+        {
+            const Action& a = plan.actions[i];
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            { casts.push_back(i); slots.push_back(i); }
+        }
+        std::stable_sort(casts.begin(), casts.end(), [&](std::size_t x, std::size_t y)
+        { return CastOrderLess(s, plan.actions[x], plan.actions[y]); });
+        for (std::size_t i = 0; i < slots.size(); ++i) { ord[slots[i]] = casts[i]; }
+    }
     bool vamp = false;
     int trailing = 0;
     for (const Action& a : plan.actions)
@@ -684,6 +709,15 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // difference between variants, and without them the menu held identical twins
                 // and the fetch was invisible (seed-7 play-test: the picked plan silently
                 // grabbed a 1-drop). Same lesson as the Pod/blink labels below.
+                else if ([&]() { FixedBurnPin bp; return DecodeFixedBurnPin(a.tutor_target.str(), bp); }())
+                {
+                    FixedBurnPin bp; DecodeFixedBurnPin(a.tutor_target.str(), bp);
+                    tag += " → " + FixedBurnPinLabel(s, s.active_player_index, bp);
+                    if (a.tutor_target.str().compare(0, 10, "fireblast:") == 0)
+                    { tag += " (sacrifice two Mountains)"; }
+                }
+                else if (a.tutor_target.str().compare(0, 10, "fireblast:") == 0)
+                { tag += " (sacrifice two Mountains)"; }
                 else if (a.tutor_target.str() == kTutorDeclineTarget)
                 { tag += " \xE2\x86\x92 fail to find (X=" + std::to_string(a.chosen_x) + ")"; }
                 else if (!a.tutor_target.empty())
@@ -735,6 +769,16 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::ActivateLoyalty:
                 tag = LoyaltyActionLabel(a.card_name.str(), a.loyalty_ability);
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
+                if (a.card_name == "Chandra, Torch of Defiance" && a.loyalty_ability == 0)
+                {
+                    if (a.ponder_keep == 0) { tag += " (decline cast; deal 2)"; }
+                    else
+                    {
+                        const Action nested = TurnSolver::ChandraNestedCastOption(a.tutor_target.str());
+                        tag += " (prefer paid cast: " + nested.card_name.str()
+                            + " " + nested.cost.ToString() + ")";
+                    }
+                }
                 break;
             case Action::Kind::Equip:
                 // Lizard Blades: the attach is its RECONFIGURE ability, not an equip ability (unless
@@ -745,7 +789,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 break;
             case Action::Kind::GraveyardExileAbility:
                 tag = a.card_name + (a.gy_exile_mode == 1 ? ": exile instant/sorcery (drain 2)"
-                                                          : ": exile creature (gain 2)");
+                                          : a.gy_exile_mode == 3 ? ": exile two cards (2 damage)"
+                                          : ": exile creature (gain 2)");
                 break;
             case Action::Kind::GraveyardReturnAbility:
                 // One plan variant per legal target, so the label must name WHICH card comes back --
@@ -1873,7 +1918,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // capped-mode only, so the uncapped protocol checker still replays every recorded
                 // named variant verbatim. Measured on the repro (EDF seed 6 gi 5, T6 pre-main):
                 // 1268 plans, of which 72 double-wish + 884 single-wish variants.
-                std::string tgt = a.tutor_target.str();
+                std::string tgt = FixedBurnCostPrefix(a.tutor_target.str());
                 if (a.kind == Action::Kind::CastFromHand && !tgt.empty())
                 {
                     const CardDefinition* cd = a.def ? a.def
@@ -2014,7 +2059,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // hidden. Capped mode only, so the uncapped protocol checker is byte-identical.
         auto payload_key = [](const Action& a) -> std::string
         {
-            std::string tgt = a.tutor_target.str();
+            std::string tgt = FixedBurnCostPrefix(a.tutor_target.str());
             if (a.kind == Action::Kind::CastFromHand && !tgt.empty())
             {
                 const CardDefinition* cd = a.def ? a.def
@@ -2811,7 +2856,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (kd && kd->params.kicker_cost.has_value())
                 { os << ", \"kicked_cost_mv\": " << kd->params.kicker_cost->ManaValue(); }
             }
-            if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
+            FixedBurnPin burn_pin;
+            if (DecodeFixedBurnPin(ac.tutor_target.str(), burn_pin))
+            { os << ", \"burn_target\": "; JsonStr(os, FixedBurnPinLabel(s, s.active_player_index, burn_pin)); }
+            else if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             // Kitesail Larcenist: the searched own-side Treasure target (0 = none, -2 = choose on
             // resolution), named, so the GUI and a claude-play agent can tell the variants apart.
@@ -3341,7 +3389,7 @@ static void CollectDamageTargets(const GameState& s, int controller, bool player
                 // Utvara's 6/6 Dragon tokens could never be Bolt targets, and neither could the
                 // opponent spawns that exist precisely "to provide creature targets for spells like
                 // Searing Blood" (GameState.h). Found by the Dragons Stage-5d claude-play sweep.
-                if (!p.card.IsCreature()) { continue; }
+                if (!BurnPermanentTargetLegal(s, controller, p)) { continue; }
                 out.push_back({ 1, i });
                 labels.push_back(p.card.m_name.str() + (side == controller ? " (yours)" : " (opponent)"));
             }
@@ -3642,9 +3690,11 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
                                     bool sacrifice = false, bool allow_decline = false)
 {
     DecisionJson d(os, decision_index);
+    const bool legend_keep = source.rfind("Legend rule: ", 0) == 0;
     // A `sacrifice` variant reuses the identical board-land picker as the Karoo bounce, but the land
     // goes to the graveyard (Shard Volley's additional cost) and the viewer says "sacrifice".
-    d.Type(sacrifice ? "sacrifice" : "bounce").Source(source).Turn(s.turn_number)
+    d.Type(legend_keep ? "legend_keep" : (sacrifice ? "sacrifice" : "bounce"))
+     .Source(source).Turn(s.turn_number)
      .Board(s).HeuristicDefault(heuristic_default);
     // MACHINE-READABLE decline flag. This used to live only in the prose `note` below, which the
     // play viewer does not parse -- so Surtland Flinger's "you MAY sacrifice another creature"
@@ -3660,7 +3710,7 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     // prompts that never states the total -- the shape that let Shroofus Sproutsire die unasked
     // (see SacBurstDisclosure in GameLogger.h for the report). Emitted only for a real burst, so
     // every ordinary single sacrifice serialises byte-identically and no saved reference moves.
-    if (sacrifice && g_sac_burst_disclosure.total > 1)
+    if (sacrifice && !legend_keep && g_sac_burst_disclosure.total > 1)
     {
         d.Int("pick_index", g_sac_burst_disclosure.index)
          .Int("pick_total", g_sac_burst_disclosure.total);
@@ -3670,7 +3720,13 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
         const Permanent& p = s.battlefield[legal[i]];
         os << "{ \"index\": " << i << ", \"perm_index\": " << legal[i] << ", \"tapped\": "
            << (p.tapped ? "true" : "false") << ", \"name\": "; JsonStr(os, p.card.m_name.str());
-        os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
+        os << ", \"label\": "; JsonStr(os, p.card.m_name.str());
+        if (legend_keep)
+        {
+            os << ", \"card_num\": " << p.card.m_number << ", \"loyalty\": " << p.loyalty
+               << ", \"can_activate\": " << (!p.loyalty_activated_this_turn ? "true" : "false");
+        }
+        os << " }";
     });
     // Noun derived from the actual options: this writer is shared by the Karoo bounce (lands),
     // Shard Volley's land sacrifice AND the creature-sac-outlet victim picker (Carrion Feeder /
@@ -3687,6 +3743,12 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
             all_creature = all_creature && c.IsCreature();
         }
         if (all_land) { noun = "land"; } else if (all_creature) { noun = "creature"; }
+    }
+    if (legend_keep)
+    {
+        d.Note("reply an option index -- keep that Chandra; the other goes to the graveyard. "
+               "Default = the AI's pick.");
+        return;
     }
     d.Note(std::string("reply an option index -- the ") + noun + " to "
            + (sacrifice ? "sacrifice" : "return to your hand") + ". Default = the AI's pick."
@@ -4042,7 +4104,11 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     // The AI's suggestion also ships as `ai_pick` for the viewer's badge either way.
     d.Type("free_cast").Source(source).Turn(s.turn_number).Board(s)
      .HeuristicDefault(source == "Maelstrom Archangel" ? -1 : heuristic_default);
+    if (source == "Chain Lightning (pay {R}{R})") { d.Word("operation", "pay_rr"); }
+    else if (source == "Chain Lightning (copy spell)") { d.Word("operation", "copy"); }
+    else if (source.find("(suspend)") != std::string::npos) { d.Word("operation", "suspend_cast"); }
     d.Int("ai_pick", heuristic_default);
+    if (g_paid_exile_cast_prompt) { d.Bool("paid_cast", true); }
     // WHERE THE CANDIDATES LIVE, so the viewer can offer the choice IN THAT ZONE rather than in a
     // modal (USER 2026-09-17: *"All of these decisions should be done on the board or hand"*,
     // *"(not in a separate dialog)"*). Four mechanics share this decision and they do NOT share a
@@ -4062,7 +4128,10 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     if (all_in_hand) { d.Word("zone", "hand"); }
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
-        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str());
+        if (g_paid_exile_cast_labels && i < g_paid_exile_cast_labels->size())
+        { os << ", \"cost_label\": "; JsonStr(os, (*g_paid_exile_cast_labels)[i]); }
+        os << " }";
     });
     // The library walk's NON-HIT cards, in walk order (empty for Archangel's from-hand charge).
     // Informational: the walk just made these public, so the dialog shows them beside the hit
@@ -4073,7 +4142,14 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
         d.Array("walked", walked.size(), [&](std::size_t i) { JsonStr(os, walked[i]); });
     }
     EmitRevealsField(os, reveals);
-    d.Note("reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick.");
+    if (source == "Chain Lightning (pay {R}{R})")
+    { d.Note("reply 0 to pay {R}{R}, or -1 to decline. Paying permits a separate optional copy choice."); }
+    else if (source == "Chain Lightning (copy spell)")
+    { d.Note("reply 0 to copy Chain Lightning, or -1 to decline. Copying is not casting; choose the copy's target next."); }
+    else if (g_paid_exile_cast_prompt)
+    { d.Note("reply a candidate index to cast the exiled card paying its listed cost, or -1 to decline and deal 2 damage to each opponent. Default = the AI's pick."); }
+    else
+    { d.Note("reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."); }
 }
 
 // MADNESS decision (Vampires A1, 2026-10-18; CR 702.35): a discarded card with madness is in EXILE and its
@@ -4333,12 +4409,15 @@ static void WriteGyReturnOneDecisionJson(std::ostream& os, const GameState& s, c
     DecisionJson d(os, decision_index);
     d.Type("gy_return_one").Source(source).Turn(s.turn_number).Board(s)
      .HeuristicDefault(heuristic_default).Str("alt_text", alt_text);
+    if (g_graveyard_exile_cost_prompt > 0)
+    { d.Bool("exile_cost", true).Int("cost_number", g_graveyard_exile_cost_prompt); }
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << (i + 1) << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
     });
-    d.Note("reply 0 for the alternative (alt_text), or the index (1..n) of the graveyard card to return "
-           "to the battlefield.");
+    d.Note(g_graveyard_exile_cost_prompt > 0
+        ? "reply with the index (1..n) of a graveyard card to exile as an activation cost; two cards are exiled."
+        : "reply 0 for the alternative (alt_text), or the index (1..n) of the graveyard card to return to the battlefield.");
 }
 
 // Celes rummage decision: the player picks WHICH hand cards to discard ("discard any number of
@@ -6356,7 +6435,34 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const std::string lifegain_desc = lifegain_player
                 ? ("gains " + std::to_string(per_target_damage) + " life") : std::string();
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (lifegain_player)
+            if (def.params.incinerator_damage_trigger)
+            {
+                for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                {
+                    const Permanent& p = s.battlefield[bi];
+                    if (p.controller_index == controller || !BurnPermanentTargetLegal(s, controller, p)) { continue; }
+                    legal.push_back({1, bi, 0}); legal_labels.push_back(p.card.m_name.str() + " (opponent)");
+                }
+            }
+            else if (FixedTargetedBurn(def))
+            {
+                const auto pins = FixedBurnCandidates(s, controller, def);
+                for (const auto& pin : pins)
+                {
+                    if (g_paired_burn_stage == 2 && pin.paired_controller != g_paired_burn_controller) { continue; }
+                    const int target = g_paired_burn_stage == 2 ? pin.second : pin.first;
+                    const ChosenTarget t = BurnChoiceForPin(s, controller, target);
+                    bool seen = false;
+                    for (const auto& old : legal)
+                    { if (old.kind == t.kind && old.index == t.index) { seen = true; break; } }
+                    if (seen) { continue; }
+                    legal.push_back(t);
+                    legal_labels.push_back(t.kind == 0 ? (t.index == controller ? "You (face)" : "Opponent (face)")
+                        : s.battlefield[t.index].card.m_name.str()
+                          + (s.battlefield[t.index].controller_index == controller ? " (yours)" : " (opponent)"));
+                }
+            }
+            else if (lifegain_player)
             {
                 legal.push_back({ 0, controller, 0 });     legal_labels.push_back("You (self)");
                 legal.push_back({ 0, 1 - controller, 0 }); legal_labels.push_back("Opponent");
@@ -7900,7 +8006,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& full_enum_spec = "",
                          int auto_depth = -1, int auto_budget_ms = -1)
 {
-    GameState state = GoldFishRunner::SetupGame(deck, seed);
+    GameState state = GoldFishRunner::SetupGame(deck, seed, game_index);
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
     // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
     // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
@@ -8123,13 +8229,13 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 uint64_t seed = base_seed + static_cast<uint64_t>(i);
                 GameResult& gr = results[i];
 
-                GameState s3 = GoldFishRunner::SetupGame(deck, seed);
+                GameState s3 = GoldFishRunner::SetupGame(deck, seed, i);
                 GoldFishRunner::PopulateOpponentSpawns(s3, i);
                 AIEngine bot3(profile, 3, timeout_ms);
                 bot3.HandleMulligan(s3, max_turns);
                 gr.hand3 = SortedHandNames(s3);
 
-                GameState s4 = GoldFishRunner::SetupGame(deck, seed);
+                GameState s4 = GoldFishRunner::SetupGame(deck, seed, i);
                 GoldFishRunner::PopulateOpponentSpawns(s4, i);
                 AIEngine bot4(profile, 4, timeout_ms);
                 bot4.HandleMulligan(s4, max_turns);
@@ -8181,7 +8287,7 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
             if (logging || trace_divergence)
             {
                 // Reconstruct the post-mulligan state for this seed (cheap + deterministic).
-                GameState s3 = GoldFishRunner::SetupGame(deck, seed);
+                GameState s3 = GoldFishRunner::SetupGame(deck, seed, i);
                 GoldFishRunner::PopulateOpponentSpawns(s3, i);
                 AIEngine bot3(profile, 3, timeout_ms);
                 bot3.HandleMulligan(s3, max_turns);
@@ -8219,7 +8325,7 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
             if (logging || trace_divergence)
             {
                 // Reconstruct both post-mulligan states (cheap + deterministic).
-                GameState s3b = GoldFishRunner::SetupGame(deck, seed);
+                GameState s3b = GoldFishRunner::SetupGame(deck, seed, i);
                 GoldFishRunner::PopulateOpponentSpawns(s3b, i);
                 AIEngine bot3b(profile, 3, timeout_ms);
                 if (trace_divergence)
@@ -8230,7 +8336,7 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 bot3b.HandleMulligan(s3b, max_turns);
                 TurnSolver::SetTraceSolve(false);
 
-                GameState s4b = GoldFishRunner::SetupGame(deck, seed);
+                GameState s4b = GoldFishRunner::SetupGame(deck, seed, i);
                 GoldFishRunner::PopulateOpponentSpawns(s4b, i);
                 AIEngine bot4b(profile, 4, timeout_ms);
                 if (trace_divergence)

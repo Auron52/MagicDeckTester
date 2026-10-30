@@ -193,6 +193,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // ride AntiLifegainProvider (Flamekin Harbinger's tutor_to_top) or VialProvider (Aether Vial);
         // LandfallElementalsProvider is an empty DeckProvider derivation.
         {"LandfallElementals", "LandfallElementals"},
+        // Midrange Burn is intentionally separate from the low-curve Burn provider:
+        // Chandra and Incinerator need their own cast/legend ordering.
+        {"Midrange Burn", "MidrangeBurn"},
     };
 
     namespace fs = std::filesystem;

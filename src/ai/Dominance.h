@@ -258,7 +258,7 @@ static_assert(std::is_trivially_copyable_v<Permanent>,
 // cast, and Build() compares only END-OF-TURN states -- so two end-of-turn siblings differing only in
 // it have identical futures. (Mid-turn identity keys are another matter: TurnSolver's BuildSimKey
 // folds its vanished-land residual, gated on a same-turn reader in hand.)
-static_assert(sizeof(Player) == 200,
+static_assert(sizeof(Player) == 208,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 688 -> 696 (2026-09-01): ManaPool gained `wild_c`, and GameState embeds one as floating_mana.
@@ -558,7 +558,9 @@ static_assert(sizeof(Player) == 200,
 // in StampDeckTraits that only skips the boundary fan's provably-empty battlefield walk -- nothing to fold; the pin
 // is FUTURE-DETERMINING (set by the turn's plan apply, consumed at the NEXT upkeep), FOLDED in Build() value-gated
 // (and in BuildDedupKey's pending pins and BuildBreakpointKey).
-static_assert(sizeof(GameState) == 1152,
+// Midrange Burn adds noncombat-damage tracking and its pending triggers; see the
+// matching fields folded in Build() below before changing this size assertion.
+static_assert(sizeof(GameState) == 1216,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -843,6 +845,15 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     }
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
+    if (s.deck_tracks_noncombat_damage)
+    {
+        fold(0x1C1DE); fold(s.noncombat_damage_received_this_turn[0]);
+        fold(s.noncombat_damage_received_this_turn[1]);
+        for (const auto& e : s.pending_incinerator_damage)
+        { fold(e.source.m_number); fold(e.source.m_name_hash); fold(e.controller); fold(e.damaged_player); fold(e.amount); }
+        fold(s.noncombat_trigger_depth);
+    }
+
     fold(static_cast<std::uint64_t>(s.vial_target_mv));
     fold(s.deck_feeds_combat ? 1u : 0u);
     fold(s.search_count);
@@ -1089,6 +1100,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // the game, future-determining (every creature we ever play is bigger), and NOT droppable
         // despite being monotone, because dominance here is an EQUALITY key rather than an ordering.
         // Folded only when nonzero -> byte-identical for every deck with no emblem source.
+        if (p.emblem_spell_cast_damage > 0)
+        { fold(0xC4AD2ull); fold(static_cast<std::uint64_t>(p.emblem_spell_cast_damage)); }
         if (p.emblem_team_pump > 0)
         { fold(0xE3B1Eull); fold(static_cast<std::uint64_t>(p.emblem_team_pump)); }
         fold(static_cast<std::uint64_t>(p.poison_counters));

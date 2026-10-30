@@ -260,8 +260,21 @@ struct PayRollbackLedger
     void NoteUntapEffect(int t, int p) { Stamp(t, p); untap_effect = true; }
 };
 
+struct IncineratorDamageTrigger
+{
+    Card source;
+    int controller = 0;
+    int damaged_player = 1;
+    int amount = 0;
+};
+
 struct GameState
 {
+    bool deck_tracks_noncombat_damage = false;
+    std::array<int, 2> noncombat_damage_received_this_turn{};
+    std::vector<IncineratorDamageTrigger> pending_incinerator_damage;
+    int noncombat_trigger_depth = 0;
+
     std::array<Player, 2>    players;
     PayRollbackLedger        pay_ledger;
     int                      active_player_index   = 0;

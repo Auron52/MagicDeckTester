@@ -3076,6 +3076,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (!is_src) { continue; }
         if (!RestrictedManaUsable(def->params, for_creature, 2)) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
+        if (!dmgev::CanPayManaTapLife(state, active, *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = dead
         // PAINLESS-FIRST PASS (see BtPainlessMode): the oracle prices exactly the sources the restricted
@@ -4377,6 +4378,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (!is_src) { continue; }
         if (!RestrictedManaUsable(def->params, for_creature, 3)) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
+        if (!dmgev::CanPayManaTapLife(state, active, *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = no mana
         // PAINLESS-FIRST PASS (MTG_PAY_PAIN_LAST; see BtPainlessMode): while the restricted pass runs, a
@@ -5550,6 +5552,13 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         { if (canon) { mix(dh, a); } else { mix(h1, a); mix(h2, b); } };
         if (!canon) { mix(h1, static_cast<std::uint64_t>(i)); mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull); }
         smix(di, di ^ 0xD1B54A32D192ED03ull);
+        // A life-cost source's eligibility changes with life, and cached self-life deltas
+        // must never replay a payment that was affordable only on another board.
+        if (d->params.tap_is_life_payment)
+        {
+            const std::uint64_t life = static_cast<std::uint64_t>(state.players[active].life);
+            smix(0x11FEC057ull ^ life, 0x11FEC057ull + life);
+        }
         smix(p.tapped ? 1ull : 2ull, p.tapped ? 3ull : 5ull);
         // SCALED MANA DORK YIELD (Priest of Titania / Elvish Archdruid: the live Elf count; Accomplished
         // Alchemist: life gained this turn). The DFS taps it for ScaledDorkCount, and the untap-burst

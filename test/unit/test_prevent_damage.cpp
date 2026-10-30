@@ -1074,3 +1074,145 @@ TEST_CASE("Prevent Damage pain deferral: {C} is generic while no {C} pip is live
     CHECK_FALSE(TappedNamed(on, "City of Brass"));
     CHECK_FALSE(TappedNamed(on, "Brushland"));
 }
+
+TEST_CASE("Fiery Islet: life payment is neither preventable nor a damage event")
+{
+    for (bool purity : {false, true})
+    {
+        GameState s = Board();
+        Put(s, "Tamanoa");
+        Put(s, "Vito, Thorn of the Dusk Rose");
+        if (purity) { Put(s, "Purity"); }
+        Put(s, "Fiery Islet");
+        REQUIRE(Pay(s, Cost(0, 0, 0, 1)));
+        CHECK(Me(s) == 19);
+        CHECK(Opp(s) == 20);
+        CHECK(s.players[0].life_gained_this_turn == 0);
+        for (const Permanent& p : s.battlefield) { CHECK(p.mana_tap_mark == 0); }
+    }
+}
+
+TEST_CASE("Fiery Islet: affordability, memo replay, and manual tap respect life cost")
+{
+    for (int life : {2, 0, 1, 0, 2})
+    {
+        GameState s = Board(false);
+        s.players[0].life = life;
+        Put(s, "Fiery Islet");
+        CHECK(AvailableManaPool(s).Total() == (life > 0 ? 1 : 0));
+        CHECK(!HumanPreTapFaces(s, s.battlefield.back()).empty() == (life > 0));
+        const bool paid = Pay(s, Cost(0, 0, 0, 1));
+        CHECK(paid == (life > 0));
+        CHECK(Me(s) == (life > 0 ? life - 1 : 0));
+        CHECK(s.battlefield.back().tapped == paid);
+    }
+    GameState s = Board(false);
+    s.players[0].life = 1;
+    Put(s, "Fiery Islet");
+    Put(s, "Fiery Islet");
+    CHECK_FALSE(Pay(s, Cost(0, 0, 0, 2)));
+    CHECK(Me(s) == 1);
+    for (const Permanent& p : s.battlefield) { CHECK_FALSE(p.tapped); }
+}
+
+TEST_CASE("Fiery Islet: Manabarbs still sees the land tap")
+{
+    GameState s = Board();
+    Put(s, "Tamanoa");
+    Put(s, "Manabarbs");
+    Put(s, "Fiery Islet");
+    REQUIRE(Pay(s, Cost(0, 0, 0, 1)));
+    CHECK(Me(s) == 19);  // one paid life, then one damage and one Tamanoa gain
+    CHECK(s.players[0].life_gained_this_turn == 1);
+}
+
+TEST_CASE("Searing Blaze: legal player or walker plus same-controller creature pairs")
+{
+    GameState s = Board(false);
+    Put(s, "Gideon, Ally of Zendikar");
+    Put(s, "Monastery Swiftspear");
+    Put(s, "Monastery Swiftspear", 1);
+    const CardDefinition& blaze = *CardDatabase::Instance().Lookup("Searing Blaze");
+    const int walker = s.battlefield[0].card.m_number;
+    const int own = s.battlefield[1].card.m_number;
+    const int opp = s.battlefield[2].card.m_number;
+    const auto legal = FixedBurnCandidates(s, 0, blaze);
+    CHECK(legal.size() == 3);  // self+own, own walker+own, opponent+opponent creature
+    FixedBurnPin pin;
+    CHECK(PrepareFixedBurnPin(s, 0, blaze, EncodeFixedBurnPin({walker, own, 0}), pin));
+    CHECK(PrepareFixedBurnPin(s, 0, blaze, EncodeFixedBurnPin({0, opp, 1}), pin));
+    CHECK_FALSE(PrepareFixedBurnPin(s, 0, blaze, EncodeFixedBurnPin({0, own, 0}), pin));
+    CHECK_FALSE(PrepareFixedBurnPin(s, 0, blaze, EncodeFixedBurnPin({walker, opp, 1}), pin));
+}
+
+TEST_CASE("Searing Blaze: each surviving target resolves independently, walkers lose loyalty")
+{
+    GameState s = Board(false);
+    Put(s, "Gideon, Ally of Zendikar");
+    Put(s, "Monastery Swiftspear");
+    s.battlefield[0].loyalty = 5;
+    const FixedBurnPin pin{s.battlefield[0].card.m_number, s.battlefield[1].card.m_number, 0};
+    const CardDefinition& blaze = *CardDatabase::Instance().Lookup("Searing Blaze");
+    GameState no_creature = s;
+    no_creature.battlefield.pop_back();
+    ResolveFixedBurnPin(no_creature, 0, blaze, pin, 3);
+    CHECK(no_creature.battlefield[0].loyalty == 2);
+    CHECK(no_creature.battlefield[0].damage == 0);
+    CHECK(Me(no_creature) == 20);
+
+    GameState no_walker = s;
+    no_walker.battlefield.erase(no_walker.battlefield.begin());
+    ResolveFixedBurnPin(no_walker, 0, blaze, pin, 3);
+    CHECK(no_walker.battlefield.empty());
+    CHECK(no_walker.players[0].graveyard.size() == 1);
+
+    GameState no_creature_player = s;
+    no_creature_player.battlefield.pop_back();
+    ResolveFixedBurnPin(no_creature_player, 0, blaze, {-1, pin.second, 0}, 3);
+    CHECK(Me(no_creature_player) == 17);
+}
+
+TEST_CASE("Searing Blaze: human chooses the first target and the paired creature separately")
+{
+    GameState s = Board(false);
+    Put(s, "Gideon, Ally of Zendikar");
+    Put(s, "Monastery Swiftspear");
+    const CardDefinition& blaze = *CardDatabase::Instance().Lookup("Searing Blaze");
+    int prompts = 0;
+    TargetChooser chooser = [&](const GameState&, const CardDefinition&, int, int, int,
+                                const std::vector<ChosenTarget>&) -> std::vector<ChosenTarget>
+    {
+        ++prompts;
+        CHECK(g_paired_burn_stage == prompts);
+        if (prompts == 2) { CHECK(g_paired_burn_controller == 0); }
+        return {{1, prompts == 1 ? 0 : 1, 0}};
+    };
+    TargetChooser* previous = g_play_target_chooser;
+    g_play_target_chooser = &chooser;
+    FixedBurnPin selected;
+    const bool prepared = PrepareFixedBurnPin(s, 0, blaze, "", selected);
+    g_play_target_chooser = previous;
+    CHECK(prepared);
+    CHECK(prompts == 2);
+    CHECK(selected.first == s.battlefield[0].card.m_number);
+    CHECK(selected.second == s.battlefield[1].card.m_number);
+    CHECK(g_paired_burn_stage == 0);
+}
+
+TEST_CASE("Fixed burn: stable target pins preserve Fireblast costs and any-target walker damage")
+{
+    GameState s = Board(false);
+    Put(s, "Gideon, Ally of Zendikar");
+    s.battlefield[0].loyalty = 5;
+    const CardDefinition& bolt = *CardDatabase::Instance().Lookup("Lightning Bolt");
+    const FixedBurnPin target{s.battlefield[0].card.m_number, -2, -1};
+    const std::string token = WithFixedBurnPin("fireblast:10,11", target);
+    CHECK(token.rfind("fireblast:10,11|@burn/", 0) == 0);
+    FixedBurnPin parsed;
+    REQUIRE(DecodeFixedBurnPin(token, parsed));
+    CHECK(parsed.first == target.first);
+    REQUIRE(PrepareFixedBurnPin(s, 0, bolt, token, parsed));
+    ResolveFixedBurnPin(s, 0, bolt, parsed, 3);
+    CHECK(s.battlefield[0].loyalty == 2);
+    CHECK(Opp(s) == 20);
+}

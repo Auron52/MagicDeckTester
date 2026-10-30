@@ -1062,6 +1062,85 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
 inline std::vector<std::string> HasteKeywords(bool haste)
 { return haste ? std::vector<std::string>{"Haste"} : std::vector<std::string>{}; }
 
+
+inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why);
+inline void FlushIncineratorDamageTriggers(GameState& state);
+inline void RecordNoncombatDamageToPlayer(GameState& state, int source_controller,
+                                          int damaged_player, int amount);
+struct NoncombatTriggerScope
+{
+    explicit NoncombatTriggerScope(GameState& s) : state(s), tracked(s.deck_tracks_noncombat_damage)
+    { if (tracked) { ++state.noncombat_trigger_depth; } }
+    ~NoncombatTriggerScope()
+    { if (tracked && --state.noncombat_trigger_depth == 0) { FlushIncineratorDamageTriggers(state); } }
+    GameState& state;
+    bool tracked;
+};
+
+// Manual mana-payment probes historically snapshot the spectacle flag/lives rather
+// than the full GameState. This companion snapshot preserves the new resource and queue.
+struct NoncombatStateSnapshot
+{
+    bool enabled;
+    std::array<int, 2> received{};
+    std::vector<IncineratorDamageTrigger> pending;
+    int depth = 0;
+    explicit NoncombatStateSnapshot(const GameState& s) : enabled(s.deck_tracks_noncombat_damage)
+    {
+        if (enabled) { received = s.noncombat_damage_received_this_turn;
+            pending = s.pending_incinerator_damage; depth = s.noncombat_trigger_depth; }
+    }
+    void Restore(GameState& s) const
+    {
+        if (enabled) { s.noncombat_damage_received_this_turn = received;
+            s.pending_incinerator_damage = pending; s.noncombat_trigger_depth = depth; }
+    }
+};
+
+inline thread_local const std::vector<int>* g_incinerator_pins = nullptr;
+inline thread_local std::size_t g_incinerator_pin_cursor = 0;
+using IncineratorTargetProbe = std::function<void(const std::vector<int>&)>;
+inline thread_local IncineratorTargetProbe* g_incinerator_target_probe = nullptr;
+inline thread_local const std::vector<int>* g_incinerator_probe_owner = nullptr;
+inline thread_local int g_incinerator_probe_fan_depth = -1;
+// Probe ownership follows the plan vector, not just a thread-wide callback. A nested
+// continuation searches its own targets and cannot add speculative events to its parent.
+struct IncineratorTargetProbeScope
+{
+    IncineratorTargetProbe* old_probe = g_incinerator_target_probe;
+    const std::vector<int>* old_owner = g_incinerator_probe_owner;
+    int old_depth = g_incinerator_probe_fan_depth;
+    IncineratorTargetProbeScope(IncineratorTargetProbe& probe, const std::vector<int>& owner, int depth)
+    { g_incinerator_target_probe = &probe; g_incinerator_probe_owner = &owner;
+      g_incinerator_probe_fan_depth = depth; }
+    ~IncineratorTargetProbeScope()
+    { g_incinerator_target_probe = old_probe; g_incinerator_probe_owner = old_owner;
+      g_incinerator_probe_fan_depth = old_depth; }
+};
+struct IncineratorPinScope
+{
+    const std::vector<int>* old;
+    std::size_t cursor;
+    IncineratorTargetProbe* old_probe;
+    const std::vector<int>* old_probe_owner;
+    int old_probe_depth;
+    explicit IncineratorPinScope(const std::vector<int>& pins)
+        : old(g_incinerator_pins), cursor(g_incinerator_pin_cursor),
+          old_probe(g_incinerator_target_probe), old_probe_owner(g_incinerator_probe_owner),
+          old_probe_depth(g_incinerator_probe_fan_depth)
+    {
+        g_incinerator_pins = &pins; g_incinerator_pin_cursor = 0;
+        if (g_incinerator_target_probe && g_incinerator_probe_owner != &pins)
+        { g_incinerator_target_probe = nullptr; g_incinerator_probe_owner = nullptr;
+          g_incinerator_probe_fan_depth = -1; }
+    }
+    ~IncineratorPinScope()
+    {
+        g_incinerator_pins = old; g_incinerator_pin_cursor = cursor;
+        g_incinerator_target_probe = old_probe; g_incinerator_probe_owner = old_probe_owner;
+        g_incinerator_probe_fan_depth = old_probe_depth;
+    }
+};
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&,
                         const std::string& = std::string(),
@@ -4658,10 +4737,230 @@ void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
 //     include cast_trigger_subtype (Worthy Knight: cast a Knight -> 1/1 Human token).
 //   - draw_on_aura_cast: Kor Spiritdancer draws a card when you cast an Aura spell.
 // Aether Vial deployment is NOT a cast, so it never reaches here -- correct (CR 601.2).
+inline void RecordNoncombatDamageToPlayer(GameState& state, int source_controller,
+                                          int damaged_player, int amount)
+{
+    if (!state.deck_tracks_noncombat_damage || amount <= 0 || damaged_player < 0 || damaged_player >= 2)
+    { return; }
+    // The cost reduction counts damage from ANY source; the trigger requires our source.
+    state.noncombat_damage_received_this_turn[damaged_player] += amount;
+    if (source_controller != damaged_player)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != source_controller) { continue; }
+            const auto* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.incinerator_damage_trigger)
+            { state.pending_incinerator_damage.push_back({p.card, source_controller, damaged_player, amount}); }
+        }
+    }
+    if (state.noncombat_trigger_depth == 0) { FlushIncineratorDamageTriggers(state); }
+}
+
+inline void FlushIncineratorDamageTriggers(GameState& state)
+{
+    if (state.noncombat_trigger_depth != 0 || state.pending_incinerator_damage.empty()) { return; }
+    // State-based actions precede putting these triggered abilities on the stack. A creature
+    // killed by Searing Blaze itself is already gone when Incinerator's target is chosen.
+    ++state.noncombat_trigger_depth;
+    for (std::size_t i = state.battlefield.size(); i-- > 0;)
+    {
+        const Permanent& p = state.battlefield[i];
+        if ((p.card.IsCreature() || p.is_animated) && p.damage > 0
+            && p.damage >= LethalToughness(p, state) && !p.card.HasKeyword(Keyword::Indestructible))
+        { CounterPingKillAt(state, i, "lethal damage before Incinerator trigger"); }
+    }
+    --state.noncombat_trigger_depth;
+    // Sources are copied into the queue: a trigger exists independently after its source leaves.
+    auto pending = std::move(state.pending_incinerator_damage);
+    state.pending_incinerator_damage.clear();
+    for (const auto& event : pending)
+    {
+        if (state.players[event.controller].life <= 0 || state.players[event.damaged_player].life <= 0)
+        { break; } // the game ends at SBAs before any new trigger may resolve
+        std::vector<int> legal;
+        ResolveProvider(state).IncineratorTargetCandidates(state, event.damaged_player, event.amount, legal);
+        if (legal.empty()) { continue; } // mandatory trigger has no legal target
+        const std::size_t ordinal = g_incinerator_pin_cursor++;
+        if (g_incinerator_target_probe) { (*g_incinerator_target_probe)(legal); }
+        int id = legal.front();
+        if (g_incinerator_pins && ordinal < g_incinerator_pins->size())
+        {
+            const int pin = (*g_incinerator_pins)[ordinal];
+            if (std::find(legal.begin(), legal.end(), pin) != legal.end()) { id = pin; }
+        }
+        const auto* def = CardDatabase::Instance().LookupCached(event.source);
+        if (!def) { continue; }
+        if (g_play_target_chooser)
+        {
+            int bi = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            { if (state.battlefield[i].card.m_number == id) { bi = i; break; } }
+            if (bi < 0) { continue; }
+            auto chosen = (*g_play_target_chooser)(state, *def, event.controller, 1, event.amount, {{1, bi, 0}});
+            if (chosen.size() == 1 && chosen[0].kind == 1 && chosen[0].index >= 0
+                && chosen[0].index < static_cast<int>(state.battlefield.size()))
+            { id = state.battlefield[chosen[0].index].card.m_number; }
+        }
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            Permanent& p = state.battlefield[i];
+            if (p.card.m_number != id || p.controller_index != event.damaged_player) { continue; }
+            if (CreatureHasShroud(p, state) || p.card.HasKeyword(Keyword::Hexproof)) { break; }
+            bool dead = false;
+            if (p.card.HasType(CardType::Planeswalker))
+            {
+                p.loyalty -= event.amount;
+                for (Counter& c : p.counters)
+                { if (c.type == Counter::Type::Loyalty) { c.count = p.loyalty; } }
+                dead = p.loyalty <= 0;
+            }
+            else if (p.card.IsCreature() || p.is_animated)
+            {
+                const int before = p.damage;
+                p.damage += event.amount;
+                ApplyBurnToCreature(state, p, before, 0, event.controller);
+                dead = p.damage >= LethalToughness(p, state) && !p.card.HasKeyword(Keyword::Indestructible);
+            }
+            else { break; }
+            if (dead)
+            {
+                CounterPingKillAt(state, static_cast<std::size_t>(i), "Incinerator triggered damage");
+            }
+            break;
+        }
+    }
+}
+
+// A spell cast during another effect still gets a priority boundary for its cast
+// triggers before that spell resolves. Preserve the outer effect's batching depth:
+// flushing here must not leave its RAII scope with an unbalanced counter.
+inline void FlushNoncombatTriggersAtPriorityBoundary(GameState& state)
+{
+    if (!state.deck_tracks_noncombat_damage || state.pending_incinerator_damage.empty()
+        || (state.own_death_live && SelfHasLost(state))) { return; }
+    struct RestoreDepth
+    {
+        GameState& state; int saved;
+        ~RestoreDepth() { state.noncombat_trigger_depth = saved; }
+    } restore{state, state.noncombat_trigger_depth};
+    state.noncombat_trigger_depth = 0;
+    FlushIncineratorDamageTriggers(state);
+}
+
+// A paid cast during a resolving loyalty ability. The host routes the exact interned spell
+// action through its normal cast path; probe=true operates on a copy with all UI/logging paused.
+using PaidExileCastFn = std::function<bool(GameState&, int, const Card&, const std::string&, bool)>;
+constexpr int kAbilitySelfTarget = -1;
+inline thread_local const PaidExileCastFn* g_paid_exile_cast = nullptr;
+inline thread_local bool g_paid_exile_cast_prompt = false;
+struct PaidExileCastOption { Card card; std::string encoded; std::string cost_label; };
+std::vector<PaidExileCastOption> CollectChandraPaidCastOptions(const GameState&, int, const Card&);
+bool ChandraPaidCastOptionPayable(const GameState&, int, const Card&, const std::string&);
+inline thread_local const std::vector<std::string>* g_paid_exile_cast_labels = nullptr;
+
+inline thread_local int g_graveyard_exile_cost_prompt = 0;
+struct PaidExileCastScope
+{
+    const PaidExileCastFn* saved;
+    explicit PaidExileCastScope(const PaidExileCastFn* host) : saved(g_paid_exile_cast) { g_paid_exile_cast = host; }
+    ~PaidExileCastScope() { g_paid_exile_cast = saved; }
+};
+inline void RecordNoncombatDamageToPlayer(GameState&, int source_controller, int damaged_player, int amount);
+inline bool DealPermanentAbilityDamage(GameState&, int, const CardDefinition&, int, int, bool = true);
+inline void ResolveChandraExileCast(GameState& state, int controller, const CardDefinition& source,
+                                     const std::string& cast_option, bool take)
+{
+    auto& library = state.players[controller].library;
+    bool cast = false;
+    if (!library.empty())
+    {
+        const Card card = library.DrawTop();
+        state.exile.push_back(card);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+        std::string selected_option = cast_option;
+        bool payable = d && !d->card.IsLand() && g_paid_exile_cast && !selected_option.empty()
+                    && (*g_paid_exile_cast)(state, controller, card, selected_option, true);
+        if (d && !d->card.IsLand() && g_paid_exile_cast && g_play_free_cast_chooser)
+        {
+            // Resolve cost choices only AFTER the library card is exiled and public. Each
+            // candidate has an option index; equal card names must not collapse cost variants.
+            const auto options = CollectChandraPaidCastOptions(state, controller, card);
+            payable = !options.empty();
+            if (payable)
+            {
+                std::vector<Card> cards;
+                std::vector<std::string> labels;
+                int suggested = -1;
+                for (std::size_t i = 0; i < options.size(); ++i)
+                {
+                    cards.push_back(options[i].card); labels.push_back(options[i].cost_label);
+                    if (take && options[i].encoded == selected_option) { suggested = static_cast<int>(i); }
+                }
+                struct PaidPromptScope {
+                    bool saved = g_paid_exile_cast_prompt;
+                    const std::vector<std::string>* labels = g_paid_exile_cast_labels;
+                    explicit PaidPromptScope(const std::vector<std::string>& values)
+                    { g_paid_exile_cast_prompt = true; g_paid_exile_cast_labels = &values; }
+                    ~PaidPromptScope() { g_paid_exile_cast_prompt = saved; g_paid_exile_cast_labels = labels; }
+                } paid_prompt(labels);
+                const int picked = (*g_play_free_cast_chooser)(state, controller, source.card.m_name.str(),
+                                                              cards, suggested, {});
+                take = picked >= 0 && picked < static_cast<int>(options.size());
+                if (take) { selected_option = options[static_cast<std::size_t>(picked)].encoded; }
+            }
+            else { take = false; }
+        }
+        if (payable && take)
+        {
+            // The cast host receives the original exiled card, not a draw/hand-entry event.
+            for (auto it = state.exile.end(); it != state.exile.begin(); )
+            { --it; if (it->m_number == card.m_number && it->m_name == card.m_name) { state.exile.erase(it); break; } }
+            cast = (*g_paid_exile_cast)(state, controller, card, selected_option, false);
+            if (!cast) { state.exile.push_back(card); }
+        }
+        if (g_play_event_sink)
+        { EmitPlayEvent(state.turn_number, "exile", source.card.m_name.str() + ": " + card.m_name.str()
+                       + (cast ? " cast during resolution" : " stays exiled")); }
+    }
+    if (!cast)
+    {
+        const int before = state.players[1 - controller].life;
+        for (int head = 0; head < gamesetup::OpponentHeads(); ++head)
+        { DealPermanentAbilityDamage(state, controller, source, 2, 0, false); }
+        if (g_play_event_sink != nullptr && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "damage", source.card.m_name.str()
+            + ": exiled card not cast; " + std::to_string(before - state.players[1 - controller].life)
+            + " damage to opponent"); }
+    }
+}
+
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 {
     int mv = cast_def.card.m_mana_cost.ManaValue();
     int active = state.active_player_index;
+    const int emblem_damage = state.players[active].emblem_spell_cast_damage;
+    if (emblem_damage > 0)
+    {
+        CardDefinition emblem;
+        emblem.card.Rename("Chandra emblem");
+        emblem.params.targeting = Targeting::Any;
+        for (int remaining = emblem_damage; remaining > 0; remaining -= 5)
+        {
+          {
+              NoncombatTriggerScope emblem_resolution(state);
+              const int amount = std::min(5, remaining);
+              const int target = ResolveProvider(state).SpellCastEmblemTarget(state, active, amount);
+              DealPermanentAbilityDamage(state, active, emblem, amount, target);
+          }
+          FlushNoncombatTriggersAtPriorityBoundary(state);
+          if (state.own_death_live && SelfHasLost(state)) { return; }
+        }
+    }
+
+    // Emblems are separate triggered abilities. Their Incinerator triggers resolve
+    // before the next emblem/cast-trigger resolution; keep the remaining scan stable.
+    NoncombatTriggerScope noncombat_triggers(state);
 
     // Token specs are collected first: CreateToken push_backs onto the battlefield, which
     // would invalidate a range-for over it. Iterate the original size by index, then create.
@@ -4704,15 +5003,17 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                 // event per trigger source per cast. "That player" is the caster (the active player);
                 // the opponent casts nothing, so the to_opp half is never reached in a goldfish.
                 const bool to_me = p.controller_index == active;
-                dmgev::DealDamageEvent(state, p.controller_index, p.card.IsCreature(),
+                const int actual_dealt = dmgev::DealDamageEvent(state, p.controller_index, p.card.IsCreature(),
                                        /*combat=*/false,
                                        to_me ? def->params.on_cast_trigger_damage : 0,
                                        to_me ? 0 : def->params.on_cast_trigger_damage,
                                        /*to_creatures_total=*/0, def->card.m_name.str().c_str());
+                RecordNoncombatDamageToPlayer(state, p.controller_index, active, actual_dealt);
             }
             else
             {
                 state.players[active].life -= def->params.on_cast_trigger_damage;
+                RecordNoncombatDamageToPlayer(state, p.controller_index, active, def->params.on_cast_trigger_damage);
             }
         }
 
@@ -4725,6 +5026,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             const int before = state.players[1 - active].life;
             const int dmg = cast_def.card.ColorCount();
             state.players[1 - active].life -= dmg;
+            RecordNoncombatDamageToPlayer(state, p.controller_index, 1 - active, dmg);
             state.opponent_lost_life_this_turn = true;
             if (g_play_event_sink)
             {
@@ -4759,6 +5061,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             state.battlefield[i].verse_counters += 1;
             const int dmg = state.battlefield[i].verse_counters;
             state.players[1 - active].life -= dmg;
+            RecordNoncombatDamageToPlayer(state, p.controller_index, 1 - active, dmg);
             state.opponent_lost_life_this_turn = true;
             // Play-viewer history: Aria's verse damage as a "damage" event (nulled by RevealLogPause
             // during search -> byte-identical). Reports the counter count driving the damage.
@@ -11634,6 +11937,10 @@ inline std::string LoyaltyAbilityText(const CardParams::LoyaltyAbilityParam& ab)
         ab.effect == "counters_up_to_two"      ? "put +1/+1 counters" :
         ab.effect == "regrow_multicolored"     ? "return a multicolored card" :
         ab.effect == "destroy_own_noncreature" ? "destroy a noncreature permanent" :
+        ab.effect == "exile_top_cast_or_damage" ? "exile top; cast paying its cost or deal 2 to each opponent" :
+        ab.effect == "add_red_mana"             ? "add {R}{R}" :
+        ab.effect == "damage_target_creature"   ? "deal 4 damage to target creature" :
+        ab.effect == "emblem_spell_cast_damage" ? "emblem: each spell cast deals 5 damage to any target" :
         ab.effect == "face_damage"             ? (std::to_string(ab.amount) + " damage") :
         ab.effect == "food_token"              ? "create a Food token" :
         ab.effect == "elk_transform"           ? "turn a permanent into a 3/3 Elk" :
@@ -11670,8 +11977,9 @@ inline std::string LoyaltyActionLabel(const std::string& walker_name, int abilit
 }
 
 inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index,
-                                int elk_target = 0)
+                                int elk_target = 0, const std::string& cast_option = std::string(), bool cast_take = false)
 {
+    NoncombatTriggerScope noncombat_triggers(state);
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     int wi = -1;
     const CardDefinition* d = nullptr;
@@ -11690,6 +11998,14 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         || ability_index >= static_cast<int>(d->params.loyalty_abilities.size())) { return; }
     const CardParams::LoyaltyAbilityParam& ab = d->params.loyalty_abilities[ability_index];
     Permanent& w = state.battlefield[wi];
+    if (ab.effect == "damage_target_creature")
+    {
+        bool legal = false;
+        for (const Permanent& p : state.battlefield)
+        { if ((p.card.IsCreature() || p.is_animated)
+              && (g_play_loyalty_chooser != nullptr || p.card.m_number == elk_target)) { legal = true; break; } }
+        if (!legal) { return; }
+    }
     if (ab.delta < 0 && w.loyalty < -ab.delta) { return; }   // can't pay the cost
     w.loyalty += ab.delta;
     w.loyalty_activated_this_turn = true;
@@ -12068,9 +12384,8 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         // land is a real cost the search rightly declined. Since -9 is unreachable from loyalty 5
         // without two +3s, that made an EIGHT-mana walker inert BY CONSTRUCTION (USER, 2026-08-16:
         // "you need a target to use the ability and destroying your own stuff is bad").
-        // FiveColourProvider::OpponentPlaysLands now gives the passive opponent lands, so the
-        // faithful play is available and this resolves to THEIR permanent first: free loyalty ramp,
-        // and their lands are inert props so nothing else about the game changes.
+        // Shared game setup gives the passive opponent lands, so the faithful play is available
+        // and this resolves to THEIR permanent first: free loyalty ramp.
         int pick = -1;
         // Pass 1 -- an OPPONENT noncreature permanent (the real MTG play, and free).
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -12154,6 +12469,23 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             got.gained_control_this_turn = true;
             got.tapped                   = false;
         }
+    }
+    else if (ab.effect == "exile_top_cast_or_damage")
+    { ResolveChandraExileCast(state, controller, *d, cast_option, cast_take); }
+    else if (ab.effect == "add_red_mana")
+    { state.floating_mana.red += ab.amount; }
+    else if (ab.effect == "emblem_spell_cast_damage")
+    { state.players[controller].emblem_spell_cast_damage += ab.amount; }
+    else if (ab.effect == "damage_target_creature")
+    {
+        int pick = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == elk_target) { pick = i; break; } }
+        pick = human_target(ab_sign, "dealt 4 damage", [](const Permanent& p) {
+            return p.card.IsCreature() || p.is_animated;
+        }, pick);
+        if (pick >= 0)
+        { DealPermanentAbilityDamage(state, controller, *d, ab.amount, state.battlefield[pick].card.m_number, false); }
     }
     else if (ab.effect == "face_damage")
     {
@@ -13216,6 +13548,391 @@ inline void ApplyGraveyardExileGrow(GameState& state, int controller, int source
         }
         break;
     }
+}
+
+
+// Stable content identity, independent of worker/game history. Card names contain no newline.
+inline std::string GraveyardDamageFuelSpec(std::string a, std::string b)
+{
+    if (b < a) { std::swap(a, b); }
+    return a + "\n" + b;
+}
+inline std::vector<int> GraveyardDamageFuelSlots(const GameState& s, int controller, const std::string& spec)
+{
+    const auto split = spec.find('\n');
+    if (split == std::string::npos) { return {}; }
+    const auto names = std::make_pair(spec.substr(0, split), spec.substr(split + 1));
+    const auto& gy = s.players[controller].graveyard;
+    int first = -1;
+    for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+    {
+        if (gy[i].m_name.str() != names.first) { continue; }
+        first = i; break;
+    }
+    if (first < 0) { return {}; }
+    for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+    { if (i != first && gy[i].m_name.str() == names.second) { return {first, i}; } }
+    return {};
+}
+inline void CounterPingKillAt(GameState&, std::size_t, const char*);
+// A shared ANY-target primitive. Target pins: 0 opponent, kAbilitySelfTarget self, every other signed id a permanent.
+inline bool DealPermanentAbilityDamage(GameState& s, int controller, const CardDefinition& d,
+                                       int amount, int target, bool ask_human)
+{
+    if (ask_human && g_play_target_chooser != nullptr)
+    {
+        std::vector<ChosenTarget> heur{ {0, 1 - controller, 0} };
+        if (target == kAbilitySelfTarget) { heur[0].index = controller; }
+        if (target != 0 && target != kAbilitySelfTarget)
+        {
+            for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+            { if (s.battlefield[i].card.m_number == target) { heur = {{1, i, 0}}; break; } }
+        }
+        const auto got = (*g_play_target_chooser)(s, d, controller, 1, amount, heur);
+        if (got.size() != 1) { return false; }
+        if (got[0].kind == 0) { target = got[0].index == controller ? kAbilitySelfTarget : 0; }
+        else if (got[0].index >= 0 && got[0].index < static_cast<int>(s.battlefield.size()))
+        { target = s.battlefield[got[0].index].card.m_number; }
+        else { return false; }
+    }
+    if (target == 0 || target == kAbilitySelfTarget)
+    {
+        const bool self = target == kAbilitySelfTarget;
+        int actual_dealt = amount;
+        if (s.dmg_events_armed)
+        { actual_dealt = dmgev::DealDamageEvent(s, controller, d.card.IsCreature(), false,
+                                 self ? amount : 0, self ? 0 : amount, 0, d.card.m_name.str().c_str()); }
+        else
+        {
+            s.players[self ? controller : 1 - controller].life -= amount;
+            if (!self) { s.opponent_lost_life_this_turn = true; }
+        }
+        RecordNoncombatDamageToPlayer(s, controller, self ? controller : 1 - controller, actual_dealt);
+        return true;
+    }
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    {
+        Permanent& p = s.battlefield[i];
+        if (p.card.m_number != target) { continue; }
+        if (p.card.HasType(CardType::Planeswalker))
+        {
+            p.loyalty -= amount;
+            for (Counter& c : p.counters)
+            { if (c.type == Counter::Type::Loyalty) { c.count = p.loyalty; } }
+            if (p.loyalty <= 0)
+            {
+                s.players[p.owner_index].graveyard.push_back(p.card);
+                s.battlefield.erase(s.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            }
+            return true;
+        }
+        if (!p.card.IsCreature() && !p.is_animated) { return false; }
+        const int before = p.damage;
+        p.damage += amount;
+        ApplyBurnToCreature(s, p, before, 0, controller);
+        if (p.damage >= LethalToughness(p, s) && !p.card.HasKeyword(Keyword::Indestructible))
+        { CounterPingKillAt(s, i, "lethal ability damage"); }
+        return true;
+    }
+    return false;
+}
+
+// Fixed targeted burn uses stable target ids in tutor_target (already a lossless plan axis).
+// 0 = opponent, -1 = self, positive = permanent id; a second target is Blaze's creature.
+inline bool FixedBurnSearchEnabled(const GameState& s)
+{
+    return HumanPlayActive() || DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        || ResolveProvider(s).SearchesFixedBurnTargets();
+}
+inline bool FixedTargetedBurn(const CardDefinition& d)
+{
+    return d.tmpl == CardTemplate::DirectDamage && !d.card.m_mana_cost.has_x
+        && !d.params.damage_divided && !d.params.damage_equals_top_mv
+        && (d.params.targeting == Targeting::Any || d.params.targeting == Targeting::Multi);
+}
+struct FixedBurnPin { int first = 0; int second = -2; int paired_controller = -1; };
+inline thread_local int g_paired_burn_stage = 0;
+inline thread_local int g_paired_burn_controller = -1;
+inline bool BurnPermanentTargetLegal(const GameState& s, int caster, const Permanent& p)
+{
+    if (CreatureHasShroud(p, s)) { return false; }
+    if (p.controller_index != caster && p.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return p.card.IsCreature() || p.is_animated || p.card.HasType(CardType::Planeswalker);
+}
+inline int BurnTargetController(const GameState& s, int caster, int target)
+{
+    if (target <= 0) { return target == -1 ? caster : 1 - caster; }
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.m_number == target) { return p.controller_index; } }
+    return -1;
+}
+inline std::string EncodeFixedBurnPin(const FixedBurnPin& p)
+{
+    return "@burn/" + std::to_string(p.first) + "/" + std::to_string(p.second)
+        + "/" + std::to_string(p.paired_controller);
+}
+inline bool DecodeFixedBurnPin(const std::string& str, FixedBurnPin& p)
+{
+    const auto at = str.find("@burn/");
+    return at != std::string::npos && std::sscanf(str.c_str() + at, "@burn/%d/%d/%d",
+        &p.first, &p.second, &p.paired_controller) == 3;
+}
+inline std::string FixedBurnCostPrefix(const std::string& token)
+{
+    if (token.rfind("@burn/", 0) == 0) { return {}; }
+    return token.substr(0, token.find("|@burn/"));
+}
+inline std::string FixedBurnPinLabel(const GameState& s, int caster, const FixedBurnPin& pin)
+{
+    auto label = [&](int target) -> std::string
+    {
+        if (target == 0) { return "opponent"; }
+        if (target == -1) { return "you"; }
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == target) { return p.card.m_name.str(); } }
+        for (const Card& c : s.players[caster].hand)
+        { if (c.m_number == target) { return c.m_name.str(); } }
+        return "chosen permanent";
+    };
+    std::string result = label(pin.first);
+    if (pin.second != -2) { result += " + " + label(pin.second); }
+    return result;
+}
+inline std::string WithFixedBurnPin(const std::string& token, const FixedBurnPin& p)
+{
+    const auto at = token.find("|@burn/");
+    const std::string prefix = token.substr(0, at);
+    if (prefix.empty() || prefix.rfind("@burn/", 0) == 0) { return EncodeFixedBurnPin(p); }
+    return prefix + "|" + EncodeFixedBurnPin(p);
+}
+inline std::vector<FixedBurnPin> FixedBurnCandidates(const GameState& s, int caster,
+                                                    const CardDefinition& d, bool pending = false)
+{
+    std::vector<FixedBurnPin> out;
+    std::vector<std::pair<int, int>> creatures, walkers;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!BurnPermanentTargetLegal(s, caster, p)) { continue; }
+        if (p.card.IsCreature() || p.is_animated) { creatures.push_back({p.card.m_number, p.controller_index}); }
+        if (p.card.HasType(CardType::Planeswalker)) { walkers.push_back({p.card.m_number, p.controller_index}); }
+    }
+    // A plan may cast the target first. The cast-time legality check rejects variants whose
+    // required permanent never entered; omitting these here would silently steal same-plan lines.
+    if (pending)
+    {
+        for (const Card& c : s.players[caster].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+            if (!hd) { continue; }
+            if (hd->card.IsCreature()) { creatures.push_back({c.m_number, caster}); }
+            if (hd->card.HasType(CardType::Planeswalker)) { walkers.push_back({c.m_number, caster}); }
+        }
+    }
+    if (d.params.targeting == Targeting::Multi)
+    {
+        for (const auto& c : creatures)
+        {
+            out.push_back({c.second == caster ? -1 : 0, c.first, c.second});
+            for (const auto& w : walkers)
+            { if (w.second == c.second) { out.push_back({w.first, c.first, c.second}); } }
+        }
+    }
+    else
+    {
+        out.push_back({0, -2, -1}); out.push_back({-1, -2, -1});
+        for (const auto& c : creatures) { out.push_back({c.first, -2, -1}); }
+        for (const auto& w : walkers)
+        {
+            bool seen = false;
+            for (const auto& p : out) { if (p.first == w.first) { seen = true; break; } }
+            if (!seen) { out.push_back({w.first, -2, -1}); }
+        }
+    }
+    // Blaze can target our own surviving Swiftspear without landfall to buy a
+    // prowess attack when the goldfish opponent has no creature. Keep its axis.
+    if (d.params.targeting != Targeting::Multi
+        && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        && ResolveProvider(s).PrunesOwnFixedBurnTargets())
+    {
+        out.erase(std::remove_if(out.begin(), out.end(), [&](const FixedBurnPin& pin)
+        {
+            if (pin.first == -1) { return true; }
+            if (pin.first <= 0) { return false; }
+            if (BurnTargetController(s, caster, pin.first) == caster) { return true; }
+            // Pending same-plan targets can still be in hand.
+            for (const Card& c : s.players[caster].hand)
+            { if (c.m_number == pin.first) { return true; } }
+            return false;
+        }), out.end());
+    }
+    return out;
+}
+inline ChosenTarget BurnChoiceForPin(const GameState& s, int caster, int target)
+{
+    if (target <= 0) { return {0, target == -1 ? caster : 1 - caster, 0}; }
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    { if (s.battlefield[i].card.m_number == target) { return {1, i, 0}; } }
+    return {1, -1, 0};
+}
+inline int BurnPinForChoice(const GameState& s, int caster, const ChosenTarget& t)
+{
+    if (t.kind == 0) { return t.index == caster ? -1 : 0; }
+    return t.index >= 0 && t.index < static_cast<int>(s.battlefield.size())
+        ? s.battlefield[t.index].card.m_number : -3;
+}
+inline bool PrepareFixedBurnPin(const GameState& s, int caster, const CardDefinition& d,
+                               const std::string& token, FixedBurnPin& selected)
+{
+    const auto legal = FixedBurnCandidates(s, caster, d);
+    if (legal.empty()) { return false; }
+    const bool pinned = DecodeFixedBurnPin(token, selected);
+    if (!pinned) { selected = legal.front(); }
+    // Human decisions use the existing target protocol twice, with a filtered second set.
+    if (g_play_target_chooser)
+    {
+        const int old_stage = g_paired_burn_stage, old_ctrl = g_paired_burn_controller;
+        g_paired_burn_stage = d.params.targeting == Targeting::Multi ? 1 : 0;
+        // Searing Blaze's landfall amount is already fixed at this cast. Show
+        // that amount in both target prompts, rather than its printed base 1.
+        const int prompt_damage = d.params.landfall_damage > 0
+            && LandEnteredUnderControlThisTurn(s, caster)
+            ? d.params.landfall_damage : d.params.damage;
+        auto got = (*g_play_target_chooser)(s, d, caster, 1, prompt_damage,
+                                          {BurnChoiceForPin(s, caster, selected.first)});
+        if (!got.empty()) { selected.first = BurnPinForChoice(s, caster, got.front()); }
+        if (d.params.targeting == Targeting::Multi)
+        {
+            selected.paired_controller = BurnTargetController(s, caster, selected.first);
+            for (const auto& p : legal)
+            { if (p.first == selected.first) { selected.second = p.second; break; } }
+            g_paired_burn_stage = 2; g_paired_burn_controller = selected.paired_controller;
+            got = (*g_play_target_chooser)(s, d, caster, 1, prompt_damage,
+                                          {BurnChoiceForPin(s, caster, selected.second)});
+            if (!got.empty()) { selected.second = BurnPinForChoice(s, caster, got.front()); }
+        }
+        g_paired_burn_stage = old_stage; g_paired_burn_controller = old_ctrl;
+    }
+    for (const auto& p : legal)
+    { if (p.first == selected.first && p.second == selected.second
+          && p.paired_controller == selected.paired_controller) { return true; } }
+    return false;
+}
+inline bool ResolveFixedBurnPin(GameState& s, int caster, const CardDefinition& d,
+                                const FixedBurnPin& p, int damage)
+{
+    // Legality is checked independently: losing the creature does not counter the player/walker hit.
+    auto hit = [&](int target, bool creature_only) -> bool
+    {
+        if (target <= 0)
+        {
+            if (!creature_only && (target == 0 || target == -1))
+            { DealPermanentAbilityDamage(s, caster, d, damage, target, false); return true; }
+            return false;
+        }
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.card.m_number != target) { continue; }
+            if (!BurnPermanentTargetLegal(s, caster, q)) { return false; }
+            if (creature_only && ((!q.card.IsCreature() && !q.is_animated)
+                                 || q.controller_index != p.paired_controller)) { return false; }
+            if (!creature_only && d.params.targeting == Targeting::Multi
+                && !q.card.HasType(CardType::Planeswalker)) { return false; }
+            DealPermanentAbilityDamage(s, caster, d, damage, target, false);
+            return true;
+        }
+        return false;
+    };
+    // Creature first keeps an immediate opponent-damage watcher from consuming that
+    // creature between the two components of Blaze's simultaneous damage event.
+    bool resolved = false;
+    if (d.params.targeting == Targeting::Multi) { resolved = hit(p.second, true); }
+    return hit(p.first, false) || resolved;
+}
+
+// Select TARGET then both non-targeting exile costs, validate, pay mana, tap/exile, resolve.
+// The payer is the host's existing unified mana payment; one helper serves real and rollout games.
+inline bool ApplyGraveyardDamageAbility(GameState& s, int controller, int source_id,
+                                        const std::string& fuel_spec, int target, const MadnessPayFn& payer)
+{
+    NoncombatTriggerScope noncombat_triggers(s);
+    const CardDefinition* d = nullptr;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number != source_id || p.controller_index != controller || p.tapped) { continue; }
+        d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.tap_graveyard_exile_damage <= 0 || !CanTapNow(p, s.battlefield)) { return false; }
+        break;
+    }
+    if (!d) { return false; }
+    auto slots = GraveyardDamageFuelSlots(s, controller, fuel_spec);
+    auto& gy = s.players[controller].graveyard;
+    if (slots.size() != 2 && gy.size() < 2) { return false; }
+    // Resolve the any-target chooser before costs by using the same target encoding as Ballista.
+    if (g_play_target_chooser != nullptr)
+    {
+        const std::vector<ChosenTarget> heur{{0, 1 - controller, 0}};
+        const auto got = (*g_play_target_chooser)(s, *d, controller, 1, d->params.tap_graveyard_exile_damage, heur);
+        if (got.size() != 1) { return false; }
+        if (got[0].kind == 0) { target = got[0].index == controller ? kAbilitySelfTarget : 0; }
+        else if (got[0].index >= 0 && got[0].index < static_cast<int>(s.battlefield.size()))
+        { target = s.battlefield[got[0].index].card.m_number; }
+        else { return false; }
+    }
+    if (g_play_gy_return_one_chooser != nullptr)
+    {
+        slots.clear();
+        for (int pick = 0; pick < 2; ++pick)
+        {
+            std::vector<Card> menu;
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+            {
+                if (!slots.empty() && i == slots[0]) { continue; }
+                menu.push_back(gy[i]); legal.push_back(i);
+            }
+            struct CostPromptScope {
+                int saved = g_graveyard_exile_cost_prompt;
+                explicit CostPromptScope(int number) { g_graveyard_exile_cost_prompt = number; }
+                ~CostPromptScope() { g_graveyard_exile_cost_prompt = saved; }
+            } cost_prompt(pick + 1);
+            const int got = (*g_play_gy_return_one_chooser)(s, controller,
+                d->card.m_name.str(), "", menu, 1);
+            if (got < 1 || got > static_cast<int>(legal.size())) { return false; }
+            slots.push_back(legal[static_cast<std::size_t>(got - 1)]);
+        }
+    }
+    if (slots.size() != 2) { return false; }
+    if (target != 0 && target != kAbilitySelfTarget)
+    {
+        bool legal = false;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == target && (p.card.IsCreature() || p.is_animated || p.card.HasType(CardType::Planeswalker))) { legal = true; break; } }
+        if (!legal) { return false; }
+    }
+    const Card first = gy[slots[0]], second = gy[slots[1]];
+    ManaCost cost; cost.red = 1;
+    if (!payer(s, cost)) { return false; }
+    for (Permanent& p : s.battlefield)
+    { if (p.card.m_number == source_id) { p.tapped = true; break; } }
+    std::sort(slots.begin(), slots.end(), std::greater<int>());
+    for (int i : slots) { gy.erase(gy.begin() + i); }
+    s.exile.push_back(first); s.exile.push_back(second);
+    const int before_life = s.players[target == kAbilitySelfTarget ? controller : 1 - controller].life;
+    std::string target_name = target == 0 ? "opponent" : target == kAbilitySelfTarget ? "you" : "permanent";
+    if (target > 0)
+    { for (const Permanent& p : s.battlefield)
+      { if (p.card.m_number == target) { target_name = p.card.m_name.str(); break; } } }
+    const bool dealt = DealPermanentAbilityDamage(
+        s, controller, *d, d->params.tap_graveyard_exile_damage, target, false);
+    if (dealt && g_play_event_sink != nullptr && !g_tap_speculating)
+    {
+        const int amount = target <= 0
+            ? before_life - s.players[target == kAbilitySelfTarget ? controller : 1 - controller].life
+            : d->params.tap_graveyard_exile_damage;
+        EmitPlayEvent(s.turn_number, "damage", d->card.m_name.str() + ": "
+            + std::to_string(amount) + " damage to " + target_name);
+    }
+    return true;
 }
 
 inline void ApplyGraveyardExileAbility(GameState& state, int controller, int source_id, int mode)
@@ -19762,10 +20479,176 @@ inline int ApplyFirebreathing(GameState& state, int controller,
 // spells_cast_this_turn increment will live, so an off-suspend arrival automatically counts +1 toward
 // storm. Suspending (paying {0}) and sacrificing are NOT casts and do NOT come through here. The card
 // enters as its permanent; a Dragon fires FireEtbWatchers (Lotus Bloom is a colourless artifact -> no-op).
+// One ordinary, single-target burn resolution. Used by suspend and Chain copies, which
+// are not hand-cast actions. The callback is shared with all existing burn targeting.
+inline int ResolveSingleTargetBurn(GameState& state, int controller, const CardDefinition& def)
+{
+    NoncombatTriggerScope noncombat_scope(state);
+    FixedBurnPin pin;
+    if (!PrepareFixedBurnPin(state, controller, def, "", pin)) { return -1; }
+    const int damaged_controller = BurnTargetController(state, controller, pin.first);
+    ResolveFixedBurnPin(state, controller, def, pin, def.params.damage);
+    return damaged_controller;
+}
+
+// The passive opponent never exercises this optional payment. A human who targeted
+// themselves/their permanent still receives ALL three choices: pay, copy, new target.
+// A copy is not cast: no storm, prowess, Eidolon or Steam-Kin triggers are fired.
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+inline void ContinueChainLightning(GameState& state, const CardDefinition& def, int damaged_controller)
+{
+    if (!def.params.chain_lightning_copy) { return; }
+    const int active = state.active_player_index;
+    ManaCost rr; rr.red = 2;
+    while (damaged_controller == active && g_play_free_cast_chooser)
+    {
+        ManaPool pool = AvailableManaPool(state, nullptr);
+        if (!FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
+        if (!pool.CanPay(rr) || state.players[active].life <= 0) { break; }
+        const std::vector<Card> offered = {def.card};
+        const std::vector<std::string> walked;
+        if ((*g_play_free_cast_chooser)(state, active, "Chain Lightning (pay {R}{R})",
+                                        offered, -1, walked) < 0) { break; }
+        if (!TapForCostDirect(state, rr, false)) { break; }
+        if ((*g_play_free_cast_chooser)(state, active, "Chain Lightning (copy spell)",
+                                        offered, -1, walked) < 0) { break; }
+        damaged_controller = ResolveSingleTargetBurn(state, active, def);
+        // The copy finishes resolving before its next optional payment continuation;
+        // copied Chain Lightning itself includes this same continuation.
+    }
+}
+
+// Shared executor/rollout Price of Progress payload: no targets; count each side independently.
+inline int NonbasicLandDamage(const GameState& state, int controller, int multiplier)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.IsLand() && !IsBasicLandCard(p.card)) { ++n; } }
+    return n * multiplier;
+}
+
+inline void ResolveNonbasicLandDamage(GameState& state, int controller, int multiplier)
+{
+    NoncombatTriggerScope noncombat_scope(state);
+    for (int who = 0; who < static_cast<int>(state.players.size()); ++who)
+    {
+        const int amount = NonbasicLandDamage(state, who, multiplier);
+        state.players[who].life -= amount;
+        RecordNoncombatDamageToPlayer(state, controller, who, amount);
+        if (who != controller && amount > 0) { state.opponent_lost_life_this_turn = true; }
+    }
+}
+
+// Fireblast's alternative is pinned by STABLE card numbers in tutor_target, so a prior
+// sacrifice/land entry cannot redirect its payment to another Mountain. Free casts without
+// this marker (cascade etc.) do not pay the alternative cost.
+inline bool IsFireblastAlternative(const CardDefinition& def, const std::string& pin)
+{ return def.params.sacrifice_mountains_alternative && pin.compare(0, 10, "fireblast:") == 0; }
+
+inline std::vector<int> FireblastMountains(const GameState& state, int controller)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.IsLand() && CardHasSubtype(p.card, "Mountain"))
+        { out.push_back(i); }
+    }
+    return out;
+}
+
+inline bool PayFireblastAlternative(GameState& state, int controller, const std::string& pin)
+{
+    auto lands = FireblastMountains(state, controller);
+    if (lands.size() < 2) { return false; }
+    const std::size_t comma = pin.find(',', 10);
+    if (comma == std::string::npos) { return false; }
+    const int first = std::atoi(pin.c_str() + 10);
+    const int second = std::atoi(pin.c_str() + comma + 1);
+    int a = -1, b = -1;
+    for (int i : lands)
+    {
+        if (state.battlefield[i].card.m_number == first) { a = i; }
+        if (state.battlefield[i].card.m_number == second) { b = i; }
+    }
+    if (a < 0 || b < 0 || a == b) { return false; }
+    if (g_play_sacrifice_chooser)
+    {
+        int defidx = static_cast<int>(std::find(lands.begin(), lands.end(), a) - lands.begin());
+        int k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (first Mountain)", lands, defidx);
+        if (k >= 0 && k < static_cast<int>(lands.size())) { a = lands[k]; }
+        lands.erase(std::find(lands.begin(), lands.end(), a));
+        auto it = std::find(lands.begin(), lands.end(), b);
+        defidx = it == lands.end() ? 0 : static_cast<int>(it - lands.begin());
+        k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (second Mountain)", lands, defidx);
+        b = k >= 0 && k < static_cast<int>(lands.size()) ? lands[k] : lands[defidx];
+    }
+    // A player may tap basic Mountains for mana while casting Fireblast, before
+    // paying its sacrifice cost. Both chosen lands are about to leave play, so
+    // floating their {R} is always useful and costs nothing in this goldfish.
+    // Do it only for human play: autonomous plans already allocate their mana
+    // before this payment, and their rollout/executor costs must stay in lockstep.
+    if (g_play_sacrifice_chooser)
+    {
+        for (int i : {a, b})
+        {
+            Permanent& p = state.battlefield[i];
+            if (p.tapped || p.card.m_name != "Mountain") { continue; }
+            p.tapped = true;
+            ++state.floating_mana.red;
+            if (g_play_event_sink)
+            { EmitPlayEvent(state.turn_number, "mana", "Mountain: float {R} before Fireblast sacrifice"); }
+        }
+    }
+    // Choose BOTH before mutation: atomic payment; remove high index first.
+    if (a < b) { std::swap(a, b); }
+    for (int i : {a, b})
+    {
+        state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+        state.battlefield.erase(state.battlefield.begin() + i);
+        FireSacrificeWatchers(state, controller);
+    }
+    return true;
+}
+
 inline void CastOffSuspend(GameState& state, int controller, const Card& card)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
     if (!def) { return; }
+    auto strand = [&]()
+    {
+        SuspendedCard declined; declined.card = card; declined.arrive_turn = -1;
+        state.players[controller].suspended_cards.push_back(std::move(declined));
+    };
+    if (state.casts_remaining_this_turn == 0) { strand(); return; }
+    FixedBurnPin suspended_burn_pin;
+    if (def->tmpl == CardTemplate::DirectDamage)
+    {
+        bool take = ResolveProvider(state).TakeFreeCast(state, controller, *def);
+        if (g_play_free_cast_chooser)
+        {
+            const std::vector<Card> offered = {card};
+            const std::vector<std::string> walked;
+            take = (*g_play_free_cast_chooser)(state, controller, card.m_name.str() + " (suspend)",
+                                              offered, take ? 0 : -1, walked) >= 0;
+        }
+        if (!take)
+        {
+            strand();
+            return; // remains exiled without time counters; never offered again
+        }
+        // Targets are part of CAST, before any on-cast trigger can remove them.
+        // Keep stable IDs across those triggers; do not re-target at resolution.
+        if (!PrepareFixedBurnPin(state, controller, *def, "", suspended_burn_pin))
+        { strand(); return; }
+    }
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    if (def->params.max_casts_after >= 0)
+    {
+        state.casts_remaining_this_turn = state.casts_remaining_this_turn < 0
+            ? def->params.max_casts_after
+            : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
+    }
     // STORM counter (Dragonstorm): casting off suspend IS a spell cast (CR 702.62e) -> count it here,
     // the single shared arrival path (executor GameEngine::UpkeepStep + rollout
     // SimulateEndAndStartNextTurn, both after the turn-start reset). A Lotus Bloom arriving on the same
@@ -19789,6 +20672,16 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         {
             EmitPlayEvent(state.turn_number, "suspend",
                           "\xE2\x8C\x9B " + card.m_name.str() + " -- cast off suspend");
+        }
+        if (def->tmpl == CardTemplate::DirectDamage)
+        {
+            FireOnCastTriggers(state, *def);
+            FireProwess(state, *def);
+            FlushNoncombatTriggersAtPriorityBoundary(state);
+            // Cast triggers resolve ABOVE the spell. Lethal Eidolon damage ends the game
+            // before Rift Bolt may resolve, even if its three damage would have won.
+            if (state.players[controller].life > 0)
+            { ResolveFixedBurnPin(state, controller, *def, suspended_burn_pin, def->params.damage); }
         }
         if (def->params.land_search_on_resolve && def->params.land_search_count > 0)
         {
@@ -19823,7 +20716,9 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
     Player& pl = state.players[controller];
     for (auto it = pl.hand.begin(); it != pl.hand.end(); ++it)
     {
-        if (it->m_name != name) { continue; }
+        // Suspend is an alternative to casting FROM HAND; staged exile permission
+        // cannot supply it, even when an equal-named actual hand copy exists.
+        if (it->m_name != name || it->m_is_staged) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
         if (!d || d->params.suspend_time_counters <= 0) { continue; }
         // THE SUSPEND COST (Search for Tomorrow's "Suspend 2--{G}"), paid HERE so every apply site --
@@ -20103,7 +20998,7 @@ inline void ProcessSuspendArrivals(GameState& state, int controller)
     pl.suspended_cards.clear();
     for (SuspendedCard& sc : snap)
     {
-        if (sc.arrive_turn <= state.turn_number) { CastOffSuspend(state, controller, sc.card); }
+        if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.turn_number) { CastOffSuspend(state, controller, sc.card); }
         else                                     { remaining.push_back(std::move(sc)); }
     }
     // Re-attach anything an arrival's cascade may have added, plus the not-yet-arrived remainder.
@@ -21870,7 +22765,21 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     for (const auto& g : groups)
     {
         if (g.second.size() < 2) { continue; }
-        const int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
+        int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
+        // A human chooses which Chandra survives. Reuse the existing board-click
+        // chooser at the real SBA; rollouts have that chooser nulled and use the
+        // provider's deterministic keep. Chandra has no enter/leave watcher that
+        // depends on the provisional LegendRuleLoser check before this SBA.
+        if (g.first == "Chandra, Torch of Defiance" && g_play_sacrifice_chooser != nullptr
+            && controller_index == state.active_player_index)
+        {
+            auto it = std::find(g.second.begin(), g.second.end(), keep);
+            const int default_option = it == g.second.end() ? 0 : static_cast<int>(it - g.second.begin());
+            const int chosen = (*g_play_sacrifice_chooser)(state, controller_index,
+                "Legend rule: choose Chandra to keep", g.second, default_option);
+            if (chosen >= 0 && chosen < static_cast<int>(g.second.size()))
+            { keep = g.second[static_cast<std::size_t>(chosen)]; }
+        }
         // MTG_TRACE=legend: is "keep the original" ever actually WRONG? One copy dies either way and
         // the ETB is already banked before this state-based action runs, so the choice is purely
         // about WHICH BODY survives -- i.e. it can only matter when the copies differ in a way that
@@ -36236,6 +37145,7 @@ inline bool AnyUntappedFilterSource(const GameState& state)
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
                             int yield_override, const Permanent* perm)
 {
+    if (!dmgev::CanPayManaTapLife(state, state.active_player_index, def)) { return; }
     // SNOW provenance choke point (see ManaPool::snow_units): every unit this source adds is
     // tagged snow iff the DEFINITION's card is snow -- def.card carries real supertype masks
     // even when `perm` is null (a pending rock projected from hand, where the ZoneCard
@@ -40622,7 +41532,7 @@ inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost
             || pp.any_color_filter || pp.storage_land || pp.domain_mana || IsScaledManaDork(*d)
             || IsScaledManaLand(*d) || pp.untap_creature_cost.has_value()
             || pp.energy_per_colored_tap > 0 || pp.colored_creature_only || pp.creature_mana_only
-            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana
+            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana || pp.tap_is_life_payment
             || pp.enters_tapped_with_depletion > 0 || pp.etb_choose_color
             || LandAuraBonus(state, p) > 0)
         { return lbf(); }
@@ -40772,7 +41682,7 @@ inline void PaymentDeferralDP(const GameState& state, const ManaCost& cost, cons
             || pp.any_color_filter || pp.storage_land || pp.domain_mana || IsScaledManaDork(*d)
             || IsScaledManaLand(*d) || pp.untap_creature_cost.has_value()
             || pp.energy_per_colored_tap > 0 || pp.colored_creature_only || pp.creature_mana_only
-            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana
+            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana || pp.tap_is_life_payment
             || pp.enters_tapped_with_depletion > 0 || pp.etb_choose_color
             || LandAuraBonus(state, p) > 0)
         { return; }
@@ -41642,8 +42552,10 @@ inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
         if (pain_useful && has_col)
         { for (Color c : prod) { if (c != Color::Colorless) { col = c; break; } } }
         const int pain = dmgev::PainForTap(*d, col, has_c);
+        if (!dmgev::CanPayManaTapLife(state, ctrl, *d)) { continue; }
+        if (d->params.tap_is_life_payment && nbarb == 0) { continue; }
         if (pain == 0 && nbarb == 0) { continue; }  // nothing to gain from this tap
-        if (!purity)
+        if (!purity || d->params.tap_is_life_payment)
         {
             const int life = state.players[ctrl].life;
             if (life - pain <= 0) { continue; }                  // the SBA before Tamanoa resolves

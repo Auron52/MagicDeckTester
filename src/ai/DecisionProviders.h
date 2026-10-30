@@ -140,6 +140,7 @@ enum class UnprunedGate
                   // face-ping offer opened to the generic full set instead of the deck provider's
                   // CounterPingCounts narrowing (LifegainHeliodComboProvider, MTG_LHC_PING_PRUNE). The
                   // 33rd gate: the masks were widened to 64 bits for it. Human play always sees every ping.
+    FixedBurnTarget, // fixed direct-damage targets/pairs: full rules-legal axis
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -239,6 +240,8 @@ double CastFactorFor(const Census& c, const CardDefinition& d, const std::vector
 class GenericProvider : public DecisionProvider
 {
 public:
+    bool TakeFreeCast(const GameState&, int, const CardDefinition&) const override;
+
     const char* Name() const override { return "Generic"; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
@@ -1262,6 +1265,23 @@ public:
     bool Main2CastAllowed(const GameState& s, const Action& a) const override;
 };
 
+// Midrange Burn uses the common baseline: the original Burn list's low-curve land
+// banking and main-2 restrictions are invalid for Chandra and Incinerator.
+// No Burn-specific judgement hooks are inherited; future narrowing belongs here.
+class MidrangeBurnProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Bound direct burn, suspend, planeswalker "
+        "abilities, Grim Lavamancer activations and combat before claiming a winless turn" }; }
+    const char* Name() const override { return "MidrangeBurn"; }
+    bool SearchesFixedBurnTargets() const override { return true; }
+    bool PrunesOwnFixedBurnTargets() const override;
+    int CastOrderRank(const GameState&, const CardDefinition&) const override;
+    bool OrderOpaqueCastsByRank() const override;
+    int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
+};
+
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by
 // Hinata's "{1} less per target", which the deck maximises by targeting extra/own/opponent
 // permanents -- so its goldfish opponent must present real targets. Layer 2 grows this provider
@@ -1291,7 +1311,6 @@ public:
     bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
                                 const std::vector<Action>& reorder,
                                 std::vector<std::vector<int>>& out) const override;
-    bool OpponentPlaysLands() const override { return true; }
     // M2 FIXPOINT OPT-IN, mode 2 (ADOPTED 2026-09-06; USER approved the per-deck opt-in and
     // the 18-deck sweep found hinata the only converter). Evidence, both tiers + quiet box:
     // train smoke d0 -0.012/1000g; held-out regression net -12 game-turns (d0 -0.010, d3/d5
@@ -1863,12 +1882,8 @@ public:
     // Measurement lever, default OFF pending the per-deck A/B.
     bool        CondemnsPassedMainPhase() const override;
     // Nicol Bolas +3 is "destroy target NONCREATURE permanent" -- it REQUIRES a target, and with a
-    // land-less opponent the only legal ones are ours. Destroying our own land is a real cost, so
-    // the search correctly declined the ability; but -9 is unreachable from loyalty 5 without two
-    // +3s, which left an EIGHT-mana walker ({4}{U}{B}{B}{R}) inert BY CONSTRUCTION. Opting in gives the passive opponent
-    // lands (inert props -- destroying one changes nothing else), so the faithful play is available
-    // and +3 becomes the free ramp it is meant to be. Same reason HinataProvider opts in.
-    bool OpponentPlaysLands() const override { return true; }
+    // land-less opponent the only legal ones were ours. The shared passive opponent now has
+    // three lands in every game, so its +3 can target one of those lands.
     // MTG_5C_BUCKET_DISCARD: USER-reviewed bucket cleanup-shed policy (2026-08-21) -- quota-first
     // keep set (colour coverage / land drops / acceleration / threat floor / Cannons / Greaves),
     // single-index return. See the .cpp comment for the full design + evidence.

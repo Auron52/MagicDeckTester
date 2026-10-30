@@ -314,6 +314,7 @@ add_executable(mtg-test
     test/unit/test_rollout_land_act_color.cpp
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp
+    test/unit/test_midrange_burn_permanents.cpp
     test/unit/test_edf_blink_target.cpp
     test/unit/test_edf_d0_play.cpp
     test/unit/test_critter_lifegain.cpp
@@ -339,6 +340,7 @@ add_executable(mtg-test
     test/unit/test_keyword_mask.cpp
     test/unit/test_pirates.cpp
     test/unit/test_vial_target_from_decklist.cpp
+    test/unit/test_passive_opponent_lands.cpp
     test/unit/test_pirates_provider.cpp
     test/unit/test_etb_dig_breakpoint.cpp
     test/unit/test_etb_treasure_spend.cpp
@@ -419,6 +421,7 @@ add_executable(mtg-test
     test/unit/test_auras_restricted_new_creature.cpp
     test/unit/test_equip_one_host_ds_gate.cpp
     test/unit/test_eldrazi_flicker_discard.cpp
+    test/unit/test_midrange_burn_spells.cpp
     test/unit/test_burn_discard.cpp
     test/unit/test_burn_cast_order.cpp
     test/unit/test_creature_giving_discard.cpp

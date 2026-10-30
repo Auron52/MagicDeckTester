@@ -1765,7 +1765,7 @@ function queueActivation(src, opt, clickedNum){
     : opt.verb==='auraswap' ? `${src}: aura swap — ${opt.name} comes in from your hand, ${src} returns to your hand. Commit the phase to resolve it. (To swap AFTER attackers are declared instead, skip this: you are asked in combat.)`
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
     : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
-    : opt.verb==='gyexile' ? `${src}: tapping to exile ${opt.mode===2?'a creature card from a graveyard and gain 2 life':'an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
+    : opt.verb==='gyexile' ? `${src}: ${opt.mode===3?'paying {R}, tapping and exiling two cards from your graveyard to deal 2 damage to any target':opt.mode===2?'tapping to exile a creature card from a graveyard and gain 2 life':'tapping to exile an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
     : (opt.verb==='gyreturn' && opt.name==='@random') ? `${src}: tapping and sacrificing it to return a creature card AT RANDOM from your graveyard to your hand (the card is not chosen). Commit the phase to resolve it.`
     : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
     : opt.verb==='animate' ? `${src}: animating it — it becomes a creature and can attack this turn. Commit the phase to resolve it.`
@@ -2306,7 +2306,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -2394,7 +2394,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='treasurify';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='treasurify';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   // HAND-CLICK decisions -- the hand's answer to boardClick. The objects being chosen among are
   // cards sitting in YOUR HAND, so they are picked by clicking them where they already are, not in a
@@ -4102,7 +4102,7 @@ function initBoardSel(d){
     // the AI is recommending for pairing").
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default);
     if (def) S.boardSel.add('m:'+def.perm_index);
-  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker'){
+  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
     // Multi-victim burst: seed the WHOLE cost, not one body of it -- the heuristic pick first, then
@@ -4126,7 +4126,7 @@ function initHandSel(d){
 function toggleHandSel(oi){ S.handSel = (S.handSel===oi) ? null : oi; renderBoard(); }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -4146,14 +4146,14 @@ function wireDecisionBoard(d, dec){
       t.onclick=e=>{ e.stopPropagation(); toggleHandSel(+t.dataset.hpick); };
     });
   }
-  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='treasurify'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='treasurify'){
     const legal=legalTargetKeys(d);
     // A multi-victim sacrifice takes `need` bodies, not one -- and when need === the candidate count
     // every one of them dies, so the board is highlighted (they ARE the victims) but NOT clickable:
     // there is no choice to make and letting a click deselect one would only be able to produce an
     // un-confirmable state.
     const ro = dec==='sacrifice' && sacBurstForced(d);
-    const max = (dec==='bounce'||dec==='attach_host'||dec==='flicker'||dec==='treasurify')?1
+    const max = (dec==='bounce'||dec==='legend_keep'||dec==='attach_host'||dec==='flicker'||dec==='treasurify')?1
               : dec==='sacrifice' ? sacBurstNeed(d)
               : (dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
@@ -4311,7 +4311,8 @@ function activationPickerHtml(pick){
                    : o.verb==='auraswap'  ? `Aura swap — bring in ${o.name} (${pick.src} returns to hand)${o.inCombat ? ' — in combat, after attacks' : ''}`
                    : o.verb==='attachall' ? `Attach every Equipment to ${pick.src}`
                    : o.verb==='jittemode' ? jitteModeLabel(o.mode)
-                   : o.verb==='gyexile'   ? (o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'
+                   : o.verb==='gyexile'   ? (o.mode===3 ? 'Pay {R}, tap, exile two graveyard cards — 2 damage to any target'
+                                          : o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'
                                                         : 'Exile an instant/sorcery from a graveyard — each opponent loses 2 life')
                    : (o.verb==='gyreturn' && o.name==='@random') ? `Sacrifice — return a creature card AT RANDOM from your graveyard to your hand`
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
@@ -4576,6 +4577,15 @@ function lackeyPanelHtml(d){
 // silently lost when the paid variant of the same card won the dedup). Same shape as the Lackey put.
 function freeCastPanelHtml(d){
   const cands=d.candidates||[];
+  if(d.operation==='pay_rr'||d.operation==='copy'){
+    const pay=d.operation==='pay_rr';
+    const title=pay?'Pay {R}{R} for Chain Lightning?':'Copy Chain Lightning?';
+    const detail=pay?'You may pay two red mana. You may then copy the spell.':'The copy is not cast. Its target is chosen next.';
+    const c=cands[0]||{};
+    return `<h3>${title}</h3><div class="sub">${detail}</div>`+
+      `<div class="tutgrid"><span class="cardmini tdig" data-opt="0" data-name="Chain Lightning"><img loading="lazy" src="${scryImg(c.name||'Chain Lightning','small')}"/><em>${pay?'Pay {R}{R}':'Copy spell'}</em></span></div>`+
+      `<div class="pbtns"><button class="ghost" data-opt="-1">Decline</button></div>`;
+  }
   // The BADGE follows ai_pick (the engine's suggestion); heuristic_default is -1/decline, because a
   // "may" trigger must default to the no-op for references that predate this decision -- see
   // WriteFreeCastDecisionJson.
@@ -4606,16 +4616,18 @@ function freeCastPanelHtml(d){
       `<span class="spacer"></span><button id="fcdecline" class="ghost">Decline</button>`+
       `<button id="decconfirm" class="primary" ${pickName?'':'disabled'}>Confirm</button></div>`;
   }
-  let h=`<h3>${esc(src)} — cast a spell for free</h3>`;
-  h+=isArch
+  let h=`<h3>${esc(src)} — ${d.paid_cast?'cast paying its cost':'cast a spell for free'}</h3>`;
+  h+=d.paid_cast
+    ? `<div class="sub">You may cast this exiled card now, <b>paying its cost</b>. Decline to leave it exiled and deal 2 damage to each opponent.</div>`
+    : isArch
     ? `<div class="sub"><b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`
-    : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':src.indexOf('Creative Technique')>=0?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
+    : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':(src.indexOf('Creative Technique')>=0||d.operation==='suspend_cast')?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
   h+=`<div class="tutgrid fc-cands">`;
   if(!cands.length) h+=`<span class="hint">No castable spell in hand.</span>`;
   cands.forEach(c=>{
     const def=c.index===d.heuristic_default && c.name===defName;
     h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
-       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}${d.paid_cast&&c.cost_label?'<br>'+esc(c.cost_label):''}</em>`+
        (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
   h+=`</div>`;
@@ -4988,6 +5000,15 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns"><span class="pcount">Returning: <b>${opt?esc(opt.name):'(pick a land)'}</b></span>`+
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='legend_keep'){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    const label=opt?`#${opt.card_num} · ${opt.loyalty} loyalty · ${opt.can_activate?'can activate':'already activated'}`:'(choose a Chandra)';
+    return `<h3>Keep one Chandra — legend rule</h3>`+
+      `<div class="sub">Click the copy to keep. The other goes to your graveyard. A fresh Chandra can use a loyalty ability even if the older copy already used one this turn.</div>`+
+      `<div class="pbtns"><span class="pcount">Keeping: <b>${label}</b></span>`+
+      `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Keep this copy</button></div>`;
+  }
   if (dec==='sacrifice'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
@@ -5317,7 +5338,7 @@ function commitLackey(d, oi){
 }
 function commitFreeCast(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);
-  pushChoice(d, oi, `${d.source||'Maelstrom Archangel'}: ${oi<0||!c?'declined the free cast':'cast '+c.name+' for free'}`);
+  pushChoice(d, oi, `${d.source||'Maelstrom Archangel'}: ${oi<0||!c?(d.paid_cast?'declined: 2 damage to each opponent':'declined the free cast'):'cast '+c.name+(d.paid_cast?' paying its cost':' for free')}`);
 }
 // MADNESS (Vampires A1; CR 702.35): a discarded card with madness went to EXILE and its trigger offers
 // "cast it for its madness cost or put it into your graveyard". A centred modal with the CARD IMAGE (the
@@ -5420,8 +5441,10 @@ function commitLifegainCounters(d, v){
 // (alt_text: "Gain 1 life" / "Return nothing"). Reply 0 = the alternative, i >= 1 = candidate i.
 function gyReturnOnePanelHtml(d){
   const def=(d.heuristic_default==null)?0:d.heuristic_default;
-  let h=`<h3>${esc(d.source||'')} — return which creature card?</h3>`;
-  h+=`<div class="sub">Pick a creature card in your graveyard to return to the battlefield${d.alt_text?`, or <b>${esc(d.alt_text)}</b> instead`:''}.</div>`;
+  let h=`<h3>${esc(d.source||'')} — ${d.exile_cost?'exile cost ('+(d.cost_number||1)+'/2)':'return which creature card?'}</h3>`;
+  h+=d.exile_cost
+    ? `<div class="sub">Choose a card from your graveyard to <b>exile as an activation cost</b>. Two cards must be exiled; they are not targets.</div>`
+    : `<div class="sub">Pick a creature card in your graveyard to return to the battlefield${d.alt_text?`, or <b>${esc(d.alt_text)}</b> instead`:''}.</div>`;
   h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
   h+=`<div class="tutgrid">`;
   (d.candidates||[]).forEach(c=>{
@@ -5439,7 +5462,7 @@ function gyReturnOnePanelHtml(d){
 }
 function commitGyReturnOne(d, v){
   const c=(d.candidates||[]).find(x=>x.index===v);
-  pushChoice(d, v, `${d.source||'Return'}: ${v===0?(d.alt_text||'none'):('return '+(c?c.name:'#'+v))}`);
+  pushChoice(d, v, `${d.source||'Return'}: ${v===0?(d.alt_text||'none'):((d.exile_cost?'exile ':'return ')+(c?c.name:'#'+v))}`);
 }
 function commitAttackMode(d, v){
   const opts = d.options || [];
@@ -5839,6 +5862,10 @@ function commitBoardSel(d, dec){
   if (dec==='bounce'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: return ${opt?opt.name:'land'}`;
+  } else if (dec==='legend_keep'){
+    const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
+    oi=opt?opt.index:d.heuristic_default;
+    lab=`Legend rule: keep Chandra #${opt?opt.card_num:'default'}`;
   } else if (dec==='sacrifice'){
     const need=sacBurstNeed(d);
     if (need>1){

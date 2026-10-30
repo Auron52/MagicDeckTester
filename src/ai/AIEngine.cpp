@@ -4576,6 +4576,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedSacLand _ssac_exec(plan.sac_pins);      // executor/rollout lockstep for the searched
                                                     // sac-land picks (one entry per sac ordinal,
                                                     // resolved at the true state); empty inert
+    IncineratorPinScope _incinerator_pins_exec(plan.incinerator_targets);
     ScriptedLookTop _slt_exec(plan.look_top_pins);   // executor/rollout lockstep for the searched Risen
                                                      // Reef land / trigger-order entries; empty inert
     ScriptedLandSearch _sls_exec(plan.land_search_pins);   // executor/rollout lockstep for the
@@ -6159,7 +6160,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // Deathrite abilities 2/3 (executor mirror of the rollout's trailing pass).
             ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            if (a.gy_exile_mode == 3)
+            {
+                const MadnessPayFn payer = [this](GameState& s, const ManaCost& c) {
+                    ManaPool pool = AvailableManaPool(s); return TapForCost(s, c, pool, false);
+                };
+                ApplyGraveyardDamageAbility(state, state.active_player_index, a.sac_source_id,
+                                            a.tutor_target, a.enchant_target, payer);
+            }
+            else if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
         }
         else if (a.kind == Action::Kind::GraveyardReturnAbility)
@@ -7083,8 +7092,34 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // Planeswalker loyalty (executor mirror; no mana cost).
             const WalkerBefore b = walker_before(a.sac_source_id, "");
+            const PaidExileCastFn chandra_cast = [this, &resolve_stack](GameState& live, int controller,
+                                                                           const Card& card, const std::string& option, bool probe) {
+                const Action ca = TurnSolver::ChandraNestedCastOption(option);
+                if (ca.kind != Action::Kind::CastFromHand || ca.card_name != card.m_name) { return false; }
+                auto cast_in = [&](GameState& target) {
+                    auto& hand = target.players[controller].hand;
+                    hand.insert(hand.begin(), card);
+                    const int before = target.spells_cast_this_turn;
+                    ManaPool pool = AvailableManaPool(target);
+                    CastSpellFromHand(target, hand.front(), pool, ca.alt_lifegain, ca.tutor_target,
+                        ca.chosen_x, ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
+                        ca.splice_count, ca.chosen_float_color, ca.enchant_target, false, ca.bestow,
+                        ca.replicate_count, ca.convoke_green, ca.convoke_other, ca.phyrexian_life,
+                        ca.evoke, ca.adventure, ca.kicked, CastRiders::Of(ca));
+                    const bool cast = target.spells_cast_this_turn > before;
+                    if (cast && resolve_stack) { resolve_stack(target); }
+                    if (!cast)
+                    { for (auto it = hand.begin(); it != hand.end(); ++it)
+                      { if (it->m_number == card.m_number && it->m_name == card.m_name) { hand.erase(it); break; } } }
+                    return cast;
+                };
+                // A probe pays on a copy; it never logs a phantom cast or resolves triggers.
+                if (probe) { return ChandraPaidCastOptionPayable(live, controller, card, option); }
+                return cast_in(live);
+            };
+            const PaidExileCastScope chandra_host(&chandra_cast);
             ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability,
-                                a.enchant_target);   // Oko +1: the searched Elk target (lockstep)
+                                a.enchant_target, a.tutor_target, a.ponder_keep == 1);
             log_loyalty_if_fired(b, a.loyalty_ability);
         }
         else if (a.kind == Action::Kind::GarthActivate)
@@ -7441,6 +7476,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
     PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
     TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
+    // Lockstep twin of ApplyPlanDirect: the face-targeted Lavamancer activation
+    // must resolve before the spectacle cast whose discount it enables.
+    int spectacle_hoisted_source = -1;
+    if (const int first = TurnSolver::SpectacleGraveyardDamageFirst(state, plan.actions); first >= 0)
+    {
+        const Action& a = plan.actions[static_cast<std::size_t>(first)];
+        exec_trailing_activations(std::vector<Action>{a});
+        for (const Permanent& q : state.battlefield)
+        { if (q.card.m_number == a.sac_source_id && q.tapped)
+          { spectacle_hoisted_source = a.sac_source_id; break; } }
+    }
     // Whole-turn batch pre-payment -- mirror of ApplyPlanDirect (lockstep): tap for the combined
     // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
@@ -7979,10 +8025,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             : std::vector<Action>{};
     const std::vector<Action>& exec_own_acts = (exec_ls_act_done || exec_ls_act_first_mask != 0)
                                              ? exec_trail : plan.actions;
-    if (pending_cont_acts.empty()) { exec_trailing_activations(exec_own_acts); }
+    std::vector<Action> spectacle_filtered;
+    if (spectacle_hoisted_source >= 0)
+    {
+        spectacle_filtered = exec_own_acts;
+        spectacle_filtered.erase(std::remove_if(spectacle_filtered.begin(), spectacle_filtered.end(),
+            [&](const Action& a) { return a.kind == Action::Kind::GraveyardExileAbility
+                && a.gy_exile_mode == 3 && a.sac_source_id == spectacle_hoisted_source; }),
+            spectacle_filtered.end());
+    }
+    const std::vector<Action>& own_final = spectacle_hoisted_source >= 0 ? spectacle_filtered : exec_own_acts;
+    if (pending_cont_acts.empty()) { exec_trailing_activations(own_final); }
     else
     {
-        std::vector<Action> all = exec_own_acts;
+        std::vector<Action> all = own_final;
         all.insert(all.end(), pending_cont_acts.begin(), pending_cont_acts.end());
         exec_trailing_activations(all);
     }
@@ -8985,7 +9041,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     entry.evoke              = evoke;
 
     int opp_index = 1 - state.active_player_index;
-    switch (def->params.targeting)
+    FixedBurnPin fixed_burn_pin;
+    if (FixedTargetedBurn(*def) && FixedBurnSearchEnabled(state))
+    {
+        if (!PrepareFixedBurnPin(state, state.active_player_index, *def, tutor_target, fixed_burn_pin)) { return; }
+        entry.tutor_target = WithFixedBurnPin(tutor_target, fixed_burn_pin);
+    }
+    // Grim Lavamancer's any-target PARAM belongs to its activated ability, not
+    // to casting the creature. A cast entry with a player target is spurious.
+    else switch (def->params.tap_graveyard_exile_damage > 0
+                 ? Targeting::None : def->params.targeting)
     {
         case Targeting::Any:
         case Targeting::Player:
@@ -9190,12 +9255,14 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // Maelstrom Archangel: spend a banked free cast (mirror of the rollout's prep_free +
     // cascade_free arm). Consumed here so exactly this cast skips payment; a stranded marker
     // (bank empty) falls through to the normal paid attempt below, matching apply_one.
-    bool spend_free = false;
-    if (free_cast && state.free_casts_available > 0)
+    bool spend_free = IsFireblastAlternative(*def, tutor_target);
+    if (!spend_free && free_cast && state.free_casts_available > 0)
     {
         spend_free = true;
         --state.free_casts_available;
     }
+    if (IsFireblastAlternative(*def, tutor_target)
+        && !PayFireblastAlternative(state, state.active_player_index, tutor_target)) { return; }
     bool haste_from_mana = false;   // Generator Servant's rider, set at the payment below
     if (alt_lifegain > 0)
     {
@@ -9574,6 +9641,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     entry.haste_from_mana = haste_from_mana;   // Generator Servant: EnterBattlefield grants temp_haste
     state.stack.push_back(std::move(entry));
 
+    // Paying life to zero is legal, but the SBA ends the game before any CAST
+    // trigger or spell can resolve. The paid cast remains committed on the stack.
+    if (state.own_death_live && SelfHasLost(state)) { return; }
     // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
     FireOnCastTriggers(state, *def);
     FireProwess(state, *def);
@@ -9582,6 +9652,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // 702.85a). This is what makes cascade fire on CREATURE casts. No-op for every card
     // without a cast-trigger param -> byte-identical elsewhere.
     EffectHandler::PushCastTriggers(state, *def, state.active_player_index);
+    FlushNoncombatTriggersAtPriorityBoundary(state);
+    if (state.own_death_live && SelfHasLost(state)) { return; }
 
     // Push replicate token copies onto the stack so they enter the battlefield when
     // the stack resolves (EffectHandler will call EnterBattlefield for each).

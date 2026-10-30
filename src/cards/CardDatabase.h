@@ -31,7 +31,13 @@ enum class Targeting
 // Parameters extracted from a card's JSON definition, forwarded to the template handler.
 struct CardParams
 {
+    bool cost_less_per_opponent_noncombat_damage = false;
+    bool incinerator_damage_trigger = false; // transient chooser filter and Incinerator trigger marker
+
     int damage       = 0;
+    int damage_per_nonbasic_land = 0; // each player takes their own live nonbasic-land count
+    bool chain_lightning_copy = false; // damaged player/controller may pay RR and copy
+    bool sacrifice_mountains_alternative = false; // Fireblast: sacrifice two Mountains instead of mana
     int draw         = 0;
     int power_bonus  = 0;
     int tough_bonus  = 0;
@@ -766,9 +772,10 @@ struct CardParams
     // GameState::deck_has_scry_watcher, so every deck without one is byte-identical.
     bool scry_reveal_land_to_battlefield = false;
 
-    // Pain land (e.g. Fiery Islet): tapping this land for mana costs the controller
-    // this much life. Applied at tap time in TapForCost / TapForCostDirect.
+    // Pain from tapping for mana (or a life cost when tap_is_life_payment is set).
     int tap_self_damage = 0;
+    // Horizon lands pay life as an activation COST: never preventable damage or a damage trigger.
+    bool tap_is_life_payment = false;
     // The pain applies to EVERY mode of the land's mana ability, including a {C} one (Ancient
     // Tomb: "{T}: Add {C}{C}. This land deals 2 damage to you."). Every pain site treats a {C} tap
     // of a land that HAS a {C} mode as the painless separate ability of a painland (Brushland's
@@ -1916,6 +1923,7 @@ struct CardParams
     //    -> gy_exile_creature_lifegain = 2 (cost fixed {G})
     // The exiled card is fungible within its type filter (deterministic first-match pick, both
     // worlds).
+    int tap_graveyard_exile_damage = 0; // {R}, {T}, exile two graveyard cards: damage to any target
     int gy_exile_instant_sorcery_drain = 0;
     int gy_exile_creature_lifegain     = 0;
 

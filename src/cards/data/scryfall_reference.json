@@ -1023,6 +1023,15 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Human Wizard Knight"
   },
+  "Chain Lightning": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Chain Lightning deals 3 damage to any target. Then that player or that permanent's controller may pay {R}{R}. If the player does, they may copy this spell and may choose a new target for that copy.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Champion of the Parish": {
     "cmc": 1.0,
     "keywords": [],
@@ -1031,6 +1040,26 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Soldier"
+  },
+  "Chandra's Incinerator": {
+    "cmc": 6.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{5}{R}",
+    "oracle_text": "This spell costs {X} less to cast, where X is the total amount of noncombat damage dealt to your opponents this turn.\nTrample\nWhenever a source you control deals noncombat damage to an opponent, this creature deals that much damage to target creature or planeswalker that player controls.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Elemental"
+  },
+  "Chandra, Torch of Defiance": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "+1: Exile the top card of your library. You may cast that card. If you don't, Chandra deals 2 damage to each opponent.\n+1: Add {R}{R}.\n−3: Chandra deals 4 damage to target creature.\n−7: You get an emblem with \"Whenever you cast a spell, this emblem deals 5 damage to any target.\"",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Chandra"
   },
   "Chord of Calling": {
     "cmc": 3.0,
@@ -1939,6 +1968,15 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Fireblast": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "You may sacrifice two Mountains rather than pay this spell's mana cost.\nFireblast deals 4 damage to any target.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Fists of Flame": {
     "cmc": 2.0,
     "keywords": [],
@@ -2475,6 +2513,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Grim Lavamancer": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "{R}, {T}, Exile two cards from your graveyard: This creature deals 2 damage to any target.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Wizard"
   },
   "Grove of the Burnwillows": {
     "cmc": 0.0,
@@ -3356,6 +3403,17 @@
     "toughness": "5",
     "type_line": "Legendary Creature — Elemental"
   },
+  "Magma Jet": {
+    "cmc": 2.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Magma Jet deals 2 damage to any target. Scry 2.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Magma Opus": {
     "cmc": 8.0,
     "keywords": [
@@ -4045,6 +4103,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Price of Progress": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Price of Progress deals damage to each player equal to twice the number of nonbasic lands that player controls.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Priest of Titania": {
     "cmc": 2.0,
     "keywords": [],
@@ -4434,6 +4501,17 @@
     "power": "3",
     "toughness": "4",
     "type_line": "Legendary Creature — Human Soldier"
+  },
+  "Rift Bolt": {
+    "cmc": 3.0,
+    "keywords": [
+      "Suspend"
+    ],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Rift Bolt deals 3 damage to any target.\nSuspend 1—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with a time counter on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Righteous Valkyrie": {
     "cmc": 3.0,
@@ -4962,6 +5040,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact — Equipment"
+  },
+  "Skewer the Critics": {
+    "cmc": 3.0,
+    "keywords": [
+      "Spectacle"
+    ],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Spectacle {R} (You may cast this spell for its spectacle cost rather than its mana cost if an opponent lost life this turn.)\nSkewer the Critics deals 3 damage to any target.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Skirk Prospector": {
     "cmc": 1.0,

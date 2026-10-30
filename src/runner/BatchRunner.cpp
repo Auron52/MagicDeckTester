@@ -1855,7 +1855,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 indexcarry::Sink icarry;
                 if (s_index_carry) { indexcarry::t_sink = &icarry; }
                 GameState state = GoldFishRunner::SetupGame(
-                    job.deck, job.seed + static_cast<uint64_t>(wi.game));
+                    job.deck, job.seed + static_cast<uint64_t>(wi.game), global_gi);
                 GoldFishRunner::PopulateOpponentSpawns(state, global_gi);
 
                 // Attach a logger for the play fingerprint. Default: DIGEST-ONLY (no structure

@@ -79,6 +79,16 @@ static void CollectBoardState(const GameState& state,
         hand_out.push_back(c.m_number);
         if (c.m_is_staged) { staged_out.push_back(c.m_number); }  // exiled-but-playable (Light Up etc.)
     }
+    // Autonomous play parks unspent impulse-exile cards outside hand between
+    // decision passes. Show those unexpired cards in the same viewer hand/staged
+    // snapshots as the human path, which keeps them marked in hand. The zones are
+    // disjoint by MergeStagedIntoHand / ReturnStagedFromHand.
+    for (const StagedCard& sc : ap.staged_cards)
+    {
+        if (sc.expiry_turn < state.turn_number) { continue; }
+        hand_out.push_back(sc.card.m_number);
+        staged_out.push_back(sc.card.m_number);
+    }
     for (const Card& c : ap.graveyard)
     {
         graveyard_out.push_back(c.m_number);
@@ -289,6 +299,8 @@ void GameEngine::UntapStep(GameState& state)
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
     state.opponent_lost_life_this_turn = false;
+    state.noncombat_damage_received_this_turn = {};
+    state.pending_incinerator_damage.clear();
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
     state.floating_creature_mana = ManaPool{};   // ...and the creature-only reserve with it (lockstep)
     state.floating_bigspell_mana = ManaPool{}; state.floating_bigspell_pp = nullptr;   // big-spell-only reserve (lockstep)

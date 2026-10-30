@@ -65,6 +65,7 @@ static bool UnpruneHumanSuppressed()
 
 // Canonical gate name <-> enum table, shared by the MTG_UNPRUNE parser and the gate-probe report.
 static const std::pair<const char*, UnprunedGate> kGateNames[] = {
+    {"fixedburntarget", UnprunedGate::FixedBurnTarget},
     {"altpayload", UnprunedGate::AltPayload}, {"tutor",     UnprunedGate::Tutor},
     {"fetch",      UnprunedGate::Fetch},      {"dig",       UnprunedGate::Dig},
     {"xspell",     UnprunedGate::XSpell},     {"ponder",    UnprunedGate::Ponder},
@@ -20995,6 +20996,7 @@ namespace
     const VialProvider           g_vial;
     const HinataProvider         g_hinata;
     const BurnProvider           g_burn;
+    const MidrangeBurnProvider   g_midrange_burn;
     const DragonstormProvider    g_dragonstorm;
     const GoblinsProvider        g_goblins;
     const CreatureGivingProvider g_creature_giving;
@@ -22887,6 +22889,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
+    bool midrange_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
@@ -23050,6 +23053,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool lfe = false;
     for (const Card& c : deck.mainboard)
     {
+        // Midrange Burn's three independent signature cards, conjuncted with the
+        // Burn signature below: a lone red value creature/planeswalker in another
+        // archetype must not import Burn's narrowing. Names also identify cards
+        // during onboarding before their data entries have been implemented.
+        if (c.m_name == "Chandra's Incinerator" || c.m_name == "Chandra, Torch of Defiance"
+            || c.m_name == "Grim Lavamancer") { midrange_burn = true; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
@@ -23708,6 +23717,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // inherit that rule -- param-keyed and with derived land targets, but authored for Slivers -- so
     // give such a deck its own provider (the always-own-a-provider rule) rather than riding this one.
     if (vial) { return g_vial; }
+    if (burn && midrange_burn) { return g_midrange_burn; }
     if (burn) { return g_burn; }
     return g_generic;
 }
@@ -35837,7 +35847,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     {
         v.push_back(p.life); v.push_back(p.gy_size_at_turn_start); v.push_back(p.lands_played_this_turn);
         v.push_back(p.bonus_land_drops_this_turn); v.push_back(p.cards_drawn_this_turn); v.push_back(p.life_gained_this_turn);
-        v.push_back(p.cards_cycled_or_discarded_this_turn); v.push_back(p.has_city_blessing); v.push_back(p.has_enduring_story);
+        v.push_back(p.emblem_spell_cast_damage); v.push_back(p.cards_cycled_or_discarded_this_turn); v.push_back(p.has_city_blessing); v.push_back(p.has_enduring_story);
         v.push_back(p.equip_activated_this_turn); v.push_back(p.emblem_team_pump); v.push_back(p.poison_counters);
         v.push_back(p.rad_counters); v.push_back(p.energy_counters);
         // Player::land_entered_this_turn, as the ONE part of it no other element here carries (the
@@ -35866,6 +35876,13 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     SigCards(v, s.exile);
     v.push_back(s.next_token_number); v.push_back(s.next_opp_spawn_number); v.push_back(s.consecutive_passes);
     v.push_back(s.turn_number); v.push_back(s.player_lost_on_draw); v.push_back(s.proven_no_win);
+    if (s.deck_tracks_noncombat_damage)
+    {
+        v.push_back(s.noncombat_damage_received_this_turn[0]); v.push_back(s.noncombat_damage_received_this_turn[1]);
+        v.push_back(s.noncombat_trigger_depth); v.push_back(s.pending_incinerator_damage.size());
+        for (const auto& e : s.pending_incinerator_damage)
+        { v.push_back(e.source.m_number); v.push_back(e.source.m_name_hash); v.push_back(e.controller); v.push_back(e.damaged_player); v.push_back(e.amount); }
+    }
     v.push_back(s.opponent_lost_life_this_turn); v.push_back(s.opponent_library_dealt); v.push_back(s.opponent_decked);
     v.push_back(s.inf_life_turn); v.push_back(s.inf_life_possible); v.push_back(s.top_stacked_turn);
     v.push_back(s.top_stacked_card_number);
@@ -54848,4 +54865,94 @@ std::vector<int> LifegainHeliodComboProvider::CleanupDiscardCandidates(
     for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }
     for (int i = 0; i < n; ++i) { put(i); }
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+// Suspend's may-cast permission must not force an immediate Eidolon loss. The provider
+// owns this narrowing; human play still receives an unrestricted cast/decline prompt.
+bool GenericProvider::TakeFreeCast(const GameState& state, int controller,
+                                   const CardDefinition& found) const
+{
+    if (found.params.suspend_time_counters <= 0 || found.tmpl != CardTemplate::DirectDamage)
+    { return true; }
+    int self_damage = 0;
+    const int mv = found.card.m_mana_cost.ManaValue();
+    for (const Permanent& p : state.battlefield)
+    {
+        const auto* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.on_cast_trigger_max_mv > 0 && mv <= d->params.on_cast_trigger_max_mv)
+        { self_damage += d->params.on_cast_trigger_damage; }
+    }
+    return state.players[controller].life > self_damage;
+}
+
+// Single-target burn to our own life, creature or walker cannot trigger
+// spectacle or the Incinerator reduction, and converts direct damage into a
+// lost clock. Searing Blaze keeps the self-creature axis: a no-landfall Blaze
+// can trigger Swiftspear's prowess without killing it. Enemy permanent targets
+// and the complete human/unpruned menu remain. DEFAULT ON;
+// =0 restores the full autonomous target axis for the A/B.
+bool MidrangeBurnProvider::PrunesOwnFixedBurnTargets() const
+{
+    static const bool prune = EnvOn("MTG_MIDRANGE_SELF_BURN_PRUNE", true);
+    return prune;
+}
+
+// Chandra's Incinerator is funded by earlier NONCOMBAT damage in the same turn.
+// The generic creature-first rank attempted it before the Bolts that made its {R}
+// bill payable, so a legal three-spell plan dropped its Incinerator at execution.
+// DEFAULT ON; =0 restores the common rank for the cast-order A/B.
+int MidrangeBurnProvider::CastOrderRank(const GameState& state, const CardDefinition& def) const
+{
+    static const bool inc_last = EnvOn("MTG_MIDRANGE_INC_ORDER", true);
+    if (inc_last && def.params.cost_less_per_opponent_noncombat_damage) { return 1000; }
+    // A damage spell must resolve before Light Up the Stage / Skewer the Critics
+    // when the same plan relies on spectacle. This also applies to opaque draw
+    // plans through OrderOpaqueCastsByRank below.
+    static const bool spectacle_order = EnvOn("MTG_MIDRANGE_SPECTACLE_ORDER", true);
+    if (spectacle_order && def.params.spectacle_cost.has_value()) { return 30; }
+    return DeckProvider::CastOrderRank(state, def);
+}
+
+bool MidrangeBurnProvider::OrderOpaqueCastsByRank() const
+{
+    static const bool spectacle_order = EnvOn("MTG_MIDRANGE_SPECTACLE_ORDER", true);
+    return spectacle_order;
+}
+
+// A second Chandra may be a new loyalty activation after the old one fired.
+// Value an unused activation as two loyalty: that keeps a fresh four-loyalty
+// Chandra over a spent five-loyalty copy, while preserving a spent six- or
+// seven-loyalty copy that is close to its emblem. DEFAULT ON; =0 keeps oldest.
+int MidrangeBurnProvider::LegendKeepIndex(const GameState& s, int /*controller*/,
+                                          const std::vector<int>& duplicates) const
+{
+    if (duplicates.empty()) { return -1; }
+    static const bool smart_keep = EnvOn("MTG_MIDRANGE_LEGEND_KEEP", true);
+    if (!smart_keep) { return duplicates.front(); }
+    int keep = duplicates.front();
+    for (int idx : duplicates)
+    {
+        const Permanent& a = s.battlefield[idx];
+        const Permanent& b = s.battlefield[keep];
+        const int a_score = a.loyalty + (a.loyalty_activated_this_turn ? 0 : 2);
+        const int b_score = b.loyalty + (b.loyalty_activated_this_turn ? 0 : 2);
+        if (a_score > b_score) { keep = idx; }
+    }
+    return keep;
+}
+
+// The baseline exposes every legal Incinerator target. Any measured narrowing
+// belongs in the deck provider; the engine branches every returned candidate.
+void DecisionProvider::IncineratorTargetCandidates(const GameState& state, int damaged_player,
+                                                   int amount, std::vector<int>& out) const
+{
+    out.clear();
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != damaged_player || CreatureHasShroud(p, state)
+            || p.card.HasKeyword(Keyword::Hexproof)) { continue; }
+        if (p.card.IsCreature() || p.is_animated || p.card.HasType(CardType::Planeswalker))
+        { out.push_back(p.card.m_number); }
+    }
+    (void)amount;
 }

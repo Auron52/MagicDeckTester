@@ -34,7 +34,7 @@
 // docs stay readable. Where a number is listed twice, BOTH readings existed -- disambiguate by the
 // surrounding text.
 //
-//    1  TutorCandidates                 16  ShouldAttackWith  |  OpponentPlaysLands
+//    1  TutorCandidates                 16  ShouldAttackWith  |  OpponentPlaysLands (retired)
 //   1b  TutorToBattlefieldPutOrder      17  CastOrderRank
 //    2  FetchCandidates                 18  XCandidates
 //    3  ShouldEmitRiskyAltPayload       19  SituationalCardRank
@@ -152,6 +152,15 @@ public:
     // printed which provider was in force, so nothing could have caught them earlier. Pure reporting:
     // no engine path branches on this.
     virtual const char* Name() const { return "Generic"; }
+    // Historical burn target policy: Any targets opponent face; Multi chooses the
+    // opponent creature or the existing surviving-own-creature prowess fallback.
+    // Decks may opt into the complete target axis; human/unpruned always see it.
+    // This is a provider-owned narrowing, not a legality restriction.
+    virtual bool SearchesFixedBurnTargets() const { return false; }
+    // A goldfish deck may prove that spending targeted burn on its own life or
+    // permanents cannot improve its clock. Human and unpruned play retain every
+    // legal target; the provider only narrows autonomous plan enumeration.
+    virtual bool PrunesOwnFixedBurnTargets() const { return false; }
 
     // TutorCandidates -- tutor priority: ordered library card-name candidates for a tutor
     // (Idyllic / Enlightened). 1 = decided, >1 = search picks, {} = whiff.
@@ -910,6 +919,9 @@ public:
     // pure upside. Provider-owned so any narrowing away from that is a NAMED, A/B-testable
     // decision (core invariant) -- and the human chooser overrides it at the real-resolution
     // sites regardless. Disclosed in each deck's Stage 6a.
+    virtual void IncineratorTargetCandidates(const GameState&, int damaged_player, int amount,
+                                              std::vector<int>& out) const;
+
     virtual bool TakeFreeCast(const GameState& /*s*/, int /*controller*/,
                               const CardDefinition& /*found*/) const { return true; }
 
@@ -1768,6 +1780,14 @@ public:
     // gain the same reach, but that is a GT-moving change to measure per game before adopting
     // there. CritterLifegainProvider opts in (written when the list ran three Ajani; the current
     // CritterLifegain list runs one).
+    // Chandra's emblem ANY-target policy. A one-option provider prune: face damage dominates
+    // other recipients in Midrange Burn (no own-damage/death payoffs; opponent bodies are passive
+    // and may be needed for Searing Blaze). It also maximizes Incinerator's generic discount.
+    // A deck with damage/death payoffs must override this or add a searched target axis before
+    // using the policy. Human resolution always asks its unrestricted any-target chooser.
+    virtual int SpellCastEmblemTarget(const GameState& state, int controller, int amount) const
+    { (void)state; (void)controller; (void)amount; return 0; }
+
     virtual bool SearchesWalkerCastActivation() const
     { return EnvOn("MTG_WALKER_CAST_ACTIVATE"); }
 
@@ -2256,16 +2276,6 @@ public:
     // to be more aggressive. Land-pitch decks (Land's Edge / Seismic Assault) are protected by the mana-base
     // gate + PreferHoldLandDrop.
     virtual double NcLandDropTempoBonus(const GameState& s, int controller) const { (void)s; (void)controller; return 0.0; }
-
-    // OpponentPlaysLands -- does this deck's goldfish opponent play lands? Decks whose spells target the
-    // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
-    // reduction targeting points at them) need a realistic opponent board. When true the engine
-    // gives the passive opponent one land on each of the first three turns (a realistic floor:
-    // most opponents have >=3 lands, and aggressive decks with fewer bring creatures = better
-    // targets anyway). DEFAULT false -> every existing deck's opponent stays boardless-of-lands
-    // (byte-identical); only HinataProvider opts in. NOT pure (defaulted) so no other provider
-    // needs to implement it.
-    virtual bool OpponentPlaysLands() const { return false; }
 
     // UseLethalShortCircuit -- opt IN to the board-lethal search short-circuit (Solve + EnumeratePlans):
     // when the current board's attack-all damage already kills the opponent this turn, skip the cast-subset

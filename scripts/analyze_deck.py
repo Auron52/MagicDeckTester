@@ -627,7 +627,7 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
         # are elsewhere -- audit_card_fields.py's oracle-text diff against Scryfall, and
         # audit_viewer_decisions.py's hard failure on an unclassified param.
         TRIGGER_PARAM_RE = re.compile(
-            r"(_trigger_|^trigger_|^etb_|^enters_watch_|^attack_|^upkeep_|^end_step_|^dies_|"
+            r"(_trigger_|_trigger$|^trigger_|^etb_|^enters_watch_|^attack_|^upkeep_|^end_step_|^dies_|"
             r"^death_|^spore_|^combat_damage_|^landfall_|^sacrifice_watch_|^cast_trigger)")
         TRIGGER_PARAMS_LEGACY = {
             "persist",                        # "when this creature dies, return it"
@@ -641,9 +641,22 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
         trigger_implemented = any(
             v and (TRIGGER_PARAM_RE.search(k) or k in TRIGGER_PARAMS_LEGACY)
             for k, v in params.items())
+        # Chandra creates a player-owned emblem whose cast trigger is implemented
+        # by this loyalty primitive, rather than a trigger on the walker itself.
+        trigger_implemented |= any(
+            a.get("effect") == "emblem_spell_cast_damage"
+            for a in params.get("loyalty_abilities", []))
+        # Prowess is implemented by Keyword::Prowess, not a CardParams trigger.
+        # Strip only its reminder text when that keyword is actually populated;
+        # a separate printed trigger on the same card must still be checked.
+        trigger_oracle = oracle
+        if "Prowess" in entry.get("keywords", []):
+            trigger_oracle = re.sub(r"Prowess\s*\([^)]*\)", "Prowess", trigger_oracle)
+        if "Suspend" in entry.get("keywords", []) and params.get("suspend_time_counters", 0) > 0:
+            trigger_oracle = re.sub(r"Suspend\s+\d+[^()\n]*\([^)]*\)", "Suspend", trigger_oracle)
         if not trigger_implemented:
             for trigger in ("Whenever ", "At the beginning of "):
-                if trigger in oracle and not deferred:
+                if trigger in trigger_oracle and not deferred:
                     gaps.append(f"Triggered ability ('{trigger.strip()}') with no deferral bracket note — "
                                  "verify it is implemented or add a bracket note")
                     break
@@ -779,6 +792,7 @@ KNOWN_COST_MECHANICS = {
     "affinity_for_subtype": "affinity",                          # SameTurnAffinityGenericCredit
     "ritual_floating_mana": "ritual float",                      # BuildPool float credit
     "mana_rock":            "mana-rock ramp",                    # rock-ramp credit
+    "cost_less_per_opponent_noncombat_damage": "same-turn noncombat damage discount",
 }
 
 def _CardsIndex(cards_json: Path) -> dict:

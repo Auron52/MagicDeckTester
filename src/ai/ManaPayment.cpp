@@ -439,6 +439,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                         Color col, ManaPool& floating, ManaPool* available, bool for_creature,
                         const std::vector<int>* aura_colors)
 {
+    if (!dmgev::CanPayManaTapLife(state, active, def)) { return; }
     CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
     // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
     { static const bool s_tapdbg = EnvOn("MTG_TAPDBG");
@@ -1721,6 +1722,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     bool restricted_in_float = false;
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
+        if (!dmgev::CanPayManaTapLife(state, active, def)) { return false; }
         if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
         if (feeding && (def.params.creature_mana_only || BigSpellOnlySource(def.params))) { return false; }
         if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
@@ -3015,6 +3017,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     const int life_pre = state.players[active].life;
     const int opp_pre = state.players[1 - active].life;
     const bool oll_pre = state.opponent_lost_life_this_turn;
+    auto oll_pre_noncombat = NoncombatStateSnapshot(state);
     // Deathrite: a tap may exile a graveyard land; failed attempts must put it back.
     PaySnapScratch<Card> _gy_pre_scratch;
     std::vector<Card>&   gy_pre = _gy_pre_scratch.Buf();
@@ -3268,7 +3271,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.players[active].life = life_pre;
     state.players[active].graveyard = gy_pre;
     state.players[1 - active].life     = opp_pre;
-    state.opponent_lost_life_this_turn = oll_pre;
+    state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     // SNOW guard for the backtracking fallbacks: the backtracker is snow-BLIND (it assigns any
     // source to any pip), which is exact when every untapped source is snow (the Snow deck --
@@ -3335,6 +3338,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 int               best_life   = state.players[active].life;
                 int               best_opp    = state.players[1 - active].life;
                 bool              best_oll    = state.opponent_lost_life_this_turn;
+    auto best_oll_noncombat = NoncombatStateSnapshot(state);
                 int               best_e      = state.players[active].energy_counters;
                 PayRollbackLedger best_ledger = state.pay_ledger;
                 ManaPool          best_lo     = bt_leftover;
@@ -3345,7 +3349,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     state.players[active].life         = life_pre;
                     state.players[active].graveyard    = gy_pre;
                     state.players[1 - active].life     = opp_pre;
-                    state.opponent_lost_life_this_turn = oll_pre;
+                    state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
                     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }
                     state.pay_ledger   = ledger_pre;
                     g_pay_remaining_mv = pay_full_mv;
@@ -3361,7 +3365,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         best_gy     = state.players[active].graveyard;
                         best_life   = state.players[active].life;
                         best_opp    = state.players[1 - active].life;
-                        best_oll    = state.opponent_lost_life_this_turn;
+                        best_oll    = state.opponent_lost_life_this_turn; best_oll_noncombat = NoncombatStateSnapshot(state);
                         best_e      = state.players[active].energy_counters;
                         best_ledger = state.pay_ledger;
                         best_lo     = lo2;
@@ -3372,7 +3376,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 state.players[active].graveyard    = std::move(best_gy);
                 state.players[active].life         = best_life;
                 state.players[1 - active].life     = best_opp;
-                state.opponent_lost_life_this_turn = best_oll;
+                state.opponent_lost_life_this_turn = best_oll; best_oll_noncombat.Restore(state);
                 state.players[active].energy_counters = best_e;
                 state.pay_ledger                   = best_ledger;
                 bt_leftover                        = best_lo;
@@ -3395,7 +3399,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         state.players[active].life  = life_pre;
         state.players[active].graveyard = gy_pre;
         state.players[1 - active].life     = opp_pre;   // same drip rollback as above
-        state.opponent_lost_life_this_turn = oll_pre;
+        state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
         if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
         ManaPool bt2_leftover;
         if (tapstats::Enabled()) { tapstats::g_site_percast_filter.fetch_add(1, std::memory_order_relaxed); }
@@ -3420,7 +3424,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.players[active].life         = life_pre;
     state.players[active].graveyard    = gy_pre;
     state.players[1 - active].life     = opp_pre;
-    state.opponent_lost_life_this_turn = oll_pre;
+    state.opponent_lost_life_this_turn = oll_pre; oll_pre_noncombat.Restore(state);
     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     state.floating_creature_mana       = cre_reserve_pre;
@@ -3678,6 +3682,11 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         const int events = state.players[state.active_player_index].cards_cycled_or_discarded_this_turn;
         cost.generic = std::max(0, cost.generic
                                    - def.params.cost_less_per_cycle_or_discard * events);
+    }
+    if (def.params.cost_less_per_opponent_noncombat_damage)
+    {
+        cost.generic = std::max(0, cost.generic
+            - state.noncombat_damage_received_this_turn[1 - state.active_player_index]);
     }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
     // sites where the whole generic, incl. X, is known -- CastSpellFromHand / apply_one).
@@ -7731,6 +7740,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
+    auto oll_noncombat = NoncombatStateSnapshot(state);
         auto restore = [&]()
         {
             RestorePayFields(state.battlefield, bf_snap);
@@ -7744,7 +7754,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             state.players[a].graveyard         = gy_snap;
             state.players[a].life              = la;
             state.players[1 - a].life          = lo;
-            state.opponent_lost_life_this_turn = oll;
+            state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
         };
         if (TapForCostShared(state, cost_in.ExpandHybrids(0), for_creature,
                              available, honor_legacy_cco)) { return true; }
@@ -7803,6 +7813,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
+    auto oll_noncombat = NoncombatStateSnapshot(state);
         if (TapForCostSharedOnce(state, cost_in, for_creature, mask, available, honor_legacy_cco))
         { return true; }
         RestorePayFields(state.battlefield, bf_snap);
@@ -7816,7 +7827,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;
         state.players[1 - a].life          = lo;
-        state.opponent_lost_life_this_turn = oll;
+        state.opponent_lost_life_this_turn = oll; oll_noncombat.Restore(state);
         return false;
     };
     // MTG_LINE_FLOAT_TAP_FIRST (see LineFloatTapFirstPlan): one held attempt that keeps the line's owed
@@ -8041,6 +8052,8 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
     if (def == nullptr) { o.why_not = "it is not a mana source"; return o; }
     const CardParams& q = def->params;
+    if (!dmgev::CanPayManaTapLife(state, active, *def))
+    { o.why_not = "you cannot pay its life cost"; return o; }
     // The payer's own source test (`usable()`'s template half): a land, a dork, a rock -- a filter
     // among them is a CONVERSION source -- or, outside those templates, a sacrifice-for-mana source.
     const bool tmpl_src   = def->tmpl == CardTemplate::BasicLand || def->tmpl == CardTemplate::ManaDork

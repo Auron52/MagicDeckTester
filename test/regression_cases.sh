@@ -33,6 +33,7 @@ declare -A DECK_FILE=(
   [fungusv3]=decks/Fungus/Fungus.cod
   [slivers]=decks/slivers_vial/slivers_vial.txt
   [burn]=decks/burn/burn.txt
+  [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
   [th]=decks/treasure_hunt/treasure_hunt.txt
   [knights]=decks/Knights/Knights.cod
   [whiteknights]=decks/WhiteKnights/WhiteKnights.cod
@@ -84,6 +85,7 @@ declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
   [burn]=decks/burn/burn.profile.json
+  [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
   [knights]=decks/Knights/Knights.profile.json
   [whiteknights]=decks/WhiteKnights/WhiteKnights.profile.json
@@ -148,6 +150,13 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Midrange Burn: pre-keep-table ENTRY sizing, using Hinata's conservative game counts.
+  # Admission requires the same-run <=3x Hinata cost verdict and mode-budget fit.
+  # Chandra's per-opponent damage makes 2HG a relevant play row, not just a canary.
+  "midrangeburn     0 1001 1000 0"
+  "midrangeburn     3 1001   50 10"
+  "midrangeburn     5 1001  100 20"
+  "midrangeburn2hg  5 1001   25 20"
   # fungus: Hinata's sizing, adopted wholesale rather than probed (user call 2026-09-20).
   # MEASURED 2026-09-22 before adopting: this deck is the suite's most expensive by a clear margin
   # -- 281.8s CPU here (2nd behind snow's 520.5s) and 1,331.1s in REGRESSION, where it is 1st at
@@ -618,6 +627,12 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # Midrange Burn screened backstop: 30021..30023, with
+  # abandon_units=2000000 and MTG_SLOW_GAME_MS=5000; preserve screened blocks thereafter.
+  # Screen: build/midrange-burn-analysis/backstop-screen.log; max game 10.2 s.
+  # regression.sh applies the 2e6-unit cap automatically.
+  "midrangeburn     3 30021 3 0"
+  "midrangeburn     5 30021 3 0"
   # UNBUDGETED BACKSTOP (REGRESSION half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
   # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
   # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
@@ -957,6 +972,13 @@ REGRESSION_CASES=(
   "elementals 3  2002    50 10"
   "elementals 5  2002   150 20"
   "elementals 5  3003   150 20"
+  # Midrange Burn: conservative Hinata-sized gate, shipped b20 play setting.
+  "midrangeburn     0 2002 1000 0"
+  "midrangeburn     3 2002   75 10"
+  "midrangeburn     5 2002  150 20"
+  "midrangeburn     5 3003  150 20"
+  "midrangeburn2hg  5 2002   75 20"
+
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -980,6 +1002,10 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # Midrange Burn backstop candidates: screen BEFORE admission as above (2e6 units).
+  # 30041..30043 is disjoint from regression 30021..30023; both screened under 2e6 units.
+  "midrangeburn     3 30041 3 0"
+  "midrangeburn     5 30041 3 0"
   # UNBUDGETED BACKSTOP (OVERNIGHT half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
   # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
   # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
@@ -1659,4 +1685,24 @@ OVERNIGHT_CASES=(
   "elementals 5  5005   525 20"
   "elementals 5  6006   525 20"
   "elementals 5  7007   525 20"
+  # Midrange Burn: explicit pre-keep-table ENTRY set. Expand only at the planned
+  # keep-table adoption, sized from actual play-row cost and rebaselined table-absent first.
+  "midrangeburn     0  4004 2000 0"
+  "midrangeburn     0  6006 2000 0"
+  "midrangeburn     0  8008 2000 0"
+  "midrangeburn     0 10010 2000 0"
+  "midrangeburn     3  4004  400 10"
+  "midrangeburn     3  5005  400 10"
+  "midrangeburn     3  6006  400 10"
+  "midrangeburn     3  7007  400 10"
+  "midrangeburn     5  4004  300 20"
+  "midrangeburn     5  5005  300 20"
+  "midrangeburn     5  6006  300 20"
+  "midrangeburn     5  7007  300 20"
+  # Relevant 2HG play rows: one third of the standard ENTRY sample at b20.
+  "midrangeburn2hg  5  4004  100 20"
+  "midrangeburn2hg  5  5005  100 20"
+  "midrangeburn2hg  5  6006  100 20"
+  "midrangeburn2hg  5  7007  100 20"
+
 )

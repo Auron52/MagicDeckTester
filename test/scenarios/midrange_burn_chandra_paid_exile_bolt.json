@@ -1,0 +1,39 @@
+{
+  "deck": "decks/Midrange Burn/Midrange Burn.cod",
+  "turn": 4,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "library_filler": "Mountain",
+  "library_size": 20,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 7,
+  "expect_win_turn": 4,
+  "opponent_life": 3,
+  "battlefield": [
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    }
+  ],
+  "hand": [
+    "Chandra, Torch of Defiance"
+  ],
+  "library_top": [
+    "Lightning Bolt"
+  ],
+  "_comment": "Cast Chandra with one red left, then exile +1 and pay for the Bolt during resolution. Declining only deals two and delays the win."
+}

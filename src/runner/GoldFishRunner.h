@@ -107,9 +107,10 @@ public:
                   int forced_mull_count = -1,
                   std::vector<int> forced_bottom = {});
 
-    // Build the initial GameState for a single game with the given seed.
-    // Shared by the runner and the analyzer.
-    static GameState SetupGame(const Decklist& deck, uint64_t seed);
+    // Build the initial GameState for a single game with the given seed and global game index.
+    // The index selects the passive opponent's 10-game land pattern; standalone probes without
+    // an index use seed modulo 10 for a deterministic sample of the same pattern.
+    static GameState SetupGame(const Decklist& deck, uint64_t seed, int game_index = -1);
 
     // Stamp the deck-derived trait fields (uses_second_main, deck_feeds_combat, dependency
     // pulls, graveyard readers) and the env shuffle salts onto a GameState. SetupGame calls
