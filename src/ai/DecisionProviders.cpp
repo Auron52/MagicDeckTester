@@ -16253,14 +16253,14 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     const Player& ap = s.players[active];
     for (const Card& h : ap.hand)
     {
-        if (s_staged_gas && h.m_is_staged && h.m_staged_expiry < s.turn_number) { continue; }   // expired
+        if (s_staged_gas && h.m_is_staged && h.m_staged_expiry < s.TurnSeq()) { continue; }   // expired
         if (castable_spell(h)) { return false; }   // a real alternative play exists -> DECLINE
     }
     if (s_staged_gas)
     {
         for (const StagedCard& sc : ap.staged_cards)
         {
-            if (sc.expiry_turn < s.turn_number) { continue; }   // expired (its window closed)
+            if (sc.expiry_turn < s.TurnSeq()) { continue; }   // expired (its window closed)
             if (castable_spell(sc.card)) { return false; }
         }
     }
