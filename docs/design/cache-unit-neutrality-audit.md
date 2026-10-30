@@ -494,3 +494,15 @@ tomorrow."*
   hits charge exactly what a miss would, and THEN a shared pool is fine, because capacity only affects speed. Rule A's
   "no cross-thread pool" therefore applies only to caches whose hits stay discounted (the floor tier of the
   floor+overflow design). The overflow tier, and every hit==miss cache, may use a shared, memory-sized pool.
+- **The plan cache (#1) is the prime case for floor + overflow.** USER: *"This is where the solution I mentioned
+  would likely pay off. You get the reduced cost of caching on your budget only for the smaller per-thread cache that
+  is small enough to make it consistent across machines and pay the higher budget cost when you want to use a lot of
+  data."* Concretely:
+  - **Floor:** a constant per-thread floor, sized so that floor x max threads fits the smallest supported box. Hits there
+    stay discounted, as today.
+  - **Overflow:** the existing shared, memory-sized pool. Hits there charge the recorded miss cost.
+  - **Effect on heavy games:** they keep today's memory and wall time (overflow still saves the recompute), and pay
+    budget only for the data beyond the floor.
+  - **Effect on light games:** a game that fits in the floor plays as today.
+  - **Measurement:** the matched-cost A/B above decides floor+overflow against always-pay. Pick the floor size from the
+    same runs.
