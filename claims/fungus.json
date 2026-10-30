@@ -3,9 +3,12 @@
   "mulligan": "1988994f10c434a5873895f973ad991070c781a0"
  },
  "deck": "fungus",
+ "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.000698 t, cost 1.013x (se 0.003, 96 seeds)); incumbent restored",
+ "finished": "2026-10-30T13:51:30Z",
  "frozen": "8f303fddc97f7f4afb2404414d3bdad1df8256b1",
  "heartbeat": "2026-10-30T13:48:27Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/fungus-20261030-1351",
  "run_id": "fungus-artifact-queue-tool-647f24-20261030T004541",
  "score": 0.0649,
  "stage": "mulligan",
@@ -13,6 +16,6 @@
   "mulligan"
  ],
  "started": "2026-10-30T11:55:23Z",
- "state": "running",
+ "state": "rejected",
  "worker": "artifact-queue-tool-647f24"
 }
