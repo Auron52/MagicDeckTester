@@ -39195,7 +39195,15 @@ inline void CantripPlanFilter(std::vector<int>& perm, const std::vector<int>& pl
     {
         const int pq = plan[static_cast<std::size_t>(q)];
         if (pq == DecisionProvider::kCantripPlanDrop) { continue; }
-        if (pq >= 0)
+        if (pq == DecisionProvider::kCantripPlanBoth)
+        {
+            const bool seen0 = std::find(seen.begin(), seen.end(), 0) != seen.end();
+            const bool seen1 = std::find(seen.begin(), seen.end(), 1) != seen.end();
+            if (seen0 && seen1) { continue; }
+            if (!seen0) { seen.push_back(0); }
+            if (!seen1) { seen.push_back(1); }
+        }
+        else if (pq >= 0)
         {
             if (std::find(seen.begin(), seen.end(), pq) != seen.end()) { continue; }
             seen.push_back(pq);
