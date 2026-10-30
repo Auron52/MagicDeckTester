@@ -13,6 +13,7 @@
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
 #include <atomic>
@@ -6592,6 +6593,7 @@ thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
 thread_local ManaCost g_act_line_paid;      // see ManaPayment.h (ActLinePassScope / ActLinePayScope)
 thread_local bool g_cycle_seed_paying = false;   // see ManaPayment.h (CycleSeedPayScope)
+thread_local std::int32_t g_seed_pay_split = 0;
 thread_local std::uint64_t g_seed_pay_hold = 0;   // see ManaPayment.h (SeedPaySplitScope)
 
 // ---- THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT; ManaPayment.h for the shape, ledger Q61) ----------------
@@ -6603,24 +6605,47 @@ bool SeedPaySplitOn()
 
 namespace
 {
-constexpr int kSigSpecial = 1 << 6;   // a source whose tap is not a plain mana tap (see SeedPaySourceSig)
+constexpr int kSigSpecial = 1 << 6;   // plain colour masks are <=63; special keys are 64 + stable card number
+constexpr int kSeedSourceUnsupported = -2;
 constexpr int kSplitMaxGeneric = 3;   // the packed multiset holds up to 3 units (Xander's Lounge's {3})
 
-// A source's colour SIGNATURE: bit c for each colour it produces (White..Green = 0..4, Colorless = 5), plus
-// kSigSpecial for a source that also does something else when tapped (a filter, a land-search activation, a
-// sac-draw land) or is not a land (a creature or artifact source: summoning sickness and abilities ride on it).
-// -1 = not an untapped mana source of `me` (or a fetch land, which the payer never taps for mana).
+// This axis covers one-unit, unrestricted lands. A filter with a free {C} tap is also one unit for
+// an all-generic payment: its fed mode consumes one feeder and produces two, the same net amount.
+// A special source keeps its stable card identity; two lands with different non-mana abilities must
+// never merge merely because their colour menus match. Unsupported source mechanics retain the
+// ordinary payer; this is not a claim to enumerate every mana allocation on an arbitrary board.
+int SeedPaySourceColors(const Permanent& p)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr) { return 0; }
+    int mask = 0;
+    for (Color c : d->params.produces) { mask |= 1 << static_cast<int>(c); }
+    if (d->params.is_filter && !d->params.filter_no_free_colorless) { mask |= 1 << static_cast<int>(Color::Colorless); }
+    return mask;
+}
 int SeedPaySourceSig(const Permanent& p, int me)
 {
     if (p.controller_index != me || p.tapped || p.def_absent) { return -1; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-    if (d == nullptr || d->params.produces.empty() || !d->params.fetch_land_types.empty()) { return -1; }
-    int sig = 0;
-    for (Color c : d->params.produces) { sig |= 1 << static_cast<int>(c); }
-    if (!d->card.IsLand() || d->params.is_filter || d->params.ramp_filter || d->params.any_color_filter
-        || d->params.land_search_activation_cost.has_value() || d->params.sacrifice_draw_cost.has_value())
-    { sig |= kSigSpecial; }
-    return sig;
+    if (d == nullptr || !d->params.fetch_land_types.empty()) { return -1; }
+    const CardParams& q = d->params;
+    if (q.produces.empty()) { return -1; }
+    if (!d->card.IsLand() || d->tmpl != CardTemplate::BasicLand || q.produces_amount != 1
+        || q.ramp_filter || q.any_color_filter || q.filter_no_free_colorless
+        || q.storage_land || q.enters_tapped_with_depletion > 0
+        || q.creature_mana_only || q.colored_creature_only || q.mana_only_spell_min_mv > 0
+        || q.domain_mana || q.mana_colors_of_graveyard_legends || q.gy_land_exile_mana
+        || !q.mana_requires_land_subtype.empty() || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+        || q.energy_per_colored_tap > 0 || p.is_animated)
+    { return kSeedSourceUnsupported; }
+    if (q.is_filter || q.land_search_activation_cost.has_value() || q.sacrifice_draw_cost.has_value())
+    {
+        // One byte per source, with zero as the terminator: keys 65..254 cover stable numbers 1..190.
+        // Never truncate a larger number into another source's identity.
+        if (p.card.m_number <= 0 || p.card.m_number > 190) { return kSeedSourceUnsupported; }
+        return kSigSpecial + p.card.m_number;
+    }
+    return SeedPaySourceColors(p);
 }
 
 // The coloured pips the cards still in hand need, per colour (the max over cards, mana cost and cycling cost),
@@ -6645,102 +6670,93 @@ void SeedHandDemand(const GameState& state, int me, const CardDefinition& seed_d
 }
 }   // namespace
 
-std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
-                                        const CardDefinition& seed_def)
+namespace
 {
-    std::vector<std::int32_t> out;
-    if (!SeedPaySplitOn()) { return out; }
-    const int g = cost.generic;
-    if (g <= 0 || g > kSplitMaxGeneric || cost.white + cost.blue + cost.black + cost.red + cost.green != 0
-        || cost.hybrid_count != 0) { return out; }
-    if (state.floating_mana.Total() > 0) { return out; }   // the float pays first; the split would not bind
-    // Source classes: signature -> untapped count.
-    std::vector<std::pair<int, int>> cls;
-    for (const Permanent& p : state.battlefield)
+// Six concrete floating colours, at most three units: C(6+3,3) = 84 multisets, including empty.
+// Its ordinal fits the unused high byte of the existing int32 pin; low three bytes stay source
+// tokens. No Action growth and no truncation of a colour count into another allocation.
+const std::vector<ManaPool>& SeedFloatPatterns()
+{
+    static const std::vector<ManaPool> patterns = []
     {
-        const int sig = SeedPaySourceSig(p, me);
-        if (sig < 0) { continue; }
-        bool found = false;
-        for (auto& k : cls) { if (k.first == sig) { ++k.second; found = true; break; } }
-        if (!found) { cls.emplace_back(sig, 1); }
-    }
-    std::sort(cls.begin(), cls.end());
-    if (cls.size() < 2) { return out; }   // one class: every split leaves the same board
-    // Every multiset of g units over the classes (counts respected), as per-class use counts.
-    const int K = static_cast<int>(cls.size());
-    std::vector<std::vector<int>> splits;
-    std::vector<int> use(K, 0);
-    std::function<void(int, int)> rec = [&](int k, int left)
-    {
-        if (k == K) { if (left == 0) { splits.push_back(use); } return; }
-        for (int u = 0; u <= std::min(left, cls[k].second); ++u) { use[k] = u; rec(k + 1, left - u); }
-        use[k] = 0;
-    };
-    rec(0, g);
-    // DOMINANCE (sound): a split that taps a PLAIN source of signature B while a PLAIN source of signature A, a
-    // strict subset of B's colours, is left untapped is dominated by the swap -- its leftover pool can pay
-    // everything the other's can. Specials are never swapped (their tap is not only mana).
-    auto subset = [](int a, int b) { return a != b && (a & b) == a; };
-    std::vector<std::vector<int>> kept;
-    for (const std::vector<int>& sp : splits)
-    {
-        bool dominated = false;
-        for (int b = 0; b < K && !dominated; ++b)
+        std::vector<ManaPool> out(1);
+        ManaPool use;
+        const auto rec = [&](auto&& self, int first, int left) -> void
         {
-            if (sp[b] == 0 || (cls[b].first & kSigSpecial)) { continue; }
-            for (int a = 0; a < K; ++a)
+            if (left == 0) { out.push_back(use); return; }
+            for (int c = first; c < 6; ++c)
             {
-                if ((cls[a].first & kSigSpecial) || !subset(cls[a].first, cls[b].first)) { continue; }
-                if (cls[a].second - sp[a] >= 1) { dominated = true; break; }
+                use.Add(static_cast<Color>(c), 1);
+                self(self, c, left - 1);
+                use.Add(static_cast<Color>(c), -1);
             }
-        }
-        if (!dominated) { kept.push_back(sp); }
-    }
-    if (kept.size() < 2) { return out; }   // one undominated split: nothing to search
-    // THE HAND-DEMAND ORDER: the colour shortfall the leftover leaves against the hand's needs (a source counts for
-    // every colour it makes -- optimistic, an ORDER only), then fewer special taps, then the enumeration order.
-    int demand[5];
-    SeedHandDemand(state, me, seed_def, demand);
-    auto shortfall = [&](const std::vector<int>& sp)
-    {
-        int left[5] = { 0, 0, 0, 0, 0 };
-        for (int k = 0; k < K; ++k)
-        { for (int c = 0; c < 5; ++c) { if (cls[k].first & (1 << c)) { left[c] += cls[k].second - sp[k]; } } }
-        int s = 0;
-        for (int c = 0; c < 5; ++c) { s += std::max(0, demand[c] - left[c]); }
-        return s;
-    };
-    auto specials = [&](const std::vector<int>& sp)
-    { int n = 0; for (int k = 0; k < K; ++k) { if (cls[k].first & kSigSpecial) { n += sp[k]; } } return n; };
-    std::vector<int> idx(kept.size());
-    for (std::size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
-    std::stable_sort(idx.begin(), idx.end(), [&](int x, int y)
-    {
-        const int sx = shortfall(kept[x]), sy = shortfall(kept[y]);
-        if (sx != sy) { return sx < sy; }
-        return specials(kept[x]) < specials(kept[y]);
-    });
-    // Pack: each unit is (signature + 1) in its own byte, ascending, so 0 never encodes a split.
-    for (int i : idx)
-    {
-        std::int32_t v = 0;
-        int byte = 0;
-        for (int k = 0; k < K; ++k)
-        { for (int u = 0; u < kept[i][k]; ++u) { v |= static_cast<std::int32_t>(cls[k].first + 1) << (8 * byte++); } }
-        out.push_back(v);
-    }
-    return out;
+        };
+        for (int n = 1; n <= kSplitMaxGeneric; ++n) { rec(rec, 0, n); }
+        return out;
+    }();
+    return patterns;
+}
+std::array<int, 6> SeedFloatCounts(const ManaPool& f)
+{ return { f.white, f.blue, f.black, f.red, f.green, f.colorless }; }
+bool SeedFloatContains(const ManaPool& have, const ManaPool& need)
+{
+    const auto h = SeedFloatCounts(have), n = SeedFloatCounts(need);
+    for (int c = 0; c < 6; ++c) { if (h[c] < n[c]) { return false; } }
+    return true;
+}
+ManaPool SeedFloatSubtract(const ManaPool& have, const ManaPool& used)
+{
+    ManaPool left = have;
+    const auto u = SeedFloatCounts(used);
+    for (int c = 0; c < 6; ++c) { left.Add(static_cast<Color>(c), -u[c]); }
+    return left;
 }
 
-std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t split)
+// Sources collected before the plan's casts can become tapped, and those casts can create
+// FLOAT before its cycle seed pays. Enumerating only the initial float would lose Song->cycle
+// lines. This is an overestimate of colours possible by the payment point; a pin requiring float
+// not actually present fails there. In the supported Cyclone pool only Song and Cascade Bluffs
+// add float: Song's concrete ritual colour and the filter's concrete output menu cover them.
+bool SeedPotentialFloat(const GameState& state, int me, ManaPool& potential)
 {
-    if (split == 0) { return 0; }
-    const int n = static_cast<int>(state.battlefield.size());
-    if (n > 64) { return 0; }   // bitmask limit, matching ReservableSpecialMask
-    std::uint64_t chosen = 0;
-    for (int byte = 0; byte < 4; ++byte)
+    const ManaPool& actual = state.floating_mana;
+    if (actual.wild != 0 || actual.snow_units != 0 || state.floating_haste_c != 0) { return false; }
+    potential = actual;
+    const auto admit = [&](Color c)
     {
-        const int want = ((split >> (8 * byte)) & 0xFF) - 1;
+        const auto have = SeedFloatCounts(potential);
+        potential.Add(c, std::max(0, kSplitMaxGeneric - have[static_cast<int>(c)]));
+    };
+    for (const Card& c : state.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->params.ritual_floating_mana <= 0) { continue; }
+        const std::string& col = d->params.ritual_float_color;
+        const std::string letters = "WUBRGC";
+        const auto at = letters.find(col);
+        if (col.size() != 1 || at == std::string::npos) { return false; }   // a WILD producer is outside this axis
+        admit(static_cast<Color>(at));
+    }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me || q.tapped || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && d->params.is_filter)
+        { for (Color c : d->params.produces) { admit(c); } }
+    }
+    return true;
+}
+
+bool SeedSplitSources(const GameState& state, int me, std::int32_t split, std::uint64_t& hold)
+{
+    hold = 0;
+    if (split == 0) { return true; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return false; }
+    std::uint64_t chosen = 0;
+    for (int byte = 0; byte < 3; ++byte)
+    {
+        const int want = static_cast<int>((static_cast<std::uint32_t>(split) >> (8 * byte)) & 0xFFu) - 1;
         if (want < 0) { break; }
         int pick = -1;
         for (int i = 0; i < n; ++i)
@@ -6748,16 +6764,151 @@ std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t 
             if (chosen & (1ull << i)) { continue; }
             if (SeedPaySourceSig(state.battlefield[static_cast<std::size_t>(i)], me) == want) { pick = i; break; }
         }
-        if (pick < 0) { return 0; }   // not realisable on this board: the payer decides
+        if (pick < 0) { return false; }
         chosen |= 1ull << pick;
     }
-    std::uint64_t hold = 0;
     for (int i = 0; i < n; ++i)
     {
-        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
-        if (p.controller_index == me && !p.tapped && !(chosen & (1ull << i))) { hold |= 1ull << i; }
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == me && !q.tapped && !(chosen & (1ull << i))) { hold |= 1ull << i; }
     }
-    return hold;
+    return true;
+}
+}   // namespace
+
+std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
+                                        const CardDefinition& seed_def)
+{
+    std::vector<std::int32_t> out;
+    if (!SeedPaySplitOn()) { return out; }
+    if (!cost.IsFlat() || cost.colorless != 0 || cost.white + cost.blue + cost.black + cost.red + cost.green != 0
+        || cost.generic <= 0 || cost.generic > kSplitMaxGeneric || state.battlefield.size() > 64) { return out; }
+    ManaPool potential_float;
+    if (!SeedPotentialFloat(state, me, potential_float)) { return out; }
+    for (const Permanent& q : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr && (d->params.is_land_aura || !d->params.granted_tap_mana_subtypes.empty()
+                            || d->params.equip_grants_tap_mana_any)) { return out; }
+    }
+    // Source key, available count, colour menu. Special sources have distinct stable identities.
+    struct Class { int key, count, colors; };
+    std::vector<Class> cls;
+    for (const Permanent& q : state.battlefield)
+    {
+        const int sig = SeedPaySourceSig(q, me);
+        if (sig == kSeedSourceUnsupported) { return out; }
+        if (sig < 0) { continue; }
+        auto at = std::find_if(cls.begin(), cls.end(), [&](const Class& k) { return k.key == sig; });
+        if (at == cls.end()) { cls.push_back({ sig, 1, SeedPaySourceColors(q) }); }
+        else { ++at->count; }
+    }
+    std::sort(cls.begin(), cls.end(), [](const Class& x, const Class& y) { return x.key < y.key; });
+    if (cls.size() < 2 && potential_float.Total() == 0) { return out; }   // historical one-class identity fold
+    const int K = static_cast<int>(cls.size());
+    struct Split { std::vector<int> use; int float_code; };
+    std::vector<Split> kept;
+    std::vector<int> use(K, 0);
+    const auto subset = [](int x, int y) { return x != y && (x & y) == x; };
+    const auto dominated = [&]()
+    {
+        for (int b = 0; b < K; ++b)
+        {
+            if (use[b] == 0 || cls[b].key >= kSigSpecial) { continue; }
+            for (int a = 0; a < K; ++a)
+            {
+                if (cls[a].key >= kSigSpecial || !subset(cls[a].key, cls[b].key)) { continue; }
+                if (cls[a].count - use[a] >= 1) { return true; }
+            }
+        }
+        return false;
+    };
+    const auto& patterns = SeedFloatPatterns();
+    for (int fc = 0; fc < static_cast<int>(patterns.size()); ++fc)
+    {
+        const ManaPool& f = patterns[static_cast<std::size_t>(fc)];
+        if (f.Total() > cost.generic || !SeedFloatContains(potential_float, f)) { continue; }
+        const auto rec = [&](auto&& self, int k, int left) -> void
+        {
+            if (k == K)
+            {
+                if (left == 0 && !dominated()) { kept.push_back({ use, fc }); }
+                return;
+            }
+            for (int u = 0; u <= std::min(left, cls[k].count); ++u)
+            { use[k] = u; self(self, k + 1, left - u); }
+            use[k] = 0;
+        };
+        rec(rec, 0, cost.generic - f.Total());
+    }
+    // The hand-demand order reads BOTH resources left: source colours and unspent actual float.
+    // Potential future float affects admission, never the certainty of this order's demand estimate.
+    int demand[5];
+    SeedHandDemand(state, me, seed_def, demand);
+    const auto shortfall = [&](const Split& sp)
+    {
+        const auto have = SeedFloatCounts(state.floating_mana);
+        const auto used = SeedFloatCounts(patterns[static_cast<std::size_t>(sp.float_code)]);
+        int left[5];
+        for (int c = 0; c < 5; ++c) { left[c] = std::max(0, have[c] - used[c]); }
+        for (int k = 0; k < K; ++k)
+        { for (int c = 0; c < 5; ++c) { if (cls[k].colors & (1 << c)) { left[c] += cls[k].count - sp.use[k]; } } }
+        int score = 0;
+        for (int c = 0; c < 5; ++c) { score += std::max(0, demand[c] - left[c]); }
+        return score;
+    };
+    const auto specials = [&](const Split& sp)
+    { int n = 0; for (int k = 0; k < K; ++k) { if (cls[k].key >= kSigSpecial) { n += sp.use[k]; } } return n; };
+    std::stable_sort(kept.begin(), kept.end(), [&](const Split& x, const Split& y)
+    {
+        const int sx = shortfall(x), sy = shortfall(y);
+        if (sx != sy) { return sx < sy; }
+        const int px = specials(x), py = specials(y);
+        if (px != py) { return px < py; }
+        // Equal demand: consume already-floating mana before tapping more sources.
+        return patterns[static_cast<std::size_t>(x.float_code)].Total() > patterns[static_cast<std::size_t>(y.float_code)].Total();
+    });
+    for (const Split& sp : kept)
+    {
+        std::uint32_t packed = static_cast<std::uint32_t>(sp.float_code) << 24;
+        int byte = 0;
+        for (int k = 0; k < K; ++k)
+        { for (int u = 0; u < sp.use[k]; ++u) { packed |= static_cast<std::uint32_t>(cls[k].key + 1) << (8 * byte++); } }
+        out.push_back(static_cast<std::int32_t>(packed));
+    }
+    return out;
+}
+
+std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t split)
+{
+    std::uint64_t hold = 0;
+    return SeedSplitSources(state, me, split, hold) ? hold : 0;
+}
+
+SeedPaySplitScope::SeedPaySplitScope(GameState& state, int me, std::int32_t split)
+    : m_prev(g_seed_pay_hold), m_prev_split(g_seed_pay_split)
+{
+    if (split == 0) { g_seed_pay_hold = 0; g_seed_pay_split = 0; return; }
+    const auto code = static_cast<std::uint32_t>(split) >> 24;
+    const auto& patterns = SeedFloatPatterns();
+    std::uint64_t hold = 0;
+    if (code >= patterns.size() || !SeedSplitSources(state, me, split, hold)
+        || state.floating_mana.wild != 0 || state.floating_mana.snow_units != 0 || state.floating_haste_c != 0
+        || !SeedFloatContains(state.floating_mana, patterns[code]))
+    { m_valid = false; return; }
+    m_held_float = SeedFloatSubtract(state.floating_mana, patterns[code]);
+    state.floating_mana = patterns[code];
+    m_state = &state;
+    g_seed_pay_hold = hold;
+    g_seed_pay_split = split;
+}
+SeedPaySplitScope::~SeedPaySplitScope()
+{
+    // The payer restores its exposed pool on failure. Reuniting the unexposed pool therefore
+    // restores the original float on failure and preserves every unused unit on success.
+    if (m_state != nullptr) { m_state->floating_mana.AddPool(m_held_float); }
+    g_seed_pay_hold = m_prev;
+    g_seed_pay_split = m_prev_split;
 }
 thread_local ManaCost g_act_line_current;
 
@@ -7626,7 +7777,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // (The oracle's own copy never gets here -- its payments returned through ScriptedPay above -- and its
     // float-only probes, like the refine's own, are skipped.)
     const bool refine = t_pay_nest == 1 && !t_pay_refining && !manaoracle::t_float_only && !state.dmg_events_armed
-                     && PayRefineOn();
+                     && g_seed_pay_split == 0 && PayRefineOn();
     std::optional<PayRefineSnap> refine_pre;
     if (refine) { refine_pre.emplace(); refine_pre->Take(state, available); }
     bool ok;
@@ -8444,6 +8595,18 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             if (rmask == act_hold) { g_act_solo_retry.fetch_add(1, std::memory_order_relaxed); }
         }
     }
+    // The seed's searched payment must survive other SOFT reservations. If their union made
+    // the requested allocation fail, retry its hold alone before releasing it. Otherwise a
+    // reserved Myriad/filter can silently turn distinct searched pins into the same greedy tap.
+    if (g_seed_pay_hold != 0 && g_seed_pay_hold != rmask
+        && held_attempt(g_seed_pay_hold, "impl.seed-split")) { return true; }
+    if (g_seed_pay_split != 0)
+    {
+        // A zero hold means every source was selected (or none exists). It still needs one
+        // attempt, with exactly the float exposed by SeedPaySplitScope.
+        if (g_seed_pay_hold == 0 && held_attempt(0, "impl.seed-split-all")) { return true; }
+        return false;   // source/float allocations are searched pins, never soft preferences
+    }
     // PUMP-TARGET NARROW RUNG (MTG_MINT_CREDIT_EXACT). The whole-turn prepay's reserve ladder
     // retreats from "hold every dork" to "hold the projected pump target alone" before it
     // releases everything (ReserveCreatureHold); this per-cast path had no such rung, so on a
@@ -9112,6 +9275,8 @@ std::uint64_t PayContextDigest()
         | (HumanPlayActive() ? 8u : 0u) | (LineGenericOrderLive() ? 16u : 0u) | (g_hold_colorless_for_pips ? 32u : 0u)
         | (g_snow_pay_strict ? 64u : 0u) | (g_hold_colorless_in_payment ? 128u : 0u) | (g_in_blink_loop ? 256u : 0u)
         | (g_tap_speculating ? 512u : 0u) | (g_pay_need_live ? 1024u : 0u) | (g_paysac_cracked ? 2048u : 0u));
+    if (g_cycle_seed_paying) { mix(0x4359434C45534545ull); }
+    if (g_seed_pay_split != 0) { mix(0x5345454450415948ull); mix(static_cast<std::uint32_t>(g_seed_pay_split)); mix(g_seed_pay_hold); }
     mix(static_cast<std::uint32_t>(t_float_generic_hold));
     mix(static_cast<std::uint32_t>(g_human_untap_need));
     mix(static_cast<std::uint32_t>(g_pay_remaining_mv));

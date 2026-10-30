@@ -63074,7 +63074,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             const CycleSeedPayScope _csp;   // the hold must not hold back this payment's own pips
             // THE PAYMENT SPLIT (seed.seed_pay_split; 0 -> no hold): lockstep with the executor's PerformDigFull.
-            const SeedPaySplitScope _sps(SeedPaySplitHoldMask(state, me, seed.seed_pay_split));
+            const SeedPaySplitScope _sps(state, me, seed.seed_pay_split);
+            if (!_sps.Valid()) { return; }
             if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { return; }
         }
         std::vector<Card>::iterator it = find_copy();   // the payment may have moved the hand
