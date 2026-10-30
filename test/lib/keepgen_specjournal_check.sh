@@ -183,7 +183,8 @@ if interrupt "$ROOT/Wk" "roll:$NROLL:9" 137 "${WALLENV[@]}"; then
     nab=$(grep -c 'ABANDONED-WALL rollout' "$ROOT/Wk/err")
     gen "$ROOT/Wk" "${WALLENV[@]}" || bad "Wk resume failed"
     norm "$ROOT/Wk/k.raw" "$ROOT/Wk/k.raw.n"
-    cmp -s "$ROOT/Wk/k.raw.n" "$ROOT/wref/k.raw.n" && cmp -s "$ROOT/Wk/k.profile" "$ROOT/wref/k.profile" \
+    cmp -s "$ROOT/Wk/k.raw.n" "$ROOT/wref/k.raw.n" \
+        && { [ ! -e "$ROOT/wref/k.profile" ] && [ ! -e "$ROOT/Wk/k.profile" ] || cmp -s "$ROOT/Wk/k.profile" "$ROOT/wref/k.profile"; } \
         && ok "Wk: resumed raw + profile identical to the uninterrupted wall run" \
         || bad "Wk: resumed raw/profile DIFFER from the uninterrupted wall run"
     if [ "$nab" -eq 3 ]; then
