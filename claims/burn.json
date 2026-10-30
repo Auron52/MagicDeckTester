@@ -4,9 +4,12 @@
   "valueleaf": "em:1c9539bbaeade750cc31"
  },
  "deck": "burn",
+ "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.002937 t, cost 1.009x (se 0.006, 96 seeds)); incumbent restored",
+ "finished": "2026-10-30T16:01:19Z",
  "frozen": "58dcb45053e9fa6aa62da85a92872d6eeff6cdff",
  "heartbeat": "2026-10-30T15:45:27Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/burn-20261030-1601",
  "run_id": "burn-artifact-queue-d7d6a5-20261030T154152",
  "score": 0.0986,
  "stage": "mulligan",
@@ -14,6 +17,6 @@
   "mulligan"
  ],
  "started": "2026-10-30T15:41:52Z",
- "state": "running",
+ "state": "rejected",
  "worker": "artifact-queue-d7d6a5"
 }
