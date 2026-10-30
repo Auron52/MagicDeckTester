@@ -12,9 +12,10 @@
 #
 # The interruption is COUNT-keyed (MTG_KEEP_DIAG_KILL_AFTER), not timed: "spec:N" signals the process
 # right after the N-th speculative sub rollout is parked in the sub memo -- i.e. mid-speculation, the exact
-# state the Hinata2 pause of 2026-10-29 threw away -- and "roll:N:9" SIGKILLs it after N games, which
-# exercises the flush bound instead of the SIGTERM drain. Killing its OWN scratch child is the mechanism
-# under test, not a result-producing run being cancelled.
+# state the Hinata2 pause of 2026-10-29 threw away -- and "roll:N:9" SIGKILLs it after N games: every
+# record is written before run_one returns, so even an uncatchable kill must lose nothing finished
+# (only a MACHINE crash is bounded by the fsync cadence, which a test cannot simulate). Killing its OWN
+# scratch child is the mechanism under test, not a result-producing run being cancelled.
 #
 # MTG_KEEP_REFS_OFFSET=0 is pinned for the same reason test/lib/keepgen_check.sh pins it (the rolling
 # freeze target is re-derived on a timing-triggered schedule, which a byte diff cannot tolerate).
@@ -98,8 +99,6 @@ same_as_ref "$ROOT/off" "spec journal OFF"
 
 echo "== SIGTERM (a pause) mid-speculation, resumed"
 if interrupt "$ROOT/A" "spec:$NSPEC" 143; then
-    grep -q "drained to the side journal" "$ROOT/A/err" && ok "A: the pause drained the writer before exiting" \
-        || bad "A: no drain line -- the SIGTERM was not caught by the sentinel"
     cp -r "$ROOT/A" "$ROOT/A_off"
     gen "$ROOT/A" || bad "A resume failed"
     same_as_ref "$ROOT/A" "A resumed"
@@ -119,8 +118,13 @@ if interrupt "$ROOT/V" "spec:$NSPEC" 143; then
         || ok "V: $(served "$ROOT/V") banked values all equal the replayed games"
 fi
 
-echo "== SIGKILL (no drain: the flush bound), resumed"
+echo "== SIGKILL (uncatchable), resumed"
 if interrupt "$ROOT/K" "roll:$NROLL:9" 137; then
+    # The kill lands right after the NROLL-th game's record was written (no compaction at this size), so
+    # a zero-loss writer leaves at least NROLL records; a buffered one would come up short.
+    kn=$(specrecs "$ROOT/K")
+    [ "$kn" -ge "$NROLL" ] && ok "K: all $NROLL games played before the SIGKILL are in the side journal ($kn records)" \
+                           || bad "K: only $kn of the $NROLL games played before the SIGKILL reached the side journal"
     gen "$ROOT/K" || bad "K resume failed"
     same_as_ref "$ROOT/K" "K resumed"
     [ "$(served "$ROOT/K")" -gt 0 ] && ok "K: $(served "$ROOT/K") served" || bad "K: nothing served after a SIGKILL"

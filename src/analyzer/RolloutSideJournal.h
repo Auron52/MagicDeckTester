@@ -21,11 +21,12 @@
 // (floor, refine, split, speculative, precompute) consumes them exactly as the killed run would have,
 // and the finished table is byte-identical to an uninterrupted run.
 //
-// This header holds the parts that do not need the generator's state (record format, file reader,
-// background writer with compaction and rolling backups, the signal drain), so they are unit-tested in
-// isolation (test/unit/test_rollout_side_journal.cpp).
+// This header holds the parts that do not need the generator's state (record format, file reader, the
+// writer with its sync/compaction/backup thread, the small portable fd layer), so they are unit-tested
+// in isolation (test/unit/test_rollout_side_journal.cpp).
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -48,9 +49,12 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#if defined(__linux__)
-#include <pthread.h>
-#include <signal.h>
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+#include <sys/stat.h>
+#else
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -174,19 +178,15 @@ struct ReadStats
 // could parse as a different value. Blank lines are skipped silently (the writer emits one after a
 // write-failure recovery, exactly as the main journal does).
 template <class Sink>
-ReadStats ReadFile(const std::string& path, Sink&& sink)
+ReadStats ParseBuffer(const std::string& data, Sink&& sink)
 {
     ReadStats st;
-    std::ifstream f(path, std::ios::binary);
-    if (!f.is_open()) { return st; }
     st.opened = true;
-    std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    std::size_t pos = 0;
     const std::size_t nl0 = data.find('\n');
     if (nl0 == std::string::npos) { st.header = data; return st; }   // no complete header: nothing usable
     st.header = data.substr(0, nl0);
     st.header_ok = true;
-    pos = nl0 + 1;
+    std::size_t pos = nl0 + 1;
     Rec x;
     while (pos < data.size())
     {
@@ -202,6 +202,29 @@ ReadStats ReadFile(const std::string& path, Sink&& sink)
     return st;
 }
 
+// Read the first `limit` bytes of <path> (all of it when limit < 0).
+inline bool ReadBytes(const std::string& path, std::string& out, long long limit = -1)
+{
+    std::ifstream f(path, std::ios::binary);
+    if (!f.is_open()) { return false; }
+    if (limit < 0) { out.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()); }
+    else
+    {
+        out.resize(static_cast<std::size_t>(limit));
+        f.read(out.data(), static_cast<std::streamsize>(limit));
+        out.resize(static_cast<std::size_t>(f.gcount()));
+    }
+    return true;
+}
+
+template <class Sink>
+ReadStats ReadFile(const std::string& path, Sink&& sink)
+{
+    std::string data;
+    if (!ReadBytes(path, data)) { return ReadStats{}; }
+    return ParseBuffer(data, std::forward<Sink>(sink));
+}
+
 // Rename `path` aside to <path>.rejected.<epoch> (never delete, never truncate). Returns the new name,
 // or empty on failure.
 inline std::string RenameAside(const std::string& path)
@@ -214,88 +237,157 @@ inline std::string RenameAside(const std::string& path)
     return ec ? std::string() : aside;
 }
 
-// Background writer. Workers call Append() (one short critical section: format into a string); a
-// dedicated thread drains the buffer to the file every flush_ms, so file I/O never sits on a worker.
-// Durability bound: a completed rollout reaches the OS (kill-safe, the main journal's standard) within
-// flush_ms; SIGTERM/SIGINT/SIGHUP drain it immediately (TermSentinel below), so only SIGKILL / a crash
-// can lose the last <= flush_ms of completions.
+
+// ---- Minimal portable fd layer -------------------------------------------------------------------
+// Raw descriptors, not a stream: a record must reach the kernel with ONE write() before Append returns
+// (a stream's buffer is lost with the process), and the sync thread must fsync the same file.
+namespace fdio
+{
+#if defined(_WIN32)
+inline int  OpenAppend(const std::string& p) { return ::_open(p.c_str(), _O_WRONLY | _O_APPEND | _O_CREAT | _O_BINARY, _S_IREAD | _S_IWRITE); }
+inline int  OpenTrunc(const std::string& p)  { return ::_open(p.c_str(), _O_WRONLY | _O_TRUNC | _O_CREAT | _O_BINARY, _S_IREAD | _S_IWRITE); }
+inline long long WriteSome(int fd, const char* b, std::size_t n) { return ::_write(fd, b, static_cast<unsigned>(std::min<std::size_t>(n, 1u << 30))); }
+inline bool Sync(int fd)  { return ::_commit(fd) == 0; }
+inline int  Dup(int fd)   { return ::_dup(fd); }
+inline void Close(int fd) { if (fd >= 0) { ::_close(fd); } }
+inline void SyncDir(const std::string&) {}   // NTFS: a rename is durable with the file's own commit
+#else
+inline int  OpenAppend(const std::string& p) { return ::open(p.c_str(), O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0644); }
+inline int  OpenTrunc(const std::string& p)  { return ::open(p.c_str(), O_WRONLY | O_TRUNC | O_CREAT | O_CLOEXEC, 0644); }
+inline long long WriteSome(int fd, const char* b, std::size_t n) { return static_cast<long long>(::write(fd, b, n)); }
+inline bool Sync(int fd)  { return ::fsync(fd) == 0; }
+inline int  Dup(int fd)   { return ::dup(fd); }
+inline void Close(int fd) { if (fd >= 0) { ::close(fd); } }
+// A rename is durable only once its DIRECTORY is synced. Best effort (some filesystems refuse it).
+inline void SyncDir(const std::string& file)
+{
+    std::string d = std::filesystem::path(file).parent_path().string();
+    if (d.empty()) { d = "."; }
+    const int fd = ::open(d.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) { ::fsync(fd); ::close(fd); }
+}
+#endif
+// Write all of [b, b+n), retrying short writes and EINTR. False on a real error (the caller holds the
+// record and retries later; a partial record left in the file is ended by the recovery newline).
+inline bool WriteAll(int fd, const char* b, std::size_t n)
+{
+    while (n > 0)
+    {
+        const long long w = WriteSome(fd, b, n);
+        if (w < 0) { if (errno == EINTR) { continue; } return false; }
+        if (w == 0) { return false; }
+        b += w; n -= static_cast<std::size_t>(w);
+    }
+    return true;
+}
+// fsync a file by PATH (the main journal is written through a stream; any descriptor on the inode syncs
+// its data). Opened for append-write because Windows' _commit needs write access; nothing is written.
+inline bool SyncPath(const std::string& p)
+{
+#if defined(_WIN32)
+    const int fd = ::_open(p.c_str(), _O_WRONLY | _O_APPEND | _O_BINARY);   // never creates
+#else
+    const int fd = ::open(p.c_str(), O_WRONLY | O_APPEND | O_CLOEXEC);      // never creates
+#endif
+    if (fd < 0) { return false; }
+    const bool ok = Sync(fd);
+    Close(fd);
+    return ok;
+}
+}  // namespace fdio
+
+// ---- The writer ----------------------------------------------------------------------------------
+// DURABILITY (USER 2026-10-29, "no exceptions"):
+//   * PROCESS death of any kind -- a pause's SIGTERM, SIGKILL, the OOM killer, a crash -- loses ZERO
+//     completed rollouts: Append() hands the record to the kernel with one write() before it returns,
+//     i.e. before run_one returns the value to anything that could act on it, and the page cache
+//     outlives the process.
+//   * MACHINE death (power loss, a kernel panic, a VM/container host going away with dirty pages):
+//     at most the last sync_ms of completions (default 1 s). The sync thread fsyncs the file every
+//     sync_ms, and only AFTER that runs the caller's on_sync hook -- which is where the generator
+//     fsyncs the MAIN journal and only then lets the side journal forget rollouts the main journal
+//     covers. So compaction can never drop a rollout whose covering main-journal record is not on
+//     stable storage.
+// A worker's cost is one formatted ~25-byte write() under a mutex per rollout -- against a rollout
+// that is a whole searched game (~20 ms to minutes), noise.
 //
-// COMPACTION: every compact_bytes appended, the file is rewritten (tmp + atomic rename) keeping only
-// the records `keep` still wants -- the generator passes "not yet covered by a record the MAIN journal
-// has durably written", so the side file stays the size of the uncommitted frontier instead of growing
-// with every rollout of a multi-day run. A failed compaction leaves the old file in place.
+// COMPACTION every compact_bytes appended: the file is rewritten (tmp + fsync + atomic rename + dir
+// sync) keeping only what `keep` still wants. Workers are blocked only for the last step (copying
+// the few bytes appended while the prefix was being filtered, and the rename); the read/filter/write
+// of the prefix runs unlocked. A failed compaction leaves the old file in place.
 //
-// ROLLING BACKUPS: <path>.bak1/.bak2 every backup_s, rotated exactly like the main journal's (bak1 ->
-// bak2 first, then copy -> bak1.tmp -> rename), always taken from a flushed, whole-line file.
+// ROLLING BACKUPS: <path>.bak1/.bak2 every backup_s, rotated like the main journal's (bak1 -> bak2,
+// then copy -> bak1.tmp -> rename). Taken under the lock, so a backup is always whole records.
 //
-// WRITE FAILURE (a dropped mount): records are HELD in memory and the file is reopened in append mode
-// at most every 30 s; on recovery a newline terminates any record the failure cut, then every held
-// record is written in order. Same contract as the main journal's journal_emit_locked.
+// WRITE FAILURE (a dropped mount): the record is HELD in memory and the sync thread reopens the file
+// every 30 s; on recovery a newline ends any record the failure cut, then every held record follows in
+// order. Same contract as the main journal's journal_emit_locked. (Held records are, by necessity, the
+// one thing a process death during an outage loses: there is no disk to put them on.)
 class Writer
 {
 public:
     struct Opts
     {
         std::string path;
-        std::string header;          // line 1, WITHOUT the newline
-        int         flush_ms = 100;
-        long long   backup_s = 900;  // 0 disables
+        std::string header;              // line 1, WITHOUT the newline
+        int         sync_ms = 1000;      // fsync cadence = the machine-crash bound
+        long long   backup_s = 900;      // 0 disables
         long long   compact_bytes = 64LL << 20;
-        bool        quiet = false;   // unit tests
+        bool        quiet = false;       // unit tests
     };
     using KeepFn = std::function<bool(const Rec&)>;
+    using HookFn = std::function<void()>;
 
-    Writer(Opts o, KeepFn keep) : o_(std::move(o)), keep_(std::move(keep)) {}
+    Writer(Opts o, KeepFn keep, HookFn on_sync = nullptr)
+        : o_(std::move(o)), keep_(std::move(keep)), on_sync_(std::move(on_sync)) {}
     Writer(const Writer&) = delete;
     Writer& operator=(const Writer&) = delete;
     ~Writer() { Close(false); }
 
-    // Write header + `initial` to <path>.tmp, rename it over <path> (atomic), open for append and start
-    // the flusher. `initial` is the carried frontier (records a resume still needs). On failure nothing
-    // at <path> is touched and false is returned.
+    // Write header + `initial` to <path>.tmp, fsync, rename it over <path>, open for append and start the
+    // sync thread. `initial` is the carried frontier. On failure <path> is untouched and false returned.
     bool Open(const std::vector<Rec>& initial, std::string* err)
     {
-        if (!RewriteFile(initial, err)) { return false; }
-        f_.open(o_.path, std::ios::out | std::ios::app | std::ios::binary);
-        if (!f_.is_open()) { if (err) { *err = "cannot reopen " + o_.path + " for append"; } return false; }
+        long long sz = 0;
+        if (!RewriteFile(initial, std::string(), &sz, err)) { return false; }
+        fd_ = fdio::OpenAppend(o_.path);
+        if (fd_ < 0) { if (err) { *err = "cannot reopen " + o_.path + " for append"; } return false; }
+        file_bytes_ = sz;
         backup_last_ = std::chrono::steady_clock::now();
         open_.store(true);
         th_ = std::thread([this] { Loop(); });
         return true;
     }
 
+    // One completed rollout -> the kernel, now.
     void Append(const Rec& x)
     {
         std::string s;
         Format(s, x);
-        std::lock_guard<std::mutex> lk(pm_);
-        pending_ += s;
-    }
-
-    // Synchronous drain. force_retry ignores the 30 s retry spacing. A no-op once closed.
-    void FlushNow(bool force_retry = false)
-    {
         std::lock_guard<std::mutex> lk(io_);
-        if (open_.load()) { FlushLocked(force_retry); }
-    }
-
-    // Signal path: like FlushNow but never blocks for long on a flusher stuck in I/O.
-    bool TryDrain(int ms)
-    {
-        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
-        while (!io_.try_lock())
+        if (!open_.load(std::memory_order_relaxed)) { return; }
+        if (!failed_ && fdio::WriteAll(fd_, s.data(), s.size()))
         {
-            if (std::chrono::steady_clock::now() >= until) { return false; }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            file_bytes_ += static_cast<long long>(s.size());
+            since_compact_ += static_cast<long long>(s.size());
+            recs_.fetch_add(1, std::memory_order_relaxed);
+            return;
         }
-        if (open_.load()) { FlushLocked(true); }   // after Close there is nothing left to drain
-        const bool ok = !failed_ && held_.empty();
-        io_.unlock();
-        return ok;
+        if (!failed_)
+        {
+            failed_ = true;
+            retry_last_ = std::chrono::steady_clock::now();
+            if (!o_.quiet)
+            {
+                std::cerr << "[keepgen] SPEC-JOURNAL WRITE FAILED on " << o_.path << " -- holding completed"
+                             " rollouts in memory and retrying every 30 s\n" << std::flush;
+            }
+        }
+        held_ += s;
     }
 
-    // Stop the flusher and write everything still buffered. `retry`: on a failing mount keep retrying for
-    // up to ~30 s before giving up loudly (used where the file still matters -- a run that did not finish).
+    // Stop the sync thread, write anything held, fsync, close. `retry`: on a failing mount keep retrying
+    // for ~30 s (used where the file still matters -- a run that did not finish).
     void Close(bool retry)
     {
         if (!open_.load()) { return; }
@@ -303,11 +395,10 @@ public:
         cv_.notify_all();
         if (th_.joinable()) { th_.join(); }
         std::lock_guard<std::mutex> lk(io_);
-        FlushLocked(true);
-        for (int k = 0; retry && (failed_ || !held_.empty()) && k < 10; ++k)
+        for (int k = 0; (failed_ || !held_.empty()) && k < (retry ? 10 : 1); ++k)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(3));
-            FlushLocked(true);
+            if (k > 0) { std::this_thread::sleep_for(std::chrono::seconds(3)); }
+            RetryLocked(true);
         }
         if ((failed_ || !held_.empty()) && !o_.quiet)
         {
@@ -315,16 +406,20 @@ public:
                          " written to " << o_.path << " at close -- those rollouts will be rolled again on resume\n"
                       << std::flush;
         }
-        f_.close();
+        if (fd_ >= 0) { fdio::Sync(fd_); }
+        fdio::Close(fd_);
+        fd_ = -1;
         open_.store(false);
     }
 
+    // One sync cycle now (fsync + on_sync), as the thread does every sync_ms. Tests and shutdown paths.
+    void SyncNow() { DoSync(); }
+
     long long Records()     const { return recs_.load(std::memory_order_relaxed); }
     long long Compactions() const { return compactions_.load(std::memory_order_relaxed); }
-    long long FileBytes()   const { return file_bytes_.load(std::memory_order_relaxed); }
     const std::string& Path() const { return o_.path; }
 
-    // Test hook: force a compaction on the next flush.
+    // Test hook: force a compaction on the next cycle.
     void ForceCompactNext() { std::lock_guard<std::mutex> lk(io_); force_compact_ = true; }
 
 private:
@@ -333,69 +428,63 @@ private:
         std::unique_lock<std::mutex> lk(cvm_);
         while (!stop_)
         {
-            cv_.wait_for(lk, std::chrono::milliseconds(std::max(1, o_.flush_ms)), [this] { return stop_; });
+            cv_.wait_for(lk, std::chrono::milliseconds(std::max(1, o_.sync_ms)), [this] { return stop_; });
             if (stop_) { break; }
             lk.unlock();
-            {
-                std::lock_guard<std::mutex> io(io_);
-                FlushLocked(false);
-                if (!failed_ && held_.empty())
-                {
-                    MaybeBackupLocked();
-                    MaybeCompactLocked();
-                }
-            }
+            { std::lock_guard<std::mutex> io(io_); RetryLocked(false); }
+            DoSync();
+            MaybeBackup();
+            MaybeCompact();
             lk.lock();
         }
     }
 
-    // io_ held. Move the worker buffer into `held_` and write it.
-    void FlushLocked(bool force_retry)
+    // fsync our file (through a dup, so workers are not blocked behind the disk), THEN the caller's hook.
+    void DoSync()
     {
-        { std::lock_guard<std::mutex> lk(pm_); if (!pending_.empty()) { held_ += pending_; pending_.clear(); } }
-        if (held_.empty()) { return; }
+        int d = -1;
+        { std::lock_guard<std::mutex> io(io_); if (fd_ >= 0 && !failed_) { d = fdio::Dup(fd_); } }
+        if (d >= 0) { fdio::Sync(d); fdio::Close(d); }
+        if (on_sync_) { on_sync_(); }
+    }
+
+    // io_ held. After a failure: reopen (at most every 30 s unless forced), end any cut record, write held.
+    void RetryLocked(bool force)
+    {
+        if (!failed_ && held_.empty()) { return; }
         const auto now = std::chrono::steady_clock::now();
         if (failed_)
         {
-            if (!force_retry && now - retry_last_ < std::chrono::seconds(30)) { return; }
+            if (!force && now - retry_last_ < std::chrono::seconds(30)) { return; }
             retry_last_ = now;
-            f_.close(); f_.clear();
-            f_.open(o_.path, std::ios::out | std::ios::app | std::ios::binary);
-            if (!f_.is_open()) { f_.clear(); return; }
-            f_ << "\n";   // terminate a record the failure may have cut mid-line (the reader skips blanks)
+            fdio::Close(fd_);
+            fd_ = fdio::OpenAppend(o_.path);
+            if (fd_ < 0) { return; }
+            if (!fdio::WriteAll(fd_, "\n", 1)) { return; }   // the reader skips the blank line
+            file_bytes_ += 1;
         }
-        f_.write(held_.data(), static_cast<std::streamsize>(held_.size()));
-        f_.flush();
-        if (!f_.good())
-        {
-            if (!failed_ && !o_.quiet)
-            {
-                std::cerr << "[keepgen] SPEC-JOURNAL WRITE FAILED on " << o_.path << " -- holding completed"
-                             " rollouts in memory and retrying every 30 s\n" << std::flush;
-            }
-            if (!failed_) { retry_last_ = now; }
-            failed_ = true;
-            return;
-        }
+        if (!fdio::WriteAll(fd_, held_.data(), held_.size())) { failed_ = true; return; }
         if (failed_ && !o_.quiet)
         {
             std::cerr << "[keepgen] spec-journal RECOVERED: wrote " << held_.size() << " held bytes to "
                       << o_.path << "\n" << std::flush;
         }
-        failed_ = false;
         recs_.fetch_add(static_cast<long long>(std::count(held_.begin(), held_.end(), '\n')),
                         std::memory_order_relaxed);
+        file_bytes_ += static_cast<long long>(held_.size());
         since_compact_ += static_cast<long long>(held_.size());
-        file_bytes_.fetch_add(static_cast<long long>(held_.size()), std::memory_order_relaxed);
+        failed_ = false;
         held_.clear();
     }
 
-    void MaybeBackupLocked()
+    void MaybeBackup()
     {
         if (o_.backup_s <= 0) { return; }
         const auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::seconds>(now - backup_last_).count() < o_.backup_s) { return; }
         backup_last_ = now;
+        std::lock_guard<std::mutex> io(io_);   // whole records only
+        if (failed_) { return; }
         std::error_code ec;
         const std::string b1 = o_.path + ".bak1", b2 = o_.path + ".bak2", tmp = o_.path + ".bak1.tmp";
         if (std::filesystem::exists(b1, ec)) { std::filesystem::rename(b1, b2, ec); }
@@ -409,165 +498,119 @@ private:
         }
     }
 
-    void MaybeCompactLocked()
+    void MaybeCompact()
     {
-        if (!force_compact_ && since_compact_ < o_.compact_bytes) { return; }
-        force_compact_ = false;
-        f_.flush();
-        f_.close();
+        long long prefix = 0;
+        {
+            std::lock_guard<std::mutex> io(io_);
+            if (failed_ || !held_.empty()) { return; }
+            if (!force_compact_ && since_compact_ < o_.compact_bytes) { return; }
+            force_compact_ = false;
+            since_compact_ = 0;   // on failure too: retry after another threshold's worth
+            prefix = file_bytes_;
+        }
+        // Unlocked: filter the prefix [0, prefix) -- whole records, since every append is one record.
+        std::string data;
+        if (!ReadBytes(o_.path, data, prefix)) { Warn("cannot read " + o_.path); return; }
+        if (static_cast<long long>(data.size()) != prefix) { Warn("short read of the prefix"); return; }
         std::vector<Rec> kept;
         std::unordered_set<std::uint64_t> seen;
         long long before = 0;
-        ReadFile(o_.path, [&](const Rec& x)
+        ParseBuffer(data, [&](const Rec& x)
         {
             ++before;
             if (!keep_(x)) { return; }
             if (!seen.insert(Key(x.w, x.pd, x.r)).second) { return; }
             kept.push_back(x);
         });
-        std::string err;
-        const bool ok = RewriteFile(kept, &err);
-        f_.clear();
-        f_.open(o_.path, std::ios::out | std::ios::app | std::ios::binary);
-        if (!f_.is_open())
+        std::string body;
+        for (const Rec& x : kept) { Format(body, x); }
+        const std::string tmp = o_.path + ".tmp";
         {
-            f_.clear();
-            failed_ = true;   // held_ is empty; the next Append is held and retried like any failed write
-            retry_last_ = std::chrono::steady_clock::now();
+            const int t = fdio::OpenTrunc(tmp);
+            const std::string hdr = o_.header + "\n";
+            const bool ok = t >= 0 && fdio::WriteAll(t, hdr.data(), hdr.size())
+                         && fdio::WriteAll(t, body.data(), body.size());
+            fdio::Close(t);
+            if (!ok) { std::error_code ec; std::filesystem::remove(tmp, ec); Warn("cannot write " + tmp); return; }
         }
-        since_compact_ = 0;   // on failure too: retry after another threshold's worth, not every flush
-        if (!ok)
+        long long new_size = static_cast<long long>(o_.header.size() + 1 + body.size());
+        // Locked: append whatever landed after the prefix, swap the files, reopen.
+        std::lock_guard<std::mutex> io(io_);
+        std::string tail;
+        if (file_bytes_ > prefix)
         {
-            if (!o_.quiet)
-            {
-                std::cerr << "[keepgen]   WARNING: spec-journal compaction FAILED (" << err << ") -- kept the"
-                             " uncompacted file, still appending to it\n" << std::flush;
-            }
-            return;
+            std::string all;
+            if (!ReadBytes(o_.path, all, file_bytes_) || static_cast<long long>(all.size()) != file_bytes_)
+            { std::error_code ec; std::filesystem::remove(tmp, ec); Warn("short read of the tail"); return; }
+            tail = all.substr(static_cast<std::size_t>(prefix));
         }
+        const int t = fdio::OpenAppend(tmp);
+        const bool ok = t >= 0 && fdio::WriteAll(t, tail.data(), tail.size()) && fdio::Sync(t);
+        fdio::Close(t);
+        std::error_code ec;
+        if (!ok) { std::filesystem::remove(tmp, ec); Warn("cannot finish the rewrite"); return; }
+        // Close BEFORE the rename: Windows refuses to replace a file that is open without share-delete.
+        fdio::Close(fd_);
+        std::filesystem::rename(tmp, o_.path, ec);
+        const bool swapped = !ec;
+        if (swapped) { fdio::SyncDir(o_.path); } else { std::filesystem::remove(tmp, ec); }
+        fd_ = fdio::OpenAppend(o_.path);
+        if (fd_ < 0) { failed_ = true; retry_last_ = std::chrono::steady_clock::now(); }
+        if (!swapped) { Warn("rename failed"); return; }
+        file_bytes_ = new_size + static_cast<long long>(tail.size());
         compactions_.fetch_add(1, std::memory_order_relaxed);
         if (!o_.quiet)
         {
             std::cerr << "[keepgen]   spec-journal compacted: " << before << " -> " << kept.size()
-                      << " records (the rest are covered by the main journal)\n" << std::flush;
+                      << " records (+" << std::count(tail.begin(), tail.end(), '\n')
+                      << " appended meanwhile; the rest are covered by the main journal)\n" << std::flush;
         }
     }
 
-    // header + records -> <path>.tmp -> rename over <path>. Leaves <path> untouched on any failure.
-    bool RewriteFile(const std::vector<Rec>& recs, std::string* err)
+    void Warn(const std::string& what)
+    {
+        if (!o_.quiet)
+        {
+            std::cerr << "[keepgen]   WARNING: spec-journal compaction FAILED (" << what << ") -- kept the"
+                         " uncompacted file, still appending to it\n" << std::flush;
+        }
+    }
+
+    // header + recs + extra -> <path>.tmp (fsynced) -> rename over <path> (+ dir sync). <path> untouched
+    // on any failure. *size = the new file's byte count.
+    bool RewriteFile(const std::vector<Rec>& recs, const std::string& extra, long long* size, std::string* err)
     {
         const std::string tmp = o_.path + ".tmp";
         std::string buf;
-        buf.reserve(o_.header.size() + 1 + recs.size() * 28);
+        buf.reserve(o_.header.size() + 1 + recs.size() * 28 + extra.size());
         buf += o_.header; buf += '\n';
         for (const Rec& x : recs) { Format(buf, x); }
-        {
-            std::ofstream t(tmp, std::ios::out | std::ios::trunc | std::ios::binary);
-            if (!t.is_open()) { if (err) { *err = "cannot create " + tmp; } return false; }
-            t.write(buf.data(), static_cast<std::streamsize>(buf.size()));
-            t.flush();
-            t.close();
-            if (t.fail()) { std::error_code ec; std::filesystem::remove(tmp, ec); if (err) { *err = "write failed on " + tmp; } return false; }
-        }
+        buf += extra;
+        const int t = fdio::OpenTrunc(tmp);
+        const bool ok = t >= 0 && fdio::WriteAll(t, buf.data(), buf.size()) && fdio::Sync(t);
+        fdio::Close(t);
         std::error_code ec;
+        if (!ok) { std::filesystem::remove(tmp, ec); if (err) { *err = "write failed on " + tmp; } return false; }
         std::filesystem::rename(tmp, o_.path, ec);
         if (ec) { std::filesystem::remove(tmp, ec); if (err) { *err = "rename failed: " + ec.message(); } return false; }
-        file_bytes_.store(static_cast<long long>(buf.size()), std::memory_order_relaxed);
+        fdio::SyncDir(o_.path);
+        if (size) { *size = static_cast<long long>(buf.size()); }
         return true;
     }
 
     Opts   o_;
     KeepFn keep_;
-    std::mutex  pm_;  std::string pending_;            // worker side
-    std::mutex  io_;                                   // file side (flusher, drain, close)
-    std::ofstream f_;
+    HookFn on_sync_;
+    std::mutex  io_;                     // the fd, held_, failed_, the byte counters
+    int         fd_ = -1;
     std::string held_;
-    bool failed_ = false, force_compact_ = false;
+    bool        failed_ = false, force_compact_ = false;
+    long long   file_bytes_ = 0, since_compact_ = 0;
     std::atomic<bool> open_{ false };
     std::chrono::steady_clock::time_point retry_last_{}, backup_last_{};
-    long long since_compact_ = 0;
     std::mutex cvm_; std::condition_variable cv_; bool stop_ = false; std::thread th_;
-    std::atomic<long long> recs_{ 0 }, compactions_{ 0 }, file_bytes_{ 0 };
-};
-
-// ---- TERM SENTINEL: a pause (SIGTERM) must not lose the writer's last flush interval ----------------
-// The artifact queue pauses a generation with SIGTERM to its process group (artifact_queue.py `pause`),
-// and the default action kills the process with up to flush_ms of completed rollouts still in the
-// writer's buffer. This blocks SIGTERM/SIGINT/SIGHUP in the constructing thread (every thread it creates
-// afterwards inherits the mask -- so it must be constructed BEFORE the generator starts any thread) and
-// waits for them on a dedicated thread. On one: SIGPIPE is ignored (the group's `tee` dies in the same
-// instant, and a stderr write must not kill us mid-drain), the registered drain runs, and the signal is
-// re-raised with its default action, so the process still dies by that signal -- the exit status every
-// caller already handles. Only signals whose disposition is SIG_DFL are taken over: a nohup'ed run's
-// SIG_IGN SIGHUP, or a background job's SIG_IGN SIGINT, stays ignored.
-// Linux only (sigtimedwait); elsewhere a no-op, which leaves the flush interval as the bound.
-class TermSentinel
-{
-public:
-    TermSentinel()
-    {
-#if defined(__linux__)
-        sigemptyset(&set_);
-        for (int s : { SIGTERM, SIGINT, SIGHUP })
-        {
-            struct sigaction cur{};
-            if (sigaction(s, nullptr, &cur) == 0 && cur.sa_handler == SIG_DFL && !(cur.sa_flags & SA_SIGINFO))
-            { sigaddset(&set_, s); }
-        }
-        if (pthread_sigmask(SIG_BLOCK, &set_, &old_) != 0) { return; }
-        active_ = true;
-        th_ = std::thread([this] { Loop(); });
-#endif
-    }
-    ~TermSentinel()
-    {
-#if defined(__linux__)
-        if (!active_) { return; }
-        stop_.store(true);
-        if (th_.joinable()) { th_.join(); }
-        pthread_sigmask(SIG_SETMASK, &old_, nullptr);   // a signal that arrived after the join is delivered now
-#endif
-    }
-    TermSentinel(const TermSentinel&) = delete;
-    TermSentinel& operator=(const TermSentinel&) = delete;
-
-    void SetDrain(std::function<void()> f) { std::lock_guard<std::mutex> lk(mx_); drain_ = std::move(f); }
-    void ClearDrain()                      { std::lock_guard<std::mutex> lk(mx_); drain_ = nullptr; }
-
-private:
-#if defined(__linux__)
-    void Loop()
-    {
-        while (!stop_.load())
-        {
-            timespec ts{ 0, 200 * 1000 * 1000 };
-            const int s = sigtimedwait(&set_, nullptr, &ts);
-            if (s <= 0) { continue; }
-            ::signal(SIGPIPE, SIG_IGN);
-            {
-                std::lock_guard<std::mutex> lk(mx_);   // held across the drain: ClearDrain waits for it
-                if (drain_) { drain_(); }
-            }
-            std::fprintf(stderr, "[keepgen] signal %d: completed rollouts drained to the side journal --"
-                                 " exiting\n", s);
-            std::fflush(stderr);
-            struct sigaction dfl{};
-            dfl.sa_handler = SIG_DFL;
-            sigemptyset(&dfl.sa_mask);
-            sigaction(s, &dfl, nullptr);
-            sigset_t one; sigemptyset(&one); sigaddset(&one, s);
-            ::kill(::getpid(), s);                     // pending (blocked everywhere)...
-            pthread_sigmask(SIG_UNBLOCK, &one, nullptr);   // ...delivered here: default action ends the process
-            ::_exit(128 + s);                           // unreachable unless the kernel disagrees
-        }
-    }
-    sigset_t set_{}, old_{};
-#endif
-    bool active_ = false;
-    std::atomic<bool> stop_{ false };
-    std::thread th_;
-    std::mutex mx_;
-    std::function<void()> drain_;
+    std::atomic<long long> recs_{ 0 }, compactions_{ 0 };
 };
 
 }  // namespace rollj
