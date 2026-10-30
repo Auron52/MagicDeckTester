@@ -592,3 +592,55 @@ TEST_CASE("Cyclone phase 3: hazard R1 -- the reactive chain goes on past a repla
     CHECK(s.players[0].hand.empty());
     CHECK(s.players[0].life == 16);
 }
+
+TEST_CASE("Cyclone phase 3: a stale searched payment pin never cycles a different card")
+{
+    EnsureCards3();
+    struct RestoreArm
+    {
+        heurarm::Arm saved = heurarm::t_arm;
+        ~RestoreArm() { heurarm::t_arm = saved; }
+    } restore;
+    heurarm::t_arm[static_cast<int>(heurarm::CYCLE_SEED_PAY_SPLIT)] = 1;
+    GameState s = Base3(2, {}, 15);   // two Islands, library has no creature: a Wraith walk would whiff
+    Put3(s, kCyclone, 30);
+    const int mountain0 = static_cast<int>(s.battlefield.size());
+    Put3(s, "Mountain", 50);
+    const int mountain1 = static_cast<int>(s.battlefield.size());
+    Put3(s, "Mountain", 51);
+    s.players[0].hand.push_back(Card3(kCyclone, 101));
+    s.players[0].hand.push_back(Card3(kWraith, 102));
+    const auto pins = SeedPaySplits(s, 0, Def3(kCyclone).params.cycling_cost.value(), Def3(kCyclone));
+    REQUIRE_FALSE(pins.empty());
+    std::int32_t red_pin = 0;
+    const auto red_sources = (1ull << mountain0) | (1ull << mountain1);
+    for (const auto pin : pins)
+    { if ((SeedPaySplitHoldMask(s, 0, pin) & red_sources) == 0) { red_pin = pin; break; } }
+    REQUIRE(red_pin != 0);
+    // The allocation was real at collection. A preceding cast then spent its two sources;
+    // the seed still exists and is generically payable from the Islands, but this pin is stale.
+    s.battlefield[static_cast<std::size_t>(mountain0)].tapped = true;
+    s.battlefield[static_cast<std::size_t>(mountain1)].tapped = true;
+    Action seed;
+    seed.kind = Action::Kind::DigDraw;
+    seed.card_name = kCyclone;
+    seed.def = &Def3(kCyclone);
+    seed.seed_pay_split = red_pin;
+    seed.ponder_keep = kCycFcDefault;
+    const GameState before = s;
+    AIEngine eng(MulliganProfile::DefaultProfile(), 0, 20);
+    CHECK_FALSE(MtgTestSeam::UseSurplusLandAbilities(eng, s, [](GameState& g) { ResolveAll3(g); }, -1, &seed));
+    CHECK(ZoneNums(s.players[0].hand) == ZoneNums(before.players[0].hand));
+    CHECK(ZoneNums(s.players[0].graveyard) == ZoneNums(before.players[0].graveyard));
+    CHECK(LibNums(s) == LibNums(before));
+    CHECK(s.players[0].life == 20);
+    CHECK(s.floating_mana == before.floating_mana);
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    { CHECK(s.battlefield[i].tapped == before.battlefield[i].tapped); }
+    // A real alternative was available: the unchanged NO-SEED playout still cycles Wraith.
+    GameState control = before;
+    AIEngine playout(MulliganProfile::DefaultProfile(), 0, 20);
+    MtgTestSeam::UseSurplusLandAbilities(playout, control, [](GameState& g) { ResolveAll3(g); }, -1, nullptr);
+    CHECK(Count3(control.players[0].graveyard, kWraith) == 1);
+    CHECK(control.players[0].life == 18);
+}

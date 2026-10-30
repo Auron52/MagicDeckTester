@@ -8788,7 +8788,9 @@ bool AIEngine::UseSurplusLandAbilities(GameState& state,
     {
         const DigOutcome o = PerformDigFull(state, cycle_seed->card_name, false, cycle_seed->devour_count,
                                             cycle_seed->ponder_keep, resolve_stack, cycle_seed->seed_pay_split);
-        if (o != DigOutcome::Failed && ResolveProvider(state).CyclesAreSearched()) { return true; }
+        // A failed searched pin means this plan performed NO cycle. It must not fall through
+        // to SelectDigSource and cycle a different card (the rollout disables that loop too).
+        if (ResolveProvider(state).CyclesAreSearched()) { return o != DigOutcome::Failed; }
         if (o == DigOutcome::DrewLand) { dug_a_land = true; }
     }
     // THE SEARCHED CHOICE, REALISED (MTG_DIG_SEARCHED_CHOICE, default ON). This path runs only when the
