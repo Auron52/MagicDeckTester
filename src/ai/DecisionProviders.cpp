@@ -32741,6 +32741,19 @@ static int CycJunkPick(const GameState& s, int me, const CantripReadiness& r, in
 // d5 game's wall (perf, seed 121021 gi 21), once per candidate of every derived fan. Exact: inside a batch the
 // inputs cannot differ, so the memoised pair IS the recomputed one. MTG_CYC_JUNK_MEMO_VERIFY=1 recomputes every hit
 // and aborts on a difference.
+// VERIFY success alone must not masquerade as exercise of an unused memo.
+// Only the existing VERIFY mode increments this counter; ordinary play does no
+// extra atomic work. A mismatch already aborts at its verification site below.
+static std::atomic<long long> g_cyc_junk_verified_hits{0};
+struct CycJunkVerifyReport
+{
+    ~CycJunkVerifyReport()
+    {
+        if (!EnvOn("MTG_CYC_JUNK_MEMO_VERIFY")) { return; }
+        std::fprintf(stderr, "[cyc-junk-memo] verified_hits=%lld\n", g_cyc_junk_verified_hits.load());
+    }
+};
+static CycJunkVerifyReport g_cyc_junk_verify_report;
 static int CycJunkPickBatched(const GameState& s, int me, const CantripReadiness& r, int take, int out[2])
 {
     static const bool on     = EnvOn("MTG_CYC_JUNK_MEMO", true);
@@ -32755,6 +32768,7 @@ static int CycJunkPickBatched(const GameState& s, int me, const CantripReadiness
             const int fn = CycJunkPick(s, me, r, take, fresh);
             if (fn != m.n || (fn > 0 && fresh[0] != m.pick[0]) || (fn > 1 && fresh[1] != m.pick[1]))
             { std::fprintf(stderr, "[cyc-junk-memo] VERIFY MISMATCH\n"); std::abort(); }
+            g_cyc_junk_verified_hits.fetch_add(1, std::memory_order_relaxed);
         }
         out[0] = m.pick[0];
         out[1] = m.pick[1];

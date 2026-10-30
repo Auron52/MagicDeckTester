@@ -6423,11 +6423,57 @@ bool SeedSplitSources(const GameState& state, int me, std::int32_t split, std::u
 }
 }   // namespace
 
+// Observational Q61 census. DEFAULT OFF; no arm slot because it does not change a decision.
+namespace seedpaycensus
+{
+inline bool On() { static const bool on = EnvOn("MTG_CYCLE_SEED_PAY_CENSUS"); return on; }
+inline std::atomic<unsigned long long> calls{0}, enabled{0}, eligible{0}, emitted{0}, fans{0};
+inline std::array<std::atomic<unsigned long long>, 17> widths{};   // 0..15, 16+
+struct Call
+{
+    bool on = On(), active, supported = false;
+    std::size_t width = 0;
+    explicit Call(bool active_in) : active(active_in)
+    { if (on) { calls.fetch_add(1, std::memory_order_relaxed); } }
+    ~Call()
+    {
+        if (!on) { return; }
+        if (active) { enabled.fetch_add(1, std::memory_order_relaxed); }
+        if (!supported) { return; }
+        eligible.fetch_add(1, std::memory_order_relaxed);
+        emitted.fetch_add(static_cast<unsigned long long>(width), std::memory_order_relaxed);
+        if (width > 1) { fans.fetch_add(1, std::memory_order_relaxed); }
+        widths[std::min<std::size_t>(width, widths.size() - 1)].fetch_add(1, std::memory_order_relaxed);
+    }
+};
+struct Dump
+{
+    ~Dump()
+    {
+        if (calls.load(std::memory_order_relaxed) == 0) { return; }
+        std::fprintf(stderr, "[q61-seed-pay-fan] calls=%llu enabled=%llu eligible=%llu emitted=%llu fans=%llu widths={",
+                     calls.load(), enabled.load(), eligible.load(), emitted.load(), fans.load());
+        bool comma = false;
+        for (std::size_t i = 0; i < widths.size(); ++i)
+        {
+            const auto n = widths[i].load(std::memory_order_relaxed);
+            if (n == 0) { continue; }
+            std::fprintf(stderr, "%s%zu%s:%llu", comma ? "," : "", i, i + 1 == widths.size() ? "+" : "", n);
+            comma = true;
+        }
+        std::fprintf(stderr, "}\n");
+    }
+};
+inline Dump dump;
+}   // namespace seedpaycensus
+
 std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
                                         const CardDefinition& seed_def)
 {
     std::vector<std::int32_t> out;
-    if (!SeedPaySplitOn()) { return out; }
+    const bool enabled = SeedPaySplitOn();
+    seedpaycensus::Call census(enabled);
+    if (!enabled) { return out; }
     if (!cost.IsFlat() || cost.colorless != 0 || cost.white + cost.blue + cost.black + cost.red + cost.green != 0
         || cost.generic <= 0 || cost.generic > kSplitMaxGeneric || state.battlefield.size() > 64) { return out; }
     ManaPool potential_float;
@@ -6451,6 +6497,7 @@ std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const Ma
         else { ++at->count; }
     }
     std::sort(cls.begin(), cls.end(), [](const Class& x, const Class& y) { return x.key < y.key; });
+    census.supported = true;
     if (cls.size() < 2 && potential_float.Total() == 0) { return out; }   // historical one-class identity fold
     const int K = static_cast<int>(cls.size());
     struct Split { std::vector<int> use; int float_code; };
@@ -6523,6 +6570,7 @@ std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const Ma
         { for (int u = 0; u < sp.use[k]; ++u) { packed |= static_cast<std::uint32_t>(cls[k].key + 1) << (8 * byte++); } }
         out.push_back(static_cast<std::int32_t>(packed));
     }
+    census.width = out.size();
     return out;
 }
 
