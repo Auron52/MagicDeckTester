@@ -163,6 +163,15 @@ public:
     virtual bool PrunesOwnFixedBurnTargets() const { return false; }
     virtual bool PrunesPassiveBurnTargets() const { return false; }
 
+    // Cost-choice candidates. The generic provider preserves every legal pair; an archetype may
+    // return a smaller set when its lands/fuel are interchangeable. The caller opens the full set
+    // for human play and the matching unpruned audit gate. Fireblast's paid cast remains separate.
+    virtual void FireblastMountainPairCandidates(
+        const GameState&, std::vector<std::pair<int, int>>&) const {}
+    virtual void GraveyardDamageFuelCandidates(
+        const GameState&, std::vector<std::string>&) const {}
+    virtual bool OffersPaidFireblastCast(const GameState&) const { return true; }
+
     // TutorCandidates -- tutor priority: ordered library card-name candidates for a tutor
     // (Idyllic / Enlightened). 1 = decided, >1 = search picks, {} = whiff.
     virtual std::vector<std::string>

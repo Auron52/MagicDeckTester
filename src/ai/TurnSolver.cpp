@@ -34678,20 +34678,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;   // safe alts: auto-fired (not enumerated); risky alt handled above
         }
 
-        // Fireblast: one zero-mana alternative per legal pair, PLUS the normal paid cast.
+        // Fireblast: one zero-mana alternative per provider-selected legal pair, PLUS the normal
+        // paid cast. Human play and the unpruned audit always retain every legal pair.
         // The stable pair marker reaches both apply_one and CastSpellFromHand through tutor_target.
         if (def.params.sacrifice_mountains_alternative)
         {
             const auto mountains = FireblastMountains(state, state.active_player_index);
+            std::vector<std::pair<int, int>> pairs;
             for (std::size_t x = 0; x < mountains.size(); ++x)
             for (std::size_t y = x + 1; y < mountains.size(); ++y)
+            { pairs.emplace_back(mountains[x], mountains[y]); }
+            if (!pairs.empty() && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::FireblastPair))
+            { ResolveProvider(state).FireblastMountainPairCandidates(state, pairs); }
+            for (const auto& [x, y] : pairs)
             {
                 Action a;
                 a.kind = Action::Kind::CastFromHand;
                 a.card_name = ap.hand[i].m_name;
                 a.hand_index = i;
-                a.tutor_target = "fireblast:" + std::to_string(state.battlefield[mountains[x]].card.m_number)
-                                + "," + std::to_string(state.battlefield[mountains[y]].card.m_number);
+                a.tutor_target = "fireblast:" + std::to_string(state.battlefield[x].card.m_number)
+                                + "," + std::to_string(state.battlefield[y].card.m_number);
                 a.direct_damage = def.params.damage;
                 a.eval = EvalCard(def, state);
                 a.is_noncreature = true;
@@ -36014,6 +36020,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             continue;
         }
+
+        // The alternative has already been emitted above. Its printed-cost mode is another
+        // choice, but a deck provider can omit it when this turn cannot reach six mana.
+        if (def.params.sacrifice_mountains_alternative && !HumanPlayActive()
+            && !DecisionUnpruned(UnprunedGate::FireblastPaid)
+            && !ResolveProvider(state).OffersPaidFireblastCast(state))
+        { continue; }
 
         Action a;
         a.kind                  = Action::Kind::CastFromHand;
@@ -38809,6 +38822,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (std::find(pairs.begin(), pairs.end(), spec) == pairs.end()) { pairs.push_back(spec); }
                     }
                 }
+                if (!pairs.empty() && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::LavamancerFuel))
+                { ResolveProvider(state).GraveyardDamageFuelCandidates(state, pairs); }
                 for (const std::string& spec : pairs) { for (int target : targets)
                     {
                         Action a;

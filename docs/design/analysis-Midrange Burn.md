@@ -23,6 +23,50 @@ wiring, mismatch checks, play invariants, and suite membership.
 Chronological checkpoints below include superseded intermediate states; this
 opening status is current.
 
+## Search cost and cost-choice audit (2026-10-30)
+
+At depth 5 and 20 ms, a ten-game two-headed sample (seed 2002, one worker)
+used 271,903 search units for Midrange Burn, 171,740 for classic Burn, and
+508,276 for Hinata. The respective CPU task-clock totals were 5.90, 4.88,
+and 23.13 seconds. Midrange Burn's measured cost per search unit was lower
+than either comparison deck's; its total work came from more units than Burn
+and from the still-missing mulligan artifact. This is a small diagnostic sample,
+not a general speed ranking.
+
+The Midrange branch census (three two-headed games, seed 2002) attributed
+344,491 odometer positions to Searing Blaze (43%), 202,891 to Fireblast
+(25%), 150,549 to Chandra (19%), and 3,610 to Grim Lavamancer (<1%). A
+heavy game at seed 2024, game index 22, spent 612,015 of 632,395 units
+(96.8%) on 327 mulligan-bottoming trial decisions. The separate mulligan
+profile run should remove that multiplier; no profile or value leaf was built
+in this container. Sampling the unmodified game found no single dominant
+per-unit routine: plan/search was 24.4% of self samples, allocation/copy
+9.5%, and mana 5.8%.
+
+Magma Jet is not a spell-cast scry search axis. Its two-card scry resolves
+through the provider's one-choice heuristic, so keep/bottom and top order
+do not multiply its cast plans. The generic rule keeps spells, keeps lands
+only below two lands in play, and preserves look order among kept cards.
+Changing those rules would be a card-quality decision rather than a cost
+prune; the human viewer still offers all legal ordered dispositions.
+
+The new Midrange-only, default-on cost-choice hooks choose a tapped Mountain
+pair for Fireblast when every eligible land is a basic Mountain, choose one
+stable Grim Lavamancer graveyard pair while leaving damage targets searched,
+and omit Fireblast's six-mana mode only when even an optimistic same-turn
+pool cannot pay it. The printed-cost mode remains available with enough mana;
+human and unpruned play retain every legal choice. Each hook has an independent
+`MTG_MIDRANGE_*` off switch. In the same ten-game sample, these hooks reduced
+units from 271,903 to 270,837 (0.39%) with the same 5.1 average win turn.
+The measured CPU task clock fell from 4.14 to 3.94 seconds in paired runs,
+but that small timing difference is sensitive to box load.
+On a separate 100-game two-headed held-out range (seed 32000), the narrowed
+and full-choice arms both averaged 6.02 turns and matched all 92 reported
+winning game turns; the other eight games were unwon in both arms. Search
+units fell from 18,801,128 to 17,396,963 (7.5%). This result is for the
+three hooks together. The paid-cost bound was then tightened to count
+floating mana once; that correction can only omit an unaffordable paid cast.
+
 ## Initial coverage
 
 Initial card-database inspection found these nine missing entries, all now

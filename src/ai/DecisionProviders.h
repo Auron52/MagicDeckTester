@@ -141,6 +141,9 @@ enum class UnprunedGate
                   // CounterPingCounts narrowing (LifegainHeliodComboProvider, MTG_LHC_PING_PRUNE). The
                   // 33rd gate: the masks were widened to 64 bits for it. Human play always sees every ping.
     FixedBurnTarget, // fixed direct-damage targets/pairs: full rules-legal axis
+    FireblastPair,   // Midrange Burn: restore every legal Mountain pair for Fireblast's alternative cost
+    FireblastPaid,   // Midrange Burn: restore the printed-cost cast below its optimistic mana ceiling
+    LavamancerFuel,  // Midrange Burn: restore every graveyard fuel pair for Grim Lavamancer
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -1278,6 +1281,11 @@ public:
     bool SearchesFixedBurnTargets() const override { return true; }
     bool PrunesOwnFixedBurnTargets() const override;
     bool PrunesPassiveBurnTargets() const override;
+    void FireblastMountainPairCandidates(
+        const GameState& s, std::vector<std::pair<int, int>>& pairs) const override;
+    void GraveyardDamageFuelCandidates(
+        const GameState& s, std::vector<std::string>& pairs) const override;
+    bool OffersPaidFireblastCast(const GameState& s) const override;
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
     std::vector<int> CleanupDiscardShedOrder(

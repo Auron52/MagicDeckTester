@@ -66,6 +66,9 @@ static bool UnpruneHumanSuppressed()
 // Canonical gate name <-> enum table, shared by the MTG_UNPRUNE parser and the gate-probe report.
 static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"fixedburntarget", UnprunedGate::FixedBurnTarget},
+    {"fireblastpair", UnprunedGate::FireblastPair},
+    {"fireblastpaid", UnprunedGate::FireblastPaid},
+    {"lavamancerfuel", UnprunedGate::LavamancerFuel},
     {"altpayload", UnprunedGate::AltPayload}, {"tutor",     UnprunedGate::Tutor},
     {"fetch",      UnprunedGate::Fetch},      {"dig",       UnprunedGate::Dig},
     {"xspell",     UnprunedGate::XSpell},     {"ponder",    UnprunedGate::Ponder},
@@ -54906,6 +54909,65 @@ bool MidrangeBurnProvider::PrunesPassiveBurnTargets() const
 {
     static const bool prune = EnvOn("MTG_MIDRANGE_PASSIVE_BURN_PRUNE", true);
     return prune;
+}
+
+void MidrangeBurnProvider::FireblastMountainPairCandidates(
+    const GameState& s, std::vector<std::pair<int, int>>& pairs) const
+{
+    static const bool narrow = EnvOn("MTG_MIDRANGE_FIREBLAST_PAIR", true);
+    if (!narrow || pairs.size() <= 1) { return; }
+    // This list's Mountain-subtype lands are all basic Mountains. Identical lands differ only in
+    // current tappedness: sacrificing a tapped one preserves an available red source. If a future
+    // list gains a nonbasic Mountain, leave every pair to the search until its value is assessed.
+    for (const auto& [a, b] : pairs)
+    {
+        if (s.battlefield[a].card.m_name != "Mountain" || s.battlefield[b].card.m_name != "Mountain")
+        { return; }
+    }
+    auto score = [&](const std::pair<int, int>& pair)
+    {
+        return static_cast<int>(s.battlefield[pair.first].tapped)
+             + static_cast<int>(s.battlefield[pair.second].tapped);
+    };
+    const auto best = std::max_element(pairs.begin(), pairs.end(), [&](const auto& a, const auto& b)
+    { return score(a) < score(b); });
+    const auto pick = *best;
+    pairs.assign(1, pick);
+}
+
+void MidrangeBurnProvider::GraveyardDamageFuelCandidates(
+    const GameState&, std::vector<std::string>& pairs) const
+{
+    static const bool narrow = EnvOn("MTG_MIDRANGE_LAVAMANCER_FUEL", true);
+    if (!narrow || pairs.size() <= 1) { return; }
+    // Midrange Burn has no effect that retrieves or counts a specific graveyard card. Every pair
+    // pays the same two-card cost, so use a stable name-based representative. Target selection
+    // remains searched and the viewer still offers every legal pair.
+    const auto pick = *std::min_element(pairs.begin(), pairs.end());
+    pairs.assign(1, pick);
+}
+
+bool MidrangeBurnProvider::OffersPaidFireblastCast(const GameState& s) const
+{
+    static const bool prune = EnvOn("MTG_MIDRANGE_FIREBLAST_PAID", true);
+    if (!prune) { return true; }
+    // This deck has no rituals or mana rocks. The board's available pool, current float, at most
+    // one untapped land drop from hand and Chandra's {R}{R} are an upper bound on paid Fireblast
+    // mana this turn. The exact coloured payment remains the plan affordability check's job.
+    const Player& ap = s.players[s.active_player_index];
+    // AvailableManaPool already includes the current floating reserve.
+    int possible = AvailableManaPool(s).Total();
+    if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+    {
+        for (const Card& c : ap.hand)
+        { if (c.IsLand()) { ++possible; break; } }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index && p.card.m_name == "Chandra, Torch of Defiance")
+        { possible += 2; break; }
+    }
+    return possible >= 6;
 }
 
 // The approved cleanup policy lives here rather than in the original Burn provider: this

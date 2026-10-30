@@ -300,6 +300,92 @@ TEST_CASE("midrange burn: a Fireblast alternative plan pays zero mana and sacrif
     CHECK(s.free_casts_available == 0);
 }
 
+TEST_CASE("midrange burn: Fireblast cost choices keep paid mode and prefer tapped Mountains")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 6;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    for (int id = 101; id <= 108; ++id) { MBPut(s, "Mountain", id, 0, id <= 102); }
+    s.players[0].hand.push_back(MBCard("Fireblast", 200));
+    CHECK(FireblastMountains(s, 0).size() == 8);
+    CHECK(provider.OffersPaidFireblastCast(s));
+    const auto actions = TurnSolver::CollectActionsForTest(s, true);
+    int paid = 0, alternative = 0;
+    bool chose_tapped = false;
+    for (const Action& a : actions)
+    {
+        if (a.card_name != "Fireblast") { continue; }
+        if (a.tutor_target.str().rfind("fireblast:", 0) != 0) { ++paid; CHECK(a.cost.ManaValue() == 6); continue; }
+        ++alternative;
+        chose_tapped |= a.tutor_target.str().rfind("fireblast:101,102", 0) == 0;
+    }
+    const int targets = HumanPlayActive() ? 2 : 1; // enemy face and own face in the viewer
+    CHECK(paid == targets);
+    const bool full = HumanPlayActive() || DecisionUnpruned(UnprunedGate::FireblastPair)
+        || !EnvOn("MTG_MIDRANGE_FIREBLAST_PAIR", true);
+    CHECK(alternative == (full ? 28 : 1) * targets);
+    CHECK(chose_tapped);
+}
+
+TEST_CASE("midrange burn: unreachable paid Fireblast cost is omitted from autonomous actions")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 3;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    MBPut(s, "Mountain", 101); MBPut(s, "Mountain", 102);
+    s.players[0].hand.push_back(MBCard("Fireblast", 200));
+    const auto actions = TurnSolver::CollectActionsForTest(s, true);
+    int paid = 0, alternative = 0;
+    for (const Action& a : actions)
+    {
+        if (a.card_name != "Fireblast") { continue; }
+        const bool is_alternative = a.tutor_target.str().rfind("fireblast:", 0) == 0;
+        paid += !is_alternative;
+        alternative += is_alternative;
+    }
+    const bool full = HumanPlayActive() || DecisionUnpruned(UnprunedGate::FireblastPaid)
+        || !EnvOn("MTG_MIDRANGE_FIREBLAST_PAID", true);
+    const int targets = HumanPlayActive() ? 2 : 1;
+    CHECK(paid == (full ? targets : 0));
+    CHECK(alternative == targets);
+}
+
+TEST_CASE("midrange burn: Fireblast paid-cost bound counts floating mana once")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 5;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    for (int id = 101; id <= 104; ++id) { MBPut(s, "Mountain", id); }
+    s.floating_mana.red = 1;
+    CHECK(AvailableManaPool(s, nullptr).Total() == 5);
+    CHECK(provider.OffersPaidFireblastCast(s)
+          == !EnvOn("MTG_MIDRANGE_FIREBLAST_PAID", true));
+}
+
+TEST_CASE("midrange burn: Grim Lavamancer fuel choice keeps every damage target")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 4;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    MBPut(s, "Grim Lavamancer", 101); MBPut(s, "Mountain", 102);
+    s.players[0].graveyard = {MBCard("Mountain", 201), MBCard("Lightning Bolt", 202),
+                              MBCard("Fireblast", 203)};
+    const auto actions = TurnSolver::CollectActionsForTest(s, true);
+    int fuel_face = 0, fuel_self = 0, fuel_creature = 0;
+    bool chose_canonical = false;
+    for (const Action& a : actions)
+    {
+        if (a.kind != Action::Kind::GraveyardExileAbility || a.gy_exile_mode != 3) { continue; }
+        fuel_face += a.enchant_target == 0;
+        fuel_self += a.enchant_target == kAbilitySelfTarget;
+        fuel_creature += a.enchant_target == 101;
+        chose_canonical |= a.tutor_target == GraveyardDamageFuelSpec("Fireblast", "Lightning Bolt");
+    }
+    const bool full = HumanPlayActive() || DecisionUnpruned(UnprunedGate::LavamancerFuel)
+        || !EnvOn("MTG_MIDRANGE_LAVAMANCER_FUEL", true);
+    const int expected = full ? 3 : 1;
+    CHECK(fuel_face == expected);
+    CHECK(fuel_self == expected);
+    CHECK(fuel_creature == expected);
+    CHECK(chose_canonical);
+}
+
 TEST_CASE("midrange burn: Rift Bolt arrival deals damage, triggers Eidolon and prowess before draw")
 {
     GameState s; s.active_player_index = 0; s.turn_number = 2;
