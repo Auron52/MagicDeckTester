@@ -4760,6 +4760,110 @@ namespace bpcache
 {
 using Map = std::unordered_map<TranspositionTable::Key, BpEnumEntry, TranspositionTable::KeyHash>;
 inline thread_local Map t_plans;
+// Lookups entering BpEnumEntryFor on this thread (monotonic). Read around a derivation: a derivation
+// that made no nested lookup cannot have changed this cache (MTG_BP_SUMMARY, bpsum below).
+inline thread_local std::uint64_t t_lookups = 0;
+}
+// THE CONTINUATION-LIST SUMMARY (MTG_BP_SUMMARY, DEFAULT ON; =0 re-derives every refused list as before).
+//
+// WHY. A continuation list the shared plan pool refuses (bigger than the pool, or the pool full) is
+// served from BpEnumEntryFor's scratch entry and is RE-DERIVED at the next lookup of the same state.
+// On Hinata2's Forbidden Orchard boards (a Soulfire dig stages 9-11 cards into a 24-31 card hand) those
+// lists are 0.25-0.8 M plans, 0.6-3.3 GB each, against a 100 MB pool, and the W wave variants of every
+// base plan walk the same turn and reach the same 2-8 breakpoint states in the same order: 98-99% of
+// the derivation time of the generation's hours-long keep rollouts was an exact repeat of a key this
+// thread had already derived, and a one-entry scratch cannot serve any of them (the repeats cycle;
+// none is adjacent). docs/design/keepgen-hours-long-rollouts.md.
+//
+// WHAT. The wave-variant consumer (the `eligible` block of ApplyPlanDirect -- the only consumer those
+// tails reach) reads a list's LENGTH, entries by index, and three whole-list facts. So for a refused list
+// the derivation also files a SUMMARY: the length, a HEAD of the first entries, the demoted list, whether
+// any entry is apply-empty, every entry's put-back identity, and the first kChain entries that open a
+// further breakpoint. The consumer serves itself from the summary when everything it will read is in it,
+// and otherwise takes the full path (a derivation, exactly as before). THE HEAD GROWS ON DEMAND: the wave
+// walker reads ranks 0, 1, 2, ... (MTG_BP_UNIFORM_DEV: variant k takes rank k at every breakpoint), so a
+// rank past the head falls back, and that derivation refiles the entry with at least twice the head --
+// O(log R) derivations per list for R walked ranks instead of R. Memory: per-thread LRU byte cap
+// (MTG_BP_SUMMARY_KB, default 192 MB), which only ever affects speed.
+//
+// EXACT (hit == miss, units included). A summary is filed only for a derivation that charged no unit
+// (gamework / decisionwork) and made no nested bp-cache lookup (so it changed no cache). What its trial
+// applies did move is replayed on a hit: the four MONOTONIC breakpoint counters as deltas, and the two
+// LAST-APPLY channels (g_bp_seen_last / g_bp_fired_last) as the value the derivation left when it wrote
+// them absolutely, else as its increments. A hit first does to the plan cache exactly what the miss path
+// would do with that list (the clear-on-full; and when the list would now FIT, it falls back to the full
+// path, which stores it). Same key and epoch rule as the cache. Measured 2026-10-30 (single-thread
+// processes, 300 ordinary + 20 tail keep rollouts): off / on / 8 MB cap give identical units and win
+// turns on every rollout, and the keepgen play digest is unchanged. MTG_BP_SUMMARY_VERIFY=1 re-runs the
+// full path on every hit and compares list, served plan, units and channel deltas (diagnostic: it changes
+// what is cached, so its play is not the shipped play -- the counts are the deliverable).
+// (g_fb_reset is a retired counter -- the last-apply channels are replayed now -- and always reads 0.)
+namespace bpsum
+{
+constexpr int kHead  = 64;   // the initial head (entries kept by index); it grows on demand
+constexpr int kChain = 8;    // first chainable entries kept (the chain slots / pofold read <= 4)
+struct Entry
+{
+    std::uint64_t epoch = 0;
+    long long     psz   = 0;      // the byte price the miss path put on the full list
+    int           n     = 0;      // full list length
+    bool          has_empty = false;
+    std::vector<TurnSolver::Plan> head;      // plans[0 .. min(n, kHead))
+    std::vector<TurnSolver::Plan> demoted;   // the whole demoted list (filed only when it is short)
+    std::vector<std::pair<int, int>> pb;     // (putback_group, putback_choice) of every entry
+    int           chain_found = 0;           // chainable entries found, <= kChain
+    bool          chain_all   = false;       // true = the scan reached the end (no further chainable entry)
+    int           chain_ci[kChain] = {};
+    std::vector<TurnSolver::Plan> chain_plans;
+    // The derivation's moves on the four MONOTONIC breakpoint counters (g_bp_any_last, g_bp_classon_last,
+    // g_bp_latent9_last, g_bp_truncasym_last): its nested trial applies reach breakpoints and bump them, and
+    // enclosing applies read them as before/after deltas, so a hit replays exactly these increments.
+    std::uint64_t d_any = 0, d_classon = 0, d_latent9 = 0, d_truncasym = 0;
+    // ...and the two LAST-APPLY channels (g_bp_seen_last, g_bp_fired_last): their value after a derivation
+    // depends on the derivation's trial applies (they assign / reset / bump them) AND on the value it met,
+    // so a hit is taken only when the value it meets equals the one the derivation met, and then leaves
+    // exactly the value the derivation left.
+    int           seen_pre = 0, seen_post = 0, fired_pre = 0, fired_post = 0;
+    bool          seen_abs = false, fired_abs = false;   // the derivation wrote the channel absolutely
+    long long     bytes = 0;
+    std::uint64_t last_use = 0;                          // eviction order (byte cap)
+};
+using Map = std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash>;
+inline thread_local Map       t_map;
+inline thread_local long long t_bytes = 0;
+inline thread_local std::uint64_t t_clock = 0;       // use stamps for eviction
+inline thread_local long long     t_want_rank = -1;  // the rank a fallback needed (sizes the refiled head)
+inline void Clear() { t_map.clear(); t_bytes = 0; t_want_rank = -1; }
+// MTG_BP_SUMMARY_TRACE=<n> (diagnostic, print-only): the first n summary events, then every 1000th.
+inline void Trace(const char* what, int n, long long extra)
+{
+    static const int lim = EnvInt("MTG_BP_SUMMARY_TRACE", 0);
+    if (lim <= 0) { return; }
+    static std::mutex mu;
+    static std::unordered_map<std::string, long long> per;   // per event kind
+    long long i = 0;
+    { std::lock_guard<std::mutex> lk(mu); i = per[what]++; }
+    if (i < lim || i % 1000 == 0) { std::fprintf(stderr, "[bp-summary-trace] #%lld %s n=%d x=%lld\n", i, what, n, extra); }
+}
+inline long long CapBytes()
+{
+    static const long long v = static_cast<long long>(EnvInt("MTG_BP_SUMMARY_KB", 196608)) * 1024LL;
+    return v;
+}
+inline std::atomic<long long> g_filed{0}, g_hits{0}, g_fb_range{0}, g_fb_fits{0}, g_fb_reset{0}, g_refuse_effects{0},
+                              g_verify_ok{0}, g_verify_bad{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!EnvOn("MTG_BP_SUMMARY_STATS") && g_verify_ok.load() + g_verify_bad.load() == 0) { return; }
+        std::fprintf(stderr, "[bp-summary] filed=%lld hits=%lld fallback: index-out-of-summary=%lld"
+                             " would-now-fit=%lld last-apply-channel=%lld; not filed (side effects)=%lld; verify ok=%lld BAD=%lld\n",
+                     g_filed.load(), g_hits.load(), g_fb_range.load(), g_fb_fits.load(), g_fb_reset.load(),
+                     g_refuse_effects.load(), g_verify_ok.load(), g_verify_bad.load());
+    }
+};
+inline Dump g_dump;
 }
 // THE CANON FRONT memo (see BpCanonFront): the FRONT entry of the continuation list at a key, derived
 // without the put-back clones the canon never reads. Same key, same epoch rule and the same per-game
@@ -27286,6 +27390,11 @@ static thread_local int g_bp_seen_last = 0;
 // every breakpoint site routes through; reset by the caller before the apply, same
 // one-apply-measures-the-list convention.
 static thread_local int g_bp_fired_last = 0;
+// ABSOLUTE writes of the two last-apply channels above (an assignment or a reset, not a ++), counted per
+// channel. Read only by the continuation-list summary (MTG_BP_SUMMARY, bpsum): a derivation that wrote a
+// channel absolutely leaves a value that is a function of the derivation alone; one that did not leaves
+// the value it met plus its own increments.
+static thread_local std::uint64_t g_bp_seen_absw = 0, g_bp_fired_absw = 0;
 // Same event as g_bp_fired_last -- "a breakpoint occurrence happened", any class, any plan kind --
 // but MONOTONIC: nothing ever resets it, and readers take a BEFORE/AFTER DELTA across the apply
 // they care about (see MTG_BP_WAVE_NOBP).
@@ -54510,6 +54619,8 @@ struct DepletionSbaAtResolution
     DepletionSbaAtResolution& operator=(const DepletionSbaAtResolution&) = delete;
 };
 
+static bool BpSummaryServe(const GameState& state, bool is_pre_combat, const TurnSolver::Plan& plan,
+                           int site, TurnSolver::Plan& out, bool& resolved);   // MTG_BP_SUMMARY (bpsum)
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
@@ -55540,7 +55651,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Report the running count so the wave walker can open a slot for each nested breakpoint it
         // discovers (see g_bp_seen_last). Written per breakpoint rather than once at the end so it
         // survives every early exit out of this apply.
-        if (seen_before >= 0) { g_bp_seen_last = seen_before + 1; }
+        if (seen_before >= 0) { g_bp_seen_last = seen_before + 1; ++g_bp_seen_absw; }
         // A 2nd+ breakpoint in the same apply that wave 0 did not cover. Still reachable (the wave
         // phase opens it); the counter measures how much of the nesting lands there.
         const bool nested_blocked = plan.bp_choice >= 0 && class_on
@@ -55625,6 +55736,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             out              = TurnSolver::Plan{};
             out.land_decided = true;
             resolved         = true;
+        }
+        else if (tape_by_plan < 0 && eligible && BpSummaryServe(state, is_pre_combat, plan, site, out, resolved))
+        {
+            // Served from the continuation-list summary (MTG_BP_SUMMARY; see BpSummaryServe / bpsum).
         }
         else if (tape_by_plan < 0 && eligible)
         {
@@ -60666,6 +60781,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         deferred_equip_armed     = bp_resume->equip_armed;
         cascade_free             = bp_resume->cascade_free;
         g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
+        ++g_bp_seen_absw;
         g_scripted_top_choice    = bp_resume->pin_top;    // pins as the prefix left them (a
         g_scripted_saga_ch1      = bp_resume->pin_sagach1;
         g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
@@ -78785,6 +78901,7 @@ static void HybridLearnedStateClear();   // the value-leaf hybrid's learned R/G 
 void TurnSolver::ClearBreakpointCachesForDiagnostic()
 {
     bpcache::t_plans.clear();
+    bpsum::Clear();   // MTG_BP_SUMMARY: summaries go with the cache they stand in for
     plancache::Release(plancache::t_bp_bytes);
     bpcanon::t_fronts.clear();
 }
@@ -78825,6 +78942,7 @@ void TurnSolver::ClearPerGameCaches()
     // --threads 1), and that game's digest moved in a 24-thread pool. Cleared here, a game starts
     // from the same empty cache whatever ran before it. Within-game reuse across decisions is kept.
     bpcache::t_plans.clear();
+    bpsum::Clear();   // MTG_BP_SUMMARY: summaries go with the cache they stand in for
     plancache::Release(plancache::t_bp_bytes);
     bpcanon::t_fronts.clear();   // the canon-front memo (BpCanonFront): same channel, same clear
     ++bplibcheck::t_game;   // MTG_BP_ENUM_LIBCHECK's game ordinal (diagnostic stamp only)
@@ -80119,7 +80237,7 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
     if (fmode >= 2 && g_m2fix_nest < 1) { hand0 = M2FixHandNames(copy); }
     TurnSolver::Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                     second_main, tt, in_rollout);
-    if (fix) { g_bp_fired_last = 0; }
+    if (fix) { g_bp_fired_last = 0; ++g_bp_fired_absw; }
     ApplyPlanDirect(copy, post, false);
     if (OpponentHasLost(copy)) { return true; }
     // Every "main 2 is over" return below first runs the additional combats main 2 queued (Moraug; a no-op on
@@ -80174,7 +80292,7 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
             TurnSolver::Plan post2 = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                              second_main, tt, in_rollout);
             --g_m2fix_nest;
-            g_bp_fired_last = 0;
+            g_bp_fired_last = 0; ++g_bp_fired_absw;
             ApplyPlanDirect(copy, post2, false);
             if (OpponentHasLost(copy)) { return true; }
         }
@@ -80428,7 +80546,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                                                     /*in_rollout=*/true);
             }
             const bool m2fix_here = M2FixModeFor(state) != 0;   // per-deck (DecisionProviders.h)
-            if (m2fix_here) { g_bp_fired_last = 0; }
+            if (m2fix_here) { g_bp_fired_last = 0; ++g_bp_fired_absw; }
             // EMPTY-PLAN APPLY SKIP (MTG_M2_SKIP_EMPTY_APPLY, default OFF pending measurement).
             // The rollout runs this apply EVERY simulated turn once the deck has a second main,
             // including the overwhelmingly common case where the solve returned nothing to do. An
@@ -84021,7 +84139,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // M2 FIXPOINT gate input: g_bp_fired_last follows the one-apply-measures-the-list
             // convention (see its declaration) -- reset before the apply so the read below is
             // THIS plan's breakpoint count, not a stale one. Write-only unless the lever is on.
-            if (m2fmode != 0) { g_bp_fired_last = 0; }
+            if (m2fmode != 0) { g_bp_fired_last = 0; ++g_bp_fired_absw; }
             if (m2_plain_rank) { g_bp_cands_last = 0; }   // one apply measures the list (see its decl)
             g_bp_base_lens.clear();   // this apply's own measurement only (see ArmNewDupAll)
             const std::uint64_t classon_before = g_bp_classon_last;
@@ -84415,8 +84533,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     GameState s = (hit != prefix_cache.end()) ? hit->second.state : state;
                     std::vector<Action> bp;
                     g_bp_cands_last = 0;          // 0 == this apply reached no eligible breakpoint
-                    g_bp_seen_last  = 0; g_bp_demoted_last = 0;          // ... and reached no nested one either
-                    if (m2w_fix) { g_bp_fired_last = 0; }   // the fixpoint gate reads THIS apply's count
+                    g_bp_seen_last  = 0; ++g_bp_seen_absw; g_bp_demoted_last = 0;          // ... and reached no nested one either
+                    if (m2w_fix) { g_bp_fired_last = 0; ++g_bp_fired_absw; }   // the fixpoint gate reads THIS apply's count
                     if (hit != prefix_cache.end())
                     { ApplyPlanDirect(s, v, false, &bp, nullptr, &hit->second); }
                     else if (s_m2w_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
@@ -87006,7 +87124,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 GameState s = (hit != prefix_cache.end()) ? hit->second.state : state;
                 std::vector<Action> bp;
                 g_bp_cands_last = 0;              // 0 == this apply reached no eligible breakpoint
-                g_bp_seen_last  = 0; g_bp_demoted_last = 0;              // ... and reached no nested one either
+                g_bp_seen_last  = 0; ++g_bp_seen_absw; g_bp_demoted_last = 0;              // ... and reached no nested one either
                 if (hit != prefix_cache.end())
                 { ApplyPlanDirect(s, v, true, &bp, nullptr, &hit->second); }
                 else if (s_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
@@ -87217,7 +87335,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 GameState s = state;
                 bp_out.clear();
                 g_bp_cands_last = 0;
-                g_bp_seen_last  = 0; g_bp_demoted_last = 0;
+                g_bp_seen_last  = 0; ++g_bp_seen_absw; g_bp_demoted_last = 0;
                 ApplyPlanDirect(s, v, true, &bp_out);
                 // Post-apply state dedup against everything scored at this node: a tranche plan
                 // whose extra cast strands (a silent no-op) collapses onto an already-scored state
@@ -93497,7 +93615,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     auto hit = s_prefix_cache ? prefix_cache.find(ck) : prefix_cache.end();
                     GameState copy = (hit != prefix_cache.end()) ? hit->second.state : state;
                     g_bp_cands_last = 0;
-                    g_bp_seen_last  = 0; g_bp_demoted_last = 0;
+                    g_bp_seen_last  = 0; ++g_bp_seen_absw; g_bp_demoted_last = 0;
                     if (is_pre_combat)
                     {
                         if (hit != prefix_cache.end())
@@ -93651,7 +93769,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
                 g_bp_cands_last = 0;
-                g_bp_seen_last  = 0; g_bp_demoted_last = 0;
+                g_bp_seen_last  = 0; ++g_bp_seen_absw; g_bp_demoted_last = 0;
                 if (is_pre_combat)
                 {
                     ApplyPlanDirect(copy, v, true);
@@ -96326,11 +96444,18 @@ void BpDeriveGlobalCounters(int ctx, std::uint64_t* n, std::uint64_t* plans, std
     *n = bpderive::g_n[ctx].load(); *plans = bpderive::g_plans[ctx].load(); *us = bpderive::g_us[ctx].load();
 }
 
+// MTG_BP_SUMMARY (DEFAULT ON; =0 disables): see bpsum.
+static bool BpSummaryOn()
+{
+    static const bool v = EnvOn("MTG_BP_SUMMARY", true);
+    return v;
+}
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key)
 {
     const int bpd_ctx = (bpderive::On() && AlchemistComboRouteInProgress()) ? 1 : 0;
     if (bpderive::On()) { bpderive::g_lookups[bpd_ctx].fetch_add(1, std::memory_order_relaxed); }
+    ++bpcache::t_lookups;   // MTG_BP_SUMMARY's "no nested lookup" test (read around a derivation)
     // static, not a per-call EnvOn: this runs millions of times per game and a getenv here is the
     // hot-path wart that has already had to be fixed twice in this file.
     static const bool s_bp_probe = EnvOn("MTG_BP_PROBE");
@@ -96589,9 +96714,22 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         const unsigned long long dv = static_cast<unsigned long long>(bpderive::t_depth);
         while (dv > dm && !bpderive::g_depth_max[bpd_ctx].compare_exchange_weak(dm, dv, std::memory_order_relaxed)) {}
     }
+    // MTG_BP_SUMMARY's side-effect test: the channels a derivation could move that a later reader sees.
+    const long long     sm_gw0 = gamework::t_used, sm_dw0 = decisionwork::t_used;
+    const std::uint64_t sm_lk0 = bpcache::t_lookups;
+    const std::uint64_t sm_co0 = g_bp_classon_last, sm_any0 = g_bp_any_last, sm_l90 = g_bp_latent9_last;
+    const std::uint64_t sm_ta0 = g_bp_truncasym_last;
+    const int           sm_seen0 = g_bp_seen_last, sm_fired0 = g_bp_fired_last;
+    const std::uint64_t sm_sabs0 = g_bp_seen_absw, sm_fabs0 = g_bp_fired_absw;
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted);
+    // Units and nested lookups cannot be replayed (a re-derivation's cost depends on the memo state it
+    // meets), and the two RESET-style counters are owned by whoever reset them last; any of those moving
+    // makes the list uncacheable. The four monotonic counters are replayed (Entry::d_*).
+    const bool sm_effects = gamework::t_used != sm_gw0 || decisionwork::t_used != sm_dw0
+                         || bpcache::t_lookups != sm_lk0;
+    long long sm_psz = -1;   // the keyed store path's byte price (-1 = that path did not run)
     if (bpderive::On()) { --bpderive::t_depth; }
     const bool aa_cut_inside = AlchemistComboRouteCuts() != aa_cuts0;
     if (bpuse::On())
@@ -96672,6 +96810,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans))
                             + (demoted.empty() ? 0LL
                                                : static_cast<long long>(plancache::ApproxPlansBytes(demoted)));
+        sm_psz = psz;
         if (bpuse::On())
         {
             bpuse::g_stats.misses[bpuse::t_reason].fetch_add(1, std::memory_order_relaxed);
@@ -96725,7 +96864,249 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     scratch = BpEnumEntry{};
     scratch.plans   = std::move(plans);
     scratch.demoted = std::move(demoted);
+    // MTG_BP_SUMMARY: file the refused list's summary (see bpsum) -- keyed, complete, side-effect free.
+    if (keyed && sm_psz >= 0 && !bp_interrupted && !aa_cut_inside && BpSummaryOn())
+    {
+        if (sm_effects)
+        {
+            bpsum::g_refuse_effects.fetch_add(1, std::memory_order_relaxed);
+            bpsum::Trace(gamework::t_used != sm_gw0 ? "refuse-gw" : decisionwork::t_used != sm_dw0 ? "refuse-dw"
+                         : bpcache::t_lookups != sm_lk0 ? "refuse-nested" : "refuse-reset-counters",
+                         static_cast<int>(scratch.plans.size()),
+                         static_cast<long long>(bpcache::t_lookups - sm_lk0));
+        }
+        else if (scratch.demoted.size() <= static_cast<std::size_t>(bpsum::kHead))
+        {
+            bpsum::Entry e;
+            e.epoch = g_decision_epoch;
+            e.psz   = sm_psz;
+            e.n     = static_cast<int>(scratch.plans.size());
+            // THE HEAD GROWS ON DEMAND. The wave walker reads ranks 0, 1, 2, ... of the list in order (one
+            // variant per rank, taking that rank at every breakpoint it reaches), so a fixed head turns into
+            // a derivation per rank once the walk passes it. Each fallback derivation refiles the entry with
+            // at least twice the head (and at least the rank that missed), so walking R ranks costs
+            // O(log R) derivations per list instead of R -- bounded by the per-thread byte cap.
+            const auto old_it = bpsum::t_map.find(key);
+            const std::size_t old_h = old_it != bpsum::t_map.end() ? old_it->second.head.size() : 0;
+            const long long   old_b = old_it != bpsum::t_map.end() ? old_it->second.bytes : 0;
+            std::size_t want = std::max<std::size_t>(bpsum::kHead, 2 * old_h);
+            if (bpsum::t_want_rank >= 0) { want = std::max<std::size_t>(want, static_cast<std::size_t>(bpsum::t_want_rank) + 1); }
+            bpsum::t_want_rank = -1;
+            // Fit the head to the byte cap: evict the least recently used OTHER entries first, then cap the head.
+            const long long per_plan = scratch.plans.empty() ? 1
+                                     : std::max<long long>(1, sm_psz / static_cast<long long>(scratch.plans.size()));
+            const long long fixed = static_cast<long long>(scratch.plans.size() * sizeof(std::pair<int, int>)
+                                  + sizeof(bpsum::Entry)) + bpsum::kChain * per_plan;
+            const long long need = fixed + static_cast<long long>(std::min(want, scratch.plans.size())) * per_plan;
+            while (bpsum::t_bytes - old_b + need > bpsum::CapBytes() && bpsum::t_map.size() > (old_it != bpsum::t_map.end() ? 1u : 0u))
+            {
+                auto victim = bpsum::t_map.end();
+                for (auto vi = bpsum::t_map.begin(); vi != bpsum::t_map.end(); ++vi)
+                {
+                    if (vi->first == key) { continue; }
+                    if (victim == bpsum::t_map.end() || vi->second.last_use < victim->second.last_use) { victim = vi; }
+                }
+                if (victim == bpsum::t_map.end()) { break; }
+                bpsum::t_bytes -= victim->second.bytes;
+                bpsum::t_map.erase(victim);
+            }
+            const long long room = bpsum::CapBytes() - (bpsum::t_bytes - old_b) - fixed;
+            const std::size_t fit = room > 0 ? static_cast<std::size_t>(room / per_plan) : 0;
+            const std::size_t nh = std::min({ scratch.plans.size(), want, fit });
+            if (nh < bpsum::kHead && nh < scratch.plans.size()) { goto bpsum_skip_file; }   // no room: as before
+            if (old_it != bpsum::t_map.end() && nh <= old_h) { goto bpsum_skip_file; }      // nothing gained
+            e.head.assign(scratch.plans.begin(), scratch.plans.begin() + static_cast<std::ptrdiff_t>(nh));
+            e.demoted = scratch.demoted;
+            e.pb.reserve(scratch.plans.size());
+            for (const TurnSolver::Plan& cp : scratch.plans)
+            {
+                if (!e.has_empty && IsApplyEmptyPlan(cp)) { e.has_empty = true; }
+                e.pb.emplace_back(cp.putback_group, cp.putback_choice);
+            }
+            for (int i = 0; i < e.n && e.chain_found < bpsum::kChain; ++i)
+            {
+                if (PlanOpensBreakpoint(state, scratch.plans[static_cast<std::size_t>(i)]) == 0) { continue; }
+                e.chain_ci[e.chain_found++] = i;
+                e.chain_plans.push_back(scratch.plans[static_cast<std::size_t>(i)]);
+            }
+            e.chain_all = e.chain_found < bpsum::kChain;
+            e.d_any       = g_bp_any_last - sm_any0;
+            e.d_classon   = g_bp_classon_last - sm_co0;
+            e.d_latent9   = g_bp_latent9_last - sm_l90;
+            e.d_truncasym = g_bp_truncasym_last - sm_ta0;
+            e.seen_pre  = sm_seen0;  e.seen_post  = g_bp_seen_last;
+            e.fired_pre = sm_fired0; e.fired_post = g_bp_fired_last;
+            e.seen_abs  = g_bp_seen_absw != sm_sabs0;
+            e.fired_abs = g_bp_fired_absw != sm_fabs0;
+            e.bytes = static_cast<long long>(plancache::ApproxPlansBytes(e.head) + plancache::ApproxPlansBytes(e.demoted)
+                    + plancache::ApproxPlansBytes(e.chain_plans) + e.pb.capacity() * sizeof(std::pair<int, int>))
+                    + static_cast<long long>(sizeof(bpsum::Entry));
+            {
+                bpsum::t_bytes += e.bytes - old_b;
+                e.last_use = ++bpsum::t_clock;
+                bpsum::t_map.insert_or_assign(key, std::move(e));
+                bpsum::g_filed.fetch_add(1, std::memory_order_relaxed);
+                bpsum::Trace("filed", static_cast<int>(scratch.plans.size()), static_cast<long long>(nh));
+            }
+        }
+        bpsum_skip_file:;
+    }
     return &scratch;
+}
+
+// MTG_BP_SUMMARY's consumer side (see bpsum): serve the wave-variant `eligible` block of ApplyPlanDirect
+// from a summary. Returns false -- having changed nothing but what the miss path itself would have
+// changed first -- whenever anything the block will read is not in the summary; the caller then runs the
+// full block. Every channel the full block writes in the default configuration is written here with the
+// same value; the diagnostic-only reads of the whole list (MTG_ROLLOUT_STATS, MTG_BP_EMPTY_CENSUS,
+// MTG_BP_CONT_TRACE, MTG_BP_W0_CHAIN_COLLAPSE, MTG_DEDUP_CENSUS) simply disable the summary.
+static bool BpSummaryServe(const GameState& state, bool is_pre_combat, const TurnSolver::Plan& plan,
+                           int site, TurnSolver::Plan& out, bool& resolved)
+{
+    if (!BpSummaryOn()) { return false; }
+    static const bool s_diag_full = s_rollout_stats || BpEmptyCensusOn() || EnvInt("MTG_BP_CONT_TRACE", 0) > 0
+                                 || w0collapse::ChainOn() || DedupCensusOn() || BpEnumVerifyOn() || bplibcheck::On();
+    if (s_diag_full) { bpsum::Trace("diag-off", -1, 0); return false; }
+    TranspositionTable::Key key;
+    if (!BpEnumBuildKey(state, is_pre_combat, &key)) { bpsum::Trace("no-key", -1, 0); return false; }
+    bpcache::Map& cache = bpcache::t_plans;
+    {
+        auto ci = cache.find(key);
+        if (ci != cache.end() && !(BpEnumEpochScoped() && ci->second.epoch != g_decision_epoch))
+        { bpsum::Trace("in-cache", -1, plan.bp_choice); return false; }
+    }
+    auto it = bpsum::t_map.find(key);
+    if (it == bpsum::t_map.end()) { bpsum::Trace("absent", -1, plan.bp_choice); return false; }
+    bpsum::Entry& e = it->second;
+    if (BpEnumEpochScoped() && e.epoch != g_decision_epoch) { bpsum::Trace("fb-epoch", e.n, 0); return false; }
+    // Can the summary answer every read the block will make?
+    const int choice = plan.bp_choice;
+    int chain_j = -1;
+    if (pofold::t_rank0.plan == &plan && pofold::t_rank0.n0 < 0
+        && !(e.chain_all || pofold::t_rank0.want_ci <= e.chain_found))
+    { bpsum::g_fb_range.fetch_add(1, std::memory_order_relaxed); bpsum::Trace("fb-pofold", e.n, plan.bp_choice); return false; }
+    if (choice >= kBpChainChoice)
+    {
+        chain_j = choice - kBpChainChoice;
+        if (!(chain_j < e.chain_found || e.chain_all))
+        { bpsum::g_fb_range.fetch_add(1, std::memory_order_relaxed); bpsum::Trace("fb-chain", e.n, chain_j); return false; }
+    }
+    else if (!TurnSolver::IsBpDemotedChoice(choice) && choice < e.n && choice >= static_cast<int>(e.head.size()))
+    { bpsum::g_fb_range.fetch_add(1, std::memory_order_relaxed); bpsum::Trace("fb-rank", e.n, choice); bpsum::t_want_rank = choice; return false; }
+    (void)0;   // the last-apply channels are replayed below (absolute or relative), so any value met is fine
+    // What the miss path does to the cache with this list: the clear-on-full, then a store when it fits --
+    // which only the full path can do, so a list that would now fit takes it (after the same clear).
+    static const std::size_t s_cap = static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192)));
+    ++bpcache::t_lookups;   // the lookup the full path would have made
+    if (cache.size() >= s_cap || !plancache::Fits(e.psz))
+    {
+        if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
+        cache.clear();
+        plancache::Release(plancache::t_bp_bytes);
+    }
+    if (plancache::Fits(e.psz)) { bpsum::g_fb_fits.fetch_add(1, std::memory_order_relaxed); bpsum::Trace("fb-fits", e.n, e.psz); return false; }
+    bpsum::g_hits.fetch_add(1, std::memory_order_relaxed);
+    e.last_use = ++bpsum::t_clock;
+    const int v_seen_met = g_bp_seen_last, v_fired_met = g_bp_fired_last;   // (MTG_BP_SUMMARY_VERIFY)
+    // The derivation's increments of the monotonic breakpoint counters (see Entry::d_*).
+    g_bp_any_last       += e.d_any;
+    g_bp_classon_last   += e.d_classon;
+    g_bp_latent9_last   += e.d_latent9;
+    g_bp_truncasym_last += e.d_truncasym;
+    // The last-apply channels: the value the derivation left if it wrote them absolutely, else the value
+    // met plus the derivation's increments (exactly what re-deriving from here would leave).
+    if (e.seen_abs) { g_bp_seen_last = e.seen_post; ++g_bp_seen_absw; }
+    else            { g_bp_seen_last += e.seen_post - e.seen_pre; }
+    if (e.fired_abs) { g_bp_fired_last = e.fired_post; ++g_bp_fired_absw; }
+    else             { g_bp_fired_last += e.fired_post - e.fired_pre; }
+    bpsum::Trace("hit", e.n, choice);
+    // ---- the eligible block, from the summary (same order, same channels) ----
+    if (pofold::t_rank0.plan == &plan && pofold::t_rank0.n0 < 0)
+    {
+        pofold::RankMeas& rm = pofold::t_rank0;
+        rm.n0 = e.n;
+        rm.d0 = static_cast<int>(e.demoted.size());
+        int seen = 0;
+        for (int k = 0; k < e.chain_found && seen < rm.want_ci; ++k) { rm.ci[seen++] = e.chain_ci[k]; }
+        for (int j = seen; j < kBpChainMemoSlots; ++j) { rm.ci[j] = -1; }
+    }
+    g_bp_cands_last   = e.n;
+    g_bp_demoted_last = static_cast<int>(e.demoted.size());
+    const bool node_hosted = choice == 0 && BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0;
+    if (node_hosted)
+    {
+        g_bp_cands_has_empty = e.has_empty;
+        if (BpNodePutBackFoldOn())
+        {
+            g_bp_cands_pb = e.pb;
+            g_bp_cands_pb_ok = true;
+        }
+    }
+    if (choice == 0) { BpCands(site, g_bp_cands_last, BpSearchWidth()); }
+    if (choice >= kBpChainChoice)
+    {
+        const int ci = chain_j < e.chain_found ? e.chain_ci[chain_j] : -1;
+        if (ci >= 0) { out = e.chain_plans[static_cast<std::size_t>(chain_j)]; resolved = true; }
+    }
+    else if (TurnSolver::IsBpDemotedChoice(choice))
+    {
+        const std::size_t j = static_cast<std::size_t>(choice - TurnSolver::kBpDemotedChoice);
+        if (j < e.demoted.size()) { out = e.demoted[j]; resolved = true; }
+    }
+    else if (choice < e.n)
+    {
+        out      = e.head[static_cast<std::size_t>(choice)];
+        resolved = true;
+        if (cantripattr::On()) { cantripattr::t_last_cont_axis = cantripattr::AxisOf(out); }
+    }
+    // MTG_BP_SUMMARY_VERIFY: the full block's answers on the same state (diagnostic; see bpsum).
+    static const bool s_verify = EnvOn("MTG_BP_SUMMARY_VERIFY");
+    if (s_verify)
+    {
+        const long long     v_gw0 = gamework::t_used, v_dw0 = decisionwork::t_used;
+        const std::uint64_t v_any0 = g_bp_any_last, v_co0 = g_bp_classon_last;
+        const std::uint64_t v_l90 = g_bp_latent9_last, v_ta0 = g_bp_truncasym_last;
+        const std::size_t   v_cache0 = bpcache::t_plans.size();
+        // Re-derive from the value the hit met (undo the hit's replay of the last-apply channels first).
+        const int hit_seen = g_bp_seen_last, hit_fired = g_bp_fired_last;
+        g_bp_seen_last  = e.seen_abs  ? v_seen_met  : hit_seen;
+        g_bp_fired_last = e.fired_abs ? v_fired_met : hit_fired;
+        if (!e.seen_abs)  { g_bp_seen_last  -= e.seen_post - e.seen_pre; }
+        if (!e.fired_abs) { g_bp_fired_last -= e.fired_post - e.fired_pre; }
+        BpEnumEntry* const full = BpEnumEntryFor(state, is_pre_combat);
+        const bool v_last_ok = g_bp_seen_last == hit_seen && g_bp_fired_last == hit_fired;
+        g_bp_seen_last = hit_seen; g_bp_fired_last = hit_fired;
+        const std::vector<TurnSolver::Plan>& c = full->plans;
+        // A re-derivation (the full path stored nothing new) must have cost what the hit replayed.
+        const bool rederived = bpcache::t_plans.size() == v_cache0 || bpcache::t_plans.size() == 0;
+        bool ok = static_cast<int>(c.size()) == e.n && full->demoted.size() == e.demoted.size()
+               && (!rederived || (v_last_ok && gamework::t_used == v_gw0 && decisionwork::t_used == v_dw0
+                                  && g_bp_any_last - v_any0 == e.d_any && g_bp_classon_last - v_co0 == e.d_classon
+                                  && g_bp_latent9_last - v_l90 == e.d_latent9
+                                  && g_bp_truncasym_last - v_ta0 == e.d_truncasym));
+        // (the last-apply channels: the hit set them to the recorded post values; a re-derivation from the same
+        // pre value -- restored here -- must leave the same ones)
+        if (ok)
+        {
+            bool he = false;
+            for (const TurnSolver::Plan& cp : c) { if (IsApplyEmptyPlan(cp)) { he = true; break; } }
+            ok = he == e.has_empty;
+        }
+        if (ok && choice >= kBpChainChoice)
+        {
+            const int ci = TurnSolver::BpChainCandIndex(state, c, chain_j);
+            const int si = chain_j < e.chain_found ? e.chain_ci[chain_j] : -1;
+            ok = ci == si && (ci < 0 || BpCandFingerprint(c[static_cast<std::size_t>(ci)]) == BpCandFingerprint(out));
+        }
+        else if (ok && !TurnSolver::IsBpDemotedChoice(choice) && choice < e.n)
+        { ok = BpCandFingerprint(c[static_cast<std::size_t>(choice)]) == BpCandFingerprint(out); }
+        const long long vn = (ok ? bpsum::g_verify_ok : bpsum::g_verify_bad).fetch_add(1, std::memory_order_relaxed) + 1;
+        // Live, so a killed run still reports: every BAD, and a running tally every 500 checks.
+        if (!ok) { std::fprintf(stderr, "[bp-summary-verify] BAD #%lld n=%d choice=%d rederived=%d\n", vn, e.n, choice, rederived ? 1 : 0); }
+        if ((bpsum::g_verify_ok.load() + bpsum::g_verify_bad.load()) % 500 == 0)
+        { std::fprintf(stderr, "[bp-summary-verify] ok=%lld BAD=%lld\n", bpsum::g_verify_ok.load(), bpsum::g_verify_bad.load()); }
+    }
+    return true;
 }
 
 // ---- THE CANON FRONT (MTG_BP_CANON_FRONT, DEFAULT ON; =0 restores the full-list canon) ---------
