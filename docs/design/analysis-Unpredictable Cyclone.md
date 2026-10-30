@@ -1894,7 +1894,8 @@ by sides: `logs/cyclone/prunes/gi179/`, `gi92/`.
   REAL lost line: with two Eldrazi and no go-off this turn, the lesser Eldrazi on top measured -0.44 (se 0.22) against
   JUNK's Emrakul-first. OWED, first: JUNK's order puts the lesser Eldrazi on top and Emrakul second when not going off
   this turn (the USER's go-off order rule, applied to PB_PLANS itself); then re-run the gi92 isolated test, the PB A/B
-  and the gate. Default: OFF.
+  and the gate. Default: OFF. (2026-10-30: the order is CODED in `CycJunkPick`, with a gi92 unit subcase, but not yet
+  built or measured: Hinata2 was generating.)
 - QP3. THE AMENDED KEEP PRIORITY (`MTG_CYCLONE_KEEP_AMEND` + sub-lever `MTG_CYCLONE_KEEP_MYRIAD`, built, default OFF;
   the USER's review of gi179). It is the shared expendability rank, so the scorer, JUNK and Ponder all read it.
   - (a) The land need fills in this order: fetchlands, untapped non-basics, basics (a red one first when short on red),

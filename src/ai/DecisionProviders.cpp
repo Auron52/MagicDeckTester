@@ -31943,12 +31943,19 @@ static int CycJunkPick(const GameState& s, int me, const CantripReadiness& r, in
     // from the top ... so that you don't draw it and can drop it instead." One Eldrazi in the pair: on top only when
     // going off this turn (k = 0), else the other card above it. (The amended rank lifts an Eldrazi above a surplus land
     // while a put-back spell is held; that must not move it onto the top.)
-    if (raw_tb)
+    const CardDefinition* da = defs[static_cast<std::size_t>(a.i)];
+    const CardDefinition* db = defs[static_cast<std::size_t>(b.i)];
+    const bool ea = da != nullptr && CycIsEldrazi(*da), eb = db != nullptr && CycIsEldrazi(*db);
+    if (raw_tb && ea != eb) { a_more = (r.k == 0) ? ea : eb; }
+    // TWO ELDRAZI (PB_PLANS's JUNK itself, every arm; d3 gi92, ledger QP2): the same go-off rule. Going off this turn
+    // (k = 0) the better one (Emrakul) is on top, where the walk meets it first; otherwise the LESSER one is on top and
+    // Emrakul second -- the top card is redrawn next, and Emrakul is the card to keep in the library for the walk
+    // ("Otherwise you may want it second or third from the top ... so that you don't draw it"). The isolated T1 test:
+    // the lesser Eldrazi on top measured -0.44 (se 0.22) against Emrakul first.
+    if (ea && eb)
     {
-        const CardDefinition* da = defs[static_cast<std::size_t>(a.i)];
-        const CardDefinition* db = defs[static_cast<std::size_t>(b.i)];
-        const bool ea = da != nullptr && CycIsEldrazi(*da), eb = db != nullptr && CycIsEldrazi(*db);
-        if (ea != eb) { a_more = (r.k == 0) ? ea : eb; }
+        const int va = CycEldraziValue(*da), vb = CycEldraziValue(*db);
+        if (va != vb) { a_more = (r.k == 0) ? (va > vb) : (va < vb); }
     }
     out[0] = a_more ? a.i : b.i;
     out[1] = a_more ? b.i : a.i;
