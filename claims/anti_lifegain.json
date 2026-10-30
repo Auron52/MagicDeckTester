@@ -4,22 +4,16 @@
   "valueleaf": "em:41ed117cf72bdf079d5f"
  },
  "deck": "anti_lifegain",
- "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.005021 t); incumbent restored",
- "finished": "2026-10-25T00:17:36Z",
- "frozen": "e0f1f522689c9a7dc829ebdafb9443ab4ecab39a",
- "heartbeat": "2026-10-25T00:13:02Z",
- "host": "8854e545ddab",
- "landed": "dd7127d5f6845cf6e13c6430f9e82cf68402f070",
- "landed_at": "2026-10-30T16:06:29Z",
- "result_branch": "artifact-refresh/anti_lifegain-20261025-0017",
- "run_id": "anti_lifegain-MagicDeckTester2-76d2cc-20261024T201005",
- "score": 0.9852,
- "stage": "mulligan",
+ "frozen": "dd7127d5f6845cf6e13c6430f9e82cf68402f070",
+ "heartbeat": "2026-10-30T16:14:01Z",
+ "host": "550a08fdc1f3",
+ "run_id": "anti_lifegain-artifact-queue-d7d6a5-20261030T161401",
+ "score": 0.5737,
+ "stage": "valueleaf",
  "stages": [
-  "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-24T20:10:05Z",
- "state": "rejected",
- "worker": "MagicDeckTester2-76d2cc"
+ "started": "2026-10-30T16:14:01Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
 }
