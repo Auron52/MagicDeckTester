@@ -19,6 +19,25 @@
     "budget": null
    },
    "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 0.005021 t); incumbent restored"
+  },
+  {
+   "run_id": "anti_lifegain-artifact-queue-d7d6a5-20261030T161401",
+   "kind": "valueleaf",
+   "verdict": "adopted",
+   "ident": "em:32e1a88ca052ca88f467",
+   "frozen": "dd7127d5f6845cf6e13c6430f9e82cf68402f070",
+   "src_tree": "bcf643fb8ae863d139677d266eacbe772d459dee",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: ADOPTED (live sidecar's eval_model replaced)",
+   "decisions": [
+    "    VERDICT arm=d6b20 adopt=0 delta=-0.00150 t=-1.82 cost=1.166x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.17x) with quality better (-0.00150) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b30 adopt=0 delta=-0.00238 t=-2.81 cost=1.232x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.23x) with quality better (-0.00238) -- a TRADE, the user's call",
+    "    VERDICT arm=d6b40 adopt=0 delta=-0.00250 t=-2.89 cost=1.268x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.27x) with quality better (-0.00250) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-30T16:24:19  PHASE E.6: no allowance for anti_lifegain -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
