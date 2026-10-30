@@ -20,6 +20,29 @@
     "",
     "=== 2026-10-29T17:17:09  PHASE E.6: no allowance for treasure_hunt -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T135317",
+   "kind": "mulligan",
+   "verdict": "trade",
+   "ident": "e5acdc35d8cbd9b02a9c851d0092c42cd5f4e02c",
+   "frozen": "ad28dda1b9ed4858ddf06f5f595325ddc8ddc146",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-tool-647f24",
+   "delta": -0.020406,
+   "cost": [
+    1.0326923335223837,
+    0.00905978285863152,
+    32
+   ],
+   "settings": {
+    "recipe": "complete",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.020406 t) but the new table costs MORE (cost 1.033x (se 0.009, 32 seeds)): the USER's call; left live on the result branch, NOT landed"
   }
  ]
 }
