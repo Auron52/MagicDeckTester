@@ -1,25 +1,19 @@
 {
  "blobs": {
-  "mulligan": "8dc9c2a1c22f10cfb77a9cbfdd3c070a4cc66180",
+  "mulligan": "67517dad84ca8a698e8bf9affa12f5d35a78e167",
   "valueleaf": "em:15713f7430a43656572a"
  },
  "deck": "fivecolour",
- "detail": "mulligan: ADOPTED (new-vs-old -0.001833 t, cost 0.977x (se 0.004, 96 seeds), recipe fast); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fivecolour/DECISIONS.txt)",
- "finished": "2026-10-28T18:48:40Z",
- "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
- "heartbeat": "2026-10-28T18:36:40Z",
- "host": "58199181d02e",
- "landed": "1db4218a98b700dd919199b8a32142664e2470de",
- "landed_at": "2026-10-28T19:03:25Z",
- "result_branch": "artifact-refresh/fivecolour-20261028-1848",
- "run_id": "fivecolour-artifact-queue-tool-647f24-20261025T141953",
- "score": 0.9057,
+ "frozen": "60935d372a01450cacc6a13fb6003ae8b94d681f",
+ "heartbeat": "2026-10-30T06:32:13Z",
+ "host": "550a08fdc1f3",
+ "run_id": "fivecolour-artifact-queue-d7d6a5-20261030T063213",
+ "score": 0.0628,
  "stage": "valueleaf",
  "stages": [
-  "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-28T13:42:02Z",
- "state": "done",
- "worker": "artifact-queue-tool-647f24"
+ "started": "2026-10-30T06:32:13Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
 }
