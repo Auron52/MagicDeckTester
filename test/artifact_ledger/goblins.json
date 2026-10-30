@@ -38,6 +38,30 @@
     "",
     "=== 2026-10-25T14:36:38  PHASE E.6: no allowance for goblins -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "goblins-artifact-queue-d7d6a5-20261029T173238",
+   "kind": "mulligan",
+   "verdict": "kept-incumbent",
+   "ident": "cc88b6250aaf8da27fa6b452cac50e310f841509",
+   "frozen": "01b0072ebd5ea98147d2ad3b2cfb7de67c37f16c",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": 6.2e-05,
+   "cost": [
+    0.9791308231311354,
+    0.002558380329570757,
+    96
+   ],
+   "trade": true,
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 6.2e-05 t, cost 0.979x (se 0.003, 96 seeds)); incumbent restored -- a TRADE (worse but CHEAPER): reported for the USER"
   }
  ]
 }
