@@ -471,3 +471,20 @@ that units fail to track work. Fix them together, then calibrate once:
 Calibrate only after 1-3 are fixed: the matched-cost frontier above, measured per deck, gives the units-per-ms factor
 and shows whether one global factor is enough. USER 2026-10-30, on the hours-long rollouts: *"Games that are in the
 hours range should be practically nonexistent when we run with a budget."* That is the acceptance test for item 2.
+
+## Hand-off note (2026-10-30, evening)
+
+USER: *"there is an actual issue with the cache and threading. I thought we had addressed some of those issues already,
+but from what you are saying there are more remaining. That will have to wait for another agent to work on it
+tomorrow."*
+
+- **What was addressed, and where.** The shared mechanism that makes the plan pool per thread is commit `ab4fbc6a2`.
+  It is now on origin as branch **`cyclone-mem`** (pushed 2026-10-30 as a backup), but it has NOT landed on
+  `phase-1-2-deck-analyzer`, so no shipped binary and no running generation has it.
+- **Live evidence of the thread coupling (Hinata2 keepgen, generation src `7b22b6db3`).** One rollout charged 420,198
+  units, then 420,194 and 420,196 in other 4-thread runs, and 420,204 when re-run alone on 1 thread. That is four values
+  from the same inputs, with the same win turn. The prime suspect is #1: `plancache::Fits` reads a pool shared across
+  worker threads.
+- **Start here:** Rule A and step 1 of the recommendation, i.e. land `ab4fbc6a2` (play-identical on smoke and on the
+  1,300-game A/B). Then add the standing 1-vs-N-thread / tiny-vs-huge-cache invariance check, so this class of defect
+  fails a tier instead of being found by accident.
