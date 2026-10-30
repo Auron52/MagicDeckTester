@@ -85,7 +85,7 @@ static void CollectBoardState(const GameState& state,
     // disjoint by MergeStagedIntoHand / ReturnStagedFromHand.
     for (const StagedCard& sc : ap.staged_cards)
     {
-        if (sc.expiry_turn < state.turn_number) { continue; }
+        if (sc.expiry_turn < state.TurnSeq()) { continue; }
         hand_out.push_back(sc.card.m_number);
         staged_out.push_back(sc.card.m_number);
     }

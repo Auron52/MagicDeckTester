@@ -20,6 +20,8 @@
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/KeepModel.h"
+#include "ai/ValueArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameEngine.h"
@@ -352,4 +354,60 @@ TEST_CASE("DotH search: the fan finds the two-trigger upkeep kill the closed-for
     const TurnSolver::SearchLine off = search(0);
     CHECK(off.win_turn > 4);
     if (!off.phases.empty()) { CHECK(off.phases.front().plan.doth_put_choice == -1); }
+}
+
+
+TEST_CASE("DotH extra turn: a d1 constant leaf still searches the same-round upkeep choices")
+{
+    // At d1 the next REGULAR turn is outside the horizon, but an already-granted extra turn is
+    // still this round and must be searched. The ordinary constant-leaf edge fold must not erase
+    // its DotH fan, and the boundary recursion must give the crossing's ply back.
+    struct ValueArmScopeDh
+    {
+        valuearm::Arm saved = valuearm::t_arm;
+        ValueArmScopeDh()
+        {
+            valuearm::t_arm.value_model = 1;
+            valuearm::t_arm.ladder_emulated = 0;
+        }
+        ~ValueArmScopeDh() { valuearm::t_arm = saved; }
+    } value_scope;
+    const MidGameEvaluator leaf = MidGameEvaluator::Constant();
+    bool second_main = false;
+    SUBCASE("single main: the new DotH boundary host") { second_main = false; }
+    SUBCASE("second main: the generalized echo and DotH boundary host") { second_main = true; }
+    auto board = [&]()
+    {
+        GameState s = BoardDh(2, 40);
+        s.phase = Phase::PreCombatMain;
+        s.deck_has_extra_turn = true;
+        s.pending_extra_turns = 1;
+        s.m_value_model = &leaf;
+        return s;
+    };
+    auto search = [&](int axis)
+    {
+        ArmDh arm(heurarm::DOTH_AXIS, axis);
+        const GameState s = board();
+        return TurnSolver::FullSearchLine(s, 1, 8, second_main, nullptr, nullptr);
+    };
+    const auto on = search(1);
+    REQUIRE(on.win_turn == 3);   // the extra upkeep belongs to round 3
+    REQUIRE_FALSE(on.phases.empty());
+    // The actual crossing is recorded on the LAST phase of the current turn.
+    int pin = -1;
+    for (const auto& phase : on.phases)
+    {
+        if (phase.plan.doth_put_choice >= 0) { pin = phase.plan.doth_put_choice; break; }
+    }
+    REQUIRE(pin >= 0);
+    CHECK(DothPinCover(pin) == 2);
+    CHECK(DothPinRank(pin, 0) > 0);   // provider's first put sweeps away the second trigger's condition
+    GameState crossed = board();
+    crossed.scripted_doth_put = pin;
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(crossed));
+    CHECK(crossed.turn_number == 3);
+    CHECK(crossed.in_extra_turn);
+    CHECK(crossed.players[1].life <= 0);
+    CHECK(search(0).win_turn > 3);   // a provider-only crossing cannot find this same-round kill
 }
