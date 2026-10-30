@@ -1,0 +1,50 @@
+{
+ "deck": "creature_giving",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T073618",
+   "kind": "mulligan",
+   "verdict": "adopted",
+   "ident": "1694cbffd071cab904a6bb3f83ba7ed74fac5478",
+   "frozen": "226ef40b260e4c4e62e8b9b4cacb043bd8b6d40c",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-d7d6a5",
+   "delta": -0.012156,
+   "cost": [
+    0.9678421439140028,
+    0.0073843647050695314,
+    32
+   ],
+   "settings": {
+    "recipe": "fast",
+    "env": {
+     "MTG_KEEP_REDISCOVER": "1"
+    },
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: ADOPTED (new-vs-old -0.012156 t, cost 0.968x (se 0.007, 32 seeds), recipe fast)"
+  },
+  {
+   "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T073618",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:e9ea4e2f6fb6212c7fbf",
+   "frozen": "226ef40b260e4c4e62e8b9b4cacb043bd8b6d40c",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_creature_giving/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=emul_d6b30 adopt=0 delta=-0.00812 t=-5.77 cost=2.122x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (2.12x) with quality better (-0.00812) -- a TRADE, the user's call",
+    "    VERDICT arm=emul_d6b40 adopt=0 delta=-0.00950 t=-7.26 cost=2.652x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (2.65x) with quality better (-0.00950) -- a TRADE, the user's call",
+    "    PICK arm=d6b20 why=the cheapest of 1 passing arm(s) (0.99x vs live, delta +0.00025)",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-10-30T15:23:57  PHASE E.6: no allowance for creature_giving -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
