@@ -560,7 +560,7 @@ static_assert(sizeof(Player) == 208,
 // (and in BuildDedupKey's pending pins and BuildBreakpointKey).
 // Midrange Burn adds noncombat-damage tracking and its pending triggers; see the
 // matching fields folded in Build() below before changing this size assertion.
-// +8 bytes (2026-10-27, Unpredictable Cyclone phase 2; measured 1152 -> 1160): ten one-byte fields beside
+// +16 bytes on the current-main layout (2026-10-30, measured 1216 -> 1232): ten one-byte fields beside
 // pending_extra_combats. Classification: `pending_extra_turns`, `extra_turns_taken`, `in_extra_turn` are
 // FUTURE-DETERMINING (an owed extra turn; the turns-taken count every same-turn stamp reads through
 // TurnSeq) -- FOLDED in Build(), value-gated (both counts 0 for every deck without an extra-turn card).
@@ -568,7 +568,7 @@ static_assert(sizeof(Player) == 208,
 // DECK CONSTANTS stamped once in StampDeckTraits -- nothing to fold. `gy_shuffle_batch` /
 // `pending_gy_shuffles[2]` are 0 outside one simultaneous event (GyShuffleBatch), never live at a
 // snapshot -- nothing to fold.
-static_assert(sizeof(GameState) == 1224,
+static_assert(sizeof(GameState) == 1232,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
