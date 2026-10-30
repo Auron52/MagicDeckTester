@@ -4,9 +4,12 @@
   "valueleaf": "em:15713f7430a43656572a"
  },
  "deck": "fivecolour",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fivecolour/DECISIONS.txt)",
+ "finished": "2026-10-30T07:34:53Z",
  "frozen": "60935d372a01450cacc6a13fb6003ae8b94d681f",
  "heartbeat": "2026-10-30T07:32:48Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/fivecolour-20261030-0734",
  "run_id": "fivecolour-artifact-queue-d7d6a5-20261030T063213",
  "score": 0.0628,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-30T06:32:13Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-d7d6a5"
 }
