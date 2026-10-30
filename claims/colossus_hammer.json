@@ -8,6 +8,8 @@
  "frozen": "60f525f1785cc0cd127873d4196a858f9ed317f2",
  "heartbeat": "2026-10-25T14:04:06Z",
  "host": "58199181d02e",
+ "landed": "cfa44a4ef59e5de6f181cd633aa3768b27dc5b5c",
+ "landed_at": "2026-10-30T16:37:15Z",
  "result_branch": "artifact-refresh/colossus_hammer-20261025-1418",
  "run_id": "colossus_hammer-artifact-queue-tool-647f24-20261025T140337",
  "score": 0.9836,
