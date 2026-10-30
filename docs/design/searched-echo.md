@@ -106,7 +106,12 @@ A/B arm only, and play-identical to the pre-change tree. Both are measured below
 * `dominance::Build()`;
 * `BuildDedupKey`'s pending pins;
 * `BuildBreakpointKey`. The axis reads the inherited cover, so the m1/m2 enumeration memos and the
-  searched-m2 memo must tell two pins apart.
+  searched-m2 memo must tell two pins apart. The breakpoint CONTINUATION key (`BpEnumBuildKey`, the
+  continuation plan cache and canon's front memo) leaves it out, and the DotH pin with it: a continuation
+  is derived under `g_bp_enum_depth > 0`, where neither axis is live and nothing reads either pin, so the
+  pin only split one list into one copy per pin. That is an identity fold, and play is byte-identical.
+  Goblins s3510540 gi539 at b60, with the not-yet-landed Skirk activation-demand sizing (`MTG_SAC_MANA_ACT_DEMAND`) and the derivation charge off, went from 13,688 derivations to 7,216, with
+  derive time 63 s -> 29 s. `MTG_BP_CONT_KEY_PINS=1` restores the old key.
 
 `Plan::echo_choice` is in the plan signature, hash, equality, `IsApplyEmptyPlan`, the axes key, the
 executor's re-solve pin checks (`CarriesPostApplyPin` / `RecordReSolveRealized`) and the provider route

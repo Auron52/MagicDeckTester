@@ -207,7 +207,8 @@ thread, keyed EXACTLY on what `SacTutorPutOptions` may read. That key is the vir
 * `MTG_DOTH_AXIS=0` (heurarm slot `DOTH_AXIS`) is an A/B arm only, play-identical to the pre-change tree. With it
   off, nothing writes a pin, and an unpinned resolution calls `SacTutorPutList` exactly as before.
 * The pin is future-determining. It is folded value-gated into `dominance::Build`, `BuildDedupKey`'s pending pins
-  and `BuildBreakpointKey`.
+  and `BuildBreakpointKey` (not into its continuation-list form, `BpEnumBuildKey`: no derivation reads the pin;
+  see searched-echo.md, "Keys").
 * `Plan::doth_put_choice` is in the plan hash, equality, signature fingerprint and `IsApplyEmptyPlan`, the
   dedup census, the executor's re-solve pin checks (`CarriesPostApplyPin` / `RecordReSolveRealized`) and the
   provider route signature.

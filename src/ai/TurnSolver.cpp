@@ -47454,7 +47454,8 @@ static bool RestrictorPrePayable(const GameState& state, const std::vector<Actio
 // the greedy-Solve memo: its history (a first attempt keyed on BuildSimKey alone silently changed
 // Hinata's play -- floating ritual mana and the storm count are mid-turn state) is exactly the
 // trap a Solve memo faces, and one shared key means one place to keep exact.
-static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat);
+static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat,
+                                                  bool cont_list = false);
 
 // --- Greedy-Solve memo (MTG_SOLVE_MEMO, DEFAULT-ON 2026-08-19; =0 restores the old path) --------
 //
@@ -98889,7 +98890,7 @@ namespace solvekeycensus
 // what distinguishes two breakpoint states -- floating mana decides what is affordable (Hinata's
 // Reality Spasm float) and spells_cast_this_turn decides Dragonstorm's storm count. Keying the memo
 // on BuildSimKey alone silently changed Hinata's play; folding these three makes it exact.
-static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat)
+static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat, bool cont_list)
 {
     TranspositionTable::Key k = BuildSimKey(state, 0, 0, is_pre_combat);
     // This memo returns index-encoded Plans (hand indices / battlefield positions), so under
@@ -99014,12 +99015,27 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // holds (a main-1 pin standing when main 2 enumerates) and fans only the obligations past it, so two
     // same-board states with different pins enumerate DIFFERENT lists. Folded only when set, so every
     // pin-free key -- every deck without an echo card -- is byte-identical.
-    if (state.scripted_echo >= 0)
+    //
+    // NOT for a breakpoint CONTINUATION list (cont_list; BpEnumBuildKey -- the continuation plan cache and
+    // canon's front memo). A continuation is derived under g_bp_enum_depth > 0, where both next-upkeep axes
+    // are dead (EchoAxisLiveHere / DothAxisLiveHere require depth 0, so neither the fan nor the
+    // *UncoveredPending reads runs), no derivation crosses an upkeep, and nothing else in the enumeration
+    // reads either pin: the list is the same under every pin, so folding them only split one list into one
+    // copy per pin. Goblins s3510540 gi539 (b60, Skirk activation-demand sizing on, no derivation charge):
+    // all 1,027 split groups of large continuation lists differed ONLY in scripted_echo (256 "cover 1,
+    // follow" vs 257 "cover 1, invert"), every pair the same plan and action counts -- each main-2 state
+    // derived twice, and twice the plan pool; 13,688 derivations -> 7,216, derive time 63 s -> 29 s.
+    // An identity fold: play is byte-identical (MTG_BP_ENUM_VERIFY reads every hit against a fresh list).
+    // MTG_BP_CONT_KEY_PINS=1 folds them again (the old key; an A/B arm for the wall only).
+    static const bool s_cont_pins = EnvOn("MTG_BP_CONT_KEY_PINS");
+    const bool fold_upkeep_pins = !cont_list || s_cont_pins;
+    if (fold_upkeep_pins && state.scripted_echo >= 0)
     { Fold(k, 0xEC40); Fold(k, static_cast<uint64_t>(state.scripted_echo)); }
     // The searched DEFENSE OF THE HEART pin (GameState::scripted_doth_put): the boundary fan reads the cover a
     // state's pin already holds and fans only the triggers past it, so a memoised m2 solve under one pin is not
-    // another's. Folded only when set -- every deck without the card keeps its exact key.
-    if (state.scripted_doth_put >= 0)
+    // another's. Folded only when set -- every deck without the card keeps its exact key. Not for a
+    // continuation list (the echo pin's reason, above).
+    if (fold_upkeep_pins && state.scripted_doth_put >= 0)
     { Fold(k, 0xD0E7); Fold(k, static_cast<uint64_t>(state.scripted_doth_put)); }
     // LIVE ORDER-CONDEMNATION stamp (added 2026-08-20, when the m2-facing enum memo gained
     // coverage): a live stamp FILTERS the post-combat harvest, so two same-board states with
@@ -99723,7 +99739,7 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
                            TranspositionTable::Key* out)
 {
     if (!BpEnumCacheOn()) { return false; }
-    TranspositionTable::Key key = BuildBreakpointKey(state, is_pre_combat);
+    TranspositionTable::Key key = BuildBreakpointKey(state, is_pre_combat, /*cont_list=*/true);
     // THE TRUE CEILING PROBE (MTG_BP_KEY_SNAPSHOT_NONE=1) -- MEASUREMENT ONLY, DELIBERATELY UNSOUND.
     //
     // Turning condemnation on does not add ONE fold to this key, it adds THREE, because much of the
