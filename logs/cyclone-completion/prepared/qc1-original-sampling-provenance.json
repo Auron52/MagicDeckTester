@@ -1,0 +1,10 @@
+{
+  "purpose": "Sample engine-dealt original seven only; autoplay outcomes are not evaluated. Use live defaults, removing unavailable future A/B flags.",
+  "inputs": {
+    "src/core/GameSetup.h": "6aa5b9cba9a7bc34407e2a8f0765ec30ac6c39ca5d899c1e3dd1affd1c5fd31b",
+    "src/core/Library.h": "2b24b93330d4e7a5d45e972d95765bfce5d56ffb47c1802c96aa959358a5aae6",
+    "src/cards/data/cards.json": "b0c8ac06b66de5c978bcb20baed2aa23b58905df681c50d3cb1c338eeac140d7",
+    "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod": "42cf2378bb2ccdf0ba955332ec000e54ee368c912964fb5f4185f9df1ae15e33"
+  },
+  "binary_sha256": "dde588a683ad983bbf198141fce273ac3160fa457b2c706b3e89084d0d6e6c7f"
+}
