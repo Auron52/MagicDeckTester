@@ -9,6 +9,8 @@
  "frozen": "8c6810221031a6f60f243f087649ac548fe8a3a4",
  "heartbeat": "2026-10-30T06:28:59Z",
  "host": "550a08fdc1f3",
+ "landed": "60935d372a01450cacc6a13fb6003ae8b94d681f",
+ "landed_at": "2026-10-30T06:30:09Z",
  "result_branch": "artifact-refresh/fluctuator-20261030-0629",
  "run_id": "fluctuator-artifact-queue-d7d6a5-20261030T052825",
  "score": 0.1,
