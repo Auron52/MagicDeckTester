@@ -212,7 +212,10 @@ run_ab(){
   local dirs=() r delta se
   for (( r = 0; r < MAX_ROUNDS; r++ )); do
     local rd="${abdir}_r$((r+1))"
-    rm -rf "$rd"
+    # Clear the round's OUTPUTS but keep its per-game resume log: an interrupted validation re-run on the
+    # same inputs then folds back every game it already finished instead of replaying it (the A/B script
+    # checks the log's key; a changed input starts a fresh log and keeps the old one aside).
+    if [ -d "$rd" ]; then find "$rd" -mindepth 1 -maxdepth 1 ! -name 'games.resume*' -exec rm -rf {} +; fi
     local seeds; seeds=$(seed_block "$base" "$per" "$r")
     env "$@" \
       KM_DECK="$DECK" KM_MODE="$mode" KM_STATIC="$BASE" KM_EXH_PROFILE="$PROF" \
@@ -291,7 +294,8 @@ run_regression(){
   # observable ONLY at two heads), i.e. exactly what you would not want quietly skipped.
   if grep -qE "\"[[:space:]]*${key}2hg[[:space:]]" test/regression_cases.sh; then key="$key,${key}2hg"; fi
   log "--- regression (deck=$key), for VISIBILITY -- cannot reject ($(stamp)) ---"
-  bash test/regression.sh --deck="$key" > "$OUT/regression.log" 2>&1
+  # REG_RESUME=1: an interrupted validation's regression folds back the games it already finished.
+  REG_RESUME=1 bash test/regression.sh --deck="$key" > "$OUT/regression.log" 2>&1
   local rc=$?
   grep -E '^Result:|^ALL PASS|^REGRESSION DETECTED' "$OUT/regression.log" | while read -r l; do log "  $l"; done
   grep -E '^\s+\[(searched|d0)\s*\]' "$OUT/regression.log" | while read -r l; do log "  $l"; done
@@ -496,6 +500,10 @@ PY
   log "=== VALIDATION PASSED ($(stamp)) -- $PROF is live ==="
 }
 
+# gen_finished / mr_frozen_incumbent / mr_save_prev: scripts/lib/mullgen_resume.sh (unit-checked by
+# test/mullgen_resume_check.sh against a scratch git repo).
+. "$(dirname "${BASH_SOURCE[0]}")/lib/mullgen_resume.sh"
+
 case "$CMD" in
   status)   status_report ;;
   validate) validate_preflight; : > "$REPORT"; validate ;;
@@ -670,8 +678,29 @@ sys.exit(3)
 PREFLIGHT
     fi
     : > "$REPORT"
+    # ---- THE INCUMBENT, AND A GENERATION THAT ALREADY FINISHED (2026-10-29) ---------------------------
+    # This used to be an unconditional `cp -f $PROF $PREV`. Paused AFTER the generator had written the new
+    # table but BEFORE validation ended, the restart copied the NEW table over the saved incumbent -- the
+    # old-vs-new A/B then compared the new table with itself and could only "accept" -- and re-ran the
+    # generator, which read its own finished raw as a floor checkpoint (no refs, no frozen cells) and
+    # refined on. Now:
+    #   * PREV is the incumbent AT FREEZE: the profile committed at HEAD. An existing PREV is never
+    #     overwritten; one that differs from the committed incumbent is moved aside.
+    #   * A generation that already finished (gen.log's last generator run ended in GENERATION COMPLETE
+    #     for the table now in $PROF, with no verdict after it) is not re-run: we go straight to the
+    #     validation, whose A/Bs resume per game.
+    mr_frozen_incumbent   # -> $INC: the profile committed at HEAD, unpacked (empty for a first version)
+    if gen_finished; then
+      log "=== RESUMING VALIDATION ($(stamp)) deck=$STEM: the generation already FINISHED (journal gone, $PROF is"
+      log "    the new table, no validation verdict recorded yet) -- not regenerating, not touching the incumbent ==="
+      [ -e "$PREV" ] && log "regeneration: incumbent saved -> $PREV (kept from the interrupted attempt; it is the committed incumbent)"
+      validate; vrc=$?
+      echo "[mullgen] VALIDATION VERDICT rc=$vrc $(stamp)" >> "$OUT/gen.log"
+      exit $vrc
+    fi
     # A regen must keep the incumbent to compare against -- and to restore if the new one loses.
-    if [ -e "$PROF" ]; then cp -f "$PROF" "$PREV"; log "regeneration: incumbent saved -> $PREV"; fi
+    mr_save_prev
+
     # ...and keeps its BUCKETING (USER 2026-10-24: "we could actually save the bucketing used"). The
     # generator re-uses the incumbent's buckets instead of re-discovering them, and falls back to
     # discovery by itself when they no longer partition the list (a decklist edit) or break a
@@ -719,6 +748,10 @@ PREFLIGHT
       >> "$OUT/gen.log" 2>&1 || { log "GENERATION FAILED -- see $OUT/gen.log"; exit 1; }
     [ -e "$PROF" ] || { log "gen produced no profile (below the R>=10 floor?) -- see $OUT/gen.log"; exit 1; }
     log "gen complete -> $PROF"
-    validate ;;
+    # The marker gen_finished() reads: a pause from here on resumes the VALIDATION, not the generation.
+    echo "[mullgen] GENERATION COMPLETE $(stamp) $(sha256sum < "$PROF" | cut -c1-64)" >> "$OUT/gen.log"
+    validate; vrc=$?
+    echo "[mullgen] VALIDATION VERDICT rc=$vrc $(stamp)" >> "$OUT/gen.log"
+    exit $vrc ;;
   *) echo "unknown command '$CMD' (run|validate|status)"; exit 1 ;;
 esac
