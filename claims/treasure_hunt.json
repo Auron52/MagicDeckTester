@@ -10,6 +10,8 @@
  "heartbeat": "2026-10-30T18:52:11Z",
  "host": "58199181d02e",
  "land_note": "HELD for the USER: mulligan: TRADE -- quality not worse (new-vs-old -0.020406 t) but the new table costs MORE (cost 1.033x (se 0.009, 32 seeds)): the USER's call; left live on the result branch, NOT landed",
+ "landed": "7294cc39e7f4b1a09bb2d4921ea1e22e3a226818",
+ "landed_at": "2026-10-30T20:42:25Z",
  "result_branch": "artifact-refresh/treasure_hunt-20261030-1910",
  "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T135317",
  "score": 0.4111,
