@@ -4,20 +4,17 @@
   "valueleaf": "em:e9ea4e2f6fb6212c7fbf"
  },
  "deck": "creature_giving",
- "detail": "released 2026-10-30: the K-gate refusal (incumbent 21 buckets vs expected_buckets 20) is answered -- USER chose K=20 (Overgrown Tomb merged with Forest/Tree of Tales); the next run re-buckets via mulligan_env MTG_KEEP_REDISCOVER=1",
- "finished": "2026-10-30T02:37:21Z",
- "frozen": "87e57645b09e5d843f02fed504086cc06c953351",
- "heartbeat": "2026-10-29T14:39:09Z",
- "host": "58199181d02e",
- "result_branch": null,
- "run_id": "creature_giving-artifact-queue-tool-647f24-20261029T143611",
+ "frozen": "80c4bb8fcab47db48ef7aee86720271df1acd8b3",
+ "heartbeat": "2026-10-30T04:23:22Z",
+ "host": "550a08fdc1f3",
+ "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T042322",
  "score": 0.3379,
  "stage": "mulligan",
  "stages": [
   "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-29T14:36:11Z",
- "state": "released",
- "worker": "artifact-queue-tool-647f24"
+ "started": "2026-10-30T04:23:22Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
 }
