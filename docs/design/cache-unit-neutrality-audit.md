@@ -451,3 +451,23 @@ same games at 1 vs N threads and tiny vs huge physical caches must give identica
 
 **Timing.** Every step changes the engine, so it lands only after the Hinata2 mulligan stage finishes. The exception is
 anything proven play-identical on Hinata2's keepgen play digest.
+
+## Scope: one project with budget reliability (USER, 2026-10-30)
+
+USER: *"Maybe it makes sense for this to be put together with the work to rebalance usage. We do need to have the
+budget setting be somewhat reliable."* So this plan merges with the budget-rebalancing work: making a budget setting
+mean roughly the same work, and roughly the same wall, on every deck and every position. There are three ways today
+that units fail to track work. Fix them together, then calibrate once:
+
+1. **Cache hits that skip charges** (this audit). The fix is the plan above.
+2. **Work that is never billed.** Hinata2 keepgen (2026-10-30): one turn-1 decision took 107.7 s for 6,779 units, about
+   16 ms per unit against the usual ~1 us. 60-75% of the slow rollouts' wall went to breakpoint-continuation
+   derivations that charge nothing, and EDF had the same shape (`docs/design/edf-slow-rollout-tail-2026-10-17.md`).
+   Two levers for this are built and default OFF, each a USER decision: `MTG_BP_DERIVE_METER` and `MTG_ENUM_CHARGE`.
+   Diagnosis: `docs/design/keepgen-hours-long-rollouts.md` (branch `keepgen-slow-tail`).
+3. **Units that are not shape-neutral.** Per-unit cost differs between work kinds (e.g. the model leaf costs 1.24x
+   the instructions per unit of live play, by callgrind), so one units-per-ms factor misprices some decks.
+
+Calibrate only after 1-3 are fixed: the matched-cost frontier above, measured per deck, gives the units-per-ms factor
+and shows whether one global factor is enough. USER 2026-10-30, on the hours-long rollouts: *"Games that are in the
+hours range should be practically nonexistent when we run with a budget."* That is the acceptance test for item 2.
