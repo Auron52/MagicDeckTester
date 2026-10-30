@@ -12657,6 +12657,24 @@ static int ExpectedAttacks(const GameState& state)
     return std::max(1, std::min(remaining, 5));
 }
 
+// What the greedy chooser (TurnSolver::Solve -- the d0 runner and the playout beyond the horizon) charges a
+// plan for a body it EATS (the §2b payer's fodder, or the searched sac-for-mana outlet's victims): the body's
+// attacks still to come, in EvalCard's own unit -- power x ExpectedAttacks x DMG, one attack fewer when it
+// cannot swing this turn (summoning sick, already attacked, or post-combat). EvalCard credits a creature
+// cast with exactly that (power x attacks, one fewer without haste), so a cast paid for by eating bodies is
+// weighed against the same measure of what the bodies were worth. The first cut charged one attack's power
+// (doubled pre-combat for a would-attack body) against a cast credited for every remaining attack, so eating
+// the board for any castable creature read as profit -- Goblins d0 s4530477 gi476 T2 main 2: two Piledrivers
+// and Krenko off seven sacrificed Goblins, Muxus and Goblin King among them, the next turn's 30-damage swing
+// gone (T3 -> T6, -> unwon before the searched outlet's sacrifices were charged at all).
+static int EatenBodyValue(const GameState& state, const Permanent& p, int power, bool is_pre_combat)
+{
+    constexpr int DMG = 100;
+    const int attacks = std::max(0, ExpectedAttacks(state)
+                                    - ((is_pre_combat && SacPayFodderCostsAttack(state, p)) ? 0 : 1));
+    return std::max(0, power) * attacks * DMG;
+}
+
 static bool RemedyActiveOrInHand(const GameState& state, int active);   // defined below
 
 // NET face swing of a damage spell that also carries an "target opponent gains N life" rider
@@ -49199,9 +49217,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // landmarks that never bit; with the axis retired the greedy ate its whole board to cast its whole
     // hand (Goblins d0 s3850055 gi54, T3 main 2: seven permanents -> two, four creatures cast, won T8
     // instead of T4). So each body the subset's cost reaches -- in the PAYER's own order
-    // (SacPayFodderRank: bodies that cost no attack first, then the searched victim pick's order) -- is charged its board power in EvalCard's
-    // unit (one damage-equivalent per point of power, lords included), the same price a creature
-    // cast is credited for adding one. THIS IS THE GREEDY's SCORE ONLY (the d0 runner and the playout
+    // (SacPayFodderRank: bodies that cost no attack first, then the searched victim pick's order) -- is
+    // charged EatenBodyValue: its attacks still to come in EvalCard's unit, the same measure a creature
+    // cast is credited with for adding one. THIS IS THE GREEDY's SCORE ONLY (the d0 runner and the playout
     // beyond the horizon -- the permitted greedy sites); searched plans are valued by their rollouts.
     // Inert when the lever is off or no outlet is live (LiveSacPayOutlet invalid -> empty prefix).
     std::vector<int> pay_fodder_prefix;   // [k] = summed value of the k cheapest-to-eat bodies
@@ -49218,17 +49236,53 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (!IsSacPayFodder(p, d, pfo)) { continue; }
             const int pw = p.EffectivePower()
                          + ComputeLordBonus(p.card, state, p.controller_index, p.AnimatedAllTypes(), &p).first;
-            // Pre-combat, a body that would attack also takes THIS turn's swing with it (Goblins d0
-            // s3950331 gi330 T3 main 1: Muxus paid by eating Goblin Lackey, Skirk and Goblin Matron, the
-            // Lackey's combat put and the attack both lost, T4 -> T5): charge it twice.
-            const int mult = (is_pre_combat && SacPayFodderCostsAttack(state, p)) ? 2 : 1;
-            bodies.emplace_back(SacPayFodderRank(state, p, pfo, &pf_doomed), std::max(0, pw) * 100 * mult);
+            bodies.emplace_back(SacPayFodderRank(state, p, pfo, &pf_doomed), EatenBodyValue(state, p, pw, is_pre_combat));
         }
         std::stable_sort(bodies.begin(), bodies.end(),
                          [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first < b.first; });
         pay_fodder_prefix.assign(bodies.size() + 1, 0);
         for (std::size_t k = 0; k < bodies.size(); ++k)
         { pay_fodder_prefix[k + 1] = pay_fodder_prefix[k] + bodies[k].second; }
+    }
+    // ...AND THE BODIES THE SEARCHED OUTLET ACTION SACRIFICES (Skirk Prospector's / Utopia Mycon's own
+    // SacForMana, single or burst -- the lever's OFF arm, a death-value board, a same-line spore pop). Same
+    // price, same reason: the action's eval is 0 and its ritual_float credits the pool, so the subset scored
+    // the casts the float buys and nothing for the bodies it kills. The colour-presence gate used to hide
+    // most such subsets (it saw no colour from the float); once it credits the outlet's float
+    // (MTG_SUBSET_SAC_OUTLETS, ab133f122) the greedy ate its board for anything castable -- Goblins d0
+    // s4530477 gi476 T2 main 2: two Piledrivers and then Krenko off seven sacrificed Goblins, the next
+    // turn's 30-damage swing reduced to one attacker (T3 -> unwon). Charged in the canonical victim order
+    // (SacExpendabilityRank, the order ApplySacForMana eats in), each body at EatenBodyValue. GREEDY SCORE
+    // ONLY, like the prefix above; a winning plan is never charged.
+    std::vector<int> sac_victim_prefix;   // [k] = summed value of the k bodies the outlet would eat first
+    {
+        SacPayOutlet svo;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && IsSacManaOutlet(d->params)) { svo.def = d; svo.source_id = p.card.m_number; break; }
+        }
+        if (svo.valid())
+        {
+            const std::vector<int> sv_doomed = DoomedTokenCreators(state);
+            std::vector<std::pair<int, int>> bodies;   // (victim rank, value)
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+                if (!IsSacPayFodder(p, d, svo)) { continue; }
+                const int pw = p.EffectivePower()
+                             + ComputeLordBonus(p.card, state, p.controller_index, p.AnimatedAllTypes(), &p).first;
+                bodies.emplace_back(SacExpendabilityRank(state, p, svo.source_id, &sv_doomed),
+                                    EatenBodyValue(state, p, pw, is_pre_combat));
+            }
+            std::stable_sort(bodies.begin(), bodies.end(),
+                             [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first < b.first; });
+            sac_victim_prefix.assign(bodies.size() + 1, 0);
+            for (std::size_t k = 0; k < bodies.size(); ++k)
+            { sac_victim_prefix[k + 1] = sac_victim_prefix[k] + bodies[k].second; }
+        }
     }
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
 
@@ -50825,6 +50879,24 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             {
                 const int eaten = std::min(nbodies, (short_by + pay_fodder_per - 1) / pay_fodder_per);
                 total_eval -= pay_fodder_prefix[static_cast<std::size_t>(eaten)];
+            }
+        }
+        // ...and the searched outlet's own sacrifices (see sac_victim_prefix).
+        if (!wins && sac_victim_prefix.size() > 1)
+        {
+            int sacs = 0;
+            for (int j : sel)
+            {
+                const Action& sa = cands[j];
+                if (sa.kind != Action::Kind::SacForMana) { continue; }
+                const CardDefinition* sd = sa.def != nullptr ? sa.def : CardDatabase::Instance().Lookup(sa.card_name);
+                if (sd == nullptr || !IsSacManaOutlet(sd->params)) { continue; }
+                sacs += std::max(1, sa.sac_count);
+            }
+            if (sacs > 0)
+            {
+                const int nb = static_cast<int>(sac_victim_prefix.size()) - 1;
+                total_eval -= sac_victim_prefix[static_cast<std::size_t>(std::min(nb, sacs))];
             }
         }
         int rank_value = total_eval;
