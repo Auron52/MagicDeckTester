@@ -697,39 +697,36 @@ private:
 // lockstep. It only zeroes the seed half of the hold, which is zero for every deck without seeds.
 extern thread_local bool g_cycle_seed_paying;
 
-// THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT, DEFAULT OFF; ledger Q61). A searched cycle seed pays its
-// cycling cost BEFORE its site-4 continuation exists, so the payer alone can spend the colours the continuation
-// needs -- two Unpredictable Cyclones in hand on three Mountains + four Islands: the {2} took two Mountains and
-// the other Cyclone's {R}{R} was unpayable at any budget, b0 included. The split makes WHICH sources pay the
-// seed's generic a SEARCHED pin (Action::seed_pay_split), so every distinct leftover board is findable:
-//   * SeedPaySplits: the candidate splits for an ALL-GENERIC cost (no coloured pip, no float), one per distinct
-//     multiset of source colour SIGNATURES (a signature = the colours a source produces, plus a SPECIAL bit for a
-//     source whose tap costs something else: a filter land, a land-search activation, a non-land source; copies of
-//     one signature fold). A split that taps a plain source where a plain source with a STRICT SUBSET of its colours
-//     was left untapped is DOMINATED (the swap leaves a pool that pays everything the other pays) and is dropped.
-//     Ordered by the HAND-DEMAND rule: split 0 leaves the most of the colours the cards still in hand need (the
-//     max coloured pips per colour over their mana and cycling costs; the cycled copy itself excluded), so a small
-//     budget spends there first. Empty = no pin (lever off, a coloured or float-paid cost, one source class).
-//   * SeedPaySplitHoldMask: realised at payment time -- every untapped mana source is HELD except the split's
-//     (the lowest-index untapped source of each signature); 0 when the split cannot be matched on this board
-//     (the payer decides). Installed with SeedPaySplitScope around the seed's own payment at every site that
-//     pays a seed (the rollout's cycle_chain_step, the executor's PerformDigFull), so both worlds tap the same
-//     sources; it rides TapForCost's reserved-first / unrestricted-retry contract, so a split never makes a
-//     payable seed unpayable.
+// THE SEED PAYMENT SPLIT (MTG_CYCLE_SEED_PAY_SPLIT, DEFAULT OFF; ledger Q61). A cycle seed pays
+// BEFORE its continuation exists; colours needed by that continuation must remain searchable.
+// Source units occupy low three bytes; high byte is an ordinal of a <=3-unit concrete floating
+// colour multiset (84 possibilities). SeedPaySplits covers one-unit unrestricted lands, including
+// a filter's free-C tap, and the float possible before the seed from in-hand rituals/filter output.
+// Dynamic/restricted/multi-unit sources and wild/provenance-bearing float use the ordinary payer.
+// Plain colour-subset dominance is applied within a fixed float allocation; special lands keep
+// their stable identity. This does not enumerate every possible filter output-colour production.
+// Scope exposes only the selected floating units to the payer, holding the rest aside until the
+// payment returns; a valid source/float pin is binding and a stale/unrealizable pin fails atomically.
 bool SeedPaySplitOn();
 std::vector<std::int32_t> SeedPaySplits(const GameState& state, int me, const ManaCost& cost,
                                         const CardDefinition& seed_def);
 std::uint64_t SeedPaySplitHoldMask(const GameState& state, int me, std::int32_t split);
 extern thread_local std::uint64_t g_seed_pay_hold;
+extern thread_local std::int32_t g_seed_pay_split;
 class SeedPaySplitScope
 {
 public:
-    explicit SeedPaySplitScope(std::uint64_t mask) : m_prev(g_seed_pay_hold) { g_seed_pay_hold = mask; }
-    ~SeedPaySplitScope() { g_seed_pay_hold = m_prev; }
+    SeedPaySplitScope(GameState& state, int me, std::int32_t split);
+    ~SeedPaySplitScope();
+    bool Valid() const { return m_valid; }
     SeedPaySplitScope(const SeedPaySplitScope&)            = delete;
     SeedPaySplitScope& operator=(const SeedPaySplitScope&) = delete;
 private:
     std::uint64_t m_prev;
+    std::int32_t m_prev_split;
+    GameState* m_state = nullptr;
+    ManaPool m_held_float;
+    bool m_valid = true;
 };
 
 class CycleSeedPayScope
