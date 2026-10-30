@@ -711,6 +711,18 @@ def frame_ident(d):
     return (d.get("type"), d.get("turn"), d.get("phase"), d.get("source"))
 
 
+def legacy_blaze_player_stage(current, recorded):
+    """A saved one-step Blaze creature pick now follows a new player pick."""
+    if current.get("type") != "target" or current.get("source") != "Searing Blaze":
+        return False
+    if frame_ident(current) != frame_ident(recorded):
+        return False
+    def kinds(frame):
+        return {target.get("kind") for option in frame.get("options") or []
+                for target in option.get("targets") or []}
+    return kinds(current) == {"player"} and kinds(recorded) == {"permanent"}
+
+
 def plan_key(p):
     """Content identity of a plan, independent of its index: the land played plus the multiset of
     casts. Used as the order-insensitive fallback behind an exact `summary` match."""
@@ -1101,7 +1113,7 @@ def option_key(o):
     return None
 
 
-def find_option(recorded, options, recorded_index=None):
+def find_option(recorded, options, recorded_index=None, source=None):
     """Index of the recorded option in the CURRENT options list, matched by stable CONTENT -- the
     enumeration order of scry/reorder/discard options is not part of the contract, so a verbatim
     index silently performs a different placement when the order changes. Prefers the recorded
@@ -1114,6 +1126,12 @@ def find_option(recorded, options, recorded_index=None):
         return recorded_index if (recorded_index is not None
                                   and 0 <= recorded_index < len(options)) else None
     hits = [i for i, o in enumerate(options) if option_key(o) == want]
+    if not hits and source == "Searing Blaze" and want[0] == "label":
+        # The old one-step creature dialog named an opposing token without a side suffix;
+        # the new second stage says "(opponent)" after the player was chosen separately.
+        hits = [i for i, o in enumerate(options)
+                if (key := option_key(o)) and key[0] == "label"
+                and tuple(part.removesuffix(" (opponent)") for part in key[1]) == want[1]]
     if not hits and want[0] == "name" and len(want) == 3:
         # The recorded tapped state is not reproducible (the payment moved): same card, any state.
         hits = [i for i, o in enumerate(options) if (option_key(o) or ())[:2] == want[:2]]
@@ -1561,6 +1579,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             return False, "play", f"main_phase decision after {len(resolved)} picks has no plans list"
 
         aligned = ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+        if aligned and legacy_blaze_player_stage(dec, kept[ri]["decision"]):
+            aligned = False
         if (not aligned and ri < len(kept) and dec.get("type") != "main_phase"
                 and kept[ri]["decision"].get("type") != "main_phase"):
             # SUB-DECISIONS OF ONE PLAN, ASKED IN A NEW ORDER (2026-10-15, burn s17 gi16). The
@@ -1579,7 +1599,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             g = next((k for k in range(ri, len(kept))
                       if kept[k]["decision"].get("type") == "main_phase"), len(kept))
             j = next((k for k in range(ri + 1, g)
-                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
+                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)
+                      and not legacy_blaze_player_stage(dec, kept[k]["decision"])), None)
             if j is not None:
                 kept.insert(ri, kept.pop(j))
                 reordered.append(f"{frame_ident(dec)}")
@@ -1615,7 +1636,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                     return (rd_.get("turn"), rd_.get("source"), rec.get("chosen")) in honoured
                 return False
             j = next((k for k in range(ri + 1, len(kept))
-                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
+                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)
+                      and not legacy_blaze_player_stage(dec, kept[k]["decision"])), None)
             if j is not None and all(_declined(kept[k]) for k in range(ri, j)):
                 for k in range(ri, j):
                     why = ("count moved into the plan"
@@ -1630,7 +1652,8 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             while ri < len(kept) and stale_pass_frame(kept[ri], dec):
                 skipped.append(f"{frame_ident(kept[ri]['decision'])}")
                 ri += 1
-            aligned = ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+            aligned = (ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+                       and not legacy_blaze_player_stage(dec, kept[ri]["decision"]))
         if not aligned:
             # A decision this reference never recorded (a point added after it was saved, or an
             # extra frame because the line ran longer). Consume no recorded pick. For a MAIN_PHASE
@@ -1664,8 +1687,24 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             elif dec.get("type") == "target":
                 # A trick target that used to ride the PLAN and is now asked at resolution: aim it
                 # where the reference's own plan aimed it (see target_intent).
-                intent = target_intent(dec, kept, ri)
-                pick, src = intent if intent else engine_default(dec)
+                if ri < len(kept) and legacy_blaze_player_stage(dec, kept[ri]["decision"]):
+                    # The recorded creature fixes the player for the new first stage.
+                    old = kept[ri]
+                    chosen = old.get("chosen")
+                    old_opts = old["decision"].get("options") or []
+                    old_opt = old_opts[chosen] if isinstance(chosen, int) and 0 <= chosen < len(old_opts) else {}
+                    old_targets = old_opt.get("targets") or []
+                    target_index = old_targets[0].get("index") if old_targets else None
+                    self_target = (any(p.get("idx") == target_index
+                                       for p in old["decision"].get("me", {}).get("battlefield", []))
+                                   or old_opt.get("label", "").endswith("yours)"))
+                    face = "You (face)" if self_target else "Opponent (face)"
+                    pick = next((i for i, option in enumerate(dec.get("options") or [])
+                                 if option.get("label") == face), dec.get("heuristic_default", 0))
+                    src = "recorded Blaze creature controller"
+                else:
+                    intent = target_intent(dec, kept, ri)
+                    pick, src = intent if intent else engine_default(dec)
             elif dec.get("type") == "sacrifice":
                 intent = sacrifice_intent(dec, kept, ri)
                 pick, src = intent if intent else engine_default(dec)
@@ -1907,7 +1946,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
                         resolved.append(x)
                         continue
                     rec_opt = ref_opts[x] if 0 <= x < len(ref_opts) else None
-                    q = find_option(rec_opt, cur_opts, recorded_index=x)
+                    q = find_option(rec_opt, cur_opts, recorded_index=x, source=dec.get("source"))
                     if q is None:
                         cur_hand = hand_names(dec.get("me", {}).get("hand", []))
                         ref_hand = hand_names(rd.get("me", {}).get("hand", []))
