@@ -1,7 +1,7 @@
 # Unpredictable Cyclone: branch map, state and next steps (2026-10-30)
 
 > Completion update (2026-10-30): the backup branches have been rebased and integrated on
-> `cyclone-finish` against `6b655b71f`; original branch refs remain intact. The fixed 512 MB per-thread
+> `cyclone-finish` against current main `930cc5c33`; original branch refs remain intact. The fixed 512 MB per-thread
 > plan-cache policy and the companion per-thread FSL quota were removed. The existing shared,
 > RAM-sized budgets remain, together with exact keys and hit-equals-miss pricing. The user prefers
 > landing Cyclone before the separate cache-budgeting project. No broader cache redesign is being
