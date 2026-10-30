@@ -478,7 +478,8 @@ def mull_plan(cfg, deck, inc_R, inc_depth, inc_budget, screened):
     lower setting is "all but guaranteed to fail" the old-vs-new A/B).
       * R<=30 -> `fast` (R30, adaptive bottoming); R<=40, or not recorded -> `complete` (R40, full bottoming).
       * R>40 (burn/slivers/knights-era R=60 tables) is beyond `complete`: the plan is marked `beyond`, and
-        such a table is LEFT AS IT IS (not queued) unless the USER marks it, when it runs `complete`.
+        such a table queues on drift like any other and runs `complete`; the old-vs-new A/B keeps the
+        incumbent unless the fresh table is better (USER 2026-10-30; it used to need a USER mark).
       * depth / budget: the deck's screened mull_gen_* as-is (mullgen.sh's own choice). An incumbent's
         generation depth is reported (`explain`), never imposed.
     A per-deck recipe_overrides entry still wins (a USER decision)."""
@@ -498,7 +499,7 @@ def mull_plan(cfg, deck, inc_R, inc_depth, inc_budget, screened):
         plan["recipe"] = "complete"
         if R > 40:
             plan["beyond"] = True
-            plan["why"].append("incumbent R=%d is beyond complete: left as is unless USER-marked" % R)
+            plan["why"].append("incumbent R=%d is beyond complete: regenerates at complete, kept unless beaten" % R)
     if R:
         plan["why"].insert(0, "incumbent R=%d -> %s" % (R, plan["recipe"]))
     return plan
@@ -719,7 +720,10 @@ def score(it, cfg):
     s *= float(cfg["kind_weight"].get(it["kind"], 1.0))
     it["score"] = round(s, 4)
     it["queued"] = bool(it.get("mark")) or (s >= float(cfg["min_drift"]) and not it.get("uncommitted"))
-    if it.get("blocked") or (it.get("left_be") and not it.get("mark")):
+    # A beyond-complete (R>40) table is queued on drift like any other and regenerates at `complete`; the
+    # usual old-vs-new A/B keeps the incumbent unless the fresh table is better (USER 2026-10-30: "we shouldn't
+    # need a special mark. It should just be if it has drifted enough"). It used to be left be unless marked.
+    if it.get("blocked"):
         it["queued"] = False
     it["sort"] = (0 if it.get("mark") else 1, -int(it.get("mark", {}).get("priority", 0)), -s)
 
@@ -1951,9 +1955,7 @@ def cmd_selftest(a):
               (p2["depth"], p2["budget"], p2["env"]) == (None, None, {}))
         it = {"churn": {"abs_dturn": 1.0}, "flags": [], "kind": "mulligan", "left_be": True}
         score(it, cfg)
-        check("a left-be table is not queued on drift alone", not it["queued"])
-        it = dict(it, mark={"priority": 1}); score(it, cfg)
-        check("...but a USER mark queues it", it["queued"])
+        check("a beyond-complete table queues on drift alone (no mark needed)", it["queued"])
         check("recipe_overrides still wins", mull_plan(dict(cfg, recipe_overrides={"x": "fast"}), "x", 60, None, None,
                                                         (1, 3))["recipe"] == "fast")
 

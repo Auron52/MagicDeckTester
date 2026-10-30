@@ -182,8 +182,9 @@ fail."*; refined 2026-10-25: *"If the original ran complete we should at least r
 are some that ran more than complete. In that case we can just leave it be"*, and *"I'm okay with just
 considering complete and fast for this pipeline."*). `mull_plan` reads the incumbent's R (profile `effective_R`,
 raw `meta.R`): R<=30 -> `fast`, R<=40 or unrecorded -> `complete`. A table above 40 (the burn/slivers/knights-era
-R=60 tables) is beyond `complete` and is LEFT AS IT IS: not queued on drift, only on a USER mark (then
-`complete`). Depth and budget are the deck's screened `mull_gen_*`, exactly what `mullgen.sh` picks; an
+R=60 tables) is beyond `complete`: it queues on drift like any other and regenerates at `complete`, and the
+usual old-vs-new A/B keeps the incumbent unless the fresh table is better (USER 2026-10-30: *"we shouldn't need
+a special mark. It should just be if it has drifted enough"*; until then such a table needed a USER mark). Depth and budget are the deck's screened `mull_gen_*`, exactly what `mullgen.sh` picks; an
 incumbent's own generation depth is reported by `explain` but not imposed. (The 2026-10-23 build also raised
 depth/budget to the incumbent's and pinned `MTG_KEEP_ROLLOUTS` above 40; both were dropped 2026-10-25.
 Anti-Lifegain's 2026-07 table, for example, was rolled at the then-default d5 b20, recorded nowhere in the
