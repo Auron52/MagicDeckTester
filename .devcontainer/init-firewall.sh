@@ -15,6 +15,9 @@
 # Allowlist knob: extra hostnames to permit. Comment a line out to deny it.
 #   api.anthropic.com -> the Claude Code CLI. Covers both `/login` (the browser
 #   step runs on the HOST, the container only talks to the API) and normal use.
+#   api.openai.com    -> Codex API-key requests.
+#   chatgpt.com       -> Codex ChatGPT requests and streaming.
+#   auth.openai.com   -> Codex login, device authentication, and token refresh.
 #   api.scryfall.com  -> ONLY used by scripts/audit_card_costs.py (the card mana-
 #   cost audit). The build, the simulator (mtg), the analyzer (mtg-analyze), and
 #   the regression suite make NO network calls, so if you won't run the cost
@@ -23,6 +26,9 @@
 ALLOWED_HOSTS=(
   api.anthropic.com
   api.scryfall.com
+  api.openai.com
+  chatgpt.com
+  auth.openai.com
 )
 
 set -euo pipefail

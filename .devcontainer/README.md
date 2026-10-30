@@ -136,6 +136,43 @@ which reinstalls the latest via npm.)
 See "Editor extensions behind the firewall" below for the Claude **VS Code
 extension** (vs. the CLI used here).
 
+## Codex in the container
+
+The Codex CLI is installed alongside Claude Code at container creation, before
+lockdown. Rebuild the dev container to install it and mount the persistent
+`mdt-codex` volume at `~/.codex` for configuration and file-based credentials.
+
+The firewall allows `api.openai.com` (API-key requests), `chatgpt.com` (ChatGPT
+requests and streaming), and `auth.openai.com` (login and token refresh).
+Use device authentication so the browser runs on the host without forwarding
+an OAuth callback port:
+
+```bash
+codex login --device-auth
+codex
+```
+
+Enable device code login in your ChatGPT security settings (or ask your workspace
+admin to enable it) first. Alternatively, with an API key set in the container:
+
+```bash
+printenv OPENAI_API_KEY | codex login --with-api-key
+```
+
+See the [official authentication documentation](https://learn.chatgpt.com/docs/auth)
+for login options. The Codex VS Code extension (`openai.chatgpt`) is also included
+in `install-extensions.sh`; run that script from the container terminal if the
+firewall prevents its initial Marketplace installation.
+
+To apply just the network changes to an existing container:
+
+```bash
+sudo bash .devcontainer/init-firewall.sh
+```
+
+Hosts are pinned to IPv4 addresses at startup. Re-run that command if an OpenAI
+endpoint stops responding after its CDN addresses change.
+
 ## Git: committing & pushing as dtippett-bot
 
 This repo is configured (repo-local) so commits are authored/committed as
@@ -161,7 +198,7 @@ git ls-remote origin >/dev/null && echo OK
 
 ## Editor extensions behind the firewall
 
-The extensions listed in `devcontainer.json` (`anthropic.claude-code`,
+The extensions listed in `devcontainer.json` (`anthropic.claude-code`, `openai.chatgpt`,
 `ms-vscode.cpptools-extension-pack`, `ms-python.python`) install into the container's
 VS Code Server, which downloads them from the **Marketplace**. The Marketplace uses
 wildcard CDN hosts (`*.gallerycdn.vsassets.io`, `*.vscode-cdn.net`, …) on shared,
@@ -298,5 +335,48 @@ build can legitimately differ (floating-point, hash ordering, threading), so
 `test/regression.sh` may report mismatches *that are not regressions* when run in
 the container. The suite still works as a self-consistent A/B harness here; just
 don't expect the committed Windows fingerprints to validate. If you want a
-Linux baseline, inspect a run and `regression.sh <mode> --accept` into a
-**separate** ground-truth file rather than overwriting the committed one.
+Linux baseline, set `REGRESSION_GT=test/regression_gt.linux.txt` and
+`REGRESSION_GT_LOGS=test/gt_logs.linux` for the run and its `--accept`. Inspect
+the run first. These variables also select the separate baseline for
+`verify_deck.py` and `check_gt_logs.py`; without them, the Windows baseline
+remains the default.
+
+## Codex access and shared Claude instructions
+
+Every container start runs `configure-codex.py`, which adds these top-level
+settings when absent from the container's persisted `~/.codex/config.toml`
+(or `$CODEX_HOME`):
+
+```toml
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+```
+
+This makes Full access the default for Codex in this container, including CLI
+and IDE clients that use this configuration. Restart Codex or start a new session
+after applying it. Existing user settings, explicit client/session overrides, and
+managed policy take precedence. The script preserves unrelated configuration and saves the original
+as `config.toml.before-container-defaults` before its first change. It refuses to
+run outside a container. These defaults live in the container volume, rather
+than a project config that would also change host sessions.
+
+`AGENTS.md` directs Codex to read the authoritative `CLAUDE.md`. Existing skill
+bodies stay in `.claude/skills/*.md`; small committed `.agents/skills/<name>/SKILL.md`
+entrypoints give Codex discovery metadata and direct it to read the source.
+Changes to workflow bodies apply immediately, without copying or synchronization.
+After adding/removing a skill or changing its introductory description, run:
+
+```sh
+python3 scripts/sync_codex_skills.py
+python3 scripts/sync_codex_skills.py --check  # verify generated entrypoints match
+```
+
+Container startup also runs this command. It updates only its own generated
+entrypoints, removes obsolete generated entrypoints, and refuses to overwrite
+unmanaged skills. Commit generated changes alongside the Claude source so new
+checkouts work before container setup. Plain Markdown wrappers also work on
+Windows checkouts without symlink privileges. Claude hooks, permissions, and
+agent definitions are tool-specific and are not converted by this bridge.
+
+Official references: [Codex security](https://learn.chatgpt.com/docs/agent-approvals-security)
+and [skill discovery](https://learn.chatgpt.com/docs/build-skills).

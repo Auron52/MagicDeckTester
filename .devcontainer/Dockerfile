@@ -3,6 +3,7 @@
 #
 # 1. Pre-create vscode-owned dirs so their persistence volumes mount cleanly:
 #      ~/.vscode-server/extensions -> persists editor extensions across rebuilds
+#      ~/.codex                    -> persists Codex configuration and login
 #      ~/.config/gh                 -> persists the `gh` (dtippett-bot) login
 #    Without this, Docker auto-creates the parent dir root-owned when it mounts the
 #    volume. For ~/.vscode-server that breaks the VS Code server's startup
@@ -29,8 +30,8 @@
 # stays in devcontainer.json.
 FROM mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04
 
-RUN mkdir -p /home/vscode/.vscode-server/extensions /home/vscode/.config/gh \
-    && chown -R vscode:vscode /home/vscode/.vscode-server /home/vscode/.config
+RUN mkdir -p /home/vscode/.vscode-server/extensions /home/vscode/.config/gh /home/vscode/.codex \
+    && chown -R vscode:vscode /home/vscode/.vscode-server /home/vscode/.config /home/vscode/.codex
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends linux-tools-generic libjemalloc-dev \

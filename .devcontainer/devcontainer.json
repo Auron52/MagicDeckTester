@@ -21,7 +21,7 @@
   //                        The cap alone is enough (no seccomp=unconfined needed).
   "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW", "--cap-add=PERFMON", "--cap-add=SYS_PTRACE"],
 
-  // Node.js (for the Claude Code CLI, installed in postCreateCommand below) and
+  // Node.js (for the Claude Code and Codex CLIs, installed in postCreateCommand below) and
   // the GitHub CLI (so `gh auth login` can authenticate git as the dtippett-bot
   // account inside the container -- the repo-local credential helper already
   // points at `gh`, so once it's authed, commits/pushes go through as the bot).
@@ -58,6 +58,8 @@
     // Persist the Claude Code login (~/.claude/.credentials.json) across rebuilds,
     // so you only run `/login` once.
     "source=mdt-claude,target=/home/vscode/.claude,type=volume",
+    // Persist Codex configuration and authentication across rebuilds.
+    "source=mdt-codex,target=/home/vscode/.codex,type=volume",
     // Persist VS Code Server extensions across rebuilds, so the one-time
     // firewall-lifted install of Claude/C++/Python is not repeated. Works because
     // the Dockerfile pre-creates ~/.vscode-server vscode-owned; postCreateCommand
@@ -79,7 +81,8 @@
       "extensions": [
         "ms-vscode.cpptools-extension-pack",
         "ms-python.python",
-        "anthropic.claude-code"
+        "anthropic.claude-code",
+        "openai.chatgpt"
       ],
       "settings": {
         "cmake.generator": "Ninja Multi-Config",
@@ -116,7 +119,7 @@
     "NODE_PATH": "/home/vscode/.mdt-tools/node_modules"
   },
 
-  // Install the Claude Code CLI, hand the root-owned volumes (build/, ~/.claude,
+  // Install the Claude Code and Codex CLIs, hand the root-owned volumes (build/, ~/.claude,
   // and the extensions volume -- chowned here in case an older root-owned one is
   // reused; the parent ~/.vscode-server is already vscode-owned from the image) to
   // the non-root user, then configure CMake once (this triggers the FetchContent
@@ -128,12 +131,12 @@
   // (/home/vscode/.mdt-tools), made require-able via NODE_PATH (remoteEnv above);
   // jsdom is pure-JS (no native build), so no compiler/node-gyp step is needed.
   // Build with:  cmake --build build --config Release
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && npm install --prefix /home/vscode/.mdt-tools jsdom && sudo chown -R vscode:vscode build /home/vscode/.claude /home/vscode/.vscode-server/extensions /home/vscode/.config/gh && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code @openai/codex && npm install --prefix /home/vscode/.mdt-tools jsdom && sudo chown -R vscode:vscode build /home/vscode/.claude /home/vscode/.codex /home/vscode/.vscode-server/extensions /home/vscode/.config/gh && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
 
   // Apply the egress firewall on every start (a restart clears the container's
   // iptables rules). It runs AFTER postCreate, so the first dependency fetch is
   // unaffected. Edit the allowlist at the top of init-firewall.sh.
-  "postStartCommand": "sudo bash .devcontainer/init-firewall.sh",
+  "postStartCommand": "python3 .devcontainer/configure-codex.py && python3 scripts/sync_codex_skills.py && sudo bash .devcontainer/init-firewall.sh",
 
   "remoteUser": "vscode"
 }

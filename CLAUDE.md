@@ -719,6 +719,15 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   new session (personal working prefs, resume hooks), never for parking deferred
   project state.
 
+- **Checkpoint active long-running work in the repo.** Keep one short, task-specific
+  file in `docs/design/` with the last completed stage, current source/build state,
+  running command and output paths, unresolved findings, and exact next steps.
+  Update it after milestones and before starting long runs; do not wait for a
+  compaction prompt. After compaction or a new session, read that file and verify
+  the current files and processes before resuming. This is shared project state,
+  so both Claude and Codex use the same checkpoint. Commit and push the checkpoint
+  before moving work to another machine.
+
 ## Coding Conventions Skill
 
 Before **adding or changing an env flag (`MTG_*`), a debug toggle, or an A/B lever**, read
