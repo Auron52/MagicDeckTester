@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-finish`, `.claude/worktrees/cyclone-finish`, branched from `origin/cyclone-int` (3892d2159), rebasing onto current phase-1-2 6b655b71f. Original backup branches untouched. Primary checkout has an existing unrelated `test/ref_bench.json` edit; preserve it.
 
-Current stage: source frozen at tree `ce3431d90d7f7ee88b47a791ce61595740f907f0` against main930cc5c33. Final Release build and all2349 units/384 scenarios PASS. Viewer targeted/prefix gates and full699-reference strict protocol PASS; full line validation is running serially. Fresh PGO build session99103 is at its whole-suite training stage,8workers; separate Release binary remains stable for the lightweight viewer check. Prepared quality/process runs have not launched. No generation before final re-evaluation.
+Current stage: source frozen at `ce3431d90d7f7ee88b47a791ce61595740f907f0` against main930cc5c33. Release and fresh PGO builds complete;2349 units/384 scenarios and full699-reference strict protocol PASS. Full viewer line validation is still running serially. Memory6 finished468games; memory1 counterpart is running. After memory preflight, run final post-rebase smoke before trusting/adopting measurements, then launch prepared12542-game quality pool. No generation before final re-evaluation.
 
 Independent reviews found extra required fixes:
 
@@ -90,3 +90,14 @@ Shared-budget removal was rebased to `e9135d9ef`. Original9db23420e is a histori
 - PGO build99103 (final-pgo-build.log): instrumented build complete; stage2 trains whole suite197jobs/5513games with8workers; stage3 profile-use+LTO pending. This overlaps only the lightweight serial viewer checker, uses separate build/pgo-work and build/PGO, never changes Release/source.
 - Ten reproducer helpers/records now tracked under logs/cyclone-completion/prepared. Memory reporter tightened to require actual tiny20MB pool pressure (positive refused stores), exact per-game wins/digests/units, and separate FSL refusal warnings.10 synthetic tests PASS.
 - Planned order after PGO: already-owed memory6 and memory1 process runs before the12k main pool, to detect any default FSL binding/unit variance before hours of A/B collection; no additional or duplicated work. Final quiet timed cost gate remains separate after all other local work.
+
+- PGO99103 completed successfully: all197 training jobs/5513games, fresh build/PGO/SRC_TREE equalsce3431d90d7f7ee88b47a791ce61595740f907f0. Memory6 preflight is now running via launcher session39156, engine PID1447027, output final-pgo-inputs/runs/memory_t6_normal/.468games include168 shared-reference games plus300 shape games. Peak observed RSS1.49GB; no timed cost inference while lightweight serial viewer validation continues. Memory1 follows, then memory-preflight comparison before12k pool.
+
+## Shared-cache preflight underway (23:30UTC)
+
+- Full CI41140760861 now PASS: Linux, Windows, and Linux/Windows determinism parity. Watch56547 complete. PGO99103 complete and source-matching; binary SHA795a713382ea7be04453327cfe64f99d3d9fdcaaf30a32a3bc13b9a8d17b09c3.
+- Memory6 DONE0:468games,6jobs,23:14:03--23:23:47UTC. Shared plan budget1,027,328KB reached hiwater1,027,326KB, refused14stores, residual0KB; FSL did NOT bind. Peak RSS observed1.49GB. Output final-pgo-inputs/runs/memory_t6_normal.
+- Memory1 running, launcher38584, engine1453228, output runs/memory_t1_normal. First completed24-game play block EXACTLY matches memory6 avg/digest/43,056,999units. Full168 shared-game comparison pending;300 t6-only shapes are compared later to primary12 output, not claimed covered by this preflight.
+- New memory-preflight reporter requires all168 shared games plus the300 shape inventory and explicit FSL review if it binds.14 synthetic reporter tests PASS. Persistent scripts updated; helper/docs changes are pending a commit.
+- Next: after memory1, report memory-preflight; run fresh-source PGO smoke (post second rebase), audit per-game changes before any GT acceptance. Initial7known mismatches are from the6b baseline; current main9368 continuation-key fold may alter them. Then main12542-game pool, iso9240salt process modes0/2, data-dependent symmetric blind/movers/recoveries, remaining memorytiny12/unbounded6, smallVERIFY, quiet final cost, full regression+audit and linear landing as appropriate.
+- Viewer98998 still in full validate stage05 (~32min) with no failure emitted; serial reference alignment and successful validations are buffered. Stage06 sampled layers pending. Release/source hashes unchanged; only this lightweight checker overlaps heavy build/batch.

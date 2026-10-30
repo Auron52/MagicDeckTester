@@ -4,6 +4,7 @@
 quality: paired per-game reports for QC/cast/payment/nested (prunes has its own
 reporter), FD/nonconv inventory, ordinary-world diagnostic and slower-game
 recovery manifests. memory: exact wins/digests/units versus primary normal12.
+memory-preflight: interim normal t1/t6 overlap; holds for review if FSL binds.
 This script never starts the engine or substitutes missing outcomes.
 """
 import argparse
@@ -423,6 +424,81 @@ def cache_pressure(path):
     return result
 
 
+def memory_preflight(a):
+    """Compare the planned t1/t6 overlap without reading any primary results."""
+    names = ('memory_t1_normal', 'memory_t6_both_reference_sets')
+    schedule = read_json(a.inputs / 'final-runtime-plan.json')
+    variants = {v['name']: v for v in schedule['memory_comparisons']}
+    overrides = dict(x.split('=', 1) for x in a.run)
+    stderr_overrides = dict(x.split('=', 1) for x in a.stderr)
+    result = dict(scope='Interim normal t1 versus t6 shared games only; no t12/tiny or full memory proof.',
+                  runs={}, cache_pressure={}, cells={}, six_only_cells={}, differences=[], problems=[])
+    missing = sorted(set(names) - set(variants))
+    if missing:
+        result.update(complete=False, observed_exact=False, preflight_pass=False)
+        result['problems'].append(dict(error='required preflight runtime plans absent', plans=missing))
+        write_json(a.output / 'memory-preflight-report.json', result)
+        print(json.dumps(dict(report=str(a.output / 'memory-preflight-report.json'), complete=False, problems=result['problems']), indent=2))
+        return 2
+    loaded = {}
+    for name in names:
+        variant = variants[name]
+        manifest = Path(variant['argv'][variant['argv'].index('--batch') + 1])
+        jobs = read_json(manifest)['jobs']
+        wins = Path(overrides.get(name, Path(variant['stdout']).parent / 'wins'))
+        loaded[name] = load_cells(jobs, wins)
+        result['runs'][name] = dict(manifest=str(manifest), wins=str(wins),
+                                   expected_games=sum(loaded[name]['expected'].values()))
+        result['problems'] += [dict(variant=name, **p) for p in loaded[name]['problems']]
+        pressure = cache_pressure(stderr_overrides.get(name, variant['stderr']))
+        result['cache_pressure'][name] = pressure
+        result['problems'] += [dict(variant=name, error=p) for p in pressure['problems']]
+    one, six = (loaded[name] for name in names)
+    shared = set(one['data']) & set(six['data'])
+    result['shared_expected'] = sum(one['expected'].values())
+    result['shared_compared'] = 0
+    for cell in sorted(one['data']):
+        aa, bb = one['data'][cell], six['data'].get(cell, {})
+        expected = one['expected'][cell]
+        if cell not in shared or six['expected'].get(cell) != expected or len(aa) != expected or len(bb) != expected:
+            result['problems'].append(dict(cell=cell, error='shared cell missing/incomplete or planned counts differ'))
+        if set(aa) != set(bb):
+            result['problems'].append(dict(cell=cell, error='different physical game identities',
+                only_t1=[list(k) for k in sorted(set(aa) - set(bb))], only_t6=[list(k) for k in sorted(set(bb) - set(aa))]))
+        summary = dict(expected=expected, compared=len(set(aa) & set(bb)),
+                       win_differences=0, digest_differences=0, unit_differences=0)
+        result['shared_compared'] += summary['compared']
+        for key in sorted(set(aa) & set(bb)):
+            changed = [field for field in ('win', 'digest', 'units') if aa[key][field] != bb[key][field]]
+            for field in changed:
+                summary[{'win': 'win_differences', 'digest': 'digest_differences', 'units': 'unit_differences'}[field]] += 1
+            if changed:
+                result['differences'].append(dict(cell=cell, seed=key[0], gi=key[1], changed=changed,
+                    t1={k: aa[key][k] for k in ('win', 'digest', 'units')},
+                    t6={k: bb[key][k] for k in ('win', 'digest', 'units')}))
+        result['cells'][cell] = summary
+    for cell in sorted(set(six['data']) - set(one['data'])):
+        result['six_only_cells'][cell] = aggregate(six['data'][cell], six['expected'][cell])
+        if len(six['data'][cell]) != six['expected'][cell]:
+            result['problems'].append(dict(cell=cell, error='six-worker-only shapes incomplete'))
+    result['six_only_expected'] = sum(six['expected'][cell] for cell in result['six_only_cells'])
+    unknown = (set(overrides) | set(stderr_overrides)) - set(names)
+    if unknown:
+        result['problems'].append(dict(error='unknown run/log overrides: ' + str(sorted(unknown))))
+    result['complete'] = not result['problems']
+    result['observed_exact'] = result['complete'] and not result['differences'] and result['shared_compared'] == result['shared_expected']
+    result['fsl_review_required'] = any((p['fsl_refused_stores'] or 0) > 0 for p in result['cache_pressure'].values())
+    result['determinism_review_required'] = result['fsl_review_required'] or any(p['fsl_warnings'] for p in result['cache_pressure'].values())
+    result['preflight_pass'] = result['observed_exact'] and not result['determinism_review_required']
+    result['warning_scope'] = 'Refusal counts are process-wide: t6 includes its extra shapes and cannot attribute FSL pressure solely to the shared168 games.'
+    write_json(a.output / 'memory-preflight-report.json', result)
+    print(json.dumps(dict(report=str(a.output / 'memory-preflight-report.json'), complete=result['complete'],
+        observed_exact=result['observed_exact'], shared_compared=result['shared_compared'], shared_expected=result['shared_expected'],
+        six_only_expected=result['six_only_expected'], fsl_review_required=result['fsl_review_required'],
+        preflight_pass=result['preflight_pass'], differences=len(result['differences']), problems=len(result['problems'])), indent=2))
+    return 2 if not result['complete'] else 1 if not result['preflight_pass'] else 0
+
+
 def memory(a):
     inputs = a.inputs
     plan = read_json(inputs / 'primary-quality-plan.json')
@@ -511,8 +587,13 @@ def main():
     m.add_argument('--run', action='append', default=[], metavar='PLAN_NAME=WINS_DIR')
     m.add_argument('--stderr', action='append', default=[], metavar='PLAN_NAME=STDERR_FILE')
     m.add_argument('--output', type=Path, default=DEFAULT / 'reports')
+    p = sub.add_parser('memory-preflight', help='normal t1/t6 overlap only; requires review if FSL binds')
+    p.add_argument('--inputs', type=Path, default=DEFAULT)
+    p.add_argument('--run', action='append', default=[], metavar='PLAN_NAME=WINS_DIR')
+    p.add_argument('--stderr', action='append', default=[], metavar='PLAN_NAME=STDERR_FILE')
+    p.add_argument('--output', type=Path, default=DEFAULT / 'reports')
     a = ap.parse_args()
-    return quality(a) if a.mode == 'quality' else memory(a)
+    return {'quality': quality, 'memory': memory, 'memory-preflight': memory_preflight}[a.mode](a)
 
 
 if __name__ == '__main__':
