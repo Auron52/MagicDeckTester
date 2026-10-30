@@ -10,6 +10,8 @@
  "heartbeat": "2026-10-30T00:37:29Z",
  "host": "58199181d02e",
  "land_note": "HELD for the USER: mulligan: TRADE -- quality not worse (new-vs-old -0.002531 t) but the new table costs MORE (cost 1.118x (se 0.011, 96 seeds)): the USER's call; left live on the result branch, NOT landed",
+ "landed": "e355d036614f8926d6b1184cc8485ed8246b1d0e",
+ "landed_at": "2026-10-30T02:40:49Z",
  "result_branch": "artifact-refresh/auras-20261030-0043",
  "run_id": "auras-artifact-queue-tool-647f24-20261029T223109",
  "score": 0.0651,
