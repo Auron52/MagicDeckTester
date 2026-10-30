@@ -3131,7 +3131,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         rj_stage_on.store(false, std::memory_order_release);
         if (rj_writer) { rj_writer->Close(retry); }
         rj_writer.reset();
-        if (disp == 0 || !spec_journal_on || journal_path.empty()) { return; }
+        // Even with MTG_KEEP_SPEC_JOURNAL=0: a side journal left by an earlier run belongs to THIS
+        // journal, which a finished run has just superseded, so it goes with it.
+        if (disp == 0 || journal_path.empty()) { return; }
         std::error_code ec;
         const std::string sp = journal_path + ".spec";
         if (disp == 2) { std::filesystem::rename(sp, sp + ".done", ec); }
