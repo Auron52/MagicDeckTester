@@ -381,6 +381,48 @@ def quality(a):
     return 2 if not result['complete'] else 1 if result['fidelity_requires_review'] else 0
 
 
+def cache_pressure(path):
+    """Read process-exit admission counts; FSL accounting is a separate caveat."""
+    path = Path(path)
+    result = dict(stderr=str(path), plan_pool=None, fsl_refused_stores=None,
+                  fsl_warnings=[], determinism_records=[], problems=[])
+    if not path.is_file():
+        result['problems'].append('missing cache-pressure stderr: ' + str(path))
+        return result
+    text = path.read_text(errors='replace')
+    summaries = re.findall(r'\[plan-pool\] budget=(\d+) KB hiwater=(\d+) KB residual=(\d+) KB refused=(\d+)', text)
+    if len(summaries) != 1:
+        result['problems'].append(f'expected one process-exit plan-pool summary; found {len(summaries)}')
+        return result
+    result['plan_pool'] = dict(zip(('budget_kb', 'hiwater_kb', 'residual_kb', 'refused_stores'), map(int, summaries[0])))
+    result['determinism_records'] = [line for line in text.splitlines() if '[determinism]' in line]
+    result['fsl_warnings'] = [line for line in result['determinism_records'] if 'WARNING:' in line and 'FSL' in line]
+    warnings = re.findall(r'\[determinism\] WARNING: the shared memory pools refused stores \(plan cache (\d+), FSL line cache (\d+)\)', text)
+    neutral = re.findall(r'\[determinism\] plan cache refused (\d+) stores[^\n]*FSL did not bind\.', text)
+    if len(warnings) + len(neutral) > 1:
+        result['problems'].append('multiple or conflicting process-exit determinism summaries')
+    elif warnings:
+        plan, fsl = map(int, warnings[0])
+        result['fsl_refused_stores'] = fsl
+        if plan != result['plan_pool']['refused_stores']:
+            result['problems'].append('plan-pool and determinism refusal counts disagree')
+    elif neutral:
+        result['fsl_refused_stores'] = 0
+        if int(neutral[0]) != result['plan_pool']['refused_stores']:
+            result['problems'].append('plan-pool and neutral determinism refusal counts disagree')
+    elif result['plan_pool']['refused_stores'] > 0 or result['determinism_records']:
+        result['problems'].append('missing/unrecognized determinism summary for refused stores')
+    else:
+        # DeterminismReport is silent only when both process-global refusal
+        # counters are zero. The exit plan-pool summary distinguishes this from
+        # a run without the requested statistics or an absent stderr file.
+        result['fsl_refused_stores'] = 0
+    result['fsl_bound'] = None if result['fsl_refused_stores'] is None else result['fsl_refused_stores'] > 0
+    result['fsl_caveat'] = ('FSL still discounts hits; binding shared FSL admission retains the existing '
+                            'thread/interleaving limitation. Observed equality is not a general FSL invariance proof.')
+    return result
+
+
 def memory(a):
     inputs = a.inputs
     plan = read_json(inputs / 'primary-quality-plan.json')
@@ -390,7 +432,11 @@ def memory(a):
     baseline = load_cells(jobs, a.primary_wins, maps)
     schedule = read_json(inputs / 'final-runtime-plan.json')
     overrides = dict(x.split('=', 1) for x in a.run)
-    result = dict(baseline='primary normal12, chunked', comparisons={}, problems=baseline['problems'], differences=[])
+    stderr_overrides = dict(x.split('=', 1) for x in a.stderr)
+    primary_pressure = cache_pressure(a.primary_stderr)
+    result = dict(baseline='primary normal12, chunked', comparisons={}, problems=baseline['problems'], differences=[],
+                  cache_pressure={'primary': primary_pressure}, pressure_failures=[])
+    result['problems'] += [dict(variant='primary', error=p) for p in primary_pressure['problems']]
     for variant in schedule['memory_comparisons']:
         name = variant['name']
         manifest = Path(variant['argv'][variant['argv'].index('--batch') + 1])
@@ -398,6 +444,17 @@ def memory(a):
         wins = Path(overrides[name]) if name in overrides else Path(variant['stdout']).parent / 'wins'
         trial = load_cells(expected_jobs, wins)
         result['problems'] += [dict(variant=name, **p) for p in trial['problems']]
+        pressure = cache_pressure(stderr_overrides.get(name, variant['stderr']))
+        result['cache_pressure'][name] = pressure
+        result['problems'] += [dict(variant=name, error=p) for p in pressure['problems']]
+        if name == 'memory_t12_tiny':
+            pp = pressure['plan_pool']
+            proven = pp is not None and pp['budget_kb'] == 20480 and pp['refused_stores'] > 0 and not pressure['problems']
+            result['tiny12_shared_plan_pressure_proven'] = proven
+            if not proven:
+                result['pressure_failures'].append(dict(variant=name,
+                    error='Tiny12 proof requires an exit summary with a shared20480KB plan budget and positive refused stores',
+                    observed=pp))
         summary = dict(expected=sum(trial['expected'].values()), compared=0, win_differences=0, digest_differences=0, unit_differences=0)
         for cell, rows in trial['data'].items():
             control = baseline['data'].get(cell, {})
@@ -421,15 +478,20 @@ def memory(a):
                                                       trial={k: bb[k] for k in ('win', 'digest', 'units')}))
         summary['exact'] = summary['compared'] == summary['expected'] and not any(summary[k] for k in ('win_differences', 'digest_differences', 'unit_differences'))
         result['comparisons'][name] = summary
-    unknown = set(overrides) - set(result['comparisons'])
+    unknown = (set(overrides) | set(stderr_overrides)) - set(result['comparisons'])
     if unknown:
         result['problems'].append(dict(error='unknown --run overrides: ' + str(sorted(unknown))))
     result['complete'] = not result['problems']
     result['exact'] = result['complete'] and not result['differences']
+    if 'tiny12_shared_plan_pressure_proven' not in result:
+        result['tiny12_shared_plan_pressure_proven'] = False
+        result['pressure_failures'].append(dict(error='required memory_t12_tiny comparison absent from runtime plan'))
+    result['proof_pass'] = result['exact'] and result['tiny12_shared_plan_pressure_proven']
     write_json(a.output / 'memory-report.json', result)
     print(json.dumps(dict(report=str(a.output / 'memory-report.json'), complete=result['complete'], exact=result['exact'],
+                          proof_pass=result['proof_pass'], tiny12_shared_plan_pressure_proven=result['tiny12_shared_plan_pressure_proven'],
                           problems=len(result['problems']), differences=len(result['differences']), comparisons=result['comparisons']), indent=2))
-    return 2 if not result['complete'] else 1 if not result['exact'] else 0
+    return 2 if not result['complete'] else 1 if not result['proof_pass'] else 0
 
 
 def main():
@@ -445,7 +507,9 @@ def main():
     m = sub.add_parser('memory')
     m.add_argument('--inputs', type=Path, default=DEFAULT)
     m.add_argument('--primary-wins', type=Path, default=DEFAULT / 'runs/primary-quality/wins')
+    m.add_argument('--primary-stderr', type=Path, default=DEFAULT / 'runs/primary-quality/batch.err')
     m.add_argument('--run', action='append', default=[], metavar='PLAN_NAME=WINS_DIR')
+    m.add_argument('--stderr', action='append', default=[], metavar='PLAN_NAME=STDERR_FILE')
     m.add_argument('--output', type=Path, default=DEFAULT / 'reports')
     a = ap.parse_args()
     return quality(a) if a.mode == 'quality' else memory(a)

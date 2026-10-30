@@ -1,6 +1,6 @@
 # Cyclone final validation reproducers
 
-These five helpers prepare, run and report the outstanding cost, memory, QC1,
+These helpers prepare, run and report the outstanding cost, memory, QC1,
 QC3, nested-exhaustion, cast and payment experiments. `reconstruct_prunes.py`
 and `prunes_proofs.py` beside them own the pruning work; see
 `prunes-PROOF-REPORTS.md`. Nothing was simulated while this copy was prepared.
@@ -141,8 +141,16 @@ unresolved fidelity review exits1. `--allow-partial` labels intersections but
 still fails missing data. It does not duplicate pruning reports.
 
 Memory compares exact per-game wins, digests and units from primary chunks
-against t1/t6/tiny/unbounded runs, reporting every difference. Missing files
-exit2, drift exits1, complete exact equality exits0. Repro manifests emitted
+against t1/t6/tiny/unbounded runs, reporting every difference. Every run must
+have its process-exit plan-pool summary. The tiny12 proof additionally requires
+budget20480KB and positive refused stores; equality without actual pressure
+is inconclusive and exits1. Missing files or exit summaries exit2; drift
+exits1; complete exact equality with proven tiny12 pressure exits0. Per-run
+FSL refused-store counts and warning lines are retained separately: binding
+FSL still has the existing hit-discount/interleaving limitation, even if this
+measured comparison happens to agree. Use `--primary-stderr FILE` and repeat
+`--stderr PLAN_NAME=FILE` when overriding log locations. Synthetic-only
+regressions are reproducible with `python3 "$HELPERS/test_report_final_results.py"`. Repro manifests emitted
 by reporting (ordinary controls, d8/b0 and expanded budgets) are inputs only;
 no reporter launches those jobs or supplies invented results. See pruning
 proof documentation for separate iso92 and data-dependent blind workloads.
