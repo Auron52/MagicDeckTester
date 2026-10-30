@@ -80,7 +80,7 @@ WINS_RE = re.compile(r"^(?P<key>[a-z0-9_]+?)(?P<hg>2hg)?_(?P<mode>smoke|regressi
 
 DEFAULT_CONFIG = {
     "branch": "phase-1-2-deck-analyzer",
-    "min_drift": 0.02,
+    "min_drift": 0.05,
     "kind_weight": {"mulligan": 1.0, "valueleaf": 1.0},
     "recipe_overrides": {},
     "mulligan_env": {},

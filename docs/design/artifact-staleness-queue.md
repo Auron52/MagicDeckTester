@@ -137,8 +137,13 @@ regardless of score, **until a run answers it**: any verdict the deck's ledger r
 stamps the time to the second (`set`); an older date-only mark counts from the end of its day. An answered mark
 is inert and `status` tags it `mark-answered(unmark)`. Before this, a mark outlived its answer: on 2026-10-28
 the worker regenerated Angels again right after its marked table landed, then started a third Giants run for a
-ruling answered on 10-25. An artifact is queued when score >= `min_drift` (0.02 turns), it is committed, and its deck
-is in the suite (both drivers refuse otherwise). A settings-only sidecar (no `eval_model`, e.g. Snow's
+ruling answered on 10-25. An artifact is queued when score >= `min_drift` (0.05 turns), it is committed, and its deck
+is in the suite (both drivers refuse otherwise). `min_drift` was 0.02 until 2026-10-30, when the USER raised it
+to 0.05 on the first week's results: every keep table that came back >= 0.01 t better had started from >= 0.08
+drift (Giants 0.079, Melira 0.41, Dragons 0.82, Goblins 0.86, Mirrorwing 1.14, Snow 1.23); runs from 0.00-0.04
+(Angels x3) adopted tables only 0-0.003 t better, and all five leaf runs from 0.06-0.11 kept the incumbent.
+At 0.02 the threshold sat at the 75th percentile of all 64 artifacts' drift, re-queueing decks for drift
+too small to give a fresh artifact a real chance of adoption. A settings-only sidecar (no `eval_model`, e.g. Snow's
 `leaf: none`) is not a leaf and is not queued unless marked.
 
 **The queue unit is a DECK, and stages run mulligan -> valueleaf** (USER order 2026-10-18), so a leaf

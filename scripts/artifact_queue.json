@@ -1,7 +1,7 @@
 {
   "_doc": "Config + USER marks for scripts/artifact_queue.py (docs/design/artifact-staleness-queue.md). Each worker reads this file from ITS OWN checkout when it STARTS, so commit + push an edit AND pull it into every worker's checkout and restart that worker (stop, then start) for it to take effect. marks: [{deck, kind: mulligan|valueleaf, why, priority, date, set}] -- a marked artifact sorts first regardless of measured drift (higher priority first) until a run started after `set` (date-only: after that day) records a verdict for it in the deck's ledger; then the mark is inert (`status` shows mark-answered) and `unmark` tidies it. Set with `artifact_queue.py mark`. recipe_overrides: {deck: fast|complete} -- a USER override of the never-below-the-incumbent plan (mull_plan). mulligan_env: {deck: {ENV: value}} -- a USER-decided environment for that deck's mulligan regeneration (e.g. MTG_KEEP_REDISCOVER=1 to re-bucket instead of re-using the incumbent's buckets).",
   "branch": "phase-1-2-deck-analyzer",
-  "min_drift": 0.02,
+  "min_drift": 0.05,
   "kind_weight": {
     "mulligan": 1.0,
     "valueleaf": 1.0
