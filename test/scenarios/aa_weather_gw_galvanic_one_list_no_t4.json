@@ -4,7 +4,9 @@
     "Weather strictly last), Combo Off route OFF. Galvanic Alchemist is cast ahead of Weather and its {U} burns the",
     "Alchemist for one blue before the life, so the cast list cannot go off: no win by turn 4 even at --depth 8",
     "--budget-ms 0. (With the route ON, gw still kills on turn 4 through the route's link-by-link walk -- the USER's",
-    "line is found there; this pins only what the cast list itself can realise.)"
+    "line is found there; this pins only what the cast list itself can realise.)",
+    "MTG_BP_DEV_SEQ=0: the breakpoint deviation SEQUENCES step off the cast list (Weather ahead of Galvanic) and find",
+    "that same T4 kill, so they are out of this fixture's scope (2026-10-30)."
   ],
   "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
   "turn": 4,
@@ -46,7 +48,8 @@
   ],
   "env": {
     "MTG_AA_GENERIC_WEATHER_ONLY_LAST": "1",
-    "MTG_AA_COMBO_ROUTE": "0"
+    "MTG_AA_COMBO_ROUTE": "0",
+    "MTG_BP_DEV_SEQ": "0"
   },
   "max_turns": 4,
   "expect_no_win": true
