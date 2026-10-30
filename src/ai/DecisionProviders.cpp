@@ -32384,6 +32384,56 @@ bool CycloneProvider::CastOrderTotalByName() const
 // The draft's item D: rank-sort sets that hold a draw spell too, and run the range ladder for every set.
 bool CycloneProvider::OrderOpaqueCastsByRank() const { return CycloneOrderDrawTurnsOn(); }
 
+// Q60: the information ranges are searched choices, independent of whether the canonical
+// sequence pays. The existing DRAW arm opts in; CO alone preserves the earlier measurements.
+bool CycloneProvider::WantsCastOrderingSearch() const { return CycloneOrderDrawTurnsOn(); }
+
+bool CycloneProvider::CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                              const std::vector<Action>& reorder,
+                                              std::vector<std::vector<int>>& out) const
+{
+    (void)plan_actions;
+    out.clear();
+    if (!CycloneOrderDrawTurnsOn()) { return false; }
+    auto def_of = [&](int i) -> const CardDefinition*
+    { return reorder[i].def ? reorder[i].def : CardDatabase::Instance().Lookup(reorder[i].card_name); };
+    auto is_ltp = [&](int i) { const auto* d = def_of(i); return d != nullptr && d->params.tutor_library_position > 0; };
+    auto is_ponder = [&](int i)
+    { const auto* d = def_of(i); return d != nullptr && d->params.cast_reorder > 0 && d->params.put_back_from_hand == 0; };
+    auto is_putback = [&](int i) { const auto* d = def_of(i); return d != nullptr && d->params.put_back_from_hand > 0; };
+    auto is_brainstorm = [&](int i)
+    { const auto* d = def_of(i); return d != nullptr && d->params.put_back_from_hand > 0 && d->card.m_mana_cost.ManaValue() <= 1; };
+    std::vector<int> canon(reorder.size());
+    for (std::size_t i = 0; i < canon.size(); ++i) { canon[i] = static_cast<int>(i); }
+    const bool ltp_slot = std::any_of(canon.begin(), canon.end(), is_ltp)
+                       && std::any_of(canon.begin(), canon.end(), is_putback);
+    const bool ponder_slot = std::any_of(canon.begin(), canon.end(), is_ponder)
+                          && std::any_of(canon.begin(), canon.end(), is_brainstorm);
+    if (!ltp_slot && !ponder_slot) { return true; }   // keep the ordinary plan, no order probes
+    std::stable_sort(canon.begin(), canon.end(), [&](int x, int y) { return CastOrderLess(s, reorder[x], reorder[y]); });
+    // Funding is placed first. Running the rank ladder AFTER the information transforms could
+    // sort them back into their ideal slots and silently erase both searched alternatives.
+    ApplyCastOrderRangeLadder(s, reorder, canon);
+    auto move_after = [](const std::vector<int>& order, auto moved_pred, auto anchor_pred)
+    {
+        std::vector<int> moved, kept;
+        for (int i : order) { (moved_pred(i) ? moved : kept).push_back(i); }
+        auto last = std::find_if(kept.rbegin(), kept.rend(), anchor_pred);
+        if (moved.empty() || last == kept.rend()) { return order; }
+        const auto at = last.base();   // forward insertion point just AFTER the last anchor
+        kept.insert(at, moved.begin(), moved.end());
+        return kept;
+    };
+    auto append = [&](std::vector<int> order)
+    { if (std::find(out.begin(), out.end(), order) == out.end()) { out.push_back(std::move(order)); } };
+    append(canon);   // the drafted ideal wins an equal score
+    if (ltp_slot) { append(move_after(canon, is_ltp, is_putback)); }
+    if (ponder_slot) { append(move_after(canon, is_ponder, is_brainstorm)); }
+    if (ltp_slot && ponder_slot)
+    { append(move_after(move_after(canon, is_ltp, is_putback), is_ponder, is_brainstorm)); }
+    return true;
+}
+
 // THE DRAFT'S RANGES, where the existing ladder can carry them. The ladder (ApplyCastOrderRangeLadder) walks a rung only
 // while the line CANNOT BE PAID, so it expresses the FUNDING ranges:
 //   Brainstorm  31 -> 71  to after Song / Cyclone when its {U} cannot otherwise be paid
