@@ -3516,13 +3516,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (k >= items.size()) { break; }
                 const RItem& it = items[k];
                 const auto t0 = std::chrono::steady_clock::now();
+                const long long u0 = gamework::Used();   // thread-local: this rollout's own units
                 const double wt = run_one(ai, it.w, it.pd, it.r);
+                const long long units = gamework::Used() - u0;
                 const double ms = std::chrono::duration<double, std::milli>(
                                       std::chrono::steady_clock::now() - t0).count();
                 std::lock_guard<std::mutex> lk(out_mtx);
                 total_ms += ms; total_logged += it.logged_ms;
                 std::cout << "[replay-list] ms=" << static_cast<long long>(ms) << " logged_ms=" << it.logged_ms
-                          << " win_turn=" << wt << "  " << it.line << "\n" << std::flush;
+                          << " win_turn=" << wt << " units=" << units << "  " << it.line << "\n" << std::flush;
             }
         };
         std::vector<std::thread> pool;
