@@ -800,6 +800,7 @@ enum Slot : int
     CYCLONE_CYCLE_CHEAP,      // MTG_CYCLONE_CYCLE_ORDER=2  Cyclone: the USER's cheapest-first cycle order (effective cycling cost's mana value, then the existing order), same two places. DEFAULT OFF; mode 1 wins when both are set
     CYCLE_SEED_PAY_SPLIT,     // MTG_CYCLE_SEED_PAY_SPLIT  a searched cycle seed's all-generic cycling cost gets a SEARCHED payment split (Action::seed_pay_split; ManaPayment.h SeedPaySplits): one variant per distinct multiset of source colour signatures, dominated splits dropped, split 0 = the hand-demand rule's. A COMPLETENESS fix (ledger Q61: the seed paid before its continuation existed and could spend the continuation's colours, unfindable at any budget). Only decks whose provider SEARCHES its cycles (Cyclone) have seeds. DEFAULT OFF (a play change, measured first)
     CYCLONE_CO_REV_CYCLERS,   // MTG_CYCLONE_CO_REV_CYCLERS  MEASUREMENT HANDLE for MTG_CYCLONE_CAST_ORDER's tier attribution (2026-10-29): the creature cyclers (Curator, Street Wraith) back to the generic position -- FIRST, before every noncreature (rank 5). Inert without the order. DEFAULT OFF
+    CYCLONE_CO_CYCLERS_BEFORE_SONG, // MTG_CYCLONE_CO_CYCLERS_BEFORE_SONG  Q64 middle amendment: hard-cast creature cyclers after draws/Remand, before Song/Cyclone (rank55). Existing REV_CYCLERS remains the before-everything diagnostic. DEFAULT OFF
     CYCLONE_CO_REV_ELDRAZI,   // MTG_CYCLONE_CO_REV_ELDRAZI  ...the Eldrazi back to the generic creature position (rank 5, first). DEFAULT OFF
     CYCLONE_CO_REV_SONG,      // MTG_CYCLONE_CO_REV_SONG     ...Seething Song back before every noncreature (rank 5; generic: ritual 15 < other 20). DEFAULT OFF
     CYCLONE_CO_REV_FLAT,      // MTG_CYCLONE_CO_REV_FLAT     ...Long-Term Plans, the cantrips, Remand and Cyclone back to ONE tier after Song (rank 65), and no name tie-break (the generic 20 tier keeps plan order). DEFAULT OFF
@@ -1548,6 +1549,7 @@ inline const char* Name(int slot)
         "MTG_CYCLONE_CYCLE_CHEAP",
         "MTG_CYCLE_SEED_PAY_SPLIT",
         "MTG_CYCLONE_CO_REV_CYCLERS",
+        "MTG_CYCLONE_CO_CYCLERS_BEFORE_SONG",
         "MTG_CYCLONE_CO_REV_ELDRAZI",
         "MTG_CYCLONE_CO_REV_SONG",
         "MTG_CYCLONE_CO_REV_FLAT",
