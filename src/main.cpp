@@ -9805,7 +9805,7 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
         std::string note;
         if (!fb.empty())
         {
-            note = "FUNDING ladder: prefers the late slot, walks earlier only while the line cannot pay (";
+            note = "FUNDING ladder: tries the listed ranks in order while the line cannot pay (";
             for (std::size_t fi = 0; fi < fb.size(); ++fi)
             { note += (fi ? "->" : "") + std::to_string(fb[fi]); }
             note += ")";

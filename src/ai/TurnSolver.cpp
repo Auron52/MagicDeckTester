@@ -46505,7 +46505,10 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 {
                     const std::vector<int>& g = groups[r.second];
                     if (g.empty()) { continue; }
-                    if (!viewerplancap::IsPinned(cands[g.front()].card_name.str())) { continue; }
+                    // A mutual-exclusion family (generic cycle seeds) can name several cards.
+                    // Pin membership is per CARD, not whichever member happens to be first.
+                    if (std::none_of(g.begin(), g.end(), [&](int j)
+                        { return viewerplancap::IsPinned(cands[j].card_name.str()); })) { continue; }
                     if (!try_add(r.second)) { continue; }
                     const auto ck = cover_key(g);
                     if (std::find(kinds.begin(), kinds.end(), ck) == kinds.end())
@@ -69927,8 +69930,68 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // contributes nothing (its plan space was fully covered by wave 0 / earlier tranches).
     if (any_metalcraft && mcstats::Enabled())
     { mcstats::CapSurvival(cands, groups, independent, /*before=*/true); }
+    // QR1: generic human cycle seeds are additions to an older menu. They
+    // must not reserve a KIND slot in the viewer valve or push an old group out
+    // merely by making a previously fitting frame cross its bound (EDF s5/gi4).
+    // Run the valve on the original groups, then offer the extra seed family
+    // only when it fits the remaining capacity. Its standalone cycle stays
+    // offered, so an omitted extra family is not a dropped CARD in the warning.
+    std::vector<std::vector<int>> viewer_cycle_groups;
+    std::vector<int> viewer_cycle_keys;
+    const bool protect_old_viewer_groups = HumanPlayActive()
+        && !ResolveProvider(state).CyclesAreSearched()
+        && groupwave::g_state.tranche_rank < 0
+        && (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap))
+        && viewerplancap::On() && viewerplancap::Positions() > 0.0;
+    if (protect_old_viewer_groups)
+    {
+        for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+        {
+            if (groups[g].empty()
+                || !std::all_of(groups[g].begin(), groups[g].end(),
+                    [&](int j) { return IsHumanGenericCycleSeed(cands[j]); })) { continue; }
+            // An explicit "play it anyway" cycle belongs in the normal valve's PIN pass,
+            // ahead of unrelated groups. Ordinary menus still protect the old exact prefix.
+            if (std::any_of(groups[g].begin(), groups[g].end(), [&](int j)
+                { return viewerplancap::IsPinned(cands[j].card_name.str()); })) { continue; }
+            viewer_cycle_groups.push_back(std::move(groups[g]));
+            viewer_cycle_keys.push_back(group_hand_index[g]);
+            groups.erase(groups.begin() + g);
+            group_hand_index.erase(group_hand_index.begin() + g);
+        }
+    }
     CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
                                static_cast<int>(independent.size()), /*greedy=*/false, &pool);
+    if (!viewer_cycle_groups.empty())
+    {
+        const double pcap = viewerplancap::Positions();
+        const double wcap = pcap * viewerplancap::kWalkFactor;
+        const int mb = ManaPruneBound(pool, cands, 0, &state);
+        // Extraction walked backwards; restore the seed families' original order.
+        for (std::size_t i = viewer_cycle_groups.size(); i > 0; --i)
+        {
+            groups.push_back(std::move(viewer_cycle_groups[i - 1]));
+            group_hand_index.push_back(viewer_cycle_keys[i - 1]);
+            std::vector<int> all(groups.size());
+            for (int g = 0; g < static_cast<int>(groups.size()); ++g) { all[g] = g; }
+            const std::pair<double, double> raw = viewerplancap::Estimate(
+                ViewerGroupCosts(cands, groups, all), static_cast<int>(independent.size()), mb);
+            FungibleEquipClasses vcc;
+            if (EquipCopyCollapseEnabled()
+                && BuildFungibleEquipClasses(state, cands, groups, vcc) == 0) { vcc.clear(); }
+            const double fold = FungibleEquipFoldRatio(groups, vcc.class_of);
+            if (raw.second * fold > pcap || raw.first * fold > wcap)
+            {
+                groups.pop_back();
+                group_hand_index.pop_back();
+            }
+            else
+            {
+                viewerplancap::Acc().kept_positions = std::max(
+                    viewerplancap::Acc().kept_positions, raw.second * fold);
+            }
+        }
+    }
     if (any_metalcraft && mcstats::Enabled())
     { mcstats::CapSurvival(cands, groups, independent, /*before=*/false); }
     if (groupwave::g_state.tranche_rank >= 0 && !groupwave::g_state.call_active)
