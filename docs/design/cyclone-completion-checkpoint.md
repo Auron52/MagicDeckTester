@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-finish`, `.claude/worktrees/cyclone-finish`, branched from `origin/cyclone-int` (3892d2159), rebasing onto current phase-1-2 6b655b71f. Original backup branches untouched. Primary checkout has an existing unrelated `test/ref_bench.json` edit; preserve it.
 
-Current stage: all branch picks and corrective reviews integrated; rebased again onto current main `930cc5c33`. Source is committed. Final Release build session92782 is running (primary scratch/final-release-build.log), followed by unit/scenario/viewer gates and a fresh PGO build. Long comparison inputs are prepared but not launched. Do not start generation before the final re-evaluation.
+Current stage: source frozen at tree `ce3431d90d7f7ee88b47a791ce61595740f907f0` against main930cc5c33. Final Release build and all2349 units/384 scenarios PASS. Viewer targeted/prefix gates and full699-reference strict protocol PASS; full line validation is running serially. Fresh PGO build session99103 is at its whole-suite training stage,8workers; separate Release binary remains stable for the lightweight viewer check. Prepared quality/process runs have not launched. No generation before final re-evaluation.
 
 Independent reviews found extra required fixes:
 
@@ -82,3 +82,11 @@ Source tree `ce3431d90d7f7ee88b47a791ce61595740f907f0`, code/test HEADb925035e9.
 Serial viewer validation runner is active, owned by payment reviewer session98998; live state primary scratch/final-viewer/status.json. Cycle pin stage PASS. Remaining: EDF/cross-deck exact menu prefix, full strict protocol4threads, full validate, sampled viewer layers. No other heavy local job runs alongside it. Next: source-matching PGO, seal prepared12542-game primary pool, then outstanding process-only memory/iso92/VERIFY and quiet cost runs. Source proposal flags remain OFF pending proofs; no profile/value generation.
 
 Shared-budget removal was rebased to `e9135d9ef`. Original9db23420e is a historical pre-rebase hash. No fixed per-thread plan or FSL quota remains.
+
+## Optimized build and viewer status (23:10UTC)
+
+- Backup branch pushed to origin/cyclone-finish; HEADae635995f before this checkpoint. LinuxCI41140760861 PASS including units/viewer/determinism; Windows still building. CI waiter56547 remains active.
+- Viewer runner98998: cycle pinPASS; EDF72frames exact prefixPASS;15 cross-deck referencesPASS; full strict protocol699refsPASS (264ok,434repaired stale indices,1suboptimal beaten, zero drift/gaps/contract failures). Stage05 full line validation silently resolves697 proper refs serially before checking8285 recorded main decisions; stage06 sampled layers still queued. Payment reviewer owns waiter.
+- PGO build99103 (final-pgo-build.log): instrumented build complete; stage2 trains whole suite197jobs/5513games with8workers; stage3 profile-use+LTO pending. This overlaps only the lightweight serial viewer checker, uses separate build/pgo-work and build/PGO, never changes Release/source.
+- Ten reproducer helpers/records now tracked under logs/cyclone-completion/prepared. Memory reporter tightened to require actual tiny20MB pool pressure (positive refused stores), exact per-game wins/digests/units, and separate FSL refusal warnings.10 synthetic tests PASS.
+- Planned order after PGO: already-owed memory6 and memory1 process runs before the12k main pool, to detect any default FSL binding/unit variance before hours of A/B collection; no additional or duplicated work. Final quiet timed cost gate remains separate after all other local work.
