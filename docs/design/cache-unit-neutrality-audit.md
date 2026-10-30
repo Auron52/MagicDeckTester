@@ -488,3 +488,9 @@ tomorrow."*
 - **Start here:** Rule A and step 1 of the recommendation, i.e. land `ab4fbc6a2` (play-identical on smoke and on the
   1,300-game A/B). Then add the standing 1-vs-N-thread / tiny-vs-huge-cache invariance check, so this class of defect
   fails a tier instead of being found by accident.
+- **Do NOT fix the coupling with a constant per-thread quota.** USER: *"a 100MB quota will really starve the
+  slow-heavy games."* The heavy threads borrow from the shared pool today, so a fixed per-thread quota buys
+  consistency by starving them, and while hits still save units it also moves their play. The order is: first make
+  hits charge exactly what a miss would, and THEN a shared pool is fine, because capacity only affects speed. Rule A's
+  "no cross-thread pool" therefore applies only to caches whose hits stay discounted (the floor tier of the
+  floor+overflow design). The overflow tier, and every hit==miss cache, may use a shared, memory-sized pool.
