@@ -134,6 +134,68 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertTrue(result['problems'])
 
+    def preflight_fixture(self, fsl=0):
+        a = self.fixture(refused=0, fsl=fsl)
+        six = self.root/'six'; six.mkdir()
+        for path in (self.root/'trial').iterdir():
+            (six/path.name).write_bytes(path.read_bytes())
+        shape = dict(name='cyclone_shapes',seed=107000,game_index=0,games=1)
+        (six/'cyclone_shapes.wins').write_text('0 5 abcdef0123456789\n')
+        (six/'cyclone_shapes.units').write_text('0 222\n')
+        shared = report.read_json(a.inputs/'tiny.json')['jobs']
+        report.write_json(a.inputs/'six.json',dict(jobs=shared+[shape]))
+        variants=[]
+        for name,manifest,wins,err in (
+            ('memory_t1_normal',a.inputs/'tiny.json',self.root/'trial',self.root/'primary.err'),
+            ('memory_t6_both_reference_sets',a.inputs/'six.json',six,self.root/'tiny.err')):
+            variants.append(dict(name=name,argv=['mtg','--batch',str(manifest)],
+                                 stdout=str(wins/'batch.log'),stderr=str(err)))
+        report.write_json(a.inputs/'final-runtime-plan.json',dict(memory_comparisons=variants))
+        for path in (a.inputs/'primary-quality.json',a.inputs/'primary-quality-plan.json'):
+            path.unlink()
+        for path in (self.root/'primary').iterdir():
+            path.unlink()
+        (self.root/'primary').rmdir()
+        return argparse.Namespace(inputs=a.inputs,run=[
+            'memory_t1_normal='+str(self.root/'trial'),
+            'memory_t6_both_reference_sets='+str(six)],stderr=[],output=a.output)
+
+    def run_preflight(self, a):
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = report.memory_preflight(a)
+        return rc,report.read_json(a.output/'memory-preflight-report.json')
+
+    def test_preflight_needs_no_primary_inputs_or_outputs(self):
+        rc,result = self.run_preflight(self.preflight_fixture())
+        self.assertEqual(rc,0)
+        self.assertTrue(result['preflight_pass'])
+        self.assertEqual(result['shared_compared'],2)
+        self.assertEqual(result['six_only_expected'],1)
+        self.assertNotIn('tiny12_shared_plan_pressure_proven',result)
+
+    def test_preflight_fsl_binding_requires_review_even_if_equal(self):
+        rc,result = self.run_preflight(self.preflight_fixture(fsl=9))
+        self.assertEqual(rc,1)
+        self.assertTrue(result['observed_exact'])
+        self.assertFalse(result['preflight_pass'])
+        pressure=result['cache_pressure']['memory_t6_both_reference_sets']
+        self.assertEqual(pressure['fsl_refused_stores'],9)
+        self.assertTrue(pressure['fsl_warnings'])
+
+    def test_preflight_shared_unit_difference_blocks(self):
+        a=self.preflight_fixture()
+        (self.root/'six/cyclone_d3_s121000.units').write_text('0 100\n1 102\n')
+        rc,result=self.run_preflight(a)
+        self.assertEqual(rc,1)
+        self.assertEqual(result['differences'][0]['changed'],['units'])
+
+    def test_preflight_missing_shapes_file_is_incomplete(self):
+        a=self.preflight_fixture()
+        (self.root/'six/cyclone_shapes.units').unlink()
+        rc,result=self.run_preflight(a)
+        self.assertEqual(rc,2)
+        self.assertFalse(result['complete'])
+
 
 if __name__ == '__main__':
     unittest.main()
