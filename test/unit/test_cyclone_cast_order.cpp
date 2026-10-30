@@ -447,3 +447,21 @@ TEST_CASE("Seed payment split: a failed realised pin restores exposed float and 
         for (const auto& q : t.battlefield) { CHECK_FALSE(q.tapped); }
     }
 }
+
+TEST_CASE("Cyclone Q64: middle creature-cycler tier differs from the before-all diagnostic")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLONE_CAST_ORDER, 1);
+    arm.Set(heurarm::CYCLONE_CO_REV_CYCLERS, 0);
+    arm.Set(heurarm::CYCLONE_CO_CYCLERS_BEFORE_SONG, 1);
+    const GameState s = StateO({}, {});
+    CHECK(ProvO().CastOrderRank(s, DefO(kCurO)) == 55);
+    CHECK(ProvO().CastOrderRank(s, DefO(kWraO)) == 55);
+    CHECK(ProvO().CastOrderRank(s, DefO("Remand")) < ProvO().CastOrderRank(s, DefO(kCurO)));
+    CHECK(ProvO().CastOrderRank(s, DefO(kCurO)) < ProvO().CastOrderRank(s, DefO("Seething Song")));
+    CHECK(ProvO().CastOrderTierName(55) != nullptr);
+    arm.Set(heurarm::CYCLONE_CO_REV_CYCLERS, 1);
+    CHECK(ProvO().CastOrderRank(s, DefO(kCurO)) == 5);
+    arm.Set(heurarm::CYCLONE_CAST_ORDER, 0);
+    CHECK(ProvO().CastOrderRank(s, DefO(kCurO)) == GenericProvider{}.CastOrderRank(s, DefO(kCurO)));
+}
