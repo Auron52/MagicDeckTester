@@ -3,9 +3,11 @@
   "mulligan": "1988994f10c434a5873895f973ad991070c781a0"
  },
  "deck": "fungus",
+ "detail": "paused by the USER: resumes when worker artifact-queue-tool-647f24 next starts; set aside for every other worker",
  "frozen": "8f303fddc97f7f4afb2404414d3bdad1df8256b1",
- "heartbeat": "2026-10-30T02:04:36Z",
+ "heartbeat": "2026-10-30T02:10:59Z",
  "host": "58199181d02e",
+ "paused": "2026-10-30T02:10:56Z",
  "run_id": "fungus-artifact-queue-tool-647f24-20261030T004541",
  "score": 0.0649,
  "stage": "mulligan",
@@ -13,6 +15,6 @@
   "mulligan"
  ],
  "started": "2026-10-30T00:45:41Z",
- "state": "running",
+ "state": "paused",
  "worker": "artifact-queue-tool-647f24"
 }
