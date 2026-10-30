@@ -188,6 +188,13 @@ TEST_CASE("Cyclone cycle order mode 1 (draft 2): Cyclone OUT")
         CHECK(ProvO().SearchedCycleSources(s) == NamesO{ kWraO, kCurO, kCycO, kLoungeO });
         CHECK(PlayoutPickO(s) == kWraO);
     }
+    SUBCASE("cycle order off retains the adopted spare-blue cycler rule")
+    {
+        arm.Set(heurarm::CYCLONE_CYCLE_ORDER, 0).Set(heurarm::CYCLONE_CYCLER_RULE, 1);
+        const GameState s = StateO({ kCycO, "Island", "Island" }, hand);
+        CHECK(ProvO().SearchedCycleSources(s) == NamesO{ kCurO, kWraO, kCycO, kLoungeO });
+        CHECK(PlayoutPickO(s) == kWraO);
+    }
 }
 
 TEST_CASE("Cyclone cycle order mode 1 (draft 2): Cyclone NOT out")
@@ -464,4 +471,105 @@ TEST_CASE("Cyclone Q64: middle creature-cycler tier differs from the before-all 
     CHECK(ProvO().CastOrderRank(s, DefO(kCurO)) == 5);
     arm.Set(heurarm::CYCLONE_CAST_ORDER, 0);
     CHECK(ProvO().CastOrderRank(s, DefO(kCurO)) == GenericProvider{}.CastOrderRank(s, DefO(kCurO)));
+}
+
+namespace
+{
+std::vector<Action> CastsInfoO(const NamesO& names)
+{
+    std::vector<Action> out;
+    for (const auto& name : names)
+    {
+        Action a;
+        a.kind = Action::Kind::CastFromHand;
+        a.card_name = name;
+        a.def = &DefO(name);
+        out.push_back(a);
+    }
+    return out;
+}
+NamesO OrderNamesInfoO(const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    NamesO out;
+    for (int i : order) { out.push_back(acts[i].card_name.str()); }
+    return out;
+}
+}
+
+TEST_CASE("Cyclone Q60: DRAW searches independent information slots, canonical first")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLONE_CAST_ORDER, 1);
+    arm.Set(heurarm::CYCLONE_ORDER_DRAW_TURNS, 1);
+    const GameState s = StateO({ "Island", "Island", "Island", "Island", "Island", "Island", "Mountain", "Mountain", "Mountain" }, {});
+    const auto acts = CastsInfoO({ "Seething Song", "Brainsurge", "Brainstorm", "Ponder", "Long-Term Plans" });
+    std::vector<std::vector<int>> orders;
+    REQUIRE(ProvO().WantsCastOrderingSearch());
+    REQUIRE(ProvO().CastOrderingCandidates(s, acts, acts, orders));
+    REQUIRE(orders.size() == 4);
+    CHECK(OrderNamesInfoO(acts, orders[0]) == NamesO{ "Long-Term Plans", "Ponder", "Brainstorm", "Brainsurge", "Seething Song" });
+    CHECK(OrderNamesInfoO(acts, orders[1]) == NamesO{ "Ponder", "Brainstorm", "Brainsurge", "Long-Term Plans", "Seething Song" });
+    CHECK(OrderNamesInfoO(acts, orders[2]) == NamesO{ "Long-Term Plans", "Brainstorm", "Ponder", "Brainsurge", "Seething Song" });
+    CHECK(OrderNamesInfoO(acts, orders[3]) == NamesO{ "Brainstorm", "Ponder", "Brainsurge", "Long-Term Plans", "Seething Song" });
+    for (auto order : orders)
+    {
+        std::sort(order.begin(), order.end());
+        CHECK(order == std::vector<int>{ 0, 1, 2, 3, 4 });
+    }
+    arm.Set(heurarm::CYCLONE_ORDER_DRAW_TURNS, 0);
+    CHECK_FALSE(ProvO().WantsCastOrderingSearch());
+    CHECK_FALSE(ProvO().CastOrderingCandidates(s, acts, acts, orders));
+    arm.Set(heurarm::CYCLONE_ORDER_DRAW_TURNS, 1);
+    arm.Set(heurarm::CYCLONE_CAST_ORDER, 0);
+    CHECK_FALSE(ProvO().WantsCastOrderingSearch());
+}
+
+TEST_CASE("Cyclone Q60: each information pair emits only its two slots; no pair adds no probes")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLONE_CAST_ORDER, 1);
+    arm.Set(heurarm::CYCLONE_ORDER_DRAW_TURNS, 1);
+    const GameState s = StateO({ "Island", "Island", "Island", "Island", "Island", "Island" }, {});
+    const auto check = [&](const NamesO& names, std::size_t count)
+    {
+        const auto acts = CastsInfoO(names);
+        std::vector<std::vector<int>> orders;
+        REQUIRE(ProvO().CastOrderingCandidates(s, acts, acts, orders));
+        CHECK(orders.size() == count);
+        for (auto order : orders)
+        {
+            std::sort(order.begin(), order.end());
+            for (std::size_t i = 0; i < order.size(); ++i) { CHECK(order[i] == static_cast<int>(i)); }
+        }
+    };
+    check({ "Long-Term Plans", "Brainsurge" }, 2);
+    check({ "Ponder", "Brainstorm" }, 2);
+    check({ "Ponder", "Brainstorm", "Brainstorm" }, 2);
+    check({ "Ponder", "Brainsurge" }, 0);
+    check({ "Remand", "Seething Song" }, 0);
+}
+
+TEST_CASE("Cyclone Q60: information slots preserve a required Song funding prefix")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLONE_CAST_ORDER, 1).Set(heurarm::CYCLONE_ORDER_DRAW_TURNS, 1);
+    const GameState s = StateO({ "Mountain", "Mountain", "Mountain", "Mountain",
+                                "Island", "Island", "Island" }, {});
+    auto acts = CastsInfoO({ "Long-Term Plans", "Ponder", "Brainstorm", "Seething Song" });
+    for (Action& a : acts)
+    {
+        a.cost = a.def->card.m_mana_cost;
+        a.ritual_float = a.def->params.ritual_floating_mana;
+    }
+    std::vector<std::vector<int>> orders;
+    REQUIRE(ProvO().CastOrderingCandidates(s, acts, acts, orders));
+    REQUIRE(orders.size() == 4);
+    for (const auto& order : orders)
+    {
+        // Three blue spells need every Island; Song must spend three Mountains
+        // before LTP can consume two of them for generic. Moving information slots
+        // after the funding ladder must not erase this required producer prefix.
+        REQUIRE_FALSE(order.empty());
+        CHECK(acts[order.front()].card_name == "Seething Song");
+    }
 }
