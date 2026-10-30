@@ -4066,10 +4066,18 @@ struct Scope
 {
     Rec rec;
     bool live = false;
+    bool meter_armed = false;
+    long long meter_used = 0;
+    int meter_acc = 0;
+    int greedy_acc = 0;
     Scope()
     {
         if (!On()) { return; }
         live = true;
+        meter_armed = decisionwork::Armed();
+        meter_used = decisionwork::t_used;
+        meter_acc = decisionwork::t_charge_acc;
+        greedy_acc = g_greedy_charge_acc;
         rec.outer = t_rec;
         rec.had_dec = g_decision_budget != nullptr;
         rec.had_greedy = g_greedy_charge_budget != nullptr;
@@ -4086,7 +4094,16 @@ struct Scope
         c.had_dec = rec.had_dec; c.had_greedy = rec.had_greedy;
         const bool dec_cut = c.dec > 0 && g_decision_budget != nullptr && g_decision_budget->Exhausted();
         const bool gr_cut  = c.greedy > 0 && g_greedy_charge_budget != nullptr && g_greedy_charge_budget->Exhausted();
+        // Direct decisionwork::Add bypasses ConsumeAt, and weighted walks
+        // change the residual before charging an integer unit. A replay of raw
+        // units would not reproduce that residual or its cutoff. Recompute these
+        // derivations in either pricing mode; unchanged-meter lists remain cached.
+        // The SearchBudget-backed greedy walk has the same fractional-unit issue.
+        const bool meter_changed = meter_armed
+            && (decisionwork::t_used != meter_used || decisionwork::t_charge_acc != meter_acc);
+        const bool greedy_residual_changed = g_greedy_charge_acc != greedy_acc;
         c.storable = c.other == 0 && !dec_cut && !gr_cut
+                  && !meter_changed && !greedy_residual_changed && !decisionwork::Exceeded()
                   && (Mode() != 1 || (c.dec == 0 && c.greedy == 0 && rec.subsearch == 0));
         g_computations.fetch_add(1, std::memory_order_relaxed);
         if (c.dec + c.greedy + c.other > 0) { g_charging.fetch_add(1, std::memory_order_relaxed); }
@@ -4117,7 +4134,7 @@ static bool CacheHitCharge(const cachecharge::Cost& c)
     if (!cachecharge::On()) { return true; }
     SearchBudget* const d = g_decision_budget;
     SearchBudget* const g = g_greedy_charge_budget;
-    bool ok = c.storable && c.other == 0;
+    bool ok = c.storable && c.other == 0 && !decisionwork::Exceeded();
     if (ok && d != nullptr && !c.had_dec && c.null_attempts > 0) { ok = false; }
     if (ok && g != nullptr && !c.had_greedy && c.null_attempts > 0) { ok = false; }
     if (ok && !cachecharge::Affordable(d, c.dec)) { ok = false; }
@@ -51315,6 +51332,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // definitions of a unit -- and the generation drivers that arm this meter are precisely
             // the callers who would then be calibrated against the wrong one. (W defaults to 1, so
             // the unweighted single Add is still what every current caller does.)
+            TurnSolver::NoteChargingSubsearch();   // meter-only work is not a free cache hit
             const int dw = GreedyChargeWeight(state);
             if (dw <= 1)
             {
@@ -70040,6 +70058,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // decision meter, outside human play. Read once per call.
     const bool bp_meter_on = BpDeriveMeterOn() && g_bp_enum_depth > 0 && decisionwork::Armed()
                           && !HumanPlayActive();
+    if (bp_meter_on) { TurnSolver::NoteChargingSubsearch(); }
     // THE PER-GAME BACKSTOP INSIDE A DERIVATION (gamework::Poll; 2026-10-21). A breakpoint-continuation
     // derivation is an enumeration, not a search node, so it charges no unit and the wall cap was never read
     // while one ran: AccomplishedAlchemist's route walk derives every affordable subset of the hand after
@@ -84843,44 +84862,11 @@ namespace plancache
     inline bool StatsOn() { static const bool v = EnvOn("MTG_PLAN_POOL_STATS"); return v; }
     inline std::atomic<long long> g_cat_used[kCats], g_cat_hi[kCats], g_cat_at_hi[kCats];
     inline thread_local long long t_cat[kCats] = { 0, 0, 0 };
-    // PER-THREAD ADMISSION (MTG_PLAN_CACHE_PER_THREAD, DEFAULT ON; 2026-10-29). The caches this pool bounds
-    // are thread_local and emptied at every game start (ClearPerGameCaches), so a thread's holdings are a
-    // function of the game it is playing -- but a GLOBAL bound made each admission depend on what the
-    // OTHER threads held, and a refused store changed what a later lookup did (served vs recomputed), so a
-    // game's units and play depended on thread count and interleaving. USER 2026-10-29: "We don't want any
-    // non-determinism regarding thread-count." Admitting against a FIXED per-thread quota makes every
-    // admission a function of the game's own history: thread-count invariant by construction, whatever the
-    // caches' content or side effects. The quota: MTG_PLAN_CACHE_THREAD_KB if set; else, when
-    // MTG_PLAN_CACHE_KB is set explicitly (the generation drivers' memory budgets, a test's tiny pool),
-    // that budget's share per machine worker (membudget::Workers, the affinity CPU count -- a machine
-    // constant, not --threads; =0 still means unbounded); else kDefaultThreadQuotaKb. The process bound is
-    // workers x quota; the global counter stays as the gauge (heartbeat, MTG_PLAN_POOL_STATS).
-    inline bool PerThreadOn() { static const bool v = EnvOn("MTG_PLAN_CACHE_PER_THREAD", true); return v; }
-    constexpr long long kDefaultThreadQuotaKb = 512LL * 1024;   // 512 MB per worker thread (measured, ledger)
-    inline long long ThreadQuotaBytes()
-    {
-        static const long long v = [] {
-            if (std::getenv("MTG_PLAN_CACHE_THREAD_KB") != nullptr)
-            { return static_cast<long long>(EnvInt("MTG_PLAN_CACHE_THREAD_KB", 0)) * 1024LL; }
-            if (std::getenv("MTG_PLAN_CACHE_KB") != nullptr)
-            {
-                const long long kb = static_cast<long long>(EnvInt("MTG_PLAN_CACHE_KB", 0));
-                if (kb <= 0) { return 0LL; }
-                return std::max<long long>(1, kb * 1024LL / std::max(1, membudget::Workers()));
-            }
-            return kDefaultThreadQuotaKb * 1024LL; }();
-        return v;
-    }
+    // Keep the original RAM-sized GLOBAL pool. Exact keys, isolated derivation
+    // channels and hit-equals-miss pricing make plan-cache admission a wall-only
+    // decision; a fixed per-thread quota is not required for that contract.
     inline bool Fits(long long add)
     {
-        if (PerThreadOn())
-        {
-            const long long q = ThreadQuotaBytes();
-            if (q <= 0) { return true; }   // unbounded
-            if (t_enum_bytes + t_bp_bytes + add <= q) { return true; }
-            Refused().fetch_add(1, std::memory_order_relaxed);
-            return false;
-        }
         const long long b = BudgetBytes();
         if (b <= 0) { return true; }                 // 0/unset = unbounded = byte-identical, unchanged
         if (PoolUsed().load(std::memory_order_relaxed) + add <= b) { return true; }
@@ -84953,9 +84939,8 @@ namespace plancache
                 std::sort(pk.begin(), pk.end());
                 auto q = [&](double f) -> long long
                 { return pk.empty() ? 0 : pk[std::min(pk.size() - 1, static_cast<std::size_t>(f * static_cast<double>(pk.size())))] >> 10; };
-                std::fprintf(stderr, "[plan-pool] per-game peak (KB, %zu games): max %lld p99 %lld p95 %lld p50 %lld | per-thread %s quota %lld KB\n",
-                             pk.size(), pk.empty() ? 0LL : pk.back() >> 10, q(0.99), q(0.95), q(0.50),
-                             PerThreadOn() ? "ON" : "off", ThreadQuotaBytes() >> 10);
+                std::fprintf(stderr, "[plan-pool] per-game peak (KB, %zu games): max %lld p99 %lld p95 %lld p50 %lld | shared global pool\n",
+                             pk.size(), pk.empty() ? 0LL : pk.back() >> 10, q(0.99), q(0.95), q(0.50));
             }
             std::fprintf(stderr, "[plan-pool] by cache (own peak / at the pool's peak, KB): m1-enum %lld / %lld"
                          "  m2-enum %lld / %lld  bp-cont %lld / %lld\n",
@@ -85289,7 +85274,9 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
     // list derived where the route did not run, served where a recompute runs (and charges) it.
     mix(0x11B6);
     mix((TurnSolver::InRolloutPlayout() ? 1u : 0u) | (TurnSolver::InD0Runner() ? 2u : 0u)
-        | (TurnSolver::DecisionRootOpen() ? 4u : 0u) | (TurnSolver::DecisionBudget() != nullptr ? 8u : 0u));
+        | (TurnSolver::DecisionRootOpen() ? 4u : 0u) | (TurnSolver::DecisionBudget() != nullptr ? 8u : 0u)
+        | (decisionwork::Armed() ? 16u : 0u) | (g_greedy_charge_budget != nullptr ? 32u : 0u));
+    // An unarmed list cannot skip armed meter-only work or a weighted greedy walk.
     Fold(k, 0x9417C0);
     Fold(k, h);
 }
@@ -87459,6 +87446,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // deterministically scores the un-rolled remainder as losses. Disarmed -> byte-identical.
         if (!budget && decisionwork::Armed())
         {
+            TurnSolver::NoteChargingSubsearch();
             decisionwork::Add(1);
             if (s_rollout_stats) { unitsite::g_units[unitsite::kMeterRolloutStep].fetch_add(1, std::memory_order_relaxed); }
         }
@@ -88701,44 +88689,13 @@ inline std::size_t ApproxFslBytes(const TurnSolver::SearchLine& line)
     { b += ApproxPlanBytes(pp.plan) - sizeof(TurnSolver::Plan); }
     return b;
 }
-// PER-THREAD SHARES OF THE FSL POOL (MTG_FSL_PER_THREAD, DEFAULT ON; 2026-10-29). The pool was one GLOBAL
-// counter, so whether a line-cache store was admitted -- and a refused store is searched again, at full
-// units (EDF seed 900411 gi161: 7.7M units at the default pool, 30.1M at 50 MB) -- depended on what the
-// OTHER worker threads held: a game's units, and through the budget its play, depended on thread count
-// whenever the pool bound (USER 2026-10-29: "We don't want any non-determinism regarding thread-count").
-// The line caches are per-DECISION and live on one thread, so a FIXED per-thread share makes every
-// admission a function of the decision's own history alone. The share is MTG_FSL_POOL / the machine's
-// worker count (membudget::Workers, the affinity CPU count -- a machine constant, NOT --threads), so the
-// process-wide bound is unchanged and can never bind. Unlike the plan caches this one cannot take
-// hit-equals-miss pricing: an entry is reused across iterative-deepening passes under other bounds, as a
-// truncated line or a no-win bound, so what a recompute at the hit site would charge (or return) is not a
-// recorded quantity. =0 restores the global admission.
-inline bool FslPerThreadOn() { static const bool v = EnvOn("MTG_FSL_PER_THREAD", true); return v; }
-inline long long FslThreadShare()
-{
-    static const long long v = [] {
-        const long long pool = FslPool();
-        if (pool <= 0) { return pool; }
-        const long long w = std::max<long long>(1, membudget::Workers());
-        return std::max<long long>(1, pool / w); }();
-    return v;
-}
-inline thread_local long long t_fsl_used = 0;   // this thread's live line-cache bytes (per-thread admission)
+// Preserve the original shared FSL pool. Its hits do not have hit-equals-miss
+// pricing, so binding admission can still affect units; the warning below stays
+// truthful until the separate cache-budgeting project resolves that contract.
 inline bool FslPoolAcquire(long long kb)
 {
     const long long pool = FslPool();
     if (pool <= 0) { return true; }   // pool off: only the per-cache cap applies
-    if (FslPerThreadOn())
-    {
-        if (t_fsl_used + kb > FslThreadShare())
-        { FslPoolRefused().fetch_add(1, std::memory_order_relaxed); return false; }
-        t_fsl_used += kb;
-        const long long now = FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb;   // the gauge
-        long long hi = FslPoolHiwater().load(std::memory_order_relaxed);
-        while (now > hi
-               && !FslPoolHiwater().compare_exchange_weak(hi, now, std::memory_order_relaxed)) {}
-        return true;
-    }
     const long long now = FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb;
     if (now <= pool)
     {
@@ -88765,17 +88722,18 @@ struct DeterminismReport
         const long long p = plancache::Refused().load();
         const long long f = FslPoolRefused().load();
         if (p == 0 && f == 0) { return; }
-        // 2026-10-29: with hit-equals-miss pricing and the physical-card key the plan caches' refusals no
-        // longer move a result (a hit serves and charges what a recompute would), and the FSL pool admits
-        // per thread -- so a refusal is a fact about THIS game only. The warning stands only for a pool
-        // still run in its old mode.
-        const bool plan_legacy = !cachecharge::On() || !PlanCacheExactKeyOn();
-        const bool fsl_legacy  = !FslPerThreadOn();
-        if ((p == 0 || !plan_legacy) && (f == 0 || !fsl_legacy))
+        // Shared plan-cache pressure is neutral only with all exact-mode
+        // prerequisites. The separate FSL cache still discounts hits: any FSL
+        // refusal retains the original thread/interleaving warning.
+        // Meter-only derivations are also refused storage (cachecharge::Scope),
+        // and their armed context is part of the exact plan key.
+        const bool plan_exact = cachecharge::Mode() == 1 && PlanCacheExactKeyOn()
+                             && EnvOn("MTG_BP_DERIVE_ISOLATE", true);
+        if (f == 0 && (p == 0 || plan_exact))
         {
-            std::fprintf(stderr, "[determinism] pools refused stores (plan cache %lld, FSL line cache %lld) --"
-                         " thread-count invariant (hit-equals-miss pricing, exact plan-cache key, per-thread"
-                         " FSL shares).\n", p, f);
+            std::fprintf(stderr, "[determinism] plan cache refused %lld stores -- shared admission"
+                         " with exact keys, isolated channels and hit-equals-miss pricing;"
+                         " FSL did not bind.\n", p);
             return;
         }
         std::fprintf(stderr,
@@ -88810,7 +88768,6 @@ inline void FslPoolAdjust(long long delta_kb)
     if (FslPool() > 0 && delta_kb != 0)
     {
         FslPoolUsed().fetch_add(delta_kb, std::memory_order_relaxed);
-        if (FslPerThreadOn()) { t_fsl_used += delta_kb; }
     }
 }
 inline void FslPoolRelease(long long kb)
@@ -88818,7 +88775,6 @@ inline void FslPoolRelease(long long kb)
     if (FslPool() > 0 && kb != 0)
     {
         FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
-        if (FslPerThreadOn()) { t_fsl_used -= kb; }
     }
 }
 struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
