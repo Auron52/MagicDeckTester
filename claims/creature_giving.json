@@ -4,9 +4,12 @@
   "valueleaf": "em:e9ea4e2f6fb6212c7fbf"
  },
  "deck": "creature_giving",
+ "detail": "mulligan: ADOPTED (new-vs-old -0.012156 t, cost 0.968x (se 0.007, 32 seeds), recipe fast); valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_creature_giving/DECISIONS.txt)",
+ "finished": "2026-10-30T15:24:23Z",
  "frozen": "226ef40b260e4c4e62e8b9b4cacb043bd8b6d40c",
  "heartbeat": "2026-10-30T15:22:11Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/creature_giving-20261030-1524",
  "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T073618",
  "score": 0.3379,
  "stage": "valueleaf",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-30T07:36:18Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-d7d6a5"
 }
