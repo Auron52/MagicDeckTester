@@ -31992,6 +31992,20 @@ bool CycloneProvider::CantripOrderKey(const GameState& s, int controller, std::v
     key.push_back(0xC1C10000ull | (order ? 1u : 0u) | (rule ? 2u : 0u) | (CyclonePutBackUsableOn() ? 4u : 0u)
                   | (CyclonePbPlansOn() ? 8u : 0u) | (CyclonePonderPlansOn() ? 16u : 0u) | (situ ? 32u : 0u)
                   | (CyclonePbPlainRankOn() ? 64u : 0u) | (CycloneKeepAmendOn() ? 128u : 0u) | (CycloneKeepMyriadOn() ? 256u : 0u));
+    // KEEP_AMEND demotes the last needed land from the remaining library's density.
+    // Same hand/board but different density must not reuse another fan's ranking.
+    if (CycloneKeepAmendOn())
+    {
+        std::uint64_t lands = 0;
+        for (std::size_t i = 0; i < pl.library.size(); ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.library.RawAt(i));
+            if (d != nullptr && d->card.IsLand()) { ++lands; }
+        }
+        key.push_back(0x4C414E4444454E53ull);
+        key.push_back(pl.library.size());
+        key.push_back(lands);
+    }
     // The situational layer reads the KNOWN library positions (CycAvailableKnown): their cards are inputs too.
     if (situ)
     {
