@@ -74,3 +74,11 @@ USER steering 2026-10-30: fixed 512MB/thread plan-cache policy is unwanted going
 - Final prepared pooled quality manifest:12542 games /1430 jobs /12 workers, including pruning12arms7200games, cast raw+blind3000, payment600, nested600, QC3 480, selected QC1 194, memory12normal168+300 shape. Other thread/pool variants remain independent process runs; quiet535-game cost gate separate. All require refreshed provenance and clean source plus matching PGO stamp before launch. No long simulations launched yet.
 
 - Rebase onto930cc5c33 completed with no conflicts; pre-freeze GT consistency883/883. Corrected bounded pin fixture uses implemented Bone Saw/Paradise Mantle (original scratch Memnite/Ornithopter were absent); ordinary cap32 omits combined line, explicit Street Wraith pin restores it even though Cloud of Faeries is family front, kept positions30/32. New check is tracked in test/viewer_cycle_pin_check.py. Final Release rebuild92782 includes all source changes plus current main; stale-seed guard green proof pending this build.
+
+## Frozen-source gates (current main930cc5c33)
+
+Source tree `ce3431d90d7f7ee88b47a791ce61595740f907f0`, code/test HEADb925035e9. Final optimized Release build92782 complete. All2349 unit cases /3,566,068 assertions PASS. Stale searched-payment regression now41/41 PASS (six failures before). All384 scenarios PASS.
+
+Serial viewer validation runner is active, owned by payment reviewer session98998; live state primary scratch/final-viewer/status.json. Cycle pin stage PASS. Remaining: EDF/cross-deck exact menu prefix, full strict protocol4threads, full validate, sampled viewer layers. No other heavy local job runs alongside it. Next: source-matching PGO, seal prepared12542-game primary pool, then outstanding process-only memory/iso92/VERIFY and quiet cost runs. Source proposal flags remain OFF pending proofs; no profile/value generation.
+
+Shared-budget removal was rebased to `e9135d9ef`. Original9db23420e is a historical pre-rebase hash. No fixed per-thread plan or FSL quota remains.
