@@ -231,6 +231,48 @@ of 30 s-10 min plus 2,000 ordinary samples, 24 threads, summary on. RSS was 7-9 
 generation's own rss-cap monitor is the live check from here; the old binary peaked at ~27 GB and never
 aborted.
 
+## 5b. The residual case after the fix: pool THRASH (2026-10-30)
+
+After the resume on the fix, the slowest rollout was `size7 play r=2 seed=15755400543391521167` (hand: Soulfire
+Eruption, Reality Spasm, Preordain, Forbidden Orchard x4). It took 1,665 s in the gen, at 24 threads.
+
+**Replay setup.** The worker's PGO binary (`src` tree 303bb918), at the gen's settings: d1, b3, the worker's
+`.PREV.json` buckets, `MTG_DECISION_WORK_X=1000`, one thread. The play digest is 79871cfd49865d33 in every arm. Only
+the plan-pool size varies (`MTG_PLAN_CACHE_KB`):
+
+| plan pool | wall | units | win | summary |
+|---|---|---|---|---|
+| 100 MB (every big list refused) | 690 s | 406,135 | T7 | filed 33, hits 8,510, fallback 12 |
+| **2.5 GB (the gen's pool: 24 x 100 MB)** | **~1,750 s per decision** (stopped after 3 decisions, ~1.8 h) | 67,512 / 67,509 / 67,509 per decision (identical) | — | — |
+| 4 GB (every list fits) | 48 s | 406,135 | T7 | filed 0, hits 0 |
+
+**Mechanism.** The rollout cycles over 4 continuation lists of 209k, 20k, 250k and 289k plans, about 2.9 GB together.
+Each one fits a 2.5 GB pool alone, but all four do not. So every store hits clear-on-full and wipes the others, and
+each list was re-derived about 1,925 times (`MTG_BP_DERIVE_SLOW_MS` + the `[bp-derive-key]` trace). The summary does
+not apply. It files only lists the pool REFUSES, and a hit falls back to the full path when the list would now fit
+(`would-now-fit`). That fallback is what keeps it play-identical: the miss path stores the list, the store moves the
+pool's occupancy, and occupancy decides later clear-on-full events and therefore later main-cache hits, which save
+units. The wall is not monotone in the pool size: a small pool is served by the summary, a big pool by the cache, and
+the band in between thrashes.
+
+In the gen the pool is shared by 24 threads, so how much room a thread sees varies, and this rollout spent only part of
+its time in the thrash band. That is why it took 28 min there.
+
+**Units did not move with the pool in this rollout:** 406,135 at 100 MB and at 4 GB, and the same per decision. Every
+decision ran to the decision-unit ceiling. That is consistent with the derivations here charging nothing, but it does
+not show pool size is unit-neutral in general (see the 4-thread coupling above).
+
+**Candidate play-identical fix (not built): the PHANTOM STORE.** When a list the summary covers would fit, book its
+bytes in the pool exactly as the store would, but keep only its summary. Pool occupancy, clear-on-full and every
+later hit/miss would then be identical to today's, so play is identical by construction. A rank past the head
+re-derives as it does now (head doubling). One detail: a hit on a phantom entry must replay what a CACHE HIT does
+(no derivation counters), not what a miss does, because today that list would have been a real hit. The pool's
+accounting then over-states the bytes held, which only errs on the safe side for memory. This removes the thrash band without touching the unit question. The
+alternative is the cache audit's fix (hits charge what a miss would, `docs/design/cache-unit-neutrality-audit.md`).
+After that, the summary could serve whatever the pool holds.
+
+Scratch for these runs: `build/scratch/hinata-slow2/` (rep.sh, rep_{A,B,P100,P4G}.{out,err}).
+
 ## 6. Open (for the USER)
 
 1. The main bp cache's unit non-neutrality (section 3). Leaving it alone keeps Hinata2's journal
