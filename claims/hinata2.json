@@ -4,19 +4,17 @@
   "valueleaf": "em:63f552c7e70c9e1c2c09"
  },
  "deck": "hinata2",
- "detail": "paused by the USER: resumes when worker MagicDeckTester2-76d2cc next starts; set aside for every other worker",
  "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
- "heartbeat": "2026-10-30T02:30:54Z",
+ "heartbeat": "2026-10-30T04:14:49Z",
  "host": "8854e545ddab",
- "paused": "2026-10-30T02:30:50Z",
- "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
+ "run_id": "hinata2-MagicDeckTester2-76d2cc-20261030T041449",
  "score": 1.089,
  "stage": "mulligan",
  "stages": [
   "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-29T13:04:47Z",
- "state": "paused",
+ "started": "2026-10-30T04:14:49Z",
+ "state": "running",
  "worker": "MagicDeckTester2-76d2cc"
 }
