@@ -4,8 +4,8 @@
   "valueleaf": "em:e9ea4e2f6fb6212c7fbf"
  },
  "deck": "creature_giving",
- "detail": "mulligan: FAILED rc=1 -- see creature_giving.mulligan.log",
- "finished": "2026-10-29T14:49:03Z",
+ "detail": "released 2026-10-30: the K-gate refusal (incumbent 21 buckets vs expected_buckets 20) is answered -- USER chose K=20 (Overgrown Tomb merged with Forest/Tree of Tales); the next run re-buckets via mulligan_env MTG_KEEP_REDISCOVER=1",
+ "finished": "2026-10-30T02:37:21Z",
  "frozen": "87e57645b09e5d843f02fed504086cc06c953351",
  "heartbeat": "2026-10-29T14:39:09Z",
  "host": "58199181d02e",
@@ -18,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-29T14:36:11Z",
- "state": "failed",
+ "state": "released",
  "worker": "artifact-queue-tool-647f24"
 }
