@@ -13,7 +13,9 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <atomic>
 #include <map>
+#include <set>
 #include <thread>
 #include "../../src/analyzer/RolloutSideJournal.h"
 
@@ -118,6 +120,28 @@ TEST_CASE("side journal: a file with no complete header yields nothing")
     CHECK_FALSE(st.header_ok);
 }
 
+TEST_CASE("side journal: every Append is in the file when it returns (a process kill loses nothing)")
+{
+    const std::string p = TmpPath("immediate.spec");
+    rollj::Writer::Opts o;
+    o.path = p; o.header = "{\"specjournal\":{\"format\":1}}"; o.sync_ms = 60000; o.backup_s = 0;
+    o.compact_bytes = 1LL << 40; o.quiet = true;
+    rollj::Writer w(o, [](const rollj::Rec&) { return true; });
+    std::string err;
+    REQUIRE(w.Open({}, &err));
+    for (int r = 0; r < 20; ++r)
+    {
+        w.Append(R(5, 0, r, 4.0 + r));
+        // No flush, no sync, no wait: what a SIGKILL right now would leave is exactly the file.
+        rollj::ReadStats st;
+        const auto recs = ReadAll(p, &st);
+        REQUIRE(recs.size() == static_cast<std::size_t>(r + 1));
+        CHECK_FALSE(st.torn_tail);
+        CHECK(recs.back().r == r);
+    }
+    w.Close(false);
+}
+
 TEST_CASE("side journal: writer carries the initial frontier, appends, and compacts to what keep wants")
 {
     const std::string p = TmpPath("writer.spec");
@@ -126,15 +150,15 @@ TEST_CASE("side journal: writer carries the initial frontier, appends, and compa
     std::mutex cm;
     auto keep = [&](const rollj::Rec& x)
     { std::lock_guard<std::mutex> lk(cm); auto it = covered.find(x.w); return it == covered.end() || x.r >= it->second; };
+    std::atomic<int> syncs{ 0 };
     rollj::Writer::Opts o;
-    o.path = p; o.header = "{\"specjournal\":{\"format\":1}}"; o.flush_ms = 5; o.backup_s = 0;
+    o.path = p; o.header = "{\"specjournal\":{\"format\":1}}"; o.sync_ms = 5; o.backup_s = 0;
     o.compact_bytes = 1LL << 40; o.quiet = true;
     {
-        rollj::Writer w(o, keep);
+        rollj::Writer w(o, keep, [&] { ++syncs; });
         std::string err;
         REQUIRE(w.Open({ R(9, 0, 1, 4.0), R(9, 0, 2, 5.0) }, &err));
         for (int r = 0; r < 50; ++r) { w.Append(R(1, r & 1, r, 3.0 + r)); }
-        w.FlushNow();
         {
             rollj::ReadStats st;
             const auto recs = ReadAll(p, &st);
@@ -142,6 +166,8 @@ TEST_CASE("side journal: writer carries the initial frontier, appends, and compa
             CHECK(recs.size() == 52);
             CHECK_FALSE(st.torn_tail);
         }
+        for (int k = 0; k < 400 && syncs.load() == 0; ++k) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+        CHECK(syncs.load() > 0);   // the on_sync hook (the generator's main-journal fsync) runs
         // Commit w=1 below r=40 and w=9 entirely; compaction must keep exactly w=1, r>=40.
         { std::lock_guard<std::mutex> lk(cm); covered[1] = 40; covered[9] = std::numeric_limits<long long>::max(); }
         w.ForceCompactNext();
@@ -157,6 +183,33 @@ TEST_CASE("side journal: writer carries the initial frontier, appends, and compa
     for (std::size_t i = 0; i + 1 < recs.size(); ++i) { CHECK(recs[i].w == 1); CHECK(recs[i].r >= 40); }
     CHECK(recs.back().w == 2);
     CHECK_FALSE(std::filesystem::exists(p + ".tmp"));
+}
+
+TEST_CASE("side journal: appends racing a compaction are all kept")
+{
+    const std::string p = TmpPath("race.spec");
+    rollj::Writer::Opts o;
+    o.path = p; o.header = "{\"specjournal\":{}}"; o.sync_ms = 1; o.backup_s = 0;
+    o.compact_bytes = 2048; o.quiet = true;   // compacts over and over while the writers run
+    std::atomic<long long> floor{ 0 };
+    rollj::Writer w(o, [&](const rollj::Rec& x) { return x.r >= floor.load(); });
+    std::string err;
+    REQUIRE(w.Open({}, &err));
+    std::vector<std::thread> th;
+    for (int t = 0; t < 4; ++t)
+    { th.emplace_back([&w, t] { for (int r = 0; r < 3000; ++r) { w.Append(R(t, 0, r, 1.0 * r)); } }); }
+    for (auto& x : th) { x.join(); }
+    floor.store(1000);   // everything below r=1000 is now "committed"
+    w.ForceCompactNext();
+    for (int k = 0; k < 400 && w.Compactions() < 2; ++k) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+    w.Close(false);
+    std::map<long long, std::set<long long>> got;
+    for (const auto& x : ReadAll(p)) { got[x.w].insert(x.r); }
+    for (int t = 0; t < 4; ++t)
+    {
+        // nothing at or above the floor may be missing, whatever the compactions interleaved with
+        for (long long r = 1000; r < 3000; ++r) { REQUIRE_MESSAGE(got[t].count(r) == 1, "lost w=" << t << " r=" << r); }
+    }
 }
 
 TEST_CASE("side journal: rename-aside never destroys the file")
