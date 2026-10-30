@@ -1,0 +1,19 @@
+{
+ "blobs": {
+  "mulligan": "461f92544b47277998e3057169a6bacb7a8fd559",
+  "valueleaf": "em:1c9539bbaeade750cc31"
+ },
+ "deck": "burn",
+ "frozen": "58dcb45053e9fa6aa62da85a92872d6eeff6cdff",
+ "heartbeat": "2026-10-30T15:41:52Z",
+ "host": "550a08fdc1f3",
+ "run_id": "burn-artifact-queue-d7d6a5-20261030T154152",
+ "score": 0.0986,
+ "stage": "mulligan",
+ "stages": [
+  "mulligan"
+ ],
+ "started": "2026-10-30T15:41:52Z",
+ "state": "running",
+ "worker": "artifact-queue-d7d6a5"
+}
