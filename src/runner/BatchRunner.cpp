@@ -1158,14 +1158,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             if (ec)
             {
                 std::fprintf(stderr, "[batch] RESUME: %s is %s and could NOT be moved aside (%s) -- running WITHOUT"
-                                     " a resume log; move it yourself.
-", rp.c_str(), why.c_str(), ec.message().c_str());
+                                     " a resume log; move it yourself.\n", rp.c_str(), why.c_str(), ec.message().c_str());
                 fresh = false;
             }
             else
             {
-                std::fprintf(stderr, "[batch] RESUME: %s is %s -- PRESERVED as %s; every game is played
-",
+                std::fprintf(stderr, "[batch] RESUME: %s is %s -- PRESERVED as %s; every game is played\n",
                              rp.c_str(), why.c_str(), aside.c_str());
             }
         }
@@ -1192,8 +1190,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             for (std::size_t j = 0; j < jobs.size(); ++j)
             { if (ncarried[j] > 0 && ncarried[j] + static_cast<int>(jobs[j].skip_games.size()) == jobs[j].games) { ++complete; } }
             std::fprintf(stderr, "[batch] RESUME: carried %lld finished games from %s (%d job(s) already complete;"
-                                 " %lld record(s) rejected%s) -- they are NOT played again
-",
+                                 " %lld record(s) rejected%s) -- they are NOT played again\n",
                          ncarry, rp.c_str(), complete, nbad + L.bad, L.torn ? ", 1 torn last record dropped" : "");
         }
         if (fresh || why.empty())
@@ -1201,8 +1198,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             resume_log = std::make_unique<batchresume::Log>();
             if (!resume_log->Open(rp, key, fresh, L.torn && !fresh))
             {
-                std::fprintf(stderr, "[batch] RESUME: cannot open %s -- running WITHOUT a resume log
-", rp.c_str());
+                std::fprintf(stderr, "[batch] RESUME: cannot open %s -- running WITHOUT a resume log\n", rp.c_str());
                 resume_log.reset();
             }
         }
