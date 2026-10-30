@@ -390,3 +390,28 @@ h_repro_cmd() {
                "$bin" "$deck" "$prof" "$gseed" "$gi" "$depth"
     fi
 }
+
+# ---- per-game batch RESUME (src/runner/BatchResume.h) --------------------------------------------
+# harness_resume_key <file-or-deck-dir>...  -> a key for MTG_BATCH_RESUME_KEY.
+#   The batch adds its own engine fingerprint, manifest bytes and MTG_* environment; this covers what
+#   only the CALLER knows: the CONTENT of the decklists, profiles and every sidecar the engine resolves
+#   next to them (a directory argument hashes its files), plus the runtime card/heuristic data. The
+#   generator's in-flight artifacts are excluded (raw/journal/slow log/caches/quarantine/PREV) -- they
+#   do not change what a game plays, and including them would make a key that never matches. A file
+#   that IS an input (e.g. the A/B's PREV table) is passed explicitly and hashed regardless.
+harness_resume_key() {
+    local a f
+    {
+        for a in "$@"; do
+            if [ -d "$a" ]; then
+                find "$a" -maxdepth 1 -type f \
+                     ! -name '*.raw.json*' ! -name '*.journal*' ! -name '*.slow.log' ! -name '*gencache*' \
+                     ! -name '*.probe' ! -name '*.DISABLED*' ! -name '*.PREV*' ! -name '*.backup-*' -print
+            elif [ -f "$a" ]; then
+                printf '%s\n' "$a"
+            fi
+        done
+        find src/cards/data src/ai/data -maxdepth 1 -type f -print 2>/dev/null
+    } | LC_ALL=C sort -u | while IFS= read -r f; do printf '%s ' "$f"; sha256sum < "$f"; done \
+      | sha256sum | cut -c1-32
+}
