@@ -4,20 +4,17 @@
   "valueleaf": "em:e9ea4e2f6fb6212c7fbf"
  },
  "deck": "creature_giving",
- "detail": "released 2026-10-30: this 04:24 K-gate failure came from worker artifact-queue-d7d6a5 running the queue tool 2 commits behind origin (no mulligan_env), so it re-used the incumbent's 21 buckets instead of re-bucketing at the USER's K=20 (MTG_KEEP_REDISCOVER=1, 0caf930ba). The worker now runs 0caf930ba.",
- "finished": "2026-10-30T06:33:56Z",
- "frozen": "80c4bb8fcab47db48ef7aee86720271df1acd8b3",
- "heartbeat": "2026-10-30T04:23:34Z",
+ "frozen": "226ef40b260e4c4e62e8b9b4cacb043bd8b6d40c",
+ "heartbeat": "2026-10-30T07:36:18Z",
  "host": "550a08fdc1f3",
- "result_branch": null,
- "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T042322",
+ "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T073618",
  "score": 0.3379,
  "stage": "mulligan",
  "stages": [
   "mulligan",
   "valueleaf"
  ],
- "started": "2026-10-30T04:23:22Z",
- "state": "released",
+ "started": "2026-10-30T07:36:18Z",
+ "state": "running",
  "worker": "artifact-queue-d7d6a5"
 }
