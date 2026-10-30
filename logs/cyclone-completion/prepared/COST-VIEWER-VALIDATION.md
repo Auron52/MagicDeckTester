@@ -98,7 +98,27 @@ Never copy provenance onto older traces whose origin is unknown.
 
 ## Launch and report
 
-After fresh PGO, the single primary launch command is:
+After fresh PGO, the already-planned normal memory processes can run before
+primary to catch a default FSL/thread-unit problem early. The launcher does
+not require primary result files for these stages. Run sequentially, then
+inspect the independent interim report before launching primary:
+
+```bash
+python3 "$HELPERS/run_prepared_validation.py" memory6
+python3 "$HELPERS/run_prepared_validation.py" memory1
+python3 "$HELPERS/report_final_results.py" memory-preflight
+```
+
+`memory-preflight-report.json` compares only the168 shared logical games
+(t1 vs t6), with exact win/digest/unit differences. It inventories the extra300
+t6-only shape games separately and makes no t12/tiny/full-proof claim. Both
+processes need complete output files and exit cache statistics. Any positive
+FSL refusal count or determinism warning requires review and exits1 even when
+the168 observed pairs agree; decide whether that existing issue is a prerequisite
+before collecting primary A/B data. Counts are process-wide, so a t6 warning
+cannot be attributed solely to the168 shared games. Missing data exits2.
+
+After fresh PGO and a passing preflight, the primary launch command is:
 
 ```bash
 python3 "$HELPERS/run_prepared_validation.py" primary
