@@ -796,8 +796,35 @@ def fmt_item(it):
         " ".join(tags))
 
 
+def view_tree(a):
+    """-> the tree `status` / `explain` assess: a detached, tool-owned VIEW worktree at origin/<branch>'s
+    tip, i.e. what the worker would freeze on. Assessing this checkout's own HEAD read the TOOL branch,
+    which only follows the deck branch when it is rebased: 2026-10-30 it was a week behind, so `status`
+    showed Snow's 10-09 keep table as live (score 1.23, QUEUED) after the 10-25 regeneration had landed,
+    and an agent on another machine concluded Snow was adopted but never landed. `--here` keeps the old
+    reading of this checkout (to test an unlanded config or tool change)."""
+    if getattr(a, "here", False):
+        return ROOT
+    br = load_config()["branch"]
+    wt = os.path.join(ROOT, ".claude", "worktrees", "artifact-view")
+    try:
+        git("fetch", "-q", "origin", br)
+        target = git("rev-parse", "origin/%s" % br).strip()
+        if not os.path.exists(os.path.join(wt, ".git")):
+            os.makedirs(os.path.dirname(wt), exist_ok=True)
+            git("worktree", "add", "-q", "--detach", wt, target)
+        else:
+            git("checkout", "-q", "--detach", target, cwd=wt)
+        return wt
+    except Exception as e:                      # never block a status read on the view: say so, read here
+        print("WARNING: could not sync the view worktree at origin/%s (%s) -- assessing THIS checkout's "
+              "HEAD, which may lag the deck branch" % (br, e), file=sys.stderr)
+        return ROOT
+
+
 def cmd_status(a):
-    items, cfg = assess_all()
+    root = view_tree(a)
+    items, cfg = assess_all(root=root, cfg=load_config())
     if a.json:
         print(json.dumps([{k: v for k, v in it.items() if k != "sort"} for it in items], indent=1))
         return 0
@@ -813,7 +840,7 @@ def cmd_status(a):
         print("(%d fresh artifact(s) below min_drift=%.3f turns hidden; --all shows them)" % (hidden, cfg["min_drift"]))
     jobs = deck_jobs(items, cfg)
     claims = Queue().claims()                 # the LOCAL copy of origin/artifact-queue (`claims` fetches)
-    note_claim_drift(ROOT, "HEAD", jobs, claims)
+    note_claim_drift(root, "HEAD", jobs, claims)
     now = utcnow()
     print("\nDECK JOBS, in claim order (%d):" % len(jobs))
     for i, j in enumerate(jobs, 1):
@@ -821,8 +848,13 @@ def cmd_status(a):
         tag = ""
         if c and claim_blocks(c, j, cfg, None, now):
             ds = (j.get("drift_since") or {}).get(c.get("frozen"))
-            tag = "  [%s by %s%s%s]" % (c.get("state"), c.get("worker"),
-                                        ", awaiting landing: " + c["result_branch"] if c.get("result_branch") else "",
+            if c.get("landed"):
+                land = ", landed %s from %s" % (c["landed"][:9], c.get("result_branch", "?"))
+            elif c.get("result_branch"):
+                land = ", awaiting landing: " + c["result_branch"]
+            else:
+                land = ""
+            tag = "  [%s by %s%s%s]" % (c.get("state"), c.get("worker"), land,
                                         ", drift since %s %.4f < %.3f" % (c["frozen"][:9], ds, cfg["min_drift"])
                                         if ds is not None else "")
         print("  %2d. %-24s %s%s" % (i, j["deck"], " -> ".join(j["stages"]), tag))
@@ -830,7 +862,7 @@ def cmd_status(a):
 
 
 def cmd_explain(a):
-    items, cfg = assess_all(only=a.deck)
+    items, cfg = assess_all(root=view_tree(a), only=a.deck, cfg=load_config())
     if not items:
         print("no artifacts found for %s" % a.deck)
         return 1
@@ -2003,8 +2035,10 @@ def main():
     s = sp.add_parser("status")
     s.add_argument("--json", action="store_true")
     s.add_argument("--all", action="store_true")
+    s.add_argument("--here", action="store_true", help="assess this checkout's HEAD, not origin/<branch>")
     s = sp.add_parser("explain")
     s.add_argument("deck")
+    s.add_argument("--here", action="store_true", help="assess this checkout's HEAD, not origin/<branch>")
     for name in ("mark", "unmark"):
         s = sp.add_parser(name)
         s.add_argument("deck")
