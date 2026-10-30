@@ -252,7 +252,7 @@ SMOKE_CASES=(
   # Tail is mild: 2 games of 2800 over 30 s (worst 60.8 s), no multi-minute blowups. ~5 min ST added.
   "fivecolour 0 1001 1000 0"
   "fivecolour 3  1001    50 10"
-  "fivecolour 5  1001   125 20"
+  "fivecolour 5  1001   125 40"
   # stompy: StompySurprise elf ramp (wins ~T4.9; StompyProvider -- discard buckets + tutor
   # lethality gate). Dragonstorm-class cost (probed 2026-08-21 single-thread at gate budgets:
   # d0 ~0 ms/game, d3 b10 ~0.28 s/game, d5 b20 ~0.63 s/game; no heavy tail, worst game
@@ -403,7 +403,7 @@ SMOKE_CASES=(
   # case structurally cannot see it. The deck also runs Adeline, whose token clause IS per-opponent, so
   # both sides of the "each opponent x heads" class sit in one deck. ~4 core-s.
   "whiteknights2hg 5  1001    75 20"
-  "fivecolour2hg 5  1001    50 20"
+  "fivecolour2hg 5  1001    50 40"
   "fluctuator2hg 5  1001    75 40"
   # angels2hg: antilife/minotaur sizing. Angels is one of the cheapest decks in the matrix
   # (d3 b10 ~0.066 s/game), so the whole relevant-tier treatment costs ~7 core-s here.
@@ -797,8 +797,8 @@ REGRESSION_CASES=(
   # fivecolour: hinata/mirrorwing-mirror sizing (~14 min ST added; see SMOKE block for costs).
   "fivecolour 0 2002 1000 0"
   "fivecolour 3  2002    75 10"
-  "fivecolour 5  2002   200 20"
-  "fivecolour 5  3003   200 20"
+  "fivecolour 5  2002   200 40"
+  "fivecolour 5  3003   200 40"
   # stompy: dragonstorm-style two-seed sweep (~8 min ST added at probed per-game costs).
   "stompy  0 2002 1000 0"
   "stompy     3  2002   100 10"
@@ -858,7 +858,7 @@ REGRESSION_CASES=(
   "goblins2hg 5  2002    75 60"
   "knights2hg 5  2002   100 20"
   "whiteknights2hg 5  2002   100 20"
-  "fivecolour2hg 5  2002    75 20"
+  "fivecolour2hg 5  2002    75 40"
   "fluctuator2hg 5  2002   100 40"
   # angels2hg: antilife/minotaur sizing again (~10 core-s at 0.066 s/game).
   "angels2hg  5  2002   150 20"
@@ -1247,10 +1247,10 @@ OVERNIGHT_CASES=(
   "fivecolour 0 8008 2000 0"
   "fivecolour 0 10010 2000 0"
   "fivecolour 3  4004   125 10"
-  "fivecolour 5  4004   550 20"
-  "fivecolour 5  5005   550 20"
-  "fivecolour 5  6006   550 20"
-  "fivecolour 5  7007   550 20"
+  "fivecolour 5  4004   550 40"
+  "fivecolour 5  5005   550 40"
+  "fivecolour 5  6006   550 40"
+  "fivecolour 5  7007   550 40"
   # stompy: creature_giving-style generosity (d3 b20 / d5 b40, ~2x the gate budgets) --
   # ~70 min ST added (d3 ~0.45 s/game, d5 b40 ~1.2 s/game est. from the gate-budget probe).
   # d0 on the 2002-spaced bases per the SEED SPACING rule above.
@@ -1508,10 +1508,10 @@ OVERNIGHT_CASES=(
   "whiteknights2hg 5  5005   300 20"
   "whiteknights2hg 5  6006   300 20"
   "whiteknights2hg 5  7007   300 20"
-  "fivecolour2hg 5  4004   100 20"
-  "fivecolour2hg 5  5005   100 20"
-  "fivecolour2hg 5  6006   100 20"
-  "fivecolour2hg 5  7007   100 20"
+  "fivecolour2hg 5  4004   100 40"
+  "fivecolour2hg 5  5005   100 40"
+  "fivecolour2hg 5  6006   100 40"
+  "fivecolour2hg 5  7007   100 40"
   "fluctuator2hg 5  4004    100 40"
   "fluctuator2hg 5  5005    100 40"
   "fluctuator2hg 5  6006    100 40"
