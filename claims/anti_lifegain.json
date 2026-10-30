@@ -9,6 +9,8 @@
  "frozen": "dd7127d5f6845cf6e13c6430f9e82cf68402f070",
  "heartbeat": "2026-10-30T16:14:15Z",
  "host": "550a08fdc1f3",
+ "landed": "a748affe7d27ac691314f7c56634674a4bd2b400",
+ "landed_at": "2026-10-30T16:34:22Z",
  "result_branch": "artifact-refresh/anti_lifegain-20261030-1624",
  "run_id": "anti_lifegain-artifact-queue-d7d6a5-20261030T161401",
  "score": 0.5737,
