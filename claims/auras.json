@@ -4,9 +4,12 @@
   "valueleaf": "em:8f9467f9f125c2b4d1b1"
  },
  "deck": "auras",
+ "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.002531 t) but the new table costs MORE (cost 1.118x (se 0.011, 96 seeds)): the USER's call; left live on the result branch, NOT landed; valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_auras/DECISIONS.txt)",
+ "finished": "2026-10-30T00:44:10Z",
  "frozen": "ce02942e3353c17147a1dbea6ab343593ef700be",
  "heartbeat": "2026-10-30T00:37:29Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/auras-20261030-0043",
  "run_id": "auras-artifact-queue-tool-647f24-20261029T223109",
  "score": 0.0651,
  "stage": "valueleaf",
@@ -15,6 +18,6 @@
   "valueleaf"
  ],
  "started": "2026-10-29T22:31:09Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
