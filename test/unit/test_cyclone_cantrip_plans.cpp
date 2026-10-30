@@ -534,7 +534,7 @@ TEST_CASE("Cyclone cantrip plans: two-Eldrazi JUNK follows the current or next-t
     v.top[1] = &hand[static_cast<std::size_t>(second)];
     int kind = -1;
     REQUIRE(ProvP().CantripPlanOf(s, 0, r, v, kind));
-    CHECK(kind == 1);   // JUNK, not merely a matching SETUP candidate
+    CHECK(kind == DecisionProvider::kCantripPlanBoth);   // the fixed JUNK pick is also a SETUP candidate
     const NamesP expected{ hand[static_cast<std::size_t>(first)].m_name.str(),
                            hand[static_cast<std::size_t>(second)].m_name.str() };
     const auto fan = FanP(s);
@@ -564,4 +564,37 @@ TEST_CASE("Cyclone cantrip cache key: KEEP_AMEND includes remaining land density
     REQUIRE(ProvP().CantripOrderKey(a, 0, ka));
     REQUIRE(ProvP().CantripOrderKey(b, 0, kb));
     CHECK(ka != kb);
+}
+
+TEST_CASE("Cyclone cantrip plans: an overlapping JUNK and SETUP pick survives the ready prune once")
+{
+    ArmP arm;
+    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PB_PLANS, 1)
+       .Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 0).Set(heurarm::CYCLONE_KEEP_AMEND, 0);
+    const GameState s = StateP({ kCycP, "Island", "Island", "Island" },
+                              { kWraP, kWraP, "Island", kHunP, kEmrP });
+    const std::vector<NamesP> expected{ NamesP{ kEmrP, kHunP } };
+    CHECK(FanP(s) == expected);
+    arm.Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 1);
+    CHECK(FanP(s) == expected);
+}
+
+TEST_CASE("Cantrip plan roles: shared winners fold only after each role selects its best")
+{
+    std::vector<int> order{ 0, 1, 2 };
+    SUBCASE("shared best winner satisfies both roles once")
+    {
+        CantripPlanFilter(order, { DecisionProvider::kCantripPlanBoth, 0, 1 });
+        CHECK(order == std::vector<int>{ 0 });
+    }
+    SUBCASE("a better SETUP does not erase the fixed JUNK pick")
+    {
+        CantripPlanFilter(order, { 0, DecisionProvider::kCantripPlanBoth, 1 });
+        CHECK(order == std::vector<int>{ 0, 1 });
+    }
+    SUBCASE("a better JUNK does not erase the other role's best")
+    {
+        CantripPlanFilter(order, { 1, DecisionProvider::kCantripPlanBoth, 0 });
+        CHECK(order == std::vector<int>{ 0, 1 });
+    }
 }

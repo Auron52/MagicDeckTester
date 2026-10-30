@@ -732,13 +732,15 @@ public:
     // order's first member of that plan = the heuristic's fulfilment), so the search still branches over the PLANS.
     // CantripPlanOf -- the plan of ONE scored candidate (same arguments as ScoreTopDisposition, called after it):
     // >= 0 a plan id (the engine keeps that plan's best-scored candidate), kCantripPlanKeep (-2) keep this candidate
-    // ungrouped, kCantripPlanDrop (-1) drop it (a situational prune). FALSE for any candidate = no plan-level
+    // ungrouped, kCantripPlanDrop (-1) drop it (a situational prune), kCantripPlanBoth (-3) belongs to
+    // BOTH plan 0 and plan 1. Select each role's best candidate before folding shared winners. FALSE = no plan-level
     // admission for this resolution. The engine never leaves a fan empty (an all-dropped fan keeps its rank 0).
     // Applied inside the shared PutBackPickAt / PutBackCandidates / ScoredReorderCandidates, so the executor, the
     // rollout and the blind chooser read the same (shorter) list; must be a pure function of the resolution
     // state (and, like the scorer, of what the player knows). Default false.
     static constexpr int kCantripPlanDrop = -1;
     static constexpr int kCantripPlanKeep = -2;
+    static constexpr int kCantripPlanBoth = -3;
     virtual bool CantripPlanOf(const GameState& s, int controller, const CantripReadiness& r,
                                const TopDispositionView& view, int& plan_out) const
     { (void)s; (void)controller; (void)r; (void)view; (void)plan_out; return false; }

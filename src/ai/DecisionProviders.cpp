@@ -32554,7 +32554,10 @@ bool CycloneProvider::CantripPlanOf(const GameState& s, int controller, const Ca
                     if (is_junk) { plan_out = kCantripPlanDrop; return true; }
                 }
             }
-            if (is_junk)                     { plan = kJunk; }
+            // The fixed JUNK fulfilment can also be a SETUP candidate. Preserve
+            // both memberships: each role selects its best scorer independently,
+            // and an identical winner is emitted once by CantripPlanFilter.
+            if (is_junk)                    { plan = (eld && setup_exists) ? kCantripPlanBoth : kJunk; }
             else if (eld && setup_exists)    { plan = kSetup; }
             else                             { plan_out = kCantripPlanDrop; return true; }
         }
@@ -32569,6 +32572,10 @@ bool CycloneProvider::CantripPlanOf(const GameState& s, int controller, const Ca
         if (v.putback)
         {
             const bool ready = avail && !r.missing_piece && r.k >= 0 && r.k <= 1 && r.c >= 1 && r.aux[kAuxEldHand] > 0;
+            // Narrow the roles before selecting their winners. An overlapping
+            // candidate survives whenever either of its roles is still admitted.
+            if (!avail && plan == kCantripPlanBoth) { plan = kJunk; }
+            if (ready && plan == kCantripPlanBoth) { plan = kSetup; }
             if (!avail && plan != kJunk) { plan_out = kCantripPlanDrop; return true; }
             if (ready && plan != kSetup) { plan_out = kCantripPlanDrop; return true; }
         }
