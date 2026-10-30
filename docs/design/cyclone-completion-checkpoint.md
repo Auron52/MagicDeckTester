@@ -4,7 +4,7 @@ User scope: finish outstanding changes in `origin/cyclone-analysis:docs/design/c
 
 Working branch/worktree: `cyclone-finish`, `.claude/worktrees/cyclone-finish`, branched from `origin/cyclone-int` (3892d2159), rebasing onto current phase-1-2 6b655b71f. Original backup branches untouched. Primary checkout has an existing unrelated `test/ref_bench.json` edit; preserve it.
 
-Current stage: rebase complete, HEAD 6c8a68c70. Skipped obsolete GT-only f586cb53b; retained current-main GT as one consistent measurement (883 rows, zero stale/missing). Resolved engine/viewer conflicts preserving both changes, including BoundaryFan extra-turn depth restoration and meter-only census accounting. First post-rebase Release build is running, log primary build/scratch/cyclone-finish/rebase-build.log. Unit/scenarios/smoke pending before queued picks. Build only via build.sh; all recreatable output under primary build/scratch/cyclone-finish. Prior machine's scratch manifests/binaries are absent: reconstruct from tracked ledgers, rerun paired baselines on current integrated source.
+Current stage: all branch picks and corrective reviews integrated; rebased again onto current main `930cc5c33`. Source is committed. Final Release build session92782 is running (primary scratch/final-release-build.log), followed by unit/scenario/viewer gates and a fresh PGO build. Long comparison inputs are prepared but not launched. Do not start generation before the final re-evaluation.
 
 Independent reviews found extra required fixes:
 
@@ -13,9 +13,9 @@ Independent reviews found extra required fixes:
 - Q61 SeedPaySplits incomplete for partial floating mana; special-source signatures may fold distinct capabilities, Cascade Bluffs colourless face omitted; all-generic guards incomplete. Current-main PayContextDigest must include new seed-payment holds. Payment review agent drafting corrective patch in build/scratch/cyclone-finish/q61.
 - Q64 REV_CYCLERS rank 5 is before draws; proposed after-draw/before-Song order requires separate rank ~55 arm.
 - Viewer branch has an unfixed wide-board valve regression: EDF claude_s5_gi4 T4 loses existing Mariposa group. Exclude added generic-cycle groups before old valve, append within caps. menu-prefix checker currently exits zero even on failure; repair before using as gate.
-- Cache design remains interim 512MB/thread; broader floor+shared-overflow work belongs to cache audit, not a claim of completion here.
+- Initial review found a fixed512MB/thread policy. It has since been removed; shared RAM-sized budgets remain. Broader floor/shared-overflow design stays a separate project.
 
-Queued picks after rebase:
+Original pick queue (all integrated):
 
 - prunes: a6766244f e672a8f73 cd8bd730b 9764ea0b8 0b8c27fbb (then test PB before flip)
 - cost: 479bb66b6 76a733712
@@ -72,3 +72,5 @@ USER steering 2026-10-30: fixed 512MB/thread plan-cache policy is unwanted going
 - Viewer menu preservation/checker fix committed2bb51290d; Q61 fan-width and JUNK VERIFY observational reports4449e4a82. Separate failed-seed guard+test committed immediately afterward. Prepared source drafts are scratch only; applied implementations are tracked.
 - Pre-freeze fetch found current main moved four commits to930cc5c33 (continuation-cache pin identity fold, Midrange Burn discard, Treasure Hunt artifact+GT). Rebase onto that current snapshot before final Release/PGO build and measurements. Primary unrelated ref_bench.json remains untouched.
 - Final prepared pooled quality manifest:12542 games /1430 jobs /12 workers, including pruning12arms7200games, cast raw+blind3000, payment600, nested600, QC3 480, selected QC1 194, memory12normal168+300 shape. Other thread/pool variants remain independent process runs; quiet535-game cost gate separate. All require refreshed provenance and clean source plus matching PGO stamp before launch. No long simulations launched yet.
+
+- Rebase onto930cc5c33 completed with no conflicts; pre-freeze GT consistency883/883. Corrected bounded pin fixture uses implemented Bone Saw/Paradise Mantle (original scratch Memnite/Ornithopter were absent); ordinary cap32 omits combined line, explicit Street Wraith pin restores it even though Cloud of Faeries is family front, kept positions30/32. New check is tracked in test/viewer_cycle_pin_check.py. Final Release rebuild92782 includes all source changes plus current main; stale-seed guard green proof pending this build.
