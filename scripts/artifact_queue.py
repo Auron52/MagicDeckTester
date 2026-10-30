@@ -83,6 +83,7 @@ DEFAULT_CONFIG = {
     "min_drift": 0.02,
     "kind_weight": {"mulligan": 1.0, "valueleaf": 1.0},
     "recipe_overrides": {},
+    "mulligan_env": {},
     "leaf_follows_mulligan": False,
     "exclude": [],
     "lease_hours": 3,
@@ -483,6 +484,11 @@ def mull_plan(cfg, deck, inc_R, inc_depth, inc_budget, screened):
     A per-deck recipe_overrides entry still wins (a USER decision)."""
     plan = {"env": {}, "depth": None, "budget": None, "why": [], "beyond": False}
     R = max([r for r in (inc_R,) if isinstance(r, int)] or [0])
+    if deck in cfg.get("mulligan_env", {}):
+        # A USER decision recorded in the config, e.g. {"MTG_KEEP_REDISCOVER": "1"}: re-bucket from scratch instead
+        # of re-using the incumbent's buckets (USER 2026-10-30: Creature Giving K 21 -> 20, Overgrown Tomb merged).
+        plan["env"].update({k: str(v) for k, v in cfg["mulligan_env"][deck].items()})
+        plan["why"].append("env %s from mulligan_env" % ",".join("%s=%s" % kv for kv in sorted(plan["env"].items())))
     if deck in cfg.get("recipe_overrides", {}):
         plan["recipe"] = cfg["recipe_overrides"][deck]
         plan["why"].append("recipe %s from recipe_overrides" % plan["recipe"])
