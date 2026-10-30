@@ -2561,6 +2561,18 @@ public:
     // budget-starvation gate reads it).
     static TwinCacheProbe TwinNoWinCacheForTest(const GameState& first, const GameState& second, int depth,
                                                 int max_turns, bool second_main, long long second_budget_units = 0);
+    // MTG_NOWIN_TWIN_EST / MTG_NOWIN_TWIN_HEQ test hook. Search `first` at an unlimited budget (with
+    // nwtwin::t_upl = `first_upl` while it runs, when MTG_NOWIN_TWIN_HEQ is on -- what an emulated warm-up pass
+    // sets), optionally DROP the root's twin hint from both caches (so only its descendants' hints remain), then
+    // search `second` under a finite budget of `budget_units`, then `second` AGAIN under a fresh budget of the same
+    // size, all with the same caches and one FSLineWin nesting level deep (`separate_decisions`: a FRESH per-decision
+    // FSLineCache for each search, the game line cache kept -- three decisions of one game). Reports each search's units and win turn,
+    // `first`'s leaf count, and how many estimate hints MTG_NOWIN_TWIN_EST left.
+    struct TwinWaveProbe { int win[3] = {0, 0, 0}; long long units[3] = {0, 0, 0}; long long first_leaves = 0;
+                           long long est_hints = 0; long long est_wins = 0; };
+    static TwinWaveProbe TwinWaveProbeForTest(const GameState& first, const GameState& second, int depth, int max_turns,
+                                              bool second_main, long long budget_units, double first_upl,
+                                              bool drop_root_hint, bool separate_decisions = false);
     // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
     // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
     static int ProjectedAttackDamage(const GameState& state);

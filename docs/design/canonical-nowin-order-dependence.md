@@ -1,4 +1,4 @@
-# Canonical no-win sharing is not order-free (found 2026-10-29; fix built and measured the same day -- `MTG_NOWIN_ORDER_EXACT` + `MTG_NOWIN_TWIN_WAVE`, both default ON -- adoption is the USER's call, see Open)
+# Canonical no-win sharing is not order-free (found 2026-10-29; fix `MTG_NOWIN_ORDER_EXACT` + `MTG_NOWIN_TWIN_WAVE`; 2026-10-30 rebased onto e3725d76a, the residual churn root-caused, `MTG_NOWIN_TWIN_EST` + `MTG_NOWIN_TWIN_HEQ` added -- all default ON; held-out bar: half (1) met, half (2) NOT met for Alchemist +1 / Hinata +3 per 1,600 -- adoption is the USER's call, see Open)
 
 ## What
 
@@ -181,6 +181,49 @@ search is exactly the order-exact one. That is the sanctioned shape for a lossy 
 re-price work, it may not make a line unfindable"): at the shipped budgets it behaves like the canonical
 sharing, and every line it skips is findable with more budget. Inert with `MTG_NOWIN_ORDER_EXACT=0`.
 
+### `MTG_NOWIN_TWIN_EST` (heurarm `NOWIN_TWIN_EST`, DEFAULT ON 2026-10-30; `=0` -> the 2026-10-29 wave)
+
+A twin reuse is booked as a truncation, so a node whose subtree took one is not a refutation and was stored
+NOWHERE: every later query of that node (the next pass of the ladder at the same turn + depth, a twin from another
+branch, the next decision through the game line cache) searched it again at full price, its own children answered by
+the same reuses again. That is the BOOKING half of the residual below (`MTG_NOWIN_TWIN_BOOK=0`, the diagnostic that
+stores such a node as a proof, recovered exactly the games this lever recovers).
+
+Under the lever, a no-win whose ONLY cuts beneath were twin reuses (its truncation delta equals the delta of
+`nwtwin::t_book_ev`, the reuses' own bookings; no budget bind, no decision-ceiling stop, no truncated line) still
+stores no refutation, but leaves the twin hint, in both caches, holding its bound and its own measured units. A hint is
+exactly the kind of thing such a node is (an order's no-win under its cutoff, with what its search cost), and a hint
+is only ever served through the same gate (`units > share * Remaining`, never at an unlimited budget, never in a
+verify re-search) and booked as a cut. So nothing resting on a twin is ever stored or served as a proof; what changes
+is that an expensive estimate is reused instead of rebuilt. At an unlimited budget no reuse happens, so no such node
+exists: inert by construction.
+
+The WIN half. The per-decision cache keeps a found win whatever was cut beneath it; the game line cache keeps one only
+from a complete search ("best win at or before the cutoff"). So a win found under twin reuses was lost to every later
+DECISION, which searched the node again (Hinata s1610001 gi1154 below: T2's pass 4 cost 5 units under the canonical
+key, where T1's pass 5 had stored the turn-2 nodes, and 10,847 without them). Under the lever such a win is kept in the
+game line cache as a WIN ESTIMATE: its line (under the ORDER-EXACT win key plus a private salt, so the index-encoded
+line is replayable by construction) and its search's units. A later query takes it only through the same gate, only
+when the line beats its cutoff, and books it as a cut: the line is real, but whether it is the BEST is exactly what
+the reuses beneath it left open.
+
+### `MTG_NOWIN_TWIN_HEQ` (heurarm `NOWIN_TWIN_HEQ`, DEFAULT ON 2026-10-30; `=0` -> raw warm-up units)
+
+The EMULATED ladder (`value_play.ladder: "emulated"`: Landfall, Melira Pod, KittyEquipment, Niv-Mizzet) plays its
+warm-up passes on the value leaf (or no leaf) and gates the next pass on RECONSTRUCTED heuristic costs, `ch(k) =
+cost(k) + R x leaves(k)`, on the premise that *"the tree of a pass is identical under both leaves"*. The twin gate
+broke that premise: in a warm-up a twin costs its interior units only (a value leaf charges none), so the gate stays
+shut and the twin is re-searched, where the committing heuristic pass at the same depth would price the same node at
+its rollouts and reuse it. The re-searched twins add LEAVES, which the reconstruction multiplies by R, so a few dozen
+units of warm-up work read as hundreds of heuristic ones and the ladder calls its committing pass a depth early (the
+Landfall games below: +18 to +50 units and the same number of leaves at pass 3).
+
+Under the lever, while an emulated warm-up pass runs (bounded budgets only), a twin hint stored in it prices its node
+in the committing leaf's currency, `units + R_at(d) x leaves` (`nwtwin::t_upl`, set by `run_pass`), so the gate makes
+the call it would make for the committing pass's identical node. It re-prices; it admits nothing at an unlimited
+budget (the gate never opens there). Every other pass, and every other ladder, prices in raw units, which is their
+own gating currency (a value ladder gates on value-pass units).
+
 ## Witness results (17779dce0 + the fix, `--depth 8 --budget-ms 0`, `MTG_SUBSET_SAC_OUTLETS=1 MTG_BP_DEV_SEQ=0`)
 
 | run | result |
@@ -195,8 +238,9 @@ sharing, and every line it skips is findable with more budget. Inert with `MTG_N
 | fix + `MTG_NOWIN_FSL_VERIFY=1` | T3; 3 hits, 0 cross, 0 WRONG |
 | `=0` + `MTG_GAME_LINE_CACHE_VERIFY=1` (fixed) | T3 (plays the fresh answer); verified=13 DISAGREE=1 MATERIAL=1 |
 | `MTG_BP_UNIFORM_DEV=0`, fix / `=0` | T3 / T4 |
+| rebased onto e3725d76a (2026-10-30): `=0` / fix | **T3 / T3** -- upstream's `MTG_COMBAT_STABLE_SOURCES` (damaging Lackeys resolved by identity) and `MTG_LACKEY_DECLINE` (the decline searched) removed the order-dependent site this witness hit; 2 game-cache no-win hits, 0 twin reuses |
 
-## Held-out A/B
+## Held-out A/B #1 (the 2026-10-29 shape: order-exact + twin wave, no EST / HEQ)
 
 Rebased onto 33c9189c7 (the Goblins echo fix and the breakpoint canon wave). One pooled batch on held-out seed
 1490001: every suite deck (39) at its shipped play setting, 400 paired games per arm (`seed`/`game_index`
@@ -271,6 +315,161 @@ changes** in 600 paired games, and the order-exact search costs **1.95x** the un
 2.7x, Galadriel 2.4x, slivers 2.3x, Fungus 2.0x, Knights 2.0x). That is the canonical key's sharing at an
 unlimited budget -- exactly the reuse that was unsound -- and the wave cannot buy it back there by design.
 
+## 2026-10-30: rebase, the residual root-caused, `MTG_NOWIN_TWIN_EST` + `MTG_NOWIN_TWIN_HEQ`
+
+**Rebase.** Onto e3725d76a (branch `wip/nowin-order-exact-2`; `wip/nowin-order-exact` keeps the 2026-10-29 commit).
+One conflict, the `HeuristicArm.h` slot tail (both sides' slots kept, in order, matching `kNames`). With
+`MTG_NOWIN_ORDER_EXACT=0` the rebased tree is byte-identical to the tip: 39 decks x 10 games (seed 1600001), every
+digest and every game's units equal.
+
+**The adoption bar, restated by the USER:** *"The no win cache should be tested as with every other such option."*
+So (1) every slower game recovers at `--depth 8 --budget-ms 0` (or is CLEAR clairvoyance) AND (2) every deck's net is
+<= 0 vs the committed tree on a large held-out sample.
+
+### Every residual slower game, traced
+
+Single-game repros at the shipped play setting (`MTG_TRACE=search` prints each ladder pass's cost; the diagnostic
+counters added to that line count the twin reuses taken and the twins RE-SEARCHED because a covering hint existed
+but cost <= share x Remaining -- "sub-gate twins" -- with their hint units and their real re-search units, which agree
+to within a few units in every game). The old A/B's ten slower games, re-run on the rebased tree (Elementals
+s1490001 gi95 is no longer slower there), plus every slower game of the measurements below:
+
+| game | canon | 10-29 wave | where the units went | +EST | +EST+HEQ |
+|---|---|---|---|---|---|
+| Elementals s1490001 gi249 | 6 | 7 | T2: T1's reuses left the turn-2 nodes unstored; pass 3 53 -> 112, pass 4 2,199 -> 4,994 units, pass 5 refused (BOOKING) | 6 | 6 |
+| Elementals s1530001 gi665 | 5 | 6 | T1 pass 4 7,423 -> 7,715, pass 5 refused; `MTG_NOWIN_TWIN_BOOK=0` 7,479, admitted (BOOKING) | 5 | 5 |
+| Melira s1490001 gi214 | 6 | 7 | booking (recovered by BOOK=0) | 6 | 6 |
+| Landfall s1530001 gi1069 | 5 | 6 | emulated V warm-up pass 3: 7 sub-gate twins = +50 units AND +48 leaves; reconstructed `ch` 847 -> 1,118, so pass 4 is called the committing (H) pass and the d5 H pass misses the T5 line (CURRENCY) | 6 | 5 |
+| Landfall s1490001 gi139 | 5 | 6 | the same: V pass 3, 3 sub-gate twins, +18 units / +18 leaves, `ch` 631 -> 732 | 6 | 5 |
+| Landfall s1530001 gi648 | 5 | 6 | the same: 3 sub-gate twins, +20 / +20, `ch` 857 -> 969 | 6 | 5 |
+| Landfall s1530001 gi729 | 6 | 8 | the same, at T1 / T2 | 8 | 6 |
+| Hinata s1610001 gi1154 | 7 | -- | T2 pass 4: 5 units canonical (turn-2 nodes stored by T1's pass 5) vs 10,847; the missing entries are WINS found under reuses, which the game cache keeps only from a complete search (BOOKING, win half) | 8 (no-win EST) | 7 (with the win estimate) |
+| Elementals s1530001 gi492 | 4 | 5 | value ladder T1 pass 3: 23 sub-gate twins = +96 units (8,189 -> 8,285, +1.2%); pass 4's start gate (alpha 8.8 under the value leaf) admits 77.7k <= 78.4k in canonical and refuses 79.5k > 77.5k (SUB-GATE) | 5 | 5 |
+| Elementals s1530001 gi1098 | 5 | 6 | T1 pass 4 9,170 -> 9,870: 114 sub-gate re-searches (424 units) + booking; pass 5 refused (SUB-GATE + BOOKING) | 6 | 6 |
+| Melira s1490001 gi47 | 4 | -- | H pass 3: 2 sub-gate twins = +92 units (9,500 -> 9,592); pass 4 refused (canonical's pass 4 found the T4 line) (SUB-GATE) | 5 | 5 |
+| Elementals s1610001 gi1280 | 5 | -- | T1 pass 4: 192 sub-gate re-searches, +665 units; pass 5 refused (SUB-GATE) | -- | 6 |
+| Melira s1610001 gi592 | 4 | -- | H pass 3: 9 sub-gate twins, +354 units; pass 4 refused (SUB-GATE) | -- | 5 |
+| Hinata s1630001 gi150 | 5 | -- | T1 pass 4: 164 sub-gate re-searches, +791 units (842 metered); pass 5 refused (SUB-GATE) | -- | 6 |
+| Hinata s1630001 gi371 | 5 | -- | T1 pass 4: 31 sub-gate re-searches, +187 units (219 metered); pass 5 refused (SUB-GATE) | -- | 6 |
+| Alchemist s1630001 gi140 | 6 | -- | T1 passes 1-5 complete in both arms, pass 5 +270 units (97 sub-gate re-searches); the escalation that follows starts on 12,212 instead of 12,539 units left (SUB-GATE) | -- | 7 |
+| Hinata s1630001 gi1228 | 6 | -- | T3 pass 3 3,457 -> 3,621 units (12 sub-gate re-searches, 144 units); pass 4 refused where canonical's found the T6 line (SUB-GATE) | -- | 8 |
+
+So there are exactly three mechanisms, and every slower game is one of them:
+
+1. **BOOKING** (no-win and win). A reuse is booked as a cut, so every ancestor of one was stored nowhere and was
+   rebuilt at full price by the next pass, the next twin and the next decision. Fixed soundly by `MTG_NOWIN_TWIN_EST`
+   (above): the ancestor becomes the same kind of gated, booked estimate as the reuse itself.
+2. **CURRENCY** (emulated ladder only). The twin gate priced a warm-up's twin in value-leaf units, breaking the
+   "same tree under both leaves" premise the emulated gate's reconstruction rests on; the extra leaves are multiplied
+   by R. Fixed soundly by `MTG_NOWIN_TWIN_HEQ` (above).
+3. **SUB-GATE twins.** A twin whose re-search costs <= share x Remaining is re-searched -- by design: that is the
+   order-exact soundness price the gate decides to pay. Each costs a few units (4-50), a pass carries a few to a
+   couple of hundred of them (+1 to +5% of the pass), and the ladder's start gate extrapolates the next pass's cost
+   QUADRATICALLY from the last two (`c_k^2 / c_{k-1}`) against a fixed remaining budget, so a 1% heavier pass k moves
+   pass k+1's admission by ~2%. Games sitting within that margin of the gate lose the deeper pass. The gate is priced
+   in the currency its ladder gates on in every one of these games (raw units in a value or heuristic ladder, the
+   committing leaf's after HEQ), so there is no mispricing left to correct: the re-search is the cost of the fix.
+
+**On the old A/B seeds** (NOT held out for these levers: EST and HEQ were built on their slower games; seeds 1490001 x
+400 + 1530001 x 1,200 per deck, the three decks the 10-29 A/B left positive), vs canonical: EST + HEQ (no win half
+yet) Elementals +2 (gi492, gi1098: SUB-GATE), Landfall 0, Melira +1 (gi47: SUB-GATE), 0 faster; EST alone (`HEQ=0`)
+leaves Landfall at +5 -- the currency defect is the whole of Landfall's residual.
+
+### Held-out A/B #2 (seed 1610001; EST without the win half, + HEQ)
+
+One pooled batch, every suite deck (39) at its shipped play setting, 400 paired games per deck, three arms (canonical
+`MTG_NOWIN_ORDER_EXACT=0`; the new shape; the 10-29 shape `MTG_NOWIN_TWIN_EST=0 MTG_NOWIN_TWIN_HEQ=0`), `MTG_PGO=0`,
+`MTG_RSS_CAP_GB=43`, 0 abandoned. New vs canonical: **0 faster / 0 slower in all 39 decks**, units 1.0049x. The 10-29
+shape on the same games: 2 slower (Dragons, Prevent Damage) / 2 faster (Alchemist, Landfall), units 1.021x. Sized up to
+1,600 (seed 1610001, gi 400-1599) on every deck that changed play at all (Elementals, Hinata, KittyEquipment, Landfall,
+Melira, Colossus): Elementals +1 (gi1280), Hinata +1 (gi1154), Melira +1 (gi592), the other three 0; 0 faster. Hinata
+gi1154 is what found the win half of BOOKING (the game cache's win estimate, now part of `MTG_NOWIN_TWIN_EST`), which
+recovers it; the other two are SUB-GATE. That made 1610001 a development seed, so the shipped shape was measured again
+on a fresh one.
+
+### Held-out A/B #3 -- the shipped shape (seed 1630001)
+
+The final tree (order-exact + twin wave + EST incl. the win estimate + HEQ, all default ON) vs canonical, one pooled
+batch, 39 decks x 400 paired games, same settings, 0 abandoned; the six decks marked 1,600 were sized up in a second
+pooled batch (below):
+
+| deck | games | faster | slower | play changed | net | units new / canon |
+|---|---|---|---|---|---|---|
+| alchemist | 1600 | 0 | 1 | 2 | **+1** | 1.001 |
+| angels | 400 | 0 | 0 | 0 | +0 | 1.044 |
+| antilife | 400 | 0 | 0 | 0 | +0 | 1.001 |
+| auras | 400 | 0 | 0 | 0 | +0 | 1.008 |
+| breaching | 400 | 0 | 0 | 0 | +0 | 1.026 |
+| bruna | 1600 | 0 | 0 | 1 | +0 | 1.001 |
+| burn | 400 | 0 | 0 | 0 | +0 | 1.001 |
+| colossus | 400 | 0 | 0 | 0 | +0 | 1.013 |
+| creature_giving | 400 | 0 | 0 | 0 | +0 | 1.001 |
+| critter | 400 | 0 | 0 | 0 | +0 | 1.114 |
+| dragons | 400 | 0 | 0 | 0 | +0 | 0.967 |
+| dragonstorm | 400 | 0 | 0 | 0 | +0 | 1.035 |
+| edf | 400 | 0 | 0 | 0 | +0 | 1.004 |
+| elementals | 1600 | 0 | 0 | 2 | +0 | 1.002 |
+| fivecolour | 400 | 0 | 0 | 0 | +0 | 1.000 |
+| fluctuator | 400 | 0 | 0 | 0 | +0 | 0.988 |
+| fungusv3 | 400 | 0 | 0 | 0 | +0 | 1.002 |
+| galadriel | 400 | 0 | 0 | 0 | +0 | 1.018 |
+| giants | 400 | 0 | 0 | 0 | +0 | 1.000 |
+| goblins | 400 | 0 | 0 | 0 | +0 | 1.011 |
+| hinata | 1600 | 1 | 3 | 6 | **+3** | 1.001 |
+| kittyv3 | 400 | 0 | 0 | 0 | +0 | 1.000 |
+| knights | 400 | 0 | 0 | 0 | +0 | 1.011 |
+| landfall | 400 | 0 | 0 | 0 | +0 | 1.002 |
+| lhc | 400 | 0 | 0 | 0 | +0 | 1.031 |
+| melira | 1600 | 0 | 0 | 21 | +0 | 1.000 |
+| minotaur | 400 | 0 | 0 | 0 | +0 | 1.014 |
+| mirrorwing | 400 | 0 | 0 | 0 | +0 | 1.010 |
+| niv | 400 | 0 | 0 | 0 | +0 | 1.000 |
+| pd | 400 | 0 | 0 | 0 | +0 | 1.000 |
+| pirates | 400 | 0 | 0 | 0 | +0 | 1.011 |
+| selesnyav2 | 400 | 0 | 0 | 0 | +0 | 1.028 |
+| slivers | 400 | 0 | 0 | 0 | +0 | 1.003 |
+| snow | 400 | 0 | 0 | 0 | +0 | 1.000 |
+| soldiers | 400 | 0 | 0 | 0 | +0 | 1.066 |
+| stompy | 400 | 0 | 0 | 0 | +0 | 1.020 |
+| th | 400 | 0 | 0 | 0 | +0 | 1.012 |
+| vampires | 1600 | 0 | 0 | 2 | +0 | 1.015 |
+| whiteknights | 400 | 0 | 0 | 0 | +0 | 1.048 |
+| **TOTAL** | 22800 | 1 | 4 | 34 | +4 | 1.0019 |
+
+At 400 games per deck the 39-deck total was 0 faster / 3 slower (Alchemist gi140, Hinata gi150, gi371), units
+**1.0048x**. Sized up to 1,600 (gi 400-1599) on the two nonzero decks and on every deck that changed play at all
+(Bruna, Elementals, Melira, Vampires): one more Hinata game slower (gi1228, 6 -> 8) and one faster (gi1024, 6 -> 5);
+the other four stay at 0. **Final: 37 decks net 0, Alchemist +1 / 1,600, Hinata +3 / 1,600** (+0.0006 and +0.0019 t
+per game). Every one of the four slower games is SUB-GATE (table above; Hinata gi1228: T3 pass 3 3,457 -> 3,621 units,
+12 sub-gate re-searches = 144 of them, pass 4 refused where canonical's found the T6 line).
+
+**Recovery at `--depth 8 --budget-ms 0`** (abandon 20M units, both arms): all ten slower games found on these samples
+-- the four above plus Elementals s1610001 gi1280, Hinata s1610001 gi1154, Melira s1610001 gi592, Elementals
+s1530001 gi492 / gi1098, Melira s1490001 gi47 -- reach canonical's shipping win turn or better, and the two arms play
+the SAME game at d8 b0 (identical digests):
+
+| game | shipping canon / new | d8 b0 canon = new |
+|---|---|---|
+| Alchemist s1630001 gi140 | 6 / 7 | 6 |
+| Hinata s1630001 gi150 | 5 / 6 | 5 |
+| Hinata s1630001 gi371 | 5 / 6 | 5 |
+| Hinata s1630001 gi1228 | 6 / 8 | 5 |
+| Elementals s1610001 gi1280 | 5 / 6 | 5 |
+| Hinata s1610001 gi1154 | 7 / 8 (before the win estimate; 7 after) | 7 |
+| Melira s1610001 gi592 | 4 / 5 | 4 |
+| Elementals s1530001 gi492 | 4 / 5 | 4 |
+| Elementals s1530001 gi1098 | 5 / 6 | 5 |
+| Melira s1490001 gi47 | 4 / 5 | 4 |
+
+So **half (1) of the bar is met** (every slower game is budget churn and recovers at d8 b0; none needs the
+clairvoyance check) and **half (2) is not, for Alchemist (+1) and Hinata (+3)**, every slower game of the SUB-GATE kind.
+
+**Unlimited budget** (`--depth 8 --budget-ms 0`, `abandon_units` 3M, seed 1620001, the 24 cheaper decks x 5 games,
+three arms): the new shape and the 10-29 shape are **byte-identical in all 120 games, units included** (EST and HEQ
+cannot act without a finite budget), and new vs canonical has **0 play changes** at **1.74x** units.
+
+The witness (Goblins s1330145 gi144, d8 b0) now wins T3 under BOTH arms on the rebased tree (row above).
+
 ## Unit tests
 
 `test/unit/test_nowin_order_exact.cpp`, through `TurnSolver::TwinNoWinCacheForTest` (searches `first`, then
@@ -287,18 +486,52 @@ rotates the battlefield.
 * control: an exact transposition is still answered from the cache;
 * control: with `NOWIN_ORDER_EXACT` pinned OFF the twin IS answered by the other order's refutation.
 
+`TurnSolver::TwinWaveProbeForTest` (search `first` unlimited, optionally drop the root's own twin hint so only its
+descendants' remain, then search `second` twice under a finite budget, same caches) covers the two sub-levers:
+
+* EST: under 2,000 units `second`'s first search reuses its children's twins, leaves an estimate hint at the root, and
+  its second search is answered by it (`MTG_NOWIN_TWIN_EST=0 mtg-test` fails it); control: pinned OFF, no hint and the
+  root is searched again; at an unlimited budget no hint is ever left and the twin's own search completes as a proof;
+* HEQ: a hint stored with `t_upl = 1000` prices its node at `units + 1000 x leaves`, so under a budget sized to put
+  the gate between the two prices the twin is reused, and with raw units (or `NOWIN_TWIN_HEQ` pinned OFF) it is
+  searched (`MTG_NOWIN_TWIN_HEQ=0 mtg-test` fails it);
+* EST's win half: three DECISIONS of one game (a fresh per-decision cache each, the game line cache kept; opponent at
+  12, a turn-7 kill): the second decision finds the win while its no-win siblings are twin reuses, keeps it as a
+  win estimate, and the third is answered by it at 0 units; control: pinned OFF, no estimate and the third decision
+  searches the win again.
+
+Each of `MTG_NOWIN_ORDER_EXACT=0`, `MTG_NOWIN_TWIN_WAVE=0`, `MTG_NOWIN_TWIN_EST=0`, `MTG_NOWIN_TWIN_HEQ=0` fails its own
+cases; the full suite is 2168/2168 under the defaults (rebased tree, 2026-10-30).
+
 ## Open
 
-* **The USER's decision: adopt with the measured churn, or not.** The shipped shape (order-exact + twin wave) is
-  sound at every budget the completeness invariant names (the witness wins T3 at d8 b0; 0 play changes and 0 wrong
-  hits across 600 unlimited games) and costs +1.0% units at shipping, but leaves Elementals and Landfall at +5 /
-  1,600 games and Melira at +1 / 1,600, every slower game churn that recovers at d8 b0. The order-exact key alone
-  (`MTG_NOWIN_TWIN_WAVE=0`) is the simpler shape and costs +9.7% units and +25 / 15,600 (11 decks > 0). Ideas for
-  the residual, unmeasured: store a reuse's ancestors as GATED estimates (served only under the same budget gate)
-  instead of not at all -- the booking test above bounds what that can buy; raise those three decks' budgets
-  (settings, not search).
-* **Unlimited-budget cost: 1.95x units** (Dragons 7.6x). Inherent: it IS the unsound sharing. Anything that searches
-  at `--budget-ms 0` -- the unbudgeted backstop rows, unbounded label search for value-leaf generation -- pays it.
+* **The USER's decision: adopt or not -- half (2) of the bar is NOT met, and cannot be met soundly as it stands.**
+  The shipped shape (order-exact + twin wave + EST + HEQ, all default ON) is sound at every budget the completeness
+  invariant names (identical to the order-exact search at an unlimited budget; every slower game recovers at d8 b0)
+  and costs +0.5% units at shipping. On the final held-out sample (seed 1630001) it is net 0 on 37 of 39 decks and
+  **Alchemist +1 / 1,600, Hinata +3 / 1,600** (0 / 1 faster). Before EST + HEQ the same bar read Elementals +5,
+  Landfall +5, Melira +1 (10-29 shape, seeds 1490001 + 1530001). What is left is the SUB-GATE mechanism (above): twins
+  the gate re-searches because each costs <= share x Remaining, i.e. the soundness price itself, tipping the ladder's
+  quadratic start gate in the games that sit within ~1-2% of it. Removing it means spending LESS on exactness at the
+  shipped budgets, which no re-pricing can do; the shapes that would, all the USER's call:
+  1. accept the residual (Hinata +3 / Alchemist +1 per 1,600, ~0.002 t / game) as the order-exact price;
+  2. the share (`MTG_NOWIN_TWIN_SHARE`, not tuned here by direction): as share -> 0 every twin with a hint is reused at
+     any finite budget (canonical cost at shipping, still exact at an unlimited budget, where the gate never opens);
+  3. budgets (settings): the decks that move (Hinata, Alchemist; Elementals / Melira on other samples) a little more;
+  4. a PASS-LEVEL fill-in wave instead of the per-node gate: reuse every twin in every pass (the ladder's admissions
+     become canonical's), then re-search the committed pass with reuse off when budget remains -- exact at an
+     unlimited or depth-capped budget, canonical-like whenever the ladder is budget-bound, and it spends on depth
+     before within-turn exactness, i.e. NOT turn-complete (the USER's stated preference). Unmeasured.
+* **Is the fix still needed on the rebased tree?** The witness no longer reproduces under the canonical key (upstream's
+  Lackey fixes removed its site). Yes. The instrument at shipping settings on the rebased tree (seed 1640001, all 39 decks x 40 games per arm,
+`MTG_NOWIN_FSL_VERIFY=1`): canonical **177,068** game-cache no-win hits, 109,926 (62%) cross-order, **16 WRONG** (all
+Hinata, all cross-order, 1-ply nodes at turns 4-5 whose fresh search wins inside the cutoff -- the beyond-horizon
+rollout order dependence of the first census), 1 unverified; the new shape 65,722 hits, **0 WRONG** (6 classed cross,
+all on Stompy and all agreeing: attribute permutations among same-named copies that `FsOrderSig` cannot see, the
+item below). The per-decision cache took no hit in either arm.
+* **Unlimited-budget cost: 1.74x units** on the d8 b0 sample (24 decks x 5, seed 1620001; it was 1.95x on the 10-29
+  sample, Dragons 7.6x). Inherent: it IS the unsound sharing. Anything that searches at `--budget-ms 0` -- the
+  unbudgeted backstop rows, unbounded label search for value-leaf generation -- pays it.
 * **Residual wrong hits under the fix: 2 of 691,005** (both one node of one Hinata game: seed 1480164 gi163, turn 6,
   depth 1, cutoff 7, fresh T7 beyond the horizon), game line cache only, SAME order on both sides, and the stored
   state's own fresh search also finds T7. Attribution (`MTG_NOWIN_FSL_VERIFY_MODE`): the disagreement disappears when
@@ -307,15 +540,15 @@ rotates the battlefield.
   `MTG_GAME_LINE_CACHE` (an answer that depends on per-decision state its Tag does not fold), not order dependence.
   Not reproduced at d8 b0 (79,400 hits on that game unbudgeted, 0 wrong) or in the per-decision cache; past-cutoff
   win reuse (`MTG_FSL_PASTCUT_PROBE`) is not it (0 wider hits). Not root-caused.
-* **The witness's own site is a Goblins play defect, outside this fix:** `FireCombatDamageCheatIntoPlay` iterates
-  stale battlefield POSITIONS, so an ETB that removes an earlier permanent (Goblin Chainwhirler killing the
-  opponent's 1/1) drops or misattributes a later Lackey trigger depending on board order; and the Lackey's put is a
-  "may" whose decline is never a searched option, which is the line the T3 kill actually needs. Each moves Goblins
-  play and needs its own A/B.
+* **The witness's own site** (`FireCombatDamageCheatIntoPlay`'s stale positions; the Lackey decline never searched)
+  was fixed upstream by `MTG_COMBAT_STABLE_SOURCES` and `MTG_LACKEY_DECLINE`; on the rebased tree both arms win T3.
 * **`FsOrderSig`'s resolution** (hand names, battlefield name + copy id, in order) cannot see an attribute permutation
   among same-named copies (which of two identical Lackeys is tapped). WIN lines rely on it already and the order-exact
-  no-win key inherits it; the instrument's finer signature found no such cross hit under the fix in any sample.
-* **Not done here:** smoke / regression / overnight ground truth is not re-accepted (the shipped levers changed play
-  in 45 of 15,600 A/B games, so those tiers will report moved digests until the lander accepts them); the legacy
-  single-key path (`MTG_FSL_SPLIT_KEYS=0`) gets the order-exact key but not the wave (A/B hatch only); not pushed, so
-  no Windows CI.
+  no-win key inherits it; the instrument's finer signature found no such cross hit under the fix in the 2026-10-29
+  samples, and 6 on seed 1640001 (Stompy), all agreeing with their fresh re-search.
+* **The instrument does not verify twin REUSES** (`MTG_NOWIN_FSL_VERIFY` checks cache hits on the node's own key); a
+  reuse is an estimate by construction and never served at an unlimited budget.
+* **Not done here:** smoke / regression / overnight ground truth is not re-accepted (the shipped levers move play: 34
+  changed games in the final 22,800, so those tiers will report moved digests until the lander accepts them); the
+  legacy single-key path (`MTG_FSL_SPLIT_KEYS=0`) gets the order-exact key but not the wave, EST or HEQ (A/B hatch
+  only); not pushed, so no Windows CI.

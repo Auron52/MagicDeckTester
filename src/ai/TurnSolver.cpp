@@ -89080,6 +89080,14 @@ static double NowinTwinShare()
       return x > 0.0 ? x : 0.0005; }();
     return v;
 }
+// MTG_NOWIN_TWIN_EST's game-cache WIN estimate: a win line found by a search cut only by twin reuses, under the
+// ORDER-EXACT win key (so the index-encoded line is replayable) folded with a private salt nothing else computes.
+inline TranspositionTable::Key FSEstWinKey(const TranspositionTable::Key& key_win)
+{
+    TranspositionTable::Key k = key_win;
+    Fold(k, 0x5EED0E57A7E0F1A9ULL);
+    return k;
+}
 inline TranspositionTable::Key FSNowinTwinKey(const TranspositionTable::Key& canonical)
 {
     TranspositionTable::Key k = canonical;
@@ -89089,9 +89097,49 @@ inline TranspositionTable::Key FSNowinTwinKey(const TranspositionTable::Key& can
 namespace nwtwin
 {
     inline std::atomic<long long> g_hints{0}, g_reused_lc{0}, g_reused_gl{0};
+    // MTG_TRACE=search diagnostics (counters only): twin reuses taken, and twins RE-SEARCHED because the gate stayed
+    // shut (a covering hint existed but cost <= share * Remaining) -- how many, the hints' units, and what the
+    // outermost such re-searches actually cost. Cumulative per thread; the pass-done trace line prints them.
+    inline thread_local long long t_reuse = 0, t_rs_n = 0, t_rs_hint_u = 0, t_rs_u = 0;
+    // Truncation events booked BY twin reuses (each bumps g_fs_trunc_events too): a node whose truncation delta equals
+    // its delta here was cut only by reuses -- an estimate, never a proof (see EstOn).
+    inline thread_local unsigned long long t_book_ev = 0;
+    inline std::atomic<long long> g_est_hints{0}, g_est_wins{0}, g_est_win_reused{0};
+    // MTG_NOWIN_TWIN_EST: a no-win whose ONLY cuts beneath were twin reuses is not a refutation and is stored as none,
+    // but it is an estimate of exactly the twin hint's kind (an order's no-win under the cutoff, with what its search
+    // cost), so it also leaves the hint -- served only through the same budget gate and booked as a cut like any reuse.
+    inline bool EstOn()
+    {
+        static const bool env = EnvOn("MTG_NOWIN_TWIN_EST", true);   // DEFAULT ON; =0 -> a reuse's ancestors leave no hint
+        return heurarm::Flag(heurarm::NOWIN_TWIN_EST, env);
+    }
+    // MTG_NOWIN_TWIN_HEQ: the committing leaf's units per leaf while an EMULATED-ladder warm-up pass runs (0 otherwise;
+    // set by FullSearchLine's run_pass). A twin hint stored in such a pass prices its node as units + t_upl x leaves --
+    // the reconstruction the emulated gate reads -- so the twin gate makes the same call it would make for the
+    // committing pass's identical node. 0 = raw units (every other pass, and the lever off).
+    inline thread_local double t_upl = 0.0;
+    inline bool HeqOn()
+    {
+        static const bool env = EnvOn("MTG_NOWIN_TWIN_HEQ", true);   // DEFAULT ON; =0 -> raw warm-up units
+        return heurarm::Flag(heurarm::NOWIN_TWIN_HEQ, env);
+    }
+    inline thread_local int       t_rs_active = 0;
+    struct ResearchMeter
+    {
+        const SearchBudget* b = nullptr; long long u0 = 0; bool on = false;
+        void Start(const SearchBudget* bb, long long hint_u)
+        {
+            if (on || bb == nullptr) { return; }
+            on = true; b = bb; u0 = bb->Used(); t_rs_hint_u += hint_u;
+            if (t_rs_active == 0) { ++t_rs_n; }
+            ++t_rs_active;
+        }
+        ~ResearchMeter() { if (on) { if (--t_rs_active == 0) { t_rs_u += b->Used() - u0; } } }
+    };
     struct Reporter { ~Reporter() { if (g_hints.load() == 0) { return; }   // a per-job arm can set it: print on use
         std::cerr << "[nowin-twin-wave] hints=" << g_hints.load() << " reused(lc)=" << g_reused_lc.load()
-                  << " reused(gamelc)=" << g_reused_gl.load() << "\n"; } };
+                  << " reused(gamelc)=" << g_reused_gl.load() << " est_hints=" << g_est_hints.load()
+                  << " est_wins=" << g_est_wins.load() << " est_win_reused=" << g_est_win_reused.load() << "\n"; } };
     inline Reporter g_reporter;
 }
 // Store a twin-refutation hint (see above): the widest bound any order proved, and what that order's search cost.
@@ -89540,6 +89588,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // nothing reads a no-win entry's order_sig, so this is the only reader).
     const bool nw_verify = nwverify::On();
     std::uint64_t nw_sig = 0;
+    nwtwin::ResearchMeter twin_rs;   // diagnostics only (see nwtwin::t_rs_n)
     if (lc != nullptr)
     {
         key_base = BuildSimKeyBase(state, max_turns, second_main);
@@ -89578,6 +89627,23 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     { NwVerifyCheck(1, state, depth, max_turns, cutoff, second_main, budget, tt, gn->second.nowin_bound, gn->second.order_sig, key_nw); }
                     if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
+                }
+            }
+            // MTG_NOWIN_TWIN_EST: no proof for this node, but an earlier decision's search of it found a WIN while cut only
+            // by twin reuses. The line is real and replayable (order-exact key); whether it is the BEST is what the
+            // reuses left open -- so it is an estimate, served through the twin gate and booked as a cut.
+            if (!gamelc_hit && !(key_win == key) && budget != nullptr && !budget->Unlimited() && nwverify::t_in == 0
+                && NowinOrderExactOn() && NowinTwinWaveOn() && nwtwin::EstOn())
+            {
+                auto ge = gamelc::t_map.find(gamelc::Tag(FSEstWinKey(key_win), state));
+                if (ge != gamelc::t_map.end() && ge->second.line.win_turn <= cutoff   // past the cutoff it answers nothing
+                    && static_cast<long long>(ge->second.order_sig) > SearchBudget::SatMulD(NowinTwinShare(), budget->Remaining()))
+                {
+                    nwtwin::g_est_win_reused.fetch_add(1, std::memory_order_relaxed);
+                    ++nwtwin::t_reuse;
+                    ++g_fs_trunc_events; ++nwtwin::t_book_ev;
+                    ++g_fs_memo_win_hits;
+                    return ge->second.line;
                 }
             }
             if (gamelc_hit)
@@ -89687,14 +89753,26 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     if (gh != gamelc::t_map.end() && cutoff <= gh->second.nowin_bound
                         && static_cast<long long>(gh->second.order_sig) > thresh) { reuse = 2; }
                 }
+                if (reuse == 0)
+                {
+                    long long hu = -1;
+                    if (ith != lc->end() && cutoff <= ith->second.nowin_bound) { hu = static_cast<long long>(ith->second.order_sig); }
+                    else if (gamelc::On() && g_fsline_nest > 0 && !gamelc_bypass)
+                    {
+                        auto gh = gamelc::t_map.find(gamelc::Tag(tk, state));
+                        if (gh != gamelc::t_map.end() && cutoff <= gh->second.nowin_bound) { hu = static_cast<long long>(gh->second.order_sig); }
+                    }
+                    if (hu >= 0) { twin_rs.Start(budget, hu); }
+                }
                 if (reuse != 0)
                 {
+                    ++nwtwin::t_reuse;
                     (reuse == 1 ? nwtwin::g_reused_lc : nwtwin::g_reused_gl).fetch_add(1, std::memory_order_relaxed);
                     // MTG_NOWIN_TWIN_BOOK=0 (DIAGNOSTIC, default 1): do not book the reuse as a cut, so ancestors are
                     // stored as if it were a proof. Measures what the booking costs; never a shipping setting (an
                     // estimate would then outlive the budget pressure that admitted it).
                     static const bool s_book = EnvOn("MTG_NOWIN_TWIN_BOOK", true);
-                    if (s_book) { ++g_fs_trunc_events; }
+                    if (s_book) { ++g_fs_trunc_events; ++nwtwin::t_book_ev; }
                     ++g_fs_memo_nowin_hits;
                     return { max_turns + 1, {} };
                 }
@@ -90104,12 +90182,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // watermark for the budget cuts that never book a truncation (see SearchBudget.h).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
     const unsigned long long binds_at_entry = budgetbind::t_binds;
+    const unsigned long long twbook_at_entry = nwtwin::t_book_ev;   // MTG_NOWIN_TWIN_EST
     // What this node's search COSTS, in the same deterministic work units the budget is denominated
     // in. Stored beside its answer in the wave index so a permuted twin can price the re-search it
     // is deciding whether to skip -- a measured cost, not a guess at one. Subtree-inclusive, which
     // is the right quantity: skipping this node skips everything under it too.
     const long long of_used_at_entry = (budget != nullptr) ? budget->Used() : 0;
     #define OF_UNITS() ((budget != nullptr) ? (budget->Used() - of_used_at_entry) : 0)
+    // A twin hint's cost (MTG_NOWIN_TWIN_WAVE): OF_UNITS, plus R x this node's leaves inside an emulated warm-up
+    // (MTG_NOWIN_TWIN_HEQ, see nwtwin::t_upl).
+    const long long tw_leaves_at_entry = g_fs_leaf_evals;
+    #define TWIN_UNITS() (OF_UNITS() + static_cast<long long>(nwtwin::t_upl * static_cast<double>(g_fs_leaf_evals - tw_leaves_at_entry) + 0.5))
     // MTG_EXHAUST_PROBE (diagnostic; see exhprobe). Reads only.
     const bool exh_fs_on    = exhprobe::On() && lc != nullptr;
     const bool exh_fs_entry = exh_fs_on && exhprobe::ExhNow(budget);
@@ -92289,6 +92372,56 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     {
         const bool complete = g_fs_trunc_events == trunc_at_entry && budgetbind::t_binds == binds_at_entry
                            && !decisionwork::Exceeded() && !best.truncated;
+        // MTG_NOWIN_TWIN_EST: cut ONLY by twin reuses -> an estimate. A WIN inside the cutoff is kept as a game-cache win
+        // ESTIMATE (its line, under the order-exact key + salt, with what its search cost), a no-win as the twin hint.
+        // Both are served only through the gate and booked as a cut.
+        const bool est_only = !complete && nwtwin::EstOn() && NowinTwinWaveOn() && !(key_nw == key)
+            && g_fs_trunc_events - trunc_at_entry == nwtwin::t_book_ev - twbook_at_entry
+            && budgetbind::t_binds == binds_at_entry && !decisionwork::Exceeded() && !best.truncated;
+        if (est_only && best.win_turn <= std::min(cutoff, max_turns) && !(key_win == key))
+        {
+            const TranspositionTable::Key ek = gamelc::Tag(FSEstWinKey(key_win), state);
+            const long long eu = std::max<long long>(1, TWIN_UNITS());
+            auto et = gamelc::t_map.find(ek);
+            if (et == gamelc::t_map.end())
+            {
+                const std::size_t nb = ApproxFslBytes(best) + 64;
+                if (gamelc::t_bytes + nb <= gamelc::CapBytes())
+                {
+                    gamelc::t_bytes += nb;
+                    gamelc::t_map.emplace(ek, FSLineEntry{ best, std::numeric_limits<int>::max(), static_cast<std::uint64_t>(eu) });
+                    nwtwin::g_est_wins.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+            else if (best.win_turn < et->second.line.win_turn)   // an earlier win replaces a later one
+            {
+                const std::size_t nb = ApproxFslBytes(best) + 64, ob = ApproxFslBytes(et->second.line) + 64;
+                if (gamelc::t_bytes + nb <= gamelc::CapBytes() + ob)
+                {
+                    gamelc::t_bytes = gamelc::t_bytes + nb - ob;
+                    et->second = FSLineEntry{ best, std::numeric_limits<int>::max(), static_cast<std::uint64_t>(eu) };
+                }
+            }
+        }
+        if (est_only && best.win_turn > std::min(cutoff, max_turns))
+        {
+            const TranspositionTable::Key hk = gamelc::Tag(FSNowinTwinKey(key), state);
+            const int hb = std::min(cutoff, max_turns + 1);
+            const long long hu = std::max<long long>(1, TWIN_UNITS());
+            auto ht = gamelc::t_map.find(hk);
+            if (ht == gamelc::t_map.end())
+            {
+                const std::size_t nb = sizeof(FSLineEntry) + 64;
+                if (gamelc::t_bytes + nb <= gamelc::CapBytes())
+                {
+                    gamelc::t_bytes += nb;
+                    FSLineEntry e; e.nowin_bound = hb; e.order_sig = static_cast<std::uint64_t>(hu);
+                    gamelc::t_map.emplace(hk, std::move(e));
+                    nwtwin::g_est_hints.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+            else if (hb > ht->second.nowin_bound) { ht->second.nowin_bound = hb; ht->second.order_sig = static_cast<std::uint64_t>(hu); }
+        }
         if (complete)
         {
             // A node searched under `cutoff` proves only its best win AT OR BEFORE the cutoff. A win it returns
@@ -92343,7 +92476,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 const TranspositionTable::Key hk = gamelc::Tag(FSNowinTwinKey(key), state);
                 const int hb = std::min(cutoff, max_turns + 1);
-                const long long hu = std::max<long long>(1, OF_UNITS());
+                const long long hu = std::max<long long>(1, TWIN_UNITS());
                 auto ht = gamelc::t_map.find(hk);
                 if (ht == gamelc::t_map.end())
                 {
@@ -92385,7 +92518,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             FSLineStoreNoWin(lc, key_nw, best, std::min(cutoff, max_turns + 1), nw_sig);
             nwverify::NoteStore(key_nw, state);
             if (!(key_nw == key) && nwverify::t_in == 0 && NowinTwinWaveOn())   // MTG_NOWIN_TWIN_WAVE's hint
-            { FSLineStoreTwinHint(lc, key, std::min(cutoff, max_turns + 1), OF_UNITS()); }
+            { FSLineStoreTwinHint(lc, key, std::min(cutoff, max_turns + 1), TWIN_UNITS()); }
+        }
+        else if (FSNoWinCacheOn() && nwtwin::EstOn() && NowinTwinWaveOn() && !(key_nw == key) && nwverify::t_in == 0
+                 && g_fs_trunc_events != trunc_at_entry
+                 && g_fs_trunc_events - trunc_at_entry == nwtwin::t_book_ev - twbook_at_entry
+                 && budgetbind::t_binds == binds_at_entry && !decisionwork::Exceeded())
+        {
+            // MTG_NOWIN_TWIN_EST: cut ONLY by twin reuses -> not a refutation (nothing is stored under key_nw), but the
+            // same kind of estimate a twin hint is: leave the hint, served only through the gate and booked as a cut.
+            FSLineStoreTwinHint(lc, key, std::min(cutoff, max_turns + 1), TWIN_UNITS());
+            nwtwin::g_est_hints.fetch_add(1, std::memory_order_relaxed);
+            if (ProvisionalLive(budget)) { FSLineStoreNoWin(lc, FSProvKey(key), best, std::min(cutoff, max_turns + 1)); }
         }
         else if (FSNoWinCacheOn() && ProvisionalLive(budget))
         {
@@ -92413,6 +92557,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         else { ofwprobe::g_worse.fetch_add(1, std::memory_order_relaxed); }
     }
     #undef OF_UNITS
+    #undef TWIN_UNITS
     if (exh_fs_on)
     {
         exhprobe::Exit(exhprobe::kFsl, key, exh_fs_rep, exh_fs_entry, cutoff, max_turns, best.win_turn,
@@ -93074,6 +93219,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             ForceConstantLeafGuard  _c(!heuristic && warm_none);
             ConstantLeafPassGuard   _clp(!heuristic && warm_none);   // leafless warm-up: stop at exhaustion
             struct WarmFlag { bool prev; WarmFlag(bool on) : prev(g_emul_warm_pass) { g_emul_warm_pass = on; } ~WarmFlag() { g_emul_warm_pass = prev; } } _wf(!heuristic);
+            // MTG_NOWIN_TWIN_HEQ: a warm-up stands in for the committing pass at this depth (same tree, reconstructed
+            // cost cost + R x leaves), so its twin hints are priced in the committing leaf's units per leaf.
+            struct UplScope { double prev; UplScope(double v) : prev(nwtwin::t_upl) { nwtwin::t_upl = v; } ~UplScope() { nwtwin::t_upl = prev; } }
+                _upl((!heuristic && bounded && NowinTwinWaveOn() && nwtwin::HeqOn()) ? std::max(0.0, R_at(d)) : 0.0);
             const long long used_before   = budget ? budget->Used() : 0;
             const long long leaves_before = g_fs_leaf_evals;
             const long long cuts0 = g_fs_cut_prunes, hex0 = g_fs_hexits, wt0 = g_fs_leaf_wt_sum;
@@ -93203,8 +93352,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (g_probe_recording && k >= 0 && k < 16) { g_probe_leaves[k] = leaves; g_probe_cost[k] = cost; }
             if (escstats::t_rec == 1 && g_fsline_nest == 0 && g_rollout_nest == 0 && k >= 0 && k < 16)
             { escstats::t_pl[k] = leaves; escstats::t_pc[k] = cost; }
-            TRACE("search", "T%d emul pass=%d %s done win=%d cost=%lld leaves=%lld ch=%.0f",
-                  state.turn_number, k, heuristic ? "H" : "V", att.win_turn, cost, leaves, ch[k]);
+            TRACE("search", "T%d emul pass=%d %s done win=%d cost=%lld leaves=%lld ch=%.0f tw_reuse=%lld tw_rs=%lld tw_rs_hint_u=%lld tw_rs_u=%lld",
+                  state.turn_number, k, heuristic ? "H" : "V", att.win_turn, cost, leaves, ch[k],
+                  nwtwin::t_reuse, nwtwin::t_rs_n, nwtwin::t_rs_hint_u, nwtwin::t_rs_u);
         };
         bool verified = false;
         for (int k = 1; k <= depth; ++k)
@@ -93536,8 +93686,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             pl[pass_depth] = g_fs_leaf_evals - leaves_before;
             pc[pass_depth] = cost;
         }
-        TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld",
-              state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0);
+        TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld rem=%lld tw_reuse=%lld tw_rs=%lld tw_rs_hint_u=%lld tw_rs_u=%lld",
+              state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0,
+              budget ? budget->Remaining() : -1LL, nwtwin::t_reuse, nwtwin::t_rs_n, nwtwin::t_rs_hint_u, nwtwin::t_rs_u);
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
@@ -106673,6 +106824,50 @@ TurnSolver::TwinCacheProbe TurnSolver::TwinNoWinCacheForTest(const GameState& fi
         r.second_units    = b2.Used();
         r.second_root_hit = (r.second_units == 0 && g_fs_memo_nowin_hits - nh0 == 1) ? 1 : 0;
     }
+    GameLineCacheClear();
+    return r;
+}
+
+TurnSolver::TwinWaveProbe TurnSolver::TwinWaveProbeForTest(const GameState& first, const GameState& second, int depth,
+                                                           int max_turns, bool second_main, long long budget_units,
+                                                           double first_upl, bool drop_root_hint, bool separate_decisions)
+{
+    ++g_decision_epoch;
+    GameLineCacheClear();
+    TwinWaveProbe r;
+    const long long est0 = nwtwin::g_est_hints.load(), estw0 = nwtwin::g_est_wins.load();
+    {
+        FSLineCache lc;
+        const FsLineNestGuard nest;   // a NON-root node, as in a real search (the game line cache is in play)
+        {
+            SearchBudget b(0);
+            const double prev = nwtwin::t_upl;
+            nwtwin::t_upl = nwtwin::HeqOn() ? first_upl : 0.0;
+            const long long l0 = g_fs_leaf_evals;
+            r.win[0] = FSLineWin(first, depth, max_turns, max_turns + 1, second_main, nullptr, &lc, &b).win_turn;
+            r.first_leaves = g_fs_leaf_evals - l0;
+            r.units[0] = b.Used();
+            nwtwin::t_upl = prev;
+        }
+        if (drop_root_hint)
+        {
+            const TranspositionTable::Key kc = SimKeyAtDepth(BuildSimKeyBase(first, max_turns, second_main), depth);
+            const TranspositionTable::Key hk = FSNowinTwinKey(kc);
+            lc.erase(hk);
+            gamelc::t_map.erase(gamelc::Tag(hk, first));
+        }
+        for (int i = 1; i <= 2; ++i)
+        {
+            SearchBudget b(budget_units);
+            FSLineCache own;
+            if (separate_decisions) { ++g_decision_epoch; }
+            r.win[i] = FSLineWin(second, depth, max_turns, max_turns + 1, second_main, nullptr,
+                                 separate_decisions ? &own : &lc, &b).win_turn;
+            r.units[i] = b.Used();
+        }
+    }
+    r.est_hints = nwtwin::g_est_hints.load() - est0;
+    r.est_wins  = nwtwin::g_est_wins.load() - estw0;
     GameLineCacheClear();
     return r;
 }
