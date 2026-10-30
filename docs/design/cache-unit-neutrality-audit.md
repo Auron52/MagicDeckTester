@@ -506,3 +506,10 @@ tomorrow."*
   - **Effect on light games:** a game that fits in the floor plays as today.
   - **Measurement:** the matched-cost A/B above decides floor+overflow against always-pay. Pick the floor size from the
     same runs.
+- **Floor size.** USER: *"Something like 50-100 MB I imagine could be a reasonable floor, but I guess we can calculate
+  out what is appropriate based on usage."*
+  - **Starting range:** 50-100 MB per thread, i.e. 1.2-2.4 GB at 24 threads, well inside the 30 GB box budget.
+  - **Size it from usage:** instrument the plan cache's peak bytes per game, and per decision, across a pooled fleet
+    run (every suite deck, play and generation shapes).
+  - **Choose:** the floor that covers most games outright (e.g. p90-p95). Report how much of the heavy tail's hit
+    volume falls into overflow at each candidate size, and confirm the choice in the matched-cost A/B.
