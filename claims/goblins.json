@@ -4,9 +4,12 @@
   "valueleaf": "em:71c8696d5192fbe47e51"
  },
  "deck": "goblins",
+ "detail": "mulligan: KEPT INCUMBENT -- a fresh table at no-lower settings was not better (new-vs-old 6.2e-05 t, cost 0.979x (se 0.003, 96 seeds)); incumbent restored -- a TRADE (worse but CHEAPER): reported for the USER",
+ "finished": "2026-10-30T04:21:41Z",
  "frozen": "01b0072ebd5ea98147d2ad3b2cfb7de67c37f16c",
  "heartbeat": "2026-10-30T04:20:08Z",
  "host": "550a08fdc1f3",
+ "result_branch": "artifact-refresh/goblins-20261030-0421",
  "run_id": "goblins-artifact-queue-d7d6a5-20261029T173238",
  "score": 0.1009,
  "stage": "mulligan",
@@ -14,6 +17,6 @@
   "mulligan"
  ],
  "started": "2026-10-29T17:32:38Z",
- "state": "running",
+ "state": "rejected",
  "worker": "artifact-queue-d7d6a5"
 }
