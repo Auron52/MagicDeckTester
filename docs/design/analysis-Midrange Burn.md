@@ -6,7 +6,9 @@ are complete. The original-branch Linux regression tiers have accepted ground
 truth, and its b20 cost gate passed at 2.95x Hinata. The required
 horizon leaf check completed 18 blocks and both its aggregate and unlimited-
 budget preservation gates pass; keep default ON. The authored cleanup-discard
-policy remains a proposal pending user review and a measured adoption test.
+policy was approved and adopted on 2026-10-30 behind a default-on, reversible
+Midrange-only flag. Its paired seeded tiers are non-inferior overall; the one
+persistent slower game is documented below.
 The user has paused exhaustive mulligan-profile and value-leaf generation while
 another container uses the box; neither is part of this push. A new shared
 passive-opponent land pattern passed a full smoke A/B. A targeted fold of burn
@@ -14,8 +16,8 @@ spells against inert passive creatures restored the 20 ms two-headed play
 setting under the integrated-branch cost gate: 1.21x Hinata (limit 3x),
 with a 6.0133 two-headed regression average. The refreshed-profile smoke,
 regression and overnight Linux baselines are accepted (46 consistent keys).
-The final full unit suite passed 2,226 cases and 3,556,657 assertions; all
-349 scenarios passed. The final integrated-branch verifier passed every
+The final discard-rule full unit suite passed 2,230 cases and 3,556,777
+assertions; all 349 scenarios passed. The final integrated verifier passed every
 blocking gate, including 15/15 card coverage, field and cost audits, viewer
 wiring, mismatch checks, play invariants, and suite membership.
 Chronological checkpoints below include superseded intermediate states; this
@@ -54,10 +56,7 @@ cases / 3,553,305 assertions; 348/348 scenarios passed.
 
 ## Pending convergence work
 
-1. Present the authored discard policy for user review. It is a proposal,
-   with rollout impact bounded but no real shed labels; implementation and
-   adoption require user approval and a paired non-inferiority test.
-2. Keep the four Claude-faster seeds as documented search-quality candidates;
+1. Keep the four Claude-faster seeds as documented search-quality candidates;
    they are not unresolved legality or viewer flags.
 
 ## Passive-opponent land update, 2026-10-30
@@ -150,6 +149,45 @@ single-player searched rows by 0.18–0.23 turns. All 13 searched slower
 individual games recovered their old win turn at 4x budget. The three Linux
 tiers have 46 consistent baseline/log pairs (7 smoke, 13 regression, 26
 overnight); Snow's previously missing Linux rows are now recorded.
+
+## Cleanup-discard adoption, 2026-10-30
+
+The user approved `docs/design/midrange-burn-discard-policy.md` and noted that
+real cleanup discards should be rare. `MidrangeBurnProvider` now returns one
+discard candidate from a full keep-set order; `MTG_MIDRANGE_BUCKET_DISCARD=0`
+restores the generic ranking. The first two lands and the one-drop creature
+then spell tier take priority. Visible damage is kept until it can bring the
+opponent to three or less over two turns; a needed third land or two-Mountain
+Fireblast fuel joins that package. Third and fourth lands otherwise occupy
+optional slots, and Chandra never makes four lands mandatory. Dead Price of
+Progress and Searing Blaze shed first. The full-order hook re-ranks multi-card
+cleanup after each shed because losing a land or damage spell can change the
+next quota. Human card choices and other deck providers are untouched.
+
+The Release build, targeted flag-on/flag-off tests, full unit suite (2,230
+cases, 3,556,777 assertions), and 349 scenarios passed. The corrected final
+smoke had one same-score play change and no slower games. The regression tier
+improved the 2HG average 6.0133→5.9867; gi13 went T7→T5 because the generic
+arm shed Fireblast at T2 while the new arm retained it. One single-player
+game went T6→T7 at 20ms but recovered to T6 at 4× and 16× budget. Other
+searched single-player averages were unchanged. Overnight covered 18 Midrange rows / 11,206 games:
+10 searched games faster, 2 slower, and about 12 fewer total game-turns.
+The d3 s4004 gi40 T5→T6 loss recovered at 4× budget. The d3 s4004 gi310
+T8→unwon loss persisted at 16×: the new rollout induced an early T2
+Fireblast, leaving only three lands for a Chandra drawn on T7. This is a real
+search-quality tradeoff, carried in the Linux GT provenance, while the pooled
+outcome is non-inferior. All 46 Linux baseline/log pairs remain consistent.
+The prior full strict replay covered 689 saved references; there are no
+Midrange Burn saved references, and this adoption changes only its provider.
+The regression tier was therefore completed with the unrelated full-corpus
+replay skipped after a targeted inventory confirmed zero matching references.
+The final-policy standalone discard-analysis repeat at seed 930000 found zero
+real cleanup discards in 400 d3 games, 1,359 rollout sheds (all below four
+battlefield lands), and therefore no searchable real-site discard labels.
+The post-policy `verify_deck.py --write-ledger` pass completed every blocking
+gate: 15/15 card coverage, card costs and fields, all three suite tiers,
+viewer decisions and wiring, 120 mismatch games per arm, eight play-invariant
+games (215 decisions), and suite membership. Its current ledger appears below.
 
 ## Horizon leaf tie-break checkpoint
 
@@ -2003,6 +2041,6 @@ Remove a +1/+1
 - oracle_text advisory -- Emeria, the Sky Ruin: oracle_text diverges (similarity 0.19); scryfall='This land enters tapped.
 At the beginning of your upkeep, if you control seven or more Plains, you may return
 - clause_ledger: no dedicated per-clause artifact. Its function -- every oracle clause modeled/inert/deferred -- is covered by coverage(partial hard-stop) + bracket-note deferrals + viewer oracle cross-check + audit_card_fields oracle-diff. A dedicated ledger is deferred (high per-card cost, marginal added rigor).
-- claude_sweep recorded at commit 4a04d8c14 (HEAD 5aa92789ab9a); re-run if play changed since (play_invariants + smoke digests track play live).
+- claude_sweep recorded at commit 4a04d8c14 (HEAD 1e0b6438214e); re-run if play changed since (play_invariants + smoke digests track play live).
 
 <!-- verify_deck:end -->

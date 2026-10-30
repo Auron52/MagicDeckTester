@@ -54908,6 +54908,229 @@ bool MidrangeBurnProvider::PrunesPassiveBurnTargets() const
     return prune;
 }
 
+// The approved cleanup policy lives here rather than in the original Burn provider: this
+// list has Fireblast, Price, Incinerator and Chandra instead of Eidolon/Volley. Its first
+// two lands and cheap threats are the core; optional lands yield to damage needed to put
+// the opponent at three or less within two turns. The estimate deliberately credits only
+// visible cards and board damage, never future draws or an unearned spectacle discount.
+static bool MidrangeBucketDiscardEnabled()
+{
+    static const bool on = EnvOn("MTG_MIDRANGE_BUCKET_DISCARD", true); // DEFAULT ON; =0 -> generic
+    return on;
+}
+
+std::vector<int> MidrangeBurnProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!MidrangeBucketDiscardEnabled())
+    { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n == 0) { return {}; }
+    struct Threat { int index, tier, damage, cost; };
+    std::vector<int> lands, dead_blaze, dead_price, other;
+    std::vector<Threat> threats, light, chandra;
+    int board_lands = 0, board_mountains = 0, board_damage = 0, nonbasics = 0;
+    bool enemy_creature = false, own_chandra = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me)
+        {
+            enemy_creature |= p.card.IsCreature();
+            if (p.card.IsLand())
+            { if (!IsBasicLandCard(p.card)) { ++nonbasics; } }
+            continue;
+        }
+        if (p.card.IsLand()) { ++board_lands; board_mountains += p.card.m_name == "Mountain"; }
+        if (p.card.IsCreature())
+        {
+            // Both of our next attacks are visible; do not invent prowess or graveyard fuel.
+            board_damage += 2 * std::max(0, p.EffectivePower() - p.temp_power_bonus);
+        }
+        own_chandra |= p.card.m_name == "Chandra, Torch of Defiance";
+    }
+    int mountains_available = board_mountains, hand_lands = 0;
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        if (CleanupDiscardIsLand(c)) { ++hand_lands; }
+        if (c.m_name == "Mountain") { ++mountains_available; }
+    }
+    // Cleanup is normally Phase::Ending. Damage dealt this turn cannot pay
+    // next turn's spectacle or Incinerator bill.
+    const bool spectacle = s.phase != Phase::Ending && s.opponent_lost_life_this_turn;
+    const int graveyard_n = static_cast<int>(ap.graveyard.size());
+    std::vector<std::pair<int, int>> future_burn; // mana, noncombat damage
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        if (CleanupDiscardIsLand(c)) { continue; }
+        const std::string name = c.m_name.str();
+        if (name == "Lightning Bolt" || name == "Chain Lightning")
+        { future_burn.emplace_back(1, 3); }
+        else if (name == "Rift Bolt" || name == "Skewer the Critics")
+        { future_burn.emplace_back(name == "Skewer the Critics" && spectacle ? 1 : 3, 3); }
+        else if (name == "Magma Jet") { future_burn.emplace_back(2, 2); }
+        else if (name == "Fireblast"
+            && board_mountains + (mountains_available > board_mountains ? 1 : 0) >= 2)
+        { future_burn.emplace_back(0, 4); }
+        else if (name == "Price of Progress" && nonbasics > 0)
+        { future_burn.emplace_back(2, 2 * nonbasics); }
+        else if (name == "Searing Blaze" && enemy_creature)
+        { future_burn.emplace_back(2, hand_lands > 0 ? 3 : 1); }
+    }
+    const int discount = (s.phase == Phase::Ending ? 0 : s.noncombat_damage_received_this_turn[1 - me]);
+    const int mana_next_turn = board_lands + (hand_lands > 0 ? 1 : 0);
+    std::vector<int> burn_at_mana(static_cast<std::size_t>(mana_next_turn + 1), -1);
+    burn_at_mana[0] = 0;
+    for (const auto& [cost, damage] : future_burn)
+    {
+        for (int mana = mana_next_turn; mana >= cost; --mana)
+        {
+            if (burn_at_mana[static_cast<std::size_t>(mana - cost)] < 0) { continue; }
+            burn_at_mana[static_cast<std::size_t>(mana)] = std::max(
+                burn_at_mana[static_cast<std::size_t>(mana)],
+                burn_at_mana[static_cast<std::size_t>(mana - cost)] + damage);
+        }
+    }
+    bool incinerator_playable = false;
+    for (int spent = 0; spent <= mana_next_turn; ++spent)
+    {
+        const int burn = burn_at_mana[static_cast<std::size_t>(spent)];
+        if (burn < 0) { continue; }
+        if (mana_next_turn - spent >= std::max(1, 6 - discount - burn))
+        { incinerator_playable = true; break; }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        if (CleanupDiscardIsLand(c)) { lands.push_back(i); continue; }
+        const std::string name = c.m_name.str();
+        if (name == "Searing Blaze" && !enemy_creature) { dead_blaze.push_back(i); continue; }
+        if (name == "Price of Progress" && nonbasics == 0) { dead_price.push_back(i); continue; }
+        if (name == "Light Up the Stage")
+        { light.push_back({i, spectacle ? 3 : 12, 0, spectacle ? 1 : 3}); continue; }
+        if (name == "Chandra, Torch of Defiance")
+        { chandra.push_back({i, own_chandra ? 22 : 20, 2, 4}); continue; }
+        Threat t{i, 15, 0, CleanupDiscardManaValue(c)};
+        if      (name == "Monastery Swiftspear") { t = {i, 0, 2, 1}; }
+        else if (name == "Grim Lavamancer")      { t = {i, graveyard_n >= 2 ? 1 : 11, graveyard_n >= 2 ? 2 : 0, 1}; }
+        else if (name == "Lightning Bolt" || name == "Chain Lightning" || name == "Rift Bolt")
+        { t = {i, 2, 3, 1}; }
+        else if (name == "Skewer the Critics")  { t = {i, spectacle ? 2 : 7, 3, spectacle ? 1 : 3}; }
+        else if (name == "Fireblast")           { t = {i, mountains_available >= 2 ? 4 : 13,
+                                                      mountains_available >= 2 ? 4 : 0, mountains_available >= 2 ? 0 : 6}; }
+        else if (name == "Searing Blaze")       { t = {i, 5, hand_lands > 0 ? 3 : 1, 2}; }
+        else if (name == "Price of Progress")   { t = {i, 5, 2 * nonbasics, 2}; }
+        else if (name == "Magma Jet")           { t = {i, 6, 2, 2}; }
+        else if (name == "Chandra's Incinerator")
+        { t = {i, 8, incinerator_playable ? 6 : 0, std::max(1, 6 - discount)}; }
+        else { other.push_back(i); continue; }
+        // A visible immediate kill outranks even a future creature attack.
+        if (t.damage >= s.Opponent().life && t.cost <= board_lands) { t.tier = -1; }
+        threats.push_back(t);
+    }
+    std::stable_sort(threats.begin(), threats.end(), [](const Threat& a, const Threat& b)
+    {
+        if (a.tier != b.tier) { return a.tier < b.tier; }
+        if (a.cost != b.cost) { return a.cost < b.cost; }
+        if (a.damage != b.damage) { return a.damage > b.damage; }
+        return a.index < b.index;
+    });
+    std::vector<int> keep;
+    keep.reserve(static_cast<std::size_t>(n));
+    std::vector<char> taken(static_cast<std::size_t>(n), 0);
+    auto take = [&](int i) { if (!taken[static_cast<std::size_t>(i)])
+        { taken[static_cast<std::size_t>(i)] = 1; keep.push_back(i); } };
+    auto take_land = [&](bool mountain_only, bool optional) -> bool
+    {
+        int best = -1;
+        for (int i : lands)
+        {
+            if (taken[static_cast<std::size_t>(i)]) { continue; }
+            const bool mountain = ap.hand[static_cast<std::size_t>(i)].m_name == "Mountain";
+            if (mountain_only && !mountain) { continue; }
+            if (best < 0) { best = i; continue; }
+            const bool prev_mountain = ap.hand[static_cast<std::size_t>(best)].m_name == "Mountain";
+            const bool prefer_mountain = !optional || ap.life <= 3;
+            if (mountain != prev_mountain && mountain == prefer_mountain) { best = i; }
+        }
+        if (best < 0) { return false; }
+        take(best);
+        return true;
+    };
+    int kept_lands = board_lands, kept_mountains = board_mountains;
+    while (kept_lands < 2 && take_land(false, false))
+    {
+        ++kept_lands;
+        kept_mountains += ap.hand[static_cast<std::size_t>(keep.back())].m_name == "Mountain";
+    }
+    int reach = board_damage, threat_count = 0;
+    const int target = std::max(0, s.Opponent().life - 3);
+    auto take_threat = [&](const Threat& t)
+    {
+        if (ap.hand[static_cast<std::size_t>(t.index)].m_name == "Fireblast")
+        {
+            while (kept_mountains < 2 && take_land(true, false))
+            { ++kept_lands; ++kept_mountains; }
+        }
+        else if (t.cost == 3 && t.damage > 0 && reach < target)
+        {
+            // A third land moves ahead of a three-mana threat only when needed
+            // to make its visible damage part of the near-lethal package.
+            while (kept_lands < 3 && take_land(false, true))
+            {
+                ++kept_lands;
+                kept_mountains += ap.hand[static_cast<std::size_t>(keep.back())].m_name == "Mountain";
+            }
+        }
+        take(t.index); reach += t.damage; ++threat_count;
+    };
+    for (const Threat& t : threats)
+    {
+        if (t.tier <= 2 && t.damage > 0) { take_threat(t); }
+    }
+    if (reach < target && !light.empty() && spectacle) { take(light.front().index); }
+    for (const Threat& t : threats)
+    {
+        if (taken[static_cast<std::size_t>(t.index)] || t.damage <= 0) { continue; }
+        if (reach >= target && threat_count >= 2) { break; }
+        take_threat(t);
+    }
+    if (reach < target && !light.empty()) { take(light.front().index); }
+    // Retain a third and then fourth land only after the needed damage. A
+    // fourth is useful with Chandra but never forces the damage package out.
+    while (kept_lands < 4 && take_land(false, true))
+    {
+        ++kept_lands;
+        kept_mountains += ap.hand[static_cast<std::size_t>(keep.back())].m_name == "Mountain";
+    }
+    if (!light.empty()) { take(light.front().index); }
+    if (!chandra.empty()) { take(chandra.front().index); }
+    for (const Threat& t : threats) { take(t.index); }
+    for (const Threat& t : light) { take(t.index); }
+    for (const Threat& t : chandra) { take(t.index); }
+    for (int i : other) { take(i); }
+    for (int i : lands) { take(i); }
+    for (int i : dead_blaze) { take(i); }
+    for (int i : dead_price) { take(i); }
+    std::reverse(keep.begin(), keep.end());
+    return CleanupDiscardRankingWithOrder(s, required_pieces, keep);
+}
+
+std::vector<int> MidrangeBurnProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    std::vector<int> out = CleanupDiscardShedOrder(s, required_pieces);
+    if (MidrangeBucketDiscardEnabled() && out.size() > 1) { out.resize(1); }
+    return out;
+}
+
+bool MidrangeBurnProvider::CleanupDiscardShedStable() const
+{ return !MidrangeBucketDiscardEnabled(); }
+
 // Chandra's Incinerator is funded by earlier NONCOMBAT damage in the same turn.
 // The generic creature-first rank attempted it before the Bolts that made its {R}
 // bill payable, so a legal three-spell plan dropped its Incinerator at execution.

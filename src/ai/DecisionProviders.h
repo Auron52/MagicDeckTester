@@ -1278,6 +1278,11 @@ public:
     bool SearchesFixedBurnTargets() const override { return true; }
     bool PrunesOwnFixedBurnTargets() const override;
     bool PrunesPassiveBurnTargets() const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
     int CastOrderRank(const GameState&, const CardDefinition&) const override;
     bool OrderOpaqueCastsByRank() const override;
     int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;

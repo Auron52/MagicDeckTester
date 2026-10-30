@@ -1,18 +1,20 @@
-# Regression ground truth -- commit 5aa92789a  date 2026-10-30
+# Regression ground truth -- commit 1e0b64382  date 2026-10-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-10-30): Midrange Burn target-prune A/B: d0 -154 turns/1000, 2HG d5 -6/75; smoke gi31 T6->T7 and 2HG gi10 T7->unwon persist with same draws, legal search-quality tradeoff (analysis-Midrange Burn.md)
 # accepted-with-regressions (smoke, 2026-10-30): Midrange Burn passive nonbasic lands: aggregate rows improve; one 2HG smoke game finishes T7 instead of T6 and persists at higher search budgets.
 # accepted-with-regressions (smoke, 2026-10-30): Midrange passive burn target fold: 2HG gi12 T7->T8 at b20 recovers to T6 at b80; gi17 T7->T6 offsets it. Searched single-player turns unchanged, greedy row improves.
 # accepted-with-regressions (regression, 2026-10-30): Midrange Burn passive lands and inert-target fold: searched 2HG gi13 T6->T7 improves to T5 at b80; single-player gi45 T5->T6 returns T5 at b80. Affected row averages improve; cost gate 1.21x Hinata.
 # accepted-with-regressions (overnight, 2026-10-30): Midrange Burn passive lands and inert-target fold: all 18 aggregate rows improve or tie; all 13 searched slower games recover their old win turn at 4x budget. Snow receives new Linux rows.
+# accepted-with-regressions (overnight, 2026-10-30): Midrange Burn bucket discard: d3 s4004 gi40 T5->T6 recovers at 4x; gi310 T8->unwon persists at 16x after early Fireblast strands four-mana Chandra line. Net -12 game-turns/11,206 across tier; 10 searched faster, 2 slower.
+# accepted-with-regressions (regression, 2026-10-30): Midrange Burn cleanup policy: d5 s3003 gi70 T6->T7 at 20ms, recovers to T6 at 4x/16x budget (search churn); all other searched regression results unchanged.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-midrangeburn_smoke_d0_s1001=5.6700/be375f0366137651
-midrangeburn_smoke_d3_s1001=4.8000/fa646f2083163796
+midrangeburn_smoke_d0_s1001=5.6700/45416f929b91674b
+midrangeburn_smoke_d3_s1001=4.8000/68a131a17391174c
 midrangeburn_smoke_d5_s1001=4.6200/ab8d95fc63291945
-midrangeburn2hg_smoke_d5_s1001=6.1600/a15927d4d44b2524
+midrangeburn2hg_smoke_d5_s1001=6.0800/a1adc811336a067c
 snow_smoke_d0_s1001=6.1300/b7b2200cd612c515
 snow_smoke_d3_s1001=5.7600/f36d4ce93c929921
 snow_smoke_d5_s1001=5.7440/fceb7ba27dfe318d
@@ -26,11 +28,11 @@ snow_regression_d0_s2002=6.1590/79c57f2cb162e553
 snow_regression_d3_s2002=5.6800/5f194ad4bb44224b
 snow_regression_d5_s2002=5.6267/d2fb1e59a8b335ca
 snow_regression_d5_s3003=5.7000/3570ac2df3c31cec
-midrangeburn_regression_d0_s2002=5.7250/f692bafe6fe2b4f2
+midrangeburn_regression_d0_s2002=5.7250/57e3fb06296ca9bf
 midrangeburn_regression_d3_s2002=4.4800/8c60a5e3d30b9679
-midrangeburn_regression_d5_s2002=4.5800/6f0ef41e92cc7b66
-midrangeburn_regression_d5_s3003=4.4533/43491697c164e338
-midrangeburn2hg_regression_d5_s2002=6.0133/90db849dbe710a7b
+midrangeburn_regression_d5_s2002=4.5800/a22732d900871a74
+midrangeburn_regression_d5_s3003=4.4600/502a945da1d1bee3
+midrangeburn2hg_regression_d5_s2002=5.9867/d019e100496d3d43
 
 # --- overnight ---
 midrangeburn_overnight_d3_s30041=4.3333/af5954b2ad5cceef
@@ -43,19 +45,19 @@ snow_overnight_d5_s4004=5.6518/f5b92ed976f14b9a
 snow_overnight_d5_s5005=5.6235/92dca4a650445994
 snow_overnight_d5_s6006=5.6471/7b336003ce9291d3
 snow_overnight_d5_s7007=5.6424/8a22faa145950873
-midrangeburn_overnight_d0_s4004=5.6920/910df51d7e5f89cf
-midrangeburn_overnight_d0_s6006=5.6545/2717a213bd4015ae
-midrangeburn_overnight_d0_s8008=5.6130/32423857638996f5
-midrangeburn_overnight_d0_s10010=5.6070/425690b02eada46c
-midrangeburn_overnight_d3_s4004=4.6250/d1096fa1dec9ef44
-midrangeburn_overnight_d3_s5005=4.6275/d7e1109edfbd8796
-midrangeburn_overnight_d3_s6006=4.6350/e32d5c0bbb46f243
-midrangeburn_overnight_d3_s7007=4.6475/a4b5e32a19d38dfa
+midrangeburn_overnight_d0_s4004=5.6920/f7d3a64d8630a016
+midrangeburn_overnight_d0_s6006=5.6545/118a90c518acffd6
+midrangeburn_overnight_d0_s8008=5.6130/baa188bce63bafd8
+midrangeburn_overnight_d0_s10010=5.6070/7b89d2cdcdbdac96
+midrangeburn_overnight_d3_s4004=4.6300/5a954d94091e7268
+midrangeburn_overnight_d3_s5005=4.6250/477dcfb8d288f775
+midrangeburn_overnight_d3_s6006=4.6350/511bf9654d64fa90
+midrangeburn_overnight_d3_s7007=4.6325/ff72d2662737dad8
 midrangeburn_overnight_d5_s4004=4.6100/ccc8e8747c227699
-midrangeburn_overnight_d5_s5005=4.5867/42bb125317cc2204
-midrangeburn_overnight_d5_s6006=4.6233/3d51bbd504cd47d1
-midrangeburn_overnight_d5_s7007=4.5800/c3bdb82b08262283
-midrangeburn2hg_overnight_d5_s4004=5.9700/85f571a9428eed45
-midrangeburn2hg_overnight_d5_s5005=5.9300/20e3c1adb5a3ce57
-midrangeburn2hg_overnight_d5_s6006=5.9300/82f12c6d3321aefb
-midrangeburn2hg_overnight_d5_s7007=5.8600/ea5439959a9ac21e
+midrangeburn_overnight_d5_s5005=4.5833/d31ddad2a90dc993
+midrangeburn_overnight_d5_s6006=4.6233/54349b8079e6ccba
+midrangeburn_overnight_d5_s7007=4.5800/9a2225abc5190643
+midrangeburn2hg_overnight_d5_s4004=5.9600/177cae57e5f75acf
+midrangeburn2hg_overnight_d5_s5005=5.9000/7431ae883cc6a743
+midrangeburn2hg_overnight_d5_s6006=5.9300/552c91dfeb4a6b61
+midrangeburn2hg_overnight_d5_s7007=5.8400/a42fdc023efa8477

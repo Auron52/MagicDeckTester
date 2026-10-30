@@ -102,6 +102,112 @@ TEST_CASE("midrange burn: autonomous burn folds inert spawn targets but keeps th
     CHECK(std::any_of(with_own.begin(), with_own.end(), [](const FixedBurnPin& p) { return p.first == -1; }) == complete);
 }
 
+TEST_CASE("midrange burn: cleanup sheds dead burn before optional mana and protects the core")
+{
+    GameState s; s.active_player_index = 0;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    const std::vector<std::string> names = {"Price of Progress", "Searing Blaze", "Mountain",
+        "Mountain", "Mountain", "Monastery Swiftspear", "Lightning Bolt", "Chain Lightning",
+        "Magma Jet", "Chandra, Torch of Defiance"};
+    for (int i = 0; i < static_cast<int>(names.size()); ++i)
+    { s.players[0].hand.push_back(MBCard(names[static_cast<std::size_t>(i)], 200 + i)); }
+    for (int i = 0; i < 3; ++i)
+    {
+        Permanent p;
+        p.card.m_name = "Opponent Basic Land";
+        p.card.RehashName();
+        p.card.AddType(CardType::Land);
+        p.card.AddSupertype(Supertype::Basic);
+        p.controller_index = p.owner_index = 1;
+        s.battlefield.push_back(p);
+    }
+    const auto rank = provider.CleanupDiscardShedOrder(s, nullptr);
+    const bool enabled = provider.CleanupDiscardShedStable() == false;
+    if (!enabled)
+    {
+        CHECK(rank.size() == names.size());
+        CHECK(provider.CleanupDiscardCandidates(s, nullptr).size() == names.size());
+        return;
+    }
+    REQUIRE(rank.size() == names.size());
+    CHECK(rank[0] == 0); // no opponent nonbasics
+    CHECK(rank[1] == 1); // no opposing creature
+    const auto pos = [&](int i)
+    { return std::find(rank.begin(), rank.end(), i) - rank.begin(); };
+    CHECK(pos(4) < pos(8)); // third land yields to damage still needed near lethal
+    CHECK(pos(4) < pos(6)); // one-drop burn is a higher priority
+    CHECK(pos(4) < pos(5)); // one-drop creature is a higher priority
+    CHECK(pos(2) > pos(4));
+    CHECK(pos(3) > pos(4));
+    CHECK(provider.CleanupDiscardCandidates(s, nullptr) == std::vector<int>{0});
+    GameState nonbasic = s;
+    Card other_land;
+    other_land.m_name = "Opponent Nonbasic Land";
+    other_land.RehashName();
+    other_land.AddType(CardType::Land);
+    nonbasic.battlefield[0].card = other_land;
+    CHECK(provider.CleanupDiscardShedOrder(nonbasic, nullptr).front() == 1);
+}
+
+TEST_CASE("midrange burn: cleanup retains Mountain fuel for chosen Fireblast")
+{
+    GameState s; s.active_player_index = 0;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    MBPut(s, "Mountain", 300);
+    MBPut(s, "Fiery Islet", 301);
+    const std::vector<std::string> names = {"Fiery Islet", "Mountain", "Fireblast",
+        "Lightning Bolt", "Chain Lightning", "Magma Jet", "Chandra, Torch of Defiance", "Mountain"};
+    for (int i = 0; i < static_cast<int>(names.size()); ++i)
+    { s.players[0].hand.push_back(MBCard(names[static_cast<std::size_t>(i)], 310 + i)); }
+    if (provider.CleanupDiscardShedStable()) { return; } // flag-off generic control
+    const auto rank = provider.CleanupDiscardShedOrder(s, nullptr);
+    const auto pos = [&](int i)
+    { return std::find(rank.begin(), rank.end(), i) - rank.begin(); };
+    CHECK(pos(1) > pos(0)); // Mountain pays Fireblast; Islet cannot
+    CHECK(pos(2) > pos(0));
+    CHECK(pos(7) < pos(1)); // fourth total land is optional
+}
+
+TEST_CASE("midrange burn: Light Up fills a damage shortage before optional lands")
+{
+    GameState s; s.active_player_index = 0; s.phase = Phase::Ending;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    MBPut(s, "Mountain", 400); MBPut(s, "Mountain", 401);
+    const std::vector<std::string> names = {"Light Up the Stage", "Mountain", "Mountain",
+        "Monastery Swiftspear", "Lightning Bolt", "Chain Lightning", "Magma Jet", "Chandra, Torch of Defiance"};
+    for (int i = 0; i < static_cast<int>(names.size()); ++i)
+    { s.players[0].hand.push_back(MBCard(names[static_cast<std::size_t>(i)], 410 + i)); }
+    if (provider.CleanupDiscardShedStable()) { return; } // flag-off generic control
+    const auto rank = provider.CleanupDiscardShedOrder(s, nullptr);
+    const auto pos = [&](int i)
+    { return std::find(rank.begin(), rank.end(), i) - rank.begin(); };
+    CHECK(pos(0) > pos(1));
+    CHECK(pos(0) > pos(2));
+}
+
+TEST_CASE("midrange burn: cleanup landfall reach does not depend on hand order")
+{
+    static const MidrangeBurnProvider provider;
+    const std::vector<std::string> names = {"Searing Blaze", "Mountain", "Lightning Bolt",
+        "Magma Jet", "Fireblast", "Monastery Swiftspear", "Fiery Islet", "Chandra, Torch of Defiance"};
+    auto rank_names = [&](bool move_land_first)
+    {
+        GameState s; s.active_player_index = 0; s.phase = Phase::Ending;
+        s.players[1].life = 14; s.m_provider = &provider;
+        MBPut(s, "Mountain", 500); MBPut(s, "Mountain", 501);
+        MBPut(s, "Monastery Swiftspear", 502, 1);
+        for (int i = 0; i < static_cast<int>(names.size()); ++i)
+        { s.players[0].hand.push_back(MBCard(names[static_cast<std::size_t>(i)], 510 + i)); }
+        if (move_land_first) { std::swap(s.players[0].hand[0], s.players[0].hand[1]); }
+        std::vector<std::string> out;
+        for (int i : provider.CleanupDiscardShedOrder(s, nullptr))
+        { out.push_back(s.players[0].hand[static_cast<std::size_t>(i)].m_name.str()); }
+        return out;
+    };
+    if (provider.CleanupDiscardShedStable()) { return; } // flag-off generic control
+    CHECK(rank_names(false) == rank_names(true));
+}
+
 TEST_CASE("midrange burn: a fresh Chandra can survive the legend rule and human play chooses")
 {
     MBHooks restore;

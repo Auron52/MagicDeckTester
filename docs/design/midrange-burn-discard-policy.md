@@ -1,7 +1,9 @@
-# Midrange Burn cleanup discard policy (proposal)
+# Midrange Burn cleanup discard policy
 
-This is a proposed `MidrangeBurnProvider::CleanupDiscardCandidates` keep-set
-rule. It is not adopted yet. The source of truth for card roles and costs is
+This is the approved `MidrangeBurnProvider::CleanupDiscardCandidates` keep-set
+rule, adopted on 2026-10-30 behind the default-on
+`MTG_MIDRANGE_BUCKET_DISCARD` flag (`=0` restores the previous generic ranking).
+The source of truth for card roles and costs is
 `decks/Midrange Burn/Midrange Burn.cod` plus `src/cards/data/cards.json`.
 
 Evidence: the pinned 400-game d3 pass produced **zero real cleanup discards**
@@ -9,8 +11,12 @@ and 1,627 rollout cleanup discards, all with fewer than four lands on the
 battlefield. There are no searched labels at the real decision site. The
 earlier paired worst-vs-default bound over 200 games per arm was 4.6800 vs
 4.6900 average turns: changing the rollout ranking matters slightly, but the
-maximum observed prize is small. This policy needs a paired A/B and a
-non-inferiority result before adoption; labels cannot validate it.
+maximum observed prize is small. There were no searched labels at the real
+cleanup site, so adoption is judged by paired seeded outcomes and the
+three regression tiers.
+The final-policy repeat at seed 930000 likewise found **zero real cleanup
+discards in 400 d3 games**. Its 1,359 rollout discards all occurred below four
+battlefield lands, confirming that the rule mainly affects search evaluation.
 
 Build the keep set quota-first, net of permanents already on the battlefield.
 The damage target is **near lethal**: enough damage from visible hand and board
@@ -64,11 +70,9 @@ hand limit allows rather than reserving optional lands.
    overflow unless required for the selected Fireblast line.
 5. **Inert cards.** In the passive opponent's zero-nonbasic buckets, shed
    Price of Progress first when it cannot contribute to the visible damage
-   package. Shed Searing Blaze next while the opponent
-   controls no creature; promote it above optional lands only if casting it
-   on our own creature gives a same-turn prowess/other payoff that improves
-   the visible near-lethal package. This promotion must be based on visible
-   board state, not future draws.
+   package. Shed Searing Blaze next while the opponent controls no creature.
+   Cleanup happens after combat, so targeting our own creature cannot create
+   the same-turn prowess payoff contemplated in the draft policy.
 
 Among overflow cards, shed the least playable one first. Use current board
 mana and discount conditions: Fireblast counts as `{0}` only with two
@@ -83,9 +87,21 @@ Incinerator, Magma Jet, then Chandra and optional dig. A spell whose
 visible damage completes immediate lethal moves ahead of this tie-break.
 For a deterministic final tie-break, shed the later hand index.
 
-The provider implementation should return **one** discard index through
-`CleanupDiscardRankingWithOrder` so staged-card and required-piece protection
-remain in force. After approval of this proposal, gate it with a default-on
-`MTG_MIDRANGE_BUCKET_DISCARD` flag (`=0` restores the generic rule), then run
-paired outcomes and all three regression tiers before adoption. No
-implementation or ground-truth change is authorized by this proposal alone.
+The provider returns **one** discard index through
+`CleanupDiscardRankingWithOrder`, preserving staged-card and required-piece
+protection. Its separate full-order hook supplies multi-card cleanup, which
+re-ranks after each shed because quotas and the visible damage package can move.
+
+Validation on the approved rule: 2,230 unit tests and 349 scenarios passed.
+The corrected final smoke had one same-score play change and no slower games;
+the regression tier had one T6→T7 game that returned to T6 at 4× and 16×
+search budget. Regression improved the 2HG mean 6.0133→5.9867 turns
+(gi13 T7→T5 by avoiding an early Fireblast shed), with the other searched
+single-player rows unchanged. The overnight entry set
+improved by about 12 game-turns over 11,206 games: ten searched games faster,
+two slower. One slower d3 game recovered its old win turn at 4× budget; the
+other, gi310 at seed 4314, went T8→unwon by T8 and persisted at 16×.
+In that game the new rollout led the search to spend Fireblast on turn 2,
+leaving only three lands when Chandra was drawn on turn 7. This is a real
+search-quality tradeoff recorded in the Linux ground-truth provenance, not a
+discard legality or card-rule failure. The pooled outcome remains non-inferior.
