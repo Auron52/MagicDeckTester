@@ -1,4 +1,5 @@
 #include "BatchRunner.h"
+#include "BatchResume.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../ai/GameWorkMeter.h"
@@ -37,6 +38,27 @@
 #include <thread>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
+#include <csignal>
+#include <ctime>
+#include <filesystem>
+#include <sstream>
+#if !defined(_WIN32)
+#include <signal.h>
+#include <unistd.h>
+#endif
+
+// Build-time engine fingerprint (cmake/EngineFingerprint.cmake): part of the per-game resume key, so a
+// resume never carries games played by a different build.
+#if defined(__has_include)
+#  if __has_include("engine_fp.h")
+#    include "engine_fp.h"
+#  endif
+#endif
+#ifndef MTG_ENGINE_FP
+#  define MTG_ENGINE_FP ""
+#endif
+
+extern char** environ;
 
 using json = nlohmann::json;
 
@@ -1079,6 +1101,113 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         units[j].assign(jobs[j].games, 0);
     }
 
+    // ---- PER-GAME RESUME (MTG_BATCH_RESUME=<file>; see BatchResume.h) ---------------------------------
+    // Games a killed run of THIS batch already finished are folded in from the log instead of replayed:
+    // their slots get exactly what the pool wrote then, they are not enqueued, and they count toward the
+    // job's completion. REFUSED (a fresh log, the old one renamed aside) when the manifest uses a rule
+    // that makes one game's outcome depend on its cell's OTHER games or on scheduling -- the relative
+    // ceiling (abandon_k / abandon_calib: a calibration sample) or condemnation (a row/cell median) --
+    // because carrying part of such a cell would change what the rest of it does. Neither the mulligan
+    // validation A/B nor the regression tiers use either.
+    std::vector<std::vector<char>> carried(jobs.size());
+    std::vector<int>               ncarried(jobs.size(), 0);
+    std::unique_ptr<batchresume::Log> resume_log;
+    if (const char* rpath = EnvPath("MTG_BATCH_RESUME"))
+    {
+        std::string key_src;
+        { const char* ck = std::getenv("MTG_BATCH_RESUME_KEY"); key_src += ck ? ck : ""; }
+        key_src += "\x1f"; key_src += MTG_ENGINE_FP;
+        {
+            std::ifstream mf(manifest_path, std::ios::binary);
+            key_src += "\x1f";
+            key_src.append((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
+        }
+        {
+            std::vector<std::string> env;
+            for (char** e = environ; e && *e; ++e)
+            {
+                const std::string v = *e;
+                if (v.rfind("MTG_", 0) != 0) { continue; }
+                // the resume variables themselves, and pure read-outs that cannot move a game
+                if (v.rfind("MTG_BATCH_RESUME", 0) == 0 || v.rfind("MTG_BATCH_HEARTBEAT", 0) == 0
+                    || v.rfind("MTG_BATCH_DIAG_KILL_AFTER", 0) == 0 || v.rfind("MTG_SLOW_GAME_MS", 0) == 0)
+                { continue; }
+                env.push_back(v);
+            }
+            std::sort(env.begin(), env.end());
+            for (const std::string& v : env) { key_src += "\x1f"; key_src += v; }
+        }
+        const std::string key = batchresume::Fnv64Hex(key_src);
+        bool refuse = condemn.enabled;
+        for (const Job& j : jobs) { if (j.abandon_k > 0.0 || j.abandon_calib > 0) { refuse = true; } }
+        const std::string rp = rpath;
+        const batchresume::Loaded L = batchresume::Load(rp);
+        std::string why;
+        if (L.exists)
+        {
+            if (!L.header_ok)                                { why = "no header"; }
+            else if (L.header != batchresume::Header(key))   { why = "a different batch (inputs, build, manifest or MTG_* environment changed)"; }
+            else if (refuse)                                 { why = "this manifest uses a calibration ceiling or condemnation"; }
+        }
+        bool fresh = !L.exists || !why.empty();
+        if (L.exists && !why.empty())
+        {
+            std::error_code ec;
+            const std::string aside = rp + ".rejected." + std::to_string(static_cast<long long>(std::time(nullptr)));
+            std::filesystem::rename(rp, aside, ec);
+            if (ec)
+            {
+                std::fprintf(stderr, "[batch] RESUME: %s is %s and could NOT be moved aside (%s) -- running WITHOUT"
+                                     " a resume log; move it yourself.
+", rp.c_str(), why.c_str(), ec.message().c_str());
+                fresh = false;
+            }
+            else
+            {
+                std::fprintf(stderr, "[batch] RESUME: %s is %s -- PRESERVED as %s; every game is played
+",
+                             rp.c_str(), why.c_str(), aside.c_str());
+            }
+        }
+        long long ncarry = 0, nbad = 0;
+        if (L.exists && why.empty())
+        {
+            for (std::size_t j = 0; j < jobs.size(); ++j) { carried[j].assign(static_cast<std::size_t>(std::max(0, jobs[j].games)), 0); }
+            for (const batchresume::GameRec& r : L.recs)
+            {
+                if (r.job >= static_cast<int>(jobs.size()) || jobs[r.job].name != r.name || r.gi >= jobs[r.job].games
+                    || std::binary_search(jobs[r.job].skip_games.begin(), jobs[r.job].skip_games.end(), r.gi))
+                { ++nbad; continue; }
+                if (carried[r.job][r.gi]) { continue; }   // a duplicate of the same game: identical by construction
+                carried[r.job][r.gi] = 1;
+                ++ncarried[r.job];
+                ++ncarry;
+                win_turns[r.job][r.gi]    = r.wt;
+                digests[r.job][r.gi]      = r.dg;
+                units[r.job][r.gi]        = r.units;
+                abandoned_at[r.job][r.gi] = r.ab ? 1 : 0;
+                job_ms[r.job].fetch_add(r.ms, std::memory_order_relaxed);
+            }
+            int complete = 0;
+            for (std::size_t j = 0; j < jobs.size(); ++j)
+            { if (ncarried[j] > 0 && ncarried[j] + static_cast<int>(jobs[j].skip_games.size()) == jobs[j].games) { ++complete; } }
+            std::fprintf(stderr, "[batch] RESUME: carried %lld finished games from %s (%d job(s) already complete;"
+                                 " %lld record(s) rejected%s) -- they are NOT played again
+",
+                         ncarry, rp.c_str(), complete, nbad + L.bad, L.torn ? ", 1 torn last record dropped" : "");
+        }
+        if (fresh || why.empty())
+        {
+            resume_log = std::make_unique<batchresume::Log>();
+            if (!resume_log->Open(rp, key, fresh, L.torn && !fresh))
+            {
+                std::fprintf(stderr, "[batch] RESUME: cannot open %s -- running WITHOUT a resume log
+", rp.c_str());
+                resume_log.reset();
+            }
+        }
+    }
+
     // Flatten every game of every job into one work list, minus each job's index-carry skip list
     // (see Job::skip_games). A skipped slot is stamped kSkipped here, which reuses the EXISTING
     // condemned-cell path in reduce_job verbatim: `win_turns == kSkipped` with `abandoned_at == 0`
@@ -1099,6 +1228,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             {
                 // sk is sorted and deduped (ParseJob), so one forward cursor matches it in O(games).
                 if (s < sk.size() && sk[s] == gi) { ++s; win_turns[j][gi] = kSkipped; continue; }
+                if (!carried[j].empty() && carried[j][gi]) { continue; }   // folded in from the resume log
                 items.push_back({j, gi});
             }
         }
@@ -1516,10 +1646,20 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // zero, on_job_done never fired, and the job's `played=/ms=/units=` summary line was simply
         // ABSENT from the streamed output. That is how the first carried run presented -- correct
         // per-game results, correct deltas, and a `nan` in the ms/game column with no error anywhere.
-        remaining[j].store(jobs[j].games - static_cast<int>(jobs[j].skip_games.size()),
+        remaining[j].store(jobs[j].games - static_cast<int>(jobs[j].skip_games.size()) - ncarried[j],
                            std::memory_order_relaxed);
     }
     std::mutex cb_mtx;
+    // A job the resume log already completed has no game left to finish it: report it now, in manifest
+    // order, exactly as its last game would have.
+    if (on_job_done)
+    {
+        for (std::size_t j = 0; j < jobs.size(); ++j)
+        {
+            if (ncarried[j] > 0 && remaining[j].load(std::memory_order_relaxed) == 0)
+            { BatchJobResult r = reduce_job(j); std::lock_guard<std::mutex> lk(cb_mtx); on_job_done(r); }
+        }
+    }
 
     // Slowest-game heartbeat (see Heartbeat). One running-slot per worker; inert unless
     // MTG_BATCH_HEARTBEAT names a file.
@@ -2291,6 +2431,35 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
+                // Durable BEFORE this game counts toward its job: one write() (see BatchResume.h).
+                if (resume_log)
+                {
+                    batchresume::GameRec gr;
+                    gr.job = wi.job; gr.gi = wi.game; gr.wt = win_turns[wi.job][wi.game];
+                    gr.dg = digests[wi.job][wi.game]; gr.units = units[wi.job][wi.game]; gr.ms = g_ms;
+                    gr.ab = abandoned_at[wi.job][wi.game] != 0; gr.name = job.name;
+                    resume_log->Append(gr);
+                    // MTG_BATCH_DIAG_KILL_AFTER="<N>[:<sig>]" (DIAGNOSTIC ONLY): signal this process right
+                    // after the N-th recorded game, so a resume test interrupts at a COUNT, not a time.
+                    static const std::pair<long long, int> s_kill = []{
+                        const char* e = std::getenv("MTG_BATCH_DIAG_KILL_AFTER");
+                        long long n = 0; int sig = 15;
+                        if (e && *e) { std::sscanf(e, "%lld:%d", &n, &sig); }
+                        return std::make_pair(n, sig);
+                    }();
+                    static std::atomic<long long> s_kill_n{ 0 };
+                    if (s_kill.first > 0 && s_kill_n.fetch_add(1) + 1 == s_kill.first)
+                    {
+                        std::fprintf(stderr, "[batch] DIAG KILL: signal %d after %lld recorded games\n",
+                                     s_kill.second, s_kill.first);
+                        std::fflush(stderr);
+#if defined(_WIN32)
+                        std::raise(s_kill.second);
+#else
+                        ::kill(::getpid(), s_kill.second);
+#endif
+                    }
+                }
                 // Per-game play digest + work (escalation-skip prototype; see ai/EscStats.h), so a paired
                 // A/B can count the games whose play actually moved, not just the aggregate.
                 static const bool s_esk_game = EnvOn("MTG_ESC_SKIP_LOG");

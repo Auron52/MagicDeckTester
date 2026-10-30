@@ -106,9 +106,22 @@ MF=$OUT/manifest.json
 # ONE pooled batch for both arms (inherits any MTG_CONFOUND_BOTTOM from the caller's environment, which
 # applies to both arms alike). The per-arm env levers are cleared: the manifest carries them now, and
 # the batch refuses a job whose manifest key and env form are both set.
+#
+# RESUMABLE PER GAME (USER 2026-10-29: after a pause "the only wasted work that is allowed is games in
+# progress"). Every finished game is written to $OUT/games.resume the moment it lands; re-running this
+# script on the same inputs folds those games back in instead of replaying them (src/runner/BatchResume.h).
+# The key is the CONTENT of everything a game reads -- decklist, base profile, both tables, every sidecar
+# in the deck folder, the card data -- plus (inside the batch) the build, the manifest and the MTG_*
+# environment, so a changed input starts a fresh log (the old one is kept aside). KM_RESUME=0 disables.
+RESUME_ENV=()
+if [ "${KM_RESUME:-1}" != 0 ]; then
+  RKEY=$(harness_resume_key "$DECK" "$BASE" "$A_PROF" "$B_PROF" "$(dirname "$DECK")" "$(dirname "$BASE")")
+  RESUME_ENV=(MTG_BATCH_RESUME="$OUT/games.resume" MTG_BATCH_RESUME_KEY="$RKEY")
+  [ -e "$OUT/games.resume" ] && log "resuming: $(($(wc -l < "$OUT/games.resume") - 1)) finished game record(s) in $OUT/games.resume (used only if the key still matches)"
+fi
 log "--- arms A=$A_TAG B=$B_TAG: one pooled batch, seeds interleaved ($(stamp)) ---"
 rm -f "$OUT/EARLY_STOP.txt" "$OUT/EARLY_STOP_SEEDS.txt"
-env -u MTG_EXHAUSTIVE_PROFILE -u MTG_EXHAUSTIVE_BOTTOM \
+env -u MTG_EXHAUSTIVE_PROFILE -u MTG_EXHAUSTIVE_BOTTOM "${RESUME_ENV[@]}" \
   "$BIN" --batch "$MF" --threads 0 --game-log-dir "$OUT/wins" > "$OUT/batch.log" 2> "$OUT/batch.err" &
 BPID=$!
 if [ "$EARLY" = 1 ]; then

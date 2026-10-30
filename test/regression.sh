@@ -404,7 +404,23 @@ TOTAL_START=$(date +%s)
 # `tee` to batch.log so per-job results STREAM to the terminal live as each case
 # finishes (the binary flushes one line per completed job), instead of being buffered
 # inside $() until the whole batch ends. We then read the captured file for parsing.
-"$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$LOGDIR/wins" \
+# REG_RESUME=1 (opt-in; scripts/mullgen.sh sets it for its validation regression): every finished game is
+# recorded in $LOGDIR/games.resume, and a re-run of the SAME batch -- same build, manifest, MTG_*
+# environment and input CONTENT (each case's deck folder plus the card/heuristic data; see
+# harness_resume_key) -- folds those games back in instead of replaying them, byte-identically
+# (src/runner/BatchResume.h). Off by default so an ordinary tier run always plays every game.
+RESUME_ENV=()
+if [ "${REG_RESUME:-0}" = 1 ]; then
+  _rk_in=()
+  for spec in "${CASES[@]}"; do
+    # shellcheck disable=SC2086
+    set -- $spec; _b=${1%2hg}
+    _rk_in+=("${DECK_FILE[$_b]}" "${DECK_PROF[$_b]}" "$(dirname "${DECK_FILE[$_b]}")" "$(dirname "${DECK_PROF[$_b]}")")
+  done
+  RESUME_ENV=(MTG_BATCH_RESUME="$LOGDIR/games.resume" MTG_BATCH_RESUME_KEY="$(harness_resume_key "${_rk_in[@]}")")
+  log "(REG_RESUME=1: finished games are recorded in $LOGDIR/games.resume and carried by a re-run of this batch)"
+fi
+env "${RESUME_ENV[@]}" "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$LOGDIR/wins" \
     2>"$LOGDIR/batch.err" | tee "$LOGDIR/batch.log"
 TOTAL=$(( $(date +%s) - TOTAL_START ))
 BATCH_OUT=$(cat "$LOGDIR/batch.log")
