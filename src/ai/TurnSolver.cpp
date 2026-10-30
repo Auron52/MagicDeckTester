@@ -82844,7 +82844,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 520;   // pinned; see the static_assert below (+24: Plan::look_top_pins (Risen Reef land / trigger-order entries), 2026-10-18, folded into the Xaxes key; +8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
+static constexpr std::size_t kPlanDomAssertedSize = 528;   // pinned; current-main + Cyclone layout measured 528 (cast_trigger_target_choice folded below); see the static_assert below (+24: Plan::look_top_pins (Risen Reef land / trigger-order entries), 2026-10-18, folded into the Xaxes key; +8: Plan::putback_choice (Brainstorm's put-back pin, which itself landed in padding) + Plan::putback_group (the put-back fold's sibling id), 2026-10-17, measured 464 -> 472, both folded into the Xaxes key; +8: Plan::attack_attach_choice (Raubahn's attack-attach pin), 2026-10-17, measured 456 -> 464, folded into the Xaxes key; +8: Bruna gather + Wings combat-swap pins, 2026-10-05; +8: Plan::bounce_choice, 2026-10-08; +0: Plan::land_after_casts + Plan::landfall_target_choice, 2026-10-15 -- both placed in existing padding, both folded into the Xaxes key; +0: Plan::land_from_top, 2026-10-15, padding, folded by hand; +0: land_after_casts -> int8_t Plan::land_slot, 2026-10-15, same byte; +32: Plan::land_search_pins + attack/upkeep land-search pins, 2026-10-15; +8: Plan::combat_crack_choice, 2026-10-15; +0: Plan::land_search_act_slot (int8_t), in padding; +8: Plan::land_tie_key, 2026-10-15 -- EnumeratePlansWithLand's sort scratch, a function of actions + land_to_play, so the axes key needs nothing new; 448 + 8 = 456 when the two branches met, measured 2026-10-16)
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -92166,14 +92166,14 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (!fan.Cross(s)) { continue; }
                 ExpireStagedCards(s);
                 const int cut = have ? FsChildCut(s, cutoff, best_tail.win_turn, max_turns, budget) : cutoff;
-                if (eot_seen != nullptr && !eot_seen->Visit(BuildDedupKey(s), s, cut, depth, max_turns)) { continue; }
+                if (eot_seen != nullptr && !eot_seen->Visit(BuildDedupKey(s), s, cut, DepthAcrossTurn(s, depth), max_turns)) { continue; }
                 domin::Probe dprobe;
                 if (DomActive() && dom_arch)
                 {
                     dprobe = domin::Check(*dom_arch, s);
                     if (dprobe.prune) { continue; }
                 }
-                TurnSolver::SearchLine line = FSLineWin(s, depth, max_turns, cut, second_main, tt, lc, budget);
+                TurnSolver::SearchLine line = FSLineWin(s, DepthAcrossTurn(s, depth), max_turns, cut, second_main, tt, lc, budget);
                 if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, line.win_turn); }
                 if (!have || line.win_turn < best_tail.win_turn)
                 {
