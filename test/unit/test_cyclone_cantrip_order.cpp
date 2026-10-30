@@ -61,7 +61,9 @@ const CycloneProvider& ProvCo() { static const CycloneProvider cp; return cp; }
 struct ArmCo
 {
     heurarm::Arm saved;
-    ArmCo() : saved(heurarm::t_arm) {}
+    // These tests read the FULL scored fan: MTG_CYCLONE_PB_PLANS is pinned off in every scope, so they hold whatever its
+    // default (test_cyclone_cantrip_plans.cpp covers the plan-level prune).
+    ArmCo() : saved(heurarm::t_arm) { heurarm::t_arm[static_cast<int>(heurarm::CYCLONE_PB_PLANS)] = 0; }
     ArmCo& Set(heurarm::Slot slot, int v) { heurarm::t_arm[static_cast<int>(slot)] = static_cast<std::int8_t>(v); return *this; }
     ~ArmCo() { heurarm::t_arm = saved; }
 };

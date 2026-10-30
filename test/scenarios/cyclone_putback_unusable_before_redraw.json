@@ -7,9 +7,12 @@
     "later' says it goes back. Rank 0 of the amended score puts back [Brainsurge, Brainsurge]; the pre-amendment score",
     "put back [Remand, Remand] (the lowest keep needs), as gi13's A arm did. The searched fan is unchanged (an ORDER); at",
     "d5 b20 the search takes rank 0 here. The switch is DEFAULT OFF (measured worse, ledger Q44), so the fixture turns",
-    "it on; it FAILS with the switch off."
+    "it on; it FAILS with the switch off.",
+    "PB_PLANS is pinned OFF (2026-10-30): this fixture tests the FULL scored fan's rank 0, which the plan-level prune",
+    "replaces with the JUNK pick (here [Remand, Remand]: both cards are unusable before the redraw and Remand is the",
+    "lower keep need). It stays meaningful whatever PB_PLANS's default is."
   ],
-  "env": { "MTG_CYCLONE_PUTBACK_USABLE": "1" },
+  "env": { "MTG_CYCLONE_PUTBACK_USABLE": "1", "MTG_CYCLONE_PB_PLANS": "0" },
   "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
   "turn": 1,
   "on_the_play": false,
