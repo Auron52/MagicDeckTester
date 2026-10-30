@@ -117,14 +117,17 @@
   "enabled": true,
   "mull_gen_depth": 1,
   "mull_gen_budget_ms": 3,
-  "note": "ADOPTION CANDIDATE 2026-09-03: fresh model (11,707 rows on current play, RMSE 0.475) + escalation_fresh_frac=1.0. The 2026-08-06 play rejection (and every re-test) measured the hybrid with the heuristic escalation on the legacy shared REMAINING budget; with a fresh escalation budget the held-out A/B is parity (-0.0001, t=-0.1, 26f/15s, 0 flips) at 2.14x less d5 wall. mull_gen d1/b3 + K=20 carried from the 2026-09-03 phase F derivation.",
-  "target_depth": 5,
+  "note": "ADOPTION CANDIDATE 2026-09-03: fresh model (11,707 rows on current play, RMSE 0.475) + escalation_fresh_frac=1.0. The 2026-08-06 play rejection (and every re-test) measured the hybrid with the heuristic escalation on the legacy shared REMAINING budget; with a fresh escalation budget the held-out A/B is parity (-0.0001, t=-0.1, 26f/15s, 0 flips) at 2.14x less d5 wall. mull_gen d1/b3 + K=20 carried from the 2026-09-03 phase F derivation. | E.7 play-setting stage 2026-10-30: d6b20 adopted over its enabled block (d5/20); the cheapest of 1 passing arm(s) (0.99x vs live, delta +0.00025)",
+  "target_depth": 6,
   "budget_ms": 20,
   "expected_buckets": 20,
   "escalation_cap": 5,
   "beam_width": 3,
   "beam_leafdepth": 2,
-  "escalation_r": 21.0
+  "escalation_r": 21.0,
+  "ladder": "single",
+  "leaf": "none",
+  "alpha": "relaxed"
  },
  "eval_model": {
   "intercept": 4797,
