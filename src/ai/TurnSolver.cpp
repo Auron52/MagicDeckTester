@@ -66412,8 +66412,9 @@ static thread_local bool t_rollout_narrow = false;
 static bool FsNextLeafConstant(const GameState& s);
 static bool EchoEdgeFoldHere(const GameState& s)
 {
-    return g_fsline_nest > 0 && g_cs_solver_nest == 0 && g_rollout_nest == 0 && greedywindow::t_depth == 1
-        && FsNextLeafConstant(s);
+    // A following extra turn remains inside this round, so its upkeep is still searched.
+    return !s.deck_has_extra_turn && g_fsline_nest > 0 && g_cs_solver_nest == 0
+        && g_rollout_nest == 0 && greedywindow::t_depth == 1 && FsNextLeafConstant(s);
 }
 // The echo cover census's search-side split (MTG_ECHO_AXIS_STATS; SpellEffects.h NoteEchoCover counts the
 // totals). An obligation past the pin's cover, resolved while the innermost search frame still had depth:
