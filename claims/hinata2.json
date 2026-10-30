@@ -4,9 +4,11 @@
   "valueleaf": "em:63f552c7e70c9e1c2c09"
  },
  "deck": "hinata2",
+ "detail": "paused by the USER: resumes when worker MagicDeckTester2-76d2cc next starts; set aside for every other worker",
  "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
- "heartbeat": "2026-10-30T21:27:24Z",
+ "heartbeat": "2026-10-30T21:32:50Z",
  "host": "8854e545ddab",
+ "paused": "2026-10-30T21:32:49Z",
  "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
  "score": 1.089,
  "stage": "mulligan",
@@ -15,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-30T11:00:00Z",
- "state": "running",
+ "state": "paused",
  "worker": "MagicDeckTester2-76d2cc"
 }
