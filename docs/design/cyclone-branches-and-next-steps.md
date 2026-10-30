@@ -112,8 +112,9 @@ All of these wait for a free box. While a generation runs, nothing runs alongsid
    - viewer: `viewer_validate_check`.
 7. **Line up with the cache / budget-reliability work** (another agent, brief on `origin/budget-reliability-docs`,
    `docs/design/cache-unit-neutrality-audit.md`). `cyclone-mem`'s `5a3c185b2` holds the plan-cache determinism the
-   audit builds on. The plan cache's 512 MB/thread was my setting and has not been ruled on; it should follow the USER's
-   floor + overflow design once that lands.
+   audit builds on. **Updated USER ruling (2026-10-30): fixed 512 MB per-thread quotas are rejected.** The integration
+   retains the exact-key/pricing fixes and restores the existing shared RAM-sized plan/FSL budgets. Land Cyclone before
+   the separate floor/shared-overflow project unless verification demonstrates that cache work is a prerequisite.
 
 ## 4. Open USER decisions (none blocks the steps above)
 
