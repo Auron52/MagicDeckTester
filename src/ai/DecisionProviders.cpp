@@ -32339,6 +32339,7 @@ int CycloneCastOrderRankOf(const CardDefinition& def)
 #define CYCLONE_CO_REV(fn, slot, envname) \
     static bool fn() { static const bool on = EnvOn(envname); return heurarm::Flag(heurarm::slot, on); }
 CYCLONE_CO_REV(CycloneCoRevCyclers, CYCLONE_CO_REV_CYCLERS, "MTG_CYCLONE_CO_REV_CYCLERS")   // DEFAULT OFF
+CYCLONE_CO_REV(CycloneCoCyclersBeforeSong, CYCLONE_CO_CYCLERS_BEFORE_SONG, "MTG_CYCLONE_CO_CYCLERS_BEFORE_SONG")   // DEFAULT OFF
 CYCLONE_CO_REV(CycloneCoRevEldrazi, CYCLONE_CO_REV_ELDRAZI, "MTG_CYCLONE_CO_REV_ELDRAZI")   // DEFAULT OFF
 CYCLONE_CO_REV(CycloneCoRevSong,    CYCLONE_CO_REV_SONG,    "MTG_CYCLONE_CO_REV_SONG")      // DEFAULT OFF
 CYCLONE_CO_REV(CycloneCoRevFlat,    CYCLONE_CO_REV_FLAT,    "MTG_CYCLONE_CO_REV_FLAT")      // DEFAULT OFF
@@ -32348,7 +32349,8 @@ int CycloneProvider::CastOrderRank(const GameState& s, const CardDefinition& def
 {
     if (!CycloneCastOrderOn()) { return DeckProvider::CastOrderRank(s, def); }
     int r = CycloneCastOrderRankOf(def);
-    if (r > 80 && r < 90 && CycloneCoRevCyclers()) { r = 5; }
+    if (r > 80 && r < 90 && CycloneCoRevCyclers()) { r = 5; }   // diagnostic takes precedence
+    else if (r > 80 && r < 90 && CycloneCoCyclersBeforeSong()) { r = 55; }
     else if (r >= 100 && r < 200 && CycloneCoRevEldrazi()) { r = 5; }
     else if (r == 60 && CycloneCoRevSong()) { r = 5; }
     else if (r >= 10 && r <= 70 && r != 60 && CycloneCoRevFlat()) { r = 65; }
@@ -32362,6 +32364,7 @@ const char* CycloneProvider::CastOrderTierName(int rank) const
     if (rank == 20)                  { return "2 PONDER: look before you put back (Brainstorm then draws seen cards)"; }
     if (rank > 30 && rank < 40)      { return "3-4 PUT-BACK CANTRIP by mana value (Brainstorm, then Brainsurge): draws first"; }
     if (rank == 50)                  { return "5 REMAND (+ a 1-drop): the dearest draw, last among the draws"; }
+    if (rank == 55)                  { return "Q64 CREATURE CYCLER: after the draws, before Song and Cyclone"; }
     if (rank == 60)                  { return "6 RITUAL (Seething Song): after the draws, before what it pays for"; }
     if (rank == 70)                  { return "7 UNPREDICTABLE CYCLONE: after Song, before every cycle and the payoffs"; }
     if (rank > 80 && rank < 90)      { return "8-9 CREATURE CYCLER, hard cast, by mana value (Curator, then Street Wraith)"; }
