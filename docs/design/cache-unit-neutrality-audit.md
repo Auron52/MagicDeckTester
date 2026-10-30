@@ -408,3 +408,46 @@ adopted inside-out, innermost charging memo first.
 - `plancache` `:79153`: "Result-neutral either way … play is identical at ANY budget". The same block corrects
   itself at `:79173`.
 - `AIEngine.h:346-359`: the shared-TT "size+front" rationale.
+
+## Plan (USER rulings, 2026-10-30)
+
+**The governing rule.** USER: *"They should run the same statements if given the same budget and depth etc. How much
+cache space or how many other threads are running should only be able to impact performance at most."* Play must be a
+function of (deck, seed, depth, budget, settings) only. Cache capacity, thread count and machine may change wall time,
+never a decision. Units drive the budget, so a capacity-bounded cache whose hit saves units breaks the rule.
+
+**New caches:** a hit charges exactly what a miss would, always. No exceptions.
+
+**Existing caches: build both designs and measure.** USER: *"we should probably build them both and measure. I can't see
+a better way to be sure of the approach. That said, it's a tricky ask, since we would need to rebalance the budgeting
+for both."*
+
+1. **Always pay.** Every hit replays its miss's charge, so units price the full search tree.
+2. **Floor + overflow (the USER's design).** Each thread gets a FIXED-size floor tier, identical on every machine, with
+   deterministic eviction and per-game or per-decision scope. Hits in the floor are discounted, as today. Whatever the
+   floor evicts goes to an overflow tier sized by available memory, and a hit there charges exactly what the miss would
+   (a pure speed cache). Quality then depends only on the floor size, and extra memory only buys speed.
+
+**Shared prerequisite.** Each entry carries its miss's cost and replays it on a hit. This is needed for every hit in
+design 1 and for overflow hits in design 2. Build it on the `cachecharge` mechanism (`cyclone-mem` `ab4fbc6a2`).
+
+- Replay must go innermost first: every memo nested inside a recorded computation must also replay. Otherwise a
+  recompute is cheaper than the recorded cost and replay overcharges (Kitty gi14: 20,443 units against 4,424).
+- The rollout TT (#11, #12) needs per-turn unit prefixes, because a recompute under an earlier cutoff charges less.
+- The line cache (#14) needs a recorded recompute cost, which is a design question rather than a field.
+
+**The measurement: compare at MATCHED COST, not matched budget.** Both designs charge more units than today for the same
+search, so at the same budget each one searches shallower, and a same-budget A/B would mostly measure that.
+Rebalancing by hand is the tricky part, so measure it instead: run each arm (today with constant caps, always pay, floor
+at one or two floor sizes) at three or four budget multipliers on held-out seeds. Plot avg win turn against mean core-ms
+per game. The arm with the better quality-vs-cost frontier wins, and the multiplier at which it matches today's cost IS
+its rebalance. Start with one global units-per-ms factor and check the per-deck spread before considering per-deck
+factors. The cost axis is wall time, so it needs a quiet box, the same thread count and the same build mode on every arm
+(`MTG_PGO=0` both, or PGO both), with the arms interleaved.
+
+**Required whatever the outcome (Rule A):** remove every RAM-, core- or worker-derived cap and every cross-thread pool
+from the unit-relevant caches (#1, #7, #11, #12, #14, #15). Add a standing invariance check to the regression tier: the
+same games at 1 vs N threads and tiny vs huge physical caches must give identical decisions and units.
+
+**Timing.** Every step changes the engine, so it lands only after the Hinata2 mulligan stage finishes. The exception is
+anything proven play-identical on Hinata2's keepgen play digest.
