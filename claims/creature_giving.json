@@ -10,6 +10,8 @@
  "heartbeat": "2026-10-30T15:22:11Z",
  "host": "550a08fdc1f3",
  "land_note": "build failed in the landing worktree -- left for an agent",
+ "landed": "58dcb45053e9fa6aa62da85a92872d6eeff6cdff",
+ "landed_at": "2026-10-30T15:40:02Z",
  "result_branch": "artifact-refresh/creature_giving-20261030-1524",
  "run_id": "creature_giving-artifact-queue-d7d6a5-20261030T073618",
  "score": 0.3379,
