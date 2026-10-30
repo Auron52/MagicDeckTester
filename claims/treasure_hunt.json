@@ -1,25 +1,19 @@
 {
  "blobs": {
-  "mulligan": "f4055ba42152f2c3806ee0c99db906abe6d9f955",
+  "mulligan": "e5acdc35d8cbd9b02a9c851d0092c42cd5f4e02c",
   "valueleaf": "em:22c2f0ca0230d32b1c26"
  },
  "deck": "treasure_hunt",
- "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.020406 t) but the new table costs MORE (cost 1.033x (se 0.009, 32 seeds)): the USER's call; left live on the result branch, NOT landed",
- "finished": "2026-10-30T19:10:40Z",
- "frozen": "ad28dda1b9ed4858ddf06f5f595325ddc8ddc146",
- "heartbeat": "2026-10-30T18:52:11Z",
+ "frozen": "6b655b71fbd2150b8830ea70780236b09fa1eba1",
+ "heartbeat": "2026-10-30T21:13:45Z",
  "host": "58199181d02e",
- "land_note": "HELD for the USER: mulligan: TRADE -- quality not worse (new-vs-old -0.020406 t) but the new table costs MORE (cost 1.033x (se 0.009, 32 seeds)): the USER's call; left live on the result branch, NOT landed",
- "landed": "7294cc39e7f4b1a09bb2d4921ea1e22e3a226818",
- "landed_at": "2026-10-30T20:42:25Z",
- "result_branch": "artifact-refresh/treasure_hunt-20261030-1910",
- "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T135317",
- "score": 0.4111,
- "stage": "mulligan",
+ "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T211345",
+ "score": 0.0656,
+ "stage": "valueleaf",
  "stages": [
-  "mulligan"
+  "valueleaf"
  ],
- "started": "2026-10-30T13:53:17Z",
- "state": "done",
+ "started": "2026-10-30T21:13:45Z",
+ "state": "running",
  "worker": "artifact-queue-tool-647f24"
 }
