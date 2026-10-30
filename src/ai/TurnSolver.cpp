@@ -57538,8 +57538,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const CardDefinition* copt = CardDatabase::Instance().Lookup(name);
         if (!copt || !copt->card.IsCreature()) { return; }
         int mv = copt->card.m_mana_cost.ManaValue();
+        // Never a STAGED copy (impulse-exiled / on an adventure: not in the hand the Vial reaches) --
+        // lockstep with AIEngine's deploy_via_vial and CollectActions' Vial candidates.
         auto hand_it = std::find_if(ap.hand.begin(), ap.hand.end(),
-            [&name](const Card& c) { return c.m_name == name; });
+            [&name](const Card& c) { return c.m_name == name && !c.m_is_staged; });
         if (hand_it == ap.hand.end()) { return; }
         int bf_sz = static_cast<int>(state.battlefield.size());
         for (int vi = 0; vi < bf_sz; ++vi)

@@ -24013,6 +24013,16 @@ inline bool WantVialCharge(const GameState& state, const Permanent& vial)
     int count_above = 0;   // creatures of any higher MV (includes count_next)
     for (const Card& card : ap.hand)
     {
+        // A STAGED card is impulse-exiled / on an adventure: castable, never Vial-able (the Vial puts
+        // "a creature card from your hand" -- CollectActions' Vial candidates skip it for the same reason).
+        // And the two worlds hold it differently at upkeep: a simulated state keeps it in `hand` with
+        // m_is_staged set, the executor keeps it in Player::staged_cards until TakeTurn merges it -- so
+        // counting it made the rollout charge where the executor held. Goblins s4323206 gi3205 (2HG,
+        // MTG_SAC_OUTLET_PAY on) T4 upkeep: Rundvelt's impulse had staged Goblin Matron (MV 3); the
+        // rollout climbed the Vial at 2 to 3 for it and scored a T4 kill that Vials the Matron-found
+        // Goblin Chieftain at 3, the executor held at 2 for Goblin Piledriver and the Chieftain waited a
+        // turn (T4 proven, T5 realised).
+        if (card.m_is_staged) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
         if (!def || !def->card.IsCreature()) { continue; }
         int mv = def->card.m_mana_cost.ManaValue();
@@ -33982,6 +33992,35 @@ struct SacPayOutlet
     bool valid() const { return def != nullptr; }
 };
 
+// THE FODDER-FREE JUDGEMENT (MTG_SAC_OUTLET_PAY): while set, LiveSacPayOutlet answers "none", so no payment
+// on this thread may eat a body and every pool, bound and hold mask sees exactly the lever's OFF-arm board.
+// Set for the first attempt of a payment (the fodder-last block in TapForCostSharedImpl) and for the first
+// pass of the cast-order decider (PayableCastOrderCore): a body is spent only when neither a payment nor an
+// order of the same casts can do without it.
+inline thread_local bool g_pay_fodder_off = false;
+struct PayFodderOffScope
+{
+    bool prev;
+    PayFodderOffScope() : prev(g_pay_fodder_off) { g_pay_fodder_off = true; }
+    ~PayFodderOffScope() { g_pay_fodder_off = prev; }
+    PayFodderOffScope(const PayFodderOffScope&)            = delete;
+    PayFodderOffScope& operator=(const PayFodderOffScope&) = delete;
+};
+
+// THE CAPPED FODDER ATTEMPTS (TapForCostSharedImpl, after the fodder-free attempt failed): the most bodies
+// this payment may eat. -1 = no cap (outside the fodder-last block). The greedy's pip selection refuses a
+// body once this many are already marked eaten in the payment; the backtracker -- which never sees fodder
+// -- is skipped while it is set, since it is exactly the fodder-free solve the first attempt already ran.
+inline thread_local int g_pay_fodder_cap = -1;
+struct PayFodderCapScope
+{
+    int prev;
+    explicit PayFodderCapScope(int cap) : prev(g_pay_fodder_cap) { g_pay_fodder_cap = cap; }
+    ~PayFodderCapScope() { g_pay_fodder_cap = prev; }
+    PayFodderCapScope(const PayFodderCapScope&)            = delete;
+    PayFodderCapScope& operator=(const PayFodderCapScope&) = delete;
+};
+
 // Scan once per payment (never per source per pip -- that is O(n^2) on a 40-token board, which is
 // exactly the cost this whole strand is trying to remove). state.deck_has_sac_mana_outlet makes it
 // free for every deck that cannot contain one.
@@ -33994,7 +34033,7 @@ inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
     // payer must not eat bodies on the human's behalf; CollectActions keeps the searched action under
     // the same gate. Rollouts run under HumanPlaySuppress, so a search FROM a human state still uses
     // the payment model -- the gate only changes what the human's own payments may do.
-    if (!state.deck_has_sac_mana_outlet || !SacOutletPayEnabled() || HumanPlayActive()) { return out; }
+    if (!state.deck_has_sac_mana_outlet || g_pay_fodder_off || !SacOutletPayEnabled() || HumanPlayActive()) { return out; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || p.pay_sac_eaten) { continue; }

@@ -4505,8 +4505,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!copt || !copt->card.IsCreature()) { return; }
         int mv = copt->card.m_mana_cost.ManaValue();
         Player& ap_v = state.ActivePlayer();
+        // Never a STAGED copy (impulse-exiled / on an adventure) -- lockstep with TurnSolver's apply_vial.
         auto hand_it = std::find_if(ap_v.hand.begin(), ap_v.hand.end(),
-            [&name](const Card& c) { return c.m_name == name; });
+            [&name](const Card& c) { return c.m_name == name && !c.m_is_staged; });
         if (hand_it == ap_v.hand.end()) { return; }
         int bf_sz = static_cast<int>(state.battlefield.size());
         for (int vi = 0; vi < bf_sz; ++vi)
@@ -6414,7 +6415,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
                     {
                         const Action& ca = extra.actions[ci];
-                        if (ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
+                        // Vial puts ride the cast sequence, exactly as resolve_draw_breakpoint and the
+                        // rollout's apply_plan_actions sequence them (see the site-9 twin below).
+                        if ((ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
+                            || ca.kind == Action::Kind::ActivateVial)
                         { pod_cont_order.push_back(ci); }
                     }
                     if (!extra.searched_order && pod_cont_order.size() > 1)
@@ -6431,6 +6435,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     for (int ci : pod_cont_order)
                     {
                         const Action& ca = extra.actions[ci];
+                        if (ca.kind == Action::Kind::ActivateVial)
+                        { deploy_via_vial(ca.card_name); resolve_now(); pod_unlock->Fire();
+                          exec_cont_land_hook(pod_land, ca); continue; }
                         m_cast_riders = CastRiders::Of(ca); cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
                                      ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
                                      ca.splice_count, ca.chosen_float_color, ca.enchant_target,
@@ -8157,7 +8164,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
                 {
                     const Action& ca = extra.actions[ci];
-                    if (ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
+                    // VIAL PUTS RIDE THE CAST SEQUENCE here too (lockstep with the rollout's site 9,
+                    // whose apply_continuation_plan -> apply_plan_actions sequences an ActivateVial
+                    // like a cast of its card, and with resolve_draw_breakpoint above). This list held
+                    // casts only, so a site-9 continuation that Vials a creature in was realised
+                    // WITHOUT the put: Goblins s4113005 gi3004 T4 (MTG_SAC_OUTLET_PAY on) -- Muxus puts
+                    // Goblin Matron, Matron finds Goblin Chieftain, the scored continuation Vials the
+                    // Chieftain in (haste for the team, a 19-damage swing); the executor dropped it,
+                    // the main-2 solve Vialed it after combat, and the proven T4 kill realised T5.
+                    if ((ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
+                        || ca.kind == Action::Kind::ActivateVial)
                     { pe_cont_order.push_back(ci); }
                 }
                 if (!extra.searched_order && pe_cont_order.size() > 1)
@@ -8210,6 +8226,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 exec_cont_reveal_precast(extra);   // position-0 reveal outlets (apply_continuation_plan's twin)
                 for (int ci : pe_cont_order)
                 {
+                    if (extra.actions[ci].kind == Action::Kind::ActivateVial)
+                    { deploy_via_vial(extra.actions[ci].card_name); resolve_now(); pe_unlock->Fire();
+                      exec_cont_land_hook(pe_land, extra.actions[ci]); continue; }
                     pe_cast(extra.actions[ci]);
                     pe_trunc = pe_truncates(extra.actions[ci]);
                     pe_unlock->Fire(); exec_cont_land_hook(pe_land, extra.actions[ci]);

@@ -1691,9 +1691,12 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // `def` is NULLABLE: a TOKEN has no CardDefinition, and on this deck the fodder IS tokens (see
     // IsSacPayFodder). Requiring one here is what made the §2b payment source unable to eat the very
     // bodies MTG_SAC_OUTLET_PAY suppresses the searched actions for.
+    // The capped fodder attempts (g_pay_fodder_cap, see the fodder-last block in TapForCostSharedImpl):
+    // set once per pip, before the selection loop, from the bodies this payment has already marked.
+    bool fodder_capped = false;
     auto fodder_ok = [&](const Permanent& p, const CardDefinition* def) -> bool
     {
-        if (!sac_outlet.valid()) { return false; }
+        if (!sac_outlet.valid() || fodder_capped) { return false; }
         // The creature THIS cast is about to sacrifice as a cost is already spent (see
         // g_pay_sac_victim below); eating it too would spend one body twice.
         if (g_pay_sac_victim != 0 && p.card.m_number == g_pay_sac_victim) { return false; }
@@ -2033,6 +2036,13 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // O(board^2) -- measured at +48% CPU on Fungus candidate B before this hoist. Empty
             // whenever MTG_SAC_VICTIM_DOOMED is off, so the default path does not even scan.
             const std::vector<int> pay_doomed = DoomedTokenCreators(state);
+            if (g_pay_fodder_cap >= 0 && sac_outlet.valid())
+            {
+                int eaten = 0;
+                for (const Permanent& q : state.battlefield)
+                { if (q.controller_index == active && q.pay_sac_eaten) { ++eaten; } }
+                fodder_capped = eaten >= g_pay_fodder_cap;
+            }
             int dh_ncand = 0;   // MTG_PAY_DEPLETION_HOLD: candidates this pip compared (>1 -> an alternative exists)
             for (int i = 0; i < bn; ++i)
             {
@@ -3286,7 +3296,9 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // its complete fallback is preserved) and could construct an illegal {S} assignment on a
     // MIXED manabase -- there it is skipped (pessimistic-safe: a payable cast the greedy missed
     // fails instead of resolving illegally; disclosed in the ledger). Inert for snow_pips == 0.
-    auto snow_backtrack_ok = [&]() -> bool { return !snow_strict; };
+    // ...and not inside the CAPPED fodder attempts (g_pay_fodder_cap): the backtracker never sees fodder,
+    // so here it would re-run, on the same board and mask, the fodder-free solve that already failed.
+    auto snow_backtrack_ok = [&]() -> bool { return !snow_strict && g_pay_fodder_cap < 0; };
     ManaPool bt_leftover;
     if (tapstats::Enabled()) { tapstats::g_site_percast.fetch_add(1, std::memory_order_relaxed); }
     const PayRollbackLedger ledger_pre = state.pay_ledger;   // (the give-back below re-solves from here)
@@ -5193,11 +5205,11 @@ static int PoWidenFirstUnpayable(const std::vector<Action>& acts, const std::vec
     return -1;
 }
 
-static void PayableCastOrderCore(const GameState& state, const std::vector<Action>& acts,
+static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<Action>& acts,
                                  std::vector<int>& order, const std::vector<InternedName>* hand_exits,
                                  int extra_wild, int site)
 {
-    if (order.size() < 2) { return; }
+    if (order.size() < 2) { return false; }
     bool any = false;
     for (int i : order)
     { if (IsFundingProducerCast(acts[i]) || PoIsRevealCostCast(acts[i])) { any = true; break; } }
@@ -5224,8 +5236,8 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
             widen_only = any = (w_union != 0);
         }
     }
-    if (!any) { return; }
-    if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return; }
+    if (!any) { return false; }
+    if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return false; }
     g_po_stats.domain[site].fetch_add(1, std::memory_order_relaxed);
 
     ManaPool pool0 = AvailableManaPool(state);   // already includes the turn-scoped float
@@ -5268,7 +5280,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         hand = hand0;
         return FirstUnpayablePosImpl(state, acts, ord, la_pool0, &hand, la_p) < 0;
     };
-    if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return; }
+    if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return true; }
 
     // Order-free necessary condition: every cast at its cheapest (reveal granted) against the pool
     // plus EVERY producer's output. A sequential payment implies this aggregate one, so failing it
@@ -5343,7 +5355,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         if (widen_only) { bound.wild += w_live * std::popcount(static_cast<unsigned>(w_union)); }
         if (la_host != nullptr) { for (const ManaPool& b : la.bonus) { bound.AddPool(b); } }
         if (!bound.CanPay(total))
-        { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return; }
+        { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return false; }
     }
 
     // (1) The maker hoist (ApplyEtbTreasureFundingOrder's order), judged reveal-aware.
@@ -5355,7 +5367,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     {
         order.swap(hoisted);
         g_po_stats.hoist[site].fetch_add(1, std::memory_order_relaxed);
-        return;
+        return true;
     }
 
     // (2) Nearest payable permutation. Work in POSITIONS of the given order (0..n-1).
@@ -5414,10 +5426,41 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         {
             order = trial;
             g_po_stats.perm[site].fetch_add(1, std::memory_order_relaxed);
-            return;
+            return true;
         }
     }
     g_po_stats.none[site].fetch_add(1, std::memory_order_relaxed);
+    return false;
+}
+
+// THE ORDER-LEVEL HALF OF "FODDER IS THE LAST SOURCE" (MTG_SAC_OUTLET_PAY; the payment-level half is the
+// fodder-last block in TapForCostSharedImpl). Both apply worlds realise a plan's casts in the order this
+// decider returns: the given order when it projects payable, else the nearest payable permutation. With a
+// sac-for-mana outlet live, AvailableManaPool credits every legal body as a mana, so an order that can be
+// paid only by EATING one projects payable and is kept -- while a different order of the SAME casts pays
+// from the board alone. Fungus s4245015 gi5014 (2HG) T3: Forest, Sporecrown Thallid then Brightcap Badger
+// (off the adventure) -- Thallid first spends the Forest's {G}, the Badger's {G} has no source until its own
+// grant is live, and Utopia Mycon eats a Saproling for it; Badger first pays off Hickory Woodlot + Ancient
+// Tomb, and its grant taps Mycon and the Saprolings for the Thallid. The OFF arm (no fodder in the pool)
+// read Thallid-first as unpayable and took Badger-first; the ON arm kept Thallid-first, lost the Saproling
+// and the T5 kill (T6). So the decider first looks for a payable order judged WITHOUT fodder (the OFF arm's
+// decider exactly, PayFodderOffScope), and only when no order of these casts pays from the board alone does
+// it judge with the bodies credited. Inert with the lever off or no outlet live.
+static void PayableCastOrderCore(const GameState& state, const std::vector<Action>& acts,
+                                 std::vector<int>& order, const std::vector<InternedName>* hand_exits,
+                                 int extra_wild, int site)
+{
+    if (!g_pay_fodder_off && order.size() >= 2 && LiveSacPayOutlet(state, state.active_player_index).valid())
+    {
+        std::vector<int> nf = order;
+        bool found;
+        {
+            const PayFodderOffScope _fo;
+            found = PayableCastOrderCoreImpl(state, acts, nf, hand_exits, extra_wild, site);
+        }
+        if (found) { order.swap(nf); return; }
+    }
+    (void)PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site);
 }
 
 // Does cast `c` satisfy a dependent Theft's same-plan target of name `nm`? `equipment` selects which
@@ -8130,6 +8173,94 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         // historical single-attempt failure left it.
         TapForCostShared(state, cost_in.ExpandHybrids(0), for_creature, available, honor_legacy_cco);
         return false;
+    }
+
+    // §2b FODDER IS THE LAST SOURCE OF THE WHOLE PAYMENT, not merely the last rank of the greedy
+    // (MTG_SAC_OUTLET_PAY). The greedy ranks a body behind every real source, but the complete
+    // backtracker -- the only route to a CONVERSION source's fed mode (Three Tree City's "{2},{T}: add
+    // one {R} per Goblin", a filter, a ramp filter) -- runs only when the greedy FAILS, and with bodies
+    // on the board the greedy no longer fails: it eats. Goblins s4113506 gi3505 T3 main 2, two
+    // Siege-Gang Commanders, twelve Goblins, two Mountains and Three Tree City, team at 11: six shots
+    // cost {12}; the Mountains fed into the City make twelve {R} and the six shots kill with six Goblins
+    // left over (the lever's OFF arm, T3). With fodder in reach the greedy paid Mountains + the City's
+    // {C} + NINE eaten Goblins, leaving three victims -- three shots, 5 life left, T4. The payment
+    // contract the lever was revived for (USER 2026-10-30: "only spend as much as the line requires")
+    // is that a body is eaten only when the board cannot pay without one. So: the FULL payer (greedy,
+    // hold rungs, backtracker) first, with no fodder in reach (g_pay_fodder_off -- the OFF arm's payer
+    // exactly), and only if that fails, the payer with fodder. Not a preference: a payment that eats
+    // nothing leaves every body the fodder one would have eaten and taps sources the fodder payment
+    // would ALSO have had to leave for a later cost, and a tapped source untaps next turn while an
+    // eaten body does not; a death that pays keeps the payer off altogether (SacOutletEatHasValue), so
+    // an eaten body never buys anything a tapped source does not. A failed attempt restores everything
+    // it touched (same snapshot as the hybrid split above), the executor's accounting pool included.
+    // Inert with the lever off or no outlet live (one null test).
+    if (!g_pay_fodder_off && g_pay_fodder_cap < 0 && LiveSacPayOutlet(state, state.active_player_index).valid())
+    {
+        const int a = state.active_player_index;
+        PaySnapScratch<PermPaySnap> _bf_snap_scratch;
+        std::vector<PermPaySnap>&   bf_snap = _bf_snap_scratch.Buf();
+        SnapPayFields(state.battlefield, bf_snap);
+        std::vector<Permanent> bf_snap_full;
+        if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
+        const ManaPool               fm_snap  = state.floating_mana;
+        const ManaPool               fcm_snap = state.floating_creature_mana;
+        const ManaPool               fbm_snap = state.floating_bigspell_mana;
+        const int                    fhc_snap = state.floating_haste_c;
+        const ManaPool               av_snap  = available ? *available : ManaPool{};
+        PaySnapScratch<Card>         _gy_snap_scratch;
+        std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();
+        gy_snap = state.players[a].graveyard;
+        const int  la  = state.players[a].life;
+        const int  lo  = state.players[1 - a].life;
+        const bool oll = state.opponent_lost_life_this_turn;
+        auto restore = [&]()
+        {
+            RestorePayFields(state.battlefield, bf_snap);
+            if (g_pay_snap_verify) { VerifyPaySnapRestore(state.battlefield, bf_snap_full, "impl.fodderlast"); }
+            state.floating_mana                = fm_snap;
+            state.floating_creature_mana       = fcm_snap;
+            state.floating_bigspell_mana       = fbm_snap;
+            state.floating_haste_c             = fhc_snap;
+            if (available) { *available = av_snap; }
+            state.players[a].graveyard         = gy_snap;
+            state.players[a].life              = la;
+            state.players[1 - a].life          = lo;
+            state.opponent_lost_life_this_turn = oll;
+        };
+        int fodder_free_ub = 0;
+        {
+            const PayFodderOffScope _fo;
+            if (TapForCostSharedImpl(state, cost_in, for_creature, available, honor_legacy_cco)) { return true; }
+            restore();
+            fodder_free_ub = UntappedManaUpperBound(state, for_creature, 0);
+        }
+        // ...AND THEN AS FEW BODIES AS THE PAYMENT CAN BE MADE WITH. The greedy's per-pip needs order prices
+        // a land as scarcer than an abundant body, so left alone it eats bodies for the coloured pips and
+        // leaves lands up: Goblins s4154256 gi4255 T5 main 2 (five Mountains, Skirk, Siege-Gang and three
+        // tapped tokens, team at 5), three shots {3}{R}{R}{R} -- the greedy ate THREE tokens for the {R}s,
+        // paid the generic with three Mountains and left two up, so two victims remained, two shots, 1 life
+        // left (T6; the OFF arm floats one Goblin and kills, T5). A body eaten instead of a tapped land is a
+        // body lost for the rest of the turn (an attacker, a victim, the next cost's fodder) for mana the
+        // land would have made anyway. So the payment is retried with at most k bodies, k rising from the
+        // fewest the fodder-free supply could possibly leave owed, and the first k that pays is taken. Each
+        // attempt is the full payer (hold rungs, then unrestricted); the backtracker is skipped inside
+        // (g_pay_fodder_cap) because it never sees fodder. The last k is every body there is, i.e. the old
+        // uncapped payment, so nothing payable before is refused now.
+        const SacPayOutlet so = LiveSacPayOutlet(state, a);
+        const int bodies = SacPayFodderCount(state, a, so);
+        const int per    = so.valid() ? std::max(1, so.def->params.sac_outlet_add_mana_amount) : 1;
+        const int owed   = cost_in.ManaValue() - state.floating_mana.Total() - fodder_free_ub;
+        // Clamped to the bodies there are, so the last attempt is always the uncapped one (the bound above
+        // ignores the restricted reserves, which can only make `owed` too high, never too low).
+        for (int k = std::min(bodies, std::max(1, (owed + per - 1) / per)); k <= bodies; ++k)
+        {
+            {
+                const PayFodderCapScope _cap(k);
+                if (TapForCostSharedImpl(state, cost_in, for_creature, available, honor_legacy_cco)) { return true; }
+            }
+            restore();
+        }
+        return false;   // no body, or not even all of them: the fodder-free attempt was the whole payer
     }
 
     // `act_hold` is split out of the fold ONLY so MTG_ACT_DROP_AUDIT can price the lever (see

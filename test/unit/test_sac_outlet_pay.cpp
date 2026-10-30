@@ -310,3 +310,138 @@ TEST_CASE("Sac outlet pay: where a death pays, the payer is OFF and the board pl
         CHECK_MESSAGE(!LiveSacPayOutlet(h, 0).valid(), payoff);
     }
 }
+
+namespace
+{
+int OwnCreaturesSp(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& q : s.battlefield) { if (q.controller_index == 0 && q.card.IsCreature()) { ++n; } }
+    return n;
+}
+
+// Goblins s4113506 gi3505 T3 main 2: two Mountains and Three Tree City up, twelve Goblins (two Siege-Gang
+// Commanders, one summoning sick with its three tokens), team at 11.
+GameState Gi3505Sp()
+{
+    GameState s = EmptySp(11);
+    PutSp(s, "Mountain", false);
+    PutSp(s, "Mountain", false);
+    PutSp(s, "Three Tree City", false);
+    for (const char* n : { "Goblin Lackey", "Goblin Lackey", "Skirk Prospector", "Siege-Gang Commander" })
+    { PutSp(s, n, /*tapped=*/true); }
+    for (int t = 0; t < 3; ++t)
+    { GoblinTokenSp(s); s.battlefield.back().tapped = true; s.battlefield.back().entered_this_turn = false; }
+    PutSp(s, "Siege-Gang Commander", /*tapped=*/false, /*sick=*/true);
+    for (int t = 0; t < 3; ++t) { GoblinTokenSp(s); }
+    PutSp(s, "Stingscourger", /*tapped=*/false, /*sick=*/true);
+    return s;
+}
+
+// Goblins s4154256 gi4255 T5 main 2: five Mountains up, Skirk, a Siege-Gang and three tokens tapped from
+// the attack, team at 5.
+GameState Gi4255Sp()
+{
+    GameState s = EmptySp(5);
+    s.turn_number = 5;
+    for (int k = 0; k < 5; ++k) { PutSp(s, "Mountain", false); }
+    PutSp(s, "Skirk Prospector", /*tapped=*/true);
+    PutSp(s, "Siege-Gang Commander", /*tapped=*/true);
+    for (int t = 0; t < 3; ++t)
+    { GoblinTokenSp(s); s.battlefield.back().tapped = true; s.battlefield.back().entered_this_turn = false; }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Sac outlet pay: fodder is the LAST source of the whole payment -- Three Tree City's fed mode first")
+{
+    // Six shots cost {6}{R}{R}{R}{R}{R}{R}. The two Mountains fed into Three Tree City make twelve {R}, so the
+    // payment eats nothing; the greedy alone (which never reaches the City's fed mode -- only the backtracker
+    // does, and it ran only when the greedy FAILED) paid Mountains + the City's {C} + nine Goblins, leaving
+    // three victims for six shots. With the fodder-free payer first, the six shots kill (the OFF arm's T3).
+    const GameState s = Gi3505Sp();
+    ArmSp pay(heurarm::SAC_OUTLET_PAY, 1);
+    GameState probe = s;
+    ManaCost c; c.generic = 6; c.red = 6;
+    REQUIRE(TapForCostDirect(probe, c, /*for_creature=*/false));
+    CHECK(OwnCreaturesSp(probe) == OwnCreaturesSp(s));
+    CHECK(SomePlanKillsSp(s, AllPlansSp(s)));
+}
+
+TEST_CASE("Sac outlet pay: a payment eats as FEW bodies as it can be made with")
+{
+    // Three shots, {3}{R}{R}{R}, off five Mountains: exactly one body is owed. The greedy's per-pip needs
+    // order priced the Mountains as scarcer than the bodies and ate three tokens for the {R}s, leaving two
+    // victims -- two shots, 1 life left (T6 where the OFF arm kills T5).
+    const GameState s = Gi4255Sp();
+    ArmSp pay(heurarm::SAC_OUTLET_PAY, 1);
+    GameState probe = s;
+    ManaCost c; c.generic = 3; c.red = 3;
+    REQUIRE(TapForCostDirect(probe, c, /*for_creature=*/false));
+    CHECK(OwnCreaturesSp(probe) == OwnCreaturesSp(s) - 1);
+    int untapped_lands = 0;
+    for (const Permanent& q : probe.battlefield) { if (q.card.IsLand() && !q.tapped) { ++untapped_lands; } }
+    CHECK(untapped_lands == 0);
+    CHECK(SomePlanKillsSp(s, AllPlansSp(s)));
+}
+
+TEST_CASE("Sac outlet pay: an ORDER of the same casts that pays without a body is preferred to one that eats")
+{
+    // Fungus s4245015 gi5014 (2HG) T3: Hickory Woodlot (one depletion counter), Ancient Tomb, Utopia Mycon and two
+    // Saprolings, a Forest to play, Sporecrown Thallid in hand and Brightcap Badger on its adventure. Thallid
+    // first spends the Forest's {G} and the Badger's {G} then has no source but Mycon eating a Saproling; Badger
+    // first pays off the Woodlot + the Tomb and its grant taps Mycon and a Saproling for the Thallid. The pool
+    // credits each Saproling as a mana, so Thallid-first projected payable and was kept (the Saproling and the
+    // T5 kill lost, T6); the cast-order decider now looks for an order that pays from the board alone first.
+    EnsureCardsSp();
+    static const FungusProvider fprov;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.players[0].life     = 20;
+    s.players[1].life     = 30;
+    s.players[0].lands_played_this_turn = 0;
+    s.m_provider          = &fprov;
+    for (int k = 0; k < 10; ++k) { s.players[0].library.push_back(PhSp("Forest")); }
+    PutSp(s, "Hickory Woodlot", false);
+    { Counter dep; dep.type = Counter::Type::Depletion; dep.count = 1; s.battlefield.back().counters.Add(dep); }
+    PutSp(s, "Ancient Tomb", false);
+    PutSp(s, "Utopia Mycon", false);
+    for (int k = 0; k < 2; ++k)
+    {
+        Permanent p;
+        p.card.m_name = "1/1 Saproling Token"; p.card.RehashName(); p.card.AddColor(Color::Green);
+        p.card.AddType(CardType::Creature); p.card.m_subtypes = { "Saproling" };
+        p.card.m_power = 1; p.card.m_toughness = 1; p.card.m_number = 1000 + k;
+        p.is_token = true; p.def_absent = true; p.controller_index = 0; p.owner_index = 0;
+        s.battlefield.push_back(p);
+    }
+    s.players[0].hand.push_back(PhSp("Sporecrown Thallid"));
+    s.players[0].hand.push_back(PhSp("Forest"));
+    { Card c = PhSp("Brightcap Badger"); c.m_is_staged = true; c.m_staged_expiry = 1 << 30; s.players[0].hand.push_back(c); }
+    ArmSp pay(heurarm::SAC_OUTLET_PAY, 1);
+    bool seen = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlansExhaustive(s, /*is_pre_combat=*/true, nullptr, nullptr))
+    {
+        bool thallid = false, badger = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() == "Sporecrown Thallid") { thallid = true; }
+            if (a.card_name.str() == "Brightcap Badger" && !a.adventure) { badger = true; }
+        }
+        if (!thallid || !badger || p.actions.size() != 2) { continue; }
+        GameState probe = s;
+        TurnSolver::ApplyPlan(probe, p, /*is_pre_combat=*/true);
+        int saprolings = 0, thallids = 0, badgers = 0;
+        for (const Permanent& q : probe.battlefield)
+        {
+            if (q.card.m_name.str() == "1/1 Saproling Token") { ++saprolings; }
+            if (q.card.m_name.str() == "Sporecrown Thallid")  { ++thallids; }
+            if (q.card.m_name.str() == "Brightcap Badger")    { ++badgers; }
+        }
+        if (thallids != 1 || badgers != 1) { continue; }   // a land variant that cannot pay both
+        seen = true;
+        CHECK_MESSAGE(saprolings == 2, "land=" << p.land_to_play);
+    }
+    CHECK(seen);
+}
