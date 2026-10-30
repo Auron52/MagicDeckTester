@@ -219,7 +219,7 @@ TEST_CASE("side journal: rename-aside never destroys the file")
     const std::string a = rollj::RenameAside(p);
     REQUIRE_FALSE(a.empty());
     CHECK_FALSE(std::filesystem::exists(p));
-    CHECK(std::filesystem::file_size(a) == 12);
+    CHECK(std::filesystem::file_size(a) == 14);   // "hdr\n" + "1 0 0 5 1\n"
     std::error_code ec;
     std::filesystem::remove(a, ec);
 }
