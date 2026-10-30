@@ -3622,6 +3622,11 @@ public:
     bool             CastOrderTotalByName() const override;
     bool             OrderOpaqueCastsByRank() const override;
     std::vector<int> CastOrderFallbackRanks(const GameState& s, const CardDefinition& def) const override;
+    // DRAW searches the independent information slots; canonical order first.
+    bool WantsCastOrderingSearch() const override;
+    bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
+                                 const std::vector<Action>& reorder,
+                                 std::vector<std::vector<int>>& out) const override;
 };
 
 // ---- THE CYCLONE BUCKET MODEL, the USER's expendability rank (shared by the cleanup discard and, under
