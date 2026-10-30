@@ -2,8 +2,7 @@
 
 Deck: `decks/Midrange Burn/Midrange Burn.cod` (60 cards, mono-red with Fiery Islet).
 Started 2026-10-29. Implementation and the original-branch full verifier pass
-are complete. The original-branch Linux regression tiers have accepted ground
-truth, and its b20 cost gate passed at 2.95x Hinata. The required
+are complete. The original-branch b20 cost gate passed at 2.95x Hinata. The required
 horizon leaf check completed 18 blocks and both its aggregate and unlimited-
 budget preservation gates pass; keep default ON. The authored cleanup-discard
 policy was approved and adopted on 2026-10-30 behind a default-on, reversible
@@ -14,8 +13,9 @@ another container uses the box; neither is part of this push. A new shared
 passive-opponent land pattern passed a full smoke A/B. A targeted fold of burn
 spells against inert passive creatures restored the 20 ms two-headed play
 setting under the integrated-branch cost gate: 1.21x Hinata (limit 3x),
-with a 6.0133 two-headed regression average. The refreshed-profile smoke,
-regression and overnight Linux baselines are accepted (46 consistent keys).
+with a 6.0133 two-headed regression average. The current branch has accepted
+Midrange Burn smoke and regression baselines (11 keys); overnight ground truth
+has not yet been recorded here.
 The final discard-rule full unit suite passed 2,230 cases and 3,556,777
 assertions; all 349 scenarios passed. The final integrated verifier passed every
 blocking gate, including 15/15 card coverage, field and cost audits, viewer
@@ -66,6 +66,9 @@ winning game turns; the other eight games were unwon in both arms. Search
 units fell from 18,801,128 to 17,396,963 (7.5%). This result is for the
 three hooks together. The paid-cost bound was then tightened to count
 floating mana once; that correction can only omit an unaffordable paid cast.
+The corrected build passed all 2,234 unit cases (3,556,833 assertions), all
+349 scenarios, the scoped smoke and regression batches, and strict replay
+of 689 saved viewer references with zero play drift or enumeration gaps.
 
 ## Initial coverage
 
