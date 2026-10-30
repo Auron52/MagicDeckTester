@@ -500,3 +500,68 @@ TEST_CASE("Cyclone cycler rule: which creature cycler a cycle seed uses (USER 20
         CHECK_FALSE(ProvP().CycleSeedAdmissionSets(s, o, n));
     }
 }
+
+
+TEST_CASE("Cyclone cantrip plans: two-Eldrazi JUNK follows the current or next-turn walk")
+{
+    ArmP arm;
+    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_PB_PLANS, 1)
+       .Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 0).Set(heurarm::CYCLONE_KEEP_AMEND, 0);
+    GameState s;
+    int first = -1, second = -1, expected_k = -1;
+    SUBCASE("this turn: Emrakul first in JUNK itself")
+    {
+        s = StateP({ kCycP, "Island", "Island", "Island" }, { kWraP, kEmrP, kHunP });
+        first = 1; second = 2; expected_k = 0;
+    }
+    SUBCASE("next turn: lesser first, Emrakul preserved for the walk")
+    {
+        s = StateP({ "Island", "Island", "Mountain", "Mountain" }, { kCycP, kWraP, kEmrP, kHunP, "Island" });
+        first = 3; second = 2; expected_k = 1;
+    }
+    CantripReadiness r;
+    REQUIRE(ProvP().CantripReadinessOf(s, 0, r));
+    REQUIRE(r.k == expected_k);
+    REQUIRE_FALSE(r.missing_piece);
+    const auto& hand = s.players[0].hand;
+    TopDispositionView v;
+    v.putback = true;
+    v.n_removed = 2;
+    v.n_top = 2;
+    v.removed[0] = first;
+    v.removed[1] = second;
+    v.top[0] = &hand[static_cast<std::size_t>(first)];
+    v.top[1] = &hand[static_cast<std::size_t>(second)];
+    int kind = -1;
+    REQUIRE(ProvP().CantripPlanOf(s, 0, r, v, kind));
+    CHECK(kind == 1);   // JUNK, not merely a matching SETUP candidate
+    const NamesP expected{ hand[static_cast<std::size_t>(first)].m_name.str(),
+                           hand[static_cast<std::size_t>(second)].m_name.str() };
+    const auto fan = FanP(s);
+    CHECK(std::find(fan.begin(), fan.end(), expected) != fan.end());
+}
+
+TEST_CASE("Cyclone cantrip cache key: KEEP_AMEND includes remaining land density")
+{
+    ArmP arm;
+    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_KEEP_AMEND, 1)
+       .Set(heurarm::CYCLONE_KEEP_MYRIAD, 0).Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 0);
+    GameState a = StateP({ "Island" }, { kCycP, kWraP, "Brainstorm", "Island", "Island", "Island", "Island", kEmrP, kDelP });
+    GameState b = a;
+    std::vector<Card> lands, spells;
+    for (int i = 0; i < 12; ++i)
+    {
+        lands.push_back(CardP("Island", 2000 + i));
+        spells.push_back(CardP(kDelP, 2000 + i));
+    }
+    a.players[0].library.assign(lands.begin(), lands.end());
+    b.players[0].library.assign(spells.begin(), spells.end());
+    CantripReadiness ra, rb;
+    REQUIRE(ProvP().CantripReadinessOf(a, 0, ra));
+    REQUIRE(ProvP().CantripReadinessOf(b, 0, rb));
+    REQUIRE(ra.keep_need != rb.keep_need);   // only the land-density demotion differs
+    std::vector<std::uint64_t> ka, kb;
+    REQUIRE(ProvP().CantripOrderKey(a, 0, ka));
+    REQUIRE(ProvP().CantripOrderKey(b, 0, kb));
+    CHECK(ka != kb);
+}
