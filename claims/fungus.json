@@ -8,6 +8,8 @@
  "frozen": "8f303fddc97f7f4afb2404414d3bdad1df8256b1",
  "heartbeat": "2026-10-30T13:48:27Z",
  "host": "58199181d02e",
+ "landed": "ad28dda1b9ed4858ddf06f5f595325ddc8ddc146",
+ "landed_at": "2026-10-30T13:52:02Z",
  "result_branch": "artifact-refresh/fungus-20261030-1351",
  "run_id": "fungus-artifact-queue-tool-647f24-20261030T004541",
  "score": 0.0649,
