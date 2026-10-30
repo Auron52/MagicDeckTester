@@ -5,7 +5,7 @@
   {
    "run_id": "auras-artifact-queue-tool-647f24-20261029T223109",
    "kind": "mulligan",
-   "verdict": "trade",
+   "verdict": "adopted-trade",
    "ident": "12e1a5d6acef4a14489cb089629878b9840542f7",
    "frozen": "ce02942e3353c17147a1dbea6ab343593ef700be",
    "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
@@ -23,7 +23,7 @@
     "depth": null,
     "budget": null
    },
-   "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.002531 t) but the new table costs MORE (cost 1.118x (se 0.011, 96 seeds)): the USER's call; left live on the result branch, NOT landed"
+   "detail": "mulligan: ADOPTED by USER direction 2026-10-30 (new-vs-old -0.002531 t, 52/96 seeds; cost 1.118x work units, se 0.011, 96 seeds -- a TRADE; USER: \"I think its okay if we add a small amount of cost\" -- Auras is ~60 core-ms/game, ~1/36 of Hinata). Landed e355d0366 via `artifact_queue.py land --force`. Mechanism of the cost: a heavier tail (65 vs 52 games >30k units per 6,000), not a per-decision blowup."
   },
   {
    "run_id": "auras-artifact-queue-tool-647f24-20261029T223109",
