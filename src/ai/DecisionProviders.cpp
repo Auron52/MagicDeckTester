@@ -16131,7 +16131,22 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     if (!d) { return true; }
     const CardParams& ep = d->params;
     const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
-    if (!self_token) { return true; }                       // Stingscourger etc: default PAY
+    if (!self_token)
+    {
+        // Stingscourger etc: default PAY -- but not by EATING BODIES. With Skirk Prospector live as a
+        // payment source (MTG_SAC_OUTLET_PAY) the payer meets an echo the lands cannot cover by
+        // sacrificing Goblins, i.e. it trades bodies to keep one body (Goblins d0 s3950589 gi588 T3:
+        // Stingscourger's {3}{R} ate Twinshot Sniper and Skirk itself, T5 -> T8). Decline there; the
+        // echo axis (MTG_ECHO_AXIS) still searches the other answer, so this only ORDERS the two.
+        if (const SacPayOutlet so = LiveSacPayOutlet(s, s.active_player_index); so.valid() && ep.echo_cost)
+        {
+            const int per     = std::max(1, so.def->params.sac_outlet_add_mana_amount);
+            const int nonbody = AvailableManaPool(s).Total()
+                              - SacPayFodderCount(s, s.active_player_index, so) * per;
+            if (ep.echo_cost->ManaValue() > nonbody) { return false; }
+        }
+        return true;
+    }
     static const bool on = !EnvOn("MTG_NO_GOBLIN_ECHO");
     if (!on) { return false; }                              // isolation: historical always-decline
 

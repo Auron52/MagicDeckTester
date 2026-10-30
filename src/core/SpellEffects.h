@@ -16942,6 +16942,98 @@ inline bool DeathOfWouldPay(const GameState& state, int controller, const Perman
     return false;
 }
 
+// DOES EATING A BODY THROUGH THIS SAC-FOR-MANA OUTLET BUY ANYTHING BESIDES THE MANA? (§2b, the
+// MTG_SAC_OUTLET_PAY carve-out.) With the lever on, a repeatable sac-for-mana outlet's searched action
+// is replaced by the payment source -- which eats a body ONLY when a cost needs its mana. That is
+// lossless exactly when the death itself is worth nothing: then a sacrifice whose mana goes unspent is
+// a body thrown away, and every sacrifice whose mana IS spent the payer makes on demand. When the
+// death pays -- Pashalik Mons pings on every Goblin death, Rundvelt Hordemaster impulse-exiles, Mogg
+// War Marshal leaves a token, a persist body comes back, a sacrifice watcher pumps -- a line may sac
+// purely for the death with the mana unused, and only the searched action can say that. So the
+// enumerator keeps the searched action wherever this is true (the payer stays live beside it).
+//
+// CONSERVATIVE IN THE TRUE DIRECTION, by construction: a false positive keeps the searched action
+// (today's menu, plus the payer -- never fewer lines); a false negative is the only error that could
+// hide a line, so every death-side mechanism OnCreatureDies / SacrificePermanentAt can fire for an
+// own creature is admitted: the death watchers DeathOfWouldPay and SelfSacHasDeathPayoff read (any
+// subtype-keyed watcher, payload or not), Daxos-style "another creature dies" lifegain, LTB returns,
+// a sacrifice watcher, persist, a self-death trigger, and a graveyard reanimator deck stamp.
+// ONE pass over the controller's permanents plus one over the fodder, never a per-body board walk
+// (a Fungus board holds hundreds of Saprolings).
+inline bool SacOutletEatHasValue(const GameState& state, int controller, const CardParams& op)
+{
+    if (state.deck_has_endstep_reanimate || state.deck_has_upkeep_reanimate) { return true; }
+    const CardDatabase& db = CardDatabase::Instance();
+    const std::string& need_sub = op.sac_creature_requires_subtype;
+    // Subtype-keyed watchers on the board: (subtype, watcher id, fires for itself).
+    struct SubW { const std::string* sub; int id; bool self; };
+    SubW subw[8]; int nsub = 0; bool many_sub = false;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller || w.def_absent) { continue; }
+        const CardDefinition* wd = db.LookupCached(w.card);
+        if (wd == nullptr) { continue; }
+        const CardParams& wp = wd->params;
+        if (wp.sacrifice_watch_pump_power > 0)  { return true; }   // "whenever you sacrifice"
+        if (wp.own_creature_dies_lifegain > 0)  { return true; }   // Daxos: any creature's death
+        if (wp.ltb_return_creatures > 0)        { return true; }
+        if (!wp.dies_watch_subtype.empty())
+        {
+            // A watcher keyed on the outlet's OWN fodder subtype (Pashalik / Rundvelt on Goblins,
+            // Slimefoot on Saprolings) pays for every body the outlet can eat -- including the ones
+            // the plan has not made yet (Slimefoot's {4} Saproling, eaten in the same line: the
+            // fungusb_slimefoot_onboard_token_sac_ping fixture), so it decides without a body.
+            if (need_sub.empty() || wp.dies_watch_subtype == need_sub) { return true; }
+            if (nsub < 8) { subw[nsub++] = SubW{ &wp.dies_watch_subtype, w.card.m_number,
+                                                 wp.dies_watch_includes_self }; }
+            else          { many_sub = true; }
+        }
+    }
+    if (many_sub) { return true; }
+    // A creature CARD in hand the plan may cast and then sacrifice for its own death (persist, a
+    // self-death trigger): the body does not exist yet, so the board pass below cannot see it.
+    for (const Card& hc : state.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* hd = db.LookupCached(hc);
+        if (hd == nullptr) { continue; }
+        const CardParams& hp = hd->params;
+        // A WATCHER in hand the line may cast before it sacrifices (Pashalik / Rundvelt): the decision
+        // must not flip mid-line from "the death is worthless" to "it pays" when the watcher lands.
+        if (!hp.dies_watch_subtype.empty() && (need_sub.empty() || hp.dies_watch_subtype == need_sub))
+        { return true; }
+        if (hp.own_creature_dies_lifegain > 0 || hp.sacrifice_watch_pump_power > 0) { return true; }
+        if (!hd->card.IsCreature()) { continue; }
+        if (!need_sub.empty() && !CardHasSubtype(hd->card, need_sub)) { continue; }
+        if (hp.persist || hp.ltb_return_creatures > 0) { return true; }
+        const bool pays = hp.dies_trigger_damage > 0 || hp.dies_trigger_creates_tokens > 0
+                       || hp.dies_trigger_self_gain > 0 || hp.dies_trigger_impulse_exile;
+        if (pays && hp.dies_watch_includes_self) { return true; }
+    }
+    for (const Permanent& v : state.battlefield)
+    {
+        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+        if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+        for (int k = 0; k < nsub; ++k)
+        {
+            if (!CardHasSubtype(v.card, *subw[k].sub)) { continue; }
+            if (v.card.m_number != subw[k].id || subw[k].self) { return true; }
+        }
+        if (v.def_absent) { continue; }   // a definition-less token carries no death text of its own
+        const CardDefinition* vd = db.LookupCached(v.card);
+        if (vd == nullptr) { continue; }
+        const CardParams& vp = vd->params;
+        if (vp.persist && MinusCountersOn(v) == 0) { return true; }
+        // Its OWN death pays (Mogg War Marshal's token, Tukatongue's refund): DeathOfWouldPay's
+        // self-only branch, on the body's own params.
+        const bool pays = vp.dies_trigger_damage > 0 || vp.dies_trigger_creates_tokens > 0
+                       || vp.dies_trigger_self_gain > 0 || vp.dies_trigger_impulse_exile;
+        if (pays && vp.dies_watch_includes_self) { return true; }
+        if (vp.ltb_return_creatures > 0) { return true; }
+    }
+    return false;
+}
+
+
 // Apply a signed until-end-of-turn P/T change to one creature and run the toughness SBA inline,
 // routing any resulting death through OnCreatureDies so every death watcher fires.
 //
@@ -33715,6 +33807,24 @@ inline bool TreasurePaySourceEnabled()
 }
 
 // ---- REPEATABLE creature-sac MANA OUTLETS as payment sources (§2b) ---------------------------
+// STATUS 2026-10-30 (wip/sacpay) -- READ THIS FIRST; the 2026-10-01 text below is the history.
+// Default still OFF -- MEASURED, NOT YET ADOPTABLE: net-better summed per deck on 144,000 held-out games
+// (Goblins -71, Fungus -49; every searched cell better-or-neutral at fewer units), but eight slower games
+// do not recover at --depth 8 --budget-ms 0 and are not clairvoyance (the Fungus ones localized to the
+// fodder credit in the GENERAL AvailableManaPool; see the doc). It is no longer only a cost change: the
+// searched count axis's landmarks could not express a spell AND a Siege-Gang shot, or two spells, at any
+// budget, and the payer eats exactly what each cost needs. What changed, all in
+// docs/design/sac-mana-outlet-as-deferred-source.md §"STATUS 2026-10-30":
+//   * two crashes the lever's ON arm hit (a token fodder body's null definition in the payer's
+//     creature-only rank; the executor's CastSpellFromHand holding a hand reference across a payment
+//     whose death triggers reallocate the hand);
+//   * the searched action is KEPT where a death pays (SacOutletEatHasValue) and the payer is OFF there
+//     (LiveSacPayOutlet) -- such a board plays exactly as the OFF arm; kept too where no body exists yet
+//     (the same-line spore fusion), and in human play;
+//   * one set of bodies for mana AND sacrifice costs (PayFodderOverspent), an activation never eats
+//     its own source or victim (PaySacSpareScope), the greedy charges the bodies a plan eats;
+//   * the payer's victim order defers attackers and creature cards cast this turn.
+//
 // MTG_SAC_OUTLET_PAY / heurarm SAC_OUTLET_PAY -- DEFAULT OFF: MEASURED 2026-10-01 and REGRESSING,
 // with the cause located. This is NOT a parked/unmeasured lever and NOT a rejected one -- it is a
 // lever with a known, named defect in front of it. Do not re-derive the measurement; fix the defect.
@@ -33879,13 +33989,28 @@ inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
 {
     if (tokenstats::On()) { tokenstats::g_outlet.fetch_add(1, std::memory_order_relaxed); }
     SacPayOutlet out;
-    if (!state.deck_has_sac_mana_outlet || !SacOutletPayEnabled()) { return out; }
+    // HUMAN PLAY KEEPS THE EXPLICIT OUTLET. A human clicks "Sacrifice a Goblin: Add {R}" themselves
+    // (the viewer menu, and every MTG_HUMAN_PLAY validate_line fixture names a `sacout=` step), so the
+    // payer must not eat bodies on the human's behalf; CollectActions keeps the searched action under
+    // the same gate. Rollouts run under HumanPlaySuppress, so a search FROM a human state still uses
+    // the payment model -- the gate only changes what the human's own payments may do.
+    if (!state.deck_has_sac_mana_outlet || !SacOutletPayEnabled() || HumanPlayActive()) { return out; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || p.pay_sac_eaten) { continue; }
         if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !IsSacManaOutlet(d->params)) { continue; }
+        // A DEATH THAT PAYS (SacOutletEatHasValue: Pashalik's ping, Rundvelt's impulse, Mogg War
+        // Marshal's token, persist, a watcher in hand) keeps the payer OFF: the board plays exactly as
+        // the lever's OFF arm, searched count axis and all. Two measured reasons the payer cannot run
+        // BESIDE the searched action there: (1) DOUBLE CREDIT -- the searched SacForMana floats a
+        // body's mana and the pool credits the same body as fodder, so a lone Skirk Prospector read as
+        // two mana (Goblins d0 s3950036 gi35 T1: Mogg War Marshal {1}{R} "payable", the prepay ate
+        // Skirk, the cast failed, the outlet was gone); (2) a death that REVEALS (Rundvelt) puts a
+        // library reveal inside a payment where nothing can branch on it -- gi5126 b60 took 36 s /
+        // 3.9 GB that way against 11 s / 0.46 GB off.
+        if (SacOutletEatHasValue(state, controller, d->params)) { return out; }
         // The FIRST live outlet is enough: a deck runs copies of ONE such card (4 Skirk, 2 Mycon),
         // never two different ones, so a second copy changes no colour and no filter.
         out.def = d; out.source_id = p.card.m_number;
@@ -33893,6 +34018,26 @@ inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
     }
     return out;
 }
+
+// BODIES A PAYMENT MAY NOT EAT, published around an ACTIVATION's own mana payment (the trailing
+// SacCreatureOutlet dispatch, executor and rollout alike): the activation's SOURCE and its baked
+// VICTIM. Siege-Gang Commander's "{1}{R}, Sacrifice a Goblin: 2 damage" paid by eating Goblins through
+// Skirk Prospector must not eat the Siege-Gang (the engine resolves the ability off its source on the
+// battlefield) nor the Goblin the activation is about to sacrifice (a real-card victim gone means the
+// activation no-ops after its mana was spent). Pessimistic in the safe direction -- a body withheld
+// here can only make a payment fail, never let an unpayable one resolve -- and inert unless the
+// §2b payer is live (fodder_ok is the only reader). 0 = none.
+inline thread_local int g_pay_sac_spare[2] = { 0, 0 };
+struct PaySacSpareScope
+{
+    int prev[2];
+    // Published only while the lever is on, so the OFF arm's payment context is untouched.
+    PaySacSpareScope(int a, int b) : prev{ g_pay_sac_spare[0], g_pay_sac_spare[1] }
+    { if (SacOutletPayEnabled()) { g_pay_sac_spare[0] = a; g_pay_sac_spare[1] = b; } }
+    ~PaySacSpareScope() { g_pay_sac_spare[0] = prev[0]; g_pay_sac_spare[1] = prev[1]; }
+    PaySacSpareScope(const PaySacSpareScope&)            = delete;
+    PaySacSpareScope& operator=(const PaySacSpareScope&) = delete;
+};
 
 // Is this permanent legal fodder for `outlet` right now?
 // `def` is NULLABLE and must stay that way. A TOKEN HAS NO CardDefinition -- there is no "Saproling"
@@ -33948,9 +34093,9 @@ inline const std::vector<Color>& SacPayOutletColors(const CardParams& op)
 // else can pay the pip.
 //
 // Within fodder, two terms:
-//   * A BODY THAT WOULD ATTACK is eaten later. USER: "prioritizes saprolings with summoning
-//     sickness" -- a creature that cannot attack this turn costs nothing to eat NOW, so it is the
-//     free one. Same "its tap costs an attack" test AvailableManaPoolNoAttackers uses.
+//   * A BODY THAT WOULD ATTACK -- or a creature CARD this turn's line just cast -- is eaten later.
+//     USER: "prioritizes saprolings with summoning sickness": a token that cannot attack this turn
+//     costs nothing to eat NOW. Same "its tap costs an attack" test AvailableManaPoolNoAttackers uses.
 //   * then the SHARED expendability ranking (SacExpendabilityRank): tokens and self-replacing
 //     bodies first, lords and combo enablers deferred, the outlet itself dead last. One ordering
 //     for the searched victim pick, the devour victim pick and this -- they cannot drift.
@@ -33972,7 +34117,16 @@ inline int SacPayFodderRank(const GameState& state, const Permanent& p, const Sa
 {
     // The caller HOISTS the doomed-creator list: this is called once per candidate body inside a
     // battlefield loop, so computing it here is an O(board^2) pass (measured +48% CPU).
-    return 500 + (SacPayFodderCostsAttack(state, p) ? 10000 : 0)
+    // Two tiers, then the SHARED expendability rank (the searched victim pick's order) inside each.
+    // The FREE tier is a body whose loss costs nothing this turn: it cannot attack (USER: "prioritizes
+    // saprolings with summoning sickness"). EXCEPT a non-token creature that entered THIS turn: that is a
+    // card the line just CAST, and eating it to pay for the next cast throws the first one away --
+    // Goblins d0 s3952530 gi2529 T2 main 2 cast Goblin Matron and Goblin Piledriver and then ate both
+    // to pay for Goblin Chieftain (T3 -> T8). Measured both ways on the 8,000-game d0 cells: dropping
+    // the attack tier altogether (pure CanonicalSacVictim order) cost Fungus +0.022t (28 faster / 153
+    // slower) -- the summoning-sick-Saproling-first rule is worth keeping; this keeps it for tokens only.
+    const bool deferred = SacPayFodderCostsAttack(state, p) || (!p.is_token && p.entered_this_turn);
+    return 500 + (deferred ? 10000 : 0)
                + SacExpendabilityRank(state, p, outlet.source_id, doomed_creators);
 }
 

@@ -157,6 +157,8 @@ bool SomePlanKills(const GameState& s, const std::vector<TurnSolver::Plan>& plan
 
 TEST_CASE("Sac-mana activation demand: the gi2905 main-2 board offers the four-sac burst and kills")
 {
+    // These pin the SEARCHED count axis, so the payment model (MTG_SAC_OUTLET_PAY) is pinned off.
+    ArmSd nopay(heurarm::SAC_OUTLET_PAY, 0);
     const GameState s = BoardSd(/*opp_life=*/3, /*untapped_mountains=*/0, /*sgc=*/2, {});
     ArmSd on(heurarm::SAC_MANA_ACT_DEMAND, 1);
     const std::vector<TurnSolver::Plan> plans = AllPlansSd(s);
@@ -167,6 +169,8 @@ TEST_CASE("Sac-mana activation demand: the gi2905 main-2 board offers the four-s
 
 TEST_CASE("Sac-mana activation demand OFF: one {R} per main, the kill is unfindable (the defect)")
 {
+    // These pin the SEARCHED count axis, so the payment model (MTG_SAC_OUTLET_PAY) is pinned off.
+    ArmSd nopay(heurarm::SAC_OUTLET_PAY, 0);
     const GameState s = BoardSd(3, 0, 2, {});
     ArmSd off(heurarm::SAC_MANA_ACT_DEMAND, 0);
     const std::vector<TurnSolver::Plan> plans = AllPlansSd(s);
@@ -177,6 +181,8 @@ TEST_CASE("Sac-mana activation demand OFF: one {R} per main, the kill is unfinda
 
 TEST_CASE("Sac-mana activation demand: one Mountain up -> the burst is the three-sac shortfall")
 {
+    // These pin the SEARCHED count axis, so the payment model (MTG_SAC_OUTLET_PAY) is pinned off.
+    ArmSd nopay(heurarm::SAC_OUTLET_PAY, 0);
     const GameState s = BoardSd(3, /*untapped_mountains=*/1, 1, {});
     ArmSd on(heurarm::SAC_MANA_ACT_DEMAND, 1);
     const std::vector<TurnSolver::Plan> plans = AllPlansSd(s);
@@ -186,6 +192,8 @@ TEST_CASE("Sac-mana activation demand: one Mountain up -> the burst is the three
 
 TEST_CASE("Sac-mana activation demand: a VALUE outlet's one activation (Pashalik Mons, {3}{R})")
 {
+    // These pin the SEARCHED count axis, so the payment model (MTG_SAC_OUTLET_PAY) is pinned off.
+    ArmSd nopay(heurarm::SAC_OUTLET_PAY, 0);
     // No Siege-Gang: Pashalik Mons alone ("{3}{R}, Sacrifice a Goblin: create two 1/1 Goblins"), no land up,
     // empty hand. The landmark is one activation: four sacs for {3}{R}. Off, Skirk is worth one {R}.
     GameState s = BoardSd(30, 0, /*sgc=*/0, {});
@@ -201,6 +209,8 @@ TEST_CASE("Sac-mana activation demand: a VALUE outlet's one activation (Pashalik
 
 TEST_CASE("Sac-mana activation demand: a NON-lethal Siege-Gang shot is no landmark")
 {
+    // These pin the SEARCHED count axis, so the payment model (MTG_SAC_OUTLET_PAY) is pinned off.
+    ArmSd nopay(heurarm::SAC_OUTLET_PAY, 0);
     // Team at 30, one Siege-Gang: fifteen shots are needed and the board holds ten Goblins, so there is no
     // lethal count and the chip shot is not a landmark -- the menu is the hand-landmark menu exactly.
     const GameState s = BoardSd(30, 0, 1, {});
@@ -218,6 +228,8 @@ TEST_CASE("Sac-mana activation demand: a NON-lethal Siege-Gang shot is no landma
 
 TEST_CASE("Sac-mana activation demand: no activation sink -> the count menu is unchanged")
 {
+    // These pin the SEARCHED count axis, so the payment model (MTG_SAC_OUTLET_PAY) is pinned off.
+    ArmSd nopay(heurarm::SAC_OUTLET_PAY, 0);
     const GameState s = BoardSd(3, 0, /*sgc=*/0, {});
     std::set<int> on_counts, off_counts;
     {

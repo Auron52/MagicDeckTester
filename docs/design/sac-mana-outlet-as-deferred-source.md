@@ -1,5 +1,174 @@
 # Sac-for-mana outlets: model them as a LAST-RANKED MANA SOURCE, not a searched action
 
+## STATUS 2026-10-30 (wip/sacpay): brought up to date, rebuilt as a COMPLETENESS fix. Still default OFF.
+
+**Why it came back.** USER 2026-10-30: *"Shouldn't Skirk Prospector be counting Goblins like a mana source
+now? That would mean that we are limited by the number of goblins and only spend as much as the line
+requires."* The 2026-10-01 framing below ("a cost change, not a correctness fix") rested on the searched
+count axis being right. It is not: Skirk reaches the search as landmark counts (none, one, the shortfall to
+the costliest hand spell, and since `MTG_SAC_MANA_ACT_DEMAND` the activation landmarks), so a line needing
+any other count -- a spell AND a Siege-Gang shot, two spells -- was unfindable at every budget
+(gi2905 / gi3241 / gi3590 / gi37). The payer eats exactly what each cost needs, bounded by the bodies.
+
+### What changed on the branch (all inert with the lever off: OFF arm byte-identical on 8 Goblins/Fungus cells)
+
+1. **Two crashes the ON arm hit at once.** (a) `ManaPayment.cpp`: the creature-only-mana rank read
+   `def->params` before testing `kind == 1`; a Goblin TOKEN offered as fodder has no definition -> SIGSEGV
+   on the first ON game. (b) `AIEngine::CastSpellFromHand` held a `Card&` into the hand across the cast's
+   payment; eating a Goblin under Rundvelt Hordemaster stages the impulse card in hand, reallocating it, and
+   `LogCastSpell` read freed memory (`std::length_error` / `bad_alloc`, s3815127 gi5126). Now a pointer
+   re-found by the copy's stable number after the payment -- the executor twin of the 09-18 `apply_one` fix.
+   ASan sweep (991 games, lever on, both decks; re-run on the final code) clean afterwards.
+2. **Human play keeps the explicit outlet** (`LiveSacPayOutlet` and the suppression both gate on
+   `!HumanPlayActive()`): the viewer and every `validate_line` fixture click `sacout=` themselves.
+3. **The searched action is kept where no body exists yet.** The 10-01 blocker
+   (`fungus_sac_fodder_same_line_GAP`: pop a Saproling, eat it, cast Sporesower) was the suppression deleting
+   the same-line fused action. A spore pop is a TRAILING activation, so its Saproling lands after the casts
+   and no payment can reach it; with no body on the board there is no count axis to retire anyway. The
+   suppression now fires only when `CanonicalSacVictim` finds a body. Unit-tested autonomously.
+4. **Where a death PAYS, the board plays exactly as the OFF arm** (`SacOutletEatHasValue`, read by both
+   `CollectActions` and `LiveSacPayOutlet`): Pashalik's ping, Rundvelt's impulse, Mogg War Marshal's token,
+   persist, a sacrifice watcher, a watcher or self-death body in HAND (so the answer cannot flip mid-line).
+   A line may sacrifice for the death alone, and only the searched action says that. Running the payer
+   BESIDE it was tried and measured wrong twice over: (a) one body credited twice -- its searched float AND
+   its pool fodder (Goblins d0 s3950036 gi35: a lone Skirk read as two mana, the prepay ate it, the cast
+   failed); (b) under Rundvelt every eaten Goblin reveals a card inside a payment -- s3815127 gi5126 b60 took
+   36 s / 3.9 GB against 11 s / 0.46 GB off.
+5. **One set of bodies for mana AND sacrifice costs** (`PayFodderOverspent`, both enumerators): the flat
+   test credited each Goblin as mana and again as Siege-Gang's victim (d0 gi215: a "lethal" four-shot burst
+   ate seven Goblins for mana and fired once). Necessary condition `eaten + victims <= bodies` and
+   `eaten <= bodies - activation sources`; not judged when the subset can add a body. (The first cut also
+   counted the sources in the sum, which hid d0 gi1799's T3 kill whose last victim is a Siege-Gang.)
+6. **An activation's payment never eats its own source or baked victim** (`PaySacSpareScope`, executor and
+   rollout).
+7. **The payer's order**: summoning-sick TOKENS first, then the shared `SacExpendabilityRank`; a body that
+   would attack, or a creature CARD cast this turn, is deferred. (Pure `CanonicalSacVictim` order cost
+   Fungus d0 +0.022t, 28 / 153; deferring just-cast cards fixed d0 gi2529's "cast Matron and Piledriver,
+   then eat both for Chieftain".)
+8. **The greedy (d0 runner + playout) charges the bodies a plan eats**: each body the subset's cost reaches,
+   in the payer's order, at its board power in EvalCard's unit, doubled pre-combat for a would-attack body.
+   Unbounded by landmarks, the greedy otherwise ate its board to cast its hand (d0 gi54: seven permanents to
+   two, T4 -> T8). GoblinsProvider::PayEchoToKeep also declines a Stingscourger echo the lands cannot cover
+   (the payer would eat Goblins to keep one; the echo axis still searches the other answer).
+
+### Witnesses (d8 b0, `--ignore-play-profile`, binary from the worktree)
+
+| witness | OFF | ON | ON + `MTG_SAC_MANA_ACT_DEMAND=0` | OFF + `ACT_DEMAND=0` |
+|---|---|---|---|---|
+| 2HG s3212906 gi2905 (`LACKEY_DECLINE=0`) | 3 | **3** | **3** | 4 |
+| s3313242 gi3241 | 3 | **3** | **3** | 3 |
+| s3313591 gi3590 | 3 | **3** | **3** | 3 |
+| 2HG s3620038 gi37 | 3 | **3** | 4 | 4 |
+
+gi37's kill is in a death-value state (item 4), where the board plays as the OFF arm, so it still needs the
+activation landmark. **The landmark cannot be retired** while value states keep the searched axis -- the
+`payna` arm below says the same on 8,000 games (Goblins -0.0029 against -0.0079 with it).
+
+### The held-out A/B (ONE pooled batch, 432 jobs / 144,000 games -- 48,000 per arm --, arms pinned per job via `heurarm`)
+
+Fresh seeds (Goblins 4110001 / 2HG 4120001 / Fungus 4130001 / Fungus 2HG 4140001 / d0 4150001, 4160001 / d3
+4170001, 4180001), 12 threads, `MTG_PGO=0`, binary `wip/sacpay` with the lever pinned per arm. `base` = lever
+OFF, `pay` = lever ON (activation landmark ON, the proposed setting), `payna` = lever ON with
+`MTG_SAC_MANA_ACT_DEMAND=0`. Win turn LOWER is better; unwon = 9. Searched cells at their suite settings
+(profile depth, b60 Goblins / b20 Fungus); d3 = `--depth 3 --budget-ms 10`; d0 = the greedy.
+
+| cell | games | `pay` d(avg) | faster / slower | net | units | ms | `payna` d(avg) | f / s |
+|---|---|---|---|---|---|---|---|---|
+| Goblins b60 | 8,000 | **-0.0079** | 69 / 6 | -63 | 0.977x | 1.021x | -0.0029 | 70 / 47 |
+| Goblins 2HG b60 | 6,000 | **-0.0078** | 55 / 8 | -47 | 0.983x | 1.064x | -0.0022 | 56 / 43 |
+| Goblins d3 | 3,000 | **-0.0073** | 26 / 4 | -22 | 0.981x | 1.013x | -0.0017 | 26 / 21 |
+| Goblins d0 | 8,000 | +0.0076 | 106 / 146 | +61 | -- | 0.942x | +0.0067 | 129 / 174 |
+| Fungus b20 | 6,000 | -0.0002 | 7 / 6 | -1 | 0.968x | 0.985x | same | |
+| Fungus 2HG b20 | 6,000 | -0.0008 | 12 / 7 | -5 | 0.960x | 0.968x | same | |
+| Fungus d3 | 3,000 | +0.0003 | 3 / 4 | +1 | 0.979x | 0.987x | same | |
+| Fungus d0 | 8,000 | **-0.0055** | 49 / 13 | -44 | -- | 1.056x | same | |
+
+Per deck, all cells summed: **Goblins net -71, Fungus net -49.** Fungus has no death-value card, so
+`payna` = `pay` there exactly. Goblins d0 is the one cell that still regresses (it was +0.131 before items
+5, 7 and 8 above; the greedy is a crude policy and the rest of the gap is the same class: it sees bodies as
+mana it can spend).
+
+### Slower games at `--depth 8 --budget-ms 0` (the bar) -- NOT MET YET
+
+All 194 slower `pay` games were replayed at d8 b0 with the lever on (one pooled batch): **173 recover.** Each of
+the 21 that do not was replayed with the lever OFF at d8 b0 (all 21 reach the faster turn there) and with
+the lever OFF at its own setting under `MTG_NC_SEARCH=1`:
+
+| class | games |
+|---|---|
+| CLEAR clairvoyance (the OFF arm also misses the faster turn without seeing hidden information) | 13 -- Goblins 3, Goblins 2HG 3, Fungus 3, Fungus 2HG 3, Fungus d3 1 |
+| **HONEST losses** (OFF finds the faster turn non-clairvoyantly; ON at d8 b0 does not) | **8** -- Fungus s4133781 gi3780, s4133848 gi3847, s4135551 gi5550 (4 -> 5); Fungus 2HG s4140744 gi743 (4 -> 5); Goblins s4113005 gi3004 (4 -> 5), s4113506 gi3505 (3 -> 4); Goblins d0 s4154256 gi4255, s4155580 gi5579 (5 -> 8 at d8 b0) |
+
+**The Fungus class is LOCALIZED, not fixed.** Every Fungus honest loss inspected (also s4031532 gi1531 and the
+2HG gi149 / gi4573 / gi5676 of the previous round) is the same line: T2 Utopia Mycon + Fungus Frolic (the
+Brightcap Badger adventure), T3 Brightcap Badger twice off lands plus the Badger's GRANT tapping Mycon and the
+Saprolings -- no sacrifice anywhere in it. ON plays T2 Badger as a creature instead. Bisected by throwaway
+knobs on the d8 b0 replays: keeping the searched outlet action (payer + searched) -- no change; no greedy
+charge -- no change; no fodder in BatchPrepay -- no change; no `PayFodderOverspent` -- no change; no fodder in
+`BuildNonCreaturePool` or `AvailableManaPoolNoAttackers` -- no change; **no fodder credit in
+`AvailableManaPool` -- three of the four 2HG losses recover** (but the completeness witnesses go back to T4,
+so the credit itself is needed). So some consumer of the GENERAL pool, outside the subset-payability tests that
+need the credit, misjudges that line once the Saprolings read as mana. Next step: credit fodder only in the
+enumerators' own pools (SolveUncached / EnumeratePlans `pool`, the bound, the colour gates) and leave
+`AvailableManaPool` fodder-free for every other reader; then re-run these eight.
+
+The two Goblins searched losses and the two d0 games (T8 at d8 b0 where the OFF greedy wins T5) are not
+root-caused.
+
+### gi539 (Goblins s3510540 gi539 at `--budget-ms 60`, profile depth 7, alone on the box)
+
+| arm | win | units | ms (two heavy jobs sharing the box) |
+|---|---|---|---|
+| lever OFF | T3 | 344,604 | 204,243 |
+| lever ON | T3 (same digest) | 344,604 | 206,047 |
+| lever OFF, `MTG_SAC_MANA_ACT_DEMAND=0` | T3 | 225,908 | 907 |
+| lever ON, `MTG_SAC_MANA_ACT_DEMAND=0` | T3 | 225,908 | 910 |
+
+The lever does not touch gi539: its board holds a death payoff, so it plays as the OFF arm (item 4). Its
+wall is the activation landmark's unbilled continuation derivations -- the g2905 agent's billing work -- and
+the lever neither causes nor cures it. (Before item 4, with the payer live there, it read 50 s / 195,955
+units against 107 s / 344,604; the same payer-beside-the-axis shape is what made gi5126 36 s / 3.9 GB.)
+
+### Other checks
+
+* OFF arm byte-identical to the pre-branch binary on 8 cells (Goblins b60 / 2HG / d3 / d0, Fungus b20 / 2HG /
+  d3 / d0); unit tests 2,175 / 2,175 (the six `MTG_SAC_MANA_ACT_DEMAND` cases now pin the lever off, since they
+  test the searched axis); scenarios 339 / 340 OFF and ON (the one failure, `aa_weather_gw_galvanic_one_list_no_t4`,
+  fails identically on the pre-branch binary).
+* New unit file `test/unit/test_sac_outlet_pay.cpp` (8 cases): gi2905 with no activation landmark; the OFF
+  control; the spare scope; three Bolts off three sacrifices (unfindable OFF); Krenko's tokens funding a
+  Siege-Gang shot; the death-value keep; the payer-off states; the Fungus same-line fodder line autonomously.
+* Fungus: a play change, so it matters for the mulligan generation paused in the artifact queue at the origin
+  tip -- but only if the lever is turned on; default OFF moves nothing.
+
+### Bodies created earlier in the plan -- what works and what does not
+
+* Spore Saprolings (Fungus): the fused same-line action (item 3) when no body exists; otherwise the board's
+  bodies, and a pop co-selected ahead of a cast is credited by `SacPayPlanFodderCount` in the bound. Works.
+* Krenko's tokens: Krenko taps AFTER the main casts by design, so they fund the trailing activations (a
+  Siege-Gang shot -- unit-tested) and the next phase, not a cast in the same section. Same as the OFF arm.
+* Siege-Gang / Mogg War Marshal / Muxus / Lackey bodies: they exist for every LATER payment in the line at
+  apply time (the payer sees the live board), but the enumerators' flat test counts plan-start bodies only, so
+  a subset whose cost needs them is pruned before it is tried. The OFF arm could not express those lines
+  either (its float happens before the casts). Crediting them is the follow-up, in the bound's direction
+  (an over-count only keeps lines).
+* Melira persist: Melira Pod holds no sac-for-mana outlet, so the lever never reaches it; the persist
+  replenishment is read by `SacOutletEatHasValue` (a persist body makes the death pay -> OFF-arm behaviour).
+
+### Recommendation
+
+**Not yet default ON.** Goblins and Fungus are each net-better summed over their cells (Goblins -71, Fungus
+-49) and the searched cells are better-or-neutral with fewer units, but the bar is "every slower game
+recovers at d8 b0 or is clear clairvoyance", and eight do not. Fix the Fungus general-pool consumer (above),
+root-cause the four Goblins games, re-run this A/B, then propose ON. The activation landmark
+(`MTG_SAC_MANA_ACT_DEMAND`) stays: death-value states keep the searched axis, and `payna` is worse.
+
+
+
+---
+
+# HISTORY (2026-09-18 .. 2026-10-01)
+
 **Status (2026-10-01): MEASURED AT LAST, and the first measurement found a BUG rather than a verdict.
 Still DEFAULT OFF, but the residual is now small, located, and named.** See §"WHY THIS WENT 13 DAYS
 UNMEASURED" at the bottom for how it went unmeasured from 2026-09-18, and §"THE TOKEN-FODDER BUG" for

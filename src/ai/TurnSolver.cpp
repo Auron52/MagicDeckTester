@@ -18856,6 +18856,90 @@ static inline bool SubsetOversubscribesSacFodderFast(const FodderIndex& fx,
     return fast;
 }
 
+// ---- §2b: THE PAYER AND THE SACRIFICE COSTS DRAW ON ONE SET OF BODIES (MTG_SAC_OUTLET_PAY) --------
+//
+// With a sac-for-mana outlet live as a payment source, every legal fodder body is credited to the pool
+// as one mana -- and a sacrifice COST (Siege-Gang's "{1}{R}, Sacrifice a Goblin") needs a body of the
+// same kind. The flat mana test saw each body twice: once as mana, once as the victim. Goblins d0
+// s3951216 gi215, T3 main 2: Siege-Gang's lethal four-shot burst (4 x {1}{R} = 8 mana, four victims)
+// was judged payable off one Mountain plus eight Goblins, projected as a win, and applied as: eat seven
+// Goblins for the mana, ONE victim left -- one shot, the board gone, the opponent at 6 instead of dead
+// (T4 -> T7). The plan really needs mana-eaten + victims <= the bodies on the board, and mana-eaten <=
+// the bodies minus the activations' own SOURCES (PaySacSpareScope: the payer never eats a source; it
+// may still be sacrificed as its own victim).
+//
+// A NECESSARY CONDITION, applied only where it is exact: a subset holding anything that can ADD a body
+// (any creature cast, a token maker, a put, an activation other than a plain sacrifice outlet) is not
+// judged at all -- the same bail-out SubsetOversubscribesSacFodder takes, for the same reason (a static
+// count of plan-start bodies would prune a line that makes its own fodder). Inert when the lever is off
+// or no outlet is live.
+struct PayFodderGate
+{
+    bool        active  = false;
+    int         bodies  = 0;      // legal fodder on the board (SacPayFodderCount)
+    int         per     = 1;      // mana per body
+    int         nonbody = 0;      // the pool's total WITHOUT the fodder credit (lands, rocks, float)
+    std::string sub;              // the outlet's fodder subtype ("" = any creature)
+};
+static void BuildPayFodderGate(const GameState& state, PayFodderGate& g)
+{
+    const int me = state.active_player_index;
+    const SacPayOutlet so = LiveSacPayOutlet(state, me);
+    if (!so.valid()) { return; }
+    g.bodies = SacPayFodderCount(state, me, so);
+    if (g.bodies <= 0) { return; }
+    g.per     = std::max(1, so.def->params.sac_outlet_add_mana_amount);
+    g.nonbody = AvailableManaPool(state).Total() - g.bodies * g.per;
+    g.sub     = so.def->params.sac_creature_requires_subtype;
+    g.active  = true;
+}
+static bool PayFodderOverspent(const PayFodderGate& g, const GameState& state,
+                               const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    int mv = 0, victims = 0, sources = 0;
+    int seen_src[8]; int nsrc = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        mv += a.cost.ManaValue();
+        if (a.kind == Action::Kind::CastFromHand)
+        {
+            const CardDefinition* d = a.def;
+            if (d == nullptr || d->card.IsCreature() || (!d->card.IsInstant() && !d->card.IsSorcery()))
+            { return false; }   // a permanent or an unknown spell may add a body: not judged
+            continue;
+        }
+        if (a.kind != Action::Kind::SacCreatureOutlet || a.sac_source_id == 0) { return false; }
+        const CardDefinition* sd = ControlledDefByNumber(state, a.sac_source_id);
+        if (sd == nullptr || !sd->params.sac_creature_outlet) { return false; }
+        const CardParams& op = sd->params;
+        if (op.sac_outlet_creates_tokens > 0 || op.sac_outlet_self_only) { return false; }
+        if (op.sac_creature_requires_subtype != g.sub) { return false; }   // a different victim pool
+        victims += a.sac_count > 1 ? a.sac_count : 1;
+        bool dup = false;
+        for (int k = 0; k < nsrc; ++k) { if (seen_src[k] == a.sac_source_id) { dup = true; break; } }
+        if (!dup && nsrc < 8)
+        {
+            seen_src[nsrc++] = a.sac_source_id;
+            // The source is spared by the payer only if it is itself a fodder body.
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.card.m_number != a.sac_source_id) { continue; }
+                if (p.card.IsCreature() && (g.sub.empty() || CardHasSubtype(p.card, g.sub))) { ++sources; }
+                break;
+            }
+        }
+    }
+    if (victims == 0) { return false; }   // no sacrifice cost: the flat test already judged it
+    const int short_by = mv - g.nonbody;
+    const int eaten    = short_by > 0 ? (short_by + g.per - 1) / g.per : 0;
+    // The sources are spared from EATING only -- a Siege-Gang may still be its own (last) victim
+    // ("Sacrifice a Goblin"), so they bound the eaten count, not the sum. Counting them in the sum
+    // rejected Goblins d0 s4051800 gi1799's T3 kill: six shots, ten Goblins eaten and six sacrificed
+    // off sixteen bodies, the last victim a Siege-Gang -- the OFF arm's line, unfindable at d8 b0.
+    return eaten + victims > g.bodies || eaten > g.bodies - sources;
+}
+
 static bool SubsetWastesCreatureSacMana(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel,
@@ -41716,7 +41800,37 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // above it) from every enumeration on a deck whose plan is making dozens of fungible
             // bodies. VALUE outlets (Siege-Gang's damage, Psychotrope Thallid's draw) are untouched
             // -- their payload is not mana and the payer has no way to reach it.
-            if (is_mana_outlet && SacOutletPayEnabled()) { continue; }
+            //
+            // TWO CARVE-OUTS keep the searched action, and both are about completeness, not cost:
+            //   * HUMAN PLAY: the human clicks the outlet themselves (LiveSacPayOutlet disables the
+            //     payer there under the same gate), so the menu entry must exist.
+            //   * A DEATH THAT PAYS (SacOutletEatHasValue): Pashalik Mons' ping, Rundvelt
+            //     Hordemaster's impulse, Mogg War Marshal's token, persist, a sacrifice watcher. A line
+            //     may sacrifice purely for the death with the mana unused -- the payer never eats a body
+            //     a cost does not need, so without the searched action that line is unexpressed at
+            //     every budget. There the payer is OFF as well (LiveSacPayOutlet asks the same
+            //     predicate), so such a board plays exactly as the lever's OFF arm -- searched count
+            //     axis, MTG_SAC_MANA_ACT_DEMAND landmarks and all. Running the payer BESIDE the searched
+            //     action double-credits one body (its float AND its pool fodder) and, under Rundvelt,
+            //     puts a library reveal inside a payment; see LiveSacPayOutlet.
+            // Everywhere else the death is worth nothing, so a sacrifice whose mana goes unspent only
+            // throws a body away, and every sacrifice whose mana IS spent the payer makes on demand --
+            // the searched action is dominated and its count axis (whose landmarks could not express a
+            // spell AND a Siege-Gang shot, or two spells: see SacManaActDemandOn) is retired.
+            //
+            // AND ONLY WHERE A BODY ALREADY EXISTS (the `victim_id >= 0` test below, after the victim
+            // pick). The payer eats only bodies that EXIST at payment time and never makes one (USER
+            // ruling 2026-10-01, see SacOutletPayEnabled). A board with NO legal fodder whose deck can
+            // make one in the same line (MTG_SAC_FODDER_SAME_LINE's spore pop fused into the sac, or
+            // MTG_SAC_FODDER_ACT_MAKER's trailing form) keeps that searched action: a spore activation
+            // is a TRAILING activation, so the Saproling it makes lands after the casts and no payment
+            // of a cast could ever reach it -- suppressing the fused action deleted the
+            // fungus_sac_fodder_same_line_GAP line (pop a Saproling, eat it, cast Sporesower) at every
+            // budget. With no body there is no count axis to retire anyway: one activation per source.
+            const bool pay_live_here = is_mana_outlet && SacOutletPayEnabled() && !HumanPlayActive();
+            const bool pay_value     = pay_live_here
+                && SacOutletEatHasValue(state, state.active_player_index, sd->params);
+            const bool pay_suppress  = pay_live_here && !pay_value;
             // Sac-outlet pre-combat deferral (GoblinsProvider::DeferSacOutletPreCombat, ADOPTED default-ON,
             // off-switch MTG_NO_GOBLIN_SAC_2ND): defer the VALUE outlets (Siege-Gang / Pashalik / the multi-
             // sac burst) to the second main and haste-gate Skirk's mana outlet. Vs the passive opponent a
@@ -41749,6 +41863,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                                sd->params.sac_outlet_allows_enchantment,
                                                sd->params.sac_outlet_excludes_self,
                                                sd->params.sac_outlet_self_only);
+            if (pay_suppress && victim_id >= 0) { continue; }   // §2b: the payer eats the board's fodder
             // SAME-LINE FODDER (MTG_SAC_FODDER_SAME_LINE, default OFF -> byte-identical). The board
             // has no victim, but this deck can MAKE one for free right now -- three idle spore
             // counters become a Saproling and that Saproling becomes a mana. Bailing here is what
@@ -49077,6 +49192,44 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // attack (see CollectAttackingManaSources).
     const std::vector<AttackingManaSource> atk_mana_srcs = CollectAttackingManaSources(state);
     int prowess_attackers   = CountProwessAttackers(state);
+    // §2b BODIES THE PAYMENT WILL EAT (MTG_SAC_OUTLET_PAY): what this greedy chooser charges a plan
+    // for them. The pool above credits every legal fodder body as one mana, and nothing in a plan's
+    // score said the payer turns those bodies into mana by SACRIFICING them -- a cast's EvalCard
+    // counts the body it adds, but the bodies it eats were free. Bounded by the searched count axis's
+    // landmarks that never bit; with the axis retired the greedy ate its whole board to cast its whole
+    // hand (Goblins d0 s3850055 gi54, T3 main 2: seven permanents -> two, four creatures cast, won T8
+    // instead of T4). So each body the subset's cost reaches -- in the PAYER's own order
+    // (SacPayFodderRank: bodies that cost no attack first, then the searched victim pick's order) -- is charged its board power in EvalCard's
+    // unit (one damage-equivalent per point of power, lords included), the same price a creature
+    // cast is credited for adding one. THIS IS THE GREEDY's SCORE ONLY (the d0 runner and the playout
+    // beyond the horizon -- the permitted greedy sites); searched plans are valued by their rollouts.
+    // Inert when the lever is off or no outlet is live (LiveSacPayOutlet invalid -> empty prefix).
+    std::vector<int> pay_fodder_prefix;   // [k] = summed value of the k cheapest-to-eat bodies
+    int pay_fodder_per = 1;
+    if (const SacPayOutlet pfo = LiveSacPayOutlet(state, state.active_player_index); pfo.valid())
+    {
+        pay_fodder_per = std::max(1, pfo.def->params.sac_outlet_add_mana_amount);
+        const std::vector<int> pf_doomed = DoomedTokenCreators(state);
+        std::vector<std::pair<int, int>> bodies;   // (payer rank, value)
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+            if (!IsSacPayFodder(p, d, pfo)) { continue; }
+            const int pw = p.EffectivePower()
+                         + ComputeLordBonus(p.card, state, p.controller_index, p.AnimatedAllTypes(), &p).first;
+            // Pre-combat, a body that would attack also takes THIS turn's swing with it (Goblins d0
+            // s3950331 gi330 T3 main 1: Muxus paid by eating Goblin Lackey, Skirk and Goblin Matron, the
+            // Lackey's combat put and the attack both lost, T4 -> T5): charge it twice.
+            const int mult = (is_pre_combat && SacPayFodderCostsAttack(state, p)) ? 2 : 1;
+            bodies.emplace_back(SacPayFodderRank(state, p, pfo, &pf_doomed), std::max(0, pw) * 100 * mult);
+        }
+        std::stable_sort(bodies.begin(), bodies.end(),
+                         [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first < b.first; });
+        pay_fodder_prefix.assign(bodies.size() + 1, 0);
+        for (std::size_t k = 0; k < bodies.size(); ++k)
+        { pay_fodder_prefix[k + 1] = pay_fodder_prefix[k] + bodies[k].second; }
+    }
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
 
     // Greedy path (d0 decision + every rollout leaf): suppress the speculative safe-alt burn so
@@ -49157,6 +49310,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // original per-subset function runs. Lockstep twin in EnumeratePlans.
     FodderIndex fodx;
     if (pre.sac_fodder) { BuildFodderIndex(state, cands, pre.sac_src_def, pre.board_persist, fodx); }
+    PayFodderGate payfg;   // §2b: mana-eaten + sacrifice victims share one set of bodies
+    BuildPayFodderGate(state, payfg);
     // ...and of the creature-sac-mana filter (see WasteIndex). Lockstep twin in EnumeratePlans.
     const int payoff_arg = pre.sac_src_def.empty() ? -1 : (pre.board_death_payoff ? 1 : 0);
     WasteIndex wastx;
@@ -49713,6 +49868,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (pre.sac_fodder
             && SubsetOversubscribesSacFodderFast(fodx, state, cands, sel, sac_tab, persist_arg))
         { if (shape != nullptr) { shapestats::Bump(shape->rej_fodder); ++callf.rej_fodder; } return; }
+        if (payfg.active && PayFodderOverspent(payfg, state, cands, sel)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }
@@ -50656,6 +50812,21 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Learned ranking for NON-lethal plans (lethal stays exact and dominates, so the model never
         // ranks a win). rank_value replaces total_eval in the compare + best.value; it IS total_eval
         // whenever no model is attached / the flag is off -> byte-identical. See learned-d0-policy.md.
+        // §2b: charge the bodies this subset's cost makes the payer eat (see pay_fodder_prefix). The mana
+        // the board supplies WITHOUT eating is the judged pool minus the fodder credit in it; whatever the
+        // cost needs beyond that is eaten, cheapest first. A winning plan is never charged (a win dominates).
+        if (!wins && pay_fodder_prefix.size() > 1)
+        {
+            const int nbodies  = static_cast<int>(pay_fodder_prefix.size()) - 1;
+            const int supply   = (credited ? eff : pool).Total();
+            const int nonbody  = supply - nbodies * pay_fodder_per;
+            const int short_by = combined.ManaValue() - nonbody;
+            if (short_by > 0)
+            {
+                const int eaten = std::min(nbodies, (short_by + pay_fodder_per - 1) / pay_fodder_per);
+                total_eval -= pay_fodder_prefix[static_cast<std::size_t>(eaten)];
+            }
+        }
         int rank_value = total_eval;
         if (ev && !wins)
         {
@@ -62031,6 +62202,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (SacOutletPayScopeOn()
                 && PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
             { sac_pay_scope.emplace(); }
+            // §2b: the payment may eat Goblins through Skirk, but never this activation's own source
+            // or baked victim (PaySacSpareScope; executor twin in AIEngine's trailing pass).
+            const PaySacSpareScope _spare(a.sac_source_id, a.sac_victim_id);
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
                 if (a.sac_count > 1 && a.sac_victim_id != 0)
@@ -66822,6 +66996,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // the build in Solve; inactive -> the original per-subset function runs.
     FodderIndex fodx;
     if (pre.sac_fodder) { BuildFodderIndex(state, cands, pre.sac_src_def, pre.board_persist, fodx); }
+    PayFodderGate payfg;   // §2b: mana-eaten + sacrifice victims share one set of bodies
+    BuildPayFodderGate(state, payfg);
     // ...and of the creature-sac-mana filter (see WasteIndex). Lockstep twin of the build in Solve.
     const int payoff_arg = pre.sac_src_def.empty() ? -1 : (pre.board_death_payoff ? 1 : 0);
     WasteIndex wastx;
@@ -67677,6 +67853,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // the second half silently no-opped at apply). Correctness, not a narrowing.
         if (pre.sac_fodder
             && SubsetOversubscribesSacFodderFast(fodx, state, cands, sel, sac_tab, persist_arg)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_fodder); ++ecallf.rej_fodder; } return; }
+        if (payfg.active && PayFodderOverspent(payfg, state, cands, sel)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- lockstep twin of Solve::consider's call; see the helper).
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }

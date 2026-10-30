@@ -1697,6 +1697,11 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         // The creature THIS cast is about to sacrifice as a cost is already spent (see
         // g_pay_sac_victim below); eating it too would spend one body twice.
         if (g_pay_sac_victim != 0 && p.card.m_number == g_pay_sac_victim) { return false; }
+        // An activation's own source and baked victim (PaySacSpareScope): eating either would leave
+        // the ability nothing to resolve from or nothing to sacrifice.
+        if (p.card.m_number != 0
+            && (p.card.m_number == g_pay_sac_spare[0] || p.card.m_number == g_pay_sac_spare[1]))
+        { return false; }
         // Snow-pip restriction: with no definition we cannot prove the body is snow, so refuse --
         // the pessimistic direction (a payable cast fails, never an unpayable one resolving).
         if (paying_snow && !(def != nullptr && def->card.HasSupertype(Supertype::Snow))
@@ -2201,8 +2206,11 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // abilities of Elementals" -- usable() admitted it, so SubtypeAbilityManaOk passed):
                 // Incandescent Soulstoke's put {1}{R} spends Elemental-only mana first for the same
                 // reason. Only Smokebraider carries mana_only_subtype_abilities.
-                if ((for_creature || def->params.mana_only_subtype_abilities)
-                    && def->params.creature_mana_only && kind == 1
+                // `kind == 1` FIRST: a §2b fodder candidate (kind 5) may be a TOKEN with no definition
+                // at all (def == nullptr), so reading def->params before the kind test segfaulted the
+                // moment MTG_SAC_OUTLET_PAY ate a Goblin token for a non-creature payment.
+                if (kind == 1 && (for_creature || def->params.mana_only_subtype_abilities)
+                    && def->params.creature_mana_only
                     && CreatureOnlyFirstEnabled()
                     && !(def->card.IsCreature() && restricted_hold_ok
                          && SacPayFodderCostsAttack(state, p))) { rank = -500; }
@@ -2341,7 +2349,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 ++dh_ncand;
                 if (nddbg)
                 { std::fprintf(stderr, "[nddbg]   cand %s kind=%d rank=%d harm=%d hold=%d dep=%d sur=%d\n",
-                               def->card.m_name.str().c_str(), kind, rank, harm, hold, dep, sur); }
+                               p.card.m_name.str().c_str(), kind, rank, harm, hold, dep, sur); }
                 // "FIRST HAND, THEN DECK" (USER): harm's WHOLE pips (certain demand: the hand, the
                 // board, a pump sink) outrank the ladder; its FRACTION (the library reveal's
                 // expectation, pips / library size) only breaks a rank tie. Compared raw, a 2/64
@@ -2483,7 +2491,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             if (best_i < 0) { return false; }
             if (nddbg)
             { std::fprintf(stderr, "[nddbg]   -> %s kind=%d rank=%d key=(%d %d %d %d)\n",
-                           CardDatabase::Instance().LookupCached(state.battlefield[best_i].card)->card.m_name.str().c_str(),
+                           state.battlefield[best_i].card.m_name.str().c_str(),
                            best_kind, best_rank, best_key[0], best_key[1], best_key[2], best_key[3]); }
             // Needs-based order: the chosen source leaves the supply for this payment's later pips.
             if (nd_live && nd_ready && (best_kind == 1 || best_kind == 3))
@@ -8884,6 +8892,9 @@ std::uint64_t PayContextDigest()
     mix(static_cast<std::uint32_t>(g_tap_keep_last_card));
     mix(static_cast<std::uint32_t>(g_pain_sweep_defer));
     mix(static_cast<std::uint32_t>(g_pay_sac_victim));
+    if ((g_pay_sac_spare[0] | g_pay_sac_spare[1]) != 0)   // §2b PaySacSpareScope; unset -> digest unchanged
+    { mix((static_cast<std::uint64_t>(static_cast<std::uint32_t>(g_pay_sac_spare[0])) << 32)
+          | static_cast<std::uint32_t>(g_pay_sac_spare[1])); }
     for (int i = 0; i < 5; ++i)
     {
         mix(static_cast<std::uint32_t>(g_pay_own_line_pips[i]));

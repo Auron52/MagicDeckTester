@@ -6152,6 +6152,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (SacOutletPayScopeOn()
                 && PermAbilitySourceIsCreature(state, state.active_player_index, a.sac_source_id))
             { sac_pay_scope.emplace(); }
+            // §2b: never eat this activation's own source or baked victim (rollout twin).
+            const PaySacSpareScope _spare(a.sac_source_id, a.sac_victim_id);
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
@@ -8872,7 +8874,7 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
     return -1;
 }
 
-void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
+void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool& available,
                                  int alt_lifegain, const std::string& tutor_target,
                                  int chosen_x, int own_targets, int ponder_keep,
                                  int crackle_targets, int splice_count,
@@ -8881,6 +8883,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                                  int convoke_green, int convoke_other, int phyrexian_life,
                                  bool evoke, bool adventure, bool kicked, const CastRiders& riders)
 {
+    // `hand_card_p`, NOT a `Card&`: a §2b sac-for-mana payment (MTG_SAC_OUTLET_PAY) SACRIFICES creatures, and
+    // their death triggers can push into THIS hand (Rundvelt Hordemaster's impulse stages the exiled card in
+    // hand), reallocating it -- a reference held across TapForCost then dangles (LogCastSpell read freed
+    // memory: Goblins s3815127 gi5126 d3 b10, std::length_error). Re-found by the copy's stable number right
+    // after the payment, the twin of the rollout apply_one fix (sac-mana-outlet-as-deferred-source.md).
+    Card* hand_card_p = &hand_card_in;
+    const int hand_card_number = hand_card_in.m_number;
     // The cast's riders (TurnSolver.h CastRiders) arrive already TAKEN by the caller, so no return
     // below can strand one: Beseech's twobrid pips, Search for Tomorrow's land-put credit, Magnetic
     // Theft's Equipment target and Mycoloth's devour count, each stamped onto the entry below.
@@ -8890,7 +8899,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     const InternedName remand_name = riders.remand_by;   // the REMAND rider (Action::remand_by)
     m_last_cast_remanded = false;
     Player& ap = state.ActivePlayer();
-    auto def = CardDatabase::Instance().LookupCached(hand_card);
+    auto def = CardDatabase::Instance().LookupCached((*hand_card_p));
     if (!def) { return; }
     // ADVENTURE (Brightcap Badger // Fungus Frolic, CR 715): swap in the adventure face's def for
     // the whole cast -- its cost is paid and its text resolves. The hand card is still `hand_card`
@@ -8948,7 +8957,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     if (cast_pitch
         && (pitch_name.empty()
             || FindPitchHandIndex(ap, pitch_name.str(), def->params.evoke_exile_color,
-                                  hand_card.m_number) < 0))
+                                  (*hand_card_p).m_number) < 0))
     { return; }
 
     // REMAND rider: live only for a plain paid hand cast with a copy of the Remand in hand and a cast
@@ -8961,7 +8970,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         if (rd != nullptr && rd->params.counters_target_spell_to_hand)
         {
             for (const Card& hc : ap.hand)
-            { if (hc.m_name == remand_name && hc.m_number != hand_card.m_number) { remand_def = rd; break; } }
+            { if (hc.m_name == remand_name && hc.m_number != (*hand_card_p).m_number) { remand_def = rd; break; } }
         }
     }
     const bool remand_countered = remand_def != nullptr && !def->params.cant_be_countered;
@@ -8969,7 +8978,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
     entry.source           = def->card;
-    entry.source.m_number  = hand_card.m_number;  // preserve per-copy ID for logging
+    entry.source.m_number  = (*hand_card_p).m_number;  // preserve per-copy ID for logging
     entry.controller_index = state.active_player_index;
     entry.tutor_target     = tutor_target;        // searched fetch target (empty -> heuristic)
     // The land-put credit the cast's variant was enumerated with -- only on a LandSearchPutsUntapped
@@ -9041,7 +9050,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // the definition, so it does NOT carry m_is_staged -- the gate MUST read hand_card. Inert (colour
     // empty, cast_from_hand unused) for every non-impulse spell.
     entry.chosen_float_color = chosen_float_color;
-    entry.cast_from_hand     = !hand_card.m_is_staged;
+    entry.cast_from_hand     = !(*hand_card_p).m_is_staged;
     // Aura (Bogles): carry the searched creature to enchant so EffectHandler's aura-enter branch sets
     // aura_attached_to to the same creature the rollout's apply_one did (lockstep). 0 = not an aura /
     // heuristic fallback (ResolveEnchantTarget). Inert for every non-aura spell.
@@ -9397,7 +9406,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                 // ...and its NUMBER, so a later Equip in this same plan can tell that the host it
                 // was co-selected against never arrived (see the stranded-equip note in
                 // GameLogger.h). Audit-only, like every other line in this block.
-                NoteDroppedCastNumber(hand_card.m_number);
+                NoteDroppedCastNumber((*hand_card_p).m_number);
                 if (AffordAuditLevel() >= 2)
                 {
                     const ManaPool rem = AvailableManaPool(state);
@@ -9444,6 +9453,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             SubManaCost(g_line_unpaid_cost, rep_share);
         }
     }
+    // Re-find the cast card by its stable number: the payment above may have sacrificed creatures
+    // whose death triggers reallocated the hand (see hand_card_p). Same element when nothing moved.
+    for (Card& hc : ap.hand) { if (hc.m_number == hand_card_number) { hand_card_p = &hc; break; } }
 
     if (m_logger)
     {
@@ -9499,7 +9511,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                 tgts.push_back(std::move(d));
             }
         }
-        m_logger->LogCastSpell(hand_card.m_number, hand_card.m_name,
+        m_logger->LogCastSpell((*hand_card_p).m_number, (*hand_card_p).m_name,
                                alt_lifegain > 0 ? ("(alt: opp +" + std::to_string(alt_lifegain) + ")")
                                                 : x_effective.ToString(),
                                logged_x, tgts);
@@ -9527,7 +9539,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         //
         // Position is load-bearing and unchanged: an additional cost is paid at CAST time, before
         // resolution (CR 601.2h), so a Crop Rotation's fetched land is never a legal victim.
-        PerformSacrificeLandCost(state, hand_card.m_name.str());
+        PerformSacrificeLandCost(state, (*hand_card_p).m_name.str());
     }
 
     // Natural Order: "sacrifice a green creature" additional cost, paid at cast (CR 601.2h) --
@@ -9536,16 +9548,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // spell does. Lockstep with the rollout's apply_one branch.
     if (!def->params.sac_additional_creature_color.empty())
     {
-        PerformSacrificeCreatureCost(state, hand_card.m_name.str(),
+        PerformSacrificeCreatureCost(state, (*hand_card_p).m_name.str(),
                                      def->params.sac_additional_creature_color, own_targets);
     }
 
     // REMAND: keep the physical card -- a countered X goes back to its owner's hand under its own number.
     Card remand_x_card;
-    if (remand_def != nullptr) { remand_x_card = hand_card; }
-    const int pitch_cast_number = hand_card.m_number;   // `hand_card` dies with the erase below
+    if (remand_def != nullptr) { remand_x_card = (*hand_card_p); }
+    const int pitch_cast_number = (*hand_card_p).m_number;   // `hand_card` dies with the erase below
     ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
-        [&hand_card](const Card& c) { return &c == &hand_card; }));
+        [hand_card_p](const Card& c) { return &c == hand_card_p; }));
     // ...and the PITCH half of the evoke cost (validated before payment above): exile the pinned red
     // card -- any copy of that name other than the cast card (lockstep twin of apply_one).
     if (cast_pitch)
