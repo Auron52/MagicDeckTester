@@ -8939,7 +8939,8 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         {
             const CycleSeedPayScope _csp;   // lockstep with the rollout's cycle_chain_step (PlanTraits::cycle_seed_pips)
             // THE PAYMENT SPLIT (ledger Q61): the seed's searched split, lockstep with cycle_chain_step. 0 -> no hold.
-            const SeedPaySplitScope _sps(SeedPaySplitHoldMask(state, state.active_player_index, pay_split));
+            const SeedPaySplitScope _sps(state, state.active_player_index, pay_split);
+            if (!_sps.Valid()) { return DigOutcome::Failed; }
             if (!TapForCost(state, cyc_cost, avail, false)) { return DigOutcome::Failed; }
         }
         // TapForCost may have moved the hand (a payment that mutates zones): re-find the copy.

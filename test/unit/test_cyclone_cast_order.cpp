@@ -181,9 +181,9 @@ TEST_CASE("Cyclone cycle order mode 1 (draft 2): Cyclone OUT")
         CHECK(ProvO().SearchedCycleSources(s) == NamesO{ kWraO, kCurO, kLoungeO, kCycO });
         CHECK(PlayoutPickO(s) == kWraO);
     }
-    SUBCASE("lever off: today's order (creatures, other nonlands, lands; cheaper first) and today's pick (Wraith)")
+    SUBCASE("both cycle policies off: generic order and cheapest playout pick")
     {
-        arm.Set(heurarm::CYCLONE_CYCLE_ORDER, 0);
+        arm.Set(heurarm::CYCLONE_CYCLE_ORDER, 0).Set(heurarm::CYCLONE_CYCLER_RULE, 0);
         const GameState s = StateO({ kCycO, "Island", "Island" }, hand);
         CHECK(ProvO().SearchedCycleSources(s) == NamesO{ kWraO, kCurO, kCycO, kLoungeO });
         CHECK(PlayoutPickO(s) == kWraO);
@@ -241,7 +241,7 @@ namespace
 std::vector<int> SplitUnitsO(std::int32_t v)
 {
     std::vector<int> u;
-    for (int b = 0; b < 4; ++b) { const int x = ((v >> (8 * b)) & 0xFF) - 1; if (x < 0) { break; } u.push_back(x); }
+    for (int b = 0; b < 3; ++b) { const int x = static_cast<int>((static_cast<std::uint32_t>(v) >> (8 * b)) & 0xFFu) - 1; if (x < 0) { break; } u.push_back(x); }
     return u;
 }
 constexpr int kSigU = 1 << static_cast<int>(Color::Blue);
@@ -282,9 +282,13 @@ TEST_CASE("Seed payment split: off by default; on, one split per colour multiset
         ArmO arm;
         arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
         const GameState v = StateO({ "Mountain", "Mountain", "Steam Vents" }, { kCycO, kCycO });
-        CHECK(SeedPaySplits(v, 0, two, DefO(kCycO)).empty());
+        const auto vs = SeedPaySplits(v, 0, two, DefO(kCycO));
+        REQUIRE(vs.size() == 1);
+        CHECK(SeedPaySplitHoldMask(v, 0, vs[0]) == (1ull << 2));
         const GameState w = StateO({ "Mountain", "Island", "Steam Vents" }, { kCycO, kCycO });
-        CHECK(SeedPaySplits(w, 0, two, DefO(kCycO)).empty());   // only {Mountain, Island} is undominated
+        const auto ws = SeedPaySplits(w, 0, two, DefO(kCycO));
+        REQUIRE(ws.size() == 1);
+        CHECK(SeedPaySplitHoldMask(w, 0, ws[0]) == (1ull << 2));   // only {Mountain, Island} is undominated
     }
     SUBCASE("a coloured cost (Curator's {U}) and a single source class never fan")
     {
@@ -293,5 +297,153 @@ TEST_CASE("Seed payment split: off by default; on, one split per colour multiset
         CHECK(SeedPaySplits(s, 0, DefO(kCurO).params.cycling_cost.value(), DefO(kCurO)).empty());
         const GameState m = StateO({ "Mountain", "Mountain", "Mountain" }, { kCycO, kCycO });
         CHECK(SeedPaySplits(m, 0, two, DefO(kCycO)).empty());
+    }
+}
+
+TEST_CASE("Seed payment split: partial float keeps the residual source choice searched")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+    GameState s = StateO({ "Mountain", "Mountain", "Island", "Island" }, { kCycO, kCycO });
+    s.floating_mana.red = 1;
+    const auto sp = SeedPaySplits(s, 0, DefO(kCycO).params.cycling_cost.value(), DefO(kCycO));
+    REQUIRE(sp.size() == 5);   // RR/RU/UU with float kept, R/U with float spent
+    for (const auto pin : sp)
+    {
+        CHECK(SplitUnitsO(pin).size() >= 1);
+        GameState t = s;
+        const auto hold = SeedPaySplitHoldMask(t, 0, pin);
+        SeedPaySplitScope scope(t, 0, pin);
+        REQUIRE(scope.Valid());
+        REQUIRE(TapForCostShared(t, DefO(kCycO).params.cycling_cost.value(), false, nullptr, true));
+        for (std::size_t i = 0; i < t.battlefield.size(); ++i)
+        { CHECK(t.battlefield[i].tapped == ((hold & (1ull << i)) == 0)); }
+    }
+}
+
+TEST_CASE("Seed payment split: filter and Myriad remain distinct special choices and each pin is realised")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+    GameState s = StateO({ "Cascade Bluffs", "Myriad Landscape", "Myriad Landscape", "Island", "Mountain" }, { kCycO, kCycO });
+    ManaCost one;
+    one.generic = 1;
+    const auto sp = SeedPaySplits(s, 0, one, DefO(kCycO));
+    REQUIRE(sp.size() >= 5);   // plus speculative filter float
+    std::vector<std::uint64_t> holds;
+    for (const auto pin : sp)
+    {
+        GameState t = s;
+        const auto hold = SeedPaySplitHoldMask(t, 0, pin);
+        SeedPaySplitScope scope(t, 0, pin);
+        if (!scope.Valid()) { continue; }   // future filter float is not present yet
+        holds.push_back(hold);
+        REQUIRE(TapForCostShared(t, one, false, nullptr, true));
+        for (std::size_t i = 0; i < t.battlefield.size(); ++i)
+        { CHECK(t.battlefield[i].tapped == ((hold & (1ull << i)) == 0)); }
+    }
+    REQUIRE(holds.size() == 5);
+    std::sort(holds.begin(), holds.end());
+    CHECK(std::adjacent_find(holds.begin(), holds.end()) == holds.end());
+}
+
+TEST_CASE("Seed payment split: non-generic metadata and unsupported multi-unit sources do not claim exact splits")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+    const GameState s = StateO({ "Mountain", "Island", "Steam Vents" }, { kCycO });
+    ManaCost cost;
+    cost.generic = 2;
+    SUBCASE("colourless pip") { cost.colorless = 1; }
+    SUBCASE("snow pip") { cost.snow_pips = 1; }
+    SUBCASE("twobrid") { cost.twobrid_count = 1; }
+    SUBCASE("X") { cost.has_x = true; }
+    CHECK(SeedPaySplits(s, 0, cost, DefO(kCycO)).empty());
+    const GameState multi = StateO({ "Sol Ring", "Island", "Mountain" }, { kCycO });
+    cost = ManaCost{};
+    cost.generic = 2;
+    CHECK(SeedPaySplits(multi, 0, cost, DefO(kCycO)).empty());
+}
+
+TEST_CASE("Seed payment split: keep red float while Islands pay the seed, preserving the held Cyclone RR")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+    GameState s = StateO({ "Mountain", "Island", "Island", "Island", "Island", "Island" }, { kCycO, kCycO });
+    s.floating_mana.red = 1;
+    const ManaCost cost = DefO(kCycO).params.cycling_cost.value();
+    const auto pins = SeedPaySplits(s, 0, cost, DefO(kCycO));
+    REQUIRE_FALSE(pins.empty());
+    bool found = false;
+    for (const auto pin : pins)
+    {
+        GameState t = s;
+        {
+            SeedPaySplitScope scope(t, 0, pin);
+            if (!scope.Valid() || !TapForCostShared(t, cost, false, nullptr, true)) { continue; }
+        }
+        int untapped = 0;
+        for (const Permanent& q : t.battlefield) { untapped += !q.tapped; }
+        CHECK(untapped + t.floating_mana.Total() == 5);   // seven available units less the seed's two
+        if (t.floating_mana.red == 1 && !t.battlefield[0].tapped
+            && TapForCostShared(t, DefO(kCycO).card.m_mana_cost, false, nullptr, true)) { found = true; }
+    }
+    CHECK(found);
+}
+
+TEST_CASE("Seed payment split: invalid floating allocation is atomic and later ritual float is admitted")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+    GameState s = StateO({ "Mountain", "Island", "Island" }, { kCycO, kCycO, "Seething Song" });
+    const auto pins = SeedPaySplits(s, 0, DefO(kCycO).params.cycling_cost.value(), DefO(kCycO));
+    bool future_float_pin = false, paid_after_song = false;
+    for (const auto pin : pins)
+    {
+        if ((static_cast<std::uint32_t>(pin) >> 24) == 0) { continue; }
+        future_float_pin = true;
+        GameState t = s;
+        {
+            SeedPaySplitScope scope(t, 0, pin);
+            CHECK_FALSE(scope.Valid());
+        }
+        CHECK(t.floating_mana.Total() == 0);
+        for (const auto& q : t.battlefield) { CHECK_FALSE(q.tapped); }
+        // The same allocation becomes real after the plan's preceding Song has floated red.
+        t.floating_mana.red = 5;
+        for (auto& q : t.battlefield) { q.tapped = true; }   // Song consumed all three original lands
+        {
+            SeedPaySplitScope scope(t, 0, pin);
+            CHECK(scope.Valid() == SplitUnitsO(pin).empty());
+            if (!scope.Valid()) { continue; }
+            CHECK(TapForCostShared(t, DefO(kCycO).params.cycling_cost.value(), false, nullptr, true));
+            paid_after_song = true;
+        }
+        CHECK(t.floating_mana.red == 3);   // the spent two and unexposed three reunite correctly
+    }
+    CHECK(future_float_pin);
+    CHECK(paid_after_song);
+}
+
+TEST_CASE("Seed payment split: a failed realised pin restores exposed float and every tap")
+{
+    ArmO arm;
+    arm.Set(heurarm::CYCLE_SEED_PAY_SPLIT, 1);
+    GameState s = StateO({ "Mountain", "Island", "Island", "Island" }, { kCycO, kCycO });
+    s.floating_mana.red = 1;
+    const auto pins = SeedPaySplits(s, 0, DefO(kCycO).params.cycling_cost.value(), DefO(kCycO));
+    REQUIRE_FALSE(pins.empty());
+    for (const auto pin : pins)
+    {
+        GameState t = s;
+        {
+            SeedPaySplitScope scope(t, 0, pin);
+            REQUIRE(scope.Valid());
+            ManaCost unaffordable;
+            unaffordable.generic = 3;   // the pin selected exactly two units
+            CHECK_FALSE(TapForCostShared(t, unaffordable, false, nullptr, true));
+        }
+        CHECK(t.floating_mana == s.floating_mana);
+        for (const auto& q : t.battlefield) { CHECK_FALSE(q.tapped); }
     }
 }
