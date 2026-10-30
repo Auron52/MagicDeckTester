@@ -4,9 +4,12 @@
   "valueleaf": "em:22c2f0ca0230d32b1c26"
  },
  "deck": "treasure_hunt",
+ "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_treasure_hunt/DECISIONS.txt)",
+ "finished": "2026-10-30T21:46:21Z",
  "frozen": "6b655b71fbd2150b8830ea70780236b09fa1eba1",
  "heartbeat": "2026-10-30T21:33:53Z",
  "host": "58199181d02e",
+ "result_branch": "artifact-refresh/treasure_hunt-20261030-2146",
  "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T211345",
  "score": 0.0656,
  "stage": "valueleaf",
@@ -14,6 +17,6 @@
   "valueleaf"
  ],
  "started": "2026-10-30T21:13:45Z",
- "state": "running",
+ "state": "done",
  "worker": "artifact-queue-tool-647f24"
 }
