@@ -60,7 +60,9 @@ same_as_ref() {
     local d=$1 what=$2
     [ -e "$d/k.raw" ] || { bad "$what: no final raw (see $d/err)"; return; }
     norm "$d/k.raw" "$d/k.raw.n"
-    if cmp -s "$d/k.raw.n" "$ROOT/ref1/k.raw.n" && cmp -s "$d/k.profile" "$ROOT/ref1/k.profile"
+    # The profile exists only at R >= the profile floor (10); below it both runs write none.
+    profeq() { if [ -e "$ROOT/ref1/k.profile" ] || [ -e "$1/k.profile" ]; then cmp -s "$1/k.profile" "$ROOT/ref1/k.profile"; fi; }
+    if cmp -s "$d/k.raw.n" "$ROOT/ref1/k.raw.n" && profeq "$d"
     then ok "$what: raw + profile byte-identical to the uninterrupted run"
     else bad "$what: raw/profile DIFFER from the uninterrupted run"; fi
     [ -e "$d/k.raw.journal.spec" ] && bad "$what: side journal left behind by a FINISHED run" || true
