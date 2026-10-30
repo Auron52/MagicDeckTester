@@ -1,16 +1,23 @@
 # Midrange Burn analysis
 
 Deck: `decks/Midrange Burn/Midrange Burn.cod` (60 cards, mono-red with Fiery Islet).
-Started 2026-10-29. Implementation and the full verifier pass are complete;
-all three Linux regression tiers have accepted ground truth (29 consistent
-keys), and the final b20 cost gate passed at 2.95x Hinata. The required
+Started 2026-10-29. Implementation and the original-branch full verifier pass
+are complete. The original-branch Linux regression tiers have accepted ground
+truth, and its b20 cost gate passed at 2.95x Hinata. The required
 horizon leaf check completed 18 blocks and both its aggregate and unlimited-
 budget preservation gates pass; keep default ON. The authored cleanup-discard
 policy remains a proposal pending user review and a measured adoption test.
 The user has paused exhaustive mulligan-profile and value-leaf generation while
 another container uses the box; neither is part of this push. A new shared
-passive-opponent land pattern has passed a full smoke A/B and is undergoing a
-scoped regression check before its Linux ground truth is promoted.
+passive-opponent land pattern passed a full smoke A/B. A targeted fold of burn
+spells against inert passive creatures restored the 20 ms two-headed play
+setting under the integrated-branch cost gate: 1.21x Hinata (limit 3x),
+with a 6.0133 two-headed regression average. The refreshed-profile smoke,
+regression and overnight Linux baselines are accepted (46 consistent keys).
+The final full unit suite passed 2,226 cases and 3,556,657 assertions; all
+349 scenarios passed. The final integrated-branch verifier passed every
+blocking gate, including 15/15 card coverage, field and cost audits, viewer
+wiring, mismatch checks, play invariants, and suite membership.
 Chronological checkpoints below include superseded intermediate states; this
 opening status is current.
 
@@ -52,8 +59,6 @@ cases / 3,553,305 assertions; 348/348 scenarios passed.
    adoption require user approval and a paired non-inferiority test.
 2. Keep the four Claude-faster seeds as documented search-quality candidates;
    they are not unresolved legality or viewer flags.
-3. Revalidate against the updated shared branch after integration. The full
-   verifier and accepted tiers above predate the passive-opponent land change.
 
 ## Passive-opponent land update, 2026-10-30
 
@@ -80,6 +85,71 @@ faster. It reflects a different earlier play/draw line, and is recorded as a
 tradeoff rather than hidden by the better average. Logs and comparison script:
 `/tmp/passive-land-full-old`, `test/logs/smoke`, and
 `/tmp/compare_passive_land_full.py` in this container.
+
+The original-branch scoped regression ran 13 Midrange Burn/Snow rows and 2,787
+games. Midrange Burn improved d0 5.9260→5.7670, d3 4.7733→4.4800,
+d5/s2002 4.8200→4.5733, d5/s3003 4.5800→4.4533, and 2HG d5
+6.1867→6.0400. The two searched slower games in the 2HG row were both
+classified as budget churn: gi13 changed T6→T7 at b20 but won T5 at 4× and
+16×; gi67 changed T7→T8 at b20 and returned to T7 at both higher budgets.
+The other searched Midrange regression changes were faster. Snow had no prior Linux
+ground-truth rows and will receive them in the integrated-branch run.
+
+After rebasing the deck work onto the shared branch, the Release build passed
+2,225/2,225 unit cases (3,556,643 assertions), 349/349 scenarios, and the
+provider routing audit. Four existing Burn saved references initially showed
+`shuffle-dead` in the strict replay, but the same four replayed correctly on
+the pre-deck binary, even before the passive-land change. The cause was the
+new two-stage Searing Blaze target protocol: a saved one-stage creature choice
+was being compared with its newly inserted player-choice stage. The reference
+checker now derives that player from the saved target creature and then
+content-matches the creature choice. All 17 Burn references now replay: 16
+reproduce their recorded win turn; the marked suboptimal one is beaten.
+
+The lightweight analyzer profile was refreshed at seed 871000 after the
+opponent land update (1,000 d5 scoring games). Price of Progress's score
+moved from -0.6126 to -0.0441. The analyzer updated the card scores only;
+the generic mulligan settings and absence of a hand-score gate are unchanged.
+This is the deck's baseline `.profile.json`, not an exhaustive mulligan table
+or a value leaf; generation of those larger artifacts remains paused by the
+user's 2026-10-30 instruction.
+
+The integrated-branch b20 cost gate initially failed at 3.91x Hinata: the
+2HG regression row took 15,876.773 ms/game against Hinata's 4,055.947.
+Reducing only the 2HG budget to b10 or b15 lost two smoke wins and warned
+that those rows no longer matched the shipped b20 play setting, so the budget
+was restored. A CPU sample of the two worst 2HG seeds (gi12 and gi22, both
+six-creature passive-opponent buckets) found repeated `sscanf` burn-pin parsing
+and a large burn-target enumeration. `DecodeFixedBurnPin` now uses integer
+parsing without `sscanf`; Midrange Burn's autonomous target menu folds inert
+passive-creature targets. Single-target burn keeps the face target; Searing
+Blaze keeps the toughest passive creature to preserve a later target. When an
+enemy target exists, Blaze also drops own-creature targets that can kill an
+attacker. Human and unpruned menus retain all legal targets. The two outlier
+regression games kept their T8/T7 wins and identical play digests while their
+single-game runtime fell from hundreds of seconds to about 42/35 seconds.
+
+The final same-run cost gate passed at **1.21x Hinata**: Midrange Burn's worst
+searched row was 2HG d5/b20 at 4,674.227 ms/game; Hinata's was 3,877.193.
+The final integrated smoke is accepted: Midrange d0 improved 5.713→5.670;
+d3 and d5 kept their 4.800/4.620 averages; 2HG kept 6.160. Its two searched
+turn changes offset (gi12 T7→T8, gi17 T7→T6), and gi12 wins T6 at b80.
+The final integrated regression is accepted: Midrange d0 5.926→5.725,
+d3 4.7733→4.4800, d5/s2002 4.8200→4.5800, d5/s3003
+4.5800→4.4533, and 2HG d5 6.1867→6.0133. Its only two searched
+slowdowns were budget churn: 2HG gi13 T6→T7 wins T5 at b80, and
+single-player gi45 T5→T6 returns T5 at b80. The strict replay on the
+first passive-target fold passed all 689 saved references with zero protocol
+or board drift; the final edit narrows only autonomous Blaze self-targets
+while leaving human and unpruned menus complete, and is covered by a directed
+unit test. The final full unit suite passed 2,226/2,226 cases and
+3,556,657/3,556,657 assertions. The final overnight tier accepted all 26
+Midrange Burn/Snow rows: every Midrange aggregate was better or equal than
+its pre-land baseline, with 2HG d5 rows improving by 0.17–0.24 turns and
+single-player searched rows by 0.18–0.23 turns. All 13 searched slower
+individual games recovered their old win turn at 4x budget. The three Linux
+tiers have 46 consistent baseline/log pairs (7 smoke, 13 regression, 26
+overnight); Snow's previously missing Linux rows are now recorded.
 
 ## Horizon leaf tie-break checkpoint
 
@@ -885,13 +955,13 @@ play settings, 24 threads). Do not infer a leaf verdict until it completes.
 |---|---|---|---|
 | coverage | PASS | yes | all 15 cards full (missing=0, partial=0) |
 | card_costs | PASS | yes | all mana costs match Scryfall (cost/cmc only) |
-| card_fields | PASS | yes | 646 cards match snapshot (cost/PT/types/keywords); 16 allowlisted divergence(s) |
+| card_fields | PASS | yes | 647 cards match snapshot (cost/PT/types/keywords); 16 allowlisted divergence(s) |
 | clause_ledger | SKIP | no | covered by coverage+bracket-notes+oracle-diff |
 | regression_tiers | PASS | yes | in all 3 suite tiers with GT (midrangeburn) |
 | viewer | PASS | yes | self-guard + surface sweep clean |
 | viewer_wiring | PASS | yes | 5 type(s) wired (emitter + GUI): free_cast, gy_return_one, sacrifice, scry, target |
 | mismatch | PASS | yes | no nonconv/fd-diverge across seeds [7001, 8001] x 60 games (both arms completed) |
-| play_invariants | PASS | yes | 8 game(s)/236 decisions: determinism+integrity+progress hold |
+| play_invariants | PASS | yes | 8 game(s)/215 decisions: determinism+integrity+progress hold |
 | claude_sweep | PASS | yes | Claude-play sweep recorded, 0 unresolved flags |
 | suite | PASS | yes | suite gate: Midrange Burn is regression key `midrangeburn` |
 
@@ -1225,6 +1295,8 @@ Equipped creature gets +3/+0 and h
 - oracle_text advisory -- Ancient Den: oracle_text diverges (similarity 0.02); scryfall='{T}: Add {W}.'
 - oracle_text advisory -- Bone Saw: oracle_text diverges (similarity 0.29); scryfall='Equipped creature gets +1/+0.
 Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.
+- oracle_text advisory -- Paradise Mantle: oracle_text diverges (similarity 0.10); scryfall='Equipped creature has "{T}: Add one mana of any color."
+Equip {1}'
 - oracle_text advisory -- Cathar's Shield: oracle_text diverges (similarity 0.17); scryfall='Equipped creature gets +0/+3 and has vigilance.
 Equip {3} ({3}: Attach to target creature you control. Equip
 - oracle_text advisory -- Accorder's Shield: oracle_text diverges (similarity 0.23); scryfall="Equipped creature gets +0/+3 and has vigilance. (Attacking doesn't cause it to tap.)
@@ -1931,5 +2003,6 @@ Remove a +1/+1
 - oracle_text advisory -- Emeria, the Sky Ruin: oracle_text diverges (similarity 0.19); scryfall='This land enters tapped.
 At the beginning of your upkeep, if you control seven or more Plains, you may return
 - clause_ledger: no dedicated per-clause artifact. Its function -- every oracle clause modeled/inert/deferred -- is covered by coverage(partial hard-stop) + bracket-note deferrals + viewer oracle cross-check + audit_card_fields oracle-diff. A dedicated ledger is deferred (high per-card cost, marginal added rigor).
+- claude_sweep recorded at commit 4a04d8c14 (HEAD 5aa92789ab9a); re-run if play changed since (play_invariants + smoke digests track play live).
 
 <!-- verify_deck:end -->

@@ -54897,6 +54897,17 @@ bool MidrangeBurnProvider::PrunesOwnFixedBurnTargets() const
     return prune;
 }
 
+// Passive goldfish spawns never attack or block. A single-target burn spell is
+// strictly better pointed at the opponent, while Blaze needs one creature but
+// gains nothing from choosing among equivalent inert targets. Keep the toughest
+// spawn: it is most likely to survive and remain a target for a later Blaze.
+// Human and unpruned play retain the complete legal menu.
+bool MidrangeBurnProvider::PrunesPassiveBurnTargets() const
+{
+    static const bool prune = EnvOn("MTG_MIDRANGE_PASSIVE_BURN_PRUNE", true);
+    return prune;
+}
+
 // Chandra's Incinerator is funded by earlier NONCOMBAT damage in the same turn.
 // The generic creature-first rank attempted it before the Bolts that made its {R}
 // bill payable, so a legal three-spell plan dropped its Incinerator at execution.

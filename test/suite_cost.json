@@ -163,11 +163,11 @@
    "worst_case": "goblins2hg_regression_d3_s2002"
   },
   "hinata": {
-   "cost_per_game_ms": 6539.8133,
+   "cost_per_game_ms": 3877.1933,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 2659394,
+   "total_core_ms": 1539831,
    "worst_case": "hinata_regression_d5_s3003"
   },
   "kittyv3": {
@@ -211,11 +211,11 @@
    "worst_case": "melira_regression_d5_s2002"
   },
   "midrangeburn": {
-   "cost_per_game_ms": 19317.6267,
+   "cost_per_game_ms": 4674.2267,
    "jobs": 7,
    "key": "midrangeburn",
    "tier": "regression",
-   "total_core_ms": 3283002,
+   "total_core_ms": 837142,
    "worst_case": "midrangeburn2hg_regression_d5_s2002"
   },
   "minotaur": {
@@ -267,11 +267,11 @@
    "worst_case": "slivers_regression_d3_s2002"
   },
   "snow": {
-   "cost_per_game_ms": 752.0667,
-   "jobs": 5,
+   "cost_per_game_ms": 3249.7533,
+   "jobs": 6,
    "key": "snow",
    "tier": "regression",
-   "total_core_ms": 109863,
+   "total_core_ms": 894505,
    "worst_case": "snow_regression_d5_s2002"
   },
   "soldiers": {

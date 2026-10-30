@@ -62,8 +62,9 @@ hand limit allows rather than reserving optional lands.
    prefer a first Fiery Islet as a redraw source, then Mountains; prefer a
    Mountain over an extra Islet when life is low. Lands above four total are
    overflow unless required for the selected Fireblast line.
-5. **Inert cards.** Shed Price of Progress first while the passive opponent
-   controls no nonbasic lands. Shed Searing Blaze next while the opponent
+5. **Inert cards.** In the passive opponent's zero-nonbasic buckets, shed
+   Price of Progress first when it cannot contribute to the visible damage
+   package. Shed Searing Blaze next while the opponent
    controls no creature; promote it above optional lands only if casting it
    on our own creature gives a same-turn prowess/other payoff that improves
    the visible near-lethal package. This promotion must be based on visible

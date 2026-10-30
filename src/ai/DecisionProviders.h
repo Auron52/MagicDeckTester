@@ -1277,6 +1277,7 @@ public:
     const char* Name() const override { return "MidrangeBurn"; }
     bool SearchesFixedBurnTargets() const override { return true; }
     bool PrunesOwnFixedBurnTargets() const override;
+    bool PrunesPassiveBurnTargets() const override;
     int CastOrderRank(const GameState&, const CardDefinition&) const override;
     bool OrderOpaqueCastsByRank() const override;
     int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;

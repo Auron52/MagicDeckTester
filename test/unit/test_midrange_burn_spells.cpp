@@ -72,6 +72,36 @@ TEST_CASE("midrange burn: autonomous burn keeps enemy targets and viewer keeps a
     CHECK(own_blaze);
 }
 
+TEST_CASE("midrange burn: autonomous burn folds inert spawn targets but keeps the human menu")
+{
+    GameState s; s.active_player_index = 0;
+    static const MidrangeBurnProvider provider; s.m_provider = &provider;
+    static const std::vector<OpponentSpawn> spawns = {{1, 1, 1}, {1, 6, 6}};
+    s.opponent_spawns = &spawns;
+    for (int i = 0; i < 2; ++i)
+    {
+        Permanent p;
+        p.card.m_name = i == 0 ? "1/1 Creature" : "6/6 Creature";
+        p.card.RehashName(); p.card.AddType(CardType::Creature);
+        p.card.m_toughness = i == 0 ? 1 : 6;
+        p.card.m_number = 500000 + i;
+        p.controller_index = p.owner_index = 1;
+        s.battlefield.push_back(p);
+    }
+    const auto bolt = FixedBurnCandidates(s, 0, MBDef("Lightning Bolt"));
+    const auto blaze = FixedBurnCandidates(s, 0, MBDef("Searing Blaze"));
+    const bool complete = HumanPlayActive() || DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        || !provider.PrunesPassiveBurnTargets();
+    CHECK(std::any_of(bolt.begin(), bolt.end(), [](const FixedBurnPin& p) { return p.first == 0; }));
+    CHECK(std::any_of(bolt.begin(), bolt.end(), [](const FixedBurnPin& p) { return p.first == 500000; }) == complete);
+    CHECK(std::any_of(bolt.begin(), bolt.end(), [](const FixedBurnPin& p) { return p.first == 500001; }) == complete);
+    CHECK(std::any_of(blaze.begin(), blaze.end(), [](const FixedBurnPin& p) { return p.second == 500001; }));
+    CHECK(std::any_of(blaze.begin(), blaze.end(), [](const FixedBurnPin& p) { return p.second == 500000; }) == complete);
+    MBPut(s, "Monastery Swiftspear", 10);
+    const auto with_own = FixedBurnCandidates(s, 0, MBDef("Searing Blaze"));
+    CHECK(std::any_of(with_own.begin(), with_own.end(), [](const FixedBurnPin& p) { return p.first == -1; }) == complete);
+}
+
 TEST_CASE("midrange burn: a fresh Chandra can survive the legend rule and human play chooses")
 {
     MBHooks restore;

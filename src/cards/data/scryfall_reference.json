@@ -3975,6 +3975,17 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Paradise Mantle": {
+    "cmc": 0.0,
+    "keywords": [
+      "Equip"
+    ],
+    "mana_cost": "{0}",
+    "oracle_text": "Equipped creature has \"{T}: Add one mana of any color.\"\nEquip {1}",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact — Equipment"
+  },
   "Parallel Lives": {
     "cmc": 4.0,
     "keywords": [],

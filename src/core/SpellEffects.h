@@ -28,6 +28,7 @@
 #include <type_traits>
 #include <atomic>
 #include <chrono>    // ShedStats::CostScope -- pricing the shed path, not just counting it
+#include <charconv>  // fixed-burn pins are decoded in the plan-subset hot path
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -13674,8 +13675,21 @@ inline std::string EncodeFixedBurnPin(const FixedBurnPin& p)
 inline bool DecodeFixedBurnPin(const std::string& str, FixedBurnPin& p)
 {
     const auto at = str.find("@burn/");
-    return at != std::string::npos && std::sscanf(str.c_str() + at, "@burn/%d/%d/%d",
-        &p.first, &p.second, &p.paired_controller) == 3;
+    if (at == std::string::npos) { return false; }
+    const char* cur = str.data() + at + 6;
+    const char* end = str.data() + str.size();
+    int first = 0, second = -2, controller = -1;
+    auto read = [&](int& value, bool needs_slash)
+    {
+        const auto [next, ec] = std::from_chars(cur, end, value);
+        if (ec != std::errc{} || next == cur || (needs_slash && (next == end || *next != '/')))
+        { return false; }
+        cur = next + (needs_slash ? 1 : 0);
+        return true;
+    };
+    if (!read(first, true) || !read(second, true) || !read(controller, false)) { return false; }
+    p = {first, second, controller};
+    return true;
 }
 inline std::string FixedBurnCostPrefix(const std::string& token)
 {
@@ -13764,6 +13778,41 @@ inline std::vector<FixedBurnPin> FixedBurnCandidates(const GameState& s, int cas
             { if (c.m_number == pin.first) { return true; } }
             return false;
         }), out.end());
+    }
+    if (s.opponent_spawns != nullptr && !HumanPlayActive()
+        && !DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        && ResolveProvider(s).PrunesPassiveBurnTargets())
+    {
+        int best_spawn = -1, best_survival = -1;
+        bool only_passive_spawns = true;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index == caster || (!p.card.IsCreature() && !p.is_animated)) { continue; }
+            const std::string name = p.card.m_name.str();
+            if (p.card.m_number < 500000 || !name.ends_with(" Creature"))
+            { only_passive_spawns = false; break; }
+            const int survival = p.card.m_toughness.value_or(0) - p.damage;
+            if (survival > best_survival)
+            { best_survival = survival; best_spawn = p.card.m_number; }
+        }
+        if (only_passive_spawns && best_spawn > 0)
+        {
+            out.erase(std::remove_if(out.begin(), out.end(), [&](const FixedBurnPin& pin)
+            {
+                if (d.params.targeting == Targeting::Multi)
+                {
+                    // With an inert enemy target available, damaging our own
+                    // creature cannot improve Blaze's face damage or cast
+                    // triggers and can remove an attacker.
+                    return pin.first == -1
+                        || (pin.first == 0 && pin.second > 0 && pin.second != best_spawn);
+                }
+                for (const Permanent& p : s.battlefield)
+                { if (p.card.m_number == pin.first && p.controller_index != caster && p.card.IsCreature())
+                    { return true; } }
+                return false;
+            }), out.end());
+        }
     }
     return out;
 }

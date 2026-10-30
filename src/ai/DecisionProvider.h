@@ -161,6 +161,7 @@ public:
     // permanents cannot improve its clock. Human and unpruned play retain every
     // legal target; the provider only narrows autonomous plan enumeration.
     virtual bool PrunesOwnFixedBurnTargets() const { return false; }
+    virtual bool PrunesPassiveBurnTargets() const { return false; }
 
     // TutorCandidates -- tutor priority: ordered library card-name candidates for a tutor
     // (Idyllic / Enlightened). 1 = decided, >1 = search picks, {} = whiff.
