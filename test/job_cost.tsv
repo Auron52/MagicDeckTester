@@ -1024,7 +1024,7 @@ stompy_smoke_d0_s1001	1
 stompy_smoke_d3_s1001	3996
 stompy_smoke_d5_s1001	3564
 th2hg_smoke_d3_s1001	10016
-th2hg_smoke_d5_s1001	37657
+th2hg_smoke_d5_s1001	37511
 th_overnight_d0_s10010	1
 th_overnight_d0_s4004	1
 th_overnight_d0_s6006	1
@@ -1043,12 +1043,12 @@ th_regression_d0_s2002	1
 th_regression_d3_s2002	6563
 th_regression_d3_s30001	16277
 th_regression_d3_s3003	4913
-th_regression_d5_s2002	9403
+th_regression_d5_s2002	9114
 th_regression_d5_s30001	13474
-th_regression_d5_s3003	7836
+th_regression_d5_s3003	7241
 th_smoke_d0_s1001	1
 th_smoke_d3_s1001	6645
-th_smoke_d5_s1001	9234
+th_smoke_d5_s1001	8970
 vampires2hg_overnight_d5_s4004	32708
 vampires2hg_overnight_d5_s5005	32931
 vampires2hg_overnight_d5_s6006	23789
