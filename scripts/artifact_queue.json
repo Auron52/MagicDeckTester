@@ -18,5 +18,14 @@
   "heartbeat_minutes": 20,
   "idle_poll_minutes": 5,
   "retry_rejected_days": 14,
-  "marks": []
+  "marks": [
+    {
+      "deck": "treasure_hunt",
+      "kind": "mulligan",
+      "why": "USER 2026-10-30: run TH's keep table at Complete (incumbent R=41 is beyond complete); if the fresh table is not better, keep the incumbent and leave it alone.",
+      "priority": 1,
+      "date": "2026-10-30",
+      "set": "2026-10-30T10:10:35Z"
+    }
+  ]
 }
