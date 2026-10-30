@@ -1,0 +1,158 @@
+{
+  "deck": "decks/Goblins/Goblins.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 30,
+  "opponent_life": 3,
+  "lands_played_this_turn": 0,
+  "resume_at": "main2",
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Goblin Lackey",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Goblin Piledriver",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Muxus, Goblin Grandee",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Goblin Lackey",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Skirk Prospector",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Goblin Lackey",
+      "controller": 0,
+      "tapped": true,
+      "sick": false
+    },
+    {
+      "name": "Siege-Gang Commander",
+      "controller": 0,
+      "tapped": false,
+      "sick": true
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Goblin"
+      ],
+      "color": "R",
+      "controller": 0,
+      "tapped": false,
+      "sick": true,
+      "name": "Goblin Token"
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Goblin"
+      ],
+      "color": "R",
+      "controller": 0,
+      "tapped": false,
+      "sick": true,
+      "name": "Goblin Token"
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Goblin"
+      ],
+      "color": "R",
+      "controller": 0,
+      "tapped": false,
+      "sick": true,
+      "name": "Goblin Token"
+    },
+    {
+      "name": "Siege-Gang Commander",
+      "controller": 0,
+      "tapped": false,
+      "sick": true
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Goblin"
+      ],
+      "color": "R",
+      "controller": 0,
+      "tapped": false,
+      "sick": true,
+      "name": "Goblin Token"
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Goblin"
+      ],
+      "color": "R",
+      "controller": 0,
+      "tapped": false,
+      "sick": true,
+      "name": "Goblin Token"
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Goblin"
+      ],
+      "color": "R",
+      "controller": 0,
+      "tapped": false,
+      "sick": true,
+      "name": "Goblin Token"
+    }
+  ],
+  "hand": [],
+  "library_filler": "Mountain",
+  "library_size": 40,
+  "depth": 1,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 3,
+  "opponent_heads": 2,
+  "comment": "Goblins 2HG seed 3212906 gi2905 (MTG_LACKEY_DECLINE=0) T3 MAIN 2: both Mountains tapped (Twinshot Sniper's channel), two Siege-Gang Commanders and fourteen Goblins, the team at 3. Two Siege-Gang shots ({1}{R} each) paid by FOUR Skirk Prospector sacrifices kill. Two gates kept that off the menu at any budget: Skirk's burst COUNT was sized for hand spells only (an empty hand -> one {R}; MTG_SAC_MANA_ACT_DEMAND), and the colour-presence gate did not credit a creature sac outlet's same-subset {R} with no red land untapped (MTG_SUBSET_SAC_OUTLETS)."
+}

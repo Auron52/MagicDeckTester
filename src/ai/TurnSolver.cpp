@@ -16728,6 +16728,102 @@ static bool SacOutletPoolEnabled()
     return heurarm::Flag(heurarm::SAC_OUTLET_POOL, env_on);
 }
 
+// THE SAC-MANA BURST IS ALSO SIZED FOR ACTIVATION DEMAND (MTG_SAC_MANA_ACT_DEMAND, DEFAULT ON; =0 ->
+// the burst counts are sized for HAND spells only, byte-identical to before).
+//
+// A repeatable sac-for-mana outlet (Skirk Prospector, "Sacrifice a Goblin: Add {R}") reaches the
+// search as a COUNT axis whose values are demand landmarks: none, one sac, and the burst `k` that is
+// the shortfall to the most expensive HAND spell it newly reaches (plus Slimefoot's lethal-drain
+// burst). Mana-costed ACTIVATED sinks on the battlefield were never a landmark, so with an empty hand
+// (or a hand that is already castable) the outlet was worth exactly one {R} per main phase, however
+// many Goblins were on the board. Goblins 2HG s3212906 gi2905 (MTG_LACKEY_DECLINE=0), T3 main 2:
+// both Mountains tapped, two Siege-Gang Commanders, fourteen Goblins, opponent at 3 -- two
+// activations ({1}{R} each) paid by four Skirk sacrifices kill, and the menu offered one {R}. The
+// game went to T4 at --depth 8 --budget-ms 0, i.e. the line was unfindable at ANY budget (the
+// completeness invariant), and the same defect hides every "lands + one {R} is one short" kill.
+//
+// The landmarks added, each emitted only where it is a NEW count in [2, V] and reachable from the
+// board's own fodder (the hand landmark's rule), one per mana-costed value sac outlet on our board:
+//   * a DAMAGE outlet (Siege-Gang) -- its LETHAL shot count n = ceil(life / damage), n >= 1, at
+//     n x cost (exactly the damage-burst sizing below; n == 1 is the single lethal shot);
+//   * any other outlet (Pashalik Mons' tokens, a draw outlet) -- one activation.
+// A non-lethal chip shot and "hand spell + activation" sums are deliberately NOT landmarks: each
+// extra count multiplies every plan that carries a breakpoint, and each breakpoint continuation
+// re-enumerates the menu (Goblins s3510540 gi539 T3: five counts instead of two took the
+// continuation derivations 409 -> 20,170 and the game 1 s -> 143 s at b60, the derivations being
+// unbilled). An outlet the provider defers pre-combat (DeferSacOutletPreCombat) emits no activation
+// there and contributes no demand. This WIDENS the count axis (more lines findable), never narrows
+// it; the subset guards (SubsetOversubscribesSacFodder, the waste prune) still police every pick.
+// It is a landmark set, not every count: a line needing some other count (a spell AND a shot, two
+// spells) stays unexpressed, as it was before.
+static bool SacManaActDemandOn()
+{
+    static const bool env_on = EnvOn("MTG_SAC_MANA_ACT_DEMAND", true);
+    return heurarm::Flag(heurarm::SAC_MANA_ACT_DEMAND, env_on);
+}
+
+// The distinct mana costs of the landmark activations of our mana-costed value sac outlets (see
+// SacManaActDemandOn): a damage outlet's lethal shot count, any other outlet's one activation.
+// Empty = no live sink.
+static void SacOutletActivationManaDemands(const GameState& state, bool is_pre_combat,
+                                           std::vector<int>& out)
+{
+    static const bool s_drain_env = EnvOn("MTG_SAC_DRAIN_LETHAL");
+    out.clear();
+    auto add = [&](int d)
+    { if (d > 0 && std::find(out.begin(), out.end(), d) == out.end()) { out.push_back(d); } };
+    const int me = state.active_player_index;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd || !qd->params.sac_creature_outlet || IsSacManaOutlet(qd->params)) { continue; }
+        if (!qd->params.sac_creature_cost.has_value()) { continue; }
+        const int per_cost = qd->params.sac_creature_cost->ManaValue();
+        if (per_cost <= 0) { continue; }
+        if (is_pre_combat && !HumanPlayActive()
+            && ResolveProvider(state).DeferSacOutletPreCombat(state, q, /*is_mana_outlet=*/false))
+        { continue; }
+        const std::string& sub = qd->params.sac_creature_requires_subtype;
+        const int drain = (!IsDiscardSacOutlet(qd->params)
+                           && heurarm::Flag(heurarm::SAC_DRAIN_LETHAL, s_drain_env))
+                        ? DrainPerDeathOfSubtype(state, me, sub) : 0;
+        const int D = IsDiscardSacOutlet(qd->params) ? 0 : qd->params.sac_outlet_damage + drain;
+        if (D <= 0) { add(per_cost); continue; }   // a value outlet: one activation
+        int V = 0;
+        for (const Permanent& v : state.battlefield)
+        {
+            if (v.controller_index != me || !v.card.IsCreature()) { continue; }
+            if (!sub.empty() && !CardHasSubtype(v.card, sub)) { continue; }
+            ++V;
+        }
+        const int n = std::max(1, (state.players[1 - me].life + D - 1) / D);   // lethal shots
+        if (n <= V) { add(n * per_cost); }
+    }
+}
+
+// The extra burst COUNTS (see SacManaActDemandOn) for one sac-for-mana outlet yielding `per` a sac,
+// with `base` mana available without it and `V` matching fodder on the board. Empty when the lever is
+// off or no activation sink is live. Duplicates of the caller's own counts are the caller's to drop.
+static void SacManaActDemandBursts(const GameState& state, bool is_pre_combat, int base, int V,
+                                   int per, std::vector<int>& out)
+{
+    out.clear();
+    if (!SacManaActDemandOn()) { return; }
+    static thread_local std::vector<int> demands;
+    SacOutletActivationManaDemands(state, is_pre_combat, demands);
+    if (demands.empty()) { return; }
+    const int cap = base + V * per;
+    auto shortfall = [&](int dem) -> int
+    { return (dem > base && dem <= cap) ? (dem - base + per - 1) / per : 0; };
+    auto add = [&](int kk)
+    {
+        if (kk < 2 || kk > V) { return; }
+        if (std::find(out.begin(), out.end(), kk) == out.end()) { out.push_back(kk); }
+    };
+    for (const int act : demands) { add(shortfall(act)); }
+}
+
 // RESERVE THE FODDER (MTG_SAC_FODDER_RESERVE). SubsetOversubscribesSacFodder answers a yes/no
 // question -- "could this plan conceivably make a matching body?" -- and on yes it allows the
 // subset unconditionally. That is a SUPPLY question answered as an EXISTENCE question, and the
@@ -41884,7 +41980,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // Doubling-Season-off-an-activated-Saproling line. Capping here deleted it:
                         // smoke put fungus gi120 and gi177 at 8 -> LOSS. (kb keeps its own V cap
                         // only because the per-source burst below caps k at V identically.)
-                        const int maxc = N + N * kb;
+                        // ACTIVATION-DEMAND bursts (MTG_SAC_MANA_ACT_DEMAND): each further count
+                        // the per-source form now offers adds one more term, c*ka for c in [0,N],
+                        // in the same independent-sum shape. None -> the totals above, unchanged.
+                        static thread_local std::vector<int> act_bursts;
+                        SacManaActDemandBursts(state, is_pre_combat, base, V, per, act_bursts);
+                        act_bursts.erase(std::remove(act_bursts.begin(), act_bursts.end(), kb),
+                                         act_bursts.end());
+                        int maxc = N + N * kb;
+                        for (const int ka : act_bursts) { maxc += N * ka; }
                         static thread_local std::vector<bool> reach;
                         reach.assign(static_cast<std::size_t>(maxc) + 1, false);
                         for (int ai = 0; ai <= N; ++ai)
@@ -41894,6 +41998,24 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                 const int c = ai + bi * kb;
                                 if (c >= 1 && c <= maxc) { reach[static_cast<std::size_t>(c)] = true; }
                             }
+                        }
+                        if (!act_bursts.empty())
+                        {
+                            static thread_local std::vector<bool> acc;
+                            acc.assign(static_cast<std::size_t>(maxc) + 1, false);
+                            acc[0] = true;
+                            for (int c = 1; c <= maxc; ++c) { acc[static_cast<std::size_t>(c)] = reach[static_cast<std::size_t>(c)]; }
+                            for (const int ka : act_bursts)
+                            {
+                                const std::vector<bool> prev = acc;
+                                for (int c = 0; c <= maxc; ++c)
+                                {
+                                    if (!prev[static_cast<std::size_t>(c)]) { continue; }
+                                    for (int m = 1; m <= N && c + m * ka <= maxc; ++m)
+                                    { acc[static_cast<std::size_t>(c + m * ka)] = true; }
+                                }
+                            }
+                            for (int c = 1; c <= maxc; ++c) { reach[static_cast<std::size_t>(c)] = acc[static_cast<std::size_t>(c)]; }
                         }
                         for (int c = 1; c <= maxc; ++c)
                         {
@@ -42131,6 +42253,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // non-lethal state the menu is byte-identical, and in a lethal one the
                     // board-lethal cut ends the turn's enumeration on the spot.
                     if (kl <= V && kl >= 2 && kl != k) { emit_mana_burst(kl); }
+                }
+                // ACTIVATION-DEMAND bursts (MTG_SAC_MANA_ACT_DEMAND; see SacManaActDemandOn): the
+                // counts that fund a Siege-Gang shot (alone, or with the costliest hand spell). A
+                // count already emitted above is skipped, so the menu only ever gains a new size.
+                {
+                    static thread_local std::vector<int> act_bursts;
+                    SacManaActDemandBursts(state, is_pre_combat, base, V, per, act_bursts);
+                    const int kl_done = lethal_drain > 0
+                        ? (state.players[1 - state.active_player_index].life + lethal_drain - 1)
+                              / lethal_drain
+                        : 0;
+                    for (const int ka : act_bursts)
+                    {
+                        if (ka == k || (lethal_drain > 0 && ka == kl_done && kl_done <= V)) { continue; }
+                        emit_mana_burst(ka);
+                    }
                 }
             }
 
