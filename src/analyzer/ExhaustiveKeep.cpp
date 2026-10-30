@@ -2675,10 +2675,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // run_batch (the sub-tables) does leave out the single rollout, because there the accumulation is
     // a plain sum and `kept` is enough.
     //
-    // RESUME LIMITATION, stated rather than hidden: the journal has already persisted the cell's
-    // records, and poison is in-memory only, so a RESUMED run re-admits those <= 9 cell-sides with
-    // the substituted value folded in. Bounded to 9 of 213,492 cell-sides and only on a resume after
-    // a fail-out -- which is itself a run the user is meant to inspect, not resume blindly.
+    // PERSISTED (2026-10-29): every abandonment is journaled as an {"abandon":[H,i,pd,r]} record the
+    // moment it happens -- BEFORE the substituted value can reach a cell record -- and the replay
+    // re-marks poison7 from them and restores the abandonment COUNT, so a resumed run leaves out the same
+    // cell-sides and trips the fail-out at the same whole-run total as an uninterrupted one. (This used to
+    // be in-memory only: a resume re-admitted the cell-sides with the substituted value folded in.)
     // Sized here because the cell enumeration above (t.comps / t.cnt.assign) is already final at this
     // point, so the [i*2+pd] index is stable for the rest of the run.
     std::vector<char>      poison7(TB(HAND).comps.size() * 2, 0);
@@ -2692,9 +2693,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     };
     // Returns true when THIS rollout was abandoned (so the caller must drop its sample). Records it,
     // and trips the fail-out once the count reaches the threshold.
-    auto note_if_abandoned = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs)
+    // `count` = false for a rollout whose abandonment a resumed run already replayed from the journal
+    // (abandon_seen): it is still left out, but it was counted once already.
+    // `forced`: MTG_KEEP_DIAG_ABANDON (below) -- treat this rollout as abandoned, for resume tests.
+    auto note_if_abandoned = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs,
+                                 bool count = true, bool forced = false)
     {
-        if (rollout_wall_sec <= 0.0 || !gamework::Abandoned()) { return false; }
+        if (rollout_wall_sec <= 0.0 || !(gamework::Abandoned() || forced)) { return false; }
+        if (!count) { return true; }
         const long long n = abandoned_rollouts.fetch_add(1) + 1;
         std::cerr << "[keepgen] ABANDONED-WALL rollout #" << n << "/" << abandon_fail_at << " after "
                   << static_cast<long long>(gamework::Elapsed()) << "s (cap "
@@ -2703,6 +2709,27 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         if (n >= abandon_fail_at) { abandon_failed.store(true); }
         return true;
     };
+
+    // Abandonments replayed from the journal, keyed (w, pd, r) -- read-only once the pool starts.
+    std::unordered_set<std::uint64_t> abandon_seen;
+    // MTG_KEEP_DIAG_ABANDON="w:pd:r[,w:pd:r...]" (DIAGNOSTIC ONLY, default empty; -1 = wildcard): with a
+    // wall armed (MTG_KEEP_ROLLOUT_WALL_SEC > 0), treat those rollouts as wall-abandoned after they are
+    // played. Keyed on identity, never time, so a resume test can put abandonments on both sides of a
+    // kill and check that the left-out marks and the fail-out count survive it. Never set on a real run.
+    struct DiagAb { long long w, pd, r; };
+    static const std::vector<DiagAb> diag_abandon = []{
+        std::vector<DiagAb> v;
+        const char* e = std::getenv("MTG_KEEP_DIAG_ABANDON");
+        if (!e || !*e) { return v; }
+        std::string spec = e, item;
+        std::stringstream ss(spec);
+        while (std::getline(ss, item, ','))
+        {
+            DiagAb d{ -1, -1, -1 };
+            if (std::sscanf(item.c_str(), "%lld:%lld:%lld", &d.w, &d.pd, &d.r) == 3) { v.push_back(d); }
+        }
+        return v;
+    }();
 
     // ---- ROLLOUT SIDE JOURNAL: what the MAIN journal durably covers --------------------------------
     // rj_jdone[HAND-H][idx*2+pd] = the count n of the highest record for that cell-side that the MAIN
@@ -3024,7 +3051,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // Abandoned => NOT A LABEL. This path's caller stores the result in a per-(cell,r) slot and
         // folds it deterministically, so it needs a value it can recognise as absent rather than a
         // truncated win-turn; NaN is that value and every consumer below tests for it explicitly.
-        if (note_if_abandoned(H, comp, pd, r, rs)) { return std::numeric_limits<double>::quiet_NaN(); }
+        {
+            const bool seen = !abandon_seen.empty() && abandon_seen.count(rollj::Key(w, pd, r)) != 0;
+            bool forced = false;
+            for (const DiagAb& d : diag_abandon)
+            { if ((d.w < 0 || d.w == w) && (d.pd < 0 || d.pd == pd) && (d.r < 0 || d.r == r)) { forced = true; } }
+            if (note_if_abandoned(H, comp, pd, r, rs, !seen, forced))
+            {
+                // Journal it NOW, before the caller can fold a substitute into a cell record (see poison7).
+                if (!seen && journal_on)
+                {
+                    std::lock_guard<std::mutex> jl(journal_mtx);
+                    if (journal_f.is_open() || journal_failed)
+                    {
+                        journal_emit_locked("{\"abandon\":[" + std::to_string(H) + "," + std::to_string(idx) + ","
+                                            + std::to_string(pd) + "," + std::to_string(r) + "]}\n");
+                    }
+                }
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+        }
         for (const DiagSlow& d : diag_slow)
         {
             if ((d.w < 0 || d.w == w) && (d.pd < 0 || d.pd == pd) && (d.r < 0 || d.r == r))
@@ -3160,16 +3206,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         v = live;
                     }
                 }
-                // A banked ABANDONMENT (only loaded when this run has a wall too) counts toward the
-                // fail-out exactly as it did in the killed run, so the resume trips at the same total.
-                if (std::isnan(v))
-                {
-                    const long long n = abandoned_rollouts.fetch_add(1) + 1;
-                    std::cerr << "[keepgen] ABANDONED-WALL rollout #" << n << "/" << abandon_fail_at
-                              << " (banked by the interrupted run) -- LEFT OUT of its cell: w=" << w
-                              << " pd=" << pd << " r=" << r << "\n" << std::flush;
-                    if (n >= abandon_fail_at) { abandon_failed.store(true); }
-                }
+                // A banked ABANDONMENT (only loaded when this run has a wall too) is NOT counted here: its
+                // {"abandon"} record reached the main journal before the side record did (roll_live writes
+                // it first), and the replay already counted it and re-marked its cell-side.
                 return v;
             }
         }
@@ -4065,6 +4104,30 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     refs_loaded = true;
                     continue;
                 }
+                if (e.contains("abandon"))
+                {
+                    // A wall-abandoned rollout (see poison7): count it toward the fail-out total once, and
+                    // re-mark a size-7 cell-side as LEFT OUT.
+                    const nlohmann::json& a = e["abandon"];
+                    if (a.is_array() && a.size() == 4)
+                    {
+                        const int aH = a[0].get<int>(), ai = a[1].get<int>(), apd = a[2].get<int>();
+                        const long long ar = a[3].get<long long>();
+                        if (aH >= min_size && aH <= HAND && apd >= 0 && apd <= 1 && ai >= 0
+                            && ai < static_cast<int>(tables[HAND - aH].comps.size()))
+                        {
+                            const int aw = work_idx[HAND - aH][ai];
+                            if (aw >= 0 && ar >= 0 && ar <= rollj::kMaxR
+                                && abandon_seen.insert(rollj::Key(aw, apd, ar)).second)
+                            {
+                                abandoned_rollouts.fetch_add(1);
+                                const std::size_t pk = static_cast<std::size_t>(ai) * 2 + static_cast<std::size_t>(apd);
+                                if (aH == HAND && pk < poison7.size()) { poison7[pk] = 1; }
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if (e.contains("vgroll"))
                 {
                     // LAST one wins (these are strictly increasing in vgbase), so the resumed run
@@ -4198,6 +4261,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             std::cerr << "[keepgen] RESUME(journal): reloaded " << resume_loaded << " cell-sides"
                       << (refs_loaded ? " + fixed refs" : "") << " from " << journal_path
                       << " -> continuing\n" << std::flush;
+            if (!abandon_seen.empty())
+            {
+                std::cerr << "[keepgen] RESUME(journal): " << abandon_seen.size() << " wall-abandoned rollout(s)"
+                             " replayed -- their size-7 cell-sides stay LEFT OUT and they count toward the"
+                             " fail-out (" << abandoned_rollouts.load() << "/" << abandon_fail_at << ")\n" << std::flush;
+            }
             if (retain_active)
             {
                 std::cerr << "[keepgen] RETAINED (MIXED PROVENANCE): " << retained_cellsides

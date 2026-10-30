@@ -68,8 +68,8 @@ same_as_ref() {
 
 # interrupt <dir> <kill-spec> <expected rc> -- run until the diag kill fires; assert it really did.
 interrupt() {
-    local d=$1 spec=$2 want=$3
-    gen "$d" MTG_KEEP_DIAG_KILL_AFTER="$spec"; local rc=$?
+    local d=$1 spec=$2 want=$3; shift 3
+    gen "$d" "$@" MTG_KEEP_DIAG_KILL_AFTER="$spec"; local rc=$?
     if ! grep -q "DIAG KILL" "$d/err"; then
         bad "$d: the kill ($spec) never fired (rc $rc) -- the run finished first; lower SPECJ_KILL_*"
         return 1
@@ -166,6 +166,31 @@ if interrupt "$ROOT/J" "spec:$NSPEC" 143; then
     gen "$ROOT/J" || bad "J resume failed"
     same_as_ref "$ROOT/J" "J resumed from the side journal only"
     [ "$(served "$ROOT/J")" -gt 0 ] && ok "J: $(served "$ROOT/J") served" || bad "J: nothing served"
+fi
+
+echo "== wall-cap LEFT-OUT marks survive a kill (MTG_KEEP_ROLLOUT_WALL_SEC + forced abandonments)"
+# A wall that never binds by itself (600 s) plus three rollouts forced to count as abandoned, early in the
+# floor. The uninterrupted run leaves their size-7 cell-sides out; a run SIGKILLed after them and resumed
+# must leave out the same ones (the {"abandon"} records) and resume the fail-out count at 3.
+WALLENV=(MTG_KEEP_ROLLOUT_WALL_SEC=600 MTG_KEEP_DIAG_ABANDON=0:0:0,1:0:0,2:0:0)
+gen "$ROOT/wref" "${WALLENV[@]}" || bad "wref failed"
+norm "$ROOT/wref/k.raw" "$ROOT/wref/k.raw.n"
+[ "$(grep -c 'ABANDONED-WALL rollout' "$ROOT/wref/err")" -eq 3 ] && ok "wref: 3 forced abandonments" \
+    || bad "wref: expected 3 ABANDONED-WALL lines, got $(grep -c 'ABANDONED-WALL rollout' "$ROOT/wref/err")"
+if interrupt "$ROOT/Wk" "roll:$NROLL:9" 137 "${WALLENV[@]}"; then
+    nab=$(grep -c 'ABANDONED-WALL rollout' "$ROOT/Wk/err")
+    gen "$ROOT/Wk" "${WALLENV[@]}" || bad "Wk resume failed"
+    norm "$ROOT/Wk/k.raw" "$ROOT/Wk/k.raw.n"
+    cmp -s "$ROOT/Wk/k.raw.n" "$ROOT/wref/k.raw.n" && cmp -s "$ROOT/Wk/k.profile" "$ROOT/wref/k.profile" \
+        && ok "Wk: resumed raw + profile identical to the uninterrupted wall run" \
+        || bad "Wk: resumed raw/profile DIFFER from the uninterrupted wall run"
+    if [ "$nab" -eq 3 ]; then
+        grep -q "3 wall-abandoned rollout(s) replayed.*(3/" "$ROOT/Wk/err" \
+            && ok "Wk: the 3 left-out marks and the fail-out count (3) were restored from the journal" \
+            || bad "Wk: the resume did not replay the 3 abandonments"
+    else
+        echo "  (note: the kill landed after $nab of the 3 abandonments -- the count check needs all 3 first; raise SPECJ_KILL_ROLL)"
+    fi
 fi
 
 echo
