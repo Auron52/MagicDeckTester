@@ -9,6 +9,8 @@
  "frozen": "58dcb45053e9fa6aa62da85a92872d6eeff6cdff",
  "heartbeat": "2026-10-30T15:45:27Z",
  "host": "550a08fdc1f3",
+ "landed": "2c1a959d5a0103f0f7c2470452118163c4f31a7a",
+ "landed_at": "2026-10-30T16:01:44Z",
  "result_branch": "artifact-refresh/burn-20261030-1601",
  "run_id": "burn-artifact-queue-d7d6a5-20261030T154152",
  "score": 0.0986,
