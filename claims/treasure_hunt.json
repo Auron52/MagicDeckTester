@@ -9,6 +9,8 @@
  "frozen": "6b655b71fbd2150b8830ea70780236b09fa1eba1",
  "heartbeat": "2026-10-30T21:33:53Z",
  "host": "58199181d02e",
+ "landed": "930cc5c339fa753c515b733891691fce901fa7fc",
+ "landed_at": "2026-10-30T22:33:22Z",
  "result_branch": "artifact-refresh/treasure_hunt-20261030-2146",
  "run_id": "treasure_hunt-artifact-queue-tool-647f24-20261030T211345",
  "score": 0.0656,
