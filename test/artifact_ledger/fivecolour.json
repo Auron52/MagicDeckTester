@@ -43,6 +43,25 @@
     "",
     "=== 2026-10-28T18:48:10  PHASE E.6: no allowance for fivecolour -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
+  },
+  {
+   "run_id": "fivecolour-artifact-queue-d7d6a5-20261030T063213",
+   "kind": "valueleaf",
+   "verdict": "kept-incumbent",
+   "ident": "em:15713f7430a43656572a",
+   "frozen": "60935d372a01450cacc6a13fb6003ae8b94d681f",
+   "src_tree": "da525a17659a9ffd767c0bfd84eb77d74a38a284",
+   "date": "2026-10-30",
+   "worker": "artifact-queue-d7d6a5",
+   "detail": "valueleaf: KEPT INCUMBENT -- the regenerated leaf was not adopted (left staged in the worker's logs/eval; see logs/vlq_fivecolour/DECISIONS.txt)",
+   "decisions": [
+    "    VERDICT arm=d8b20 adopt=0 delta=-0.00012 t=-1.00 cost=1.000x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.00x) with quality better (-0.00012) -- a TRADE, the user's call",
+    "    VERDICT arm=d8b30 adopt=0 delta=-0.00300 t=-7.10 cost=1.090x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.09x) with quality better (-0.00300) -- a TRADE, the user's call",
+    "    VERDICT arm=d8b40 adopt=0 delta=-0.00512 t=-10.69 cost=1.153x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.15x) with quality better (-0.00512) -- a TRADE, the user's call",
+    "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
+    "",
+    "=== 2026-10-30T07:34:46  PHASE E.6: no allowance for fivecolour -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
   }
  ]
 }
