@@ -198,6 +198,19 @@ TEST_CASE("Cyclone cantrip plans: the put-back fan is the JUNK pick and, when a 
         CHECK(std::find(pl.begin(), pl.end(), std::string(kPonderP)) != pl.end());
         CHECK(pl != pri);
     }
+    SUBCASE("TWO Eldrazi in JUNK with no go-off this turn: the lesser on top, Emrakul second (d3 gi92)")
+    {
+        // d3 gi92's turn-1 Brainstorm on the play: Steam Vents out (the drop used), no Cyclone (k = 3). The two least kept
+        // are the Eldrazi. The top card is redrawn next turn, so Emrakul -- the walk's best target -- goes SECOND
+        // (isolated T1 test: Ulamog on top -0.44 se 0.22 against Emrakul first).
+        const GameState s = StateP({ kVentsP }, { "Remand", "Ulamog, the Infinite Gyre", kEmrP, kTarnP, "Xander's Lounge",
+                                                  "Curator of Mysteries", kTarnP, "Brainsurge" });
+        ArmP on;
+        on.Set(heurarm::CYCLONE_PB_PLANS, 1);
+        const std::vector<NamesP> fan = FanP(s);
+        REQUIRE(fan.size() == 1);
+        CHECK(fan[0] == NamesP{ "Ulamog, the Infinite Gyre", kEmrP });
+    }
     SUBCASE("MTG_CYCLONE_KEEP_AMEND (+ KEEP_MYRIAD), d5 gi179: the spare plain land and Emrakul go back, Myriad stays")
     {
         // d5 gi179's turn-1 Brainstorm: one Island out (the drop used), no Cyclone, Brainsurge held. Off: JUNK =
@@ -257,7 +270,8 @@ TEST_CASE("Cyclone cantrip plans: the USER's go-off rules survive as the SETUP f
 TEST_CASE("Cyclone cantrip plans: the SITUATIONAL layer")
 {
     ArmP arm;
-    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 1);
+    // The situational layer alone: PB_PLANS pinned off whatever its default (the subcases that want it set it).
+    arm.Set(heurarm::CYCLONE_CANTRIP_ORDER, 1).Set(heurarm::CYCLONE_CANTRIP_SITUATIONAL, 1).Set(heurarm::CYCLONE_PB_PLANS, 0);
     SUBCASE("no Cyclone anywhere -> JUNK only (every remaining pick keeps the Eldrazi in hand)")
     {
         const GameState s = StateP({ "Island", "Island" }, { kWraP, kEmrP, kDelP, "Island", kTarnP }, {}, 0);
