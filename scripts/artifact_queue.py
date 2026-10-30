@@ -91,7 +91,6 @@ DEFAULT_CONFIG = {
     "idle_poll_minutes": 5,
     "idle_max_load": None,
     "retry_rejected_days": 14,                # FAILED claims only (a crash is no verdict on the deck)
-    "retry_min_drift": 0.01,                  # USER 2026-10-30: a rejected/refused deck waits for play drift
     "auto_land": True,
     "marks": [],
 }
@@ -719,12 +718,7 @@ def score(it, cfg):
         s += FLAG_WEIGHT.get(f, 0.1)
     s *= float(cfg["kind_weight"].get(it["kind"], 1.0))
     it["score"] = round(s, 4)
-    # Drift since a KEPT-INCUMBENT verdict (a rejected attempt) needs only retry_min_drift: it is measured from
-    # the attempt, not the adoption (USER 2026-10-30: "that 0.01 is since the last version we attempted"),
-    # the same rule claim_blocks applies to a rejection whose verdict has not landed yet.
-    v = it.get("verified") or {}
-    thr = cfg.get("retry_min_drift", 0.01) if v.get("verdict") == "kept-incumbent" else cfg["min_drift"]
-    it["queued"] = bool(it.get("mark")) or (s >= float(thr) and not it.get("uncommitted"))
+    it["queued"] = bool(it.get("mark")) or (s >= float(cfg["min_drift"]) and not it.get("uncommitted"))
     if it.get("blocked") or (it.get("left_be") and not it.get("mark")):
         it["queued"] = False
     it["sort"] = (0 if it.get("mark") else 1, -int(it.get("mark", {}).get("priority", 0)), -s)
@@ -825,7 +819,7 @@ def cmd_status(a):
             ds = (j.get("drift_since") or {}).get(c.get("frozen"))
             tag = "  [%s by %s%s%s]" % (c.get("state"), c.get("worker"),
                                         ", awaiting landing: " + c["result_branch"] if c.get("result_branch") else "",
-                                        ", drift since %s %.4f < %.3f" % (c["frozen"][:9], ds, cfg.get("retry_min_drift", 0.01))
+                                        ", drift since %s %.4f < %.3f" % (c["frozen"][:9], ds, cfg["min_drift"])
                                         if ds is not None else "")
         print("  %2d. %-24s %s%s" % (i, j["deck"], " -> ".join(j["stages"]), tag))
     return 0
@@ -1021,10 +1015,11 @@ def claim_blocks(c, job, cfg, worker, now):
         # rejected / refused, or done with nothing adopted (a leaf left staged). USER 2026-10-30: "If we reject
         # or refuse it should wait until the drift has widened from the new version that we built from (at
         # least some amount)" -- a re-run on unchanged play would only repeat the verdict. So it waits for
-        # retry_min_drift turns of suite drift since the claim's FROZEN commit, as measured by
-        # note_claim_drift(); a job nobody measured (no suite cases, or a caller that did not ask) holds.
+        # min_drift turns of suite drift since the claim's FROZEN commit, as measured by note_claim_drift();
+        # the same bar as first entry (USER: "them being the same is probably fine"). A job nobody measured
+        # (no suite cases, or a caller that did not ask) holds.
         d = (job.get("drift_since") or {}).get(c.get("frozen"))
-        return d is None or d < float(cfg.get("retry_min_drift", 0.01))
+        return d is None or d < float(cfg["min_drift"])
     return False
 
 
@@ -1881,10 +1876,10 @@ def cmd_selftest(a):
             c3 = dict(c2, state=st)
             check("a %s claim with nothing to land HOLDS on unmeasured drift, however old" % st,
                   claim_blocks(c3, job, cfg, "A", late))
-            check("...holds while drift since its frozen commit is below retry_min_drift",
-                  claim_blocks(c3, dict(job, drift_since={"f0": 0.009}), cfg, "A", late))
+            check("...holds while drift since its frozen commit is below min_drift",
+                  claim_blocks(c3, dict(job, drift_since={"f0": cfg["min_drift"] - 0.001}), cfg, "A", late))
             check("...and is retryable once drift reaches it",
-                  not claim_blocks(c3, dict(job, drift_since={"f0": 0.01}), cfg, "A", utcnow()))
+                  not claim_blocks(c3, dict(job, drift_since={"f0": cfg["min_drift"]}), cfg, "A", utcnow()))
             check("...drift measured from a DIFFERENT frozen commit does not count",
                   claim_blocks(c3, dict(job, drift_since={"f1": 0.5}), cfg, "A", late))
         check("a failed claim holds inside the retry window", claim_blocks(dict(c2, state="failed"), job, cfg, "A", utcnow()))

@@ -151,8 +151,8 @@ so a concurrent writer makes the push fail and the writer re-reads and retries: 
 whole queue. A running claim is renewed every 20 min and is stealable after 3 h without a heartbeat. A
 finished claim holds while the deck's artifacts on the branch are still the blobs it ran against (i.e.
 until its result lands) -- but only when it produced a result branch; one that adopted nothing (a leaf left
-staged) is retryable like a rejected/refused one: once the deck's suite play has drifted `retry_min_drift`
-(0.01) turns since the commit that attempt FROZE (below). A taken-over lease uses the same
+staged) is retryable like a rejected/refused one: once the deck's suite play has drifted `min_drift` turns
+since the commit that attempt FROZE (below). A taken-over lease uses the same
 rule as the picker, so the two cannot disagree. A MACHINE fault (`./build.sh` failing) releases the claim
 and stops that worker instead of stamping every deck "failed" one after another, and three failed deck
 jobs in a row also stop it.
@@ -195,17 +195,18 @@ blob; leaf: its `eval_model` hash, so a `value_play` edit does not reset it), th
 settings and the A/B delta, and it rides the result branch. A **verdict-only** branch changes no artifact,
 so it moves no play and needs no GT accept: land it as-is. From then on that artifact's drift is measured
 from the LATER of its adoption and its last verification, so it re-enters the queue only after play has
-drifted again since the attempt -- by `retry_min_drift` (0.01 turns), not the general `min_drift` (0.02).
+drifted again since the attempt, by the same `min_drift` that admits a deck in the first place.
 Before the branch lands, its claim (`rejected`/`done` with a result branch) blocks a redo indefinitely; once
 landed (the claim's run id is in the ledger) the ledger governs.
 
 **A rejected or refused attempt waits for drift, never for the calendar (USER 2026-10-30).** *"If we reject
 or refuse it should wait until the drift has widened from the new version that we built from (at least some
-amount)"*, *"that 0.01 is since the last version we attempted ... Not away from the current profile we have
-adopted"*, and the purpose: *"We want to have at least a decent chance that the additional drift would make
+amount)"*, *"since the last version we attempted ... Not away from the current profile we have adopted"*, at the
+same bar as first entry (a retry has already drifted at least that far since adoption: *"them being the same
+is probably fine for our purposes"*), and the purpose: *"We want to have at least a decent chance that the additional drift would make
 the newly created resources adoptable."* A re-run on unchanged play only repeats the verdict. So a
 `rejected`/`refused` claim (or a `done` one that adopted nothing) with no result to land holds until
-`note_claim_drift()` measures >= `retry_min_drift` mean per-game |dturn| on the deck's suite GT since the
+`note_claim_drift()` measures >= `min_drift` mean per-game |dturn| on the deck's suite GT since the
 claim's `frozen` commit; unmeasured (no suite cases) holds. It replaced a flat 14-day retry, which would have
 re-run Dragonstorm/AntiLifegain/ColossusHammer on 2026-11-08 at ~0 drift. Only `failed` (a crash, no verdict
 on the deck; a tool fix moves no play) still retries after `retry_rejected_days` (14).
