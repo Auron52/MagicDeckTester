@@ -120,7 +120,7 @@
   "note": "ADOPTION CANDIDATE 2026-09-03: fresh model (11,707 rows on current play, RMSE 0.475) + escalation_fresh_frac=1.0. The 2026-08-06 play rejection (and every re-test) measured the hybrid with the heuristic escalation on the legacy shared REMAINING budget; with a fresh escalation budget the held-out A/B is parity (-0.0001, t=-0.1, 26f/15s, 0 flips) at 2.14x less d5 wall. mull_gen d1/b3 + K=20 carried from the 2026-09-03 phase F derivation.",
   "target_depth": 5,
   "budget_ms": 20,
-  "expected_buckets": 20,
+  "expected_buckets": 21,
   "escalation_cap": 5,
   "beam_width": 3,
   "beam_leafdepth": 2,
