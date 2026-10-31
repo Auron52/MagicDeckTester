@@ -11,7 +11,10 @@ base is latest shared `dfcb18cb90ae65aeb4968787550a10b1fb9bc55e`; all new Preven
 Damage and Slivers artifacts/GT are retained. Primary is fast-forwarded to dfcb
 with the user's unrelated `test/ref_bench.json` preserved byte for byte. No
 changes target main. Follow-up code/normal GT are backed up at5269dc4ab; the
-final evidence bundle and shared-branch push are the next integration actions.
+final evidence bundle and tested integration LANDED on phase-1-2 at
+`08d816495ab054db887fa16b007e0f18f171de8d`. Primary is fast-forwarded to08d with
+canonical89b Release/PGO binaries installed by verified atomic copies; the user
+edit remains byte-exact. Receipt: landing905-review/primary-ff-install89b.json.
 
 Frozen source: `89b146d10406063213d9abe41e1cfdf1a616c021`.
 PGO mtg SHA256: `20de8d519c6c7c8494925d5170ff91ed06f5b4fcde4fd1bc04d1325113bb5e80`.
@@ -63,13 +66,18 @@ run. Descriptive intervals and small paired cost-cohort outcomes are in
 `landing905-review/followup-cost-report/`; they do not authorize policy adoption
 or replace the held-out V5 quality history.
 
-All runtime controllers are CLOSED; none is running. Root is landing the tested
-integration/evidence on phase-1-2 first, then investigating exact performance
-improvements before admission. Prunes/payment reviewers are doing engine-free
-source/counter analysis, with no source edits or new policy batch. Current
-hypotheses concern pure enumeration-cost memo reuse and avoidable human-menu
-label construction; neither is an implemented or measured speedup. Preserve the
-frozen89b baseline. No broad cache-budget redesign or fixed per-thread quotas.
+All validation controllers are CLOSED. Performance profiling root22112 is now
+RUNNING on the frozen89b PGO: profile89-first16-live-pb/run.py --run, one32-worker
+queue, first16 matched live/PB identities from the measured worst cell. perf
+uses cycles:u at49Hz with8192-byte DWARF stacks. This measures pooled function/
+instruction attribution only; it cannot separate live/PB shares by worker and
+its timings are not a new cost gate. No source/policy change has been made.
+Shared08d CI41210350829 is watched in root52367; exact candidate code already
+passes both platform runs. Source reviewers identify unused human-label work,
+shared telemetry contention and cautiously bounded pure enumeration memo work
+as unmeasured opportunities. General free/billed reuse and general mode2 charge
+replay are NOT proven safe; retain contextbit64 and all provenance/cut guards.
+Preserve the frozen89b baseline. No broad cache-budget redesign/per-thread quota.
 After actual optimization passes quality/cost gates: add all3 suite tiers, push
 all changes, measure feasibility, then use standard solitary mulligan fast and
 value-leaf drivers in that order. User-owned policy choices remain open.
