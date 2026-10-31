@@ -185,9 +185,10 @@ std::vector<std::string> KeyPieces(const MulliganProfile& base_profile,
 std::string DeckDominantSubtype(const Decklist& deck)
 {
     // Characteristics off the DEFINITION: a decklist card is a name-only placeholder (no type, no
-    // subtypes), so the historical read (MTG_PLACEHOLDER_FEATURES=0) counted nothing and no
-    // SubtypeDensity feature was ever constructed.
-    const bool def_chars = PlaceholderFeaturesOn();
+    // subtypes), so the historical read (featurizer 1) counted nothing and no SubtypeDensity feature was
+    // ever constructed. A GENERATOR fits on kFeaturizerCurrent and stamps it into the model it writes
+    // (KeepModel::featurizer), so the runtime evaluates the feature under the read it was trained on.
+    const bool def_chars = kFeaturizerCurrent >= kFeaturizerDefinition || PlaceholderFeaturesOn();
     std::map<std::string, int> counts;
     for (const Card& raw : deck.mainboard)
     {
@@ -575,6 +576,7 @@ KeepModel BuildKeepModel(const Decklist& deck,
     // The feature context the model references. The SAME object is used to featurize during
     // training and is emitted in the final model, so runtime features match training exactly.
     KeepModel feat_model;
+    feat_model.featurizer     = kFeaturizerCurrent;   // the read the training features are computed under
     feat_model.deck_colors    = DeckColors(deck);
     feat_model.key_pieces     = KeyPieces(base_profile, card_scores);
     feat_model.extra_features = BuildCandidateSpecs(deck, feat_model.deck_colors);
@@ -1085,6 +1087,7 @@ KeepModel BuildKeepModel(const Decklist& deck,
         auto current_pi = [&]() -> KeepModel
         {
             KeepModel pi;
+            pi.featurizer     = feat_model.featurizer;
             pi.key_pieces     = feat_model.key_pieces;
             pi.deck_colors    = feat_model.deck_colors;
             pi.extra_features = feat_model.extra_features;
@@ -1156,6 +1159,7 @@ KeepModel BuildKeepModel(const Decklist& deck,
         if (hybrid_form)
         {
             KeepModel model;
+            model.featurizer     = feat_model.featurizer;
             model.key_pieces     = feat_model.key_pieces;
             model.deck_colors    = feat_model.deck_colors;
             model.extra_features = feat_model.extra_features;   // full basis
@@ -1189,6 +1193,7 @@ KeepModel BuildKeepModel(const Decklist& deck,
         }
 
         KeepModel model;
+        model.featurizer     = feat_model.featurizer;
         model.key_pieces     = feat_model.key_pieces;
         model.deck_colors    = feat_model.deck_colors;
         model.extra_features = kept;

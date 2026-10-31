@@ -37,7 +37,7 @@ struct HandFacts
 // Generic deterministic evaluator for one data-defined feature. `full` is the feature vector built so
 // far (base ++ earlier extras), so composite operands reference earlier positions by index.
 int EvalFeatureSpec(const FeatureSpec& spec, const std::vector<Card>& hand,
-                    const HandFacts& hf, const std::vector<int>& full)
+                    const HandFacts& hf, const std::vector<int>& full, int featurizer)
 {
     auto at = [&](int i) { return (i >= 0 && i < static_cast<int>(full.size())) ? full[i] : 0; };
     switch (static_cast<FeatureKind>(spec.kind))
@@ -66,8 +66,10 @@ int EvalFeatureSpec(const FeatureSpec& spec, const std::vector<Card>& hand,
         case FeatureKind::SubtypeDensity:
         {
             // Subtypes off the DEFINITION: a hand card is a name-only placeholder with no subtypes, so the
-            // historical read (MTG_PLACEHOLDER_FEATURES=0) counted 0 for every hand.
-            const bool def_subs = PlaceholderFeaturesOn();
+            // historical read (featurizer 1) counted 0 for every hand. Per MODEL (KeepModel::featurizer):
+            // no shipped keep model carries a subtype_density spec (under the placeholder read the trainer
+            // never constructed one), so this is byte-identical for every profile in the repo.
+            const bool def_subs = featurizer >= kFeaturizerDefinition || PlaceholderFeaturesOn();
             int c = 0;
             for (const Card& card : hand)
             {
@@ -353,7 +355,7 @@ std::vector<int> ComputeKeepFeatures(const std::vector<Card>& hand, int mulligan
         const HandFacts hf{ src, demand_max, &castable_mv, &nonland_mv };
         f.reserve(f.size() + model.extra_features.size());
         for (const FeatureSpec& spec : model.extra_features)
-        { f.push_back(EvalFeatureSpec(spec, hand, hf, f)); }
+        { f.push_back(EvalFeatureSpec(spec, hand, hf, f, model.featurizer)); }
     }
     return f;
 }
@@ -382,7 +384,7 @@ KeepGuard ApplyKeepConstraints(const std::vector<Card>& hand, const KeepConstrai
 // Integer-pure and NON-CLAIRVOYANT: reads only public information -- our hand/board/graveyard/exile/
 // life, the opponent's visible board + life, and library SIZE (never library ORDER or the opponent's
 // hand). Perspective is the active player (Solve runs on our turn). See docs/design/learned-d0-policy.md.
-std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan)
+std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan, int featurizer)
 {
     std::vector<int> f(static_cast<int>(MidGameFeature::Count), 0);
     const Player& ap  = state.ActivePlayer();
@@ -404,12 +406,14 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     // v7 also categorises the rest of the hand (the most immediate driver of a shallow decision). MVs of
     // nonland cards are collected for HandCastableNow, computed once untapped sources are known below.
     // Types off the DEFINITION: a hand / library card is a name-only placeholder with an empty type mask,
-    // so the historical read (MTG_PLACEHOLDER_FEATURES=0) counted only the cards that reached the zone
-    // carrying real masks (a bounced land, a def-built stage), and passed every other hand LAND on as a
-    // castable MV-0 nonland (hand_castable_now). The shipped value leaves were FITTED on that read, so the
-    // definition read (MTG_PLACEHOLDER_FEATURES) is DEFAULT OFF: turning it on is the USER's call and goes
-    // with refitting the leaves (docs/design/placeholder-card-reads.md).
-    const bool def_types = PlaceholderFeaturesOn();
+    // so the historical read (featurizer 1) counted only the cards that reached the zone carrying real
+    // masks (a bounced land, a def-built stage), and passed every other hand LAND on as a castable MV-0
+    // nonland (hand_castable_now). The value leaves shipped before 2026-10-31 were FITTED on that read, so
+    // the read is chosen PER MODEL: the caller passes the consuming model's `featurizer` (its sidecar's
+    // eval_model.featurizer, absent = 1), and a regenerated leaf (stamped 2) reads the definition
+    // (USER 2026-10-31; docs/design/placeholder-card-reads.md). MTG_PLACEHOLDER_FEATURES=1 forces the
+    // definition read for every model -- an experiment override only.
+    const bool def_types = featurizer >= kFeaturizerDefinition || PlaceholderFeaturesOn();
     int lands_in_hand = 0, hand_creatures = 0, hand_damage = 0, hand_draw = 0;
     std::vector<int> hand_nonland_mv;
     for (const Card& hc : ap.hand)

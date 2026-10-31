@@ -669,6 +669,46 @@ print(sys.argv[1], json.dumps({k: v for k, v in p.items() if k.startswith("searc
 # threshold is untouched), and which cells to move aside is the operator's call, not this script's.
 # A queue frozen before this stamp existed is backfilled from the profiles at its frozen commit, so the
 # guard covers runs already in flight.
+# FEATURIZER. Which semantics the binary's label dumps extract the features under (`mtg --featurizer-version`,
+# KeepModel.h kFeaturizerCurrent; 1 = the historical placeholder read, 2 = the definition read, USER
+# 2026-10-31, docs/design/placeholder-card-reads.md). Rows carry it in their header ("# label" = 1,
+# "# label:featurizer=N"), the trainer stamps it into eval_model.featurizer, and the engine reads each
+# model's inputs under its own version. So a queue whose banked rows were dumped under another version
+# cannot resume: appending new rows would MIX two semantics in one training file, and a queue already
+# past phase A would hand back a model fitted on the old read while the regeneration was meant to move
+# it -- the trap being a COMPLETED pre-2026-10-31 queue, whose done-markers make `run` skip every phase.
+# Like a decklist change there is nothing to salvage and nothing to auto-wipe: archive, then re-run.
+featurizer_now() {
+    local v; v=$("$(harness_bin)" --featurizer-version 2>/dev/null) || return 1
+    [[ "$v" =~ ^[0-9]+$ ]] && printf '%s\n' "$v"
+}
+rows_featurizers() {   # the distinct versions the banked rows' headers name, one per line
+    [ -s "$ALL_ROWS" ] || return 0
+    grep '^#' "$ALL_ROWS" | awk '{ t = $2; if (t ~ /^label:featurizer=/) { sub(/^label:featurizer=/, "", t); print t }
+                                   else print 1 }' | sort -u
+}
+check_featurizer() {
+    local frozen=$VLQ/freeze.featurizer now have
+    now=$(featurizer_now) || { [ -e "$frozen" ] || [ -s "$ALL_ROWS" ] || return 0   # nothing banked; not built yet
+                               log "ABORT: $(harness_bin) does not report --featurizer-version"; return 1; }
+    have=$(rows_featurizers | paste -sd, -)
+    if [ -e "$frozen" ] && [ "$(cat "$frozen")" = "$now" ] && { [ -z "$have" ] || [ "$have" = "$now" ]; }; then
+        return 0
+    fi
+    if [ ! -e "$frozen" ] && { [ -z "$have" ] || [ "$have" = "$now" ]; }; then
+        printf '%s\n' "$now" > "$frozen"
+        log "featurizer $now stamped -> $frozen"
+        return 0
+    fi
+    log "ABORT: this queue's rows were dumped under featurizer ${have:-$(cat "$frozen" 2>/dev/null)}, and the"
+    log "  engine now dumps featurizer $now. Every row (and any model trained on them) describes the old read,"
+    log "  so resuming would mix two semantics or hand back a leaf on the read this regeneration replaces."
+    log "  Archive the queue and the staged model, then re-run (nothing here deletes either):"
+    log "    mv $VLQ ${VLQ}_featurizer${have:-old}"
+    log "    mv logs/eval/<stem>.value.STAGED.json logs/eval/<stem>.featurizer${have:-old}.value.STAGED.json"
+    return 1
+}
+
 check_leaf_keys() {
     local frozen=$VLQ/freeze.leaf now
     if [ ! -e "$frozen" ]; then
@@ -950,6 +990,15 @@ phase_rows() {
 phase_split() {
     done_p A_split && return 0
     local key dir stem mkey base games row hdr bucket
+    # EVERY header must be the same line: one per dumping process, and two that differ mean rows whose
+    # columns mean different things (a featurizer version, or the feature set itself) in one file.
+    # Training on that is the train/serve skew the featurizer stamp exists to rule out, so refuse.
+    if [ "$(grep '^#' "$ALL_ROWS" | sort -u | wc -l)" -gt 1 ]; then
+        log "ABORT: $ALL_ROWS holds rows under DIFFERENT headers (featurizer or feature set):"
+        grep '^#' "$ALL_ROWS" | sort | uniq -c | cut -c1-120 | while read -r l; do log "    $l"; done
+        log "  Archive the queue and re-dump the rows under one binary (see check_featurizer)."
+        return 1
+    fi
     hdr=$(grep -m1 '^#' "$ALL_ROWS")
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
@@ -980,17 +1029,25 @@ phase_train() {
         python3 scripts/attic/train_eval_gbdt.py --rows "$src" --out "$staged.raw" \
             --regression --trees 120 --depth 4 --lr 0.15 --min-leaf 20 >> "$VLQ/train_$key.log" 2>&1
         if [ ! -s "$staged.raw" ]; then log "  $key SKIPPED: trainer produced nothing"; continue; fi
-        python3 - "$dir/$stem.value.json" "$staged.raw" "$staged" "$(cat "$VLQ/freeze.commit")" "$n" <<'PY'
+        python3 - "$dir/$stem.value.json" "$staged.raw" "$staged" "$(cat "$VLQ/freeze.commit")" "$n" "$src" <<'PY' \
+            || { log "  $key SKIPPED: staging failed (see above)"; rm -f "$staged.raw"; continue; }
 import json, os, sys
-live, raw, out, commit, n = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+sys.path.insert(0, "scripts/attic")
+from train_eval_model import rows_featurizer
+live, raw, out, commit, n, rows = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]), sys.argv[6]
 R = json.load(open(raw))
+# The model must name the featurizer its rows were dumped under (the trainer stamps it; absent = 1). A
+# mismatch would put a leaf live that reads its inputs under other semantics than it was fitted on.
+want, got = rows_featurizer(rows), R["eval_model"].get("featurizer", 1)
+if got != want:
+    sys.exit("featurizer mismatch: rows %s say %d, trained model says %d" % (rows, want, got))
 if os.path.exists(live):
     L = json.load(open(live))          # REgeneration: keep value_play/table/crossover until measured
     L["eval_model"] = R["eval_model"]
 else:
     L = R                              # FIRST model for this deck: nothing prior to preserve
 L.setdefault("provenance", {}).update({
-    "regenerated_commit": commit, "rows": n,
+    "regenerated_commit": commit, "rows": n, "featurizer": want,
     "note": "eval_model retrained on rows dumped at SHIPPED play WITH the deck profile, so the "
             "exhaustive keep model was live. Labels are searched K=3 for every deck (a pooled dump "
             "forces one label mode). value_leaf_table/crossover here are the OLD ones until the "
@@ -1615,6 +1672,7 @@ finish|run)
         check_freeze || exit 1
         check_decks  || exit 1
         check_leaf_keys || exit 1
+        check_featurizer || exit 1
         $ph || { log "STOPPED at $ph"; exit 1; }
     done
     log "=== COMPLETE -- review the A/B + sweep reports above ==="
@@ -1764,6 +1822,7 @@ ab)
     check_freeze || exit 1
     check_decks  || exit 1
     check_leaf_keys || exit 1
+    check_featurizer || exit 1
     phase_freeze && phase_emulcal && phase_measure || { log "STOPPED in ab"; exit 1; }
     log "=== AB COMPLETE -- nothing adopted; review the report above ==="
     ;;

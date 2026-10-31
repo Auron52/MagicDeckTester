@@ -47293,9 +47293,17 @@ static void DropRitualGroupsIfNoPayoff(const GameState& state, const ManaPool& p
 // (Plan::value is int; the score's magnitude is irrelevant -- ranking is ordinal). Only reached when
 // a model is attached AND MTG_EVAL_MODEL is set (guarded at each callsite), so default runs never
 // enter here and stay byte-identical.
+// The escalation confidence gate and its training dump (MTG_ESCALATION_DUMP) both featurize under the
+// deck's VALUE model's featurizer, so the dump and the gate fitted on it stay in lockstep with each other
+// and with the leaf that decided the line. 1 (the historical read) with no model attached.
+static int EscalationFeaturizer(const GameState& state)
+{
+    return state.m_value_model ? state.m_value_model->featurizer : kFeaturizerPlaceholder;
+}
+
 static int LearnedPlanScore(const GameState& state, const MidGamePlanSummary& sum, const MidGameEvaluator& ev)
 {
-    const long long s = ev.Score(ExtractMidGameFeatures(state, sum));
+    const long long s = ev.Score(ExtractMidGameFeatures(state, sum, ev.featurizer));
     constexpr long long kLo = -1000000000LL, kHi = 1000000000LL;   // clamp into int (ordinal use only)
     return static_cast<int>(std::min(kHi, std::max(kLo, s)));
 }
@@ -84118,7 +84126,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         if (s_roll_horizon >= 0 && (state.turn_number - roll_start) >= s_roll_horizon
             && state.m_value_model && !state.m_value_model->empty())
         {
-            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{},
+                                                                  state.m_value_model->featurizer);
             const long long score = state.m_value_model->Score(feats);
             int w = static_cast<int>((score + 500) / 1000);
             if (w < state.turn_number) { w = state.turn_number; }
@@ -89092,7 +89101,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         if (vm)
         {
-            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{}, vm->featurizer);
             const long long score = vm->Score(feats);                 // milliturns (x1000)
             int w = static_cast<int>((score + 500) / 1000);           // round to a turn (score > 0)
             if (w < state.turn_number) { w = state.turn_number; }
@@ -94227,7 +94236,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             raw.push_back(value_min_depth - committed);   // gap
             raw.push_back(state.turn_number);
             raw.push_back(old_wt);                          // est_wt
-            for (int f : ExtractMidGameFeatures(state, MidGamePlanSummary{})) { raw.push_back(f); }
+            // The gate is fitted on MTG_ESCALATION_DUMP rows, which read under the same rule (below):
+            // the deck's value model's featurizer (this path only runs with one attached).
+            for (int f : ExtractMidGameFeatures(state, MidGamePlanSummary{}, EscalationFeaturizer(state)))
+            { raw.push_back(f); }
             if (g_escalation_gate.PNoOp(raw) > g_escalation_gate.threshold)
             {
                 g_escalation_gate.skipped.fetch_add(1);
@@ -95061,7 +95073,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // observed BEFORE the escalation ran, so they can gate a future confidence-skip. See the doc.
         if (g_escalation_dump.enabled)
         {
-            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{},
+                                                                  EscalationFeaturizer(state));
             g_escalation_dump.row(feats, taken ? 1 : 0, wt_changed ? 1 : 0,
                                   state.turn_number, committed, value_min_depth - committed, old_wt);
         }

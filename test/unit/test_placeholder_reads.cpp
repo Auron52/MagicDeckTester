@@ -14,18 +14,23 @@
 //   * LandfallProvider::CleanupDiscardCandidates' legend rule (MTG_PLACEHOLDER_PROVIDER, DEFAULT ON): a
 //     second copy of a legend already on our battlefield is a blank and sheds first -- never, with the
 //     placeholder read.
-//   * ExtractMidGameFeatures' lands_in_hand / hand_castable_now (MTG_PLACEHOLDER_FEATURES, DEFAULT OFF --
-//     the USER's call): a placeholder land in hand was not a land, and counted as a castable MV-0 spell.
+//   * ExtractMidGameFeatures' lands_in_hand / hand_castable_now: a placeholder land in hand was not a land,
+//     and counted as a castable MV-0 spell. Since 2026-10-31 the read is chosen PER MODEL by the sidecar's
+//     "featurizer" (absent = 1, the historical read; 2 = the definition read), with MTG_PLACEHOLDER_FEATURES
+//     an experiment override forcing 2 everywhere.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
 #include "ai/KeepModel.h"
+#include "ai/MulliganProfileIO.h"   // EvalModelFromJsonObj / EvalModelToJsonObj / AttachValueSidecar
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -201,24 +206,137 @@ TEST_CASE("Placeholder: Landfall cleanup discard sheds a second copy of a legend
     CHECK(off.front() != 1);   // the placeholder read keeps it (and sheds a live card)
 }
 
-TEST_CASE("Placeholder: mid-game features count a placeholder land in hand as a land")
+namespace
 {
-    // One untapped Forest; hand = Forest + Courser of Kruphix ({1}{G}{G}, not castable off one source).
+// One untapped Forest; hand = Forest + Courser of Kruphix ({1}{G}{G}, not castable off one source).
+GameState FeaturizerBoard()
+{
     GameState s = BasePh(2);
     PutPh(s, "Forest", 20);
     s.players[0].hand.push_back(PhCard("Forest", 1));
     s.players[0].hand.push_back(PhCard("Courser of Kruphix", 2));
-    const int lih = static_cast<int>(MidGameFeature::LandsInHand);
-    const int hcn = static_cast<int>(MidGameFeature::HandCastableNow);
+    return s;
+}
+const int kLih = static_cast<int>(MidGameFeature::LandsInHand);
+const int kHcn = static_cast<int>(MidGameFeature::HandCastableNow);
+}   // namespace
 
-    const std::vector<int> on  = WithArm(heurarm::PLACEHOLDER_FEATURES, 1,
-                                         [&] { return ExtractMidGameFeatures(s, MidGamePlanSummary{}); });
-    const std::vector<int> off = WithArm(heurarm::PLACEHOLDER_FEATURES, 0,
-                                         [&] { return ExtractMidGameFeatures(s, MidGamePlanSummary{}); });
-    CHECK(on[lih] == 1);
-    CHECK(on[hcn] == 0);    // Courser costs 3; the Forest is not a spell
-    CHECK(off[lih] == 0);   // the historical read: the placeholder Forest is no land...
-    CHECK(off[hcn] == 1);   // ...and is "castable" at MV 0
+TEST_CASE("Placeholder: mid-game features count a placeholder land in hand as a land (featurizer 2)")
+{
+    const GameState s = FeaturizerBoard();
+    const std::vector<int> v2 = WithArm(heurarm::PLACEHOLDER_FEATURES, 0,
+        [&] { return ExtractMidGameFeatures(s, MidGamePlanSummary{}, kFeaturizerDefinition); });
+    const std::vector<int> v1 = WithArm(heurarm::PLACEHOLDER_FEATURES, 0,
+        [&] { return ExtractMidGameFeatures(s, MidGamePlanSummary{}, kFeaturizerPlaceholder); });
+    CHECK(v2[kLih] == 1);
+    CHECK(v2[kHcn] == 0);    // Courser costs 3; the Forest is not a spell
+    CHECK(v1[kLih] == 0);    // the historical read: the placeholder Forest is no land...
+    CHECK(v1[kHcn] == 1);    // ...and is "castable" at MV 0
+    // MTG_PLACEHOLDER_FEATURES=1 is the experiment override: the definition read whatever the model names.
+    const std::vector<int> forced = WithArm(heurarm::PLACEHOLDER_FEATURES, 1,
+        [&] { return ExtractMidGameFeatures(s, MidGamePlanSummary{}, kFeaturizerPlaceholder); });
+    CHECK(forced == v2);
+    // Generators fit on the definition read.
+    CHECK(kFeaturizerCurrent == kFeaturizerDefinition);
+}
+
+TEST_CASE("Featurizer: a sidecar without the field reads the historical placeholder values")
+{
+    const nlohmann::json j = nlohmann::json::parse(
+        R"({"eval_model": {"intercept": 5000, "coefs": {"lands_in_hand": 1000}}, "featurizer": 2})");
+    // A TOP-LEVEL "featurizer" is ignored on purpose: the version lives on the model object, so it can
+    // never detach from the model it describes when a pipeline merges eval_model into another sidecar.
+    const MidGameEvaluator e = EvalModelFromJsonObj(j);
+    REQUIRE_FALSE(e.empty());
+    CHECK(e.featurizer == kFeaturizerPlaceholder);
+    const GameState s = FeaturizerBoard();
+    const std::vector<int> f = ExtractMidGameFeatures(s, MidGamePlanSummary{}, e.featurizer);
+    CHECK(f[kLih] == 0);
+    CHECK(f[kHcn] == 1);
+    CHECK(e.Score(f) == 5000);
+}
+
+TEST_CASE("Featurizer: a \"featurizer\": 2 sidecar reads the definition values")
+{
+    const nlohmann::json j = nlohmann::json::parse(
+        R"({"eval_model": {"featurizer": 2, "intercept": 5000, "coefs": {"lands_in_hand": 1000}}})");
+    const MidGameEvaluator e = EvalModelFromJsonObj(j);
+    REQUIRE_FALSE(e.empty());
+    CHECK(e.featurizer == kFeaturizerDefinition);
+    const GameState s = FeaturizerBoard();
+    const std::vector<int> f = ExtractMidGameFeatures(s, MidGamePlanSummary{}, e.featurizer);
+    CHECK(f[kLih] == 1);
+    CHECK(f[kHcn] == 0);
+    CHECK(e.Score(f) == 6000);
+}
+
+TEST_CASE("Featurizer: the value-sidecar loader stores each model's version (end to end)")
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "mdt_unit_featurizer_version";
+    fs::create_directories(dir);
+    const GameState s = FeaturizerBoard();
+    auto score_of = [&](const char* model_json) -> long long
+    {
+        { std::ofstream(dir / "fzt.value.json") << model_json; }
+        MulliganProfile prof;
+        AttachValueSidecar(prof, dir / "fzt.profile.json");
+        REQUIRE_FALSE(prof.value_model.empty());
+        return prof.value_model.Score(
+            ExtractMidGameFeatures(s, MidGamePlanSummary{}, prof.value_model.featurizer));
+    };
+    CHECK(score_of(R"({"eval_model": {"intercept": 5000, "coefs": {"lands_in_hand": 1000}}})") == 5000);
+    CHECK(score_of(R"({"eval_model": {"featurizer": 2, "intercept": 5000, "coefs": {"lands_in_hand": 1000}}})") == 6000);
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+}
+
+TEST_CASE("Featurizer: the sidecar writer round-trips the field, and omits it for version 1")
+{
+    MidGameEvaluator e;
+    e.intercept = 4000;
+    e.coefs.assign(static_cast<int>(MidGameFeature::Count), 0);
+    e.coefs[kLih] = 250;
+    e.trees.push_back({ MidGameTreeNode{ kHcn, 0, 1, 2, 0 }, MidGameTreeNode{ -1, 0, -1, -1, 10 },
+                        MidGameTreeNode{ -1, 0, -1, -1, -10 } });
+
+    const nlohmann::json v1 = EvalModelToJsonObj(e);
+    CHECK_FALSE(v1.contains("featurizer"));   // byte-identical to the pre-field writer
+    CHECK(EvalModelFromJsonObj(v1).featurizer == kFeaturizerPlaceholder);
+
+    e.featurizer = kFeaturizerDefinition;
+    const nlohmann::json v2 = EvalModelToJsonObj(e);
+    REQUIRE(v2.contains("featurizer"));
+    CHECK(v2["featurizer"].get<int>() == kFeaturizerDefinition);
+    const MidGameEvaluator back = EvalModelFromJsonObj(nlohmann::json{ { "eval_model", v2 } });
+    CHECK(back.featurizer == kFeaturizerDefinition);
+    CHECK(EvalModelToJsonObj(back) == v2);
+
+    // The keep model carries the same field the same way.
+    KeepModel km;
+    km.nodes.push_back(KeepNode{});
+    CHECK_FALSE(KeepModelToJsonObj(km).contains("featurizer"));
+    CHECK(KeepModelFromJsonObj(KeepModelToJsonObj(km)).featurizer == kFeaturizerPlaceholder);
+    km.featurizer = kFeaturizerDefinition;
+    CHECK(KeepModelFromJsonObj(KeepModelToJsonObj(km)).featurizer == kFeaturizerDefinition);
+}
+
+TEST_CASE("Featurizer: a keep model's subtype_density reads under the model's own version")
+{
+    // Goblins: every hand card a placeholder. Version 1 counts no subtype (the historical read); 2 does.
+    std::vector<Card> hand = { PhCard("Goblin Chieftain", 1), PhCard("Goblin Chieftain", 2), PhCard("Mountain", 3) };
+    KeepModel km;
+    FeatureSpec spec;
+    spec.kind = static_cast<int>(FeatureKind::SubtypeDensity);
+    spec.s    = "Goblin";
+    spec.name = "subtype_Goblin";
+    km.extra_features.push_back(spec);
+    const int idx = static_cast<int>(KeepFeature::Count);
+    const int v1 = WithArm(heurarm::PLACEHOLDER_FEATURES, 0, [&] { return ComputeKeepFeatures(hand, 0, true, km)[idx]; });
+    km.featurizer = kFeaturizerDefinition;
+    const int v2 = WithArm(heurarm::PLACEHOLDER_FEATURES, 0, [&] { return ComputeKeepFeatures(hand, 0, true, km)[idx]; });
+    CHECK(v1 == 0);
+    CHECK(v2 == 2);
 }
 
 TEST_CASE("Placeholder: shipped lever defaults (ON where the bar was met, OFF where it was not)")
@@ -230,5 +348,5 @@ TEST_CASE("Placeholder: shipped lever defaults (ON where the bar was met, OFF wh
     CHECK(PlaceholderTectonicOn());         // unblocked by the keep axis for a Giant the plan casts
     CHECK(PlaceholderEchoOn());             // unblocked by the searched echo (MTG_ECHO_AXIS)
     CHECK_FALSE(PlaceholderManaOn());       // blocked on a sequence-aware float commit
-    CHECK_FALSE(PlaceholderFeaturesOn());   // the USER's call: the shipped models were fitted on the placeholder read
+    CHECK_FALSE(PlaceholderFeaturesOn());   // an experiment override only: the read is chosen per model (sidecar "featurizer")
 }
